@@ -77,7 +77,11 @@ struct LibraryView: View {
             }
             .navigationTitle("Library")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+            // Large, left-aligned title kept inline on the toolbar row (alongside the
+            // eye/filter buttons) rather than dropping to its own row. Restores the
+            // proper title size/alignment after the scroll-fix regression made it
+            // small + centered (.inline).
+            .toolbarTitleDisplayMode(.inlineLarge)
             #endif
             .navigationDestination(for: SavedWork.self) { work in
                 WorkDetailView(work: work)
