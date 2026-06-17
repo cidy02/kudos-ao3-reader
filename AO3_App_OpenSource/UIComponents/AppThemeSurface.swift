@@ -69,6 +69,29 @@ private extension ReaderTheme {
         appElevatedBackground ?? Color(nsColor: .controlBackgroundColor)
         #endif
     }
+
+    /// Soft elevation under each card. Light/Sepia get a subtle shadow for depth so
+    /// cards lift off the flatter backdrops; Dark stays flat (shadows muddy the dark
+    /// surfaces, and the high card↔backdrop contrast there already reads well).
+    /// Kept small enough to sit within the inter-card gap so it isn't clipped.
+    var cardShadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        switch self {
+        case .dark: (.clear, 0, 0)
+        case .light: (Color.black.opacity(0.12), 4, 2)
+        // Warm brown shadow rather than neutral grey, so it reads as paper depth.
+        case .sepia: (Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.20), 4, 2)
+        }
+    }
+
+    /// A hairline edge that crisps the card against the flatter Light/Sepia
+    /// backdrops (does the bulk of the separation; never clips). None in Dark.
+    var cardBorder: Color {
+        switch self {
+        case .dark: .clear
+        case .light: Color.black.opacity(0.06)
+        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.15)
+        }
+    }
 }
 
 /// Card-list spacing constants, kept in one place so every adopting list matches.
@@ -112,8 +135,18 @@ private struct CardRow: ViewModifier {
             .listRowBackground(
                 RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
                     .fill(theme.appTheme.cardSurface)
+                    // Hairline edge for crisp separation on flat Light/Sepia backdrops.
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                    )
+                    // Subtle elevation (Light/Sepia only).
+                    .shadow(color: theme.appTheme.cardShadow.color,
+                            radius: theme.appTheme.cardShadow.radius,
+                            x: 0, y: theme.appTheme.cardShadow.y)
                     // Inset the fill so adjacent cards leave `interCardSpacing` between
-                    // them and `sideMargin` from the screen edges.
+                    // them and `sideMargin` from the screen edges (and leave room for
+                    // the shadow within the gap).
                     .padding(EdgeInsets(
                         top: half, leading: CardListMetrics.sideMargin,
                         bottom: half, trailing: CardListMetrics.sideMargin
