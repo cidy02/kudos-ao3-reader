@@ -1,0 +1,389 @@
+import Foundation
+
+// The value types describing AO3 search results and the inputs to a search.
+// These are pure data (no networking) — `AO3Client` (in Services) fetches and
+// populates them. The faceted-filter ids/values are taken from AO3's own search
+// form; see `AO3Client` for the porting/verification notes.
+
+/// A work as summarized on an AO3 search/listing page ("blurb").
+struct AO3WorkSummary: Identifiable, Hashable, Sendable {
+    let id: Int
+    var title: String
+    var authors: [String]
+    var fandoms: [String]
+    var rating: String
+    var warnings: [String]
+    var categories: [String]
+    /// nil when AO3 doesn't say (rare); otherwise whether the work is finished.
+    var isComplete: Bool?
+    var dateUpdated: String
+    var tags: [String]
+    var summary: String
+    var language: String
+    var words: Int?
+    /// Raw "posted/total" string from AO3, e.g. "3/?" or "12/12".
+    var chapters: String
+    var comments: Int?
+    var kudos: Int?
+    var hits: Int?
+    /// Series info when the work is part of one (first series only, for v1).
+    var seriesTitle: String?
+    var seriesURL: String?
+    var seriesPosition: Int?
+
+    var workURL: URL { URL(string: "https://archiveofourown.org/works/\(id)")! }
+    var authorText: String { authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ") }
+}
+
+/// One page of search results, with the current page and total page count
+/// (parsed from AO3's pagination control) so the UI can show page navigation.
+struct AO3SearchPage: Sendable {
+    var works: [AO3WorkSummary]
+    var currentPage: Int
+    var totalPages: Int
+}
+
+/// The inputs to an AO3 works search. Maps directly to AO3's `work_search[...]`
+/// query parameters; the ids/values are taken from AO3's own search form. Covers
+/// the same filters as AO3's faceted sidebar, minus the live per-fandom counts
+/// (those come from a different browse endpoint — here you type tag names).
+struct AO3SearchFilters: Equatable, Sendable {
+    var query: String = ""
+    // Tag fields (comma-separated names).
+    var fandom: String = ""
+    var characters: String = ""
+    var relationships: String = ""
+    var additionalTags: String = ""
+    var excludeTags: String = ""
+    // Faceted filters.
+    var rating: Rating = .any
+    var warnings: Set<Warning> = []
+    var categories: Set<Category> = []
+    var crossover: Crossover = .any
+    var completion: Completion = .any
+    var wordsFrom: String = ""
+    var wordsTo: String = ""
+    var updated: Updated = .any
+    var language: Language = .any
+    var sort: Sort = .relevance
+
+    /// True when any filter beyond the plain query is set (drives the filter
+    /// button's "active" icon and the Reset action).
+    var hasActiveFilters: Bool {
+        !fandom.isBlank || !characters.isBlank || !relationships.isBlank
+            || !additionalTags.isBlank || !excludeTags.isBlank
+            || rating != .any || !warnings.isEmpty || !categories.isEmpty
+            || crossover != .any || completion != .any
+            || !wordsFrom.isBlank || !wordsTo.isBlank
+            || updated != .any || language != .any || sort != .relevance
+    }
+
+    /// True when there's enough to run a search (free text or any filter).
+    var isSearchable: Bool { !query.isBlank || hasActiveFilters }
+
+    nonisolated enum Rating: String, CaseIterable, Identifiable, Sendable {
+        case any, general, teen, mature, explicit, notRated
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .any: "Any rating"
+            case .general: "General Audiences"
+            case .teen: "Teen And Up"
+            case .mature: "Mature"
+            case .explicit: "Explicit"
+            case .notRated: "Not Rated"
+            }
+        }
+        /// AO3's `rating_ids` value, or nil to leave rating unfiltered.
+        var ao3ID: String? {
+            switch self {
+            case .any: nil
+            case .notRated: "9"
+            case .general: "10"
+            case .teen: "11"
+            case .mature: "12"
+            case .explicit: "13"
+            }
+        }
+    }
+
+    /// Archive warnings (AO3 `archive_warning_ids`). Raw value is the AO3 id.
+    nonisolated enum Warning: String, CaseIterable, Identifiable, Sendable {
+        case noWarnings = "16"
+        case chooseNotTo = "14"
+        case violence = "17"
+        case death = "18"
+        case nonCon = "19"
+        case underage = "20"
+        var id: String { rawValue }
+        var ao3ID: String { rawValue }
+        var title: String {
+            switch self {
+            case .noWarnings: "No Archive Warnings Apply"
+            case .chooseNotTo: "Creator Chose Not To Use Archive Warnings"
+            case .violence: "Graphic Depictions Of Violence"
+            case .death: "Major Character Death"
+            case .nonCon: "Rape/Non-Con"
+            case .underage: "Underage Sex"
+            }
+        }
+    }
+
+    /// Categories (AO3 `category_ids`). Raw value is the AO3 id.
+    nonisolated enum Category: String, CaseIterable, Identifiable, Sendable {
+        case ff = "116", fm = "22", gen = "21", mm = "23", multi = "2246", other = "24"
+        var id: String { rawValue }
+        var ao3ID: String { rawValue }
+        var title: String {
+            switch self {
+            case .ff: "F/F"
+            case .fm: "F/M"
+            case .gen: "Gen"
+            case .mm: "M/M"
+            case .multi: "Multi"
+            case .other: "Other"
+            }
+        }
+    }
+
+    nonisolated enum Crossover: String, CaseIterable, Identifiable, Sendable {
+        case any, exclude, only
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .any: "Include"
+            case .exclude: "Exclude"
+            case .only: "Only crossovers"
+            }
+        }
+        /// AO3's `crossover` value (blank = include all).
+        var value: String? {
+            switch self {
+            case .any: nil
+            case .exclude: "F"
+            case .only: "T"
+            }
+        }
+    }
+
+    nonisolated enum Completion: String, CaseIterable, Identifiable, Sendable {
+        case any, complete, inProgress
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .any: "All"
+            case .complete: "Complete"
+            case .inProgress: "In Progress"
+            }
+        }
+        /// AO3's `complete` value, or nil for all works.
+        var value: String? {
+            switch self {
+            case .any: nil
+            case .complete: "T"
+            case .inProgress: "F"
+            }
+        }
+    }
+
+    /// "Updated within" — maps to AO3's `revised_at` (age-based: "< 1 week ago"
+    /// means updated in the last week, verified against live AO3).
+    nonisolated enum Updated: String, CaseIterable, Identifiable, Sendable {
+        case any, week, month, sixMonths, year
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .any: "Any time"
+            case .week: "Past week"
+            case .month: "Past month"
+            case .sixMonths: "Past 6 months"
+            case .year: "Past year"
+            }
+        }
+        var value: String? {
+            switch self {
+            case .any: nil
+            case .week: "< 1 week ago"
+            case .month: "< 1 month ago"
+            case .sixMonths: "< 6 months ago"
+            case .year: "< 1 year ago"
+            }
+        }
+    }
+
+    /// A curated set of common AO3 languages (codes are AO3 `language_id` values).
+    nonisolated enum Language: String, CaseIterable, Identifiable, Sendable {
+        case any = ""
+        case english = "en"
+        case spanish = "es"
+        case french = "fr"
+        case german = "de"
+        case chinese = "zh"
+        case japanese = "ja"
+        case korean = "ko"
+        case russian = "ru"
+        case portuguese = "ptBR"
+        case italian = "it"
+        case arabic = "ar"
+        case indonesian = "id"
+        case dutch = "nl"
+        case polish = "pl"
+        case filipino = "fil"
+        case hindi = "hi"
+        case thai = "th"
+        case vietnamese = "vi"
+        case turkish = "tr"
+        var id: String { rawValue }
+        var code: String? { self == .any ? nil : rawValue }
+        var title: String {
+            switch self {
+            case .any: "Any language"
+            case .english: "English"
+            case .spanish: "Spanish"
+            case .french: "French"
+            case .german: "German"
+            case .chinese: "Chinese"
+            case .japanese: "Japanese"
+            case .korean: "Korean"
+            case .russian: "Russian"
+            case .portuguese: "Portuguese (BR)"
+            case .italian: "Italian"
+            case .arabic: "Arabic"
+            case .indonesian: "Indonesian"
+            case .dutch: "Dutch"
+            case .polish: "Polish"
+            case .filipino: "Filipino"
+            case .hindi: "Hindi"
+            case .thai: "Thai"
+            case .vietnamese: "Vietnamese"
+            case .turkish: "Turkish"
+            }
+        }
+    }
+
+    nonisolated enum Sort: String, CaseIterable, Identifiable, Sendable {
+        case relevance, dateUpdated, datePosted, words, kudos, hits, comments, bookmarks
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .relevance: "Best Match"
+            case .dateUpdated: "Date Updated"
+            case .datePosted: "Date Posted"
+            case .words: "Word Count"
+            case .kudos: "Kudos"
+            case .hits: "Hits"
+            case .comments: "Comments"
+            case .bookmarks: "Bookmarks"
+            }
+        }
+        /// AO3's `sort_column` value, or nil for AO3's default (relevance).
+        var column: String? {
+            switch self {
+            case .relevance: nil
+            case .dateUpdated: "revised_at"
+            case .datePosted: "created_at"
+            case .words: "word_count"
+            case .kudos: "kudos_count"
+            case .hits: "hits"
+            case .comments: "comments_count"
+            case .bookmarks: "bookmarks_count"
+            }
+        }
+    }
+}
+
+private extension String {
+    var isBlank: Bool { trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+/// An error surfaced from the AO3 client, with a user-facing description.
+enum AO3Error: LocalizedError {
+    case rateLimited
+    case notFound
+    case network(String)
+    case parse
+
+    var errorDescription: String? {
+        switch self {
+        case .rateLimited: "AO3 is rate-limiting requests. Wait a moment and try again."
+        case .notFound: "That work or page couldn't be found (it may be restricted)."
+        case .network(let detail): detail
+        case .parse: "AO3's page format wasn't what the app expected."
+        }
+    }
+}
+
+// MARK: - Tag autocomplete
+
+/// The AO3 tag-autocomplete categories used by the filter tag pickers. `tag` is the
+/// "any tag" endpoint, used for the Exclude field.
+enum AO3TagKind: String, Sendable {
+    case fandom, character, relationship, freeform, tag
+}
+
+// MARK: - Work tags (categorized)
+
+/// A work's AO3 tags split by type, as shown on the work page. Used to display
+/// saved-work tags under per-category headers. Also carries the work's archive
+/// warnings, categories, language, and word count so the Library can filter on
+/// the same facets Search offers.
+struct AO3WorkTagGroups: Sendable {
+    var fandoms: [String] = []
+    var relationships: [String] = []
+    var characters: [String] = []
+    var freeforms: [String] = []
+    var warnings: [String] = []
+    var categories: [String] = []
+    var language: String = ""
+    var words: Int? = nil
+
+    /// Whether the page yielded no *tags* — the signal for a locked/empty work
+    /// page, where the caller keeps the EPUB tags and retries later. (Warnings,
+    /// categories, language and word count don't count toward this.)
+    var isEmpty: Bool {
+        fandoms.isEmpty && relationships.isEmpty && characters.isEmpty && freeforms.isEmpty
+    }
+
+    /// Flat union in AO3's canonical order, for the Library filter and the
+    /// pre-refresh fallback list.
+    var flattened: [String] { fandoms + relationships + characters + freeforms }
+}
+
+// MARK: - Media browser
+
+/// A fandom as listed on AO3's media page; its `name` is the canonical AO3 tag,
+/// which drops straight into a fandom search. `workCount` is the number of works
+/// tagged with the fandom, shown on the fandom list when available.
+struct AO3Fandom: Identifiable, Hashable, Sendable {
+    var name: String
+    var workCount: Int? = nil
+    var id: String { name }
+}
+
+/// One of AO3's media categories (e.g. "TV Shows") with its featured fandoms,
+/// scraped from `/media`. `fandomsURL` points at the category's full fandom index
+/// (`/media/<name>/fandoms`), loaded on demand by the fandom detail page.
+struct AO3MediaCategory: Identifiable, Hashable, Sendable {
+    var name: String
+    var fandoms: [AO3Fandom]
+    var fandomsURL: String = ""
+    var id: String { name }
+
+    /// A representative SF Symbol, matched by AO3's category names with a fallback.
+    var symbol: String {
+        switch name {
+        case "Anime & Manga": "sparkles"
+        case "Books & Literature": "books.vertical"
+        case "Cartoons & Comics & Graphic Novels": "books.vertical.fill"
+        case "Celebrities & Real People": "person.2"
+        case "Movies": "film"
+        case "Music & Bands": "music.note"
+        case "Other Media": "square.grid.2x2"
+        case "Theater": "theatermasks"
+        case "TV Shows": "tv"
+        case "Video Games": "gamecontroller"
+        case "Uncategorized Fandoms": "questionmark.folder"
+        default: "tag"
+        }
+    }
+}

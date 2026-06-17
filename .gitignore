@@ -1,0 +1,42 @@
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# ---- Xcode: build output & DerivedData ----
+build/
+DerivedData/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Per-user Xcode state (schemes, breakpoints, window layout). Shared data
+# (xcshareddata) and project.pbxproj ARE tracked.
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# ---- Swift Package Manager ----
+.build/
+.swiftpm/
+# Note: project.xcworkspace/xcshareddata/swiftpm/Package.resolved is kept
+# (tracked) so dependency versions stay pinned across machines.
+
+# ---- Claude Code / local tooling config (personal) ----
+.claude/
+
+# ---- Migration notes, prompts, temp scripts (kept OUT of version control) ----
+READIUM_MIGRATION_NOTES.md
+*MIGRATION_NOTES*
+*_NOTES.md
+*prompt*.md
+*prompt*.txt
+*_prompt*
+artifacts/
+*.log
+scratch/
+tmp/
