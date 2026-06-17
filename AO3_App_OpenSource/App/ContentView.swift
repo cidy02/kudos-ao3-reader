@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Root of the app. On macOS it's a sidebar split with the Settings button pinned
 /// at the bottom of the sidebar; on iOS it's an adaptive tab bar / sidebar.
@@ -19,6 +22,32 @@ struct ContentView: View {
             // Sepia has no system scheme, so it also re-tints controls/links warm.
             // Light/Dark return nil here and keep the default accent.
             .tint(theme.appTheme.appTint)
+            // Segmented controls (UISegmentedControl) draw a white selected segment
+            // in Sepia's light scheme; warm them via the appearance proxy. Reset for
+            // Light/Dark. `initial` covers launch; new controls pick it up on change.
+            .onChange(of: theme.appTheme, initial: true) { _, t in
+                applySegmentedControlAppearance(for: t)
+            }
+    }
+
+    /// Warms `UISegmentedControl` for Sepia (resets to default for Light/Dark).
+    private func applySegmentedControlAppearance(for theme: ReaderTheme) {
+        #if canImport(UIKit)
+        let proxy = UISegmentedControl.appearance()
+        guard theme == .sepia else {
+            proxy.selectedSegmentTintColor = nil
+            proxy.backgroundColor = nil
+            proxy.setTitleTextAttributes(nil, for: .normal)
+            proxy.setTitleTextAttributes(nil, for: .selected)
+            return
+        }
+        // Recessed warm track + raised light-cream selected segment + brown text.
+        proxy.backgroundColor = UIColor(red: 0.886, green: 0.831, blue: 0.718, alpha: 1)
+        proxy.selectedSegmentTintColor = UIColor(red: 0.992, green: 0.965, blue: 0.910, alpha: 1)
+        let brown = UIColor(red: 0.357, green: 0.275, blue: 0.212, alpha: 1)
+        proxy.setTitleTextAttributes([.foregroundColor: brown], for: .normal)
+        proxy.setTitleTextAttributes([.foregroundColor: brown], for: .selected)
+        #endif
     }
 
     @ViewBuilder

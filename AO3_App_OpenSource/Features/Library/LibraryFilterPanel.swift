@@ -13,6 +13,9 @@ struct LibraryFilterPanel: View {
 
     var body: some View {
         Form {
+          // Group so .appThemedRows() reaches every section's rows (it doesn't
+          // propagate from the Form container, only from a Group/Section/ForEach).
+          Group {
             Section {
                 Picker("Sort by", selection: $filters.sort) {
                     ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
@@ -95,10 +98,11 @@ struct LibraryFilterPanel: View {
                     }
                 }
             }
+          }
+          .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .appThemedRows()
     }
 
     // MARK: Facet option lists
