@@ -52,11 +52,10 @@ struct FandomListView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .cardRow()
                 }
-                // Use the app's default (inset-grouped on iOS) so the fandom list
-                // matches the Media Browser it's pushed from and the rest of the app.
-                .appThemedScroll()
-                .appThemedRows()
+                // Card-based list, matching the Media Browser it's pushed from.
+                .cardList()
                 .searchable(text: $query, prompt: "Filter \(category.name)")
             }
         }

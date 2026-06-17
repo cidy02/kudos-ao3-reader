@@ -162,9 +162,9 @@ struct BookmarksView: View {
                     .buttonStyle(.plain)
                 }
                 .onDelete(perform: deleteBookmarks)
-                .appThemedRows()
+                .cardRow()
             }
-            .appThemedScroll()
+            .cardList()
         }
     }
 
@@ -196,9 +196,9 @@ struct BookmarksView: View {
                             .tint(.yellow)
                         }
                 }
-                .appThemedRows()
+                .cardRow()
             }
-            .appThemedScroll()
+            .cardList()
         }
     }
 
@@ -226,9 +226,9 @@ struct BookmarksView: View {
                             }
                         }
                 }
-                .appThemedRows()
+                .cardRow()
             }
-            .appThemedScroll()
+            .cardList()
         }
     }
 
