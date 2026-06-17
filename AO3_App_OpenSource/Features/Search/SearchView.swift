@@ -85,17 +85,16 @@ struct SearchView: View {
                         ForEach(results) { work in
                             NavigationLink(value: work) { AO3WorkRow(work: work) }
                         }
-                        .appThemedRows()
+                        .cardRow()
                     }
 
                     if showPagination {
                         Section { paginationRow }
                     }
                 }
-                // Default list style (inset-grouped on iOS) to match the Library,
-                // Bookmarks, and browse lists — same padding, grouped background,
-                // and separators across the app's scrollable content.
-                .appThemedScroll()
+                // Card-based list: each result is a fully-rounded card with ~12pt
+                // spacing, over the themed backdrop (replaces the grouped style).
+                .cardList()
                 .overlay { statusOverlay }
                 .onChange(of: currentPage) { _, _ in
                     withAnimation {
