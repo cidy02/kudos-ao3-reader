@@ -149,6 +149,11 @@ actor AO3Client {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let wordsText = (try? doc.select("dd.words").first()?.text()) ?? ""
         let words = Int(wordsText.filter(\.isNumber))
+        // Chapters read as printed ("5/10"); kudos is a count in `dd.kudos`.
+        let chapters = (try? doc.select("dd.chapters").first()?.text())?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let kudosText = (try? doc.select("dd.kudos").first()?.text()) ?? ""
+        let kudos = Int(kudosText.filter(\.isNumber))
 
         return AO3WorkTagGroups(
             fandoms: try tags("fandom"),
@@ -158,7 +163,9 @@ actor AO3Client {
             warnings: try tags("warning"),
             categories: try tags("category"),
             language: language,
-            words: words
+            words: words,
+            chapters: chapters,
+            kudos: kudos
         )
     }
 

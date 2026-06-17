@@ -41,6 +41,12 @@ import SwiftData
     /// EPUB doesn't carry it); used by the Library word-count filter and sort.
     var wordCount: Int = 0
 
+    /// AO3 work stats shown on the Library card, mirroring the Search results.
+    /// Both come from the AO3 refresh (the EPUB carries neither): `chapters` is
+    /// printed as AO3 shows it (e.g. "5/10"); `kudos` is 0 until known.
+    var chapters: String = ""
+    var kudos: Int = 0
+
     /// AO3 archive warnings and categories for the work (e.g. "Graphic Depictions
     /// Of Violence", "M/M"). Populated on AO3 refresh; before then the Library
     /// filter derives them from `workTags`, which also include these names.
@@ -91,6 +97,8 @@ import SwiftData
         !workTagsFetched || !hasCategorizedWorkTags
             || (workWarnings.isEmpty && workCategories.isEmpty
                 && language.isEmpty && wordCount == 0)
+            // Backfill the newer card stats for works saved before they existed.
+            || chapters.isEmpty
     }
 
     /// The user's own organizational tags (User Tags), shared across works.
