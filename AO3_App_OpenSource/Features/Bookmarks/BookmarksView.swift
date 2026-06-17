@@ -26,6 +26,16 @@ struct BookmarksView: View {
         case history = "History"
         case favorites = "Favorites"
         var id: String { rawValue }
+
+        /// SF Symbol shown in the icon-only section switcher. The raw value stays
+        /// the accessibility label so the control still reads as Links/History/Favorites.
+        var icon: String {
+            switch self {
+            case .links: "link"
+            case .history: "clock.arrow.circlepath"
+            case .favorites: "star"
+            }
+        }
     }
 
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
@@ -43,11 +53,23 @@ struct BookmarksView: View {
                 }
             }
             .navigationTitle("Bookmarks")
+            #if os(iOS)
+            // Match the Library tab: large, left-aligned title kept inline on the
+            // toolbar row alongside the section switcher.
+            .toolbarTitleDisplayMode(.inlineLarge)
+            #endif
             .navigationDestination(for: SavedWork.self) { work in
                 WorkDetailView(work: work)
             }
             .toolbar {
+                #if os(iOS)
+                // Top-right, alongside the inline-large title — mirrors the Library
+                // tab's "title leading, controls trailing" layout. (A .principal item
+                // would be suppressed by the inline-large title.)
+                ToolbarItem(placement: .topBarTrailing) { segmentControl }
+                #else
                 ToolbarItem(placement: .principal) { segmentControl }
+                #endif
                 if hideMature && currentSegmentHasAdult {
                     ToolbarItem { MatureRevealToggle() }
                 }
@@ -66,11 +88,24 @@ struct BookmarksView: View {
     /// macOS keeps the Liquid Glass pill buttons.
     private var segmentControl: some View {
         #if os(iOS)
-        Picker("Section", selection: $segment) {
-            ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
+        // Plain icon buttons, active one tinted. The toolbar already supplies a
+        // single Liquid Glass pill; a segmented Picker would draw its own track
+        // inside that pill, giving the "doubled pill" look.
+        HStack(spacing: 4) {
+            ForEach(Segment.allCases) { seg in
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { segment = seg }
+                } label: {
+                    Image(systemName: seg.icon)
+                        .font(.body.weight(segment == seg ? .semibold : .regular))
+                        .foregroundStyle(segment == seg ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .frame(width: 38, height: 30)
+                        .contentShape(.rect)
+                        .accessibilityLabel(seg.rawValue)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
         #else
         GlassEffectContainer(spacing: 6) {
             HStack(spacing: 6) {
@@ -78,11 +113,12 @@ struct BookmarksView: View {
                     Button {
                         withAnimation(.snappy(duration: 0.2)) { segment = seg }
                     } label: {
-                        Text(seg.rawValue)
+                        Image(systemName: seg.icon)
                             .font(.subheadline.weight(segment == seg ? .semibold : .regular))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 7)
                             .foregroundStyle(segment == seg ? Color.white : Color.primary)
+                            .accessibilityLabel(seg.rawValue)
                     }
                     .buttonStyle(.plain)
                     .glassEffect(
