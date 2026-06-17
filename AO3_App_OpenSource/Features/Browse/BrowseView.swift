@@ -104,10 +104,14 @@ struct BrowseView: View {
     private func configureImport() {
         let context = self.context
         model.onImport = { fileURL, source in
-            if let work = importEPUB(fileURL, source: source, into: context) {
-                show("Saved “\(work.title)” to Library")
-            } else {
-                show("Couldn't save EPUB.")
+            // importEPUB is async (Readium opens the publication asynchronously);
+            // the import callback is sync/fire-and-forget, so hop onto a Task.
+            Task { @MainActor in
+                if let work = await importEPUB(fileURL, source: source, into: context) {
+                    show("Saved “\(work.title)” to Library")
+                } else {
+                    show("Couldn't save EPUB.")
+                }
             }
         }
     }

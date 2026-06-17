@@ -188,6 +188,23 @@ struct ReaderOptionsForm: View {
                             : "Mature and Explicit works are blurred in your Library, History, and Favorites until you tap to reveal them.")
                         : "Mature and Explicit works are shown normally.")
                 }
+
+                #if os(iOS)
+                // Phase 0 exploration only: a sandboxed entry point to the
+                // Readium-based reader proof-of-concept. The production reader
+                // (ReaderView) is unchanged. Safe to delete with the POC.
+                Section {
+                    NavigationLink {
+                        ReadiumPOCView()
+                    } label: {
+                        Label("Readium Reader (POC)", systemImage: "flask")
+                    }
+                } header: {
+                    Text("Experimental")
+                } footer: {
+                    Text("Proof-of-concept reader built on the Readium toolkit. Pick a local EPUB to try it.")
+                }
+                #endif
             }
         }
         .formStyle(.grouped)

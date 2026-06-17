@@ -5,6 +5,9 @@ import SwiftData
 /// file into permanent storage, and inserts a `SavedWork`. Returns the inserted
 /// work (or nil if the file couldn't be saved). Shared by the Browse tab's
 /// download interception and the native AO3 search/download flow.
+///
+/// `async` because the metadata now comes from Readium (which opens the
+/// publication asynchronously) on iOS.
 @MainActor
 @discardableResult
 func importEPUB(
@@ -13,8 +16,22 @@ func importEPUB(
     isComplete: Bool = false,
     seriesURL: String = "",
     into context: ModelContext
-) -> SavedWork? {
-    let meta = EPUBDocument.metadata(ofEPUBAt: tempURL)
+) async -> SavedWork? {
+    // Metadata extraction: Readium's `Publication` replaces the custom
+    // `EPUBDocument`/`MiniZip`/`OPFParser` stack on iOS. macOS keeps the old
+    // parser for now (Readium's navigator/shared link UIKit and can't build
+    // there yet); both paths produce the same `ImportedWorkMetadata`.
+    let meta: ImportedWorkMetadata?
+    #if os(iOS)
+    if let publication = try? await ReadiumPublicationLoader.openEPUB(at: tempURL) {
+        meta = ReadiumMetadataMapper.map(publication)
+    } else {
+        meta = nil
+    }
+    #else
+    meta = EPUBDocument.metadata(ofEPUBAt: tempURL).map(ImportedWorkMetadata.init(legacy:))
+    #endif
+
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
 
