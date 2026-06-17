@@ -63,16 +63,16 @@ struct LibraryView: View {
                     List {
                         if !readingWorks.isEmpty {
                             Section("Reading") {
-                                ForEach(readingWorks, content: row).appThemedRows()
+                                ForEach(readingWorks, content: row).cardRow()
                             }
                         }
                         if !savedWorks.isEmpty {
                             Section("Saved") {
-                                ForEach(savedWorks, content: row).appThemedRows()
+                                ForEach(savedWorks, content: row).cardRow()
                             }
                         }
                     }
-                    .appThemedScroll()
+                    .cardList()
                 }
             }
             .navigationTitle("Library")

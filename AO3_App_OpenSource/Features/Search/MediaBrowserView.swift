@@ -71,9 +71,9 @@ struct MediaBrowserView: View {
                 Text("Popular fandoms from AO3. Tap one to search its works.")
                 #endif
             }
-            .appThemedRows()
+            .cardRow()
         }
-        .appThemedScroll()
+        .cardList()
     }
 
     /// A category row label. The leading glyph is rendered in the primary label
