@@ -336,6 +336,9 @@ struct AO3WorkTagGroups: Sendable {
     var categories: [String] = []
     var language: String = ""
     var words: Int? = nil
+    /// Chapter count as AO3 prints it (e.g. "5/10", "3/?"); "" when unknown.
+    var chapters: String = ""
+    var kudos: Int? = nil
 
     /// Whether the page yielded no *tags* — the signal for a locked/empty work
     /// page, where the caller keeps the EPUB tags and retries later. (Warnings,

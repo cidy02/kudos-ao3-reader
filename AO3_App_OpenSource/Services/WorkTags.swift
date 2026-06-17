@@ -28,6 +28,8 @@ enum WorkTags {
             work.workCategories = groups.categories
             if !groups.language.isEmpty { work.language = groups.language }
             if let words = groups.words { work.wordCount = words }
+            work.chapters = groups.chapters
+            if let kudos = groups.kudos { work.kudos = kudos }
             work.workTagsFetched = true
             try? context.save()
         } catch {
