@@ -69,6 +69,10 @@ struct ReaderOptionsForm: View {
 
     var body: some View {
         Form {
+          // Group so .appThemedRows() (a .listRowBackground) reaches every section's
+          // rows — it does NOT propagate from the Form container, only from a Group/
+          // Section/ForEach around the rows.
+          Group {
             // App-wide theme lives in the main Settings page. The reader's own theme
             // picker (below, in Appearance) is shown only inside the reader, since here
             // it's covered by this section.
@@ -206,10 +210,11 @@ struct ReaderOptionsForm: View {
                 }
                 #endif
             }
+          }
+          .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .appThemedRows()
         .fileImporter(
             isPresented: $importing,
             allowedContentTypes: [.font],

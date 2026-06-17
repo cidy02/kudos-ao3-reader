@@ -15,6 +15,9 @@ struct AO3WorkDetailView: View {
 
     var body: some View {
         Form {
+          // Group so .appThemedRows() reaches every section's rows (it doesn't
+          // propagate from the Form container, only from a Group/Section/ForEach).
+          Group {
             Section {
                 Button(action: read) {
                     HStack {
@@ -76,10 +79,11 @@ struct AO3WorkDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+          }
+          .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .appThemedRows()
         .navigationTitle(work.title)
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)

@@ -82,6 +82,9 @@ struct WorkDetailView: View {
 
     var body: some View {
         Form {
+          // Group so .appThemedRows() reaches every section's rows (it doesn't
+          // propagate from the Form container, only from a Group/Section/ForEach).
+          Group {
             Section {
                 Button(action: openReader) {
                     HStack {
@@ -225,10 +228,11 @@ struct WorkDetailView: View {
                     }
                 }
             }
+          }
+          .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .appThemedRows()
         .task(id: work.id) {
             backfillWorkTagsIfNeeded()
             await WorkTags.refreshFromAO3(for: work, in: context)

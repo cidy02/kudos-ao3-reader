@@ -87,6 +87,9 @@ struct TagPickerView: View {
     var body: some View {
         NavigationStack {
             List {
+              // Group so .appThemedRows() reaches every section's rows (it doesn't
+              // propagate from the List container, only from a Group/Section/ForEach).
+              Group {
                 if !selected.isEmpty {
                     Section("Selected") {
                         FlowLayout(spacing: 6, rowSpacing: 6) {
@@ -125,9 +128,10 @@ struct TagPickerView: View {
                         }
                     }
                 }
+              }
+              .appThemedRows()
             }
             .appThemedScroll()
-            .appThemedRows()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
