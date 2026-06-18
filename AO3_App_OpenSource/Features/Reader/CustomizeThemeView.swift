@@ -48,6 +48,9 @@ struct CustomizeThemeView: View {
     var body: some View {
         NavigationStack {
             Form {
+              // Group so .appThemedRows() reaches every section's rows — it doesn't
+              // propagate from the Form container, only from a Group/Section/ForEach.
+              Group {
                 Section("Text") {
                     Picker("Font", selection: $fontID) {
                         ForEach(fontOptions) { Text($0.name).tag($0.id) }
@@ -84,8 +87,11 @@ struct CustomizeThemeView: View {
                         Label("Reset Theme", systemImage: "arrow.counterclockwise")
                     }
                 }
+              }
+              .appThemedRows()
             }
             .safeAreaInset(edge: .top) { previewHeader }
+            .appThemedScroll()
             .navigationTitle("Customize Theme")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -138,7 +144,8 @@ struct CustomizeThemeView: View {
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 14)
-        .background(Color(.systemGroupedBackground))
+        // Warm base under Sepia (matches the themed Form); system grouped otherwise.
+        .background(themeManager.appTheme.appBaseBackground ?? Color(.systemGroupedBackground))
     }
 
     private func swatch(_ option: ReaderTheme) -> some View {
@@ -256,7 +263,10 @@ private struct ThemePreview: UIViewRepresentable {
         private func inject(_ css: String, into web: WKWebView) {
             // Trim only the reader's tall vertical padding so the sample fills the
             // card — leave the horizontal padding alone so the Margins slider shows.
-            let preview = css + "\nhtml, body { height: auto !important; } body { padding-top: 0.9em !important; padding-bottom: 0.9em !important; }"
+            // Trim the reader's tall vertical padding AND the first element's top
+            // margin (the sample's <h3>) so the preview starts snug at the top —
+            // space is precious here with all the options below.
+            let preview = css + "\nhtml, body { height: auto !important; } body { padding-top: 0.5em !important; padding-bottom: 0.7em !important; } body > *:first-child { margin-top: 0 !important; }"
             let base64 = Data(preview.utf8).base64EncodedString()
             web.evaluateJavaScript("""
             (function(){var id='preview-style';var s=document.getElementById(id);
