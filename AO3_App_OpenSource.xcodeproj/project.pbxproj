@@ -10,14 +10,38 @@
 		000000000000000220000000 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000210000000 /* SwiftSoup */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		000000000000000550000000 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000100000000;
+			remoteInfo = AO3_App_OpenSource;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		000000000000000560000000 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000100000000 /* AO3_App_OpenSource */;
+			targetProxy = 000000000000000550000000 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* AO3_App_OpenSource.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AO3_App_OpenSource.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* AO3_App_OpenSource */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AO3_App_OpenSource;
+			sourceTree = "<group>";
+		};
+		000000000000000000000510 /* KudosTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KudosTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -29,6 +53,11 @@
 				000000000000000220000000 /* SwiftSoup in Frameworks */,
 			);
 		};
+		000000000000000530000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -36,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000010 /* AO3_App_OpenSource */,
+				000000000000000000000510 /* KudosTests */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -44,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000120 /* AO3_App_OpenSource.app */,
+				000000000000000000000520 /* KudosTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -72,6 +103,29 @@
 			productReference = 000000000000000000000120 /* AO3_App_OpenSource.app */;
 			productType = "com.apple.product-type.application";
 		};
+		000000000000000500000000 /* KudosTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000513000000 /* Build configuration list for PBXNativeTarget "KudosTests" */;
+			buildPhases = (
+				000000000000000520000000 /* Sources */,
+				000000000000000530000000 /* Frameworks */,
+				000000000000000540000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				000000000000000560000000 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				000000000000000000000510 /* KudosTests */,
+			);
+			name = KudosTests;
+			packageProductDependencies = (
+			);
+			productName = KudosTests;
+			productReference = 000000000000000000000520 /* KudosTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -84,6 +138,10 @@
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					000000000000000500000000 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 000000000000000100000000;
 					};
 				};
 			};
@@ -105,6 +163,7 @@
 			projectRoot = "";
 			targets = (
 				000000000000000100000000 /* AO3_App_OpenSource */,
+				000000000000000500000000 /* KudosTests */,
 			);
 		};
 /* End PBXProject section */
@@ -115,10 +174,20 @@
 			files = (
 			);
 		};
+		000000000000000540000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000120000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		000000000000000520000000 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 			);
@@ -364,6 +433,48 @@
 			};
 			name = Release;
 		};
+		000000000000000514000000 /* Debug configuration for PBXNativeTarget "KudosTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NQH85H7343;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "devplaceholder.H17TULZJ.KudosTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kudos.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kudos";
+			};
+			name = Debug;
+		};
+		000000000000000515000000 /* Release configuration for PBXNativeTarget "KudosTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NQH85H7343;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "devplaceholder.H17TULZJ.KudosTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kudos.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kudos";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -380,6 +491,14 @@
 			buildConfigurations = (
 				000000000000000111000000 /* Debug configuration for PBXNativeTarget "AO3_App_OpenSource" */,
 				000000000000000112000000 /* Release configuration for PBXNativeTarget "AO3_App_OpenSource" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		000000000000000513000000 /* Build configuration list for PBXNativeTarget "KudosTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000514000000 /* Debug configuration for PBXNativeTarget "KudosTests" */,
+				000000000000000515000000 /* Release configuration for PBXNativeTarget "KudosTests" */,
 			);
 			defaultConfigurationName = Release;
 		};
