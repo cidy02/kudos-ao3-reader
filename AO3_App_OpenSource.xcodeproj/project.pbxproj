@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000220000000 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000210000000 /* SwiftSoup */; };
-		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000000 /* ReadiumShared */; };
-		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000320000000 /* ReadiumStreamer */; };
-		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
+		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000000 /* ReadiumShared */; platformFilters = (ios, ); };
+		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000320000000 /* ReadiumStreamer */; platformFilters = (ios, ); };
+		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000330000000 /* ReadiumNavigator */; platformFilters = (ios, ); };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
