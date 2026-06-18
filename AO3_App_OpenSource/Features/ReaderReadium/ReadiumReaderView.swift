@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 #if os(iOS)
+import UIKit
 import ReadiumShared
 import ReadiumNavigator
 #endif
@@ -50,16 +51,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var totalProgression: Double? { currentLocator?.locations.totalProgression }
 
     /// Opens the work's EPUB and builds the navigator at `initialLocator` with the
-    /// given starting preferences. The file already lives in the app sandbox, so
-    /// (unlike the POC) it's opened in place — no copy.
-    func open(fileURL: URL, initialLocator: Locator?, preferences: EPUBPreferences) async {
+    /// given configuration (preferences + custom-font declarations). The file
+    /// already lives in the app sandbox, so (unlike the POC) it's opened in place.
+    func open(fileURL: URL, initialLocator: Locator?,
+              config: EPUBNavigatorViewController.Configuration) async {
         phase = .loading
         do {
             let publication = try await ReadiumPublicationLoader.openEPUB(at: fileURL)
             let navigator = try EPUBNavigatorViewController(
                 publication: publication,
                 initialLocation: initialLocator,
-                config: .init(preferences: preferences)
+                config: config
             )
             navigator.delegate = self
             let tocLinks = (try? await publication.tableOfContents().get()) ?? []
@@ -105,11 +107,34 @@ struct ReadiumReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
+    @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
-    @AppStorage("readerFontPt") private var fontSizePt: Double = ReaderTextStyle.defaultFontSizePt
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
+    @AppStorage("readerFontID") private var fontID: String = "system"
+    // Apple Books–style typography; layout options are gated by `customizeEnabled`
+    // (mirrored from the legacy reader via `ReaderTextStyle.resolved`).
+    @AppStorage("readerCustomize") private var customizeEnabled = false
+    @AppStorage("readerBoldText") private var boldText = false
+    @AppStorage("readerFontPt") private var fontSizePt: Double = ReaderTextStyle.defaultFontSizePt
+    @AppStorage("readerLineHeight") private var lineHeight: Double = ReaderTextStyle.defaultLineHeight
+    @AppStorage("readerLetterSpacing") private var letterSpacing: Double = 0
+    @AppStorage("readerWordSpacing") private var wordSpacing: Double = 0
+    @AppStorage("readerMargin") private var pageMargin: Double = ReaderTextStyle.defaultMargin
+    @AppStorage("readerJustify") private var justifyText = false
 
     @State private var book = ReadiumBook()
+
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+
+    /// The effective typography (layout options collapse to defaults when Customize
+    /// is off; font weight + size always apply) — same rule as the legacy reader.
+    private var textStyle: ReaderTextStyle {
+        ReaderTextStyle(
+            customize: customizeEnabled, bold: boldText, fontSizePt: fontSizePt,
+            lineHeight: lineHeight, letterSpacing: letterSpacing, wordSpacing: wordSpacing,
+            margin: pageMargin, justify: justifyText
+        ).resolved
+    }
 
     /// Reader chrome (bars) visibility — driven by tapping the page.
     private var chromeVisible: Bool { !book.chromeHidden }
@@ -117,22 +142,53 @@ struct ReadiumReaderView: View {
     /// The reader's effective theme (app theme while linked).
     private var readerTheme: ReaderTheme { themeManager.readerTheme }
 
-    /// Maps the app's reader settings + theme onto Readium's preferences. Font
-    /// size is a multiplier (legacy points ÷ default); margins are a constant for
-    /// now (the slider is wired in a follow-up).
+    /// Maps the app's reader settings + theme onto Readium's preferences. Sizes are
+    /// expressed relative to the legacy defaults: font size and margins as
+    /// multipliers; spacing/line-height passed through (clamped non-negative).
     private var preferences: EPUBPreferences {
-        EPUBPreferences(
-            columnCount: twoPageEnabled ? .two : .auto,
-            fontSize: max(0.5, fontSizePt / ReaderTextStyle.defaultFontSizePt),
-            pageMargins: 1.4,
+        let style = textStyle
+        return EPUBPreferences(
+            // .auto lets Readium show a two-page spread on wide screens (iPad) and a
+            // single column when narrow; iPhone stays single-column like the legacy.
+            columnCount: (twoPageEnabled && !isPhone) ? .auto : .one,
+            fontFamily: readiumFontFamily,
+            fontSize: max(0.5, style.fontSizePt / ReaderTextStyle.defaultFontSizePt),
+            fontWeight: style.bold ? 1.75 : nil,        // ≈ 700 (Readium scales ×400)
+            letterSpacing: max(0, style.letterSpacing),
+            lineHeight: style.lineHeight,
+            pageMargins: min(2.0, max(0.5, style.margin / ReaderTextStyle.defaultMargin)),
             scroll: readingMode == .scroll,
-            theme: readerTheme.readiumTheme
+            textAlign: style.justify ? .justify : nil,
+            theme: readerTheme.readiumTheme,
+            wordSpacing: max(0, style.wordSpacing)
         )
     }
 
-    /// Re-submit preferences whenever any mapped setting changes.
+    /// The selected font as a Readium `FontFamily`: nil = default (system), a custom
+    /// font's id (declared via `fontFamilyDeclarations`), or a built-in's primary name.
+    private var readiumFontFamily: FontFamily? {
+        let option = ReaderFontOption.current(id: fontID, customFonts: customFonts)
+        if option.id == "system" { return nil }
+        if option.isCustom { return FontFamily(rawValue: option.id) }
+        let primary = option.cssFamily.split(separator: ",").first.map(String.init) ?? option.cssFamily
+        return FontFamily(rawValue: primary.trimmingCharacters(in: CharacterSet(charactersIn: " '\"")))
+    }
+
+    /// `@font-face` declarations for the user's imported fonts, so the navigator can
+    /// load and apply them. Built-in families need no declaration (the WebView has them).
+    private var fontFamilyDeclarations: [AnyHTMLFontFamilyDeclaration] {
+        customFonts.compactMap { font in
+            guard let fileURL = font.fileURL.fileURL else { return nil }
+            return CSSFontFamilyDeclaration(
+                fontFamily: FontFamily(rawValue: font.selectionID),
+                fontFaces: [CSSFontFace(file: fileURL)]
+            ).eraseToAnyHTMLFontFamilyDeclaration()
+        }
+    }
+
+    /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
-        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontSizePt)|\(twoPageEnabled)"
+        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontID)|\(twoPageEnabled)|\(textStyle.token)"
     }
 
     /// Chapters / Display share the app-wide panel slot so only one opens at once.
@@ -292,7 +348,11 @@ struct ReadiumReaderView: View {
             try? context.save()
         }
         let initialLocator = Locator(persistenceString: work.readiumLocator)
-        await book.open(fileURL: work.fileURL, initialLocator: initialLocator, preferences: preferences)
+        let config = EPUBNavigatorViewController.Configuration(
+            preferences: preferences,
+            fontFamilyDeclarations: fontFamilyDeclarations
+        )
+        await book.open(fileURL: work.fileURL, initialLocator: initialLocator, config: config)
     }
 }
 
