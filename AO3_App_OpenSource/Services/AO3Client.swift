@@ -156,7 +156,7 @@ actor AO3Client {
 
         guard let url = components.url else { throw AO3Error.network("Bad search URL.") }
         let html = try await getHTML(url)
-        return try parseSearchPage(html, page: page)
+        return try Self.parseSearchPage(html, page: page)
     }
 
     /// Builds AO3's `word_count` expression from the from/to fields.
@@ -202,6 +202,13 @@ actor AO3Client {
             throw AO3Error.network("Bad work URL.")
         }
         let html = try await getHTML(url)
+        return try Self.parseWorkTags(from: html)
+    }
+
+    /// Parses a work page's canonical tag groups + stats from its HTML. Split out
+    /// from `workTags(workID:)` so it can be unit-tested against fixture HTML
+    /// without a network round-trip.
+    static func parseWorkTags(from html: String) throws -> AO3WorkTagGroups {
         let doc = try SwiftSoup.parse(html)
 
         func tags(_ kind: String) throws -> [String] {
@@ -351,7 +358,9 @@ actor AO3Client {
 
     // MARK: Parsing (ported selectors)
 
-    private func parseSearchPage(_ html: String, page: Int) throws -> AO3SearchPage {
+    /// Parses a works-search results page (works list + pagination). `static` and
+    /// internal so it can be unit-tested against fixture HTML without a network call.
+    static func parseSearchPage(_ html: String, page: Int) throws -> AO3SearchPage {
         let doc = try SwiftSoup.parse(html)
         let blurbs = try doc.select("li.work.blurb").array()
         // Skip any single malformed blurb rather than failing the whole search.
