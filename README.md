@@ -1,7 +1,20 @@
 # Kudos — AO3 Reader
 
-A personal, open-source (GPL-2) SwiftUI app for reading Archive of Our Own works
-on iOS / iPadOS / macOS. Bundle id `devplaceholder.H17TULZJ.AO3_App_OpenSource`.
+A native macOS / iOS / iPadOS reader for Archive of Our Own with a polished
+Liquid Glass experience. Personal and open-source (GPL-3.0), built with SwiftUI
+and SwiftData.
+
+## Features
+
+- **Read AO3 works offline** — download a work's EPUB and read it in a native
+  paginated or scrolled reader, with Light / Sepia / Dark themes and custom
+  typography (font, size, line/letter/word spacing, justification, margins).
+- **Native AO3 search & browse** — a faceted works search, browse-by-fandom, and
+  an in-app AO3 web view; scraped politely with SwiftSoup (AO3 has no public API).
+- **Library & bookmarks** — saved works with rich metadata (rating, word count,
+  chapters, kudos, series), custom tags, filtering, reading history, and favorites.
+- **Privacy-aware** — mature works can be hidden behind a Face ID gate.
+- **Cross-platform** — one SwiftUI codebase for iPhone, iPad, and Mac.
 
 ## Branch strategy
 
@@ -95,3 +108,25 @@ git config core.hooksPath .githooks
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs SwiftLint on every
 push/PR and activates once a remote is added. A build job is omitted until
 GitHub runners ship the iOS 26 / Xcode 27 SDK.
+You can also add SwiftLint as an Xcode build phase manually (Target ▸ Build
+Phases ▸ + ▸ New Run Script Phase):
+
+```bash
+if which swiftlint >/dev/null; then swiftlint; else echo "warning: SwiftLint not installed"; fi
+```
+
+## Project docs
+
+Planning and tracking notes live in [`docs/`](docs/):
+
+- [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md) — feature backlog.
+- [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md) — visual / interaction polish items.
+- [`docs/Bugs.md`](docs/Bugs.md) — known issues.
+
+## License
+
+Released under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
+
+This project scrapes Archive of Our Own's public HTML (AO3 has no official API).
+It is an unofficial, personal project and is not affiliated with or endorsed by
+the Organization for Transformative Works or Archive of Our Own.
