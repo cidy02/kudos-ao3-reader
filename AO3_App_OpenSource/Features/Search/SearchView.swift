@@ -30,7 +30,7 @@ struct SearchView: View {
                 AO3WorkDetailView(work: work, path: $path)
             }
             .navigationDestination(for: SavedWork.self) { work in
-                ReaderView(work: work)
+                BookReaderView(work: work)
             }
             .navigationDestination(for: AO3MediaCategory.self) { category in
                 FandomListView(category: category, onSelect: searchFandomFromBrowse)

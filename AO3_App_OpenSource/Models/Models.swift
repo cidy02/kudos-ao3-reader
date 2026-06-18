@@ -53,9 +53,12 @@ import SwiftData
     var seriesPosition: Int = 0
     var seriesURL: String = ""
 
-    /// Reading progress so the reader can resume where the user left off.
+    /// Reading progress so the reader can resume where the user left off. The
+    /// legacy WKWebView reader uses spine index + scroll fraction; the Readium
+    /// reader persists its richer `Locator` as a JSON string (`readiumLocator`).
     var lastSpineIndex: Int = 0
     var lastScrollFraction: Double = 0
+    var readiumLocator: String = ""
 
     /// AO3's own tags for this work (fandoms, relationships, characters, freeform),
     /// read from the EPUB on import. These are intrinsic to the work — distinct from

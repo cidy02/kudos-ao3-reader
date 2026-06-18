@@ -238,7 +238,7 @@ struct WorkDetailView: View {
             await WorkTags.refreshFromAO3(for: work, in: context)
         }
         .navigationDestination(isPresented: $goToReader) {
-            ReaderView(work: work)
+            BookReaderView(work: work)
         }
         .navigationTitle(work.title)
         #if !os(macOS)
