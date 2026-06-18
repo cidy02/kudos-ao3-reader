@@ -3,11 +3,13 @@ import SwiftData
 
 /// Imports a downloaded EPUB into the library: reads its metadata, moves the
 /// file into permanent storage, and inserts a `SavedWork`. Returns the inserted
-/// work (or nil if the file couldn't be saved). Shared by the Browse tab's
+/// work, or throws if the file couldn't be saved. Shared by the Browse tab's
 /// download interception and the native AO3 search/download flow.
 ///
-/// `async` because the metadata now comes from Readium (which opens the
-/// publication asynchronously) on iOS.
+/// `async` because metadata comes from Readium (which opens the publication
+/// asynchronously) on iOS. Metadata extraction is best-effort: a work still
+/// imports (with a filename fallback title) if its metadata can't be read, since
+/// the file itself is valid. Throws only if the file can't be saved.
 @MainActor
 @discardableResult
 func importEPUB(
@@ -16,7 +18,7 @@ func importEPUB(
     isComplete: Bool = false,
     seriesURL: String = "",
     into context: ModelContext
-) async -> SavedWork? {
+) async throws -> SavedWork {
     // Metadata extraction: Readium's `Publication` replaces the custom
     // `EPUBDocument`/`MiniZip`/`OPFParser` stack on iOS. macOS keeps the old
     // parser for now (Readium's navigator/shared link UIKit and can't build
@@ -29,7 +31,7 @@ func importEPUB(
         meta = nil
     }
     #else
-    meta = EPUBDocument.metadata(ofEPUBAt: tempURL).map(ImportedWorkMetadata.init(legacy:))
+    meta = (try? EPUBDocument.metadata(ofEPUBAt: tempURL)).map(ImportedWorkMetadata.init(legacy:))
     #endif
 
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
@@ -53,11 +55,7 @@ func importEPUB(
 
     let destination = work.fileURL
     try? FileManager.default.removeItem(at: destination)
-    do {
-        try FileManager.default.moveItem(at: tempURL, to: destination)
-    } catch {
-        return nil
-    }
+    try FileManager.default.moveItem(at: tempURL, to: destination)
 
     context.insert(work)
     try? context.save()

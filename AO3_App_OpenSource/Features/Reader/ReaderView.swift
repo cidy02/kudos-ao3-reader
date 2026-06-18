@@ -31,6 +31,7 @@ struct ReaderView: View {
 
     @State private var controller = ReaderController()
     @State private var document: EPUBDocument?
+    @State private var openError: String?
     @State private var readRoot: URL?
     @State private var currentIndex = 0
     @State private var isLoading = true
@@ -141,7 +142,7 @@ struct ReaderView: View {
                 ContentUnavailableView(
                     "Couldn't open this EPUB",
                     systemImage: "exclamationmark.triangle",
-                    description: Text("The file may be missing or in an unsupported format.")
+                    description: Text(openError ?? "The file may be missing or in an unsupported format.")
                 )
             }
         }
@@ -452,12 +453,16 @@ struct ReaderView: View {
 
     private func load() async {
         isLoading = true
+        openError = nil
         let directory = Storage.readerDirectory(for: work.id)
-        let parsed = EPUBDocument.open(epubURL: work.fileURL, into: directory)
-        document = parsed
-        readRoot = directory
-        if let parsed, !parsed.spineURLs.isEmpty {
+        do {
+            let parsed = try EPUBDocument.open(epubURL: work.fileURL, into: directory)
+            document = parsed
+            readRoot = directory
             currentIndex = min(max(work.lastSpineIndex, 0), parsed.spineURLs.count - 1)
+        } catch {
+            document = nil
+            openError = (error as? EPUBError)?.errorDescription
         }
         configureController()
         isLoading = false
