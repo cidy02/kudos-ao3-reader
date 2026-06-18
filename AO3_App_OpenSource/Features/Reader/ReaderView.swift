@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import SwiftData
 #if canImport(UIKit)
@@ -460,9 +461,11 @@ struct ReaderView: View {
             document = parsed
             readRoot = directory
             currentIndex = min(max(work.lastSpineIndex, 0), parsed.spineURLs.count - 1)
+            Log.epub.info("Opened EPUB: \(parsed.chapters.count) chapters")
         } catch {
             document = nil
             openError = (error as? EPUBError)?.errorDescription
+            Log.epub.error("Couldn't open EPUB: \(error.localizedDescription, privacy: .public)")
         }
         configureController()
         isLoading = false
