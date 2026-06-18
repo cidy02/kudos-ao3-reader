@@ -173,6 +173,12 @@ struct ReadiumReaderView: View {
             letterSpacing: max(0, style.letterSpacing),
             lineHeight: style.lineHeight,
             pageMargins: min(2.0, max(0.5, style.margin / ReaderTextStyle.defaultMargin)),
+            // Readium honours line-height / letter- & word-spacing / justify only when
+            // publisher styles are off; with them on it keeps the EPUB's own CSS and
+            // silently drops those overrides. Turn them off when the user opts into
+            // Customize so the advanced typography actually applies (matching the
+            // preview); leave publisher styles on otherwise for comfortable defaults.
+            publisherStyles: !style.customize,
             scroll: readingMode == .scroll,
             textAlign: style.justify ? .justify : nil,
             theme: readerTheme.readiumTheme,
@@ -244,6 +250,11 @@ struct ReadiumReaderView: View {
             .edgeSwipeToGoBack { dismiss() }
             .task(id: work.id) { await openBook() }
             .onChange(of: preferencesToken) { _, _ in book.submit(preferences) }
+            // The Display / Customize controls live in a sheet over the reader; a
+            // behind-the-sheet onChange can be missed, so re-apply when it closes.
+            .onChange(of: router.panel) { _, panel in
+                if panel == .none { book.submit(preferences) }
+            }
             .onDisappear {
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
@@ -273,26 +284,12 @@ struct ReadiumReaderView: View {
 
     // MARK: Chrome
 
+    /// iOS navigation is gesture-based (swipe / tap zones), so the bar shows only
+    /// the position pill — no prev/next buttons.
     private var bottomBar: some View {
-        GlassEffectContainer(spacing: 16) {
-            HStack(spacing: 12) {
-                navButton("chevron.left") { book.goBackward() }
-                progressPill
-                navButton("chevron.right") { book.goForward() }
-            }
-        }
-        .padding(.bottom, 12)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-    }
-
-    private func navButton(_ systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.body.weight(.medium))
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
+        progressPill
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private var progressPill: some View {
