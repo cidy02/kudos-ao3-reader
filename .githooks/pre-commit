@@ -1,0 +1,14 @@
+#!/bin/sh
+# Non-blocking pre-commit: surface SwiftLint warnings on staged Swift files.
+# Enable once with:  git config core.hooksPath .githooks
+#
+# Deliberately advisory — it prints issues but never aborts the commit (warnings
+# only). CI enforces strictly. To block commits locally, drop the `exit 0`.
+command -v swiftlint >/dev/null 2>&1 || exit 0
+
+staged=$(git diff --cached --name-only --diff-filter=d | grep '\.swift$' || true)
+[ -z "$staged" ] && exit 0
+
+# shellcheck disable=SC2086
+echo "$staged" | tr '\n' '\0' | xargs -0 swiftlint lint --quiet 2>/dev/null || true
+exit 0

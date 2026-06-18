@@ -50,3 +50,34 @@ xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
   -archivePath build/AO3.xcarchive archive \
   CODE_SIGNING_ALLOWED=NO
 ```
+
+## Linting & formatting
+
+[SwiftLint](https://github.com/realm/SwiftLint) is the linter; [SwiftFormat](https://github.com/nicklockwood/SwiftFormat)
+is an optional formatter. Install both with Homebrew:
+
+```bash
+brew install swiftlint swiftformat
+```
+
+Run the checks (SwiftLint is the gate; it currently reports warnings only, so it
+exits cleanly — fix them opportunistically):
+
+```bash
+Scripts/lint.sh          # check
+Scripts/lint.sh --fix    # apply SwiftFormat + SwiftLint autofixes in place
+```
+
+Config lives in [`.swiftlint.yml`](.swiftlint.yml) and [`.swiftformat`](.swiftformat).
+SwiftFormat is kept advisory: the codebase is wrapped by hand, so it is **not**
+enforced and no bulk reformat has been applied — run `--fix` only when you want it.
+
+To surface lint warnings on staged files before each commit (non-blocking):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs SwiftLint on every
+push/PR and activates once a remote is added. A build job is omitted until
+GitHub runners ship the iOS 26 / Xcode 27 SDK.

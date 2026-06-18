@@ -1,0 +1,34 @@
+name: CI
+
+# Lint runs on every push / PR. Activates automatically once a remote is added.
+#
+# SwiftLint is the gate (config is warnings-only, so it passes today and only
+# fails when an error-severity rule is hit; switch to `--strict` once the
+# warning baseline is cleaned up). SwiftFormat is advisory (continue-on-error):
+# the codebase is hand-wrapped, so enforcing it would mean a bulk reformat.
+#
+# A build job is intentionally omitted for now: the project targets the iOS 26 /
+# Xcode 27 SDK, which GitHub-hosted runners don't yet provide. Add a build job
+# (xcodebuild ... CODE_SIGNING_ALLOWED=NO) once a runner image ships that SDK.
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & format
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: brew install swiftlint swiftformat
+      - name: SwiftLint
+        run: swiftlint lint AO3_App_OpenSource
+      - name: SwiftFormat (advisory)
+        continue-on-error: true
+        run: swiftformat --lint AO3_App_OpenSource
