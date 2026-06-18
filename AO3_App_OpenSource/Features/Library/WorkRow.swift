@@ -44,11 +44,15 @@ struct WorkRow: View {
             }
 
             if !work.workFandoms.isEmpty {
-                Label(work.workFandoms.joined(separator: ", "), systemImage: "books.vertical")
-                    .font(.caption)
-                    .foregroundStyle(.tint)
-                    .labelStyle(.titleAndIcon)
-                    .lineLimit(1)
+                // Tight icon→text gap + bold accent glyph, matching the stats row.
+                HStack(spacing: 4) {
+                    Image(systemName: "books.vertical")
+                        .fontWeight(.bold)
+                    Text(work.workFandoms.joined(separator: ", "))
+                }
+                .font(.caption)
+                .foregroundStyle(.tint)
+                .lineLimit(1)
             }
 
             if !summaryText.isEmpty {
@@ -68,7 +72,7 @@ struct WorkRow: View {
             }
 
             // Stats wrap rather than truncate (matches AO3WorkRow).
-            FlowLayout(spacing: 14, rowSpacing: 5) {
+            FlowLayout(spacing: 18, rowSpacing: 5) {
                 if !work.rating.isEmpty { statLabel(work.rating, "checkmark.shield") }
                 if work.wordCount > 0 { statLabel(work.wordCount.formatted(), "textformat.size") }
                 if !work.chapters.isEmpty { statLabel(work.chapters, "book") }
@@ -83,9 +87,16 @@ struct WorkRow: View {
     }
 
     private func statLabel(_ text: String, _ symbol: String) -> some View {
-        Label(text, systemImage: symbol)
-            .labelStyle(.titleAndIcon)
-            .lineLimit(1)
-            .fixedSize()
+        // The icon hugs its own label (tight inner spacing) and is bold + tinted in
+        // the theme accent; the wider FlowLayout spacing keeps separate stats apart,
+        // so each glyph reads as belonging to the value beside it.
+        HStack(spacing: 3) {
+            Image(systemName: symbol)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tint)
+            Text(text)
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 }
