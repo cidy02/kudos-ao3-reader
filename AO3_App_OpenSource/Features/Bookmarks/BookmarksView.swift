@@ -6,6 +6,7 @@ struct BookmarksView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -52,6 +53,9 @@ struct BookmarksView: View {
                 case .favorites: favoritesList
                 }
             }
+            // Warm the empty states under Sepia (the lists carry their own backdrop
+            // via .cardList()); no-op in Light/Dark.
+            .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle("Bookmarks")
             #if os(iOS)
             // Match the Library tab: large, left-aligned title kept inline on the
