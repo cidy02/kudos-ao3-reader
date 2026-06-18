@@ -1,6 +1,40 @@
 import Foundation
 import Compression
 
+// MARK: - Errors
+
+/// A typed failure from reading an EPUB, with a user-facing description. Replaces
+/// the parser's old silent `nil` returns so callers can tell the user *why* a
+/// file wouldn't open.
+enum EPUBError: LocalizedError {
+    /// The file's bytes couldn't be read from disk.
+    case unreadableFile
+    /// Not a valid ZIP container (so not an EPUB).
+    case notAnEPUB
+    /// `META-INF/container.xml` is missing or doesn't point at a package document.
+    case missingContainer
+    /// The OPF package document referenced by the container is missing.
+    case missingPackage
+    /// The OPF package document couldn't be parsed.
+    case malformedPackage
+    /// The package has no spine items — nothing readable.
+    case noReadableContent
+    /// The archive couldn't be unpacked to disk.
+    case extractionFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .unreadableFile: "This file couldn't be read."
+        case .notAnEPUB: "This file isn't a valid EPUB."
+        case .missingContainer: "The EPUB is missing its container file (META-INF/container.xml)."
+        case .missingPackage: "The EPUB's package file (OPF) is missing."
+        case .malformedPackage: "The EPUB's package file (OPF) couldn't be read."
+        case .noReadableContent: "The EPUB has no readable chapters."
+        case .extractionFailed: "The EPUB couldn't be unpacked."
+        }
+    }
+}
+
 // MARK: - Minimal ZIP reader
 
 /// A single entry in a ZIP archive's central directory.
@@ -175,25 +209,25 @@ struct EPUBDocument {
     let chapters: [TOCEntry]
 
     /// Parses an already-unzipped EPUB rooted at `directory`.
-    init?(unzippedAt directory: URL) {
+    init(unzippedAt directory: URL) throws {
         let containerURL = directory.appendingPathComponent("META-INF/container.xml")
-        guard
-            let containerData = try? Data(contentsOf: containerURL),
-            let opfPath = EPUBDocument.rootfilePath(from: containerData)
-        else { return nil }
+        guard let containerData = try? Data(contentsOf: containerURL) else { throw EPUBError.missingContainer }
+        guard let opfPath = EPUBDocument.rootfilePath(from: containerData) else { throw EPUBError.missingContainer }
 
         let opfURL = directory.appendingPathComponent(opfPath)
-        guard let opfData = try? Data(contentsOf: opfURL) else { return nil }
+        guard let opfData = try? Data(contentsOf: opfURL) else { throw EPUBError.missingPackage }
 
         let parser = OPFParser()
-        guard parser.parse(opfData) else { return nil }
+        guard parser.parse(opfData) else { throw EPUBError.malformedPackage }
 
         let opfDir = opfURL.deletingLastPathComponent()
-        self.spineURLs = parser.spine.compactMap { id in
+        let spineURLs = parser.spine.compactMap { id in
             parser.manifest[id].map { href in
                 opfDir.appendingPathComponent(href)
             }
         }
+        guard !spineURLs.isEmpty else { throw EPUBError.noReadableContent }
+        self.spineURLs = spineURLs
         self.metadata = EPUBMetadata(
             title: parser.title,
             author: parser.author,
@@ -281,27 +315,24 @@ struct EPUBDocument {
         return (last.removingPercentEncoding ?? last).lowercased()
     }
 
-    /// Convenience: unzip an EPUB file then parse it.
-    static func open(epubURL: URL, into directory: URL) -> EPUBDocument? {
-        guard
-            let data = try? Data(contentsOf: epubURL),
-            let zip = MiniZip(data: data)
-        else { return nil }
-        try? zip.unzip(to: directory)
-        return EPUBDocument(unzippedAt: directory)
+    /// Convenience: unzip an EPUB file then parse it. Throws `EPUBError` on failure.
+    static func open(epubURL: URL, into directory: URL) throws -> EPUBDocument {
+        guard let data = try? Data(contentsOf: epubURL) else { throw EPUBError.unreadableFile }
+        guard let zip = MiniZip(data: data) else { throw EPUBError.notAnEPUB }
+        do { try zip.unzip(to: directory) } catch { throw EPUBError.extractionFailed }
+        return try EPUBDocument(unzippedAt: directory)
     }
 
     /// Reads just the metadata from an EPUB file without unzipping to disk.
-    static func metadata(ofEPUBAt url: URL) -> EPUBMetadata? {
-        guard
-            let data = try? Data(contentsOf: url),
-            let zip = MiniZip(data: data),
-            let containerData = zip.data(named: "META-INF/container.xml"),
-            let opfPath = rootfilePath(from: containerData),
-            let opfData = zip.data(named: opfPath)
-        else { return nil }
+    /// Throws `EPUBError` on failure.
+    static func metadata(ofEPUBAt url: URL) throws -> EPUBMetadata {
+        guard let data = try? Data(contentsOf: url) else { throw EPUBError.unreadableFile }
+        guard let zip = MiniZip(data: data) else { throw EPUBError.notAnEPUB }
+        guard let containerData = zip.data(named: "META-INF/container.xml") else { throw EPUBError.missingContainer }
+        guard let opfPath = rootfilePath(from: containerData) else { throw EPUBError.missingContainer }
+        guard let opfData = zip.data(named: opfPath) else { throw EPUBError.missingPackage }
         let parser = OPFParser()
-        guard parser.parse(opfData) else { return nil }
+        guard parser.parse(opfData) else { throw EPUBError.malformedPackage }
         return EPUBMetadata(
             title: parser.title,
             author: parser.author,

@@ -298,8 +298,13 @@ private extension String {
 
 /// An error surfaced from the AO3 client, with a user-facing description.
 enum AO3Error: LocalizedError {
-    case rateLimited
+    /// HTTP 429. `retryAfter` is the server's `Retry-After` hint in seconds, if given.
+    case rateLimited(retryAfter: TimeInterval?)
     case notFound
+    /// HTTP 5xx — a transient server-side error (retried automatically).
+    case server(status: Int)
+    /// Any other unexpected HTTP status (e.g. 4xx other than 404/429).
+    case http(status: Int)
     case network(String)
     case parse
 
@@ -307,6 +312,8 @@ enum AO3Error: LocalizedError {
         switch self {
         case .rateLimited: "AO3 is rate-limiting requests. Wait a moment and try again."
         case .notFound: "That work or page couldn't be found (it may be restricted)."
+        case .server(let status): "AO3 had a server problem (HTTP \(status)). Try again shortly."
+        case .http(let status): "AO3 returned an unexpected response (HTTP \(status))."
         case .network(let detail): detail
         case .parse: "AO3's page format wasn't what the app expected."
         }

@@ -104,9 +104,10 @@ struct BrowseView: View {
     private func configureImport() {
         let context = self.context
         model.onImport = { fileURL, source in
-            if let work = importEPUB(fileURL, source: source, into: context) {
+            do {
+                let work = try importEPUB(fileURL, source: source, into: context)
                 show("Saved “\(work.title)” to Library")
-            } else {
+            } catch {
                 show("Couldn't save EPUB.")
             }
         }

@@ -108,17 +108,14 @@ struct AO3WorkDetailView: View {
             loadError = nil
             do {
                 let temp = try await AO3Client.shared.downloadEPUB(workID: work.id)
-                if let saved = importEPUB(temp, source: work.workURL,
-                                          isComplete: work.isComplete ?? false,
-                                          seriesURL: work.seriesURL ?? "", into: context) {
-                    path.append(saved)
-                } else {
-                    loadError = "The download couldn't be saved."
-                }
+                let saved = try importEPUB(temp, source: work.workURL,
+                                           isComplete: work.isComplete ?? false,
+                                           seriesURL: work.seriesURL ?? "", into: context)
+                path.append(saved)
             } catch let error as AO3Error {
                 loadError = error.errorDescription
             } catch {
-                loadError = error.localizedDescription
+                loadError = "The download couldn't be saved."
             }
             downloading = false
         }

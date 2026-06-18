@@ -29,9 +29,18 @@ actor AO3Client {
     // MARK: Requests
 
     private func getHTML(_ url: URL) async throws -> String {
-        let (data, response) = try await session.data(from: url)
-        try Self.check(response)
+        let data = try await fetchData(from: url)
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Fetches a URL's body, validating the HTTP status and retrying transient
+    /// failures with backoff (see `withRetry`).
+    private func fetchData(from url: URL) async throws -> Data {
+        try await withRetry {
+            let (data, response) = try await session.data(from: url)
+            try Self.check(response)
+            return data
+        }
     }
 
     private static func check(_ response: URLResponse) throws {
@@ -40,11 +49,70 @@ actor AO3Client {
         }
         switch http.statusCode {
         case 200...299: return
-        case 429: throw AO3Error.rateLimited
+        case 429: throw AO3Error.rateLimited(retryAfter: retryAfter(from: http))
         case 404: throw AO3Error.notFound
-        default: throw AO3Error.network("AO3 returned HTTP \(http.statusCode).")
+        case 500...599: throw AO3Error.server(status: http.statusCode)
+        default: throw AO3Error.http(status: http.statusCode)
         }
     }
+
+    /// Parses a `Retry-After` header (seconds, or an HTTP-date) into a delay.
+    private static func retryAfter(from http: HTTPURLResponse) -> TimeInterval? {
+        guard let value = http.value(forHTTPHeaderField: "Retry-After")?
+            .trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+        if let seconds = TimeInterval(value) { return seconds }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        if let date = formatter.date(from: value) { return max(0, date.timeIntervalSinceNow) }
+        return nil
+    }
+
+    // MARK: Retry
+
+    /// Runs `operation`, retrying up to `maxRetries` times on *transient* failures
+    /// with exponential backoff (~0.5s, then 1s). Network drop-outs/timeouts,
+    /// HTTP 5xx, and 429 (honouring Retry-After) are retried; 404 / other 4xx and
+    /// parse errors are not. Cancellation propagates immediately.
+    private func withRetry<T>(maxRetries: Int = 2, _ operation: () async throws -> T) async throws -> T {
+        var attempt = 0
+        while true {
+            do {
+                return try await operation()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                attempt += 1
+                guard attempt <= maxRetries,
+                      let delay = Self.retryDelay(for: error, attempt: attempt)
+                else { throw error }
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+    }
+
+    /// Backoff (seconds) before retrying a transient error, or nil if it should
+    /// not be retried. Base 0.5s, doubled per attempt; 429 respects Retry-After.
+    private static func retryDelay(for error: Error, attempt: Int) -> TimeInterval? {
+        let backoff = 0.5 * pow(2, Double(attempt - 1))   // 0.5, 1.0, 2.0…
+        switch error {
+        case AO3Error.rateLimited(let retryAfter):
+            return max(retryAfter ?? 0, backoff)
+        case AO3Error.server:
+            return backoff
+        case let urlError as URLError where transientURLErrorCodes.contains(urlError.code):
+            return backoff
+        default:
+            return nil
+        }
+    }
+
+    /// URLSession transport failures worth retrying (transient connectivity).
+    private static let transientURLErrorCodes: Set<URLError.Code> = [
+        .timedOut, .cannotConnectToHost, .cannotFindHost, .networkConnectionLost,
+        .notConnectedToInternet, .dnsLookupFailed, .secureConnectionFailed, .badServerResponse
+    ]
 
     /// Runs a works search for the given filters. `page` is 1-based.
     func search(filters: AO3SearchFilters, page: Int = 1) async throws -> AO3SearchPage {
@@ -114,8 +182,11 @@ actor AO3Client {
         guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {
             throw AO3Error.network("Bad download URL.")
         }
-        let (tempURL, response) = try await session.download(from: url)
-        try Self.check(response)
+        let tempURL = try await withRetry { () -> URL in
+            let (tempURL, response) = try await session.download(from: url)
+            try Self.check(response)
+            return tempURL
+        }
         let destination = Storage.tempDownloadURL(suggestedName: "\(workID).epub")
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: tempURL, to: destination)
@@ -177,8 +248,7 @@ actor AO3Client {
         var components = URLComponents(string: "\(base)/autocomplete/\(kind.rawValue)")!
         components.queryItems = [URLQueryItem(name: "term", value: trimmed)]
         guard let url = components.url else { return [] }
-        let (data, response) = try await session.data(from: url)
-        try Self.check(response)
+        let data = try await fetchData(from: url)
         return (try JSONDecoder().decode([AutocompleteItem].self, from: data)).map(\.name)
     }
 

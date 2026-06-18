@@ -294,7 +294,8 @@ struct WorkDetailView: View {
     /// file are skipped — they re-populate on their next download).
     private func backfillWorkTagsIfNeeded() {
         guard work.workTags.isEmpty, work.hasEPUB else { return }
-        guard let meta = EPUBDocument.metadata(ofEPUBAt: work.fileURL) else { return }
+        // Best-effort background backfill: stay silent if the EPUB can't be read.
+        guard let meta = try? EPUBDocument.metadata(ofEPUBAt: work.fileURL) else { return }
         let tags = SavedWork.normalizedWorkTags(meta.subjects, excludingRating: meta.rating)
         guard !tags.isEmpty else { return }
         work.workTags = tags

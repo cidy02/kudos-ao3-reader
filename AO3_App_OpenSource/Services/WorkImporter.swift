@@ -3,8 +3,11 @@ import SwiftData
 
 /// Imports a downloaded EPUB into the library: reads its metadata, moves the
 /// file into permanent storage, and inserts a `SavedWork`. Returns the inserted
-/// work (or nil if the file couldn't be saved). Shared by the Browse tab's
+/// work, or throws if the file couldn't be saved. Shared by the Browse tab's
 /// download interception and the native AO3 search/download flow.
+///
+/// Metadata extraction is best-effort: a work still imports (with a filename
+/// fallback title) if its metadata can't be read, since the file itself is valid.
 @MainActor
 @discardableResult
 func importEPUB(
@@ -13,8 +16,8 @@ func importEPUB(
     isComplete: Bool = false,
     seriesURL: String = "",
     into context: ModelContext
-) -> SavedWork? {
-    let meta = EPUBDocument.metadata(ofEPUBAt: tempURL)
+) throws -> SavedWork {
+    let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
 
@@ -36,11 +39,7 @@ func importEPUB(
 
     let destination = work.fileURL
     try? FileManager.default.removeItem(at: destination)
-    do {
-        try FileManager.default.moveItem(at: tempURL, to: destination)
-    } catch {
-        return nil
-    }
+    try FileManager.default.moveItem(at: tempURL, to: destination)
 
     context.insert(work)
     try? context.save()
