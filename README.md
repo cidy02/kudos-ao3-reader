@@ -36,11 +36,17 @@ config (`.claude/`), and working notes/prompts/scratch files
 ## Building
 
 Open `AO3_App_OpenSource.xcodeproj` in Xcode and build the `AO3_App_OpenSource`
-scheme. The `readium-migration` branch's Readium reader runs on iOS/iPadOS; for
-Simulator builds from the command line, code signing can be disabled:
+scheme. The `readium-migration` branch's Readium reader runs on iOS/iPadOS.
+
+A Run Script build phase strips extended attributes from Readium SPM resource
+bundles so that device builds and archives succeed (the provenance/FinderInfo
+xattrs from SPM would otherwise block codesign).
+
+Example command-line archive (then export or manual .ipa packaging):
 
 ```bash
 xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
-  -destination 'platform=iOS Simulator,name=iPhone 17' \
-  CODE_SIGNING_ALLOWED=NO build
+  -destination 'generic/platform=iOS' \
+  -archivePath build/AO3.xcarchive archive \
+  CODE_SIGNING_ALLOWED=NO
 ```

@@ -64,6 +64,7 @@
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
+				000000000000000150000000 /* Strip Readium Bundle xattrs (for signing) */,
 			);
 			buildRules = (
 			);
@@ -126,6 +127,47 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000150000000 /* Strip Readium Bundle xattrs (for signing) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Strip Readium Bundle xattrs (for signing)";
+			shellPath = /bin/sh;
+			shellScript = (
+				"# Strip xattrs from Readium (and transitive) SPM bundles.",
+				"# SPM checkouts and derived copies carry com.apple.provenance, FinderInfo,",
+				"# etc. which are rejected by codesign during device/archive builds.",
+				"# This runs after Resources phase (bundles present in app dir) but before Xcode's codesign step.",
+				"",
+				"set -eu",
+				"",
+				"echo \"Stripping Readium bundle xattrs for codesign...\"",
+				"",
+				"# Cover common locations during normal build, archive, and install phases",
+				"for base in \"${TARGET_BUILD_DIR}\" \"${BUILT_PRODUCTS_DIR}\" \"${INSTALL_DIR}\" \"${INSTALL_ROOT}\"; do",
+				"  if [ -d \"$base\" ]; then",
+				"    find \"$base\" -name 'Readium*.bundle' -o -name '*ReadiumZIPFoundation*.bundle' 2>/dev/null | while IFS= read -r b; do",
+				"      if [ -d \"$b\" ]; then",
+				"        echo \"  xattr -cr $b\"",
+				"        xattr -cr \"$b\" 2>/dev/null || true",
+				"      fi",
+				"    done",
+				"  fi",
+				"done",
+				"",
+				"# Also ensure on the final .app if present",
+				"APP=\"${TARGET_BUILD_DIR}/${PRODUCT_NAME}.app\"",
+				"if [ -d \"$APP\" ]; then",
+				"  xattr -cr \"$APP\" 2>/dev/null || true",
+				"  find \"$APP\" -name '*.bundle' -type d 2>/dev/null | while IFS= read -r b; do xattr -cr \"$b\" 2>/dev/null || true; done",
+				"fi",
+				"",
+				"echo \"Readium xattr cleanup complete.\"",
+				"",
+			);
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000120000000 /* Sources */ = {
