@@ -53,14 +53,22 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Opens the work's EPUB and builds the navigator at `initialLocator` with the
     /// given configuration (preferences + custom-font declarations). The file
     /// already lives in the app sandbox, so (unlike the POC) it's opened in place.
-    func open(fileURL: URL, initialLocator: Locator?,
+    /// `fallbackSpineIndex` migrates legacy progress: when there's no saved Readium
+    /// `Locator`, resume at the start of that reading-order item (the work's last
+    /// chapter from the old WKWebView reader). Intra-chapter offset isn't recovered.
+    func open(fileURL: URL, initialLocator: Locator?, fallbackSpineIndex: Int? = nil,
               config: EPUBNavigatorViewController.Configuration) async {
         phase = .loading
         do {
             let publication = try await ReadiumPublicationLoader.openEPUB(at: fileURL)
+            var initial = initialLocator
+            if initial == nil, let index = fallbackSpineIndex,
+               publication.readingOrder.indices.contains(index) {
+                initial = await publication.locate(publication.readingOrder[index])
+            }
             let navigator = try EPUBNavigatorViewController(
                 publication: publication,
-                initialLocation: initialLocator,
+                initialLocation: initial,
                 config: config
             )
             navigator.delegate = self
@@ -93,6 +101,14 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
         chromeHidden.toggle()
     }
+}
+
+/// Thin SwiftUI host for an already-built `EPUBNavigatorViewController`.
+struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
+    let controller: EPUBNavigatorViewController
+
+    func makeUIViewController(context: Context) -> EPUBNavigatorViewController { controller }
+    func updateUIViewController(_ controller: EPUBNavigatorViewController, context: Context) {}
 }
 
 /// The Readium-backed reader screen. Mirrors the legacy `ReaderView`'s chrome
@@ -348,11 +364,15 @@ struct ReadiumReaderView: View {
             try? context.save()
         }
         let initialLocator = Locator(persistenceString: work.readiumLocator)
+        // No Readium progress yet but a legacy position exists → resume at that chapter.
+        let fallbackSpineIndex = initialLocator == nil && work.lastSpineIndex > 0
+            ? work.lastSpineIndex : nil
         let config = EPUBNavigatorViewController.Configuration(
             preferences: preferences,
             fontFamilyDeclarations: fontFamilyDeclarations
         )
-        await book.open(fileURL: work.fileURL, initialLocator: initialLocator, config: config)
+        await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
+                        fallbackSpineIndex: fallbackSpineIndex, config: config)
     }
 }
 

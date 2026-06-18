@@ -8,13 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000220000000 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000210000000 /* SwiftSoup */; };
-		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000310000000 /* ReadiumShared */; platformFilters = (ios, ); };
-		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000320000000 /* ReadiumStreamer */; platformFilters = (ios, ); };
-		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000330000000 /* ReadiumNavigator */; platformFilters = (ios, ); };
+		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000310000000 /* ReadiumShared */; };
+		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000320000000 /* ReadiumStreamer */; };
+		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		000000000000000000000120 /* AO3_App_OpenSource.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AO3_App_OpenSource.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000120 /* AO3_App_OpenSource.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AO3_App_OpenSource.app; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -271,6 +271,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "AO3_App_OpenSource" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -288,7 +289,6 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
@@ -306,7 +306,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "devplaceholder.H17TULZJ.AO3_App_OpenSource";
+				PRODUCT_BUNDLE_IDENTIFIER = devplaceholder.H17TULZJ.AO3_App_OpenSource;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -324,6 +324,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "AO3_App_OpenSource" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -341,7 +342,6 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
@@ -359,7 +359,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "devplaceholder.H17TULZJ.AO3_App_OpenSource";
+				PRODUCT_BUNDLE_IDENTIFIER = devplaceholder.H17TULZJ.AO3_App_OpenSource;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
