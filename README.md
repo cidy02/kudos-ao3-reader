@@ -51,6 +51,20 @@ xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
   CODE_SIGNING_ALLOWED=NO
 ```
 
+## Testing
+
+Unit tests live in the `KudosTests` target (Swift Testing) and cover the
+pure-logic core: the MiniZip reader, EPUB OPF metadata + NCX table-of-contents
+parsing, HTML-entity decoding / summary stripping, and work-tag normalization.
+A minimal hand-built `KudosTests/Fixtures/sample.epub` backs the EPUB tests.
+
+```bash
+Scripts/test.sh        # runs on the default iOS Simulator
+# or directly:
+xcodebuild test -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
+  -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+```
+
 ## Linting & formatting
 
 [SwiftLint](https://github.com/realm/SwiftLint) is the linter; [SwiftFormat](https://github.com/nicklockwood/SwiftFormat)
