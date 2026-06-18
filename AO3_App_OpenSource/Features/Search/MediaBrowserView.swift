@@ -62,6 +62,9 @@ struct MediaBrowserView: View {
                     }
                     #endif
                 }
+                // Cards only on the category rows — not the Section — so the header
+                // and footer render as plain instructional text, not in a card.
+                .cardRow()
             } header: {
                 Text("Browse by fandom")
             } footer: {
@@ -71,7 +74,6 @@ struct MediaBrowserView: View {
                 Text("Popular fandoms from AO3. Tap one to search its works.")
                 #endif
             }
-            .cardRow()
         }
         .cardList()
     }
