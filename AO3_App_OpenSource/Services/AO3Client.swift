@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftSoup
 
 // A small native AO3 client: it fetches AO3's normal HTML pages over the network
@@ -36,7 +37,8 @@ actor AO3Client {
     /// Fetches a URL's body, validating the HTTP status and retrying transient
     /// failures with backoff (see `withRetry`).
     private func fetchData(from url: URL) async throws -> Data {
-        try await withRetry {
+        Log.network.debug("GET \(url.absoluteString, privacy: .public)")
+        return try await withRetry {
             let (data, response) = try await session.data(from: url)
             try Self.check(response)
             return data
@@ -87,6 +89,9 @@ actor AO3Client {
                 guard attempt <= maxRetries,
                       let delay = Self.retryDelay(for: error, attempt: attempt)
                 else { throw error }
+                Log.network.warning(
+                    "Request failed (\(error.localizedDescription, privacy: .public)); retry \(attempt) in \(delay)s"
+                )
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         }
@@ -179,6 +184,7 @@ actor AO3Client {
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so
     /// we don't need to scrape the exact link — the work id is enough.
     func downloadEPUB(workID: Int) async throws -> URL {
+        Log.network.info("Downloading EPUB for work \(workID)")
         guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {
             throw AO3Error.network("Bad download URL.")
         }

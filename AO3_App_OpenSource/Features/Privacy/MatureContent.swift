@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import LocalAuthentication
 
@@ -31,7 +32,10 @@ final class PrivacyGate {
 
     /// Reveals a single work (a Blur-mode tap), authenticating first if required.
     func reveal(_ work: SavedWork) {
-        authenticate { self.revealedIDs.insert(work.id) }
+        authenticate {
+            self.revealedIDs.insert(work.id)
+            Log.privacy.info("Revealed a mature work for this session")
+        }
     }
 
     /// Shows or re-hides every sensitive work for the session.
@@ -39,8 +43,12 @@ final class PrivacyGate {
         if revealAll {
             revealAll = false
             revealedIDs.removeAll()
+            Log.privacy.info("Re-hid all mature works")
         } else {
-            authenticate { self.revealAll = true }
+            authenticate {
+                self.revealAll = true
+                Log.privacy.info("Revealed all mature works for this session")
+            }
         }
     }
 
@@ -60,7 +68,11 @@ final class PrivacyGate {
             onSuccess(); return
         }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "View mature content") { success, _ in
-            if success { Task { @MainActor in onSuccess() } }
+            if success {
+                Task { @MainActor in onSuccess() }
+            } else {
+                Log.privacy.notice("Biometric auth failed or was cancelled; mature content stays hidden")
+            }
         }
     }
 }

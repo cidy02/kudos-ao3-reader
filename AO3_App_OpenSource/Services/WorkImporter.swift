@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// Imports a downloaded EPUB into the library: reads its metadata, moves the
@@ -18,6 +19,7 @@ func importEPUB(
     into context: ModelContext
 ) throws -> SavedWork {
     let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+    if meta == nil { Log.library.notice("EPUB metadata unreadable; importing with the filename as title") }
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
 
@@ -39,10 +41,16 @@ func importEPUB(
 
     let destination = work.fileURL
     try? FileManager.default.removeItem(at: destination)
-    try FileManager.default.moveItem(at: tempURL, to: destination)
+    do {
+        try FileManager.default.moveItem(at: tempURL, to: destination)
+    } catch {
+        Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
+        throw error
+    }
 
     context.insert(work)
     try? context.save()
+    Log.library.info("Imported work “\(title)”")
 
     // Refresh the work's tags from AO3's live page in the background; the EPUB
     // tags set above stand in until (and if) that succeeds.
