@@ -6,16 +6,23 @@ This document tracks bugs and issues found during development and testing. It he
 
 ## Active Bugs
 
-### Theming
-
-- **Sepia theme not applying consistently**  
-  In Sepia mode, some pages and UI elements (especially in Settings) render with light/white backgrounds instead of the proper warm Sepia tone. Some screens fall back to Light mode styling. This is a pre-existing bug that existed before the card-based UI changes. Currently being addressed on the `test/card-lists` branch.
+*(None currently tracked.)*
 
 ---
 
 ## Fixed / Verified
 
-*(No items yet)*
+### Theming
+
+- **Sepia theme not applying consistently** — ✅ Fixed & verified (2026-06-18, `main` + `readium-migration`).  
+  Sepia now applies app-wide via the `.appThemedScroll()` / `.appThemedRows()`
+  surface modifiers (`UIComponents/AppThemeSurface.swift`). The screens that
+  previously fell back to white were fixed and verified in the simulator:
+  - **Settings** (`ReaderOptionsForm`) — warm cells, warm segmented controls, brown text.
+  - **Browse-by-fandom footer** — was a white box; now plain text on the warm backdrop.
+  - **Bookmarks empty states** — warm backdrop instead of white.
+  - **Customize Theme sheet** — themed form + preview header.
+  - **Work cards** — warm card surfaces + accent icons.
 
 ---
 
@@ -27,4 +34,4 @@ This document tracks bugs and issues found during development and testing. It he
 
 ---
 
-*Last updated: 2026-06-17*
+*Last updated: 2026-06-18*
