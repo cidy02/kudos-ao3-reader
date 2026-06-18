@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import SwiftData
 #if os(iOS)
@@ -76,8 +77,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             self.navigator = navigator
             toc = tocLinks.isEmpty ? publication.readingOrder : tocLinks
             phase = .ready
+            Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
         } catch {
             phase = .failed(error.localizedDescription)
+            Log.epub.error("Couldn't open EPUB (Readium): \(error.localizedDescription, privacy: .public)")
         }
     }
 
