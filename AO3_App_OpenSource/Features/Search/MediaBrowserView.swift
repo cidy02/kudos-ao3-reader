@@ -62,20 +62,32 @@ struct MediaBrowserView: View {
                     }
                     #endif
                 }
-                // Cards only on the category rows — not the Section — so the header
-                // and footer render as plain instructional text, not in a card.
-                .cardRow()
+                .cardRow()   // cards only on the category rows
             } header: {
                 Text("Browse by fandom")
-            } footer: {
-                #if os(iOS)
-                Text("Browse fandoms from AO3. Tap a category to see its fandoms.")
-                #else
-                Text("Popular fandoms from AO3. Tap one to search its works.")
-                #endif
             }
+
+            // Instruction as a clear-background row, not a Section footer: a plain
+            // list row with no listRowBackground falls back to white under Sepia's
+            // light scheme, so clear it to let the warm backdrop show through.
+            instructions
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
         }
         .cardList()
+    }
+
+    /// Instructional caption shown under the category list.
+    private var instructions: Text {
+        #if os(iOS)
+        Text("Browse fandoms from AO3. Tap a category to see its fandoms.")
+        #else
+        Text("Popular fandoms from AO3. Tap one to search its works.")
+        #endif
     }
 
     /// A category row label. The leading glyph is rendered in the primary label
