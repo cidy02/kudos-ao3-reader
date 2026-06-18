@@ -1,0 +1,64 @@
+# SwiftLint configuration for Kudos.
+#
+# Philosophy: rules are advisory (warnings) so they never block a local build or
+# commit; CI runs `--strict` to enforce them on pull requests. Tuned to be quiet
+# on an established SwiftUI codebase — fix opportunistically, not in one churn.
+
+disabled_rules:
+  - todo                                    # TODO/FIXME notes are allowed
+  - trailing_comma                          # trailing commas in multiline literals are fine
+  - multiple_closures_with_trailing_closure # idiomatic in SwiftUI
+  - for_where                               # occasionally clearer without
+
+opt_in_rules:
+  - closure_spacing
+  - collection_alignment
+  - empty_count
+  - explicit_init
+  - first_where
+  - last_where
+  - sorted_first_last
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+
+excluded:
+  - build
+  - build-mac
+  - .build
+  - DerivedData
+  - Scripts
+
+# SwiftUI view bodies are naturally long; keep limits generous so warnings are signal.
+line_length:
+  warning: 120
+  error: 250
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 700
+  error: 1400
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 450
+  error: 900
+
+function_body_length:
+  warning: 100
+  error: 250
+
+cyclomatic_complexity:
+  warning: 15
+  error: 30
+
+nesting:
+  type_level:
+    warning: 3
+
+identifier_name:
+  min_length:
+    warning: 2 # allow id, ok, db, etc.
+  excluded: [id, x, y, i, db, ok, to, up, vc]
+
+reporter: "xcode"

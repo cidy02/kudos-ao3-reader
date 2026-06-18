@@ -1,0 +1,20 @@
+# SwiftFormat configuration for Kudos.
+#
+# Kept deliberately conservative so it largely agrees with the existing code —
+# running `swiftformat AO3_App_OpenSource` should make only small, safe changes,
+# not a wholesale reflow. It is advisory (a convenience formatter), not a CI gate.
+# No bulk reformat has been run. Apply opportunistically via `Scripts/lint.sh --fix`.
+
+--swiftversion 6.0
+
+--indent 4
+--ifdef no-indent
+--self remove
+--commas inline
+--trimwhitespace always
+
+# Line wrapping is intentionally NOT enforced (the codebase wraps by hand), and a
+# few rules are disabled to avoid noisy or SwiftUI-unfriendly rewrites.
+--disable wrap, wrapArguments, wrapMultilineStatementBraces, redundantClosure, blankLinesAtStartOfScope
+
+--exclude build,build-mac,.build,DerivedData
