@@ -23,20 +23,15 @@ the status here in sync with the board.
   refreshes). Implemented via `.contextMenu` (the reliable long-press affordance
   for toolbar buttons).
 
-- **[FI-2] Advanced Rating filtering** — *Status: Planned · Board: T-09*  
-  When filtering by rating, allow users to choose:
-  - Exact match (e.g., only Mature)
-  - Rating+ (Mature + higher ratings like Explicit)
-  - Rating- (Mature + lower ratings like Teen/General)
-  Add a separate toggle to include or exclude "Not Rated" works.
+- **[FI-2] Advanced Rating filtering** — *Status: Done (2026-06-18) · Board: T-09*
+  Search now offers Exact, Rating+, and Rating− matching plus a separate
+  **Include Not Rated** toggle. Multi-rating searches use AO3's field-qualified
+  `rating_ids` query syntax (verified against live AO3 results).
 
-- **[FI-3] Cycling Include/Exclude for tags** — *Status: Planned · Board: T-09*  
-  For tag-based filters (Fandom, Characters, Relationships, Additional Tags), use a
-  single selection flow instead of separate Include/Exclude fields:
-  - Tap once = Include
-  - Tap again = Exclude
-  - Tap a third time = Clear
-  Reduces UI clutter while still supporting AO3's include/exclude functionality.
+- **[FI-3] Cycling Include/Exclude for tags** — *Status: Done (2026-06-18) · Board: T-09*
+  Search's Fandom, Character, Relationship, and Additional Tag pickers now cycle
+  each result through Include → Exclude → Clear, with distinct chips and labels.
+  The separate generic Exclude Tags field is no longer needed.
 
 - **[FI-4] Expandable search result cards** — *Status: Done (2026-06-18) · Board: T-10*
   Search result cards now keep summaries to three lines by default and provide a

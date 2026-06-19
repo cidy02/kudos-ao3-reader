@@ -129,20 +129,16 @@ actor AO3Client {
             items.append(URLQueryItem(name: name, value: value))
         }
 
-        // AO3's structured search has no "exclude tag" field, so fold excluded
-        // tags into the query with AO3's `-"tag"` exclusion syntax.
-        var query = filters.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        for tag in commaList(filters.excludeTags) {
-            query += (query.isEmpty ? "" : " ") + "-\"\(tag)\""
-        }
-        add("work_search[query]", query)
+        // AO3's structured search has no multi-rating or exclude-tag fields.
+        // `searchQuery` folds those into AO3's documented text-search syntax.
+        add("work_search[query]", filters.searchQuery)
 
         add("work_search[fandom_names]", filters.fandom)
         add("work_search[character_names]", filters.characters)
         add("work_search[relationship_names]", filters.relationships)
         add("work_search[freeform_names]", filters.additionalTags)
 
-        add("work_search[rating_ids]", filters.rating.ao3ID)
+        add("work_search[rating_ids]", filters.structuredRatingID)
         for warning in filters.warnings {
             items.append(URLQueryItem(name: "work_search[archive_warning_ids][]", value: warning.ao3ID))
         }
@@ -174,11 +170,6 @@ actor AO3Client {
         case (true, false): return "< \(to)"
         case (true, true): return nil
         }
-    }
-
-    /// Splits a comma-separated field into trimmed, non-empty entries.
-    private func commaList(_ field: String) -> [String] {
-        field.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so

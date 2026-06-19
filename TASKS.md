@@ -36,7 +36,6 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features & polish (detail in `docs/`)
-- **T-09 · Advanced rating filters + cycling include/exclude tags** ↳ `docs/Feature_Ideas.md` FI-2, FI-3
 - **T-14 · Refine the search pagination pill** ↳ `docs/UI_Polish_Todo.md` UI-1
 - **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
 - **T-16 · AO3-red default accent + accent color picker** ↳ `docs/Feature_Ideas.md` FI-6
@@ -57,6 +56,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-09 | P2 Advanced rating + cycling include/exclude Search tags (FI-2, FI-3) | Codex | both | _see git log_ | 2026-06-18 |
 | T-10 | P2 Expandable search result cards (FI-4) | Codex | both | _see git log_ | 2026-06-18 |
 | T-11 | P2 Tap a tag (work/My) → filter the Library (FI-8) | Claude | both | _see git log_ | 2026-06-18 |
 | T-12 | P2 Long-press Filters → Clear All Filters (FI-1) | Claude | both | _see git log_ | 2026-06-18 |
