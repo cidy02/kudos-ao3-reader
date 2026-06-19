@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-24 | Enrich Browse-by-fandom cards (FI-9): fandom/work counts, your saved count, recently-read fandom chips, regular text weight, thin section dividers (+ dividers on Search/Library cards) | Claude | main→both | 🔄 IN PROGRESS | Reuses per-category `fandoms(atPath:)` (session-cached in `FandomCatalog`); maps saved/recent works to categories via the full fandom list. Touches MediaBrowserView + AO3WorkRow/WorkRow (dividers). |
 
 ---
 
