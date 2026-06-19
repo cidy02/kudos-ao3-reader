@@ -19,9 +19,11 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
+_None._ Claim a task from the Backlog and add a row here.
+
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| T-24 | Enrich Browse-by-fandom cards (FI-9): fandom/work counts, your saved count, recently-read fandom chips, regular text weight, thin section dividers (+ dividers on Search/Library cards) | Claude | main→both | 🔄 IN PROGRESS | Reuses per-category `fandoms(atPath:)` (session-cached in `FandomCatalog`); maps saved/recent works to categories via the full fandom list. Touches MediaBrowserView + AO3WorkRow/WorkRow (dividers). |
+| —  | —    | —     | —      | —      | —                 |
 
 ---
 
@@ -53,6 +55,7 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-24 | Enrich Browse-by-fandom cards: fandom/work counts, saved count, recently-read chips, regular text weight, section dividers (+ Search/Library card dividers) (FI-9) | Claude | both | _see git log_ | 2026-06-19 |
 | T-16 | P2 AO3-red default accent + accent color picker (FI-6) | Claude | both | _see git log_ | 2026-06-19 |
 | T-23 | Extend Include → Exclude → Clear cycling to Warnings/Categories (FI-3) | Codex | both | `ff4f93a` / `8373068` | 2026-06-19 |
 | T-22 | Fix T-09 tag cycling UI + restore top picker search field (BUG-2) | Codex | both | _see git log_ | 2026-06-18 |

@@ -56,6 +56,10 @@ struct AO3WorkRow: View {
                 .padding(.top, 1)
             }
 
+            // Thin divider separates the textual content from the metadata stats,
+            // matching the Browse-by-fandom cards.
+            Divider().padding(.top, 1)
+
             // Stats wrap to a second line rather than truncating when they don't fit
             // (long ratings like "Teen And Up Audiences" no longer clip the row).
             FlowLayout(spacing: 18, rowSpacing: 5) {

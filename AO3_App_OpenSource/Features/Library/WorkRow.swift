@@ -71,6 +71,10 @@ struct WorkRow: View {
                     .lineLimit(1)
             }
 
+            // Thin divider separates the textual content from the metadata stats,
+            // matching the Search and Browse-by-fandom cards.
+            Divider().padding(.top, 1)
+
             // Stats wrap rather than truncate (matches AO3WorkRow).
             FlowLayout(spacing: 18, rowSpacing: 5) {
                 if !work.rating.isEmpty { statLabel(work.rating, "checkmark.shield") }

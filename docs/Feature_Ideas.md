@@ -45,6 +45,13 @@ the status here in sync with the board.
   When the user changes the app theme (Light / Sepia / Dark), adjust the in-app
   browser (Browse tab) to use a matching theme on archiveofourown.org if possible.
 
+- **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
+  Cards now show real **fandom count** + **work count** (from each category's
+  fandom index, session-cached in `FandomCatalog`), the user's **saved-work count**
+  in that category, and **recently-read fandom chips** (tap → fandom search), with
+  a regular-weight name (icon stays emphasized) and thin section dividers. Matching
+  dividers added to the Search and Library result cards. Verified in the simulator.
+
 ### Theming & Customization
 
 - **[FI-6] AO3 Red as default accent + color picker** — *Status: Done (2026-06-19) · Board: T-16*  
