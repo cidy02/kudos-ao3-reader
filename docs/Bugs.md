@@ -2,6 +2,9 @@
 
 This document tracks bugs and issues found during development and testing. It helps keep track of problems that need fixing without losing them in chat history.
 
+Each bug has a stable ID (`BUG-N`); link active bugs to a task in [`../TASKS.md`](../TASKS.md)
+when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `Won't fix`.
+
 ---
 
 ## Active Bugs
@@ -14,7 +17,7 @@ This document tracks bugs and issues found during development and testing. It he
 
 ### Theming
 
-- **Sepia theme not applying consistently** — ✅ Fixed & verified (2026-06-18, `main` + `readium-migration`).  
+- **[BUG-1] Sepia theme not applying consistently** — ✅ Fixed & verified (2026-06-18, `main` + `readium-migration`; Board: T-08).  
   Sepia now applies app-wide via the `.appThemedScroll()` / `.appThemedRows()`
   surface modifiers (`UIComponents/AppThemeSurface.swift`). The screens that
   previously fell back to white were fixed and verified in the simulator:

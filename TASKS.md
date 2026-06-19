@@ -36,14 +36,14 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features & polish (detail in `docs/`)
-- **T-09 · Advanced rating filters + cycling include/exclude tags** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
-- **T-10 · Expandable search result cards** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
-- **T-11 · Tap a tag to filter the Library** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
-- **T-12 · Long-press Filters → clear all filters** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
-- **T-13 · Hide the privacy (eye) button when no hidden works exist** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
-- **T-14 · Refine the search pagination pill** ↳ [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md)
-- **T-15 · Sync in-app browser theme with app theme** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
-- **T-16 · AO3-red default accent + accent color picker** ↳ [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md)
+- **T-09 · Advanced rating filters + cycling include/exclude tags** ↳ `docs/Feature_Ideas.md` FI-2, FI-3
+- **T-10 · Expandable search result cards** ↳ `docs/Feature_Ideas.md` FI-4
+- **T-11 · Tap a tag to filter the Library** ↳ `docs/Feature_Ideas.md` FI-8
+- **T-12 · Long-press Filters → clear all filters** ↳ `docs/Feature_Ideas.md` FI-1
+- **T-13 · Hide the privacy (eye) button when no hidden works exist** ↳ `docs/Feature_Ideas.md` FI-7
+- **T-14 · Refine the search pagination pill** ↳ `docs/UI_Polish_Todo.md` UI-1
+- **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
+- **T-16 · AO3-red default accent + accent color picker** ↳ `docs/Feature_Ideas.md` FI-6
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
@@ -53,7 +53,7 @@ _None._ Claim a task from the Backlog and add a row here.
   app's; spacing/margin/bold scale; verify a real imported custom font. (Notes §5.)
 
 ### Bugs
-- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md) (Sepia consistency fixed & verified 2026-06-18).
+- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md) (BUG-1 Sepia consistency fixed & verified 2026-06-18).
 
 ---
 
