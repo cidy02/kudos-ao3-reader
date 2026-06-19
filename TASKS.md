@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-23 | Extend include/exclude cycling to Search facets | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Add cycling Warnings/Categories, exact AO3 exclusions, tests, and UI verification. |
 
 ---
 

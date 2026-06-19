@@ -28,10 +28,11 @@ the status here in sync with the board.
   **Include Not Rated** toggle. Multi-rating searches use AO3's field-qualified
   `rating_ids` query syntax (verified against live AO3 results).
 
-- **[FI-3] Cycling Include/Exclude for tags** — *Status: Done (2026-06-18) · Board: T-09*
-  Search's Fandom, Character, Relationship, and Additional Tag pickers now cycle
-  each result through Include → Exclude → Clear, with distinct chips and labels.
-  The separate generic Exclude Tags field is no longer needed.
+- **[FI-3] Cycling Include/Exclude for multi-select filters** — *Status: Done (2026-06-18) · Board: T-09, T-23*
+  Search's Warnings, Categories, Fandom, Character, Relationship, and Additional
+  Tag controls now cycle each option through Include → Exclude → Clear, with
+  distinct labels and colors. The separate generic Exclude Tags field is no
+  longer needed.
 
 - **[FI-4] Expandable search result cards** — *Status: Done (2026-06-18) · Board: T-10*
   Search result cards now keep summaries to three lines by default and provide a

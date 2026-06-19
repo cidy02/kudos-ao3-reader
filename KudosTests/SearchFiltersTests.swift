@@ -2,10 +2,10 @@ import Testing
 @testable import Kudos
 
 struct SearchFiltersTests {
-    @Test func tagSelectionCyclesIncludeExcludeClear() {
-        #expect(TagFilterState.clear.next == .included)
-        #expect(TagFilterState.included.next == .excluded)
-        #expect(TagFilterState.excluded.next == .clear)
+    @Test func filterSelectionCyclesIncludeExcludeClear() {
+        #expect(FilterSelectionState.clear.next == .included)
+        #expect(FilterSelectionState.included.next == .excluded)
+        #expect(FilterSelectionState.excluded.next == .clear)
     }
 
     @Test func defaultsDoNotAlterTheQuery() {
@@ -68,5 +68,22 @@ struct SearchFiltersTests {
             filters.searchQuery
                 == "-\"Naruto\" -\"Star Wars\" -\"Alice/Bob\""
         )
+    }
+
+    @Test func warningExclusionsUseAO3FieldSyntax() {
+        var filters = AO3SearchFilters()
+        filters.excludedWarnings = [.noWarnings, .underage]
+
+        #expect(
+            filters.searchQuery
+                == "-archive_warning_ids:16 -archive_warning_ids:20"
+        )
+    }
+
+    @Test func categoryExclusionsUseAO3FieldSyntax() {
+        var filters = AO3SearchFilters()
+        filters.excludedCategories = [.mm, .other]
+
+        #expect(filters.searchQuery == "-category_ids:23 -category_ids:24")
     }
 }

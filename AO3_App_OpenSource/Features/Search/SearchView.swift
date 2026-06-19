@@ -237,16 +237,16 @@ struct SearchView: View {
 
             Section("Warnings") {
                 ForEach(AO3SearchFilters.Warning.allCases) { warning in
-                    selectableRow(warning.title, isSelected: filters.warnings.contains(warning)) {
-                        warningBinding(warning).wrappedValue.toggle()
+                    cyclingFacetRow(warning.title, state: warningState(warning)) {
+                        cycle(warning)
                     }
                 }
             }
 
             Section("Categories") {
                 ForEach(AO3SearchFilters.Category.allCases) { category in
-                    selectableRow(category.title, isSelected: filters.categories.contains(category)) {
-                        categoryBinding(category).wrappedValue.toggle()
+                    cyclingFacetRow(category.title, state: categoryState(category)) {
+                        cycle(category)
                     }
                 }
             }
@@ -335,18 +335,24 @@ struct SearchView: View {
             .filter { !$0.isEmpty }
     }
 
-    /// A tappable filter row with a trailing checkmark when selected — matching the
-    /// tag pickers, so Warnings/Categories use the same selection style as tags.
-    private func selectableRow(_ title: String, isSelected: Bool,
-                               toggle: @escaping () -> Void) -> some View {
+    /// A tappable multi-select facet row matching the tag pickers' three states.
+    private func cyclingFacetRow(_ title: String, state: FilterSelectionState,
+                                 toggle: @escaping () -> Void) -> some View {
         Button(action: toggle) {
             HStack {
                 Text(title).foregroundStyle(.primary)
                 Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold))
+                switch state {
+                case .clear:
+                    EmptyView()
+                case .included:
+                    Label("Include", systemImage: "plus.circle.fill")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.tint)
+                case .excluded:
+                    Label("Exclude", systemImage: "minus.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
                 }
             }
             .contentShape(Rectangle())
@@ -354,22 +360,44 @@ struct SearchView: View {
         .buttonStyle(.plain)
     }
 
-    private func warningBinding(_ warning: AO3SearchFilters.Warning) -> Binding<Bool> {
-        Binding(
-            get: { filters.warnings.contains(warning) },
-            set: { on in
-                if on { filters.warnings.insert(warning) } else { filters.warnings.remove(warning) }
-            }
-        )
+    private func warningState(_ warning: AO3SearchFilters.Warning) -> FilterSelectionState {
+        if filters.warnings.contains(warning) { return .included }
+        if filters.excludedWarnings.contains(warning) { return .excluded }
+        return .clear
     }
 
-    private func categoryBinding(_ category: AO3SearchFilters.Category) -> Binding<Bool> {
-        Binding(
-            get: { filters.categories.contains(category) },
-            set: { on in
-                if on { filters.categories.insert(category) } else { filters.categories.remove(category) }
-            }
-        )
+    private func cycle(_ warning: AO3SearchFilters.Warning) {
+        switch warningState(warning).next {
+        case .included:
+            filters.warnings.insert(warning)
+            filters.excludedWarnings.remove(warning)
+        case .excluded:
+            filters.warnings.remove(warning)
+            filters.excludedWarnings.insert(warning)
+        case .clear:
+            filters.warnings.remove(warning)
+            filters.excludedWarnings.remove(warning)
+        }
+    }
+
+    private func categoryState(_ category: AO3SearchFilters.Category) -> FilterSelectionState {
+        if filters.categories.contains(category) { return .included }
+        if filters.excludedCategories.contains(category) { return .excluded }
+        return .clear
+    }
+
+    private func cycle(_ category: AO3SearchFilters.Category) {
+        switch categoryState(category).next {
+        case .included:
+            filters.categories.insert(category)
+            filters.excludedCategories.remove(category)
+        case .excluded:
+            filters.categories.remove(category)
+            filters.excludedCategories.insert(category)
+        case .clear:
+            filters.categories.remove(category)
+            filters.excludedCategories.remove(category)
+        }
     }
 
     // MARK: Searching
