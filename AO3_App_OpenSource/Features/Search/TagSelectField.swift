@@ -75,7 +75,7 @@ struct TagSelectField: View {
     private func cycle(_ tag: String) {
         var includedSet = Set(includedTags)
         var excludedSet = Set(excludedTags)
-        let current: TagFilterState = includedSet.contains(tag)
+        let current: FilterSelectionState = includedSet.contains(tag)
             ? .included
             : excludedSet.contains(tag) ? .excluded : .clear
         switch current.next {
@@ -236,7 +236,7 @@ struct TagPickerView: View {
     }
 
     @ViewBuilder
-    private func selectionLabel(for state: TagFilterState) -> some View {
+    private func selectionLabel(for state: FilterSelectionState) -> some View {
         switch state {
         case .clear:
             EmptyView()
@@ -251,7 +251,7 @@ struct TagPickerView: View {
         }
     }
 
-    private func state(of tag: String) -> TagFilterState {
+    private func state(of tag: String) -> FilterSelectionState {
         if included.contains(tag) { return .included }
         if excluded.contains(tag) { return .excluded }
         return .clear
@@ -303,7 +303,7 @@ struct TagPickerView: View {
 /// the same Include → Exclude → Clear cycle as the result row.
 private struct FilterTagChip: View {
     let tag: String
-    let state: TagFilterState
+    let state: FilterSelectionState
     let onCycle: () -> Void
 
     private var color: Color { state == .excluded ? .red : .accentColor }

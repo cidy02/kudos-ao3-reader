@@ -63,7 +63,9 @@ struct AO3SearchFilters: Equatable, Sendable {
     var ratingMatch: RatingMatch = .exact
     var includeNotRated: Bool = true
     var warnings: Set<Warning> = []
+    var excludedWarnings: Set<Warning> = []
     var categories: Set<Category> = []
+    var excludedCategories: Set<Category> = []
     var crossover: Crossover = .any
     var completion: Completion = .any
     var wordsFrom: String = ""
@@ -80,7 +82,8 @@ struct AO3SearchFilters: Equatable, Sendable {
             || !excludedCharacters.isBlank || !excludedRelationships.isBlank
             || !excludedAdditionalTags.isBlank
             || rating != .any || !includeNotRated
-            || !warnings.isEmpty || !categories.isEmpty
+            || !warnings.isEmpty || !excludedWarnings.isEmpty
+            || !categories.isEmpty || !excludedCategories.isEmpty
             || crossover != .any || completion != .any
             || !wordsFrom.isBlank || !wordsTo.isBlank
             || updated != .any || language != .any || sort != .relevance
@@ -96,6 +99,12 @@ struct AO3SearchFilters: Equatable, Sendable {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedQuery.isEmpty { clauses.append(trimmedQuery) }
         clauses += excludedTags.map { "-\"\($0)\"" }
+        clauses += Warning.allCases
+            .filter(excludedWarnings.contains)
+            .map { "-archive_warning_ids:\($0.ao3ID)" }
+        clauses += Category.allCases
+            .filter(excludedCategories.contains)
+            .map { "-category_ids:\($0.ao3ID)" }
         if let ratingSearchClause { clauses.append(ratingSearchClause) }
         return clauses.joined(separator: " ")
     }
@@ -410,8 +419,8 @@ enum AO3TagKind: String, Sendable {
     case fandom, character, relationship, freeform, tag
 }
 
-/// The three-state selection used by Search's cycling tag filters.
-nonisolated enum TagFilterState: Equatable, Sendable {
+/// The three-state selection used by Search's cycling multi-select filters.
+nonisolated enum FilterSelectionState: Equatable, Sendable {
     case clear, included, excluded
 
     var next: Self {

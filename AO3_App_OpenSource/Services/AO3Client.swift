@@ -129,7 +129,7 @@ actor AO3Client {
             items.append(URLQueryItem(name: name, value: value))
         }
 
-        // AO3's structured search has no multi-rating or exclude-tag fields.
+        // AO3's structured search has no multi-rating or exclusion fields.
         // `searchQuery` folds those into AO3's documented text-search syntax.
         add("work_search[query]", filters.searchQuery)
 
