@@ -61,9 +61,10 @@ the status here in sync with the board.
   toggle on `hideMature && <list has adult works>`, so it's hidden when nothing
   could be hidden.
 
-- **[FI-8] Tap tag to filter Library** — *Status: Planned · Board: T-11*  
-  Tapping a tag (Work Tag or My Tag) on a saved work should filter the Library to
-  show only works that contain that tag.
+- **[FI-8] Tap tag to filter Library** — *Status: Done (2026-06-18) · Board: T-11*  
+  Tapping a Work Tag (fandom / character / relationship / additional) or a My Tag
+  on a saved work switches to the Library and filters it to works with that tag
+  (via `AppRouter.filterLibrary` → `LibraryView`). Verified in the simulator.
 
 ---
 

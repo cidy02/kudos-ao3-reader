@@ -31,6 +31,14 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
     }
 }
 
+/// A request to filter the Library by a single tag, handed across tabs (e.g. from
+/// a work's detail page). Mirrors `pendingURL` for the Browse tab.
+struct LibraryTagFilter: Equatable {
+    enum Field { case userTag, fandom, character, relationship, additional }
+    let field: Field
+    let value: String
+}
+
 /// Shared navigation state so other tabs can hand a URL to the browser and
 /// switch to it (e.g. opening a saved bookmark).
 @Observable
@@ -46,6 +54,9 @@ final class AppRouter {
     var lastNonSearchTab: AppTab = .library
     /// A URL the Browse tab should load on its next appearance.
     var pendingURL: URL?
+    /// A tag the Library should filter by on its next appearance (e.g. tapped on a
+    /// work's detail page). Consumed + cleared by `LibraryView`.
+    var pendingLibraryTag: LibraryTagFilter?
 
     /// The one right-hand inspector panel open anywhere in the app. Routing every
     /// panel (Settings, Search filters, Reader chapters/display) through a single
@@ -61,6 +72,12 @@ final class AppRouter {
     func open(_ url: URL) {
         pendingURL = url
         selection = .browse
+    }
+
+    /// Switches to the Library and filters it to works containing `value` in `field`.
+    func filterLibrary(_ field: LibraryTagFilter.Field, _ value: String) {
+        pendingLibraryTag = LibraryTagFilter(field: field, value: value)
+        selection = .library
     }
 
     /// Leaves the focused Search mode, returning to the last non-Search tab.
