@@ -154,6 +154,29 @@ struct SearchView: View {
                 : "line.3.horizontal.decrease.circle")
         }
         .help("Filters")
+        // Long-press the Filters button to quickly clear every active filter
+        // without opening the sidebar. A context menu is the reliable long-press
+        // affordance for toolbar buttons; the destructive item confirms the action.
+        .contextMenu {
+            if filters.hasActiveFilters {
+                Button(role: .destructive, action: clearAllFilters) {
+                    Label("Clear All Filters", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
+    }
+
+    /// Resets every filter (keeping the query) and refreshes — shared by the
+    /// long-press confirmation and mirroring the sidebar's "Reset Filters".
+    private func clearAllFilters() {
+        filters = AO3SearchFilters(query: filters.query)
+        if filters.isSearchable {
+            runSearch()
+        } else {
+            results = []
+            phase = .idle
+            router.panel = .none
+        }
     }
 
     // MARK: Results states

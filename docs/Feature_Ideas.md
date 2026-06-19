@@ -17,10 +17,11 @@ the status here in sync with the board.
 
 ### Search & Filters
 
-- **[FI-1] Long-press to clear filters** — *Status: Planned · Board: T-12*  
-  When long-pressing the Filters button in Search, show a confirmation dialog to
-  quickly clear all active filters. A quality-of-life win for users who frequently
-  change filter sets.
+- **[FI-1] Long-press to clear filters** — *Status: Done (2026-06-18) · Board: T-12*  
+  Long-pressing the Filters button in Search shows a context menu with a
+  destructive **Clear All Filters** action (resets filters, keeps the query, and
+  refreshes). Implemented via `.contextMenu` (the reliable long-press affordance
+  for toolbar buttons).
 
 - **[FI-2] Advanced Rating filtering** — *Status: Planned · Board: T-09*  
   When filtering by rating, allow users to choose:
@@ -55,9 +56,10 @@ the status here in sync with the board.
 
 ### Library
 
-- **[FI-7] Hide privacy button when no hidden works exist** — *Status: Planned · Board: T-13*  
-  When there are no works in the Library that can be hidden by the mature-content
-  privacy setting, the privacy (eye) button should not be shown in the toolbar.
+- **[FI-7] Hide privacy button when no hidden works exist** — *Status: Done (already implemented) · Board: T-13*  
+  Verified already satisfied: both `LibraryView` and `BookmarksView` gate the eye
+  toggle on `hideMature && <list has adult works>`, so it's hidden when nothing
+  could be hidden.
 
 - **[FI-8] Tap tag to filter Library** — *Status: Planned · Board: T-11*  
   Tapping a tag (Work Tag or My Tag) on a saved work should filter the Library to
