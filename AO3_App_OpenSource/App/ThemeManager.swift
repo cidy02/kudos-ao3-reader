@@ -24,7 +24,15 @@ final class ThemeManager {
         didSet { store(readerThemeStored, forKey: "readerTheme") }
     }
 
+    /// The user's chosen accent colour as a `#RRGGBB` hex string; defaults to AO3 red.
+    var accentHex: String {
+        didSet { UserDefaults.standard.set(accentHex, forKey: Self.accentKey) }
+    }
+
+    /// AO3's signature dark red — the default app accent.
+    static let ao3Red = "#990000"
     private static let matchKey = "matchAppReaderTheme"
+    private static let accentKey = "accentColorHex"
 
     init() {
         let defaults = UserDefaults.standard
@@ -38,7 +46,25 @@ final class ThemeManager {
         }
         matchAppAndReader = (defaults.object(forKey: Self.matchKey) as? Bool) ?? true
         readerThemeStored = storedReader
+        accentHex = defaults.string(forKey: Self.accentKey) ?? Self.ao3Red
     }
+
+    /// The user's accent colour (falls back to AO3 red if the stored hex is bad).
+    var accentColor: Color {
+        Color(hex: accentHex) ?? Color(hex: Self.ao3Red)!
+    }
+
+    /// The control/link tint for the whole app: Sepia keeps its cohesive warm
+    /// brown; Light/Dark use the user's accent (default AO3 red).
+    var effectiveTint: Color {
+        appTheme.appTint ?? accentColor
+    }
+
+    /// Sets the accent from a picked colour (stored as hex).
+    func setAccent(_ color: Color) { accentHex = color.hexString }
+
+    /// Restores the default AO3-red accent.
+    func resetAccent() { accentHex = Self.ao3Red }
 
     /// The theme the reader renders with — mirrors the app theme while linked, so
     /// changing one changes the other.

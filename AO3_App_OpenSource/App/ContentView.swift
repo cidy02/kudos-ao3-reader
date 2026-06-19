@@ -19,9 +19,9 @@ struct ContentView: View {
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)
-            // Sepia has no system scheme, so it also re-tints controls/links warm.
-            // Light/Dark return nil here and keep the default accent.
-            .tint(theme.appTheme.appTint)
+            // App accent: Sepia keeps its warm brown; Light/Dark use the user's
+            // accent colour (default AO3 red).
+            .tint(theme.effectiveTint)
             // Segmented controls (UISegmentedControl) draw a white selected segment
             // in Sepia's light scheme; warm them via the appearance proxy. Reset for
             // Light/Dark. `initial` covers launch; new controls pick it up on change.

@@ -47,9 +47,10 @@ the status here in sync with the board.
 
 ### Theming & Customization
 
-- **[FI-6] AO3 Red as default accent + color picker** — *Status: Idea · Board: T-16*  
-  Change the default accent color from system blue to AO3's signature red. Add a
-  Settings section with a color picker so users can customize the app's accent.
+- **[FI-6] AO3 Red as default accent + color picker** — *Status: Done (2026-06-19) · Board: T-16*  
+  Default accent is now AO3 red (`#990000`); Settings ▸ Theme has an Accent Color
+  `ColorPicker` + "Reset to AO3 Red" (`ThemeManager.accentColor`). The accent
+  applies in Light/Dark; Sepia keeps its warm tint. Verified in the simulator.
 
 ### Library
 

@@ -57,6 +57,9 @@ struct ReaderOptionsForm: View {
         Binding(get: { themeManager.matchAppAndReader },
                 set: { themeManager.matchAppAndReader = $0 })
     }
+    private var accentBinding: Binding<Color> {
+        Binding(get: { themeManager.accentColor }, set: { themeManager.setAccent($0) })
+    }
 
     /// A segmented Light/Sepia/Dark picker bound to the given selection.
     private func themePicker(_ title: String, selection: Binding<ReaderTheme>) -> some View {
@@ -83,12 +86,16 @@ struct ReaderOptionsForm: View {
                     if !themeManager.matchAppAndReader {
                         themePicker("Reader Theme", selection: readerThemeBinding)
                     }
+                    ColorPicker("Accent Color", selection: accentBinding, supportsOpacity: false)
+                    Button("Reset to AO3 Red") { themeManager.resetAccent() }
+                        .disabled(themeManager.accentHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame)
                 } header: {
                     Text("Theme")
                 } footer: {
                     Text(themeManager.matchAppAndReader
                         ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
                         : "The app and reader use separate themes.")
+                    + Text(" The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
                 }
             }
 

@@ -38,7 +38,6 @@ _None._ Claim a task from the Backlog and add a row here.
 ### P2 — features & polish (detail in `docs/`)
 - **T-14 · Refine the search pagination pill** ↳ `docs/UI_Polish_Todo.md` UI-1
 - **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
-- **T-16 · AO3-red default accent + accent color picker** ↳ `docs/Feature_Ideas.md` FI-6
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
@@ -56,6 +55,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-16 | P2 AO3-red default accent + accent color picker (FI-6) | Claude | both | _see git log_ | 2026-06-19 |
 | T-23 | Extend Include → Exclude → Clear cycling to Warnings/Categories (FI-3) | Codex | both | `ff4f93a` / `8373068` | 2026-06-19 |
 | T-22 | Fix T-09 tag cycling UI + restore top picker search field (BUG-2) | Codex | both | _see git log_ | 2026-06-18 |
 | T-09 | P2 Advanced rating + cycling include/exclude Search tags (FI-2, FI-3) | Codex | both | _see git log_ | 2026-06-18 |
