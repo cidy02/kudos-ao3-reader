@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-16 | AO3-red default accent + accent color picker (FI-6) | Claude | main→both | 🔄 IN PROGRESS | ThemeManager accent (hex, default `#990000`) + ColorPicker in Settings; Sepia keeps its warm tint (`effectiveTint = appTint ?? accentColor`). Touches ThemeManager/ContentView/SettingsView. |
 
 ---
 
@@ -38,7 +36,6 @@ _None._ Claim a task from the Backlog and add a row here.
 ### P2 — features & polish (detail in `docs/`)
 - **T-14 · Refine the search pagination pill** ↳ `docs/UI_Polish_Todo.md` UI-1
 - **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
-- **T-16 · AO3-red default accent + accent color picker** ↳ `docs/Feature_Ideas.md` FI-6
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
