@@ -1,13 +1,22 @@
 import SwiftUI
+import SwiftData
 
 /// Fills the Search tab's idle state with a live browse of AO3's media categories
 /// (scraped from `/media`). On iOS, tapping a category pushes a dedicated fandom
 /// list; on macOS it expands inline to the featured fandoms.
+///
+/// Each category card is enriched with real fandom/work counts (from the same
+/// per-category fandom index the detail page uses, cached in `FandomCatalog`),
+/// the user's saved-work count in that category, and recently-read fandom chips.
 struct MediaBrowserView: View {
     var onSelectFandom: (String) -> Void
 
+    @Query private var library: [SavedWork]
+
     @State private var categories: [AO3MediaCategory] = []
     @State private var phase: Phase = .loading
+    /// Shared, per-launch cache of each category's fandom list.
+    private let catalog = FandomCatalog.shared
     #if os(macOS)
     /// Tracked explicitly (keyed by category name) so a row's expansion can't be
     /// recycled onto a different category as the List scrolls.
@@ -42,7 +51,7 @@ struct MediaBrowserView: View {
                 ForEach(categories) { category in
                     #if os(iOS)
                     NavigationLink(value: category) {
-                        categoryLabel(category)
+                        categoryCard(category)
                     }
                     #else
                     DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
@@ -58,7 +67,7 @@ struct MediaBrowserView: View {
                             .buttonStyle(.plain)
                         }
                     } label: {
-                        categoryLabel(category)
+                        categoryCard(category)
                     }
                     #endif
                 }
@@ -90,17 +99,127 @@ struct MediaBrowserView: View {
         #endif
     }
 
-    /// A category row label. The leading glyph is rendered in the primary label
-    /// colour (rather than the default full accent-blue) so it matches the app's
-    /// tab-bar / sidebar icons instead of standing out.
-    private func categoryLabel(_ category: AO3MediaCategory) -> some View {
-        Label {
-            Text(category.name)
-        } icon: {
-            Image(systemName: category.symbol)
-                .foregroundStyle(.primary)
+    // MARK: - Card
+
+    /// The enriched category card: an emphasized icon + regular-weight name, a thin
+    /// divider, a stats line, and (when present) a divider + recently-read chips.
+    private func categoryCard(_ category: AO3MediaCategory) -> some View {
+        let stats = stats(for: category)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: category.symbol)
+                    .font(.headline)              // icon stays emphasized
+                    .foregroundStyle(.primary)
+                    .frame(width: 24)
+                Text(category.name)
+                    .font(.headline.weight(.regular))   // regular weight (was bold)
+                    .foregroundStyle(.primary)
+            }
+
+            Divider()
+            statsLine(stats)
+
+            if !stats.recentFandoms.isEmpty {
+                Divider()
+                recentlyRead(stats.recentFandoms)
+            }
         }
-        .font(.headline)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func statsLine(_ stats: CategoryStats) -> some View {
+        FlowLayout(spacing: 16, rowSpacing: 4) {
+            if let count = stats.fandomCount {
+                statItem("books.vertical", "\(count.formatted()) fandoms")
+                if let works = stats.workCount {
+                    statItem("doc.text", "~\(compact(works)) works")
+                }
+            } else {
+                statItem("ellipsis", "Counting fandoms…")
+            }
+            if stats.savedCount > 0 {
+                statItem("bookmark.fill", "\(stats.savedCount) saved")
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+
+    private func statItem(_ symbol: String, _ text: String) -> some View {
+        // Icon hugs its label and is bold + tinted — matches the Search/Library
+        // result-card stats for visual consistency.
+        HStack(spacing: 3) {
+            Image(systemName: symbol)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tint)
+            Text(text)
+        }
+        .fixedSize()
+    }
+
+    /// Recently-read fandom chips — clearly secondary to the stats. Tapping a chip
+    /// runs a search filtered to that fandom.
+    private func recentlyRead(_ fandoms: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Recently read")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            FlowLayout(spacing: 6, rowSpacing: 6) {
+                ForEach(fandoms, id: \.self) { fandom in
+                    // Borderless so the chip's tap runs the fandom search instead of
+                    // following the card's navigation link.
+                    Button { onSelectFandom(fandom) } label: {
+                        TagChip(text: fandom)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+
+    // MARK: - Stats
+
+    private struct CategoryStats {
+        /// nil while the category's fandom list is still loading.
+        var fandomCount: Int?
+        var workCount: Int?
+        var savedCount: Int
+        var recentFandoms: [String]
+    }
+
+    private func stats(for category: AO3MediaCategory) -> CategoryStats {
+        let list = catalog.fandoms(for: category)
+        // Match the user's works to this category by fandom name — using the full
+        // fetched list when available, else the featured fandoms while it loads.
+        let names = list?.map(\.name) ?? category.fandoms.map(\.name)
+        let nameSet = Set(names.map { $0.lowercased() })
+
+        func inCategory(_ work: SavedWork) -> Bool {
+            work.workFandoms.contains { nameSet.contains($0.lowercased()) }
+        }
+
+        var recent: [String] = []
+        var seen = Set<String>()
+        for work in library.filter({ $0.hasBeenRead }).sorted(by: { $0.dateAdded > $1.dateAdded }) {
+            for fandom in work.workFandoms where nameSet.contains(fandom.lowercased()) {
+                if seen.insert(fandom.lowercased()).inserted { recent.append(fandom) }
+            }
+            if recent.count >= 3 { break }
+        }
+
+        return CategoryStats(
+            fandomCount: list?.count,
+            workCount: list.map { $0.reduce(0) { $0 + ($1.workCount ?? 0) } },
+            savedCount: library.filter(inCategory).count,
+            recentFandoms: Array(recent.prefix(3))
+        )
+    }
+
+    /// 1_234_567 → "1.2M".
+    private func compact(_ value: Int) -> String {
+        value.formatted(.number.notation(.compactName))
     }
 
     #if os(macOS)
@@ -119,10 +238,21 @@ struct MediaBrowserView: View {
         do {
             categories = try await AO3Client.shared.mediaCategories()
             phase = .loaded
+            // Fill in per-category fandom counts/lists in the background; the cards
+            // update as each lands.
+            await catalog.loadMissing(for: categories)
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+}
+
+private extension SavedWork {
+    /// The user has opened this work at least once (has reader progress / finished).
+    /// On this branch the Readium reader stores progress as `readiumLocator`.
+    var hasBeenRead: Bool {
+        isFinished || lastSpineIndex > 0 || !readiumLocator.isEmpty
     }
 }
