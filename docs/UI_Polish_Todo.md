@@ -1,8 +1,12 @@
 # UI Polish To-Do
 
-This document tracks small visual and interaction polish items that don't rise to the level of full feature ideas but still need attention for overall design quality and consistency.
+This document tracks small visual and interaction polish items that don't rise to
+the level of full feature ideas but still need attention for overall design
+quality and consistency.
 
-These items can be addressed during dedicated polish passes or when time permits between larger changes.
+Each item has a stable ID (`UI-N`) and a status; the `Board` link points at the
+matching task in [`../TASKS.md`](../TASKS.md). **Status:** `Idea` · `Planned` ·
+`In Progress` · `Done` · `Parked`.
 
 ---
 
@@ -10,17 +14,22 @@ These items can be addressed during dedicated polish passes or when time permits
 
 ### Search Results
 
-- **Refine pagination pill**  
-  The current pagination control in Search results feels visually inconsistent with the new card-based UI direction. It needs refinement to better match the overall aesthetic (corner radius, spacing, button styling, ellipsis treatment, and integration with the card design language).
+- **[UI-1] Refine pagination pill** — *Status: Planned · Board: T-14*  
+  The current pagination control in Search results feels visually inconsistent with
+  the card-based UI direction. It needs refinement to better match the overall
+  aesthetic (corner radius, spacing, button styling, ellipsis treatment, and
+  integration with the card design language).
 
 ---
 
 ## Notes
 
-- Items in this list are generally lower priority than active development (UI card migration, Readium work, major features).
-- Many of these can be grouped into a single "UI Polish Pass" when the bigger structural changes are more stable.
-- Feel free to add new items as they come up during testing and daily use.
+- Items here are generally lower priority than active development (Readium work,
+  major features).
+- Many can be grouped into a single "UI Polish Pass" when bigger structural changes
+  are more stable.
+- Add new items as they come up during testing and daily use.
 
 ---
 
-*Last updated: 2026-06-17*
+*Last updated: 2026-06-18*
