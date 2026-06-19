@@ -19,9 +19,11 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
+_None._ Claim a task from the Backlog and add a row here.
+
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| T-14 | Refine the Search pagination card (UI-1) | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Match result-card styling, improve navigation hierarchy, then verify on iPhone/macOS. |
+| —  | —    | —     | —      | —      | —                 |
 
 ---
 
@@ -52,6 +54,7 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-14 | Refine the Search pagination card (UI-1) | Codex | both | `024af77` / `1ab6781` | 2026-06-19 |
 | T-24 | Enrich Browse-by-fandom cards: fandom/work counts, saved count, recently-read chips, regular text weight, section dividers (+ Search/Library card dividers) (FI-9) | Claude | both | _see git log_ | 2026-06-19 |
 | T-16 | P2 AO3-red default accent + accent color picker (FI-6) | Claude | both | _see git log_ | 2026-06-19 |
 | T-23 | Extend Include → Exclude → Clear cycling to Warnings/Categories (FI-3) | Codex | both | `ff4f93a` / `8373068` | 2026-06-19 |
@@ -95,6 +98,6 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 - **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
   branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickups: a P2 feature (T-09…T-16) or Readium Phase-4 polish (T-20 / T-21).
+- Natural next pickups: T-15, T-17, or Readium Phase-4 polish (T-20 / T-21).
 - Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
