@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-14 | Refine the Search pagination card (UI-1) | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Match result-card styling, improve navigation hierarchy, then verify on iPhone/macOS. |
 
 ---
 
@@ -36,7 +34,6 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features & polish (detail in `docs/`)
-- **T-14 · Refine the search pagination pill** ↳ `docs/UI_Polish_Todo.md` UI-1
 - **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 

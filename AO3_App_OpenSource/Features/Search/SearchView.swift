@@ -113,9 +113,7 @@ struct SearchView: View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
             loadPage(page)
         }
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-        .listRowBackground(Color.clear)
+        .cardRow()
     }
 
     // MARK: Search bar + filter button
