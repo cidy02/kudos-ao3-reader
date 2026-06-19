@@ -69,7 +69,9 @@ xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
 Unit tests live in the `KudosTests` target (Swift Testing) and cover the
 pure-logic core: the MiniZip reader, EPUB OPF metadata + NCX table-of-contents
 parsing, HTML-entity decoding / summary stripping, and work-tag normalization.
-A minimal hand-built `KudosTests/Fixtures/sample.epub` backs the EPUB tests.
+Search-filter tests also cover advanced rating query generation, tag exclusions,
+and the include/exclude/clear cycle. A minimal hand-built
+`KudosTests/Fixtures/sample.epub` backs the EPUB tests.
 
 ```bash
 Scripts/test.sh        # runs on the default iOS Simulator

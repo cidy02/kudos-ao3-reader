@@ -54,9 +54,14 @@ struct AO3SearchFilters: Equatable, Sendable {
     var characters: String = ""
     var relationships: String = ""
     var additionalTags: String = ""
-    var excludeTags: String = ""
+    var excludedFandoms: String = ""
+    var excludedCharacters: String = ""
+    var excludedRelationships: String = ""
+    var excludedAdditionalTags: String = ""
     // Faceted filters.
     var rating: Rating = .any
+    var ratingMatch: RatingMatch = .exact
+    var includeNotRated: Bool = true
     var warnings: Set<Warning> = []
     var categories: Set<Category> = []
     var crossover: Crossover = .any
@@ -71,8 +76,11 @@ struct AO3SearchFilters: Equatable, Sendable {
     /// button's "active" icon and the Reset action).
     var hasActiveFilters: Bool {
         !fandom.isBlank || !characters.isBlank || !relationships.isBlank
-            || !additionalTags.isBlank || !excludeTags.isBlank
-            || rating != .any || !warnings.isEmpty || !categories.isEmpty
+            || !additionalTags.isBlank || !excludedFandoms.isBlank
+            || !excludedCharacters.isBlank || !excludedRelationships.isBlank
+            || !excludedAdditionalTags.isBlank
+            || rating != .any || !includeNotRated
+            || !warnings.isEmpty || !categories.isEmpty
             || crossover != .any || completion != .any
             || !wordsFrom.isBlank || !wordsTo.isBlank
             || updated != .any || language != .any || sort != .relevance
@@ -81,9 +89,67 @@ struct AO3SearchFilters: Equatable, Sendable {
     /// True when there's enough to run a search (free text or any filter).
     var isSearchable: Bool { !query.isBlank || hasActiveFilters }
 
+    /// The free-text query AO3 receives, augmented with exclusions and any
+    /// multi-rating expression that the single-value rating field can't express.
+    nonisolated var searchQuery: String {
+        var clauses: [String] = []
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedQuery.isEmpty { clauses.append(trimmedQuery) }
+        clauses += excludedTags.map { "-\"\($0)\"" }
+        if let ratingSearchClause { clauses.append(ratingSearchClause) }
+        return clauses.joined(separator: " ")
+    }
+
+    /// AO3's structured rating field can express exactly one rating. Rating+/-
+    /// and optional Not Rated combinations are added to `searchQuery` instead.
+    nonisolated var structuredRatingID: String? {
+        let ratings = selectedRatings
+        return ratings.count == 1 ? ratings[0].ao3ID : nil
+    }
+
+    nonisolated private var excludedTags: [String] {
+        [excludedFandoms, excludedCharacters, excludedRelationships, excludedAdditionalTags]
+            .flatMap(Self.commaSeparatedValues)
+            .reduce(into: [String]()) { result, tag in
+                if !result.contains(tag) { result.append(tag) }
+            }
+    }
+
+    nonisolated private var ratingSearchClause: String? {
+        if rating == .any {
+            return includeNotRated ? nil : "-rating_ids:9"
+        }
+        let ratings = selectedRatings
+        guard ratings.count > 1 else { return nil }
+        return "(\(ratings.map(\.ratingQueryToken).joined(separator: " OR ")))"
+    }
+
+    nonisolated private var selectedRatings: [Rating] {
+        guard rating != .any else { return [] }
+        if rating == .notRated { return [.notRated] }
+
+        let ranked: [Rating] = [.general, .teen, .mature, .explicit]
+        guard let index = ranked.firstIndex(of: rating) else { return [] }
+        var result: [Rating]
+        switch ratingMatch {
+        case .exact: result = [rating]
+        case .orHigher: result = Array(ranked[index...])
+        case .orLower: result = Array(ranked[...index])
+        }
+        if includeNotRated { result.append(.notRated) }
+        return result
+    }
+
+    nonisolated private static func commaSeparatedValues(_ field: String) -> [String] {
+        field.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     nonisolated enum Rating: String, CaseIterable, Identifiable, Sendable {
         case any, general, teen, mature, explicit, notRated
         var id: String { rawValue }
+        static let searchCases: [Self] = [.any, .general, .teen, .mature, .explicit]
         var title: String {
             switch self {
             case .any: "Any rating"
@@ -103,6 +169,22 @@ struct AO3SearchFilters: Equatable, Sendable {
             case .teen: "11"
             case .mature: "12"
             case .explicit: "13"
+            }
+        }
+        var ratingQueryToken: String {
+            guard let ao3ID else { return "" }
+            return "rating_ids:\(ao3ID)"
+        }
+    }
+
+    nonisolated enum RatingMatch: String, CaseIterable, Identifiable, Sendable {
+        case exact, orHigher, orLower
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .exact: "Exact"
+            case .orHigher: "Rating+"
+            case .orLower: "Rating−"
             }
         }
     }
@@ -326,6 +408,19 @@ enum AO3Error: LocalizedError {
 /// "any tag" endpoint, used for the Exclude field.
 enum AO3TagKind: String, Sendable {
     case fandom, character, relationship, freeform, tag
+}
+
+/// The three-state selection used by Search's cycling tag filters.
+nonisolated enum TagFilterState: Equatable, Sendable {
+    case clear, included, excluded
+
+    var next: Self {
+        switch self {
+        case .clear: .included
+        case .included: .excluded
+        case .excluded: .clear
+        }
+    }
 }
 
 // MARK: - Work tags (categorized)

@@ -1,22 +1,29 @@
-#if os(iOS)
 import SwiftUI
 
-/// A filter-panel row that replaces free-text tag entry with tap-to-select tags.
-/// Shows the current selections as removable chips and opens a searchable picker
-/// (live AO3 tag search) on tap. Selections are stored back into the existing
-/// comma-separated filter field, so the search request is unchanged.
+/// A filter-panel row that searches AO3 tags and gives each selection three
+/// states: clear → include → exclude → clear.
 struct TagSelectField: View {
     let title: String
     let kind: AO3TagKind
-    @Binding var value: String
-    /// Fandoms currently selected in the filters; lets the picker show that fandom's
-    /// most popular tags by default (empty for the Fandoms field itself).
+    @Binding var included: String
+    @Binding var excluded: String
+    /// Fandoms currently included in the filters; lets the picker show that
+    /// fandom's most popular tags by default.
     var fandomContext: [String] = []
 
     @State private var showPicker = false
 
-    private var selected: [String] {
-        value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    private var includedTags: [String] { Self.tags(in: included) }
+    private var excludedTags: [String] { Self.tags(in: excluded) }
+
+    private var selectionSummary: String {
+        let includeCount = includedTags.count
+        let excludeCount = excludedTags.count
+        if includeCount == 0, excludeCount == 0 { return "Any" }
+        var parts: [String] = []
+        if includeCount > 0 { parts.append("\(includeCount) included") }
+        if excludeCount > 0 { parts.append("\(excludeCount) excluded") }
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
@@ -28,7 +35,7 @@ struct TagSelectField: View {
                     Text(title)
                         .foregroundStyle(.primary)
                     Spacer()
-                    Text(selected.isEmpty ? "Any" : "\(selected.count) selected")
+                    Text(selectionSummary)
                         .foregroundStyle(.secondary)
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
@@ -38,40 +45,68 @@ struct TagSelectField: View {
             }
             .buttonStyle(.plain)
 
-            if !selected.isEmpty {
+            if !includedTags.isEmpty || !excludedTags.isEmpty {
                 FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(selected, id: \.self) { tag in
-                        SelectedTagChip(tag: tag) { remove(tag) }
+                    ForEach(includedTags, id: \.self) { tag in
+                        FilterTagChip(tag: tag, state: .included) {
+                            remove(tag, from: $included)
+                        }
+                    }
+                    ForEach(excludedTags, id: \.self) { tag in
+                        FilterTagChip(tag: tag, state: .excluded) {
+                            remove(tag, from: $excluded)
+                        }
                     }
                 }
                 .padding(.top, 2)
             }
         }
         .sheet(isPresented: $showPicker) {
-            TagPickerView(title: title, kind: kind, selected: selectionBinding, fandomContext: fandomContext)
+            TagPickerView(
+                title: title,
+                kind: kind,
+                included: includedBinding,
+                excluded: excludedBinding,
+                fandomContext: fandomContext
+            )
         }
     }
 
-    private func remove(_ tag: String) {
-        value = selected.filter { $0 != tag }.joined(separator: ", ")
+    private func remove(_ tag: String, from value: Binding<String>) {
+        value.wrappedValue = Self.tags(in: value.wrappedValue)
+            .filter { $0 != tag }
+            .joined(separator: ", ")
     }
 
-    /// Bridges the comma-separated storage to the picker's `Set<String>`.
-    private var selectionBinding: Binding<Set<String>> {
+    private var includedBinding: Binding<Set<String>> {
         Binding(
-            get: { Set(selected) },
-            set: { value = $0.sorted().joined(separator: ", ") }
+            get: { Set(includedTags) },
+            set: { included = $0.sorted().joined(separator: ", ") }
         )
+    }
+
+    private var excludedBinding: Binding<Set<String>> {
+        Binding(
+            get: { Set(excludedTags) },
+            set: { excluded = $0.sorted().joined(separator: ", ") }
+        )
+    }
+
+    private static func tags(in value: String) -> [String] {
+        value.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 }
 
-/// A searchable, multi-select tag picker backed by AO3's autocomplete. Any AO3 tag
-/// of the given kind can be found by typing; tapping toggles selection.
+/// A searchable tag picker backed by AO3 autocomplete. Repeated taps cycle a
+/// result through include, exclude, and clear states.
 struct TagPickerView: View {
     let title: String
     let kind: AO3TagKind
-    @Binding var selected: Set<String>
-    /// Selected fandoms, used to seed the default list with their popular tags.
+    @Binding var included: Set<String>
+    @Binding var excluded: Set<String>
+    /// Included fandoms used to seed the default list with popular tags.
     var fandomContext: [String] = []
     @Environment(\.dismiss) private var dismiss
 
@@ -83,6 +118,7 @@ struct TagPickerView: View {
 
     private var hasFandomContext: Bool { kind != .fandom && !fandomContext.isEmpty }
     private var isSearchEmpty: Bool { query.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var selectedTags: [String] { Array(included.union(excluded)).sorted() }
 
     var body: some View {
         NavigationStack {
@@ -90,11 +126,13 @@ struct TagPickerView: View {
               // Group so .appThemedRows() reaches every section's rows (it doesn't
               // propagate from the List container, only from a Group/Section/ForEach).
               Group {
-                if !selected.isEmpty {
+                if !selectedTags.isEmpty {
                     Section("Selected") {
                         FlowLayout(spacing: 6, rowSpacing: 6) {
-                            ForEach(selected.sorted(), id: \.self) { tag in
-                                SelectedTagChip(tag: tag, tinted: true) { selected.remove(tag) }
+                            ForEach(selectedTags, id: \.self) { tag in
+                                FilterTagChip(tag: tag, state: state(of: tag)) {
+                                    clear(tag)
+                                }
                             }
                         }
                         .padding(.vertical, 2)
@@ -102,13 +140,11 @@ struct TagPickerView: View {
                 }
 
                 if isSearchEmpty && hasFandomContext {
-                    // Default state: the selected fandom's most-used tags of this kind.
                     Section("Popular in \(fandomContext[0])") {
                         if loadingPopular {
-                            HStack(spacing: 8) { ProgressView(); Text("Loading…").foregroundStyle(.secondary) }
+                            loadingRow("Loading…")
                         } else if popular.isEmpty {
-                            Text("Type above to search AO3 \(title.lowercased()).")
-                                .foregroundStyle(.secondary)
+                            searchPrompt
                         } else {
                             tagRows(popular)
                         }
@@ -116,10 +152,9 @@ struct TagPickerView: View {
                 } else {
                     Section("Results") {
                         if isSearching {
-                            HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(.secondary) }
+                            loadingRow("Searching…")
                         } else if isSearchEmpty {
-                            Text("Type above to search AO3 \(title.lowercased()).")
-                                .foregroundStyle(.secondary)
+                            searchPrompt
                         } else if results.isEmpty {
                             Text("No tags found for “\(query)”.")
                                 .foregroundStyle(.secondary)
@@ -133,9 +168,10 @@ struct TagPickerView: View {
             }
             .appThemedScroll()
             .navigationTitle(title)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Search \(title)")
+            #endif
+            .searchable(text: $query, prompt: "Search \(title)")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -144,23 +180,33 @@ struct TagPickerView: View {
             .task { await loadPopular() }
             .task(id: query) { await runSearch() }
         }
+        #if os(iOS)
         .presentationDetents([.large])
+        #endif
+    }
+
+    private var searchPrompt: some View {
+        Text("Type above to search AO3 \(title.lowercased()).")
+            .foregroundStyle(.secondary)
+    }
+
+    private func loadingRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+            Text(text).foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder
     private func tagRows(_ tags: [String]) -> some View {
         ForEach(tags, id: \.self) { tag in
             Button {
-                toggle(tag)
+                cycle(tag)
             } label: {
                 HStack {
                     Text(tag).foregroundStyle(.primary)
                     Spacer()
-                    if selected.contains(tag) {
-                        Image(systemName: "checkmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.tint)
-                    }
+                    selectionLabel(for: state(of: tag))
                 }
                 .contentShape(Rectangle())
             }
@@ -168,8 +214,44 @@ struct TagPickerView: View {
         }
     }
 
-    private func toggle(_ tag: String) {
-        if selected.contains(tag) { selected.remove(tag) } else { selected.insert(tag) }
+    @ViewBuilder
+    private func selectionLabel(for state: TagFilterState) -> some View {
+        switch state {
+        case .clear:
+            EmptyView()
+        case .included:
+            Label("Include", systemImage: "plus.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tint)
+        case .excluded:
+            Label("Exclude", systemImage: "minus.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func state(of tag: String) -> TagFilterState {
+        if included.contains(tag) { return .included }
+        if excluded.contains(tag) { return .excluded }
+        return .clear
+    }
+
+    private func cycle(_ tag: String) {
+        switch state(of: tag).next {
+        case .included:
+            included.insert(tag)
+            excluded.remove(tag)
+        case .excluded:
+            included.remove(tag)
+            excluded.insert(tag)
+        case .clear:
+            clear(tag)
+        }
+    }
+
+    private func clear(_ tag: String) {
+        included.remove(tag)
+        excluded.remove(tag)
     }
 
     private func loadPopular() async {
@@ -196,29 +278,33 @@ struct TagPickerView: View {
     }
 }
 
-/// A capsule chip with a remove (×) affordance, used for selected filter tags.
-private struct SelectedTagChip: View {
+/// A removable capsule for an included or excluded filter tag.
+private struct FilterTagChip: View {
     let tag: String
-    var tinted: Bool = false
+    let state: TagFilterState
     let onRemove: () -> Void
+
+    private var color: Color { state == .excluded ? .red : .accentColor }
+    private var symbol: String { state == .excluded ? "minus.circle.fill" : "plus.circle.fill" }
 
     var body: some View {
         Button(action: onRemove) {
             HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.caption2)
                 Text(tag).lineLimit(1)
-                Image(systemName: "xmark.circle.fill").font(.caption2)
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption2)
             }
             .font(.caption)
-            .padding(.leading, 10)
+            .padding(.leading, 8)
             .padding(.trailing, 7)
             .padding(.vertical, 5)
-            .foregroundStyle(tinted ? AnyShapeStyle(.white) : AnyShapeStyle(.tint))
-            .background(
-                tinted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.accentColor.opacity(0.15)),
-                in: Capsule()
-            )
+            .foregroundStyle(color)
+            .background(color.opacity(0.15), in: Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(state == .excluded ? "Excluded" : "Included"): \(tag)")
+        .accessibilityHint("Removes this tag filter")
     }
 }
-#endif

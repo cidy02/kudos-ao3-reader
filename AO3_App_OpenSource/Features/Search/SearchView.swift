@@ -213,8 +213,26 @@ struct SearchView: View {
                     ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Rating", selection: $filters.rating) {
-                    ForEach(AO3SearchFilters.Rating.allCases) { Text($0.title).tag($0) }
+                    ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
                 }
+                .onChange(of: filters.rating) { oldValue, newValue in
+                    if oldValue == .any, newValue != .any {
+                        // A specific rating starts exact and excludes unrated works;
+                        // the separate toggle lets the reader opt them back in.
+                        filters.ratingMatch = .exact
+                        filters.includeNotRated = false
+                    } else if newValue == .any {
+                        filters.ratingMatch = .exact
+                    }
+                }
+                if filters.rating != .any {
+                    Picker("Match", selection: $filters.ratingMatch) {
+                        ForEach(AO3SearchFilters.RatingMatch.allCases) {
+                            Text($0.title).tag($0)
+                        }
+                    }
+                }
+                Toggle("Include Not Rated", isOn: $filters.includeNotRated)
             }
 
             Section("Warnings") {
@@ -263,31 +281,21 @@ struct SearchView: View {
             }
 
             Section {
-                #if os(iOS)
-                TagSelectField(title: "Fandoms", kind: .fandom, value: $filters.fandom)
-                TagSelectField(title: "Characters", kind: .character, value: $filters.characters,
+                TagSelectField(title: "Fandoms", kind: .fandom,
+                               included: $filters.fandom, excluded: $filters.excludedFandoms)
+                TagSelectField(title: "Characters", kind: .character,
+                               included: $filters.characters, excluded: $filters.excludedCharacters,
                                fandomContext: selectedFandoms)
-                TagSelectField(title: "Relationships", kind: .relationship, value: $filters.relationships,
+                TagSelectField(title: "Relationships", kind: .relationship,
+                               included: $filters.relationships, excluded: $filters.excludedRelationships,
                                fandomContext: selectedFandoms)
-                TagSelectField(title: "Additional Tags", kind: .freeform, value: $filters.additionalTags,
+                TagSelectField(title: "Additional Tags", kind: .freeform,
+                               included: $filters.additionalTags, excluded: $filters.excludedAdditionalTags,
                                fandomContext: selectedFandoms)
-                TagSelectField(title: "Exclude Tags", kind: .tag, value: $filters.excludeTags,
-                               fandomContext: selectedFandoms)
-                #else
-                tagField("Fandoms", text: $filters.fandom)
-                tagField("Characters", text: $filters.characters)
-                tagField("Relationships", text: $filters.relationships)
-                tagField("Additional tags", text: $filters.additionalTags)
-                tagField("Exclude tags", text: $filters.excludeTags)
-                #endif
             } header: {
                 Text("Tags")
             } footer: {
-                #if os(iOS)
-                Text("Search AO3 and tap to select tags. Exclude Tags filters them out.")
-                #else
-                Text("Separate multiple tags with commas.")
-                #endif
+                Text("Tap a tag once to include it, twice to exclude it, and a third time to clear it.")
             }
 
             Section {
@@ -319,7 +327,6 @@ struct SearchView: View {
         .appThemedScroll()
     }
 
-    #if os(iOS)
     /// The fandoms currently chosen in the filters, used to seed the other tag
     /// pickers with that fandom's popular tags.
     private var selectedFandoms: [String] {
@@ -327,12 +334,6 @@ struct SearchView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
-    #else
-    private func tagField(_ label: String, text: Binding<String>) -> some View {
-        TextField(label, text: text)
-            .onSubmit(runSearch)
-    }
-    #endif
 
     /// A tappable filter row with a trailing checkmark when selected — matching the
     /// tag pickers, so Warnings/Categories use the same selection style as tags.
@@ -375,16 +376,24 @@ struct SearchView: View {
 
     /// Runs a search for the tapped fandom from the Media Browser (macOS inline path).
     private func selectFandom(_ name: String) {
-        filters.fandom = name
+        setIncludedFandom(name)
         runSearch()
     }
 
     /// Same, but pops the pushed fandom detail page so the results become visible
     /// (the iOS Browse-by-fandom path navigates into a detail page first).
     private func searchFandomFromBrowse(_ name: String) {
-        filters.fandom = name
+        setIncludedFandom(name)
         runSearch()
         path = NavigationPath()
+    }
+
+    private func setIncludedFandom(_ name: String) {
+        filters.fandom = name
+        filters.excludedFandoms = filters.excludedFandoms.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.caseInsensitiveCompare(name) != .orderedSame }
+            .joined(separator: ", ")
     }
 
     private func runSearch() {
