@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-25 | Calm Search pagination layout (UI-1 follow-up) | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Use one row with single arrows, long-press first/last navigation, and verify card-width alignment. |
 
 ---
 
