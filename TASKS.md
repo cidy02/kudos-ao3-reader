@@ -19,9 +19,11 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
+_None._ Claim a task from the Backlog and add a row here.
+
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| T-25 | Calm Search pagination layout (UI-1 follow-up) | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Use one row with single arrows, long-press first/last navigation, and verify card-width alignment. |
+| —  | —    | —     | —      | —      | —                 |
 
 ---
 
@@ -52,6 +54,7 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-25 | Calm Search pagination layout (UI-1 follow-up) | Codex | both | `9374053` / `491b195` | 2026-06-19 |
 | T-14 | Refine the Search pagination card (UI-1) | Codex | both | `024af77` / `1ab6781` | 2026-06-19 |
 | T-24 | Enrich Browse-by-fandom cards: fandom/work counts, saved count, recently-read chips, regular text weight, section dividers (+ Search/Library card dividers) (FI-9) | Claude | both | _see git log_ | 2026-06-19 |
 | T-16 | P2 AO3-red default accent + accent color picker (FI-6) | Claude | both | _see git log_ | 2026-06-19 |
