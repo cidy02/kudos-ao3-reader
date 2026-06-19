@@ -19,9 +19,11 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
+_None._ Claim a task from the Backlog and add a row here.
+
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| T-23 | Extend include/exclude cycling to Search facets | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Add cycling Warnings/Categories, exact AO3 exclusions, tests, and UI verification. |
+| —  | —    | —     | —      | —      | —                 |
 
 ---
 
@@ -54,6 +56,7 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-23 | Extend Include → Exclude → Clear cycling to Warnings/Categories (FI-3) | Codex | both | `ff4f93a` / `8373068` | 2026-06-19 |
 | T-22 | Fix T-09 tag cycling UI + restore top picker search field (BUG-2) | Codex | both | _see git log_ | 2026-06-18 |
 | T-09 | P2 Advanced rating + cycling include/exclude Search tags (FI-2, FI-3) | Codex | both | _see git log_ | 2026-06-18 |
 | T-10 | P2 Expandable search result cards (FI-4) | Codex | both | _see git log_ | 2026-06-18 |
