@@ -49,12 +49,12 @@ struct TagSelectField: View {
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(includedTags, id: \.self) { tag in
                         FilterTagChip(tag: tag, state: .included) {
-                            remove(tag, from: $included)
+                            cycle(tag)
                         }
                     }
                     ForEach(excludedTags, id: \.self) { tag in
                         FilterTagChip(tag: tag, state: .excluded) {
-                            remove(tag, from: $excluded)
+                            cycle(tag)
                         }
                     }
                 }
@@ -72,10 +72,25 @@ struct TagSelectField: View {
         }
     }
 
-    private func remove(_ tag: String, from value: Binding<String>) {
-        value.wrappedValue = Self.tags(in: value.wrappedValue)
-            .filter { $0 != tag }
-            .joined(separator: ", ")
+    private func cycle(_ tag: String) {
+        var includedSet = Set(includedTags)
+        var excludedSet = Set(excludedTags)
+        let current: TagFilterState = includedSet.contains(tag)
+            ? .included
+            : excludedSet.contains(tag) ? .excluded : .clear
+        switch current.next {
+        case .included:
+            includedSet.insert(tag)
+            excludedSet.remove(tag)
+        case .excluded:
+            includedSet.remove(tag)
+            excludedSet.insert(tag)
+        case .clear:
+            includedSet.remove(tag)
+            excludedSet.remove(tag)
+        }
+        included = includedSet.sorted().joined(separator: ", ")
+        excluded = excludedSet.sorted().joined(separator: ", ")
     }
 
     private var includedBinding: Binding<Set<String>> {
@@ -131,7 +146,7 @@ struct TagPickerView: View {
                         FlowLayout(spacing: 6, rowSpacing: 6) {
                             ForEach(selectedTags, id: \.self) { tag in
                                 FilterTagChip(tag: tag, state: state(of: tag)) {
-                                    clear(tag)
+                                    cycle(tag)
                                 }
                             }
                         }
@@ -170,8 +185,14 @@ struct TagPickerView: View {
             .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search \(title)"
+            )
+            #else
             .searchable(text: $query, prompt: "Search \(title)")
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -278,33 +299,42 @@ struct TagPickerView: View {
     }
 }
 
-/// A removable capsule for an included or excluded filter tag.
+/// A tappable capsule for an included or excluded filter tag. Tapping continues
+/// the same Include → Exclude → Clear cycle as the result row.
 private struct FilterTagChip: View {
     let tag: String
     let state: TagFilterState
-    let onRemove: () -> Void
+    let onCycle: () -> Void
 
     private var color: Color { state == .excluded ? .red : .accentColor }
     private var symbol: String { state == .excluded ? "minus.circle.fill" : "plus.circle.fill" }
+    private var nextStateLabel: String {
+        switch state.next {
+        case .included: "Include"
+        case .excluded: "Exclude"
+        case .clear: "Clear"
+        }
+    }
 
     var body: some View {
-        Button(action: onRemove) {
-            HStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.caption2)
-                Text(tag).lineLimit(1)
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption2)
-            }
-            .font(.caption)
-            .padding(.leading, 8)
-            .padding(.trailing, 7)
-            .padding(.vertical, 5)
-            .foregroundStyle(color)
-            .background(color.opacity(0.15), in: Capsule())
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.caption2)
+            Text(tag).lineLimit(1)
         }
-        .buttonStyle(.plain)
+        .font(.caption)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .foregroundStyle(color)
+        .background(color.opacity(0.15), in: Capsule())
+        .contentShape(Capsule())
+        // A nested Button inside a Form/List row is coalesced with the row's
+        // primary Button on iOS, which made tag-chip taps open the picker instead
+        // of cycling. A direct tap gesture keeps the chip's action independent.
+        .onTapGesture(perform: onCycle)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel("\(state == .excluded ? "Excluded" : "Included"): \(tag)")
-        .accessibilityHint("Removes this tag filter")
+        .accessibilityHint("Tap to \(nextStateLabel.lowercased()) this tag")
+        .accessibilityAction(named: Text("Cycle tag"), onCycle)
     }
 }

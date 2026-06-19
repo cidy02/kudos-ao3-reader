@@ -48,7 +48,7 @@ _None._ Claim a task from the Backlog and add a row here.
   app's; spacing/margin/bold scale; verify a real imported custom font. (Notes §5.)
 
 ### Bugs
-- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md) (BUG-1 Sepia consistency fixed & verified 2026-06-18).
+- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
 
 ---
 
@@ -56,6 +56,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-22 | Fix T-09 tag cycling UI + restore top picker search field (BUG-2) | Codex | both | _see git log_ | 2026-06-18 |
 | T-09 | P2 Advanced rating + cycling include/exclude Search tags (FI-2, FI-3) | Codex | both | _see git log_ | 2026-06-18 |
 | T-10 | P2 Expandable search result cards (FI-4) | Codex | both | _see git log_ | 2026-06-18 |
 | T-11 | P2 Tap a tag (work/My) → filter the Library (FI-8) | Claude | both | _see git log_ | 2026-06-18 |

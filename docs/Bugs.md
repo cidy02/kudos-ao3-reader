@@ -15,6 +15,15 @@ when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `
 
 ## Fixed / Verified
 
+### Search
+
+- **[BUG-2] T-09 tag cycling UI / search placement regression** — ✅ Fixed &
+  verified (2026-06-18, `main` + `readium-migration`; Board: T-22).
+  Selected chips now continue the Include → Exclude → Clear cycle independently
+  of their surrounding Form row, and the tag picker search field is restored to
+  the top navigation drawer on iOS. Verified interactively in the iPhone 17
+  simulator: blue included chip → red excluded chip → cleared.
+
 ### Theming
 
 - **[BUG-1] Sepia theme not applying consistently** — ✅ Fixed & verified (2026-06-18, `main` + `readium-migration`; Board: T-08).  
