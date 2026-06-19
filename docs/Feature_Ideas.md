@@ -38,9 +38,10 @@ the status here in sync with the board.
   - Tap a third time = Clear
   Reduces UI clutter while still supporting AO3's include/exclude functionality.
 
-- **[FI-4] Expandable search result cards** — *Status: Planned · Board: T-10*  
-  Add an expand/collapse button on search result cards that shows the full summary
-  and tags (like on AO3) without opening the work detail page.
+- **[FI-4] Expandable search result cards** — *Status: Done (2026-06-18) · Board: T-10*
+  Search result cards now keep summaries to three lines by default and provide a
+  **Show more / Show less** control that reveals the full summary and wrapped tag
+  chips without opening the work detail page.
 
 ### Browse / Web View
 
