@@ -1,83 +1,116 @@
 import SwiftUI
 
-/// AO3-style page navigation arranged as a compact card: directional controls and
-/// a clear page status sit above a windowed set of page numbers
-/// (1 … 5 6 7 … 142). `SearchView` supplies the same card surface as result rows.
+/// AO3-style page navigation arranged as one calm row: single-step arrows flank a
+/// windowed set of page numbers (1 … 5 6 7 … 142). Long-pressing an arrow jumps
+/// to the corresponding end. `SearchView` supplies the same card surface as rows.
 struct SearchPaginationBar: View {
     let currentPage: Int
     let totalPages: Int
     let onSelect: (Int) -> Void
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                HStack(spacing: 5) {
-                    navButton("chevron.left.2", label: "First page",
-                              page: 1, enabled: currentPage > 1)
-                    navButton("chevron.left", label: "Previous page",
-                              page: currentPage - 1, enabled: currentPage > 1)
-                }
+        HStack(spacing: 0) {
+            navButton(.backward)
 
-                Spacer(minLength: 6)
+            Spacer(minLength: 18)
 
-                VStack(spacing: 1) {
-                    Text("Page \(currentPage)")
-                        .font(.subheadline.weight(.semibold))
-                        .monospacedDigit()
-                    Text("of \(totalPages)")
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
-
-                Spacer(minLength: 6)
-
-                HStack(spacing: 5) {
-                    navButton("chevron.right", label: "Next page",
-                              page: currentPage + 1, enabled: currentPage < totalPages)
-                    navButton("chevron.right.2", label: "Last page",
-                              page: totalPages, enabled: currentPage < totalPages)
-                }
+            // Keep the full AO3-style anchor window when it fits. On compact
+            // cards, fall back to nearby pages so the bar never exceeds its row.
+            ViewThatFits(in: .horizontal) {
+                pageItems(items)
+                pageItems(compactItems)
             }
+            .layoutPriority(1)
 
-            HStack(spacing: 6) {
-                ForEach(items) { item in
-                    switch item.kind {
-                    case .page(let page):
-                        pageButton(page)
-                    case .ellipsis:
-                        Image(systemName: "ellipsis")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 18, height: 31)
-                            .accessibilityHidden(true)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity)
+            Spacer(minLength: 18)
+
+            navButton(.forward)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func navButton(_ symbol: String, label: String,
-                           page: Int, enabled: Bool) -> some View {
-        Button {
-            onSelect(page)
-        } label: {
-            Image(systemName: symbol)
-                .font(.caption.weight(.bold))
-                .frame(width: 31, height: 31)
-                .background(
-                    Circle().fill(enabled ? Color.accentColor.opacity(0.12)
-                        : Color.secondary.opacity(0.06))
-                )
-                .contentShape(Circle())
+    @ViewBuilder
+    private func pageItems(_ items: [Item]) -> some View {
+        HStack(spacing: 6) {
+            ForEach(items) { item in
+                switch item.kind {
+                case .page(let page):
+                    pageButton(page)
+                case .ellipsis:
+                    Image(systemName: "ellipsis")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 18, height: 31)
+                        .accessibilityHidden(true)
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(enabled ? Color.accentColor : Color.secondary.opacity(0.35))
-        .disabled(!enabled)
-        .accessibilityLabel(label)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func navButton(_ direction: Direction) -> some View {
+        let isBackward = direction == .backward
+        let enabled = isBackward ? currentPage > 1 : currentPage < totalPages
+        let tapPage = Self.navigationPage(
+            direction, longPress: false, currentPage: currentPage, totalPages: totalPages
+        )
+        let endPage = Self.navigationPage(
+            direction, longPress: true, currentPage: currentPage, totalPages: totalPages
+        )
+        let tapLabel = isBackward ? "Previous page" : "Next page"
+        let endLabel = isBackward ? "First page" : "Last page"
+
+        return Image(systemName: isBackward ? "chevron.left" : "chevron.right")
+            .font(.caption.weight(.bold))
+            .frame(width: 31, height: 31)
+            .background(
+                Circle().fill(enabled ? Color.accentColor.opacity(0.12)
+                    : Color.secondary.opacity(0.06))
+            )
+            .contentShape(Circle())
+            .foregroundStyle(enabled ? Color.accentColor : Color.secondary.opacity(0.35))
+            .allowsHitTesting(enabled)
+            .gesture(
+                LongPressGesture(minimumDuration: 0.45)
+                    .exclusively(before: TapGesture())
+                    .onEnded { result in
+                        switch result {
+                        case .first:
+                            onSelect(endPage)
+                        case .second:
+                            onSelect(tapPage)
+                        }
+                    }
+            )
+            .accessibilityElement()
+            .accessibilityLabel(tapLabel)
+            .accessibilityHint("Long-press for \(endLabel.lowercased()).")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                if enabled { onSelect(tapPage) }
+            }
+            .accessibilityAction(named: Text(endLabel)) {
+                if enabled { onSelect(endPage) }
+            }
+    }
+
+    enum Direction {
+        case backward
+        case forward
+    }
+
+    static func navigationPage(_ direction: Direction, longPress: Bool,
+                               currentPage: Int, totalPages: Int) -> Int {
+        switch (direction, longPress) {
+        case (.backward, true):
+            return 1
+        case (.backward, false):
+            return max(1, currentPage - 1)
+        case (.forward, true):
+            return totalPages
+        case (.forward, false):
+            return min(totalPages, currentPage + 1)
+        }
     }
 
     private func pageButton(_ page: Int) -> some View {
@@ -160,5 +193,11 @@ struct SearchPaginationBar: View {
             previous = page
         }
         return result
+    }
+
+    /// A narrow-width fallback that keeps the current page and its neighbors.
+    private var compactItems: [Item] {
+        let pages = max(1, currentPage - 1)...min(totalPages, currentPage + 1)
+        return pages.map { Item(id: $0, kind: .page($0)) }
     }
 }
