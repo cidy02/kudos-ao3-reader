@@ -111,6 +111,21 @@ struct LibraryView: View {
                 perform: { delete($0) }
             )
             .task { await backfillFilterMetadata() }
+            // A tag tapped on a work's detail page filters the Library to it.
+            // `initial: true` catches a tag set just before this view appears.
+            .onChange(of: router.pendingLibraryTag, initial: true) { _, tag in
+                guard let tag else { return }
+                var applied = LibraryFilters()
+                switch tag.field {
+                case .userTag: applied.userTags = [tag.value]
+                case .fandom: applied.fandoms = [tag.value]
+                case .character: applied.characters = [tag.value]
+                case .relationship: applied.relationships = [tag.value]
+                case .additional: applied.additionalTags = [tag.value]
+                }
+                filters = applied
+                router.pendingLibraryTag = nil
+            }
         }
     }
 

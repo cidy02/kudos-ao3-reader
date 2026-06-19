@@ -52,24 +52,30 @@ struct WorkDetailView: View {
     /// from the EPUB's subjects.
     @ViewBuilder
     private var workTagsSections: some View {
+        let tapFooter = "Tags from AO3. Tap one to filter your Library; add your own below."
         if work.hasCategorizedWorkTags {
-            workTagSection("Fandoms", work.workFandoms)
-            workTagSection("Characters", work.workCharacters)
-            workTagSection("Relationships", work.workRelationships)
-            workTagSection("Additional Tags", work.workFreeforms,
-                           footer: "Tags from AO3. Add your own below to organize and filter your Library.")
+            workTagSection("Fandoms", work.workFandoms, field: .fandom)
+            workTagSection("Characters", work.workCharacters, field: .character)
+            workTagSection("Relationships", work.workRelationships, field: .relationship)
+            workTagSection("Additional Tags", work.workFreeforms, field: .additional, footer: tapFooter)
         } else if !work.workTags.isEmpty {
-            workTagSection("Work Tags", work.workTags,
-                           footer: "Tags from AO3. Add your own below to organize and filter your Library.")
+            workTagSection("Work Tags", work.workTags, field: .additional, footer: tapFooter)
         }
     }
 
     @ViewBuilder
-    private func workTagSection(_ title: String, _ tags: [String], footer: String? = nil) -> some View {
+    private func workTagSection(_ title: String, _ tags: [String],
+                                field: LibraryTagFilter.Field, footer: String? = nil) -> some View {
         if !tags.isEmpty {
             Section {
                 FlowLayout(spacing: 8, rowSpacing: 8) {
-                    ForEach(tags, id: \.self) { TagChip(text: $0) }
+                    ForEach(tags, id: \.self) { tag in
+                        // Tap a Work Tag → filter the Library to works with that tag.
+                        Button { router.filterLibrary(field, tag) } label: {
+                            TagChip(text: tag)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.vertical, 2)
             } header: {
@@ -175,7 +181,11 @@ struct WorkDetailView: View {
                 } else {
                     ForEach(work.tags.sorted { $0.name < $1.name }) { tag in
                         HStack {
-                            Text(tag.name)
+                            // Tap a My Tag → filter the Library to works with it.
+                            Button { router.filterLibrary(.userTag, tag.name) } label: {
+                                Text(tag.name).foregroundStyle(.primary)
+                            }
+                            .buttonStyle(.plain)
                             Spacer()
                             Button {
                                 removeTag(tag)
