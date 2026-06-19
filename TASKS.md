@@ -39,8 +39,6 @@ _None._ Claim a task from the Backlog and add a row here.
 - **T-09 · Advanced rating filters + cycling include/exclude tags** ↳ `docs/Feature_Ideas.md` FI-2, FI-3
 - **T-10 · Expandable search result cards** ↳ `docs/Feature_Ideas.md` FI-4
 - **T-11 · Tap a tag to filter the Library** ↳ `docs/Feature_Ideas.md` FI-8
-- **T-12 · Long-press Filters → clear all filters** ↳ `docs/Feature_Ideas.md` FI-1
-- **T-13 · Hide the privacy (eye) button when no hidden works exist** ↳ `docs/Feature_Ideas.md` FI-7
 - **T-14 · Refine the search pagination pill** ↳ `docs/UI_Polish_Todo.md` UI-1
 - **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
 - **T-16 · AO3-red default accent + accent color picker** ↳ `docs/Feature_Ideas.md` FI-6
@@ -61,7 +59,10 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
-| —    | Collaboration system (`AGENTS.md` + `TASKS.md`) | Claude | both | _see git log_ | 2026-06-18 |
+| T-12 | P2 Long-press Filters → Clear All Filters (FI-1) | Claude | both | _see git log_ | 2026-06-18 |
+| T-13 | P2 Hide privacy eye button when no hidden works (FI-7) — *already implemented; verified* | Claude | n/a | — | 2026-06-18 |
+| —    | docs: stable IDs + status across trackers | Claude | both | `2a8696d` / `1c3c8a4` | 2026-06-18 |
+| —    | Collaboration system (`AGENTS.md` + `TASKS.md`) | Claude | both | `458dfd4` / `170d381` | 2026-06-18 |
 | T-08 | P1 Sepia consistency verified (Settings); bug closed | Claude | both | `30f3e9a` / `746273a` | 2026-06-18 |
 | T-06 | P1 Structured OSLog logging | Claude | both | `23392f0` / `d6b8c9f`+`b0ea6ff` | 2026-06-18 |
 | T-05 | P1 Split `EPUB.swift` into focused files | Claude | both | `daa8422` / `edc07f4` | 2026-06-18 |
