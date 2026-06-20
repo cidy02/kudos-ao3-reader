@@ -36,7 +36,7 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features & polish (detail in `docs/`)
-- **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
+_None currently._
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
 - **T-20 · Phase-4 interaction polish** — auto-hide chrome on scroll, custom
@@ -53,6 +53,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-17 | Document EPUB ZIP/OPF/spine/TOC/metadata assumptions, import failures, security boundaries, tests, and Readium platform differences | Codex | both | `208df0c` / `a3f70ba` | 2026-06-20 |
 | T-29 | Readium reader routes EPUB HTTP/HTTPS links to the in-app Browse tab while preserving system handling for non-web schemes | Codex | `readium-migration` | — / `6cb7525` | 2026-06-20 |
 | T-32 | AO3 auth review follow-ups: off-screen login WebView gets a window, one silent hidden-login retry, calmer fallback copy, sign-up/reset links, AO3 HTML-fixture parser tests, doc + code clarifications | Claude | both | _see git log_ | 2026-06-20 |
 | T-31 | Preserve successful AO3 login when Keychain is unavailable by recovering from WebKit's persistent app-scoped cookie store (BUG-3) | Codex | both | `3a3363d` / `39556be` | 2026-06-20 |
@@ -109,6 +110,6 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 - **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
   branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickups: T-17 or Readium Phase-4 polish (T-20 / T-21).
+- Natural next pickups: Readium Phase-4 polish (T-20 / T-21).
 - Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
