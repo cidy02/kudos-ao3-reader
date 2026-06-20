@@ -23,7 +23,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-30 | AO3 authentication foundation: native login, hidden WebView session capture, visible fallback, Keychain persistence (FI-10) | Codex | `codex/t30-ao3-auth` → `main` → `readium-migration` | 🔄 IN PROGRESS | Implement service/session architecture and native Settings UI; verify fallback without storing user credentials. Isolated while Claude owns dirty T-28 on `main`. |
 
 ---
 
