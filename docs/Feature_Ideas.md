@@ -82,6 +82,14 @@ the status here in sync with the board.
   *work* subscriptions (series/author subs are out of scope for now). Markup, like
   the other account pages, is encoded in a fixture and needs live verification.
 
+### App
+
+- **[FI-16] About / Sources & Licenses page** — *Status: Done (2026-06-20) · Board: T-39*
+  A Settings → "About Kudos" sheet: app name + version (from the bundle), the
+  GPL-3.0 license statement, an open-source credits section (SwiftSoup MIT, Readium
+  BSD-3-Clause, ao3_api as the selector reference, each linked), and the AO3/OTW
+  "unofficial, unaffiliated, no API" disclaimer. Pre-public license compliance.
+
 ### Library
 
 - **[FI-15] Download queue & bulk actions** — *Status: Done (2026-06-20) · Board: T-37, T-38*
