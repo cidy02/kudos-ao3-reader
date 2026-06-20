@@ -134,6 +134,19 @@ struct AO3ClientTests {
         #expect(work.rating == "General Audiences")
     }
 
+    @Test func buildsHistoryURL() {
+        // The reading-history page is the readings page with no `show` filter.
+        #expect(
+            AO3Client.historyURL(username: "alice", page: 1)?.absoluteString
+                == "https://archiveofourown.org/users/alice/readings"
+        )
+        #expect(
+            AO3Client.historyURL(username: "alice", page: 4)?.absoluteString
+                == "https://archiveofourown.org/users/alice/readings?page=4"
+        )
+        #expect(AO3Client.historyURL(username: "", page: 1) == nil)
+    }
+
     // MARK: AO3 bookmarks page
 
     @Test func buildsBookmarksURL() {

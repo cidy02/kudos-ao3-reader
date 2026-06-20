@@ -11,35 +11,41 @@ struct AO3AccountWorksList: View {
     enum Kind {
         case markedForLater
         case bookmarks
+        case history
 
         var loadingText: String {
             switch self {
             case .markedForLater: "Loading your reading list…"
             case .bookmarks: "Loading your bookmarks…"
+            case .history: "Loading your history…"
             }
         }
         var emptyTitle: String {
             switch self {
             case .markedForLater: "Nothing marked for later"
             case .bookmarks: "No bookmarks yet"
+            case .history: "No reading history"
             }
         }
         var emptyMessage: String {
             switch self {
             case .markedForLater: "Tap “Mark for Later” on a work on AO3 to queue it up here."
             case .bookmarks: "Bookmark a work on AO3 to see it here."
+            case .history: "Works you read on AO3 show up here."
             }
         }
         var signedOutTitle: String {
             switch self {
             case .markedForLater: "Marked for Later"
             case .bookmarks: "AO3 Bookmarks"
+            case .history: "AO3 History"
             }
         }
         var signedOutMessage: String {
             switch self {
             case .markedForLater: "Log in to AO3 to see the works you've marked to read later."
             case .bookmarks: "Log in to AO3 to see the works you've bookmarked."
+            case .history: "Log in to AO3 to see your reading history."
             }
         }
 
@@ -47,11 +53,13 @@ struct AO3AccountWorksList: View {
             switch self {
             case .markedForLater: AO3Client.markedForLaterURL(username: username, page: page)
             case .bookmarks: AO3Client.bookmarksURL(username: username, page: page)
+            case .history: AO3Client.historyURL(username: username, page: page)
             }
         }
         func fetch(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
             switch self {
-            case .markedForLater: try await AO3Client.shared.worksPage(for: request, page: page)
+            // History and Marked for Later are both readings-page work lists.
+            case .markedForLater, .history: try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks: try await AO3Client.shared.bookmarksPage(for: request, page: page)
             }
         }

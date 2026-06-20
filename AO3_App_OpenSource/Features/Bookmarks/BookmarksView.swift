@@ -26,8 +26,7 @@ struct BookmarksView: View {
         case links = "Links"
         case history = "History"
         case favorites = "Favorites"
-        case later = "Later"
-        case ao3Bookmarks = "AO3 Bookmarks"
+        case ao3 = "AO3"
         var id: String { rawValue }
 
         /// SF Symbol shown in the icon-only section switcher. The raw value stays
@@ -37,8 +36,7 @@ struct BookmarksView: View {
             case .links: "link"
             case .history: "clock.arrow.circlepath"
             case .favorites: "star"
-            case .later: "clock.badge.checkmark"
-            case .ao3Bookmarks: "bookmark"
+            case .ao3: "person.crop.circle"
             }
         }
     }
@@ -56,8 +54,7 @@ struct BookmarksView: View {
                 case .links: linksList
                 case .history: historyList
                 case .favorites: favoritesList
-                case .later: AO3AccountWorksList(kind: .markedForLater)
-                case .ao3Bookmarks: AO3AccountWorksList(kind: .bookmarks)
+                case .ao3: AO3AccountSection()
                 }
             }
             // Warm the empty states under Sepia (the lists carry their own backdrop
@@ -261,7 +258,7 @@ struct BookmarksView: View {
         case .favorites: favorites.contains(where: \.isAdult)
         // Remote AO3 works render their own rating via AO3WorkRow, not the local
         // SavedWork privacy gate, so the mature-reveal toggle doesn't apply here.
-        case .later, .ao3Bookmarks: false
+        case .ao3: false
         }
     }
 
