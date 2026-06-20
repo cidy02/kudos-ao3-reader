@@ -186,6 +186,18 @@ actor AO3Client {
         return components?.url
     }
 
+    /// The URL of a user's AO3 subscriptions page. The page mixes work, series, and
+    /// author subscriptions; `parseSearchPage` extracts only the `li.work.blurb`
+    /// items, so this surfaces the user's *work* subscriptions.
+    static func subscriptionsURL(username: String, page: Int) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/users/\(name)/subscriptions"
+        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        return components?.url
+    }
+
     /// The URL of a user's AO3 bookmarks page (their bookmarked works), paginated.
     static func bookmarksURL(username: String, page: Int) -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)

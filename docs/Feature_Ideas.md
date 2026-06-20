@@ -74,6 +74,14 @@ the status here in sync with the board.
   into a single **"AO3"** segment hosting an `AO3AccountSection` with a sub-picker
   (Marked for Later / Bookmarks / History). Switching sub-tabs reloads the list.
 
+- **[FI-14] AO3 work Subscriptions** — *Status: Done (2026-06-20) · Board: T-36*
+  Fourth Phase-2 read feature and the last of this backlog batch: a "Subs" sub-tab
+  in the AO3 section showing the works the user subscribes to
+  (`/users/<name>/subscriptions`). The page mixes work / series / author
+  subscriptions; `parseSearchPage` keeps only the work blurbs, so this surfaces
+  *work* subscriptions (series/author subs are out of scope for now). Markup, like
+  the other account pages, is encoded in a fixture and needs live verification.
+
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
   fandom index, session-cached in `FandomCatalog`), the user's **saved-work count**
