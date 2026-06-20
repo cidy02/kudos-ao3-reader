@@ -134,6 +134,62 @@ struct AO3ClientTests {
         #expect(work.rating == "General Audiences")
     }
 
+    // MARK: AO3 bookmarks page
+
+    @Test func buildsBookmarksURL() {
+        #expect(
+            AO3Client.bookmarksURL(username: "carol", page: 1)?.absoluteString
+                == "https://archiveofourown.org/users/carol/bookmarks"
+        )
+        #expect(
+            AO3Client.bookmarksURL(username: "carol", page: 2)?.absoluteString
+                == "https://archiveofourown.org/users/carol/bookmarks?page=2"
+        )
+        #expect(AO3Client.bookmarksURL(username: "  ", page: 1) == nil)
+    }
+
+    /// A bookmarks page: one bookmarked work (id in `bookmark_111`, real work id in
+    /// the `/works/789` link) plus a bookmarked series (no `/works/` link). Only the
+    /// work should parse; the series bookmark is skipped.
+    static let bookmarksHTML = """
+    <html><body>
+    <ol class="bookmark index group">
+      <li id="bookmark_111" class="bookmark blurb group">
+        <div class="header module">
+          <h4 class="heading">
+            <a href="/works/789">Bookmarked Work</a> by <a rel="author" href="/users/carol">carol</a>
+          </h4>
+          <ul class="required-tags">
+            <li><span class="rating"><span class="text">Teen And Up Audiences</span></span></li>
+          </ul>
+        </div>
+        <dl class="stats"><dd class="kudos">42</dd></dl>
+        <div class="user module group">
+          <blockquote class="userstuff notes"><p>my private note</p></blockquote>
+        </div>
+      </li>
+      <li id="bookmark_222" class="bookmark blurb group">
+        <div class="header module">
+          <h4 class="heading">
+            <a href="/series/55">A Bookmarked Series</a> by <a rel="author" href="/users/dave">dave</a>
+          </h4>
+        </div>
+      </li>
+    </ol>
+    </body></html>
+    """
+
+    @Test func parsesBookmarkedWorksAndSkipsSeries() throws {
+        let page = try AO3Client.parseBookmarksPage(Self.bookmarksHTML, page: 1)
+        #expect(page.works.count == 1)
+        let work = try #require(page.works.first)
+        #expect(work.id == 789)   // from the /works/ link, not bookmark_111
+        #expect(work.title == "Bookmarked Work")
+        #expect(work.authors == ["carol"])
+        #expect(work.rating == "Teen And Up Audiences")
+        #expect(work.kudos == 42)
+    }
+
     // MARK: Work page tag groups
 
     static let workHTML = """
