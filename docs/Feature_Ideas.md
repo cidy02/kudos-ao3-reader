@@ -59,6 +59,14 @@ the status here in sync with the board.
   card, pagination, and work-page navigation. Shows a sign-in prompt when logged
   out and re-prompts on session expiry.
 
+- **[FI-12] AO3 Bookmarks list** — *Status: Done (2026-06-20) · Board: T-34*
+  Second Phase-2 read feature. A new **"AO3 Bookmarks"** segment shows the works
+  the user has bookmarked on AO3 (`/users/<name>/bookmarks`). The Marked-for-Later
+  view was generalized into a reusable `AO3AccountWorksList(kind:)`; bookmark
+  blurbs are parsed by `parseBookmarksPage` (work id read from the `/works/` link
+  since the `<li>` id is the bookmark id; series and external-work bookmarks are
+  skipped). Same sign-in / pagination / expiry handling.
+
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
   fandom index, session-cached in `FandomCatalog`), the user's **saved-work count**

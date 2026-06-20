@@ -174,12 +174,21 @@ actor AO3Client {
         return components?.url
     }
 
-    /// Fetches an authenticated AO3 page of standard work blurbs (the reading list,
-    /// AO3-side bookmarks, etc.) and parses it like a search results page. The
-    /// `request` must already carry the user's session cookies — build it with
+    /// The URL of a user's AO3 bookmarks page (their bookmarked works), paginated.
+    static func bookmarksURL(username: String, page: Int) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/users/\(name)/bookmarks"
+        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        return components?.url
+    }
+
+    /// Fetches an authenticated AO3 page and returns its HTML. The `request` must
+    /// already carry the user's session cookies — build it with
     /// `AO3AuthService.authenticatedRequest(for:)`. A bounce to AO3's login page is
     /// surfaced as `AO3Error.authenticationRequired` so the caller can re-auth.
-    func worksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
+    private func authenticatedHTML(for request: URLRequest) async throws -> String {
         var request = request
         // The session cookies are attached explicitly by the auth service; don't let
         // URLSession's shared cookie storage add a second, possibly stale, set.
@@ -194,8 +203,18 @@ actor AO3Client {
         if let url = response.url, url.path.contains("/users/login") {
             throw AO3Error.authenticationRequired
         }
-        let html = String(decoding: data, as: UTF8.self)
-        return try Self.parseSearchPage(html, page: page)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// An authenticated reading-list / search-style page (work blurbs + pagination),
+    /// e.g. the Marked-for-Later list.
+    func worksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
+        try Self.parseSearchPage(try await authenticatedHTML(for: request), page: page)
+    }
+
+    /// An authenticated AO3 bookmarks page (the user's bookmarked works).
+    func bookmarksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
+        try Self.parseBookmarksPage(try await authenticatedHTML(for: request), page: page)
     }
 
     /// Builds AO3's `word_count` expression from the from/to fields.
@@ -396,24 +415,53 @@ actor AO3Client {
     /// Parses a works-search results page (works list + pagination). `static` and
     /// internal so it can be unit-tested against fixture HTML without a network call.
     static func parseSearchPage(_ html: String, page: Int) throws -> AO3SearchPage {
+        try parseWorksList(html, page: page, blurbSelector: "li.work.blurb")
+    }
+
+    /// Parses a user's AO3 bookmarks page. Bookmark blurbs are `li.bookmark.blurb`
+    /// (id `bookmark_<n>`, not the work id), so `parseBlurb` reads the work id from
+    /// the `/works/<id>` title link. Series and external-work bookmarks have no such
+    /// link and are skipped — only bookmarked works are surfaced.
+    static func parseBookmarksPage(_ html: String, page: Int) throws -> AO3SearchPage {
+        try parseWorksList(html, page: page, blurbSelector: "li.bookmark.blurb")
+    }
+
+    private static func parseWorksList(
+        _ html: String, page: Int, blurbSelector: String
+    ) throws -> AO3SearchPage {
         let doc = try SwiftSoup.parse(html)
-        let blurbs = try doc.select("li.work.blurb").array()
-        // Skip any single malformed blurb rather than failing the whole search.
+        let blurbs = try doc.select(blurbSelector).array()
+        // Skip any single malformed / non-work blurb rather than failing the page.
         let works = blurbs.compactMap { try? Self.parseBlurb($0) }
         // AO3's pagination lists every page number (… 27); the largest is the
         // total. Falls back to the current page when there's no pagination.
         var totalPages = page
         for li in try doc.select("ol.pagination li").array() {
-            if let n = Int((try li.text()).trimmingCharacters(in: .whitespaces)), n > totalPages {
-                totalPages = n
+            if let value = Int((try li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
+                totalPages = value
             }
         }
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
+    /// Extracts the numeric work id from a `/works/<id>[/...]` path.
+    private static func workID(fromPath path: String) -> Int? {
+        guard let range = path.range(of: "/works/") else { return nil }
+        return Int(path[range.upperBound...].prefix { $0.isNumber })
+    }
+
     private static func parseBlurb(_ el: Element) throws -> AO3WorkSummary {
-        let idDigits = el.id().replacingOccurrences(of: "work_", with: "")
-        guard let id = Int(idDigits) else { throw AO3Error.parse }
+        // Search/readings blurbs are `li id="work_<id>"`; bookmark blurbs are
+        // `li id="bookmark_<id>"`, so fall back to the work's `/works/<id>` link.
+        let id: Int
+        if let workID = Int(el.id().replacingOccurrences(of: "work_", with: "")) {
+            id = workID
+        } else if let href = try el.select("h4.heading a[href^=\"/works/\"]").first()?.attr("href"),
+                  let workID = Self.workID(fromPath: href) {
+            id = workID
+        } else {
+            throw AO3Error.parse
+        }
 
         let title = try el.select("h4.heading a").first()?.text() ?? "Untitled"
         let authors = try el.select("h4.heading a[rel=author]").array().map { try $0.text() }
