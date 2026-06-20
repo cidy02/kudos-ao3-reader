@@ -46,10 +46,11 @@ the status here in sync with the board.
   Dark palettes on official AO3 hosts. Changes apply live and persist across page
   navigation without affecting external sites.
 
-- **[FI-10] AO3 authentication foundation** — *Status: In Progress · Board: T-30*
-  Add a native account/login experience backed by AO3's real login form in a
-  hidden WebView, with automatic visible-WebView fallback, secure session
-  persistence, logout, expiration handling, and reusable authenticated requests.
+- **[FI-10] AO3 authentication foundation** — *Status: Done (2026-06-20) · Board: T-30*
+  Settings now provides native account entry backed by AO3's real login form in
+  a hidden WebView. Mechanism failures automatically reveal a themed WebView
+  fallback; captured sessions persist device-only in Keychain and support
+  restoration, expiration, logout, and reusable authenticated requests.
 
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
@@ -79,4 +80,4 @@ the status here in sync with the board.
 
 ---
 
-*Last updated: 2026-06-18*
+*Last updated: 2026-06-20*

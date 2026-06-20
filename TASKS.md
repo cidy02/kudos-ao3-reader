@@ -23,7 +23,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| T-30 | AO3 authentication foundation: native login, hidden WebView session capture, visible fallback, Keychain persistence (FI-10) | Codex | `codex/t30-ao3-auth` → `main` → `readium-migration` | 🔄 IN PROGRESS | Implement service/session architecture and native Settings UI; verify fallback without storing user credentials. Isolated while Claude owns dirty T-28 on `main`. |
+| —  | —    | —     | —      | —      | —                 |
 
 ---
 
@@ -57,6 +57,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-30 | AO3 authentication foundation: native login, hidden WebView session capture, automatic visible fallback, Keychain persistence, session lifecycle, authenticated requests (FI-10) | Codex | both | `a5775d5` / `811a784` | 2026-06-20 |
 | T-28 | EPUB web links (AO3 work/author/tag) open in the Browse tab, not inside the legacy reader's web view — verified in simulator (BUG) | Claude | both | _see git log_ | 2026-06-19 |
 | T-15 | Sync in-app AO3 browser with app theme (FI-5) | Codex | both | `58663da` / `2f48e95` | 2026-06-19 |
 | T-27 | Search Back returns to Browse (then the previous tab) after a fandom/typed search, instead of skipping straight to the tab (BUG) | Claude | both | _see git log_ | 2026-06-19 |
@@ -92,6 +93,9 @@ _Older UI / reader / Library work predates this board — see `git log`._
   reader** (Readium navigator is UIKit-only). Readium SPM is scoped `platformFilter = ios;`.
 - **Workflow — decided:** general work on `main` first, then port to
   `readium-migration` (see `AGENTS.md` ▸ golden branch rule).
+- **AO3 authentication — decided:** native account UI drives AO3's real form in
+  a hidden WebView; mechanism failures reveal the same WebView as a fallback.
+  Sessions, never passwords, are stored device-only in Keychain.
 - **Open — before going public:** scrub the Apple `DEVELOPMENT_TEAM` ID from
   `project.pbxproj`.
 - **Open — migration (`READIUM_MIGRATION_NOTES.md` §6):** consolidate Library
@@ -106,6 +110,6 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 - **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
   branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickups: T-17 or Readium Phase-4 polish (T-20 / T-21).
+- Natural next pickups: T-17, T-29, or Readium Phase-4 polish (T-20 / T-21).
 - Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
