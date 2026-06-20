@@ -15,6 +15,14 @@ struct LibraryView: View {
     @State private var filters = LibraryFilters()
     @State private var pendingDelete: SavedWork?
 
+    // Multi-select / bulk actions.
+    @State private var editMode: EditMode = .inactive
+    @State private var selection = Set<UUID>()
+    @State private var confirmBulkDelete = false
+
+    private var isSelecting: Bool { editMode.isEditing }
+    private var selectedWorks: [SavedWork] { works.filter { selection.contains($0.id) } }
+
     /// In-progress, transient downloads: have an EPUB, not explicitly saved,
     /// not finished. Finishing an unprotected work frees its EPUB and removes it.
     private var readingWorks: [SavedWork] {
@@ -60,7 +68,7 @@ struct LibraryView: View {
                         emptyState
                     }
                 } else {
-                    List {
+                    List(selection: $selection) {
                         if !readingWorks.isEmpty {
                             Section("Reading") {
                                 ForEach(readingWorks, content: row).cardRow()
@@ -73,9 +81,12 @@ struct LibraryView: View {
                         }
                     }
                     .cardList()
+                    .environment(\.editMode, $editMode)
                 }
             }
-            .navigationTitle("Library")
+            .navigationTitle(isSelecting
+                ? (selection.isEmpty ? "Select Works" : "\(selection.count) Selected")
+                : "Library")
             #if os(iOS)
             // Large, left-aligned title kept inline on the toolbar row (alongside the
             // eye/filter buttons) rather than dropping to its own row. Restores the
@@ -87,12 +98,38 @@ struct LibraryView: View {
                 WorkDetailView(work: work)
             }
             .toolbar {
-                if hideMature && works.contains(where: \.isAdult) {
-                    ToolbarItem { MatureRevealToggle() }
+                if isSelecting {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { exitSelectMode() }
+                    }
+                    #if os(iOS)
+                    ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+                    #else
+                    ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+                    #endif
+                } else {
+                    if hideMature && works.contains(where: \.isAdult) {
+                        ToolbarItem { MatureRevealToggle() }
+                    }
+                    if !works.isEmpty {
+                        ToolbarItem { filterButton }
+                    }
+                    if !works.isEmpty {
+                        ToolbarItem {
+                            Button("Select") { enterSelectMode() }
+                        }
+                    }
                 }
-                if !works.isEmpty {
-                    ToolbarItem { filterButton }
-                }
+            }
+            .confirmationDialog(
+                "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
+                isPresented: $confirmBulkDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) { bulkDelete() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The selected works will be removed from your Library. This can't be undone.")
             }
             .inspector(isPresented: router.isShowing(.libraryFilters)) {
                 LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -209,5 +246,64 @@ struct LibraryView: View {
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         context.delete(work)
         try? context.save()
+    }
+
+    // MARK: Multi-select / bulk actions
+
+    /// The bulk-action controls shown while selecting (bottom bar on iOS). Delete
+    /// always confirms — it's a batch and can't be undone.
+    @ViewBuilder
+    private var bulkActionBar: some View {
+        Button(role: .destructive) {
+            confirmBulkDelete = true
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+        .disabled(selection.isEmpty)
+
+        Spacer()
+
+        Button {
+            bulkSave()
+        } label: {
+            Label("Save", systemImage: "bookmark")
+        }
+        .disabled(selection.isEmpty)
+
+        Spacer()
+
+        Button {
+            bulkFavorite()
+        } label: {
+            Label("Favorite", systemImage: "star")
+        }
+        .disabled(selection.isEmpty)
+    }
+
+    private func enterSelectMode() {
+        selection = []
+        editMode = .active
+    }
+
+    private func exitSelectMode() {
+        editMode = .inactive
+        selection = []
+    }
+
+    private func bulkDelete() {
+        for work in selectedWorks { delete(work) }
+        exitSelectMode()
+    }
+
+    /// Marks every selected work as saved (keeps its EPUB permanently).
+    private func bulkSave() {
+        for work in selectedWorks { WorkLifecycle.setSaved(work, true, in: context) }
+        exitSelectMode()
+    }
+
+    private func bulkFavorite() {
+        for work in selectedWorks { work.isFavorite = true }
+        try? context.save()
+        exitSelectMode()
     }
 }
