@@ -19,9 +19,11 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
+_None._ Claim a task from the Backlog and add a row here.
+
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| T-15 | Sync in-app AO3 browser with app theme (FI-5) | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Inject scoped AO3 Light/Sepia/Dark styles, update live on theme changes, then verify navigation and persistence. |
+| —  | —    | —     | —      | —      | —                 |
 
 ---
 
@@ -51,6 +53,7 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-15 | Sync in-app AO3 browser with app theme (FI-5) | Codex | both | `58663da` / `2f48e95` | 2026-06-19 |
 | T-27 | Search Back returns to Browse (then the previous tab) after a fandom/typed search, instead of skipping straight to the tab (BUG) | Claude | both | _see git log_ | 2026-06-19 |
 | T-26 | Toolbar "expand/collapse all" toggle for Search result cards | Claude | both | _see git log_ | 2026-06-19 |
 | T-25 | Calm Search pagination layout (UI-1 follow-up) | Codex | both | `9374053` / `491b195` | 2026-06-19 |
@@ -98,6 +101,6 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 - **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
   branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickups: T-15, T-17, or Readium Phase-4 polish (T-20 / T-21).
+- Natural next pickups: T-17 or Readium Phase-4 polish (T-20 / T-21).
 - Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
