@@ -20,8 +20,23 @@ struct LibraryView: View {
     @State private var selection = Set<UUID>()
     @State private var confirmBulkDelete = false
 
+    /// Tap a Continue Reading card to resume straight into the reader.
+    @State private var resumeWork: SavedWork?
+
     private var isSelecting: Bool { editMode.isEditing }
     private var selectedWorks: [SavedWork] { works.filter { selection.contains($0.id) } }
+
+    /// In-progress works (started, not finished, file present), most recently read
+    /// first — the "Continue Reading" shelf. Capped so the shelf stays compact.
+    private var continueReading: [SavedWork] {
+        works
+            .filter { $0.hasEPUB && !$0.isFinished
+                && ($0.lastSpineIndex > 0 || $0.lastScrollFraction > 0)
+                && passesPrivacy($0) }
+            .sorted { ($0.lastReadDate ?? $0.dateAdded) > ($1.lastReadDate ?? $1.dateAdded) }
+            .prefix(10)
+            .map { $0 }
+    }
 
     /// In-progress, transient downloads: have an EPUB, not explicitly saved,
     /// not finished. Finishing an unprotected work frees its EPUB and removes it.
@@ -69,6 +84,11 @@ struct LibraryView: View {
                     }
                 } else {
                     List(selection: $selection) {
+                        if !isSelecting && !continueReading.isEmpty {
+                            Section("Continue Reading") {
+                                continueReadingShelf
+                            }
+                        }
                         if !readingWorks.isEmpty {
                             Section("Reading") {
                                 ForEach(readingWorks, content: row).cardRow()
@@ -96,6 +116,11 @@ struct LibraryView: View {
             #endif
             .navigationDestination(for: SavedWork.self) { work in
                 WorkDetailView(work: work)
+            }
+            // Continue Reading cards resume straight into the reader (these works
+            // all have their EPUB on disk, so no re-download is needed).
+            .navigationDestination(item: $resumeWork) { work in
+                ReaderView(work: work)
             }
             .toolbar {
                 if isSelecting {
@@ -176,6 +201,24 @@ struct LibraryView: View {
         for work in works where work.needsAO3Refresh {
             await WorkTags.refreshFromAO3(for: work, in: context)
         }
+    }
+
+    /// A horizontal shelf of Continue Reading cards; tapping one resumes the reader.
+    private var continueReadingShelf: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(continueReading) { work in
+                    Button { resumeWork = work } label: {
+                        ContinueReadingCard(work: work)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+        }
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
     }
 
     private func row(_ work: SavedWork) -> some View {
@@ -305,5 +348,37 @@ struct LibraryView: View {
         for work in selectedWorks { work.isFavorite = true }
         try? context.save()
         exitSelectMode()
+    }
+}
+
+/// A compact card for the Library's Continue Reading shelf: title, author, and the
+/// chapter to resume at.
+private struct ContinueReadingCard: View {
+    let work: SavedWork
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(work.title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            if !work.author.isEmpty {
+                Text(work.author)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Label(resumeText, systemImage: "book")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .frame(width: 168, height: 112, alignment: .topLeading)
+        .background(.regularMaterial, in: .rect(cornerRadius: 14))
+    }
+
+    private var resumeText: String {
+        work.lastSpineIndex > 0 ? "Resume · Ch \(work.lastSpineIndex + 1)" : "Resume"
     }
 }

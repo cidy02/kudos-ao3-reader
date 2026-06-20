@@ -484,6 +484,7 @@ struct ReaderView: View {
             landOnLast: landNextChapterOnLastPage
         )
         work.lastSpineIndex = currentIndex
+        work.lastReadDate = Date()
         landNextChapterOnLastPage = false
     }
 }

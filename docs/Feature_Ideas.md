@@ -92,6 +92,13 @@ the status here in sync with the board.
 
 ### Library
 
+- **[FI-17] Continue Reading shelf** — *Status: Done (2026-06-20) · Board: T-40*
+  A horizontal "Continue Reading" shelf at the top of the Library showing
+  in-progress works (started, not finished, EPUB on disk), most-recently-read
+  first. Tapping a card resumes straight into the reader. Added a
+  `SavedWork.lastReadDate` (set when the reader opens a chapter; additive migration)
+  to drive the ordering.
+
 - **[FI-15] Download queue & bulk actions** — *Status: Done (2026-06-20) · Board: T-37, T-38*
   - **Bulk actions (T-37):** a "Select" mode in the Library (EditMode +
     `List(selection:)`) with a bottom action bar — bulk Delete (always confirms),
