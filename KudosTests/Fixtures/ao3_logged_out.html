@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!--
+  Representative (hand-built, not scraped) snapshot of AO3's /users/login page after
+  a rejected attempt. It has the live form the auto-login fills (form#new_user with
+  #user_login / #user_password / #user_remember_me and AO3's CSRF token), a flash
+  error, and crucially NO #greeting / logout control — so the parser must read this
+  as logged-out with no username. Update it when AO3 changes the login form.
+-->
+<html lang="en">
+<head><title>Log In | Archive of Our Own</title></head>
+<body class="users-sessions-new logged-out">
+  <div id="header" class="region">
+    <ul class="primary navigation actions" role="navigation">
+      <li><a href="/users/login">Log In</a></li>
+      <li><a href="/users/new">Sign Up</a></li>
+    </ul>
+  </div>
+  <div id="main" class="users-sessions-new region">
+    <div class="flash error">The password or user name you entered is incorrect.</div>
+    <h2 class="heading">Log In</h2>
+    <form class="new_user" id="new_user" action="/users/login" accept-charset="UTF-8" method="post">
+      <input type="hidden" name="authenticity_token" value="representative-csrf-token">
+      <dl>
+        <dt><label for="user_login">User name or email:</label></dt>
+        <dd><input autocomplete="username" type="text" name="user[login]" id="user_login"></dd>
+        <dt><label for="user_password">Password:</label></dt>
+        <dd><input autocomplete="current-password" type="password" name="user[password]" id="user_password"></dd>
+        <dd class="remember">
+          <input type="checkbox" name="user[remember_me]" id="user_remember_me" value="1">
+          <label for="user_remember_me">Remember me</label>
+        </dd>
+      </dl>
+      <p class="submit"><input type="submit" name="commit" value="Log In"></p>
+    </form>
+  </div>
+</body>
+</html>

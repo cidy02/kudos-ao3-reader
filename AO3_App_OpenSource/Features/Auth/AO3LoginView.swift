@@ -6,14 +6,31 @@ import SwiftUI
 struct AO3LoginView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
 
     @State private var username = ""
     @State private var password = ""
 
+    private static let signUpURL = URL(string: "https://archiveofourown.org/users/new")!
+    private static let passwordResetURL = URL(string: "https://archiveofourown.org/users/password/new")!
+
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                // Keep the automatic-login WebView mounted (but invisible) during the
+                // native phase so it has a window: an off-screen WKWebView can have its
+                // web-content process throttled or suspended, which would make the
+                // hidden login time out and drop to the fallback for no real reason.
+                // When the fallback takes over it shows the same WebView full-size.
+                if !auth.isUsingFallback {
+                    WebView(webView: auth.loginWebView)
+                        .frame(width: 1, height: 1)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+
                 if auth.isUsingFallback {
                     fallbackContent
                 } else {
@@ -98,6 +115,21 @@ struct AO3LoginView: View {
                             || password.isEmpty
                     )
                 }
+
+                Section {
+                    Button {
+                        openOnAO3(Self.signUpURL)
+                    } label: {
+                        Label("Create an AO3 account", systemImage: "person.badge.plus")
+                    }
+                    Button {
+                        openOnAO3(Self.passwordResetURL)
+                    } label: {
+                        Label("Forgot your password?", systemImage: "key")
+                    }
+                } footer: {
+                    Text("These open AO3 in the Browse tab. Come back here to log in afterwards.")
+                }
             }
             .appThemedRows()
         }
@@ -134,5 +166,14 @@ struct AO3LoginView: View {
             await auth.login(username: username, password: password)
             password = ""
         }
+    }
+
+    /// Opens an AO3 help page (sign-up / password reset) in the in-app Browse tab,
+    /// dismissing the login sheet first. Login resumes when the user returns and
+    /// signs in. AO3 uses Devise, so these are its standard registration / reset
+    /// routes; either way AO3's own page shows the current invitation/reset flow.
+    private func openOnAO3(_ url: URL) {
+        dismiss()
+        router.open(url)
     }
 }

@@ -45,6 +45,10 @@ struct AO3StoredCookie: Codable, Hashable, Sendable {
         if let expiresDate { expiresDate <= Date() } else { false }
     }
 
+    // `HTTPCookie` wants its `.secure` flag as a "TRUE"/"FALSE" string, and there is
+    // no public property key for HttpOnly — Foundation only recognises the literal
+    // "HttpOnly" key. Both are long-standing Foundation contracts; documented here
+    // because the string/private-key reliance is otherwise surprising.
     var httpCookie: HTTPCookie? {
         var properties: [HTTPCookiePropertyKey: Any] = [
             .name: name,

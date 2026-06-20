@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import WebKit
 
 enum AO3WebLoginError: LocalizedError, Equatable {
@@ -71,9 +72,17 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
 
     private static let loginURL = URL(string: "https://archiveofourown.org/users/login")!
     private static let timeout: Duration = .seconds(25)
+    /// Shown when the automatic login can't finish on its own and the visible AO3
+    /// page takes over. Deliberately calm and action-oriented — the user just typed
+    /// a password, so it must not read like a security warning.
+    private static let fallbackPrompt = "Let's finish logging in on AO3's page below."
 
     private var phase: Phase = .idle
     private var pendingCredentials: (username: String, password: String)?
+    /// The full credentials kept for the duration of one hidden attempt, so a single
+    /// transient navigation failure can silently restart the flow before falling back.
+    private var hiddenCredentials: (username: String, password: String)?
+    private var hiddenDidRetry = false
     private var hiddenExpectedUsername = ""
     private var hiddenContinuation: CheckedContinuation<AO3Session, Error>?
     private var timeoutTask: Task<Void, Never>?
@@ -98,6 +107,8 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 hiddenContinuation = continuation
+                hiddenCredentials = (username, password)
+                hiddenDidRetry = false
                 pendingCredentials = (username, password)
                 hiddenExpectedUsername = username
                 phase = .loadingLogin
@@ -139,6 +150,8 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         timeoutTask?.cancel()
         timeoutTask = nil
         pendingCredentials = nil
+        hiddenCredentials = nil
+        hiddenDidRetry = false
         hiddenExpectedUsername = ""
         webView.stopLoading()
         if let hiddenContinuation {
@@ -156,9 +169,7 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         timeoutTask = Task { [weak self] in
             try? await Task.sleep(for: Self.timeout)
             guard !Task.isCancelled else { return }
-            self?.failHidden(
-                .fallbackRequired("The automatic AO3 login timed out.")
-            )
+            self?.failHidden(.fallbackRequired(Self.fallbackPrompt))
         }
     }
 
@@ -180,27 +191,21 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
             switch phase {
             case .loadingLogin:
                 guard observation.hasLoginForm, let credentials = pendingCredentials else {
-                    failHidden(.fallbackRequired(
-                        "AO3's login form could not be recognized."
-                    ))
+                    failHidden(.fallbackRequired(Self.fallbackPrompt))
                     return
                 }
                 phase = .submitting
                 pendingCredentials = nil
                 let submitted = try await submit(credentials)
                 if !submitted {
-                    failHidden(.fallbackRequired(
-                        "AO3's login form could not be submitted automatically."
-                    ))
+                    failHidden(.fallbackRequired(Self.fallbackPrompt))
                 }
 
             case .submitting:
                 if let message = observation.errorMessage {
                     failHidden(.invalidCredentials(message))
                 } else {
-                    failHidden(.fallbackRequired(
-                        "AO3 did not confirm the automatic login."
-                    ))
+                    failHidden(.fallbackRequired(Self.fallbackPrompt))
                 }
 
             case .manual:
@@ -214,9 +219,7 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
             case .manual:
                 onManualError?("The AO3 login page could not be checked.")
             case .loadingLogin, .submitting:
-                failHidden(.fallbackRequired(
-                    "The automatic AO3 login could not inspect the page."
-                ))
+                failHidden(.fallbackRequired(Self.fallbackPrompt))
             case .idle:
                 break
             }
@@ -228,9 +231,8 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         case .manual:
             onManualError?("Return to AO3 to complete login.")
         case .loadingLogin, .submitting:
-            failHidden(.fallbackRequired(
-                "AO3 redirected the automatic login away from its secure site."
-            ))
+            Log.auth.notice("Automatic AO3 login left the AO3 site; revealing the visible fallback")
+            failHidden(.fallbackRequired(Self.fallbackPrompt))
         case .idle:
             break
         }
@@ -260,6 +262,7 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         timeoutTask?.cancel()
         timeoutTask = nil
         hiddenExpectedUsername = ""
+        hiddenCredentials = nil
         if phase == .manual {
             let completion = onManualAuthenticated
             onManualAuthenticated = nil
@@ -277,10 +280,25 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         timeoutTask?.cancel()
         timeoutTask = nil
         pendingCredentials = nil
+        hiddenCredentials = nil
         phase = .idle
         guard let hiddenContinuation else { return }
         self.hiddenContinuation = nil
         hiddenContinuation.resume(throwing: error)
+    }
+
+    /// Restarts the hidden flow from scratch (reload the form, refill, resubmit)
+    /// using the credentials kept for this attempt. Used at most once, to absorb a
+    /// transient navigation failure before revealing the visible fallback.
+    private func restartHiddenLogin() {
+        guard let hiddenCredentials else {
+            failHidden(.fallbackRequired(Self.fallbackPrompt))
+            return
+        }
+        pendingCredentials = hiddenCredentials
+        phase = .loadingLogin
+        webView.load(URLRequest(url: Self.loginURL))
+        startTimeout()
     }
 
     private var expectedUsername: String {
@@ -313,6 +331,10 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
         return try await evaluateBool(script)
     }
 
+    // NOTE: The logged-in / username detection below mirrors
+    // `LiveAO3SessionValidator.isLoggedIn(html:)` / `username(in:)` (Swift/SwiftSoup),
+    // which runs the same checks on URLSession-fetched HTML. Keep the selectors in
+    // sync when AO3's markup changes.
     private func inspectPage() async throws -> AO3LoginPageObservation {
         let script = """
         (function() {
@@ -409,9 +431,16 @@ extension AO3WebLoginCoordinator: WKNavigationDelegate {
         case .manual:
             onManualError?("AO3 could not load. Check your connection and try again.")
         case .loadingLogin, .submitting:
-            failHidden(.fallbackRequired(
-                "The automatic AO3 login could not load the page."
-            ))
+            // A navigation failure is usually a transient connection blip; retry the
+            // hidden flow once (near-instant) before revealing the fallback, so a
+            // momentary hiccup doesn't turn a clean native login into a web hand-off.
+            if hiddenContinuation != nil, !hiddenDidRetry {
+                hiddenDidRetry = true
+                Log.auth.notice("Transient failure during automatic AO3 login; retrying once before fallback")
+                restartHiddenLogin()
+            } else {
+                failHidden(.fallbackRequired(Self.fallbackPrompt))
+            }
         case .idle:
             break
         }

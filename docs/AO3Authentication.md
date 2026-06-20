@@ -25,6 +25,13 @@ website session, and never stores the user's password.
   persistent, app-scoped website data store. Preferences contain only a
   non-secret username hint so an authenticated session can be recognized
   offline; cookie values are not copied there.
+  - **This WebKit-store path is a dev/Simulator safety net, not the intended
+    production store.** `errSecMissingEntitlement` is primarily a Simulator /
+    unsigned-build condition; on a properly signed device build a generic-password
+    item uses the app's default keychain access group and Keychain is the store of
+    record. The fallback store is data-protected and app-scoped but is a weaker
+    guarantee than the device-only Keychain item, so **verify Keychain persistence
+    on a signed device build** and treat WebKit recovery as the backstop.
 - `LiveAO3SessionValidator` checks a restored session against AO3 without logging
   the user out merely because the network is unavailable.
 
@@ -41,12 +48,21 @@ website session, and never stores the user's password.
 5. AO3 cookies are captured, serialized, saved to Keychain, and installed for
    authenticated WebKit and URL requests. The password is discarded.
 
+The automatic-login WebView stays mounted (but invisible, at 1×1) behind the
+native form so it always has a window: an off-screen `WKWebView` can have its
+web-content process throttled, which would otherwise make the hidden login stall
+and fall back for no real reason. A single transient navigation failure silently
+restarts the hidden flow once before any fallback is shown.
+
 If the form cannot be recognized, submitted, inspected, or completed before the
 timeout, the login view automatically displays the same WebView with an
-"alternative login method" notice. Manual login is monitored for the same
+"alternative login method" notice. The user-facing fallback copy is deliberately
+calm and action-oriented ("Let's finish logging in on AO3's page below") rather
+than worded like a security warning. Manual login is monitored for the same
 logged-in signal and then follows the normal cookie capture path. A known
 username/password rejection remains in the native form so the user can correct
-it without being sent to the fallback.
+it without being sent to the fallback. The native form also links to AO3's
+sign-up and password-reset pages, opened in the in-app Browse tab.
 
 ## Session lifecycle
 
@@ -73,6 +89,22 @@ extract its current authenticity token, submit the expected form fields, and
 detect a redirect to login. Those feature-specific details should live in their
 own clients while authentication and session invalidation remain centralized in
 `AO3AuthService`.
+
+## AO3 markup assumptions
+
+Authentication depends on a small set of AO3 selectors. They live in **two** places
+that must stay in sync — the in-page JavaScript in `AO3WebLoginCoordinator`
+(`inspectPage` / `submit`) and the Swift/SwiftSoup parser in
+`LiveAO3SessionValidator` (`isLoggedIn` / `username`). When AO3 changes its markup,
+update both and refresh the `KudosTests/Fixtures/ao3_logged_*.html` fixtures.
+
+- **Logged-in signal:** `body.logged-in`, or a logout control
+  (`a[href="/users/logout"]` / `form[action="/users/logout"]`).
+- **Username:** the first `#greeting a[href^="/users/<name>"]` that is not
+  `/users/login` or `/users/logout` (percent-decoded).
+- **Login form:** `form#new_user` with `#user_login`, `#user_password`, and the
+  optional `#user_remember_me`; AO3 injects the `authenticity_token` (CSRF) field.
+- **Errors:** `#main .flash.error, #main .error, .flash.error, .flash.alert`.
 
 ## Security boundaries
 
