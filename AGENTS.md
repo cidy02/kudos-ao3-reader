@@ -77,7 +77,7 @@ branch, touch only its files, and never revert another agent's commits.**
 - **Pushing:** push as you go (`git push origin <branch>`) unless told to batch.
   A `could not resolve host` failure is a transient DNS hiccup — just retry.
 - **Verify before commit:** `Scripts/lint.sh` (SwiftLint gate; currently 0 errors /
-  ~38 advisory warnings) and `Scripts/test.sh` (31 tests). Build with
+  ~38 advisory warnings) and `Scripts/test.sh` (33 tests). Build with
   `CODE_SIGNING_ALLOWED=NO` for the simulator.
 
 ## `project.pbxproj` — handle with care (top conflict source)

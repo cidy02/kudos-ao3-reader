@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-15 | Sync in-app AO3 browser with app theme (FI-5) | Codex | `main` → `readium-migration` | 🔄 IN PROGRESS | Inject scoped AO3 Light/Sepia/Dark styles, update live on theme changes, then verify navigation and persistence. |
 
 ---
 
@@ -36,7 +34,6 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features & polish (detail in `docs/`)
-- **T-15 · Sync in-app browser theme with app theme** ↳ `docs/Feature_Ideas.md` FI-5
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)

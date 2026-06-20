@@ -6,6 +6,7 @@ import SwiftData
 struct BrowseView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(ThemeManager.self) private var themeManager
     @State private var model = BrowserModel()
     @State private var banner: String?
 
@@ -21,7 +22,13 @@ struct BrowseView: View {
                 .toolbar(model.tabBarHidden ? .hidden : .visible, for: .tabBar)
                 .animation(.easeInOut(duration: 0.25), value: model.tabBarHidden)
                 #endif
-                .onAppear { configureImport() }
+                .onAppear {
+                    configureImport()
+                    model.applyTheme(themeManager.appTheme)
+                }
+                .onChange(of: themeManager.appTheme) { _, theme in
+                    model.applyTheme(theme)
+                }
                 .onChange(of: router.pendingURL) { _, url in
                     if let url {
                         model.load(url)
