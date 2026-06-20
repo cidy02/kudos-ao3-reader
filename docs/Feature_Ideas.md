@@ -41,7 +41,7 @@ the status here in sync with the board.
 
 ### Browse / Web View
 
-- **[FI-5] Sync browser theme with app theme** — *Status: Idea · Board: T-15*  
+- **[FI-5] Sync browser theme with app theme** — *Status: In Progress · Board: T-15*
   When the user changes the app theme (Light / Sepia / Dark), adjust the in-app
   browser (Browse tab) to use a matching theme on archiveofourown.org if possible.
 
