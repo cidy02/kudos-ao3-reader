@@ -91,6 +91,49 @@ struct AO3ClientTests {
         #expect(page.totalPages == 2)
     }
 
+    // MARK: Marked for Later (reading list)
+
+    @Test func buildsMarkedForLaterURL() {
+        #expect(
+            AO3Client.markedForLaterURL(username: "alice", page: 1)?.absoluteString
+                == "https://archiveofourown.org/users/alice/readings?show=to-read"
+        )
+        #expect(
+            AO3Client.markedForLaterURL(username: "alice", page: 3)?.absoluteString
+                == "https://archiveofourown.org/users/alice/readings?show=to-read&page=3"
+        )
+        #expect(AO3Client.markedForLaterURL(username: "   ", page: 1) == nil)
+    }
+
+    /// The readings page adds a `reading` class to each blurb `<li>` but is otherwise
+    /// the same work-blurb markup as search — so `parseSearchPage` reads it directly.
+    static let readingsHTML = """
+    <html><body>
+    <ol class="reading work index group">
+      <li id="work_555" class="reading work blurb group">
+        <div class="header module">
+          <h4 class="heading">
+            <a href="/works/555">Queued Work</a> by <a rel="author" href="/users/bob">bob</a>
+          </h4>
+          <ul class="required-tags">
+            <li><span class="rating"><span class="text">General Audiences</span></span></li>
+          </ul>
+        </div>
+        <h4 class="viewed heading">Marked for Later</h4>
+      </li>
+    </ol>
+    </body></html>
+    """
+
+    @Test func parsesReadingsBlurbLikeSearch() throws {
+        let page = try AO3Client.parseSearchPage(Self.readingsHTML, page: 1)
+        let work = try #require(page.works.first)
+        #expect(work.id == 555)
+        #expect(work.title == "Queued Work")
+        #expect(work.authors == ["bob"])
+        #expect(work.rating == "General Audiences")
+    }
+
     // MARK: Work page tag groups
 
     static let workHTML = """

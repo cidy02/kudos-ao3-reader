@@ -52,6 +52,13 @@ the status here in sync with the board.
   fallback; captured sessions persist device-only in Keychain and support
   restoration, expiration, logout, and reusable authenticated requests.
 
+- **[FI-11] Marked for Later reading list** — *Status: Done (2026-06-20) · Board: T-33*
+  First login-gated read feature (native-AO3 roadmap Phase 2). A new **"Later"**
+  segment in the Bookmarks tab fetches the user's AO3 Marked-for-Later list
+  (`/users/<name>/readings?show=to-read`) with their session, reusing the search
+  card, pagination, and work-page navigation. Shows a sign-in prompt when logged
+  out and re-prompts on session expiry.
+
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
   fandom index, session-cached in `FandomCatalog`), the user's **saved-work count**

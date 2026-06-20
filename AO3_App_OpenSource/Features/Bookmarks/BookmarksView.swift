@@ -26,15 +26,17 @@ struct BookmarksView: View {
         case links = "Links"
         case history = "History"
         case favorites = "Favorites"
+        case later = "Later"
         var id: String { rawValue }
 
         /// SF Symbol shown in the icon-only section switcher. The raw value stays
-        /// the accessibility label so the control still reads as Links/History/Favorites.
+        /// the accessibility label so the control still reads as the section name.
         var icon: String {
             switch self {
             case .links: "link"
             case .history: "clock.arrow.circlepath"
             case .favorites: "star"
+            case .later: "bookmark"
             }
         }
     }
@@ -43,14 +45,16 @@ struct BookmarksView: View {
 
     @State private var segment: Segment = .links
     @State private var pendingDelete: SavedWork?
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 switch segment {
                 case .links: linksList
                 case .history: historyList
                 case .favorites: favoritesList
+                case .later: MarkedForLaterList()
                 }
             }
             // Warm the empty states under Sepia (the lists carry their own backdrop
@@ -64,6 +68,11 @@ struct BookmarksView: View {
             #endif
             .navigationDestination(for: SavedWork.self) { work in
                 WorkDetailView(work: work)
+            }
+            // The "Later" segment lists AO3 works (not local SavedWorks); tapping one
+            // opens the native AO3 work page, which can download + read it.
+            .navigationDestination(for: AO3WorkSummary.self) { work in
+                AO3WorkDetailView(work: work, path: $path)
             }
             .toolbar {
                 #if os(iOS)
@@ -247,6 +256,9 @@ struct BookmarksView: View {
         case .links: false
         case .history: history.contains(where: \.isAdult)
         case .favorites: favorites.contains(where: \.isAdult)
+        // Remote AO3 works render their own rating via AO3WorkRow, not the local
+        // SavedWork privacy gate, so the mature-reveal toggle doesn't apply here.
+        case .later: false
         }
     }
 
