@@ -12,12 +12,14 @@ struct AO3AccountWorksList: View {
         case markedForLater
         case bookmarks
         case history
+        case subscriptions
 
         var loadingText: String {
             switch self {
             case .markedForLater: "Loading your reading list…"
             case .bookmarks: "Loading your bookmarks…"
             case .history: "Loading your history…"
+            case .subscriptions: "Loading your subscriptions…"
             }
         }
         var emptyTitle: String {
@@ -25,6 +27,7 @@ struct AO3AccountWorksList: View {
             case .markedForLater: "Nothing marked for later"
             case .bookmarks: "No bookmarks yet"
             case .history: "No reading history"
+            case .subscriptions: "No subscriptions"
             }
         }
         var emptyMessage: String {
@@ -32,6 +35,7 @@ struct AO3AccountWorksList: View {
             case .markedForLater: "Tap “Mark for Later” on a work on AO3 to queue it up here."
             case .bookmarks: "Bookmark a work on AO3 to see it here."
             case .history: "Works you read on AO3 show up here."
+            case .subscriptions: "Works you subscribe to on AO3 show up here."
             }
         }
         var signedOutTitle: String {
@@ -39,6 +43,7 @@ struct AO3AccountWorksList: View {
             case .markedForLater: "Marked for Later"
             case .bookmarks: "AO3 Bookmarks"
             case .history: "AO3 History"
+            case .subscriptions: "AO3 Subscriptions"
             }
         }
         var signedOutMessage: String {
@@ -46,6 +51,7 @@ struct AO3AccountWorksList: View {
             case .markedForLater: "Log in to AO3 to see the works you've marked to read later."
             case .bookmarks: "Log in to AO3 to see the works you've bookmarked."
             case .history: "Log in to AO3 to see your reading history."
+            case .subscriptions: "Log in to AO3 to see the works you subscribe to."
             }
         }
 
@@ -54,13 +60,18 @@ struct AO3AccountWorksList: View {
             case .markedForLater: AO3Client.markedForLaterURL(username: username, page: page)
             case .bookmarks: AO3Client.bookmarksURL(username: username, page: page)
             case .history: AO3Client.historyURL(username: username, page: page)
+            case .subscriptions: AO3Client.subscriptionsURL(username: username, page: page)
             }
         }
         func fetch(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
             switch self {
-            // History and Marked for Later are both readings-page work lists.
-            case .markedForLater, .history: try await AO3Client.shared.worksPage(for: request, page: page)
-            case .bookmarks: try await AO3Client.shared.bookmarksPage(for: request, page: page)
+            // All of these render standard work blurbs (the bookmarks page needs a
+            // different outer selector). Subscriptions mixes types; parseSearchPage
+            // keeps only the work blurbs.
+            case .markedForLater, .history, .subscriptions:
+                try await AO3Client.shared.worksPage(for: request, page: page)
+            case .bookmarks:
+                try await AO3Client.shared.bookmarksPage(for: request, page: page)
             }
         }
     }

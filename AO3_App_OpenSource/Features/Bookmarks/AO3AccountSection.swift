@@ -13,6 +13,7 @@ struct AO3AccountSection: View {
         case markedForLater = "Later"
         case bookmarks = "Bookmarks"
         case history = "History"
+        case subscriptions = "Subs"
         var id: String { rawValue }
     }
 
@@ -46,6 +47,7 @@ struct AO3AccountSection: View {
         case .markedForLater: AO3AccountWorksList(kind: .markedForLater)
         case .bookmarks: AO3AccountWorksList(kind: .bookmarks)
         case .history: AO3AccountWorksList(kind: .history)
+        case .subscriptions: AO3AccountWorksList(kind: .subscriptions)
         }
     }
 }
