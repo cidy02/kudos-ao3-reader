@@ -160,6 +160,44 @@ actor AO3Client {
         return try Self.parseSearchPage(html, page: page)
     }
 
+    /// The URL of a user's "Marked for Later" reading list. AO3 renders it at
+    /// `/users/<name>/readings?show=to-read`, paginated, using the same work-blurb
+    /// markup as search results — so `parseSearchPage` reads it directly.
+    static func markedForLaterURL(username: String, page: Int) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/users/\(name)/readings"
+        var items = [URLQueryItem(name: "show", value: "to-read")]
+        if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
+        components?.queryItems = items
+        return components?.url
+    }
+
+    /// Fetches an authenticated AO3 page of standard work blurbs (the reading list,
+    /// AO3-side bookmarks, etc.) and parses it like a search results page. The
+    /// `request` must already carry the user's session cookies — build it with
+    /// `AO3AuthService.authenticatedRequest(for:)`. A bounce to AO3's login page is
+    /// surfaced as `AO3Error.authenticationRequired` so the caller can re-auth.
+    func worksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
+        var request = request
+        // The session cookies are attached explicitly by the auth service; don't let
+        // URLSession's shared cookie storage add a second, possibly stale, set.
+        request.httpShouldHandleCookies = false
+        Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
+
+        let (data, response) = try await withRetry {
+            let (data, response) = try await session.data(for: request)
+            try Self.check(response)
+            return (data, response)
+        }
+        if let url = response.url, url.path.contains("/users/login") {
+            throw AO3Error.authenticationRequired
+        }
+        let html = String(decoding: data, as: UTF8.self)
+        return try Self.parseSearchPage(html, page: page)
+    }
+
     /// Builds AO3's `word_count` expression from the from/to fields.
     private func wordCountExpression(_ filters: AO3SearchFilters) -> String? {
         let from = filters.wordsFrom.trimmingCharacters(in: .whitespacesAndNewlines)

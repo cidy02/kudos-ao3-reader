@@ -398,6 +398,9 @@ enum AO3Error: LocalizedError {
     case http(status: Int)
     case network(String)
     case parse
+    /// AO3 bounced an authenticated request to its login page — the saved session
+    /// is no longer valid and the user needs to sign in again.
+    case authenticationRequired
 
     var errorDescription: String? {
         switch self {
@@ -407,6 +410,7 @@ enum AO3Error: LocalizedError {
         case .http(let status): "AO3 returned an unexpected response (HTTP \(status))."
         case .network(let detail): detail
         case .parse: "AO3's page format wasn't what the app expected."
+        case .authenticationRequired: "Your AO3 session expired. Please log in again."
         }
     }
 }
