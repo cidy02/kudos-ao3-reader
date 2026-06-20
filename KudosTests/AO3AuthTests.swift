@@ -189,11 +189,13 @@ struct AO3AuthServiceTests {
         let session = testSession
         let vault = MemoryAO3SessionVault(session: session)
         let cookies = MockAO3CookieManager()
+        let hints = MemoryAO3SessionHintStore(username: session.username)
         let service = AO3AuthService(
             vault: vault,
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
-            cookieManager: cookies
+            cookieManager: cookies,
+            sessionHintStore: hints
         )
 
         await service.restoreSession()
@@ -203,6 +205,73 @@ struct AO3AuthServiceTests {
         #expect(service.noticeMessage == "Logged out of AO3.")
         #expect(vault.session == nil)
         #expect(cookies.clearCount == 1)
+        #expect(hints.username == nil)
+    }
+
+    @Test func loginSurvivesMissingKeychainEntitlement() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(saveError: .keychain(errSecMissingEntitlement))
+        let cookies = MockAO3CookieManager()
+        let hints = MemoryAO3SessionHintStore()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: cookies,
+            sessionHintStore: hints
+        )
+
+        await service.login(username: "reader", password: "password")
+
+        #expect(service.status == .signedIn(username: "reader"))
+        #expect(service.errorMessage == nil)
+        #expect(cookies.installed == session)
+        #expect(cookies.clearCount == 1)
+        #expect(hints.username == "reader")
+    }
+
+    @Test func restoreRecoversSessionFromPersistentWebCookies() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(
+            loadError: .keychain(errSecMissingEntitlement),
+            saveError: .keychain(errSecMissingEntitlement)
+        )
+        let cookies = MockAO3CookieManager(capturedCookies: session.cookies)
+        let hints = MemoryAO3SessionHintStore(username: session.username)
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: cookies,
+            sessionHintStore: hints
+        )
+
+        await service.restoreSession()
+
+        #expect(service.status == .signedIn(username: "reader"))
+        #expect(service.errorMessage == nil)
+        #expect(cookies.installed == session)
+    }
+
+    @Test func unrelatedSessionSaveFailureStillRejectsLogin() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(saveError: .invalidData)
+        let cookies = MockAO3CookieManager()
+        let hints = MemoryAO3SessionHintStore(username: "stale-user")
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: cookies,
+            sessionHintStore: hints
+        )
+
+        await service.login(username: "reader", password: "password")
+
+        #expect(service.status == .signedOut)
+        #expect(service.errorMessage?.contains("could not be saved securely") == true)
+        #expect(cookies.clearCount == 2)
+        #expect(hints.username == nil)
     }
 
     private var testSession: AO3Session {
@@ -216,14 +285,43 @@ struct AO3AuthServiceTests {
 @MainActor
 private final class MemoryAO3SessionVault: AO3SessionPersisting {
     var session: AO3Session?
+    let loadError: AO3SessionVaultError?
+    let saveError: AO3SessionVaultError?
 
-    init(session: AO3Session? = nil) {
+    init(
+        session: AO3Session? = nil,
+        loadError: AO3SessionVaultError? = nil,
+        saveError: AO3SessionVaultError? = nil
+    ) {
+        self.session = session
+        self.loadError = loadError
+        self.saveError = saveError
+    }
+
+    func load() throws -> AO3Session? {
+        if let loadError { throw loadError }
+        return session
+    }
+
+    func save(_ session: AO3Session) throws {
+        if let saveError { throw saveError }
         self.session = session
     }
 
-    func load() throws -> AO3Session? { session }
-    func save(_ session: AO3Session) throws { self.session = session }
     func delete() throws { session = nil }
+}
+
+@MainActor
+private final class MemoryAO3SessionHintStore: AO3SessionHintPersisting {
+    var username: String?
+
+    init(username: String? = nil) {
+        self.username = username
+    }
+
+    func loadUsername() -> String? { username }
+    func saveUsername(_ username: String) { self.username = username }
+    func deleteUsername() { username = nil }
 }
 
 @MainActor
@@ -236,9 +334,15 @@ private struct MockAO3SessionValidator: AO3SessionValidating {
 private final class MockAO3CookieManager: AO3CookieManaging {
     var installed: AO3Session?
     var clearCount = 0
+    var capturedCookies: [AO3StoredCookie]
+
+    init(capturedCookies: [AO3StoredCookie] = []) {
+        self.capturedCookies = capturedCookies
+    }
 
     func install(_ session: AO3Session) async { installed = session }
     func clear() async { clearCount += 1 }
+    func capture() async -> [AO3StoredCookie] { capturedCookies }
 }
 
 @MainActor
