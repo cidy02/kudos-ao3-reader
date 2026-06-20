@@ -47,6 +47,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     /// Fires on every position change — used to persist reading progress.
     var onLocatorChange: ((Locator) -> Void)?
+    /// Hands web links in EPUB content to the app's in-app Browse tab.
+    var onOpenExternalURL: ((URL) -> Void)?
 
     /// Fraction through the whole publication (0...1), when known.
     var totalProgression: Double? { currentLocator?.locations.totalProgression }
@@ -101,8 +103,27 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         phase = .failed(error.localizedDescription)
     }
 
+    /// Readium's default implementation opens every external URL in the system
+    /// browser. Keep HTTP(S) links inside Kudos, matching the legacy reader, while
+    /// preserving the system behavior for schemes such as `mailto:`.
+    func navigator(_ navigator: Navigator, presentExternalURL url: URL) {
+        if !routeWebURLToBrowse(url) {
+            UIApplication.shared.open(url)
+        }
+    }
+
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
         chromeHidden.toggle()
+    }
+
+    @discardableResult
+    func routeWebURLToBrowse(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let onOpenExternalURL
+        else { return false }
+        onOpenExternalURL(url)
+        return true
     }
 }
 
@@ -354,6 +375,7 @@ struct ReadiumReaderView: View {
         // Capture references (not the view struct) so the escaping callback is clean.
         let work = work
         let context = modelContext
+        let router = router
         book.onLocatorChange = { locator in
             work.readiumLocator = locator.persistenceString ?? work.readiumLocator
             // Finish a completed work once the user reaches the end (WIPs are manual).
@@ -362,6 +384,9 @@ struct ReadiumReaderView: View {
                 work.isFinished = true
             }
             try? context.save()
+        }
+        book.onOpenExternalURL = { url in
+            router.open(url)
         }
         let initialLocator = Locator(persistenceString: work.readiumLocator)
         // No Readium progress yet but a legacy position exists → resume at that chapter.
