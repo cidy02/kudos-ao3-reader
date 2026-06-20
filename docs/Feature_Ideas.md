@@ -41,9 +41,10 @@ the status here in sync with the board.
 
 ### Browse / Web View
 
-- **[FI-5] Sync browser theme with app theme** — *Status: In Progress · Board: T-15*
-  When the user changes the app theme (Light / Sepia / Dark), adjust the in-app
-  browser (Browse tab) to use a matching theme on archiveofourown.org if possible.
+- **[FI-5] Sync browser theme with app theme** — *Status: Done (2026-06-19) · Board: T-15*
+  The Browse tab now keeps AO3's native Light skin and applies matching Sepia or
+  Dark palettes on official AO3 hosts. Changes apply live and persist across page
+  navigation without affecting external sites.
 
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
