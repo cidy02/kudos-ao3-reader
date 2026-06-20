@@ -32,6 +32,7 @@ struct ReaderOptionsForm: View {
     @State private var importing = false
     @State private var showCustomize = false
     @State private var showAO3Login = false
+    @State private var showAbout = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -241,6 +242,14 @@ struct ReaderOptionsForm: View {
                             : "Mature and Explicit works are blurred in your Library, History, and Favorites until you tap to reveal them.")
                         : "Mature and Explicit works are shown normally.")
                 }
+
+                Section {
+                    Button {
+                        showAbout = true
+                    } label: {
+                        Label("About Kudos", systemImage: "info.circle")
+                    }
+                }
             }
           }
           .appThemedRows()
@@ -265,6 +274,9 @@ struct ReaderOptionsForm: View {
             AO3LoginView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showAbout) {
+            NavigationStack { AboutView() }
         }
     }
 
