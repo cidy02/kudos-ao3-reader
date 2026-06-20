@@ -174,6 +174,18 @@ actor AO3Client {
         return components?.url
     }
 
+    /// The URL of a user's AO3 reading history — the readings page with no filter.
+    /// Same `li.work.blurb` markup as search, so `worksPage` / `parseSearchPage`
+    /// read it directly.
+    static func historyURL(username: String, page: Int) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/users/\(name)/readings"
+        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        return components?.url
+    }
+
     /// The URL of a user's AO3 bookmarks page (their bookmarked works), paginated.
     static func bookmarksURL(username: String, page: Int) -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
