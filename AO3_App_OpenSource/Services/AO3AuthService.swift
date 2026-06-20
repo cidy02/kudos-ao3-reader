@@ -38,6 +38,7 @@ protocol AO3SessionValidating {
 protocol AO3CookieManaging {
     func install(_ session: AO3Session) async
     func clear() async
+    func capture() async -> [AO3StoredCookie]
 }
 
 struct LiveAO3CookieManager: AO3CookieManaging {
@@ -47,6 +48,10 @@ struct LiveAO3CookieManager: AO3CookieManaging {
 
     func clear() async {
         await AO3CookieBridge.clearAO3Cookies()
+    }
+
+    func capture() async -> [AO3StoredCookie] {
+        await AO3CookieBridge.captureAO3Cookies()
     }
 }
 
@@ -180,6 +185,7 @@ final class AO3AuthService {
     private let validator: AO3SessionValidating
     private let loginPerformer: AO3LoginPerforming
     private let cookieManager: AO3CookieManaging
+    private let sessionHintStore: AO3SessionHintPersisting
     private var currentSession: AO3Session?
     private var didRestore = false
 
@@ -187,12 +193,14 @@ final class AO3AuthService {
         vault: AO3SessionPersisting? = nil,
         validator: AO3SessionValidating? = nil,
         loginPerformer: AO3LoginPerforming? = nil,
-        cookieManager: AO3CookieManaging? = nil
+        cookieManager: AO3CookieManaging? = nil,
+        sessionHintStore: AO3SessionHintPersisting? = nil
     ) {
         self.vault = vault ?? KeychainAO3SessionVault()
         self.validator = validator ?? LiveAO3SessionValidator()
         self.loginPerformer = loginPerformer ?? AO3WebLoginCoordinator()
         self.cookieManager = cookieManager ?? LiveAO3CookieManager()
+        self.sessionHintStore = sessionHintStore ?? UserDefaultsAO3SessionHintStore()
     }
 
     func restoreSession() async {
@@ -205,28 +213,13 @@ final class AO3AuthService {
                 status = .signedOut
                 return
             }
-            currentSession = saved
-            await cookieManager.install(saved)
-
-            do {
-                switch try await validator.validate(saved) {
-                case .valid(let refreshed):
-                    try vault.save(refreshed)
-                    currentSession = refreshed
-                    await cookieManager.install(refreshed)
-                    status = .signedIn(username: refreshed.username)
-                    Log.auth.info("Restored and validated an AO3 session")
-                case .expired:
-                    await clearStoredSession()
-                    noticeMessage = "Your AO3 session expired. Please log in again."
-                }
-            } catch {
-                // Preserve a plausible saved session when AO3 cannot be reached.
-                // The next authenticated feature request can validate it again.
-                status = .signedIn(username: saved.username)
-                Log.auth.notice("AO3 session validation was unavailable; keeping the saved session")
-            }
+            await restore(saved, source: .keychain)
         } catch {
+            if isMissingKeychainEntitlement(error) {
+                Log.auth.notice("Keychain is unavailable; checking WebKit's persistent AO3 session")
+                await restoreWebSession()
+                return
+            }
             status = .signedOut
             errorMessage = "The saved AO3 session could not be restored."
             Log.auth.error("Could not restore the AO3 session: \(error.localizedDescription, privacy: .public)")
@@ -287,6 +280,7 @@ final class AO3AuthService {
         } catch {
             Log.auth.error("Could not delete the saved AO3 session: \(error.localizedDescription, privacy: .public)")
         }
+        sessionHintStore.deleteUsername()
         await cookieManager.clear()
         status = .signedOut
         noticeMessage = "Logged out of AO3."
@@ -347,25 +341,106 @@ final class AO3AuthService {
     private func accept(_ session: AO3Session) async {
         do {
             try vault.save(session)
-            currentSession = session
-            await cookieManager.install(session)
-            status = .signedIn(username: session.username)
-            errorMessage = nil
-            noticeMessage = nil
-            fallbackMessage = nil
-            Log.auth.info("Captured and saved an AO3 session")
         } catch {
+            if isMissingKeychainEntitlement(error) {
+                await finishAccepting(session)
+                Log.auth.notice(
+                    "Keychain is unavailable; retained the AO3 session in WebKit's persistent store"
+                )
+                return
+            }
             currentSession = nil
+            sessionHintStore.deleteUsername()
             await cookieManager.clear()
             status = .signedOut
             errorMessage = "AO3 logged in, but the session could not be saved securely."
             Log.auth.error("Could not save the AO3 session: \(error.localizedDescription, privacy: .public)")
+            return
         }
+
+        await finishAccepting(session)
+        Log.auth.info("Captured and saved an AO3 session")
+    }
+
+    private func finishAccepting(_ session: AO3Session) async {
+        currentSession = session
+        sessionHintStore.saveUsername(session.username)
+        await cookieManager.install(session)
+        status = .signedIn(username: session.username)
+        errorMessage = nil
+        noticeMessage = nil
+        fallbackMessage = nil
+    }
+
+    private enum RestoreSource {
+        case keychain
+        case webKit
+    }
+
+    private func restoreWebSession() async {
+        let cookies = await cookieManager.capture()
+        guard cookies.contains(where: { $0.name == "_otwarchive_session" && !$0.isExpired }) else {
+            status = .signedOut
+            return
+        }
+
+        let usernameHint = sessionHintStore.loadUsername() ?? ""
+        let session = AO3Session(username: usernameHint, cookies: cookies)
+        await restore(session, source: .webKit)
+    }
+
+    private func restore(_ saved: AO3Session, source: RestoreSource) async {
+        currentSession = saved
+        await cookieManager.install(saved)
+
+        do {
+            switch try await validator.validate(saved) {
+            case .valid(let refreshed):
+                do {
+                    try vault.save(refreshed)
+                } catch {
+                    if !isMissingKeychainEntitlement(error) {
+                        Log.auth.error(
+                            "Could not refresh the saved AO3 session: \(error.localizedDescription, privacy: .public)"
+                        )
+                    }
+                }
+                await finishAccepting(refreshed)
+                Log.auth.info("Restored and validated an AO3 session")
+            case .expired:
+                await clearStoredSession()
+                if source == .keychain || !saved.username.isEmpty {
+                    noticeMessage = "Your AO3 session expired. Please log in again."
+                }
+            }
+        } catch {
+            // A Keychain session is already known to be authenticated. A WebKit
+            // session is preserved offline only when a prior successful login
+            // left the non-secret username hint.
+            if source == .keychain || !saved.username.isEmpty {
+                let username = saved.username.isEmpty ? "AO3 Account" : saved.username
+                status = .signedIn(username: username)
+                Log.auth.notice(
+                    "AO3 session validation was unavailable; keeping the saved session"
+                )
+            } else {
+                currentSession = nil
+                status = .signedOut
+                Log.auth.notice(
+                    "Could not validate WebKit's AO3 cookies without a saved login hint"
+                )
+            }
+        }
+    }
+
+    private func isMissingKeychainEntitlement(_ error: Error) -> Bool {
+        (error as? AO3SessionVaultError)?.isMissingEntitlement == true
     }
 
     private func clearStoredSession() async {
         currentSession = nil
         try? vault.delete()
+        sessionHintStore.deleteUsername()
         await cookieManager.clear()
         status = .signedOut
     }

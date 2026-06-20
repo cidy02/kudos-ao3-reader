@@ -20,6 +20,11 @@ website session, and never stores the user's password.
   using `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
 - `AO3CookieBridge` keeps the saved session, WebKit cookie store, and shared HTTP
   cookie store in agreement.
+- If Keychain is unavailable because a development or unsigned build lacks its
+  application entitlement, `AO3AuthService` retains the session in WebKit's
+  persistent, app-scoped website data store. Preferences contain only a
+  non-secret username hint so an authenticated session can be recognized
+  offline; cookie values are not copied there.
 - `LiveAO3SessionValidator` checks a restored session against AO3 without logging
   the user out merely because the network is unavailable.
 
@@ -46,15 +51,16 @@ it without being sent to the fallback.
 ## Session lifecycle
 
 - App launch restores the Keychain session, installs its cookies, and validates
-  it against AO3.
+  it against AO3. Builds without Keychain entitlement recover and validate the
+  persistent WebKit session instead.
 - A confirmed logged-out response clears the stored session and asks the user to
   log in again.
 - A connectivity failure preserves a plausible session for offline use rather
   than treating it as expired.
 - Future feature clients should call `sessionDidExpire()` when AO3 redirects an
   authenticated operation to login.
-- Logout clears the Keychain item and all AO3 cookies known to WebKit and
-  `HTTPCookieStorage`.
+- Logout clears the Keychain item, username hint, and all AO3 cookies known to
+  WebKit and `HTTPCookieStorage`.
 
 ## Authenticated feature requests
 
@@ -76,3 +82,6 @@ own clients while authentication and session invalidation remain centralized in
 - Authenticated requests are rejected for non-HTTPS or non-AO3 URLs.
 - Login success is checked only on a secure AO3 page.
 - The session is device-only and does not migrate through Keychain backups.
+- No custom plaintext cookie file or preferences value is used as a fallback;
+  only WebKit's OS-managed website data store retains cookies when Keychain is
+  unavailable.

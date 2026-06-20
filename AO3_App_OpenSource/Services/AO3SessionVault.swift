@@ -12,6 +12,13 @@ enum AO3SessionVaultError: LocalizedError {
     case keychain(OSStatus)
     case invalidData
 
+    var isMissingEntitlement: Bool {
+        if case .keychain(let status) = self {
+            return status == errSecMissingEntitlement
+        }
+        return false
+    }
+
     var errorDescription: String? {
         switch self {
         case .keychain(let status):
@@ -20,6 +27,39 @@ enum AO3SessionVaultError: LocalizedError {
         case .invalidData:
             return "The saved AO3 session could not be read."
         }
+    }
+}
+
+protocol AO3SessionHintPersisting {
+    func loadUsername() -> String?
+    func saveUsername(_ username: String)
+    func deleteUsername()
+}
+
+/// Stores only a non-secret username hint. Authentication cookies remain in
+/// Keychain or WebKit's app-scoped data store and are never written here.
+struct UserDefaultsAO3SessionHintStore: AO3SessionHintPersisting {
+    private let defaults: UserDefaults
+    private let key: String
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "AO3AuthenticatedUsername"
+    ) {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    func loadUsername() -> String? {
+        defaults.string(forKey: key)
+    }
+
+    func saveUsername(_ username: String) {
+        defaults.set(username, forKey: key)
+    }
+
+    func deleteUsername() {
+        defaults.removeObject(forKey: key)
     }
 }
 
