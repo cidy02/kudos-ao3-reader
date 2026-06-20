@@ -39,10 +39,6 @@ _None._ Claim a task from the Backlog and add a row here.
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
-- **T-29 · Readium reader: route EPUB web links to Browse** — T-28 fixed the legacy
-  reader (used on macOS + all of `main`); the iOS Readium navigator (`BookReaderView`)
-  has its own link handling. Verify AO3/web links there open in the Browse tab too,
-  via the navigator's external-URL delegate, mirroring `onOpenExternalURL`.
 - **T-20 · Phase-4 interaction polish** — auto-hide chrome on scroll, custom
   page-turn animation, safe-area inset tuning. (Notes ▸ Migration status, Phase 4 = partial.)
 - **T-21 · Typography calibration** — match Readium sepia/`backgroundColor` to the
@@ -57,6 +53,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-29 | Readium reader routes EPUB HTTP/HTTPS links to the in-app Browse tab while preserving system handling for non-web schemes | Codex | `readium-migration` | — / `6cb7525` | 2026-06-20 |
 | T-32 | AO3 auth review follow-ups: off-screen login WebView gets a window, one silent hidden-login retry, calmer fallback copy, sign-up/reset links, AO3 HTML-fixture parser tests, doc + code clarifications | Claude | both | _see git log_ | 2026-06-20 |
 | T-31 | Preserve successful AO3 login when Keychain is unavailable by recovering from WebKit's persistent app-scoped cookie store (BUG-3) | Codex | both | `3a3363d` / `39556be` | 2026-06-20 |
 | T-30 | AO3 authentication foundation: native login, hidden WebView session capture, automatic visible fallback, Keychain persistence, session lifecycle, authenticated requests (FI-10) | Codex | both | `a5775d5` / `811a784` | 2026-06-20 |
@@ -112,6 +109,6 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 - **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
   branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickups: T-17, T-29, or Readium Phase-4 polish (T-20 / T-21).
+- Natural next pickups: T-17 or Readium Phase-4 polish (T-20 / T-21).
 - Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
