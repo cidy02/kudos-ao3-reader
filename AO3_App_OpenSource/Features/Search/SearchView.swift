@@ -14,6 +14,8 @@ struct SearchView: View {
     @State private var totalPages = 1
     @State private var phase: Phase = .idle
     @State private var path = NavigationPath()
+    /// Drives the toolbar "expand/collapse all" toggle for the result cards.
+    @State private var expandAllCards = false
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -47,6 +49,9 @@ struct SearchView: View {
                 }
                 #endif
                 ToolbarItem(placement: .principal) { searchField }
+                if phase == .loaded && !results.isEmpty {
+                    ToolbarItem(placement: .primaryAction) { expandAllButton }
+                }
                 ToolbarItem(placement: .primaryAction) { filterButton }
             }
             #if os(iOS)
@@ -83,7 +88,9 @@ struct SearchView: View {
 
                     Section {
                         ForEach(results) { work in
-                            NavigationLink(value: work) { AO3WorkRow(work: work) }
+                            NavigationLink(value: work) {
+                                AO3WorkRow(work: work, expandAll: expandAllCards)
+                            }
                         }
                         .cardRow()
                     }
@@ -141,6 +148,20 @@ struct SearchView: View {
             results = []
             phase = .idle
         }
+    }
+
+    /// Expands or collapses every result card at once (each card can still be
+    /// toggled individually afterwards). Shown only while results are visible.
+    private var expandAllButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { expandAllCards.toggle() }
+        } label: {
+            Image(systemName: expandAllCards
+                ? "rectangle.compress.vertical"
+                : "rectangle.expand.vertical")
+        }
+        .help(expandAllCards ? "Collapse all cards" : "Expand all cards")
+        .accessibilityLabel(expandAllCards ? "Collapse all cards" : "Expand all cards")
     }
 
     private var filterButton: some View {

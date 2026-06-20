@@ -5,6 +5,9 @@ import SwiftUI
 /// plus the work's tags (like AO3's blurb) without opening the work.
 struct AO3WorkRow: View {
     let work: AO3WorkSummary
+    /// Driven by the list's "expand/collapse all" toggle; each card follows it
+    /// (and can still be toggled individually afterwards).
+    var expandAll: Bool = false
 
     @State private var expanded = false
 
@@ -89,6 +92,9 @@ struct AO3WorkRow: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Follow the global expand/collapse-all toggle (also applies on first
+        // appearance so cards scrolled into view match the current state).
+        .onChange(of: expandAll, initial: true) { _, value in expanded = value }
     }
 
     private func statLabel(_ text: String, _ symbol: String) -> some View {
