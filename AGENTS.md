@@ -77,7 +77,7 @@ branch, touch only its files, and never revert another agent's commits.**
 - **Pushing:** push as you go (`git push origin <branch>`) unless told to batch.
   A `could not resolve host` failure is a transient DNS hiccup — just retry.
 - **Verify before commit:** `Scripts/lint.sh` (SwiftLint gate; currently 0 errors /
-  ~38 advisory warnings) and `Scripts/test.sh` (48 tests on `main`; 50 on
+  ~38 advisory warnings) and `Scripts/test.sh` (48 tests on `main`; 52 on
   `readium-migration`). Build with
   `CODE_SIGNING_ALLOWED=NO` for the simulator.
 
