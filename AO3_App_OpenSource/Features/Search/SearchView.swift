@@ -16,6 +16,10 @@ struct SearchView: View {
     @State private var path = NavigationPath()
     /// Drives the toolbar "expand/collapse all" toggle for the result cards.
     @State private var expandAllCards = false
+    /// Bumped on every search load and when backing out to Browse; a load whose
+    /// token is stale (superseded by a newer search, or by returning to Browse
+    /// before it finished) discards its result instead of re-showing results.
+    @State private var loadToken = 0
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -39,10 +43,12 @@ struct SearchView: View {
             }
             .toolbar {
                 #if os(iOS)
-                // Search is a focused, full-screen mode: a Back button leaves it and
-                // returns to the previous tab (the tab bar is hidden below).
+                // Search is a focused, full-screen mode. Results replace the
+                // Browse-by-fandom view in place (no navigation push), so Back steps
+                // back through that: results → Browse, then Browse → previous tab —
+                // landing on the page the user actually came from, not skipping it.
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: router.exitSearch) {
+                    Button(action: goBack) {
                         Image(systemName: "chevron.backward")
                     }
                     .accessibilityLabel("Back")
@@ -56,10 +62,10 @@ struct SearchView: View {
             }
             #if os(iOS)
             .toolbar(.hidden, for: .tabBar)
-            // Focused Search has a custom Back button (it leaves to the previous
+            // Focused Search has a custom Back button (results → Browse → previous
             // tab, not a navigation pop), so mirror it with a left-edge swipe.
             // Only at the root — pushed detail pages use the normal swipe-to-pop.
-            .edgeSwipeToGoBack(isActive: path.isEmpty) { router.exitSearch() }
+            .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
             #endif
             .inspector(isPresented: router.isShowing(.searchFilters)) {
                 filterPanel
@@ -419,6 +425,32 @@ struct SearchView: View {
         }
     }
 
+    // MARK: Navigation
+
+    /// Back action for the focused Search tab. Because search results replace the
+    /// Browse-by-fandom view in place rather than pushing a page, a plain "leave the
+    /// tab" Back would skip past Browse. So step back through the real history:
+    /// results → Browse, then (already on Browse) → the previous tab.
+    private func goBack() {
+        if phase == .idle {
+            router.exitSearch()
+        } else {
+            returnToBrowse()
+        }
+    }
+
+    /// Restores the Browse-by-fandom idle state, clearing the search the results
+    /// came from (a typed query or a tapped fandom chip) so Browse shows fresh.
+    private func returnToBrowse() {
+        loadToken += 1   // discard any in-flight load so it can't re-show results
+        filters = AO3SearchFilters()
+        results = []
+        currentPage = 1
+        totalPages = 1
+        expandAllCards = false
+        phase = .idle
+    }
+
     // MARK: Searching
 
     /// Runs a search for the tapped fandom from the Media Browser (macOS inline path).
@@ -461,17 +493,24 @@ struct SearchView: View {
     }
 
     private func load(page: Int) {
+        loadToken += 1
+        let token = loadToken
         let current = filters
         Task {
             do {
                 let result = try await AO3Client.shared.search(filters: current, page: page)
+                // Backed out to Browse (or a newer search started) while this was in
+                // flight — drop the result so it can't yank the user back to results.
+                guard token == loadToken else { return }
                 results = result.works
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 phase = .loaded
             } catch let error as AO3Error {
+                guard token == loadToken else { return }
                 phase = .failed(error.errorDescription ?? "Something went wrong.")
             } catch {
+                guard token == loadToken else { return }
                 phase = .failed(error.localizedDescription)
             }
         }
