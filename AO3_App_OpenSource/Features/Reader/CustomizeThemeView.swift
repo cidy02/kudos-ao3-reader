@@ -27,6 +27,10 @@ struct CustomizeThemeView: View {
     @AppStorage("readerMargin") private var pageMargin: Double = ReaderTextStyle.defaultMargin
     @AppStorage("readerJustify") private var justify = false
 
+    /// Readium accepts only non-negative letter spacing. Keep this branch's iOS
+    /// control honest instead of displaying values the navigator must clamp.
+    private let supportedLetterSpacingRange = 0.0...ReaderTextStyle.letterSpacingRange.upperBound
+
     /// The sheet's full height, so the preview can scale to a generous fraction of it.
     @State private var sheetHeight: CGFloat = 0
 
@@ -68,7 +72,7 @@ struct CustomizeThemeView: View {
                                   value: $lineHeight, range: ReaderTextStyle.lineHeightRange,
                                   valueLabel: String(format: "%.2f", lineHeight))
                         sliderRow("Character Spacing", icon: "textformat.abc",
-                                  value: $letterSpacing, range: ReaderTextStyle.letterSpacingRange)
+                                  value: $letterSpacing, range: supportedLetterSpacingRange)
                         sliderRow("Word Spacing", icon: "line.3.horizontal",
                                   value: $wordSpacing, range: ReaderTextStyle.wordSpacingRange)
                         sliderRow("Margins", icon: "rectangle.inset.filled",
