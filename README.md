@@ -126,6 +126,8 @@ Planning and tracking notes live in [`docs/`](docs/):
 - [`docs/Bugs.md`](docs/Bugs.md) — known issues.
 - [`docs/AO3Authentication.md`](docs/AO3Authentication.md) — login, session,
   security, and authenticated-request architecture.
+- [`docs/EPUBParsing.md`](docs/EPUBParsing.md) — supported EPUB structures,
+  parser/import assumptions, failure behavior, and branch differences.
 
 ## License
 
