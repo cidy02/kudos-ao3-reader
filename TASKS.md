@@ -41,8 +41,6 @@ _None currently._
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
 - **T-20 · Phase-4 interaction polish** — auto-hide chrome on scroll, custom
   page-turn animation, safe-area inset tuning. (Notes ▸ Migration status, Phase 4 = partial.)
-- **T-21 · Typography calibration** — match Readium sepia/`backgroundColor` to the
-  app's; spacing/margin/bold scale; verify a real imported custom font. (Notes §5.)
 
 ### Bugs
 - _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
@@ -53,6 +51,7 @@ _None currently._
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-21 | Calibrate Readium theme colors, typography units, margins, weight, built-in fallbacks, and imported custom-font rendering | Codex | `readium-migration` | — / `6fb3322` | 2026-06-20 |
 | T-17 | Document EPUB ZIP/OPF/spine/TOC/metadata assumptions, import failures, security boundaries, tests, and Readium platform differences | Codex | both | `208df0c` / `a3f70ba` | 2026-06-20 |
 | T-29 | Readium reader routes EPUB HTTP/HTTPS links to the in-app Browse tab while preserving system handling for non-web schemes | Codex | `readium-migration` | — / `6cb7525` | 2026-06-20 |
 | T-32 | AO3 auth review follow-ups: off-screen login WebView gets a window, one silent hidden-login retry, calmer fallback copy, sign-up/reset links, AO3 HTML-fixture parser tests, doc + code clarifications | Claude | both | _see git log_ | 2026-06-20 |
@@ -99,8 +98,7 @@ _Older UI / reader / Library work predates this board — see `git log`._
 - **Open — before going public:** scrub the Apple `DEVELOPMENT_TEAM` ID from
   `project.pbxproj`.
 - **Open — migration (`READIUM_MIGRATION_NOTES.md` §6):** consolidate Library
-  metadata on Readium vs keep the custom OPF layer? Verify a real imported custom
-  font (TTF)? Match Readium's sepia to the app's exactly?
+  metadata on Readium vs keep the custom OPF layer?
 - **Cleanup:** `test/card-lists` is abandoned/polluted and local-only — delete it
   eventually; never merge it.
 
@@ -110,6 +108,6 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 - **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
   branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickups: Readium Phase-4 polish (T-20 / T-21).
+- Natural next pickup: Readium Phase-4 polish (T-20).
 - Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
