@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Kudos
 
@@ -179,6 +180,18 @@ struct AO3ClientTests {
         #expect(page.works.count == 1)
         #expect(page.works.first?.id == 321)
         #expect(page.works.first?.title == "Subscribed Work")
+    }
+
+    @Test func buildsSeriesPageURL() throws {
+        let series = try #require(URL(string: "https://archiveofourown.org/series/55"))
+        #expect(AO3Client.seriesPageURL(series, page: 1)?.absoluteString
+            == "https://archiveofourown.org/series/55")
+        #expect(AO3Client.seriesPageURL(series, page: 3)?.absoluteString
+            == "https://archiveofourown.org/series/55?page=3")
+        // An existing page param is replaced, not duplicated.
+        let paged = try #require(URL(string: "https://archiveofourown.org/series/55?page=2"))
+        #expect(AO3Client.seriesPageURL(paged, page: 4)?.absoluteString
+            == "https://archiveofourown.org/series/55?page=4")
     }
 
     // MARK: AO3 bookmarks page

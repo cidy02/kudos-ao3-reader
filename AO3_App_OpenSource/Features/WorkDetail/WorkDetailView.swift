@@ -5,6 +5,7 @@ import SwiftData
 struct WorkDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(DownloadQueue.self) private var downloadQueue
     @Bindable var work: SavedWork
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query private var allWorks: [SavedWork]
@@ -13,6 +14,7 @@ struct WorkDetailView: View {
     @State private var downloading = false
     @State private var loadError: String?
     @State private var goToReader = false
+    @State private var queuingSeries = false
 
     /// Quick-add suggestions for My Tags: the user's other tags plus this work's
     /// own AO3 tags, minus any already applied (case-insensitive, de-duplicated).
@@ -158,6 +160,20 @@ struct WorkDetailView: View {
 
                     if !work.seriesURL.isEmpty {
                         Button {
+                            Task { await downloadSeries() }
+                        } label: {
+                            HStack {
+                                Label(
+                                    queuingSeries ? "Fetching series…" : "Download Whole Series",
+                                    systemImage: "arrow.down.circle"
+                                )
+                                Spacer()
+                                if queuingSeries { ProgressView() }
+                            }
+                        }
+                        .disabled(queuingSeries)
+
+                        Button {
                             if let url = URL(string: work.seriesURL) { router.open(url) }
                         } label: {
                             Label("View Full Series on AO3", systemImage: "safari")
@@ -297,6 +313,30 @@ struct WorkDetailView: View {
             }
             downloading = false
         }
+    }
+
+    /// Fetches every work in this work's series from AO3 and hands them to the
+    /// download queue, which downloads + imports them serially (already-saved works
+    /// are skipped). Surfaces a fetch failure in the same footer as the reader.
+    private func downloadSeries() async {
+        guard let url = URL(string: work.seriesURL) else { return }
+        queuingSeries = true
+        loadError = nil
+        do {
+            let works = try await AO3Client.shared.seriesWorks(seriesURL: url)
+            let items = works.map {
+                DownloadQueue.Item(
+                    id: $0.id, title: $0.title, sourceURL: $0.workURL,
+                    isComplete: $0.isComplete ?? false, seriesURL: work.seriesURL
+                )
+            }
+            downloadQueue.enqueue(items, into: context)
+        } catch let error as AO3Error {
+            loadError = error.errorDescription
+        } catch {
+            loadError = "Couldn't load the series from AO3."
+        }
+        queuingSeries = false
     }
 
     /// Works imported before Work Tags existed get their tags filled in lazily from

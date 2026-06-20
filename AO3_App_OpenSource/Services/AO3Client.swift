@@ -255,6 +255,31 @@ actor AO3Client {
 
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so
     /// we don't need to scrape the exact link — the work id is enough.
+    /// A series page URL with the given page number. Strips any existing `page`
+    /// query item and adds it back only for pages past the first.
+    static func seriesPageURL(_ seriesURL: URL, page: Int) -> URL? {
+        guard var components = URLComponents(url: seriesURL, resolvingAgainstBaseURL: false) else { return nil }
+        var items = (components.queryItems ?? []).filter { $0.name != "page" }
+        if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
+        components.queryItems = items.isEmpty ? nil : items
+        return components.url
+    }
+
+    /// Every work in a series, across all of the series page's pages. The series
+    /// page lists works with the same `li.work.blurb` markup as search, so it reuses
+    /// `parseSearchPage`. Used by the download queue to fetch a whole series.
+    func seriesWorks(seriesURL: URL) async throws -> [AO3WorkSummary] {
+        var all: [AO3WorkSummary] = []
+        var page = 1
+        while let pageURL = Self.seriesPageURL(seriesURL, page: page) {
+            let result = try Self.parseSearchPage(try await getHTML(pageURL), page: page)
+            all.append(contentsOf: result.works)
+            if result.works.isEmpty || page >= result.totalPages { break }
+            page += 1
+        }
+        return all
+    }
+
     func downloadEPUB(workID: Int) async throws -> URL {
         Log.network.info("Downloading EPUB for work \(workID)")
         guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {
