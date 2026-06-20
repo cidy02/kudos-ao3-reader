@@ -82,6 +82,11 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
             throw URLError(.badServerResponse)
         }
         guard (200...299).contains(http.statusCode) else {
+            // Only an explicit 401 is treated as expiry. Every other non-2xx is
+            // thrown, which the caller treats as "couldn't verify" and keeps the
+            // session — deliberately erring toward not logging the user out on a
+            // transient server hiccup. (Trade-off: a persistent hard 403/5xx also
+            // keeps a stale session until a clean logged-out 200 or a 401 arrives.)
             if http.statusCode == 401 { return .expired }
             throw URLError(.badServerResponse)
         }
@@ -93,10 +98,14 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         return .valid(Self.merging(refreshed, into: storedSession, username: username))
     }
 
+    // NOTE: This logged-in / username detection mirrors the JavaScript in
+    // `AO3WebLoginCoordinator.inspectPage()`. One runs here over URLSession-fetched
+    // HTML (SwiftSoup); the other runs inside the live WKWebView page. Keep the
+    // selectors in sync when AO3's markup changes.
     static func isLoggedIn(html: String) -> Bool {
         guard let document = try? SwiftSoup.parse(html) else { return false }
         if document.body()?.hasClass("logged-in") == true { return true }
-        return (try? document.select("a[href='/users/logout']").first()) != nil
+        return (try? document.select("a[href='/users/logout'], form[action='/users/logout']").first()) != nil
     }
 
     static func username(in html: String) -> String? {
@@ -204,6 +213,9 @@ final class AO3AuthService {
     }
 
     func restoreSession() async {
+        // Single-shot by design: this runs once from the root view's `.task` at
+        // launch. Later sign-in/out flows drive `status` directly, so restore is
+        // never meant to run again in a session.
         guard !didRestore else { return }
         didRestore = true
         status = .restoring
@@ -258,7 +270,7 @@ final class AO3AuthService {
         } catch {
             beginFallback(
                 expectedUsername: trimmedUsername,
-                reason: "The automatic AO3 login could not be completed."
+                reason: "Let's finish logging in on AO3's page below."
             )
         }
     }

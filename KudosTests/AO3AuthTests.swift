@@ -71,6 +71,33 @@ struct AO3SessionTests {
     }
 }
 
+/// Guards the Swift session parser against AO3 markup drift using representative
+/// page fixtures. The hidden-login JS in `AO3WebLoginCoordinator` reads the same
+/// structure, so a failure here is an early warning that the live-page checks need
+/// updating too.
+struct AO3AuthHTMLFixtureTests {
+    final class BundleAnchor {}
+
+    private func fixture(_ name: String) throws -> String {
+        let url = try #require(
+            Bundle(for: BundleAnchor.self).url(forResource: name, withExtension: "html")
+        )
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    @Test func recognizesLoggedInHeaderFixture() throws {
+        let html = try fixture("ao3_logged_in")
+        #expect(LiveAO3SessionValidator.isLoggedIn(html: html))
+        #expect(LiveAO3SessionValidator.username(in: html) == "AO3_Reader")
+    }
+
+    @Test func treatsLoginPageFixtureAsLoggedOut() throws {
+        let html = try fixture("ao3_logged_out")
+        #expect(!LiveAO3SessionValidator.isLoggedIn(html: html))
+        #expect(LiveAO3SessionValidator.username(in: html) == nil)
+    }
+}
+
 @MainActor
 struct AO3AuthServiceTests {
     @Test func hiddenSuccessPersistsSessionAndBuildsAuthenticatedRequest() async throws {
