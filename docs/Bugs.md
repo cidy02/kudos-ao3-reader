@@ -15,6 +15,15 @@ when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `
 
 ## Fixed / Verified
 
+### Authentication
+
+- **[BUG-3] Successful AO3 login was discarded when Keychain was unavailable** —
+  ✅ Fixed & verified (2026-06-20, `main` + `readium-migration`; Board: T-31).
+  `errSecMissingEntitlement` now falls back to WebKit's persistent, app-scoped
+  cookie store without discarding the valid login. Keychain remains primary,
+  other persistence failures remain fail-closed, and logout clears both stores.
+  Verified with 46 passing tests and an unsigned simulator launch.
+
 ### Search
 
 - **[BUG-2] T-09 tag cycling UI / search placement regression** — ✅ Fixed &
@@ -46,4 +55,4 @@ when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `
 
 ---
 
-*Last updated: 2026-06-18*
+*Last updated: 2026-06-20*
