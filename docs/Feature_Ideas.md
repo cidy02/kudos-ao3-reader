@@ -82,6 +82,20 @@ the status here in sync with the board.
   *work* subscriptions (series/author subs are out of scope for now). Markup, like
   the other account pages, is encoded in a fixture and needs live verification.
 
+### Library
+
+- **[FI-15] Download queue & bulk actions** — *Status: Done (2026-06-20) · Board: T-37, T-38*
+  - **Bulk actions (T-37):** a "Select" mode in the Library (EditMode +
+    `List(selection:)`) with a bottom action bar — bulk Delete (always confirms),
+    Save, and Favorite over the selection.
+  - **Download queue (T-38):** a root `DownloadQueue` that downloads + imports
+    several works serially via the already-serialized `AO3Client`, skipping works
+    already in the library, with a progress banner (+ Cancel) at the app root.
+    Entry point: **"Download Whole Series"** on a work's detail page —
+    `AO3Client.seriesWorks` scrapes every page of the AO3 series page (same
+    `li.work.blurb` markup) and enqueues the works. The series-page markup needs
+    live verification like the other scrapers.
+
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
   fandom index, session-cached in `FandomCatalog`), the user's **saved-work count**

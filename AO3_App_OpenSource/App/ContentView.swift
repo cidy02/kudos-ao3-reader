@@ -11,13 +11,18 @@ struct ContentView: View {
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
+    @State private var downloadQueue = DownloadQueue()
 
     var body: some View {
         content
+            // Overlay first so the environments below wrap it too — otherwise the
+            // banner sits outside the .environment scope and can't find the queue.
+            .overlay(alignment: .bottom) { DownloadQueueBanner() }
             .environment(router)
             .environment(privacyGate)
             .environment(theme)
             .environment(auth)
+            .environment(downloadQueue)
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)
