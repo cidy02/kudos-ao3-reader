@@ -459,6 +459,7 @@ struct ReadiumReaderView: View {
         let router = router
         book.onLocatorChange = { locator in
             work.readiumLocator = locator.persistenceString ?? work.readiumLocator
+            work.lastReadDate = Date()   // drives the Library's Continue Reading shelf
             // Finish a completed work once the user reaches the end (WIPs are manual).
             if let progress = locator.locations.totalProgression, progress >= 0.99,
                work.isComplete, !work.isFinished {

@@ -66,6 +66,10 @@ import SwiftData
     var lastScrollFraction: Double = 0
     var readiumLocator: String = ""
 
+    /// When the work was last opened in the reader. Drives the Library's
+    /// "Continue Reading" ordering; nil for works never opened (or pre-migration).
+    var lastReadDate: Date?
+
     /// AO3's own tags for this work (fandoms, relationships, characters, freeform),
     /// read from the EPUB on import. These are intrinsic to the work — distinct from
     /// `tags`, which are the user's own organizational tags. Shown read-only and
