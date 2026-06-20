@@ -18,6 +18,7 @@ struct ReaderOptionsForm: View {
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
@@ -30,6 +31,7 @@ struct ReaderOptionsForm: View {
 
     @State private var importing = false
     @State private var showCustomize = false
+    @State private var showAO3Login = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -80,6 +82,46 @@ struct ReaderOptionsForm: View {
             // picker (below, in Appearance) is shown only inside the reader, since here
             // it's covered by this section.
             if includeAppSettings {
+                Section {
+                    switch auth.status {
+                    case .restoring:
+                        HStack {
+                            ProgressView()
+                            Text("Checking AO3 session…")
+                        }
+
+                    case .signedIn(let username):
+                        LabeledContent {
+                            Text(username)
+                        } label: {
+                            Label("Signed In", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+
+                        Button(role: .destructive) {
+                            Task { await auth.logout() }
+                        } label: {
+                            Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+
+                    case .signedOut, .signingIn, .usingFallback:
+                        Button {
+                            showAO3Login = true
+                        } label: {
+                            Label("Log In to AO3…", systemImage: "person.badge.key")
+                        }
+                    }
+                } header: {
+                    Text("AO3 Account")
+                } footer: {
+                    if let notice = auth.noticeMessage {
+                        Text(notice)
+                    } else {
+                        Text("A login enables future synced bookmarks, history, "
+                             + "subscriptions, kudos, comments, and restricted works.")
+                    }
+                }
+
                 Section {
                     themePicker("App Theme", selection: appThemeBinding)
                     Toggle("Match App & Reader Theme", isOn: matchThemeBinding)
@@ -219,6 +261,11 @@ struct ReaderOptionsForm: View {
                 .presentationDragIndicator(.visible)
         }
         #endif
+        .sheet(isPresented: $showAO3Login) {
+            AO3LoginView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: Font import / delete
@@ -252,4 +299,3 @@ struct ReaderOptionsForm: View {
         try? context.save()
     }
 }
-

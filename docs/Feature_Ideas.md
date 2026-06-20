@@ -46,6 +46,11 @@ the status here in sync with the board.
   Dark palettes on official AO3 hosts. Changes apply live and persist across page
   navigation without affecting external sites.
 
+- **[FI-10] AO3 authentication foundation** — *Status: In Progress · Board: T-30*
+  Add a native account/login experience backed by AO3's real login form in a
+  hidden WebView, with automatic visible-WebView fallback, secure session
+  persistence, logout, expiration handling, and reusable authenticated requests.
+
 - **[FI-9] Enrich Browse-by-fandom category cards** — *Status: Done (2026-06-19) · Board: T-24*  
   Cards now show real **fandom count** + **work count** (from each category's
   fandom index, session-cached in `FandomCatalog`), the user's **saved-work count**

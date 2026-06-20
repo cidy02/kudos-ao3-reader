@@ -11,6 +11,9 @@ and SwiftData.
   typography (font, size, line/letter/word spacing, justification, margins).
 - **Native AO3 search & browse** — a faceted works search, browse-by-fandom, and
   an in-app AO3 web view; scraped politely with SwiftSoup (AO3 has no public API).
+- **Secure AO3 account session** — native login backed by AO3's real form, with
+  hidden-WebView session capture, automatic visible fallback, and device-only
+  Keychain persistence as the foundation for future account sync.
 - **Library & bookmarks** — saved works with rich metadata (rating, word count,
   chapters, kudos, series), custom tags, filtering, reading history, and favorites.
 - **Privacy-aware** — mature works can be hidden behind a Face ID gate.
@@ -64,8 +67,10 @@ Unit tests live in the `KudosTests` target (Swift Testing) and cover the
 pure-logic core: the MiniZip reader, EPUB OPF metadata + NCX table-of-contents
 parsing, HTML-entity decoding / summary stripping, and work-tag normalization.
 Search-filter tests also cover advanced rating query generation, tag and facet
-exclusions, and the include/exclude/clear cycle. A minimal hand-built
-`KudosTests/Fixtures/sample.epub` backs the EPUB tests.
+exclusions, and the include/exclude/clear cycle. Authentication tests cover
+cookie scoping, session restoration and expiration, hidden login outcomes, and
+automatic fallback. A minimal hand-built `KudosTests/Fixtures/sample.epub` backs
+the EPUB tests.
 
 ```bash
 Scripts/test.sh        # runs on the default iOS Simulator
@@ -119,6 +124,8 @@ Planning and tracking notes live in [`docs/`](docs/):
 - [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md) — feature backlog.
 - [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md) — visual / interaction polish items.
 - [`docs/Bugs.md`](docs/Bugs.md) — known issues.
+- [`docs/AO3Authentication.md`](docs/AO3Authentication.md) — login, session,
+  security, and authenticated-request architecture.
 
 ## License
 

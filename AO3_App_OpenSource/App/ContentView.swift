@@ -10,12 +10,14 @@ struct ContentView: View {
     @State private var router = AppRouter()
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
+    @State private var auth = AO3AuthService()
 
     var body: some View {
         content
             .environment(router)
             .environment(privacyGate)
             .environment(theme)
+            .environment(auth)
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)
@@ -27,6 +29,9 @@ struct ContentView: View {
             // Light/Dark. `initial` covers launch; new controls pick it up on change.
             .onChange(of: theme.appTheme, initial: true) { _, t in
                 applySegmentedControlAppearance(for: t)
+            }
+            .task {
+                await auth.restoreSession()
             }
     }
 
