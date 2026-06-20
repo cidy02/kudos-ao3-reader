@@ -23,7 +23,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-38 | Download queue — queue multiple downloads (e.g. a whole series) politely; progress UI | Claude | main → rm | 🔄 | Second half of "Download queue / bulk actions"; AO3Client is already serialized |
 
 ---
 
@@ -51,6 +51,7 @@ _None currently._
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-37 | Library bulk-select + bulk actions (delete / save / favorite) via EditMode + `List(selection:)`; first half of "Download queue / bulk actions" | Claude | both | _see git log_ | 2026-06-20 |
 | T-36 | Phase-2: native AO3 work Subscriptions (4th "AO3" sub-tab) — reuses worksPage/parseSearchPage; only `li.work.blurb` items surface, so work subs only (FI-14). Completes the Phase-2 read backlog. | Claude | both | _see git log_ | 2026-06-20 |
 | T-35 | Phase-2: native AO3 reading History + consolidate the account lists into one "AO3" segment with a sub-picker (`AO3AccountSection`) to avoid section-bar overflow (FI-13) | Claude | both | _see git log_ | 2026-06-20 |
 | T-34 | Phase-2: native AO3 Bookmarks list — generalized the MfL view into `AO3AccountWorksList(kind:)`; `parseBookmarksPage` (`li.bookmark.blurb`, work id from `/works/` link, skips series/external) (FI-12) | Claude | both | _see git log_ | 2026-06-20 |
