@@ -19,6 +19,10 @@ final class ReaderController: NSObject {
     var onReachedStart: (() -> Void)?
     /// Called when the user scrolls to the bottom of the chapter (scrolled mode).
     var onReachedScrollBottom: (() -> Void)?
+    /// Called when the user taps an external (http/https) link inside the EPUB —
+    /// e.g. an AO3 work/author/tag reference. The host routes it to the Browse tab
+    /// instead of letting it navigate away inside the reader's web view.
+    var onOpenExternalURL: ((URL) -> Void)?
 
     #if os(iOS)
     /// Called when the reading area is tapped (toggles the chrome).
@@ -159,6 +163,25 @@ extension ReaderController: WKNavigationDelegate {
             landOnLast = false
             webView.evaluateJavaScript("window.readerLast && window.readerLast();")
         }
+    }
+
+    /// Web links in EPUB content (AO3 work/author/tag pages, external sites) should
+    /// open in the in-app Browse tab, not hijack the reader's web view. The reader
+    /// only ever loads local `file://` chapters, so *any* attempt to navigate to a
+    /// web URL is a tapped content link — cancel it and hand it off. The app's own
+    /// `loadFileURL` and in-chapter anchor jumps (`file://` fragments) keep their
+    /// `file` scheme and proceed in place.
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if let url = navigationAction.request.url,
+           let scheme = url.scheme?.lowercased(),
+           scheme == "http" || scheme == "https" {
+            decisionHandler(.cancel)
+            onOpenExternalURL?(url)
+            return
+        }
+        decisionHandler(.allow)
     }
 }
 

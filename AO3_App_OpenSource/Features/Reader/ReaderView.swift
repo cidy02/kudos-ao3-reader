@@ -428,6 +428,10 @@ struct ReaderView: View {
                 autoFinishIfComplete()   // scrolled: bottom of the last chapter
             }
         }
+        // Tapping a web link in the EPUB opens it in the Browse tab's AO3 web view.
+        controller.onOpenExternalURL = { url in
+            router.open(url)
+        }
         #if os(iOS)
         controller.onTap = { toggleChrome() }
         controller.onChromeHiddenChange = { hidden in chromeVisible = !hidden }

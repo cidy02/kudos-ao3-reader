@@ -39,6 +39,10 @@ _None._ Claim a task from the Backlog and add a row here.
 - **T-17 · Document EPUB format assumptions** → new `docs/EPUBParsing.md` (P2 backlog)
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
+- **T-29 · Readium reader: route EPUB web links to Browse** — T-28 fixed the legacy
+  reader (used on macOS + all of `main`); the iOS Readium navigator (`BookReaderView`)
+  has its own link handling. Verify AO3/web links there open in the Browse tab too,
+  via the navigator's external-URL delegate, mirroring `onOpenExternalURL`.
 - **T-20 · Phase-4 interaction polish** — auto-hide chrome on scroll, custom
   page-turn animation, safe-area inset tuning. (Notes ▸ Migration status, Phase 4 = partial.)
 - **T-21 · Typography calibration** — match Readium sepia/`backgroundColor` to the
@@ -53,6 +57,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-28 | EPUB web links (AO3 work/author/tag) open in the Browse tab, not inside the legacy reader's web view — verified in simulator (BUG) | Claude | both | _see git log_ | 2026-06-19 |
 | T-15 | Sync in-app AO3 browser with app theme (FI-5) | Codex | both | `58663da` / `2f48e95` | 2026-06-19 |
 | T-27 | Search Back returns to Browse (then the previous tab) after a fandom/typed search, instead of skipping straight to the tab (BUG) | Claude | both | _see git log_ | 2026-06-19 |
 | T-26 | Toolbar "expand/collapse all" toggle for Search result cards | Claude | both | _see git log_ | 2026-06-19 |
