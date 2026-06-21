@@ -112,6 +112,36 @@ struct HeroReadingCard: View {
     }
 }
 
+/// Carousel card for a remote AO3 work (Subscriptions / Recently Updated): cover +
+/// title + author + fandom. Tapping opens the native AO3 work page (download + read).
+struct AO3WorkCoverCard: View {
+    let work: AO3WorkSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            CoverArt(title: work.title)
+                .frame(width: 120, height: 172)
+            Text(work.title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+            if let author = work.authors.first, !author.isEmpty {
+                Text(author)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            if let fandom = work.fandoms.first {
+                Text(fandom)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(width: 120, alignment: .leading)
+    }
+}
+
 /// How the dashboard opens a tapped work: straight into the reader when the EPUB is
 /// on disk, otherwise its detail page (which can re-download a freed file).
 struct HomeWorkDestination: View {

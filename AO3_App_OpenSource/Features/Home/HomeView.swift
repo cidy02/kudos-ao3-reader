@@ -8,6 +8,7 @@ import SwiftData
 struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -15,6 +16,7 @@ struct HomeView: View {
 
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
     @State private var path = NavigationPath()
+    @State private var subscriptions: [AO3WorkSummary] = []
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
@@ -24,7 +26,9 @@ struct HomeView: View {
     private var favorites: [SavedWork] { HomeSectionKind.favorites.works(from: works, visible: passesPrivacy) }
     private var recentlyOpened: [SavedWork] { HomeSectionKind.recentlyOpened.works(from: works, visible: passesPrivacy) }
 
-    private var isEmpty: Bool { readingNow.isEmpty && favorites.isEmpty && recentlyOpened.isEmpty }
+    private var isEmpty: Bool {
+        readingNow.isEmpty && favorites.isEmpty && recentlyOpened.isEmpty && subscriptions.isEmpty
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -35,6 +39,7 @@ struct HomeView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             if !readingNow.isEmpty { heroSection }
+                            subscriptionsSection
                             carousel(.favorites, works: favorites)
                             carousel(.recentlyOpened, works: recentlyOpened)
                         }
@@ -49,6 +54,8 @@ struct HomeView: View {
             #endif
             .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
             .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
+            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .task(id: auth.isLoggedIn) { await loadSubscriptions() }
         }
     }
 
@@ -66,6 +73,54 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 16)
             }
+        }
+    }
+
+    /// Subscriptions are AO3-account data (network + login). Hidden entirely when
+    /// logged out or empty — a dashboard shouldn't show a dead section.
+    @ViewBuilder
+    private var subscriptionsSection: some View {
+        if !subscriptions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                NavigationLink {
+                    AO3AccountWorksList(kind: .subscriptions)
+                } label: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Subscriptions").font(.title2.bold()).foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(subscriptions.prefix(12)) { work in
+                            NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+        }
+    }
+
+    private func loadSubscriptions() async {
+        guard auth.isLoggedIn, let username = auth.username,
+              let url = AO3Client.subscriptionsURL(username: username, page: 1)
+        else {
+            subscriptions = []
+            return
+        }
+        do {
+            let request = try auth.authenticatedRequest(for: url)
+            subscriptions = try await AO3Client.shared.worksPage(for: request, page: 1).works
+        } catch {
+            subscriptions = []
         }
     }
 
