@@ -176,3 +176,61 @@ _Older UI / reader / Library work predates this board — see `git log`._
   [[legacy-first-workflow]].
 - Quick commands — Build/Test: `xcodebuild … CODE_SIGNING_ALLOWED=NO` ·
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
+
+## UI Consistency & Density Audit (Required Before Merge)
+
+### Purpose
+Ensure new UI work remains consistent with the established Kudos design language and does not regress information density, scanability, or theme behavior.
+
+### Human Verification Required
+The following items require screenshots and human review before completion:
+
+- AO3 account sub-picker
+- Library bulk-select mode
+- Download queue banner
+- About page
+- Continue Reading shelf
+- Search result cards
+- Library cards
+
+### Information Density Review
+For every new or modified card:
+
+- Verify title visibility is unchanged or improved
+- Verify author visibility is unchanged or improved
+- Verify fandom visibility is unchanged or improved
+- Verify reading progress visibility is unchanged or improved
+- Verify chapter/word count visibility is unchanged or improved
+- Verify download status visibility is unchanged or improved
+- Verify no critical metadata has been hidden behind additional taps
+
+### Theme Consistency Review
+Verify all new UI components:
+
+- Use ThemeManager/AppThemeSurface
+- Support Light, Dark, and Sepia themes
+- Avoid hardcoded colors
+- Avoid hardcoded corner radius values
+- Avoid hardcoded shadows
+- Follow existing spacing scale
+
+### Card Family Consistency
+Compare against existing Library/Search cards:
+
+- Typography hierarchy
+- Metadata presentation
+- Badge styling
+- Progress indicators
+- Padding and spacing
+- Corner radius treatment
+
+### Approval Gate
+Before merging UI changes:
+
+1. Screenshot review completed
+2. Density review completed
+3. Theme review completed
+4. Human approval received
+
+Do not mark UI tasks complete until all four requirements are satisfied.
+  
