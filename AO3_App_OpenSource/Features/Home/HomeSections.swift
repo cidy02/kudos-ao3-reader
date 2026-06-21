@@ -7,6 +7,7 @@ import Foundation
 /// are handled separately in `HomeView`.)
 enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     case readingNow
+    case recentlyUpdated
     case favorites
     case recentlyOpened
 
@@ -15,6 +16,7 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     var title: String {
         switch self {
         case .readingNow: "Reading Now"
+        case .recentlyUpdated: "Recently Updated"
         case .favorites: "Favorites"
         case .recentlyOpened: "Recently Opened"
         }
@@ -37,6 +39,11 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
             return works
                 .filter { $0.isFavorite && visible($0) }
                 .sorted { recency($0) > recency($1) }
+        case .recentlyUpdated:
+            // Works AO3 has added chapters to since the user last saw them.
+            return works
+                .filter { $0.hasUpdate && visible($0) }
+                .sorted { ($0.lastUpdateCheck ?? .distantPast) > ($1.lastUpdateCheck ?? .distantPast) }
         case .recentlyOpened:
             // Anything actually opened (has a read date), newest first.
             return works

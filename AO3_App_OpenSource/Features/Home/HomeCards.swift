@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// A generated "cover" placeholder — EPUBs carry no cover art, so each work gets a
 /// stable gradient (hued from its title) with a book glyph, giving the dashboard a
@@ -146,12 +147,23 @@ struct AO3WorkCoverCard: View {
 /// on disk, otherwise its detail page (which can re-download a freed file).
 struct HomeWorkDestination: View {
     let work: SavedWork
+    @Environment(\.modelContext) private var context
 
     var body: some View {
-        if work.hasEPUB {
-            ReaderView(work: work)
-        } else {
-            WorkDetailView(work: work)
+        Group {
+            if work.hasEPUB {
+                ReaderView(work: work)
+            } else {
+                WorkDetailView(work: work)
+            }
+        }
+        .onAppear {
+            // Opening an updated work marks its current chapters as seen — clears it
+            // from Recently Updated.
+            if work.hasUpdate {
+                work.knownChapterCount = work.postedChapterCount
+                try? context.save()
+            }
         }
     }
 }

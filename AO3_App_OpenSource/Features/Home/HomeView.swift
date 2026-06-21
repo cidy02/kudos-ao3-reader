@@ -23,11 +23,13 @@ struct HomeView: View {
     }
 
     private var readingNow: [SavedWork] { HomeSectionKind.readingNow.works(from: works, visible: passesPrivacy) }
+    private var recentlyUpdated: [SavedWork] { HomeSectionKind.recentlyUpdated.works(from: works, visible: passesPrivacy) }
     private var favorites: [SavedWork] { HomeSectionKind.favorites.works(from: works, visible: passesPrivacy) }
     private var recentlyOpened: [SavedWork] { HomeSectionKind.recentlyOpened.works(from: works, visible: passesPrivacy) }
 
     private var isEmpty: Bool {
-        readingNow.isEmpty && favorites.isEmpty && recentlyOpened.isEmpty && subscriptions.isEmpty
+        readingNow.isEmpty && recentlyUpdated.isEmpty && favorites.isEmpty
+            && recentlyOpened.isEmpty && subscriptions.isEmpty
     }
 
     var body: some View {
@@ -39,6 +41,7 @@ struct HomeView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             if !readingNow.isEmpty { heroSection }
+                            carousel(.recentlyUpdated, works: recentlyUpdated)
                             subscriptionsSection
                             carousel(.favorites, works: favorites)
                             carousel(.recentlyOpened, works: recentlyOpened)
@@ -56,6 +59,7 @@ struct HomeView: View {
             .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
             .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
             .task(id: auth.isLoggedIn) { await loadSubscriptions() }
+            .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
         }
     }
 
@@ -172,6 +176,9 @@ struct HomeView: View {
         switch kind {
         case .readingNow, .recentlyOpened:
             return work.lastSpineIndex > 0 ? "Ch \(work.lastSpineIndex + 1)" : nil
+        case .recentlyUpdated:
+            let new = work.postedChapterCount - work.knownChapterCount
+            return new > 0 ? "+\(new) new" : "Updated"
         case .favorites:
             return nil
         }

@@ -67,6 +67,14 @@ import SwiftData
     /// "Continue Reading" ordering; nil for works never opened (or pre-migration).
     var lastReadDate: Date?
 
+    /// Update detection (Home → Recently Updated). `knownChapterCount` is the posted
+    /// chapter count the user has "seen" — set to the downloaded count on a native
+    /// import, or baselined on the first update check. When AO3's live posted count
+    /// (parsed from `chapters`) exceeds it, the work has new chapters. `0` = not yet
+    /// baselined. `lastUpdateCheck` is when AO3 was last polled for this work.
+    var knownChapterCount: Int = 0
+    var lastUpdateCheck: Date?
+
     /// AO3's own tags for this work (fandoms, relationships, characters, freeform),
     /// read from the EPUB on import. These are intrinsic to the work — distinct from
     /// `tags`, which are the user's own organizational tags. Shown read-only and
@@ -110,6 +118,17 @@ import SwiftData
 
     /// Kept works (explicitly saved or favorited) never have their EPUB freed.
     var isProtected: Bool { isSaved || isFavorite }
+
+    /// The posted-chapter count parsed from the `chapters` stats string ("5/10" → 5).
+    var postedChapterCount: Int {
+        Int(chapters.split(separator: "/").first?.trimmingCharacters(in: .whitespaces) ?? "") ?? 0
+    }
+
+    /// AO3 has new chapters the user hasn't seen (live posted count exceeds the
+    /// baseline). Drives Home → Recently Updated.
+    var hasUpdate: Bool {
+        knownChapterCount > 0 && postedChapterCount > knownChapterCount
+    }
 
     init(
         id: UUID = UUID(),

@@ -108,9 +108,12 @@ struct AO3WorkDetailView: View {
             loadError = nil
             do {
                 let temp = try await AO3Client.shared.downloadEPUB(workID: work.id)
+                let posted = Int(work.chapters.split(separator: "/").first?
+                    .trimmingCharacters(in: .whitespaces) ?? "") ?? 0
                 let saved = try importEPUB(temp, source: work.workURL,
                                            isComplete: work.isComplete ?? false,
-                                           seriesURL: work.seriesURL ?? "", into: context)
+                                           seriesURL: work.seriesURL ?? "",
+                                           knownChapterCount: posted, into: context)
                 path.append(saved)
             } catch let error as AO3Error {
                 loadError = error.errorDescription
