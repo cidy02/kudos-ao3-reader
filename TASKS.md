@@ -36,9 +36,6 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features (roadmap "Later" list; ID assigned on pickup)
-- **Reading statistics & insights** — works/words read, fandoms, finished vs
-  in-progress, etc., aggregated from local `SavedWork`. Self-contained; the natural
-  next feature.
 - **iCloud backup + Export / Import** — large; CloudKit sync and/or a file
   export/import of the library + settings.
 - **Highlights / notes / annotations** — large; a reader annotation system.
@@ -80,7 +77,9 @@ _None._ Claim a task from the Backlog and add a row here.
   `readium-migration` one ports go through). `git worktree prune` + remove when done.
 
 ### Bugs
-- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
+- **BUG-4 · macOS Library build regression** — T-37's shared `EditMode` state is
+  unavailable on macOS, so the app target no longer compiles there. iOS remains
+  green. Fix on `main`, then port. ↳ [`docs/Bugs.md`](docs/Bugs.md).
 
 ---
 
@@ -88,6 +87,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-41 | Local Reading Insights dashboard: works/words read, activity, completion, and top fandoms (FI-18) | Codex | both | `1cfe4b0` / `be74d8f` | 2026-06-20 |
 | T-40 | Continue Reading shelf at the top of the Library (in-progress works, most-recently-read first → one-tap resume into the reader); added `SavedWork.lastReadDate` (FI-17) | Claude | both | _see git log_ | 2026-06-20 |
 | T-39 | Settings → About / Sources & Licenses sheet (version, GPL-3.0, SwiftSoup/Readium/ao3_api credits, AO3/OTW disclaimer) (FI-16) | Claude | both | _see git log_ | 2026-06-20 |
 | T-38 | Download queue (`DownloadQueue` + root progress banner) — "Download Whole Series" scrapes the series page (`AO3Client.seriesWorks`) and downloads/imports serially via the polite AO3Client; second half of "Download queue / bulk actions" (FI-15) | Claude | both | _see git log_ | 2026-06-20 |
@@ -155,11 +155,10 @@ _Older UI / reader / Library work predates this board — see `git log`._
   foundation + **Phase-2 reads** (Marked for Later, Bookmarks, History,
   Subscriptions — all under the Bookmarks tab's "AO3" segment), plus the
   missing-features batch — **download queue & bulk actions, About page, Continue
-  Reading shelf** (T-30…T-40, FI-10…17).
-- **Natural next pickup:** **Reading statistics** (self-contained), or kick off the
-  **UI-refinement + maintainability pass**. But see the **Verification &
-  housekeeping debts** above first — a **live AO3 login test** would de-risk the
-  whole Phase-2 batch, and nothing this session was seen on screen.
+  Reading shelf, and Reading Insights** (T-30…T-41, FI-10…18).
+- **Natural next pickup:** fix **BUG-4** to restore the promised macOS build,
+  then start **iCloud backup + Export / Import**. The **live AO3 verification**
+  debt still needs a real signed-in session.
 - **Porting note:** `readium-migration` is checked out in a `/private/tmp/Kudos-*`
   worktree — port there (cherry-pick), not via `git checkout` in the main repo. See
   [[legacy-first-workflow]].
