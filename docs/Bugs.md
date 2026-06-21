@@ -9,17 +9,20 @@ when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `
 
 ## Active Bugs
 
-### Cross-platform
-
-- **[BUG-4] Library bulk-select broke the macOS build** — Open (found
-  2026-06-20). T-37 stores SwiftUI `EditMode` directly in `LibraryView`, but
-  `EditMode` is unavailable on macOS. An iOS Simulator build and all tests pass;
-  a macOS app build fails at that property before reaching T-41's cross-platform
-  UI. Fix the selection state conditionally on `main`, then port it.
+_None currently tracked._
 
 ---
 
 ## Fixed / Verified
+
+### Cross-platform
+
+- **[BUG-4] Library bulk-select broke the macOS build** — ✅ Fixed (2026-06-20,
+  `main` + `readium-migration`; Board: T-43). T-37 stored SwiftUI `EditMode` in
+  `LibraryView`, but `EditMode` is iOS-only. The multi-select state (`EditMode`,
+  `List(selection:)`, the "Select" button) is now `#if os(iOS)`; macOS uses a plain
+  list (`libraryList`) so row taps still navigate. Verified: a fresh-derivedData
+  **macOS app build succeeds**, and iOS builds + all tests still pass.
 
 ### Authentication
 
