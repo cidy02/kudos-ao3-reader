@@ -84,6 +84,14 @@ the status here in sync with the board.
 
 ### App
 
+- **[FI-19] Portable Library backup** — *Status: Done (2026-06-20) · Board: T-42*
+  Export a versioned `.kudosbackup` package containing Library metadata, User
+  Tags, saved links, EPUBs, custom fonts, and app/reader settings. Import merges
+  safely with the current Library. The system document picker supports iCloud
+  Drive without requiring CloudKit entitlements; automatic sync remains later.
+  Verified with package round-trip, merge-restore, and format-version tests plus
+  a simulator visual check of the Settings backup controls.
+
 - **[FI-16] About / Sources & Licenses page** — *Status: Done (2026-06-20) · Board: T-39*
   A Settings → "About Kudos" sheet: app name + version (from the bundle), the
   GPL-3.0 license statement, an open-source credits section (SwiftSoup MIT, Readium
