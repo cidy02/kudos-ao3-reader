@@ -26,6 +26,13 @@ struct LibraryView: View {
     private var isSelecting: Bool { editMode.isEditing }
     private var selectedWorks: [SavedWork] { works.filter { selection.contains($0.id) } }
 
+    /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
+    private var statisticsWorks: [SavedWork] {
+        works.filter {
+            !hideMature || !$0.isAdult || gate.isRevealed($0)
+        }
+    }
+
     /// In-progress works (started, not finished, file present), most recently read
     /// first — the "Continue Reading" shelf. Capped so the shelf stays compact.
     private var continueReading: [SavedWork] {
@@ -138,6 +145,15 @@ struct LibraryView: View {
                     }
                     if !works.isEmpty {
                         ToolbarItem { filterButton }
+                    }
+                    if !statisticsWorks.isEmpty {
+                        ToolbarItem {
+                            NavigationLink {
+                                ReadingStatisticsView(works: statisticsWorks)
+                            } label: {
+                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                            }
+                        }
                     }
                     if !works.isEmpty {
                         ToolbarItem {
