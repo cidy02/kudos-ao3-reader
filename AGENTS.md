@@ -132,3 +132,7 @@ The next agent should continue from `TASKS.md` + your commit with **zero archaeo
   tick off items in `docs/Feature_Ideas.md` / `docs/UI_Polish_Todo.md`.
 - When you verify UI in the simulator, say what you saw (and how) in the commit body
   or `TASKS.md`.
+
+  ## UI Consistency
+  - UI modernization must preserve or improve information density, a visually cleaner design that reduces scanability or hides metadata is considered a regression unless explicitly approved.
+    - New UI elements should be consistent with existing elements, unless explicitly approved.
