@@ -93,6 +93,7 @@ struct ContentView: View {
     @ViewBuilder
     private func destination(for tab: AppTab) -> some View {
         switch tab {
+        case .home: HomeView()
         case .search: SearchView()
         case .browse: BrowseView()
         case .library: LibraryView()
