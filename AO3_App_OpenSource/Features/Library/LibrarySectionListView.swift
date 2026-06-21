@@ -117,17 +117,6 @@ struct LibrarySectionListView: View {
     }
 
     private func loadMarkedForLater() async {
-        guard kind == .savedForLater, auth.isLoggedIn, let username = auth.username,
-              let url = AO3Client.markedForLaterURL(username: username, page: 1)
-        else {
-            markedForLater = []
-            return
-        }
-        do {
-            let request = try auth.authenticatedRequest(for: url)
-            markedForLater = try await AO3Client.shared.worksPage(for: request, page: 1).works
-        } catch {
-            markedForLater = []
-        }
+        markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
     }
 }

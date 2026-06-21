@@ -61,13 +61,9 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     func works(from works: [SavedWork], visible: (SavedWork) -> Bool) -> [SavedWork] {
         switch self {
         case .readingNow:
-            // Started, not finished, file present — most recently read first.
+            // In-progress (started, not finished, file present) — most recently read first.
             return works
-                .filter {
-                    $0.hasEPUB && !$0.isFinished
-                        && ($0.lastSpineIndex > 0 || $0.lastScrollFraction > 0)
-                        && visible($0)
-                }
+                .filter { $0.isInProgress && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .savedForLater:
             // Works the user explicitly saved to keep around.

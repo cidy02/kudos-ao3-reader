@@ -214,15 +214,8 @@ struct LibraryView: View {
         }
     }
 
-    /// Reading progress (0…1) for Reading Now cards: position over the work's AO3
-    /// chapter count, falling back to the in-chapter scroll fraction.
     private func progress(_ kind: LibrarySectionKind, _ work: SavedWork) -> Double? {
-        guard kind == .readingNow else { return nil }
-        let parts = work.chapters.split(separator: "/")
-        if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
-            return min(1, Double(work.lastSpineIndex + 1) / Double(total))
-        }
-        return work.lastScrollFraction > 0 ? work.lastScrollFraction : nil
+        kind == .readingNow ? work.readingProgress : nil
     }
 
     // MARK: Toolbar
@@ -292,18 +285,7 @@ struct LibraryView: View {
 
     /// Loads the user's AO3 "Marked for Later" list for the Saved for Later section.
     private func loadMarkedForLater() async {
-        guard auth.isLoggedIn, let username = auth.username,
-              let url = AO3Client.markedForLaterURL(username: username, page: 1)
-        else {
-            markedForLater = []
-            return
-        }
-        do {
-            let request = try auth.authenticatedRequest(for: url)
-            markedForLater = try await AO3Client.shared.worksPage(for: request, page: 1).works
-        } catch {
-            markedForLater = []
-        }
+        markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
     }
 
     // MARK: Multi-select / bulk actions

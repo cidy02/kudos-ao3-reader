@@ -102,18 +102,7 @@ struct HomeView: View {
     }
 
     private func loadSubscriptions() async {
-        guard auth.isLoggedIn, let username = auth.username,
-              let url = AO3Client.subscriptionsURL(username: username, page: 1)
-        else {
-            subscriptions = []
-            return
-        }
-        do {
-            let request = try auth.authenticatedRequest(for: url)
-            subscriptions = try await AO3Client.shared.worksPage(for: request, page: 1).works
-        } catch {
-            subscriptions = []
-        }
+        subscriptions = await auth.accountWorks(from: AO3Client.subscriptionsURL)
     }
 
     // MARK: Card details
@@ -133,11 +122,6 @@ struct HomeView: View {
     /// Reading progress (0…1) for Reading Now cards: position over the work's AO3
     /// chapter count, falling back to the in-chapter scroll fraction.
     private func progress(_ kind: HomeSectionKind, _ work: SavedWork) -> Double? {
-        guard kind == .readingNow else { return nil }
-        let parts = work.chapters.split(separator: "/")
-        if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
-            return min(1, Double(work.lastSpineIndex + 1) / Double(total))
-        }
-        return work.lastScrollFraction > 0 ? work.lastScrollFraction : nil
+        kind == .readingNow ? work.readingProgress : nil
     }
 }

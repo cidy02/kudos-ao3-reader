@@ -130,6 +130,23 @@ import SwiftData
         knownChapterCount > 0 && postedChapterCount > knownChapterCount
     }
 
+    /// Started but not finished, with its EPUB on disk — the in-progress / "Reading
+    /// Now" state shared by the Home and Library shelves.
+    var isInProgress: Bool {
+        hasEPUB && !isFinished && (lastSpineIndex > 0 || lastScrollFraction > 0)
+    }
+
+    /// Reading progress in 0…1 for the Reading Now shelves: chapter position over the
+    /// work's AO3 chapter count ("5/10"), falling back to the in-chapter scroll
+    /// fraction. `nil` when there's nothing meaningful to show.
+    var readingProgress: Double? {
+        let parts = chapters.split(separator: "/")
+        if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
+            return min(1, Double(lastSpineIndex + 1) / Double(total))
+        }
+        return lastScrollFraction > 0 ? lastScrollFraction : nil
+    }
+
     init(
         id: UUID = UUID(),
         title: String,
