@@ -106,9 +106,10 @@ The project uses `objectVersion = 90` with **deterministic IDs** and
 
 - Build artifacts: `build/`, `DerivedData/`, `*.ipa`, `*.dSYM` (gitignored — keep it so).
 - Local-only notes: `READIUM_MIGRATION_NOTES.md`, `*_NOTES.md`, `*prompt*` (gitignored).
-- The Apple `DEVELOPMENT_TEAM` ID lives in `project.pbxproj` — fine while the repo is
-  **private**; scrub it before going public.
-- Never commit secrets/tokens. Treat the repo as if it could go public.
+- The repo is **public**. The Apple `DEVELOPMENT_TEAM` in `project.pbxproj` is
+  scrubbed to `""` — keep it empty when you commit (Xcode re-adds your team locally
+  under Automatic signing; don't commit that back).
+- Never commit secrets/tokens or personal identifiers. The repo is public.
 
 ## Handoff protocol — leave work pickup-ready
 
