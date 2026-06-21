@@ -15,15 +15,24 @@ struct LibraryView: View {
     @State private var filters = LibraryFilters()
     @State private var pendingDelete: SavedWork?
 
-    // Multi-select / bulk actions.
+    // Multi-select / bulk actions. `EditMode` is iOS-only, so macOS keeps a plain
+    // list (no multi-select) — see `libraryList`.
+    #if os(iOS)
     @State private var editMode: EditMode = .inactive
+    #endif
     @State private var selection = Set<UUID>()
     @State private var confirmBulkDelete = false
 
     /// Tap a Continue Reading card to resume straight into the reader.
     @State private var resumeWork: SavedWork?
 
-    private var isSelecting: Bool { editMode.isEditing }
+    private var isSelecting: Bool {
+        #if os(iOS)
+        editMode.isEditing
+        #else
+        false
+        #endif
+    }
     private var selectedWorks: [SavedWork] { works.filter { selection.contains($0.id) } }
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
@@ -78,6 +87,37 @@ struct LibraryView: View {
         .help("Filters")
     }
 
+    /// The works list. iOS uses `List(selection:)` + `EditMode` for multi-select;
+    /// macOS (no `EditMode`) uses a plain list so row taps still navigate.
+    @ViewBuilder
+    private var libraryList: some View {
+        #if os(iOS)
+        List(selection: $selection) { listSections }
+            .cardList()
+            .environment(\.editMode, $editMode)
+        #else
+        List { listSections }
+            .cardList()
+        #endif
+    }
+
+    @ViewBuilder
+    private var listSections: some View {
+        if !isSelecting && !continueReading.isEmpty {
+            Section("Continue Reading") { continueReadingShelf }
+        }
+        if !readingWorks.isEmpty {
+            Section("Reading") {
+                ForEach(readingWorks, content: row).cardRow()
+            }
+        }
+        if !savedWorks.isEmpty {
+            Section("Saved") {
+                ForEach(savedWorks, content: row).cardRow()
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -90,25 +130,7 @@ struct LibraryView: View {
                         emptyState
                     }
                 } else {
-                    List(selection: $selection) {
-                        if !isSelecting && !continueReading.isEmpty {
-                            Section("Continue Reading") {
-                                continueReadingShelf
-                            }
-                        }
-                        if !readingWorks.isEmpty {
-                            Section("Reading") {
-                                ForEach(readingWorks, content: row).cardRow()
-                            }
-                        }
-                        if !savedWorks.isEmpty {
-                            Section("Saved") {
-                                ForEach(savedWorks, content: row).cardRow()
-                            }
-                        }
-                    }
-                    .cardList()
-                    .environment(\.editMode, $editMode)
+                    libraryList
                 }
             }
             .navigationTitle(isSelecting
@@ -155,11 +177,13 @@ struct LibraryView: View {
                             }
                         }
                     }
+                    #if os(iOS)
                     if !works.isEmpty {
                         ToolbarItem {
                             Button("Select") { enterSelectMode() }
                         }
                     }
+                    #endif
                 }
             }
             .confirmationDialog(
@@ -339,13 +363,17 @@ struct LibraryView: View {
         .disabled(selection.isEmpty)
     }
 
+    #if os(iOS)
     private func enterSelectMode() {
         selection = []
         editMode = .active
     }
+    #endif
 
     private func exitSelectMode() {
+        #if os(iOS)
         editMode = .inactive
+        #endif
         selection = []
     }
 

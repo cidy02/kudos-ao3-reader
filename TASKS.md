@@ -75,11 +75,19 @@ _None._ Claim a task from the Backlog and add a row here.
   only with the human's OK (AGENTS.md ▸ ask before force-pushing).
 - **Scratch worktree cleanup.** Leftover `/private/tmp/Kudos-*` worktrees (incl. the
   `readium-migration` one ports go through). `git worktree prune` + remove when done.
+- **Stashed pollution on `main` (2026-06-21).** `main`'s working tree had
+  `readium-migration` content staged on it (Readium source, async `importEPUB`, rm
+  `pbxproj`/`Package.resolved`). Stashed to **`stash@{0}`** ("POLLUTION: …") to
+  restore a clean `main`. It's recoverable; **`git stash drop`** once confirmed it
+  was accidental (it should not land on `main`).
+- **Contaminated local `build/` derivedData.** It holds cached Readium modules
+  (`ReadiumFuzi.o`, …), so `canImport(ReadiumShared)` wrongly evaluates **true** on
+  `main`, making `KudosBackup`'s `readiumLocator` access fail to compile. `main` is
+  actually fine (Codex's `#if canImport` guard is correct) — just **`rm -rf build/`**
+  and rebuild. Use a fresh `-derivedDataPath` for `main` vs `readium-migration`.
 
 ### Bugs
-- **BUG-4 · macOS Library build regression** — T-37's shared `EditMode` state is
-  unavailable on macOS, so the app target no longer compiles there. iOS remains
-  green. Fix on `main`, then port. ↳ [`docs/Bugs.md`](docs/Bugs.md).
+- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
 
 ---
 
@@ -87,6 +95,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-43 | Fix **BUG-4**: Library bulk-select `EditMode` is iOS-only → macOS build broke. Multi-select state guarded `#if os(iOS)`; macOS uses a plain `libraryList`. macOS + iOS both build, all tests pass. | Claude | both | _see git log_ | 2026-06-21 |
 | T-42 | Portable `.kudosbackup` export/import for Library records, EPUBs, User Tags, bookmarks, custom fonts, and app/reader settings; merge-only restore through the system document picker (FI-19) | Codex | both | `6048684` / `5cd9394` | 2026-06-20 |
 | T-41 | Local Reading Insights dashboard: works/words read, activity, completion, and top fandoms (FI-18) | Codex | both | `1cfe4b0` / `be74d8f` | 2026-06-20 |
 | T-40 | Continue Reading shelf at the top of the Library (in-progress works, most-recently-read first → one-tap resume into the reader); added `SavedWork.lastReadDate` (FI-17) | Claude | both | _see git log_ | 2026-06-20 |
