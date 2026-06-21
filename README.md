@@ -130,6 +130,8 @@ if which swiftlint >/dev/null; then swiftlint; else echo "warning: SwiftLint not
 
 Planning and tracking notes live in [`docs/`](docs/):
 
+- [`docs/PROJECT_PHILOSOPHY.md`](docs/PROJECT_PHILOSOPHY.md) — the canonical
+  product direction, design/engineering principles, and contributor guidance.
 - [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md) — feature backlog.
 - [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md) — visual / interaction polish items.
 - [`docs/Bugs.md`](docs/Bugs.md) — known issues.
