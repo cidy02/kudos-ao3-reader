@@ -13,6 +13,11 @@ struct ContentView: View {
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
 
+    /// First-launch onboarding gate, persisted locally.
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    /// Shake-to-report bug reporter (also reachable from Settings → About).
+    @State private var showingBugReport = false
+
     var body: some View {
         content
             // Overlay first so the environments below wrap it too — otherwise the
@@ -38,6 +43,32 @@ struct ContentView: View {
             .task {
                 await auth.restoreSession()
             }
+            // Shake the device to report a bug, from anywhere in the app (iOS).
+            .onShake { showingBugReport = true }
+            .sheet(isPresented: $showingBugReport) { BugReportView() }
+            // First-launch welcome, shown before normal navigation. The theme is
+            // re-injected because presented covers/sheets don't inherit it here.
+            #if os(iOS)
+            .fullScreenCover(isPresented: onboardingPresented) {
+                WelcomeView(onContinue: { hasCompletedOnboarding = true })
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
+            }
+            #else
+            .sheet(isPresented: onboardingPresented) {
+                WelcomeView(onContinue: { hasCompletedOnboarding = true })
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
+            }
+            #endif
+    }
+
+    /// Presents onboarding until the user completes it (persisted via `@AppStorage`).
+    private var onboardingPresented: Binding<Bool> {
+        Binding(
+            get: { !hasCompletedOnboarding },
+            set: { if !$0 { hasCompletedOnboarding = true } }
+        )
     }
 
     /// Warms `UISegmentedControl` for Sepia (resets to default for Light/Dark).

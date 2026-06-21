@@ -4,6 +4,7 @@ import SwiftUI
 /// the AO3/OTW disclaimer. Presented as a sheet from the Settings page.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var showingBugReport = false
 
     var body: some View {
         Form {
@@ -50,6 +51,19 @@ struct AboutView: View {
                     )
                 }
 
+                Section("Help & Feedback") {
+                    Button {
+                        showingBugReport = true
+                    } label: {
+                        Label("Report a Bug", systemImage: "ladybug")
+                    }
+                    if let repo = URL(string: AppLinks.repository) {
+                        Link(destination: repo) {
+                            Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                    }
+                }
+
                 Section("Disclaimer") {
                     Text("Kudos is an unofficial, personal project. It is not "
                          + "affiliated with or endorsed by the Organization for "
@@ -72,6 +86,7 @@ struct AboutView: View {
                 Button("Done") { dismiss() }
             }
         }
+        .sheet(isPresented: $showingBugReport) { BugReportView() }
     }
 
     private func creditRow(_ name: String, license: String, detail: String, url: String) -> some View {
