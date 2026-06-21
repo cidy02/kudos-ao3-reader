@@ -1,10 +1,11 @@
 import SwiftUI
 import SwiftData
 
-/// The Home tab: a personal, Books-style dashboard. Reading Now is a hero carousel;
-/// Favorites and Recently Opened are standard carousels. Tapping a card opens the
-/// work in the reader; tapping a section header pushes its full vertical list.
-/// (Network sections — Subscriptions, Recently Updated — are added in a later pass.)
+/// The Home tab: a personal, Books-style dashboard. Every section is a collapsible
+/// horizontal card carousel with a `>` chevron that opens its full vertical list.
+/// Tapping a card opens the work (reader if downloaded, else its detail page).
+/// Sections, in order: Reading Now, Recently Updated, Subscriptions, Favorites,
+/// Recently Opened.
 struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -18,37 +19,32 @@ struct HomeView: View {
     @State private var path = NavigationPath()
     @State private var subscriptions: [AO3WorkSummary] = []
 
+    /// Route marker so the Subscriptions header can push the full AO3 list.
+    private struct SubscriptionsRoute: Hashable {}
+
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
     }
 
-    private var readingNow: [SavedWork] { HomeSectionKind.readingNow.works(from: works, visible: passesPrivacy) }
-    private var recentlyUpdated: [SavedWork] { HomeSectionKind.recentlyUpdated.works(from: works, visible: passesPrivacy) }
-    private var favorites: [SavedWork] { HomeSectionKind.favorites.works(from: works, visible: passesPrivacy) }
-    private var recentlyOpened: [SavedWork] { HomeSectionKind.recentlyOpened.works(from: works, visible: passesPrivacy) }
-
-    private var isEmpty: Bool {
-        readingNow.isEmpty && recentlyUpdated.isEmpty && favorites.isEmpty
-            && recentlyOpened.isEmpty && subscriptions.isEmpty
+    private func section(_ kind: HomeSectionKind) -> [SavedWork] {
+        kind.works(from: works, visible: passesPrivacy)
     }
+    private var readingNow: [SavedWork] { section(.readingNow) }
+    private var recentlyUpdated: [SavedWork] { section(.recentlyUpdated) }
+    private var favorites: [SavedWork] { section(.favorites) }
+    private var recentlyOpened: [SavedWork] { section(.recentlyOpened) }
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 28) {
-                            if !readingNow.isEmpty { heroSection }
-                            carousel(.recentlyUpdated, works: recentlyUpdated)
-                            subscriptionsSection
-                            carousel(.favorites, works: favorites)
-                            carousel(.recentlyOpened, works: recentlyOpened)
-                        }
-                        .padding(.vertical, 12)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    localSection(.readingNow, works: readingNow)
+                    localSection(.recentlyUpdated, works: recentlyUpdated)
+                    subscriptionsSection
+                    localSection(.favorites, works: favorites)
+                    localSection(.recentlyOpened, works: recentlyOpened)
                 }
+                .padding(.vertical, 12)
             }
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle("Home")
@@ -58,6 +54,7 @@ struct HomeView: View {
             .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
             .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
             .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
             .task(id: auth.isLoggedIn) { await loadSubscriptions() }
             .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
         }
@@ -65,51 +62,42 @@ struct HomeView: View {
 
     // MARK: Sections
 
-    private var heroSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header(.readingNow, seeAll: readingNow.count > 1)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(readingNow.prefix(10)) { work in
-                        NavigationLink(value: work) { HeroReadingCard(work: work) }
-                            .buttonStyle(.plain)
-                    }
+    private func localSection(_ kind: HomeSectionKind, works sectionWorks: [SavedWork]) -> some View {
+        WorkCarouselSection(
+            title: kind.title,
+            collapseKey: "home.\(kind.rawValue)",
+            hasItems: !sectionWorks.isEmpty,
+            onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
+        ) {
+            ForEach(sectionWorks.prefix(12)) { work in
+                NavigationLink(value: work) {
+                    WorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
                 }
-                .padding(.horizontal, 16)
+                .buttonStyle(.plain)
             }
+        } emptyState: {
+            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
         }
     }
 
-    /// Subscriptions are AO3-account data (network + login). Hidden entirely when
-    /// logged out or empty — a dashboard shouldn't show a dead section.
-    @ViewBuilder
     private var subscriptionsSection: some View {
-        if !subscriptions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                NavigationLink {
-                    AO3AccountWorksList(kind: .subscriptions)
-                } label: {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("Subscriptions").font(.title2.bold()).foregroundStyle(.primary)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 14) {
-                        ForEach(subscriptions.prefix(12)) { work in
-                            NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
-                                .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
+        WorkCarouselSection(
+            title: "Subscriptions",
+            collapseKey: "home.subscriptions",
+            hasItems: !subscriptions.isEmpty,
+            onSeeAll: subscriptions.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
+        ) {
+            ForEach(subscriptions.prefix(12)) { work in
+                NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                    .buttonStyle(.plain)
             }
+        } emptyState: {
+            SectionEmptyState(
+                message: auth.isLoggedIn
+                    ? "You're not subscribed to anything yet. Subscribe to works or series to see updates here."
+                    : "Log in to AO3 to see the works and series you subscribe to.",
+                systemImage: "bell"
+            )
         }
     }
 
@@ -128,49 +116,7 @@ struct HomeView: View {
         }
     }
 
-    @ViewBuilder
-    private func carousel(_ kind: HomeSectionKind, works: [SavedWork]) -> some View {
-        if !works.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                header(kind, seeAll: works.count > 1)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 14) {
-                        ForEach(works.prefix(12)) { work in
-                            NavigationLink(value: work) {
-                                WorkCoverCard(work: work, footer: footer(kind, work))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
-    /// A tappable section header (title → full "See all" list) when there's more
-    /// than one item; otherwise a plain title.
-    @ViewBuilder
-    private func header(_ kind: HomeSectionKind, seeAll: Bool) -> some View {
-        if seeAll {
-            NavigationLink(value: kind) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(kind.title).font(.title2.bold()).foregroundStyle(.primary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-        } else {
-            Text(kind.title)
-                .font(.title2.bold())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-        }
-    }
+    // MARK: Card details
 
     private func footer(_ kind: HomeSectionKind, _ work: SavedWork) -> String? {
         switch kind {
@@ -184,13 +130,14 @@ struct HomeView: View {
         }
     }
 
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("Your dashboard is empty", systemImage: "house")
-        } description: {
-            Text("Works you read, favorite, and open will show up here as you use the app.")
-        } actions: {
-            Button("Find Works to Read") { router.selection = .search }
+    /// Reading progress (0…1) for Reading Now cards: position over the work's AO3
+    /// chapter count, falling back to the in-chapter scroll fraction.
+    private func progress(_ kind: HomeSectionKind, _ work: SavedWork) -> Double? {
+        guard kind == .readingNow else { return nil }
+        let parts = work.chapters.split(separator: "/")
+        if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
+            return min(1, Double(work.lastSpineIndex + 1) / Double(total))
         }
+        return work.lastScrollFraction > 0 ? work.lastScrollFraction : nil
     }
 }

@@ -37,10 +37,13 @@ struct WorkCoverCard: View {
     let work: SavedWork
     var footer: String?
 
+    var progress: Double?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             CoverArt(title: work.title)
                 .frame(width: 120, height: 172)
+                .overlay(alignment: .bottom) { progressBar }
             Text(work.title)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
@@ -60,56 +63,21 @@ struct WorkCoverCard: View {
         }
         .frame(width: 120, alignment: .leading)
     }
-}
 
-/// The "Reading Now" hero card: a wider, horizontal layout with the current
-/// chapter and a progress bar.
-struct HeroReadingCard: View {
-    let work: SavedWork
-
-    var body: some View {
-        HStack(spacing: 14) {
-            CoverArt(title: work.title)
-                .frame(width: 82, height: 120)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(work.title)
-                    .font(.headline)
-                    .lineLimit(2)
-                if !work.author.isEmpty {
-                    Text(work.author)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Text(chapterLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let fraction = progressFraction {
-                    ProgressView(value: fraction)
-                        .tint(.accentColor)
+    /// A thin reading-progress bar overlaid on the cover (Reading Now).
+    @ViewBuilder
+    private var progressBar: some View {
+        if let progress {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.black.opacity(0.3)).frame(height: 4)
+                    Capsule().fill(.white)
+                        .frame(width: geo.size.width * max(0.03, min(1, progress)), height: 4)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 4)
+            .padding(8)
         }
-        .padding(14)
-        .frame(width: 320, height: 148, alignment: .leading)
-        .background(.regularMaterial, in: .rect(cornerRadius: 16))
-    }
-
-    private var chapterLabel: String {
-        work.lastSpineIndex > 0 ? "Chapter \(work.lastSpineIndex + 1)" : "Just started"
-    }
-
-    /// Best-effort progress: reading position over the work's AO3 chapter count
-    /// (the "5/10" stats string). Nil — so no bar — when the total is unknown (WIP
-    /// works show "5/?").
-    private var progressFraction: Double? {
-        let parts = work.chapters.split(separator: "/")
-        guard parts.count == 2,
-              let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1
-        else { return nil }
-        return min(1, Double(work.lastSpineIndex + 1) / Double(total))
     }
 }
 

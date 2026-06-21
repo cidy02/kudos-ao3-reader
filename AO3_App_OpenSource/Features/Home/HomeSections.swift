@@ -22,6 +22,29 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
         }
     }
 
+    /// Per-section empty-state copy (from the layout spec).
+    var emptyMessage: String {
+        switch self {
+        case .readingNow:
+            "You're not reading anything right now. Start exploring in Browse or open something from your Library."
+        case .recentlyUpdated:
+            "No recent updates from your subscriptions yet."
+        case .favorites:
+            "No favorites yet. Mark works as favorites to see them here."
+        case .recentlyOpened:
+            "Nothing opened recently. Start reading to see your history here."
+        }
+    }
+
+    var emptyIcon: String {
+        switch self {
+        case .readingNow: "book"
+        case .recentlyUpdated: "sparkles"
+        case .favorites: "star"
+        case .recentlyOpened: "clock"
+        }
+    }
+
     /// The works for this section — filtered + ordered, uncapped. `visible` is the
     /// privacy predicate (callers pass `passesPrivacy`); carousels cap the result.
     func works(from works: [SavedWork], visible: (SavedWork) -> Bool) -> [SavedWork] {
