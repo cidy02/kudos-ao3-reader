@@ -123,11 +123,14 @@ if which swiftlint >/dev/null; then swiftlint; else echo "warning: SwiftLint not
 
 ## Project docs
 
-Planning and tracking notes live in [`docs/`](docs/):
+Planning and tracking notes live in [`TASKS.md`](TASKS.md) and [`docs/`](docs/):
 
-- [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md) — feature backlog.
-- [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md) — visual / interaction polish items.
-- [`docs/Bugs.md`](docs/Bugs.md) — known issues.
+- [`TASKS.md`](TASKS.md) — the single task board: backlog, completed work, and the
+  consolidated **Bugs (BUG-N)**, **Feature Ideas (FI-N)**, and **UI Polish (UI-N)**
+  registries (these replaced the former `docs/Bugs.md`, `Feature_Ideas.md`, and
+  `UI_Polish_Todo.md`).
+- [`docs/Kudos_Layout_Structure.md`](docs/Kudos_Layout_Structure.md) — navigation
+  and layout model (Home / Library section structure).
 - [`docs/AO3Authentication.md`](docs/AO3Authentication.md) — login, session,
   security, and authenticated-request architecture.
 - [`docs/EPUBParsing.md`](docs/EPUBParsing.md) — supported EPUB structures,

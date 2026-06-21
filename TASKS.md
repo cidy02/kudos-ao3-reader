@@ -87,7 +87,7 @@ _None._ Claim a task from the Backlog and add a row here.
   and rebuild. Use a fresh `-derivedDataPath` for `main` vs `readium-migration`.
 
 ### Bugs
-- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
+- _No active bugs._ ↳ see the **🐛 Bugs registry** below.
 
 ---
 
@@ -138,6 +138,40 @@ _None._ Claim a task from the Backlog and add a row here.
 | —    | P0-2 SwiftLint + SwiftFormat + pre-commit hook + CI | Claude | both | `f59a1bb` / `c5d9c1e` | 2026-06-18 |
 
 _Older UI / reader / Library work predates this board — see `git log`._
+
+---
+
+## 🐛 Bugs (BUG-N registry)
+
+_Consolidated from the former `docs/Bugs.md`._ **Status:** Open · In Progress · Fixed. Detail for each is in the Completed table / `git log` under its board task.
+
+**Active:** _none._
+
+**Fixed & verified:**
+- **BUG-4** — Library bulk-select `EditMode` broke the macOS build; guarded `#if os(iOS)`, macOS uses a plain list (T-43, 2026-06-21).
+- **BUG-3** — AO3 login was discarded when Keychain was unavailable; now falls back to WebKit's app-scoped cookie store (T-31, 2026-06-20).
+- **BUG-2** — T-09 tag-cycling UI + tag-picker search-field placement regression (T-22, 2026-06-18).
+- **BUG-1** — Sepia theme not applying app-wide; fixed via `.appThemedScroll()`/`.appThemedRows()` (T-08, 2026-06-18).
+
+---
+
+## 💡 Feature Ideas (FI-N registry)
+
+_Consolidated from the former `docs/Feature_Ideas.md`._ **Status:** Idea · Planned · In Progress · Done · Parked. All current FI items are **Done** (board task in parens).
+
+- **Search & Filters:** FI-1 long-press clear filters (T-12) · FI-2 advanced rating (T-09) · FI-3 cycling include/exclude multi-select (T-09/T-23) · FI-4 expandable result cards (T-10).
+- **Browse / Web:** FI-5 sync browser theme (T-15) · FI-9 enrich browse-by-fandom cards (T-24).
+- **AO3 account (auth + Phase-2 reads):** FI-10 auth foundation (T-30) · FI-11 Marked for Later (T-33) · FI-12 AO3 Bookmarks (T-34) · FI-13 Reading History + grouped AO3 section (T-35) · FI-14 work Subscriptions (T-36).
+- **Library:** FI-7 hide privacy eye when nothing hidden (T-13) · FI-8 tap tag → filter Library (T-11) · FI-15 download queue & bulk actions (T-37/T-38) · FI-17 Continue Reading shelf (T-40) · FI-18 reading statistics (T-41).
+- **App:** FI-16 About / Sources & Licenses (T-39) · FI-19 portable Library backup (T-42).
+- **Theming:** FI-6 AO3-red accent + color picker (T-16).
+
+---
+
+## ✨ UI Polish (UI-N registry)
+
+_Consolidated from the former `docs/UI_Polish_Todo.md`._
+- **UI-1** — Refined the Search pagination pill: elevated card, tightly grouped page pills, long-press arrows jump to first/last, nearby-page fallback on narrow cards (Done; T-14/T-25).
 
 ---
 
