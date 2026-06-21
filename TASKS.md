@@ -35,12 +35,49 @@ _None._ Claim a task from the Backlog and add a row here.
   resolve each chapter's CSS/image/font resources). Low ROI — do only if large-work
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
-### P2 — features & polish (detail in `docs/`)
-_None currently._
+### P2 — features (roadmap "Later" list; ID assigned on pickup)
+- **Reading statistics & insights** — works/words read, fandoms, finished vs
+  in-progress, etc., aggregated from local `SavedWork`. Self-contained; the natural
+  next feature.
+- **iCloud backup + Export / Import** — large; CloudKit sync and/or a file
+  export/import of the library + settings.
+- **Highlights / notes / annotations** — large; a reader annotation system.
+- **Text-to-Speech (TTS)** — large; `AVSpeechSynthesizer` in the reader.
+
+### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
+- **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
+  extract its `authenticity_token`, POST the form, detect a login redirect. Build on
+  `AO3AuthService.authenticatedRequest`. See [[native-ao3-roadmap]] Phase 3 +
+  [`docs/AO3Authentication.md`](docs/AO3Authentication.md).
+
+### UI-refinement & maintainability pass (user-planned — *after* the feature backlog)
+- Polish the AO3 account sub-picker (the "Subs" label, 4-segment layout, "AO3
+  History" vs the local "History"); a dedup / clarity sweep over the Phase-2 +
+  download-queue / bulk-actions code; general maintainability pass.
 
 ### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
 - **T-20 · Phase-4 interaction polish** — auto-hide chrome on scroll, custom
   page-turn animation, safe-area inset tuning. (Notes ▸ Migration status, Phase 4 = partial.)
+
+### ⚠️ Verification & housekeeping debts (clear before trusting the new features)
+- **🔴 Live AO3 verification (HIGH).** Every scraping feature shipped 2026-06-20
+  (auth login; Marked-for-Later / Bookmarks / History / Subscriptions selectors +
+  URLs; the series-page scrape for the download queue) is **build + unit-test
+  verified only — never run with a real AO3 session.** Selector/URL assumptions are
+  encoded in `KudosTests` fixtures; some may need a one-line fix once tested logged
+  in. A single live login test validates the whole Phase-2 batch at once.
+- **🔴 Visual verification (HIGH).** The simulator's display surfaces were
+  unavailable for the entire 2026-06-20 session, so nothing new was screenshotted
+  (AO3 sub-picker, Library bulk-select, download-queue banner, About page, Continue
+  Reading shelf). All build/test-verified and the app boots clean, but unseen.
+- **Keychain on a signed device build.** Confirm the session actually persists to
+  Keychain on real hardware (the WebKit-store fallback is meant to be the
+  Simulator/dev backstop only). See [`docs/AO3Authentication.md`](docs/AO3Authentication.md).
+- **Broken intermediate commit `cb8e67b`** (the T-34 split) is on both branches'
+  history and does **not** build on its own; HEAD is fine. Squash it via force-push
+  only with the human's OK (AGENTS.md ▸ ask before force-pushing).
+- **Scratch worktree cleanup.** Leftover `/private/tmp/Kudos-*` worktrees (incl. the
+  `readium-migration` one ports go through). `git worktree prune` + remove when done.
 
 ### Bugs
 - _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
@@ -114,8 +151,17 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 ## ↩️ Context for the next session
 
-- **P0** (lint, error handling, tests) and **P1 #5 / #6 / #8** are **done on both
-  branches and pushed**; both branches are in sync with `origin`.
-- Natural next pickup: Readium Phase-4 polish (T-20).
-- Quick commands — Build: `xcodebuild … CODE_SIGNING_ALLOWED=NO` · Test:
+- **Done & pushed (both branches, in sync with `origin`):** the full AO3 auth
+  foundation + **Phase-2 reads** (Marked for Later, Bookmarks, History,
+  Subscriptions — all under the Bookmarks tab's "AO3" segment), plus the
+  missing-features batch — **download queue & bulk actions, About page, Continue
+  Reading shelf** (T-30…T-40, FI-10…17).
+- **Natural next pickup:** **Reading statistics** (self-contained), or kick off the
+  **UI-refinement + maintainability pass**. But see the **Verification &
+  housekeeping debts** above first — a **live AO3 login test** would de-risk the
+  whole Phase-2 batch, and nothing this session was seen on screen.
+- **Porting note:** `readium-migration` is checked out in a `/private/tmp/Kudos-*`
+  worktree — port there (cherry-pick), not via `git checkout` in the main repo. See
+  [[legacy-first-workflow]].
+- Quick commands — Build/Test: `xcodebuild … CODE_SIGNING_ALLOWED=NO` ·
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
