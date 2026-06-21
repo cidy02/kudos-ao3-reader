@@ -125,6 +125,8 @@ if which swiftlint >/dev/null; then swiftlint; else echo "warning: SwiftLint not
 
 Planning and tracking notes live in [`TASKS.md`](TASKS.md) and [`docs/`](docs/):
 
+- [`docs/PROJECT_PHILOSOPHY.md`](docs/PROJECT_PHILOSOPHY.md) — the canonical
+  product direction, design/engineering principles, and contributor guidance.
 - [`TASKS.md`](TASKS.md) — the single task board: backlog, completed work, and the
   consolidated **Bugs (BUG-N)**, **Feature Ideas (FI-N)**, and **UI Polish (UI-N)**
   registries (these replaced the former `docs/Bugs.md`, `Feature_Ideas.md`, and
