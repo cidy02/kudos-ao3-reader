@@ -22,21 +22,34 @@ final class FandomCatalog {
         fandomsByCategory[category.id]
     }
 
-    /// Lazily fetches any not-yet-cached categories, **sequentially** (the AO3
-    /// client serializes requests to stay polite). Cards fill in as each lands.
-    /// Safe to call repeatedly — already-loaded / in-flight categories are skipped.
+    /// Lazily fetches any not-yet-cached categories **concurrently but bounded** via
+    /// `AO3RequestCoordinator` (a few at a time — polite, not a flood), so the cards
+    /// fill in together instead of one slow row at a time. Each result is applied as
+    /// it lands. Safe to call repeatedly — already-loaded / in-flight categories are
+    /// skipped — and cancellable (leaving the screen stops the remaining fetches).
     func loadMissing(for categories: [AO3MediaCategory]) async {
-        for category in categories {
-            let key = category.id
-            guard fandomsByCategory[key] == nil,
-                  !inFlight.contains(key),
-                  !category.fandomsURL.isEmpty else { continue }
-            inFlight.insert(key)
-            if let list = try? await AO3Client.shared.fandoms(atPath: category.fandomsURL) {
-                fandomsByCategory[key] = list
+        let pending = categories.filter {
+            fandomsByCategory[$0.id] == nil && !inFlight.contains($0.id) && !$0.fandomsURL.isEmpty
+        }
+        guard !pending.isEmpty else { return }
+        for category in pending { inFlight.insert(category.id) }
+
+        await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
+            for category in pending {
+                let key = category.id
+                let path = category.fandomsURL
+                group.addTask {
+                    let list = try? await AO3RequestCoordinator.shared.withSlot {
+                        try await AO3Client.shared.fandoms(atPath: path)
+                    }
+                    return (key, list)
+                }
             }
-            inFlight.remove(key)
-            if Task.isCancelled { return }
+            for await (key, list) in group {
+                if let list { fandomsByCategory[key] = list }
+                inFlight.remove(key)
+                if Task.isCancelled { group.cancelAll() }
+            }
         }
     }
 }
