@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="book" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E5392F"/>
+      <stop offset="1" stop-color="#C72219"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#B71D15"/>
+      <stop offset="1" stop-color="#D32A20"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed warm background; iOS masks the square automatically -->
+  <rect width="1024" height="1024" fill="#F4EFE6"/>
+
+  <!-- Soft shadow beneath the book -->
+  <ellipse cx="520" cy="812" rx="232" ry="34" fill="#000000" opacity="0.10"/>
+
+  <!-- Black bookmark ribbon, hanging from the bottom of the closed book -->
+  <path d="M452 690 L556 690 L556 902 L504 862 L452 902 Z" fill="#161616"/>
+
+  <!-- Page block peeking at the bottom -->
+  <rect x="312" y="742" width="408" height="56" rx="16" fill="#F7F3EC"/>
+
+  <!-- Spine panel (left edge of the closed book) -->
+  <rect x="300" y="196" width="70" height="572" rx="30" fill="url(#spine)"/>
+
+  <!-- Front cover -->
+  <rect x="344" y="196" width="392" height="572" rx="34" fill="url(#book)"/>
+  <!-- Groove highlight between spine and cover -->
+  <rect x="360" y="210" width="6" height="544" rx="3" fill="#ffffff" opacity="0.16"/>
+
+  <!-- White heart cutout, centered on the cover -->
+  <path transform="translate(404,322) scale(2.45)"
+        d="M56,90 C56,90 14,60 14,34 C14,18 30,12 41,18 C48,21.5 53,29 56,34 C59,29 64,21.5 71,18 C82,12 98,18 98,34 C98,60 56,90 56,90 Z"
+        fill="#F7F3EC"/>
+</svg>
