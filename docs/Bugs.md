@@ -9,7 +9,13 @@ when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `
 
 ## Active Bugs
 
-*(None currently tracked.)*
+### Cross-platform
+
+- **[BUG-4] Library bulk-select broke the macOS build** — Open (found
+  2026-06-20). T-37 stores SwiftUI `EditMode` directly in `LibraryView`, but
+  `EditMode` is unavailable on macOS. An iOS Simulator build and all tests pass;
+  a macOS app build fails at that property before reaching T-41's cross-platform
+  UI. Fix the selection state conditionally on `main`, then port it.
 
 ---
 

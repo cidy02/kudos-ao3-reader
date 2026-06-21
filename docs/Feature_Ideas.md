@@ -92,6 +92,13 @@ the status here in sync with the board.
 
 ### Library
 
+- **[FI-18] Reading statistics & insights** — *Status: Done (2026-06-20) · Board: T-41*
+  A local-only Library dashboard showing finished and in-progress works, words
+  read from finished works with known counts, recent reading activity, completion
+  rate, and most-read categorized fandoms. No AO3 account or network access.
+  Unrevealed Mature/Explicit works stay out of aggregates. Verified in the iPhone
+  17 simulator and covered by deterministic aggregation tests.
+
 - **[FI-17] Continue Reading shelf** — *Status: Done (2026-06-20) · Board: T-40*
   A horizontal "Continue Reading" shelf at the top of the Library showing
   in-progress works (started, not finished, EPUB on disk), most-recently-read
