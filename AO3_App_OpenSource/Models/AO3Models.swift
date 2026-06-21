@@ -472,7 +472,7 @@ struct AO3WorkTagGroups: Sendable {
 /// A fandom as listed on AO3's media page; its `name` is the canonical AO3 tag,
 /// which drops straight into a fandom search. `workCount` is the number of works
 /// tagged with the fandom, shown on the fandom list when available.
-struct AO3Fandom: Identifiable, Hashable, Sendable {
+struct AO3Fandom: Identifiable, Hashable, Sendable, Codable {
     var name: String
     var workCount: Int? = nil
     var id: String { name }

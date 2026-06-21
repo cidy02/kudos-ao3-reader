@@ -1,35 +1,52 @@
 import SwiftUI
 
-/// Session cache of each media category's full fandom list — the same data the
+/// Local-first cache of each media category's full fandom list — the same data the
 /// category detail page (`FandomListView`) loads from AO3's `/media/<name>/fandoms`
-/// index. The Browse cards use it for real fandom/work counts and to map the
-/// user's saved/recently-read works to a category.
+/// index. The Browse cards use it for real fandom/work counts and to map the user's
+/// saved/recently-read works to a category.
 ///
-/// A shared (per-launch) instance so the lists survive the Browse view being torn
-/// down and rebuilt when the user runs a search and returns to the idle state.
+/// Backed by an on-disk cache (`FandomCatalogCache`) so the counts show **instantly**
+/// on relaunch instead of re-scraping ~thousands of fandoms per category every time.
+/// Stale-while-revalidate: cached lists are shown immediately, then any
+/// missing/stale category is refreshed in the background, bounded + polite via
+/// `AO3RequestCoordinator`. A shared instance so the lists survive the Browse view
+/// being rebuilt when the user runs a search and returns to the idle state.
 @MainActor @Observable
 final class FandomCatalog {
     static let shared = FandomCatalog()
 
-    /// Fetched fandom lists keyed by category id (= name). Absent = not loaded yet.
+    /// Fandom lists keyed by category id (= name), shown by the cards. May hold a
+    /// stale cached list while a fresh copy is being fetched.
     private(set) var fandomsByCategory: [String: [AO3Fandom]] = [:]
-    private var inFlight: Set<String> = []
 
-    private init() {}
+    private let cache: FandomCatalogCache
+    /// Cache entries (with fetch dates) backing `fandomsByCategory`; drives staleness.
+    private var entries: [String: FandomCatalogCache.Entry] = [:]
+    private var inFlight: Set<String> = []
+    private var didLoadCache = false
+
+    private init() {
+        self.cache = FandomCatalogCache()
+    }
 
     /// The cached fandom list for a category, or nil while it's still loading.
     func fandoms(for category: AO3MediaCategory) -> [AO3Fandom]? {
         fandomsByCategory[category.id]
     }
 
-    /// Lazily fetches any not-yet-cached categories **concurrently but bounded** via
-    /// `AO3RequestCoordinator` (a few at a time — polite, not a flood), so the cards
-    /// fill in together instead of one slow row at a time. Each result is applied as
-    /// it lands. Safe to call repeatedly — already-loaded / in-flight categories are
-    /// skipped — and cancellable (leaving the screen stops the remaining fetches).
+    /// Shows any disk-cached lists immediately, then fetches the categories that are
+    /// missing or stale — **concurrently but bounded** (a few at a time, polite) so
+    /// the cards fill in together rather than one slow row at a time. Fresh results
+    /// update the cards and the on-disk cache. Safe to call repeatedly (in-flight /
+    /// fresh categories are skipped) and cancellable (leaving the screen stops the
+    /// remaining fetches).
     func loadMissing(for categories: [AO3MediaCategory]) async {
+        await loadCacheIfNeeded()
+
         let pending = categories.filter {
-            fandomsByCategory[$0.id] == nil && !inFlight.contains($0.id) && !$0.fandomsURL.isEmpty
+            FandomCatalogCache.isStale(entries[$0.id])
+                && !inFlight.contains($0.id)
+                && !$0.fandomsURL.isEmpty
         }
         guard !pending.isEmpty else { return }
         for category in pending { inFlight.insert(category.id) }
@@ -45,11 +62,37 @@ final class FandomCatalog {
                     return (key, list)
                 }
             }
+            var changed = false
             for await (key, list) in group {
-                if let list { fandomsByCategory[key] = list }
+                if let list {
+                    fandomsByCategory[key] = list
+                    entries[key] = FandomCatalogCache.Entry(fandoms: list, fetchedAt: Date())
+                    changed = true
+                }
                 inFlight.remove(key)
                 if Task.isCancelled { group.cancelAll() }
             }
+            if changed { persist() }
         }
+    }
+
+    /// Loads the disk cache once (off the main actor) and shows cached lists so the
+    /// cards aren't blank on relaunch.
+    private func loadCacheIfNeeded() async {
+        guard !didLoadCache else { return }
+        didLoadCache = true
+        let cache = self.cache
+        let loaded = await Task.detached(priority: .utility) { cache.load() }.value
+        for (key, entry) in loaded {
+            entries[key] = entry
+            if fandomsByCategory[key] == nil { fandomsByCategory[key] = entry.fandoms }
+        }
+    }
+
+    /// Writes the cache off the main actor (the payload can be a few MB).
+    private func persist() {
+        let snapshot = entries
+        let cache = self.cache
+        Task.detached(priority: .utility) { cache.save(snapshot) }
     }
 }

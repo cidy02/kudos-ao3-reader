@@ -27,6 +27,16 @@ nonisolated enum Storage {
         return dir
     }
 
+    /// Evictable cache for scraped AO3 metadata (e.g. the fandom catalog), so the
+    /// app can show data instantly on relaunch instead of re-scraping. Under
+    /// `.cachesDirectory` so the OS may purge it under disk pressure.
+    static var metadataCacheDirectory: URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let dir = base.appendingPathComponent("Metadata", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
     /// Temporary destination for an in-flight download.
     static func tempDownloadURL(suggestedName: String) -> URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
