@@ -20,6 +20,8 @@ struct ReaderOptionsForm: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
+    @Query(sort: \SavedWork.dateAdded) private var works: [SavedWork]
+    @Query(sort: \Bookmark.dateAdded) private var bookmarks: [Bookmark]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -33,6 +35,12 @@ struct ReaderOptionsForm: View {
     @State private var showCustomize = false
     @State private var showAO3Login = false
     @State private var showAbout = false
+    @State private var exportingBackup = false
+    @State private var importingBackup = false
+    @State private var showImportConfirmation = false
+    @State private var backupDocument: KudosBackupDocument?
+    @State private var pendingBackup: KudosBackupContents?
+    @State private var backupNotice: BackupNotice?
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -223,6 +231,11 @@ struct ReaderOptionsForm: View {
                     Text("Ask before a swipe-to-delete removes a work from your Library.")
                 }
 
+                BackupSettingsSection(
+                    onExport: exportBackup,
+                    onImport: { importingBackup = true }
+                )
+
                 Section {
                     Toggle("Hide mature content", isOn: $hideMatureContent)
                     if hideMatureContent {
@@ -262,6 +275,57 @@ struct ReaderOptionsForm: View {
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result { urls.forEach(importFont) }
+        }
+        .fileExporter(
+            isPresented: $exportingBackup,
+            document: backupDocument,
+            contentType: .kudosBackup,
+            defaultFilename: "Kudos Backup \(Self.backupDateFormatter.string(from: Date()))"
+        ) { result in
+            switch result {
+            case .success:
+                backupNotice = BackupNotice(
+                    title: "Backup Exported",
+                    message: "\(works.count.formatted()) Library records were included."
+                )
+            case .failure(let error):
+                backupNotice = BackupNotice(
+                    title: "Couldn't Export Backup",
+                    message: error.localizedDescription
+                )
+            }
+            backupDocument = nil
+        }
+        .fileImporter(
+            isPresented: $importingBackup,
+            allowedContentTypes: [.kudosBackup],
+            allowsMultipleSelection: false
+        ) { result in
+            importBackup(result)
+        }
+        .confirmationDialog(
+            "Import this backup?",
+            isPresented: $showImportConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Import and Merge") { restorePendingBackup() }
+            Button("Cancel", role: .cancel) { pendingBackup = nil }
+        } message: {
+            if let backup = pendingBackup {
+                Text(
+                    "This backup contains \(backup.manifest.works.count) Library records, "
+                        + "\(backup.manifest.bookmarks.count) saved links, and "
+                        + "\(backup.manifest.fonts.count) custom fonts. Existing items won't "
+                        + "be deleted."
+                )
+            }
+        }
+        .alert(item: $backupNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         #if os(iOS)
         .sheet(isPresented: $showCustomize) {
@@ -309,5 +373,101 @@ struct ReaderOptionsForm: View {
             context.delete(font)
         }
         try? context.save()
+    }
+
+    // MARK: Backup export / import
+
+    private func exportBackup() {
+        do {
+            backupDocument = try KudosBackupService.makeDocument(
+                works: works,
+                bookmarks: bookmarks,
+                fonts: customFonts
+            )
+            exportingBackup = true
+        } catch {
+            backupNotice = BackupNotice(
+                title: "Couldn't Create Backup",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func importBackup(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            pendingBackup = try KudosBackupContents.read(from: url)
+            showImportConfirmation = true
+        } catch {
+            backupNotice = BackupNotice(
+                title: "Couldn't Read Backup",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func restorePendingBackup() {
+        guard let backup = pendingBackup else { return }
+        pendingBackup = nil
+        do {
+            let summary = try KudosBackupService.restore(backup, into: context)
+            applyRestoredTheme(backup.manifest.settings)
+            backupNotice = BackupNotice(
+                title: "Backup Imported",
+                message: "Merged \(summary.works) Library records, "
+                    + "\(summary.bookmarks) saved links, and \(summary.fonts) custom fonts."
+            )
+        } catch {
+            backupNotice = BackupNotice(
+                title: "Couldn't Import Backup",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func applyRestoredTheme(_ settings: KudosBackupSettings) {
+        themeManager.matchAppAndReader = false
+        themeManager.appTheme = ReaderTheme(rawValue: settings.appTheme) ?? .light
+        themeManager.readerTheme = ReaderTheme(rawValue: settings.readerTheme) ?? .light
+        themeManager.accentHex = settings.accentColorHex
+        themeManager.matchAppAndReader = settings.matchAppReaderTheme
+    }
+
+    private struct BackupNotice: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+    }
+
+    private static let backupDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
+struct BackupSettingsSection: View {
+    let onExport: () -> Void
+    let onImport: () -> Void
+
+    var body: some View {
+        Section {
+            Button(action: onExport) {
+                Label("Export Backup…", systemImage: "square.and.arrow.up")
+            }
+            Button(action: onImport) {
+                Label("Import Backup…", systemImage: "square.and.arrow.down")
+            }
+        } header: {
+            Text("Backup")
+        } footer: {
+            Text("Backups include Library records, EPUBs, User Tags, saved links, "
+                 + "custom fonts, and app settings. Import merges without deleting "
+                 + "items already on this device. AO3 sessions and passwords are "
+                 + "never included.")
+        }
     }
 }
