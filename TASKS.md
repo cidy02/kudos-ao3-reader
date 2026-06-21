@@ -95,6 +95,9 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-46 | Layout overhaul — **Library** rebuilt as a 5-section carousel dashboard (Reading Now, Saved for Later, Finished, Collections, Downloaded) via shared `WorkCarouselSection`; collapsible, `>` See-all → full list, per-section empty states; Saved for Later merges AO3 Marked for Later; Collections placeholder; filters/insights/privacy/tag-routing/iOS bulk-select preserved. Verified in sim. | Claude | `test/home-tab-overhaul` | `3fc9c98` | 2026-06-21 |
+| T-45 | Consolidate the `docs/Bugs.md` + `Feature_Ideas.md` + `UI_Polish_Todo.md` trackers into single BUG-N / FI-N / UI-N registries in `TASKS.md`; remove the three files; update README + AGENTS.md (Layout overhaul, task 2). | Claude | `test/home-tab-overhaul` | `bb0b224` | 2026-06-21 |
+| T-44 | Layout overhaul — **Home** tab rebuilt as a Books-style dashboard: collapsible horizontal carousels (Reading Now, Recently Updated, Subscriptions, Favorites, Recently Opened) with `>` See-all, per-section empty states, reading-progress bars, and AO3 update detection (`WorkUpdateChecker`, `SavedWork.knownChapterCount`). Added the `Home` tab + `Kudos_Layout_Structure.md`. Verified in sim. | Claude | `test/home-tab-overhaul` | `5286dda` (+ `5ffa33f`, `306ac6f`) | 2026-06-21 |
 | T-43 | Fix **BUG-4**: Library bulk-select `EditMode` is iOS-only → macOS build broke. Multi-select state guarded `#if os(iOS)`; macOS uses a plain `libraryList`. macOS + iOS both build, all tests pass. | Claude | both | _see git log_ | 2026-06-21 |
 | T-42 | Portable `.kudosbackup` export/import for Library records, EPUBs, User Tags, bookmarks, custom fonts, and app/reader settings; merge-only restore through the system document picker (FI-19) | Codex | both | `6048684` / `5cd9394` | 2026-06-20 |
 | T-41 | Local Reading Insights dashboard: works/words read, activity, completion, and top fandoms (FI-18) | Codex | both | `1cfe4b0` / `be74d8f` | 2026-06-20 |
@@ -190,6 +193,16 @@ _Consolidated from the former `docs/UI_Polish_Todo.md`._
   metadata on Readium vs keep the custom OPF layer?
 - **Cleanup:** `test/card-lists` is abandoned/polluted and local-only — delete it
   eventually; never merge it.
+- **Layout overhaul (`test/home-tab-overhaul`) — decided:** Home & Library both use
+  the shared `WorkCarouselSection`. **Library cards open the work's *detail* page**
+  (the management surface), not straight into the reader as on Home — by design.
+  **Saved for Later = local saved + AO3 Marked for Later** merged; **Collections =
+  placeholder** (no model yet); **no Synced/Local badges yet**. Branch is **not** to
+  be merged into `main`/`readium-migration` until the user says so.
+- **Open — layout follow-ups (deferred):** (1) light filter *quick-chips* on the
+  Library dashboard — only the active-filter banner + full Filters inspector exist
+  so far; (2) a `Collection` model to make Collections real; (3) confirm whether
+  Library cards should offer a reader-direct affordance.
 
 ---
 
