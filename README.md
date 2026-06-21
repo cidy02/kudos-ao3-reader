@@ -16,6 +16,9 @@ and SwiftData.
   Keychain persistence as the foundation for future account sync.
 - **Library & bookmarks** — saved works with rich metadata (rating, word count,
   chapters, kudos, series), custom tags, filtering, reading history, and favorites.
+- **Portable backups** — export Library records, EPUBs, tags, bookmarks, custom
+  fonts, and settings to a versioned `.kudosbackup` package; imports merge safely
+  and the system document picker supports iCloud Drive.
 - **Privacy-aware** — mature works can be hidden behind a Face ID gate.
 - **Cross-platform** — one SwiftUI codebase for iPhone, iPad, and Mac.
 
@@ -69,8 +72,9 @@ parsing, HTML-entity decoding / summary stripping, and work-tag normalization.
 Search-filter tests also cover advanced rating query generation, tag and facet
 exclusions, and the include/exclude/clear cycle. Authentication tests cover
 cookie scoping, session restoration and expiration, hidden login outcomes, and
-automatic fallback. A minimal hand-built `KudosTests/Fixtures/sample.epub` backs
-the EPUB tests.
+automatic fallback. Backup tests cover package round-tripping, merge restoration,
+and unsupported format versions. A minimal hand-built
+`KudosTests/Fixtures/sample.epub` backs the EPUB tests.
 
 ```bash
 Scripts/test.sh        # runs on the default iOS Simulator

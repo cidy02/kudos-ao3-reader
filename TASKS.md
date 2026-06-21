@@ -36,8 +36,8 @@ _None._ Claim a task from the Backlog and add a row here.
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
 ### P2 — features (roadmap "Later" list; ID assigned on pickup)
-- **iCloud backup + Export / Import** — large; CloudKit sync and/or a file
-  export/import of the library + settings.
+- **Automatic CloudKit backup/sync** — portable file Export / Import completed
+  in T-42; automatic background sync remains a later phase.
 - **Highlights / notes / annotations** — large; a reader annotation system.
 - **Text-to-Speech (TTS)** — large; `AVSpeechSynthesizer` in the reader.
 
@@ -87,6 +87,7 @@ _None._ Claim a task from the Backlog and add a row here.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
+| T-42 | Portable `.kudosbackup` export/import for Library records, EPUBs, User Tags, bookmarks, custom fonts, and app/reader settings; merge-only restore through the system document picker (FI-19) | Codex | both | `6048684` / `5cd9394` | 2026-06-20 |
 | T-41 | Local Reading Insights dashboard: works/words read, activity, completion, and top fandoms (FI-18) | Codex | both | `1cfe4b0` / `be74d8f` | 2026-06-20 |
 | T-40 | Continue Reading shelf at the top of the Library (in-progress works, most-recently-read first → one-tap resume into the reader); added `SavedWork.lastReadDate` (FI-17) | Claude | both | _see git log_ | 2026-06-20 |
 | T-39 | Settings → About / Sources & Licenses sheet (version, GPL-3.0, SwiftSoup/Readium/ao3_api credits, AO3/OTW disclaimer) (FI-16) | Claude | both | _see git log_ | 2026-06-20 |
@@ -155,10 +156,12 @@ _Older UI / reader / Library work predates this board — see `git log`._
   foundation + **Phase-2 reads** (Marked for Later, Bookmarks, History,
   Subscriptions — all under the Bookmarks tab's "AO3" segment), plus the
   missing-features batch — **download queue & bulk actions, About page, Continue
-  Reading shelf, and Reading Insights** (T-30…T-41, FI-10…18).
+  Reading shelf, Reading Insights, and portable Library backups** (T-30…T-42,
+  FI-10…19).
 - **Natural next pickup:** fix **BUG-4** to restore the promised macOS build,
-  then start **iCloud backup + Export / Import**. The **live AO3 verification**
-  debt still needs a real signed-in session.
+  then start **Highlights / notes / annotations**. Automatic CloudKit backup/sync
+  remains a later phase. The **live AO3 verification** debt still needs a real
+  signed-in session.
 - **Porting note:** `readium-migration` is checked out in a `/private/tmp/Kudos-*`
   worktree — port there (cherry-pick), not via `git checkout` in the main repo. See
   [[legacy-first-workflow]].
