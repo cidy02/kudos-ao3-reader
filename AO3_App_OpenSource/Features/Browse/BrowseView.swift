@@ -1,10 +1,13 @@
 import SwiftUI
 import SwiftData
 
-/// The AO3 browsing tab: a web view with floating Liquid Glass controls that
-/// captures EPUB downloads into the library and bookmarks pages.
-struct BrowseView: View {
+/// The AO3 website fallback: a web view with floating Liquid Glass controls that
+/// captures EPUB downloads into the library and bookmarks pages. Presented from the
+/// native Browse tab ("Open AO3 Website") and whenever something asks to open an AO3
+/// URL (`router.open`). No longer the primary Browse experience (Part 6).
+struct AO3WebBrowserView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @State private var model = BrowserModel()
@@ -15,16 +18,19 @@ struct BrowseView: View {
             WebView(webView: model.webView)
                 .ignoresSafeArea(edges: .bottom)
                 .overlay(alignment: .bottom) { bannerView }
-                .toolbar { browserToolbar }
+                .navigationTitle("AO3 Website")
                 #if os(iOS)
-                // Safari-style: hide the bottom tab bar while scrolling the page
-                // down, reveal it on scroll up (driven by the web view's scroll).
-                .toolbar(model.tabBarHidden ? .hidden : .visible, for: .tabBar)
-                .animation(.easeInOut(duration: 0.25), value: model.tabBarHidden)
+                .navigationBarTitleDisplayMode(.inline)
                 #endif
+                .toolbar { browserToolbar }
                 .onAppear {
                     configureImport()
                     model.applyTheme(themeManager.appTheme)
+                    // Opened to a specific URL (e.g. via router.open) — load it.
+                    if let url = router.pendingURL {
+                        model.load(url)
+                        router.pendingURL = nil
+                    }
                 }
                 .onChange(of: themeManager.appTheme) { _, theme in
                     model.applyTheme(theme)
@@ -65,6 +71,10 @@ struct BrowseView: View {
             Button { bookmarkCurrentPage() } label: {
                 Image(systemName: "bookmark")
             }
+        }
+
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { dismiss() }
         }
     }
 

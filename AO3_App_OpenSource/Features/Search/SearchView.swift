@@ -47,9 +47,6 @@ struct SearchView: View {
             .navigationDestination(for: WorkCollection.self) { collection in
                 CollectionDetailView(collection: collection)
             }
-            .navigationDestination(for: AO3MediaCategory.self) { category in
-                FandomListView(category: category, onSelect: searchFandomFromBrowse)
-            }
             .toolbar {
                 #if os(iOS)
                 // Search is a focused, full-screen mode. Results replace the
@@ -97,7 +94,7 @@ struct SearchView: View {
     private var content: some View {
         if phase == .idle {
             if localQuery.isEmpty {
-                MediaBrowserView(onSelectFandom: selectFandom)
+                searchPrompt
             } else {
                 localResultsList
             }
@@ -135,6 +132,16 @@ struct SearchView: View {
     }
 
     // MARK: Local-first results
+
+    /// Shown when nothing's typed yet. Fandom/category exploration lives in Browse.
+    private var searchPrompt: some View {
+        ContentUnavailableView {
+            Label("Search Kudos", systemImage: "magnifyingglass")
+        } description: {
+            Text("Find works in your library, or search AO3 by title, author, or tag. "
+                 + "Browse fandoms and categories in the Browse tab.")
+        }
+    }
 
     private var localQuery: String { filters.query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -583,20 +590,6 @@ struct SearchView: View {
     }
 
     // MARK: Searching
-
-    /// Runs a search for the tapped fandom from the Media Browser (macOS inline path).
-    private func selectFandom(_ name: String) {
-        setIncludedFandom(name)
-        runSearch()
-    }
-
-    /// Same, but pops the pushed fandom detail page so the results become visible
-    /// (the iOS Browse-by-fandom path navigates into a detail page first).
-    private func searchFandomFromBrowse(_ name: String) {
-        setIncludedFandom(name)
-        runSearch()
-        path = NavigationPath()
-    }
 
     private func setIncludedFandom(_ name: String) {
         filters.fandom = name
