@@ -320,28 +320,32 @@ struct LibraryView: View {
             ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
             #endif
         } else {
-            if hideMature && works.contains(where: \.isAdult) {
-                ToolbarItem { MatureRevealToggle() }
-            }
-            if !works.isEmpty {
-                ToolbarItem { filterButton }
-            }
-            if !statisticsWorks.isEmpty {
-                ToolbarItem {
+            // One group so the controls sit tight together (separate ToolbarItems get
+            // spread out by the system, squeezing the large "Library" title).
+            ToolbarItemGroup(placement: .primaryAction) {
+                if hideMature && works.contains(where: \.isAdult) {
+                    MatureRevealToggle()
+                }
+                if !works.isEmpty {
+                    filterButton
+                }
+                if !statisticsWorks.isEmpty {
                     NavigationLink {
                         ReadingStatisticsView(works: statisticsWorks)
                     } label: {
                         Label("Reading Insights", systemImage: "chart.bar.xaxis")
                     }
                 }
-            }
-            #if os(iOS)
-            if !works.isEmpty {
-                ToolbarItem {
-                    Button("Select") { enterSelectMode() }
+                #if os(iOS)
+                if !works.isEmpty {
+                    Button {
+                        enterSelectMode()
+                    } label: {
+                        Label("Select", systemImage: "checklist")
+                    }
                 }
+                #endif
             }
-            #endif
         }
     }
 
