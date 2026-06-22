@@ -77,10 +77,10 @@ struct WorkRow: View {
 
             // Stats wrap rather than truncate (matches AO3WorkRow).
             FlowLayout(spacing: 18, rowSpacing: 5) {
-                if !work.rating.isEmpty { statLabel(work.rating, "checkmark.shield") }
-                if work.wordCount > 0 { statLabel(work.wordCount.formatted(), "textformat.size") }
-                if !work.chapters.isEmpty { statLabel(work.chapters, "book") }
-                if work.kudos > 0 { statLabel(work.kudos.formatted(), "heart") }
+                if !work.rating.isEmpty { WorkStatLabel(text: work.rating, symbol: "checkmark.shield") }
+                if work.wordCount > 0 { WorkStatLabel(text: work.wordCount.formatted(), symbol: "textformat.size") }
+                if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
+                if work.kudos > 0 { WorkStatLabel(text: work.kudos.formatted(), symbol: "heart") }
             }
             .font(.caption2)
             .foregroundStyle(.tertiary)
@@ -88,19 +88,5 @@ struct WorkRow: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func statLabel(_ text: String, _ symbol: String) -> some View {
-        // The icon hugs its own label (tight inner spacing) and is bold + tinted in
-        // the theme accent; the wider FlowLayout spacing keeps separate stats apart,
-        // so each glyph reads as belonging to the value beside it.
-        HStack(spacing: 3) {
-            Image(systemName: symbol)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tint)
-            Text(text)
-        }
-        .lineLimit(1)
-        .fixedSize()
     }
 }

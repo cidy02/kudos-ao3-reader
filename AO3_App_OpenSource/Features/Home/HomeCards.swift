@@ -54,6 +54,7 @@ struct WorkCoverCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            CoverStatsLine(rating: work.rating, chapters: work.chapters)
             if let footer {
                 Text(footer)
                     .font(.caption2)
@@ -106,8 +107,32 @@ struct AO3WorkCoverCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            CoverStatsLine(rating: work.rating, chapters: work.chapters)
         }
         .frame(width: 120, alignment: .leading)
+    }
+}
+
+/// A compact rating + chapter-count line for the cover-card shelves, using the same
+/// `WorkStatLabel` glyphs as the dense rows so every surface's metadata matches.
+struct CoverStatsLine: View {
+    let rating: String
+    let chapters: String
+
+    var body: some View {
+        let ratingShort = WorkStat.ratingShort(rating)
+        if ratingShort != nil || !chapters.isEmpty {
+            HStack(spacing: 10) {
+                if let ratingShort {
+                    WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
+                }
+                if !chapters.isEmpty {
+                    WorkStatLabel(text: chapters, symbol: "book")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
     }
 }
 
