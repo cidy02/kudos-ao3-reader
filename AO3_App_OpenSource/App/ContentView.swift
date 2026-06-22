@@ -100,24 +100,17 @@ struct ContentView: View {
         #endif
     }
 
-    /// The Settings button shown as a sidebar footer (macOS) / tab accessory (iOS).
-    /// Toggles the Settings inspector rather than presenting a sheet.
-    private var settingsButton: some View {
+    /// The global Search action, shown as a sidebar footer (macOS) / tab accessory
+    /// (visionOS). Settings now lives in the Account tab.
+    private var searchButton: some View {
         Button {
-            router.toggle(.settings)
+            router.selection = .search
         } label: {
-            Label("Settings", systemImage: "gearshape")
+            Label("Search", systemImage: "magnifyingglass")
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    /// The reading/display options, shown in the right inspector — consistent with
-    /// the Reader's Chapters and Display Options panels.
-    private var settingsInspector: some View {
-        ReaderOptionsForm(includeAppSettings: true)
-            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
     }
 
     /// The detail content for the selected section.
@@ -125,15 +118,10 @@ struct ContentView: View {
     private func destination(for tab: AppTab) -> some View {
         switch tab {
         case .home: HomeView()
-        case .search: SearchView()
-        case .browse: BrowseView()
         case .library: LibraryView()
-        case .bookmarks: BookmarksView()
-        case .settings:
-            NavigationStack {
-                ReaderOptionsForm(includeAppSettings: true)
-                    .navigationTitle("Settings")
-            }
+        case .browse: BrowseView()
+        case .account: AccountView()
+        case .search: SearchView()
         }
     }
 
@@ -148,7 +136,7 @@ struct ContentView: View {
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 215, max: 280)
             .safeAreaInset(edge: .bottom) {
-                settingsButton
+                searchButton
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
                     .glassEffect(.regular.interactive(), in: .capsule)
@@ -157,9 +145,6 @@ struct ContentView: View {
             }
         } detail: {
             destination(for: router.selection)
-                .inspector(isPresented: router.isShowing(.settings)) {
-                    settingsInspector
-                }
         }
     }
 
@@ -180,23 +165,19 @@ struct ContentView: View {
                 }
             }
             #if os(iOS)
-            // The Settings button uses iOS 26's search-role slot so the system
-            // lays it out as a separate circular button beside the tab bar and
-            // reserves space for it — the same relationship Apple Books gives its
-            // Search button, instead of an overlay that grazes the last tab.
-            Tab(AppTab.settings.title, systemImage: AppTab.settings.symbol,
-                value: AppTab.settings, role: .search) {
-                destination(for: .settings)
+            // Global Search uses iOS 26's search-role slot so the system lays it out
+            // as a separate circular button beside the tab bar (the same relationship
+            // Apple Books gives its Search button), distinct from the four core tabs.
+            Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
+                value: AppTab.search, role: .search) {
+                destination(for: .search)
             }
             #endif
         }
         .tabViewStyle(.sidebarAdaptable)
         #if os(visionOS)
-        .inspector(isPresented: router.isShowing(.settings)) {
-            settingsInspector
-        }
         .tabViewBottomAccessory {
-            settingsButton
+            searchButton
         }
         #endif
     }
