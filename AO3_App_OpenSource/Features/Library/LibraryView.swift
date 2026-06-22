@@ -118,7 +118,7 @@ struct LibraryView: View {
     private var dashboard: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if filters.hasActiveFilters { activeFilterBanner }
+                fandomFilterBar
                 localCarousel(.readingNow)
                 savedForLaterCarousel
                 localCarousel(.finished)
@@ -155,7 +155,8 @@ struct LibraryView: View {
     private var savedForLaterCarousel: some View {
         let kind = LibrarySectionKind.savedForLater
         let saved = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
-        let hasItems = !saved.isEmpty || !markedForLater.isEmpty
+        let mfl = filteredMarkedForLater
+        let hasItems = !saved.isEmpty || !mfl.isEmpty
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
@@ -168,12 +169,23 @@ struct LibraryView: View {
                 }
                 .buttonStyle(.plain)
             }
-            ForEach(markedForLater.prefix(12)) { work in
+            ForEach(mfl.prefix(12)) { work in
                 NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
                     .buttonStyle(.plain)
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
+        }
+    }
+
+    /// The AO3 Marked-for-Later (remote) list, narrowed by the active fandom
+    /// quick-filter so the chips affect this section too. The other, metadata-only
+    /// filters don't apply to remote summaries (they carry no rating/word count).
+    private var filteredMarkedForLater: [AO3WorkSummary] {
+        guard !filters.fandoms.isEmpty else { return markedForLater }
+        let wanted = Set(filters.fandoms.map { $0.lowercased() })
+        return markedForLater.filter { summary in
+            summary.fandoms.contains { wanted.contains($0.lowercased()) }
         }
     }
 
@@ -192,16 +204,67 @@ struct LibraryView: View {
         }
     }
 
-    private var activeFilterBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                .foregroundStyle(.tint)
-            Text("Filters active").font(.subheadline.weight(.medium))
-            Spacer()
-            Button("Reset") { filters = LibraryFilters() }
-                .font(.subheadline.weight(.semibold))
+    /// The user's most-common fandoms (privacy-filtered), most frequent first —
+    /// the data behind the quick-filter chips.
+    private var topFandoms: [String] {
+        let counts: [String: Int] = works
+            .filter(passesPrivacy)
+            .flatMap(\.workFandoms)
+            .reduce(into: [:]) { $0[$1, default: 0] += 1 }
+        return counts
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .prefix(10)
+            .map(\.key)
+    }
+
+    /// A light, horizontal quick-filter chip row: tap a fandom to filter every
+    /// section to it (the full faceted filters stay behind the "Filters" button).
+    /// Reuses `TagChip` so it matches the Browse/Search chips; a trailing Reset chip
+    /// appears whenever any filter (chip or inspector) is active.
+    @ViewBuilder
+    private var fandomFilterBar: some View {
+        let fandoms = topFandoms
+        if !fandoms.isEmpty || filters.hasActiveFilters {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if !fandoms.isEmpty {
+                        filterChip("All", selected: filters.fandoms.isEmpty) {
+                            filters.fandoms = []
+                        }
+                        ForEach(fandoms, id: \.self) { fandom in
+                            filterChip(fandom, selected: filters.fandoms.contains(fandom)) {
+                                filters.fandoms = filters.fandoms.contains(fandom) ? [] : [fandom]
+                            }
+                        }
+                    }
+                    if filters.hasActiveFilters {
+                        Button {
+                            withAnimation(.snappy) { filters = LibraryFilters() }
+                        } label: {
+                            Label("Reset", systemImage: "xmark")
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .foregroundStyle(.secondary)
+                                .background(.quaternary, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reset filters")
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
         }
-        .padding(.horizontal, 16)
+    }
+
+    private func filterChip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.snappy) { action() }
+        } label: {
+            TagChip(text: text, tinted: selected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     // MARK: Card details
