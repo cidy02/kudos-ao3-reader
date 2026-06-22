@@ -98,6 +98,9 @@ struct SearchView: View {
             } else {
                 localResultsList
             }
+        } else if phase == .loading && results.isEmpty {
+            // First load of an AO3 search: show the shape of the incoming results.
+            AO3WorkRowSkeletonList(count: 7)
         } else {
             ScrollViewReader { proxy in
                 List {

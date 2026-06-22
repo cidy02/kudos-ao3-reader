@@ -14,14 +14,6 @@ struct AO3AccountWorksList: View {
         case history
         case subscriptions
 
-        var loadingText: String {
-            switch self {
-            case .markedForLater: "Loading your reading list…"
-            case .bookmarks: "Loading your bookmarks…"
-            case .history: "Loading your history…"
-            case .subscriptions: "Loading your subscriptions…"
-            }
-        }
         var emptyTitle: String {
             switch self {
             case .markedForLater: "Nothing marked for later"
@@ -128,8 +120,9 @@ struct AO3AccountWorksList: View {
             }
 
         case .loading where works.isEmpty:
-            ProgressView(kind.loadingText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // First page of this AO3 list — show the work-row shape (same skeleton as
+            // Search/Browse) instead of a centered spinner.
+            AO3WorkRowSkeletonList()
 
         default:
             worksList

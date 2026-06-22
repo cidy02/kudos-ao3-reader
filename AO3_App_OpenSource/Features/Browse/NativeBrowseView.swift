@@ -59,20 +59,27 @@ struct FandomWorksView: View {
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
     var body: some View {
-        List {
-            if showPagination { Section { paginationRow } }
-            Section {
-                ForEach(results) { work in
-                    NavigationLink(value: work) {
-                        AO3WorkRow(work: work, expandAll: expandAll)
+        Group {
+            if phase == .loading && results.isEmpty {
+                // First load of this fandom's works — show the shape of the results.
+                AO3WorkRowSkeletonList(count: 6)
+            } else {
+                List {
+                    if showPagination { Section { paginationRow } }
+                    Section {
+                        ForEach(results) { work in
+                            NavigationLink(value: work) {
+                                AO3WorkRow(work: work, expandAll: expandAll)
+                            }
+                        }
+                        .cardRow()
                     }
+                    if showPagination { Section { paginationRow } }
                 }
-                .cardRow()
+                .cardList()
+                .overlay { statusOverlay }
             }
-            if showPagination { Section { paginationRow } }
         }
-        .cardList()
-        .overlay { statusOverlay }
         .navigationTitle(fandom)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

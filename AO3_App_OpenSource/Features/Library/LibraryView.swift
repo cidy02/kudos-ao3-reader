@@ -24,6 +24,9 @@ struct LibraryView: View {
     @State private var path = NavigationPath()
     @State private var filters = LibraryFilters()
     @State private var markedForLater: [AO3WorkSummary] = []
+    /// True only while the remote Marked-for-Later request is in flight, so the
+    /// Saved for Later carousel can show cover skeletons instead of its empty state.
+    @State private var isLoadingMarkedForLater = false
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
 
@@ -168,21 +171,28 @@ struct LibraryView: View {
         let saved = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
         let mfl = filteredMarkedForLater
         let hasItems = !saved.isEmpty || !mfl.isEmpty
+        // Skeletons only while the remote list is loading and there's nothing yet —
+        // local saved works render immediately and suppress the placeholders.
+        let showSkeleton = isLoadingMarkedForLater && !hasItems
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: hasItems,
+            hasItems: hasItems || showSkeleton,
             onSeeAll: hasItems ? { path.append(kind) } : nil
         ) {
-            ForEach(saved.prefix(12)) { work in
-                NavigationLink(value: work) {
-                    WorkCoverCard(work: work, footer: nil, progress: nil)
-                }
-                .buttonStyle(.plain)
-            }
-            ForEach(mfl.prefix(12)) { work in
-                NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+            if showSkeleton {
+                ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
+            } else {
+                ForEach(saved.prefix(12)) { work in
+                    NavigationLink(value: work) {
+                        WorkCoverCard(work: work, footer: nil, progress: nil)
+                    }
                     .buttonStyle(.plain)
+                }
+                ForEach(mfl.prefix(12)) { work in
+                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                        .buttonStyle(.plain)
+                }
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
@@ -381,7 +391,16 @@ struct LibraryView: View {
 
     /// Loads the user's AO3 "Marked for Later" list for the Saved for Later section.
     private func loadMarkedForLater() async {
+        // No request happens when signed out (accountWorks early-returns), so skip the
+        // loading flag — the local saved works (if any) and empty state show at once.
+        guard auth.isLoggedIn else {
+            markedForLater = []
+            isLoadingMarkedForLater = false
+            return
+        }
+        isLoadingMarkedForLater = true
         markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
+        isLoadingMarkedForLater = false
     }
 
     private func createCollection() {
