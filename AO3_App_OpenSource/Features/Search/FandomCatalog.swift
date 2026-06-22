@@ -34,6 +34,15 @@ final class FandomCatalog {
         fandomsByCategory[category.id]
     }
 
+    /// Clears the cached fandom catalog (disk + memory) — the Privacy & Local Data
+    /// "Clear Browse cache" action. It rebuilds the next time Browse is opened.
+    func clearCache() {
+        cache.clear()
+        fandomsByCategory = [:]
+        entries = [:]
+        didLoadCache = false
+    }
+
     /// Loads the on-disk fandom cache into memory **without any network**, so other
     /// surfaces (e.g. Global Search) can match the cached AO3 catalog instantly. The
     /// cached counts are kept fresh by the browser's stale-while-revalidate refresh;

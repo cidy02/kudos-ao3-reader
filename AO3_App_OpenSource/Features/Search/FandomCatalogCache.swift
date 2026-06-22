@@ -40,6 +40,12 @@ struct FandomCatalogCache: Sendable {
         try? data.write(to: fileURL, options: .atomic)
     }
 
+    /// Removes the cache file (the Privacy & Local Data "Clear" action). It rebuilds
+    /// the next time the user opens Browse.
+    func clear() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
     /// Whether a category needs (re)fetching: missing, or older than `maxAge`.
     static func isStale(_ entry: Entry?, now: Date = Date()) -> Bool {
         guard let entry else { return true }

@@ -18,7 +18,7 @@ struct AccountView: View {
     enum Route: Hashable {
         case subscriptions, ao3Bookmarks, markedForLater, ao3History
         case localHistory, localFavorites
-        case settings
+        case settings, privacy
     }
 
     var body: some View {
@@ -59,6 +59,7 @@ struct AccountView: View {
         case .localHistory: LocalReadingHistoryView()
         case .localFavorites: LocalFavoritesView()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
+        case .privacy: PrivacyDataView()
         }
     }
 
@@ -152,6 +153,9 @@ struct AccountView: View {
         Section("App") {
             NavigationLink(value: Route.settings) {
                 Label("Settings", systemImage: "gearshape")
+            }
+            NavigationLink(value: Route.privacy) {
+                Label("Privacy & Local Data", systemImage: "hand.raised")
             }
         }
     }
