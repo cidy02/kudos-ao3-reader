@@ -33,6 +33,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
+            .task { await FandomCatalog.shared.warmCache() }
             .navigationTitle("Search")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -164,6 +165,15 @@ struct SearchView: View {
         collections.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
     }
 
+    /// Cached AO3 fandoms matching the query (from the on-disk fandom catalog), minus
+    /// any already shown under the user's own library fandoms. Instant, no scraping;
+    /// tapping one runs the real AO3 search, which corrects any stale cached counts.
+    private var cachedAO3Fandoms: [AO3Fandom] {
+        let inLibrary = Set(matchingFandoms.map { $0.lowercased() })
+        return FandomCatalog.shared.cachedFandoms(matching: localQuery)
+            .filter { !inLibrary.contains($0.name.lowercased()) }
+    }
+
     /// On-device matches shown live as the user types, plus an explicit AO3 search
     /// action (no AO3 request fires until the user taps it or submits).
     private var localResultsList: some View {
@@ -185,10 +195,32 @@ struct SearchView: View {
                 }
             }
             if !matchingFandoms.isEmpty {
-                Section("Fandoms") {
+                Section("Fandoms in Your Library") {
                     ForEach(matchingFandoms.prefix(12), id: \.self) { fandom in
                         Button { router.filterLibrary(.fandom, fandom) } label: {
                             Label(fandom, systemImage: "books.vertical")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if !cachedAO3Fandoms.isEmpty {
+                Section("Fandoms on AO3") {
+                    ForEach(cachedAO3Fandoms, id: \.id) { fandom in
+                        Button {
+                            setIncludedFandom(fandom.name)
+                            runSearch()
+                        } label: {
+                            HStack {
+                                Label(fandom.name, systemImage: "books.vertical")
+                                Spacer()
+                                if let count = fandom.workCount {
+                                    Text(count.formatted(.number.notation(.compactName)))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
