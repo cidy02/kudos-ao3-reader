@@ -298,8 +298,21 @@ struct WorkDetailView: View {
                 }
                 .tint(work.isFavorite ? .yellow : nil)
             }
+            ToolbarItem {
+                Menu {
+                    if let id = ao3WorkID { AO3WorkActionsMenu(workID: id) }
+                } label: {
+                    Label("More actions", systemImage: "ellipsis.circle")
+                }
+                .disabled(ao3WorkID == nil)
+            }
         }
     }
+
+    // MARK: AO3 actions (web fallback)
+
+    /// The AO3 numeric work id parsed from the source URL (nil for non-AO3 imports).
+    private var ao3WorkID: Int? { WorkTags.ao3WorkID(from: work.sourceURL) }
 
     /// Opens the reader, re-downloading the EPUB first if this is a freed history
     /// entry. Reuses the work's stable id, so progress/tags stay attached.

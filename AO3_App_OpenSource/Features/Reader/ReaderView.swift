@@ -171,6 +171,16 @@ struct ReaderView: View {
                     Label("Display Options", systemImage: "textformat.size")
                 }
             }
+            ToolbarItem {
+                Menu {
+                    if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
+                        AO3WorkActionsMenu(workID: id)
+                    }
+                } label: {
+                    Label("More actions", systemImage: "ellipsis.circle")
+                }
+                .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
+            }
         }
         #if os(iOS)
         // Chapters / Display open as clean half-height sheets that float over the
