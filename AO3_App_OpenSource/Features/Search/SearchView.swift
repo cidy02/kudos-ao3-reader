@@ -8,6 +8,11 @@ struct SearchView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
 
+    // Local-first search sources (Global Search, Phase 2): matched on-device, live.
+    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var savedWorks: [SavedWork]
+    @Query(sort: \Tag.name) private var allTags: [Tag]
+    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+
     @State private var filters = AO3SearchFilters()
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
@@ -36,7 +41,10 @@ struct SearchView: View {
                 AO3WorkDetailView(work: work, path: $path)
             }
             .navigationDestination(for: SavedWork.self) { work in
-                ReaderView(work: work)
+                WorkDetailView(work: work)
+            }
+            .navigationDestination(for: WorkCollection.self) { collection in
+                CollectionDetailView(collection: collection)
             }
             .navigationDestination(for: AO3MediaCategory.self) { category in
                 FandomListView(category: category, onSelect: searchFandomFromBrowse)
@@ -79,12 +87,19 @@ struct SearchView: View {
         }
     }
 
-    /// The Media Browser fills the idle state; once a search runs, the results list
-    /// (with its loading / empty / error overlay) takes over.
+    /// Local-first Global Search: with no query, the Media Browser fills the idle
+    /// state; as the user types, on-device matches (works, fandoms, tags,
+    /// collections) appear live plus an explicit "Search AO3" action; once an AO3
+    /// search runs, the results list (with its loading / empty / error overlay)
+    /// takes over.
     @ViewBuilder
     private var content: some View {
         if phase == .idle {
-            MediaBrowserView(onSelectFandom: selectFandom)
+            if localQuery.isEmpty {
+                MediaBrowserView(onSelectFandom: selectFandom)
+            } else {
+                localResultsList
+            }
         } else {
             ScrollViewReader { proxy in
                 List {
@@ -118,6 +133,90 @@ struct SearchView: View {
         }
     }
 
+    // MARK: Local-first results
+
+    private var localQuery: String { filters.query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var matchingWorks: [SavedWork] {
+        let q = localQuery.lowercased()
+        return savedWorks.filter {
+            $0.title.lowercased().contains(q) || $0.author.lowercased().contains(q)
+        }
+    }
+
+    private var matchingFandoms: [String] {
+        let q = localQuery.lowercased()
+        var seen = Set<String>()
+        var out: [String] = []
+        for work in savedWorks {
+            for fandom in work.workFandoms where fandom.lowercased().contains(q) {
+                if seen.insert(fandom.lowercased()).inserted { out.append(fandom) }
+            }
+        }
+        return out
+    }
+
+    private var matchingTags: [Tag] {
+        allTags.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
+    }
+
+    private var matchingCollections: [WorkCollection] {
+        collections.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
+    }
+
+    /// On-device matches shown live as the user types, plus an explicit AO3 search
+    /// action (no AO3 request fires until the user taps it or submits).
+    private var localResultsList: some View {
+        List {
+            Section {
+                Button(action: runSearch) {
+                    Label("Search AO3 for “\(localQuery)”", systemImage: "magnifyingglass")
+                }
+            } header: {
+                Text("Archive of Our Own")
+            }
+
+            if !matchingWorks.isEmpty {
+                Section("In Your Library") {
+                    ForEach(matchingWorks.prefix(20)) { work in
+                        NavigationLink(value: work) { WorkRow(work: work) }
+                    }
+                    .cardRow()
+                }
+            }
+            if !matchingFandoms.isEmpty {
+                Section("Fandoms") {
+                    ForEach(matchingFandoms.prefix(12), id: \.self) { fandom in
+                        Button { router.filterLibrary(.fandom, fandom) } label: {
+                            Label(fandom, systemImage: "books.vertical")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if !matchingTags.isEmpty {
+                Section("Your Tags") {
+                    ForEach(matchingTags.prefix(12)) { tag in
+                        Button { router.filterLibrary(.userTag, tag.name) } label: {
+                            Label(tag.name, systemImage: "tag")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if !matchingCollections.isEmpty {
+                Section("Collections") {
+                    ForEach(matchingCollections.prefix(12)) { collection in
+                        NavigationLink(value: collection) {
+                            Label(collection.name, systemImage: "square.stack")
+                        }
+                    }
+                }
+            }
+        }
+        .cardList()
+    }
+
     private var showPagination: Bool { totalPages > 1 && !results.isEmpty }
 
     private let paginationTopID = "pagination-top"
@@ -132,7 +231,7 @@ struct SearchView: View {
     // MARK: Search bar + filter button
 
     private var searchField: some View {
-        GlassFieldBar(text: $filters.query, placeholder: "Search AO3 works", onSubmit: runSearch) {
+        GlassFieldBar(text: $filters.query, placeholder: "Search your library and AO3", onSubmit: runSearch) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
