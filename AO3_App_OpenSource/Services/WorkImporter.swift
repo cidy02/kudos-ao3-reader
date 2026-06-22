@@ -16,6 +16,7 @@ func importEPUB(
     source: URL?,
     isComplete: Bool = false,
     seriesURL: String = "",
+    knownChapterCount: Int = 0,
     into context: ModelContext
 ) throws -> SavedWork {
     let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
@@ -38,6 +39,10 @@ func importEPUB(
     work.seriesTitle = meta?.seriesTitle ?? ""
     work.seriesPosition = meta?.seriesIndex ?? 0
     work.seriesURL = seriesURL
+    // Baseline for update detection: the posted-chapter count at download time, so
+    // chapters AO3 adds afterwards surface in Home → Recently Updated. Native imports
+    // pass it from the AO3 work page; web imports baseline on the first update check.
+    work.knownChapterCount = knownChapterCount
 
     let destination = work.fileURL
     try? FileManager.default.removeItem(at: destination)

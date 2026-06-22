@@ -124,6 +124,7 @@ struct ContentView: View {
     @ViewBuilder
     private func destination(for tab: AppTab) -> some View {
         switch tab {
+        case .home: HomeView()
         case .search: SearchView()
         case .browse: BrowseView()
         case .library: LibraryView()
@@ -203,5 +204,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [SavedWork.self, Tag.self, Bookmark.self, CustomFont.self], inMemory: true)
+        .modelContainer(for: [SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self], inMemory: true)
 }

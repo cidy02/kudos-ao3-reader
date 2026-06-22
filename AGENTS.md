@@ -53,9 +53,8 @@ branch, touch only its files, and never revert another agent's commits.**
 ## Before you touch code (mandatory)
 
 1. Read **`AGENTS.md`** (this), **[`TASKS.md`](TASKS.md)**, **[`README.md`](README.md)**.
-2. Read the relevant tracker(s): [`docs/Bugs.md`](docs/Bugs.md),
-   [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md),
-   [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md).
+2. The bug / feature-idea / UI-polish trackers are now consolidated **into
+   [`TASKS.md`](TASKS.md)** (the Bugs / Feature Ideas / UI Polish registries).
 3. If your work touches the reader or the migration, read
    **`READIUM_MIGRATION_NOTES.md`** (gitignored, local-only — ask the human if absent).
 4. Run `git status` + `git branch --show-current`. Know where you are and that the
@@ -132,8 +131,8 @@ The next agent should continue from `TASKS.md` + your commit with **zero archaeo
 - Prefer small, reviewable commits over big drops.
 - Match the surrounding code style. The codebase is **hand-wrapped**; SwiftFormat is
   **advisory, not enforced** — do not bulk-reformat.
-- Keep `docs/` trackers current: move fixed bugs to `docs/Bugs.md` ▸ Fixed/Verified;
-  tick off items in `docs/Feature_Ideas.md` / `docs/UI_Polish_Todo.md`.
+- Keep the **`TASKS.md`** registries current: move fixed bugs to the Bugs registry,
+  and update the Feature Ideas / UI Polish registries as items land.
 - When you verify UI in the simulator, say what you saw (and how) in the commit body
   or `TASKS.md`.
 

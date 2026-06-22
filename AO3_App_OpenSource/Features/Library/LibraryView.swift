@@ -1,30 +1,38 @@
 import SwiftUI
 import SwiftData
 
-/// The library tab: saved works, filterable by tag, opening into the reader.
+/// The Library tab: a Books-style dashboard of the user's saved works. Every section
+/// is a collapsible horizontal card carousel with a `>` chevron that opens its full
+/// vertical list. Sections, in order: Reading Now, Saved for Later, Finished,
+/// Collections, Downloaded. Saved for Later merges in the user's AO3 "Marked for
+/// Later" list; Collections is a placeholder until shelves land.
+///
+/// Filtering (the inspector panel), Reading Insights, content privacy, and — on iOS —
+/// multi-select bulk actions are kept from the previous list-based Library.
 struct LibraryView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var themeManager
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
     @Query(sort: \Tag.name) private var tags: [Tag]
-    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
+    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
+    @State private var path = NavigationPath()
     @State private var filters = LibraryFilters()
-    @State private var pendingDelete: SavedWork?
+    @State private var markedForLater: [AO3WorkSummary] = []
+    @State private var showingNewCollection = false
+    @State private var newCollectionName = ""
 
-    // Multi-select / bulk actions. `EditMode` is iOS-only, so macOS keeps a plain
-    // list (no multi-select) — see `libraryList`.
+    // Multi-select / bulk actions. `EditMode` is iOS-only, so macOS has no select mode.
     #if os(iOS)
     @State private var editMode: EditMode = .inactive
     #endif
     @State private var selection = Set<UUID>()
     @State private var confirmBulkDelete = false
-
-    /// Tap a Continue Reading card to resume straight into the reader.
-    @State private var resumeWork: SavedWork?
 
     private var isSelecting: Bool {
         #if os(iOS)
@@ -37,36 +45,11 @@ struct LibraryView: View {
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
     private var statisticsWorks: [SavedWork] {
-        works.filter {
-            !hideMature || !$0.isAdult || gate.isRevealed($0)
-        }
+        works.filter { !hideMature || !$0.isAdult || gate.isRevealed($0) }
     }
 
-    /// In-progress works (started, not finished, file present), most recently read
-    /// first — the "Continue Reading" shelf. Capped so the shelf stays compact.
-    private var continueReading: [SavedWork] {
-        works
-            .filter { $0.hasEPUB && !$0.isFinished
-                && ($0.lastSpineIndex > 0 || $0.lastScrollFraction > 0)
-                && passesPrivacy($0) }
-            .sorted { ($0.lastReadDate ?? $0.dateAdded) > ($1.lastReadDate ?? $1.dateAdded) }
-            .prefix(10)
-            .map { $0 }
-    }
-
-    /// In-progress, transient downloads: have an EPUB, not explicitly saved,
-    /// not finished. Finishing an unprotected work frees its EPUB and removes it.
-    private var readingWorks: [SavedWork] {
-        filters.apply(to: works.filter { $0.hasEPUB && !$0.isSaved && !$0.isFinished && passesPrivacy($0) })
-    }
-
-    /// The permanent shelf: works the user explicitly saved.
-    private var savedWorks: [SavedWork] {
-        filters.apply(to: works.filter { $0.isSaved && passesPrivacy($0) })
-    }
-
-    /// Drops Mature/Explicit works in Hide mode (until revealed); Blur mode keeps
-    /// them in the list but `SensitiveWorkRow` blurs them.
+    /// Drops Mature/Explicit works in Hide mode (until revealed); Blur mode keeps them
+    /// in the list but `SensitiveWorkRow` blurs them.
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
     }
@@ -74,117 +57,33 @@ struct LibraryView: View {
     /// The user's own tag names, for the filter panel's "Your Tags" facet.
     private var userTagNames: [String] { tags.map(\.name) }
 
-    /// Opens the filter panel; the icon fills while any filter is active. Routed
-    /// through the shared router so only one inspector is ever open app-wide.
-    private var filterButton: some View {
-        Button {
-            router.toggle(.libraryFilters)
-        } label: {
-            Label("Filter", systemImage: filters.hasActiveFilters
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
-        }
-        .help("Filters")
-    }
-
-    /// The works list. iOS uses `List(selection:)` + `EditMode` for multi-select;
-    /// macOS (no `EditMode`) uses a plain list so row taps still navigate.
-    @ViewBuilder
-    private var libraryList: some View {
-        #if os(iOS)
-        List(selection: $selection) { listSections }
-            .cardList()
-            .environment(\.editMode, $editMode)
-        #else
-        List { listSections }
-            .cardList()
-        #endif
-    }
-
-    @ViewBuilder
-    private var listSections: some View {
-        if !isSelecting && !continueReading.isEmpty {
-            Section("Continue Reading") { continueReadingShelf }
-        }
-        if !readingWorks.isEmpty {
-            Section("Reading") {
-                ForEach(readingWorks, content: row).cardRow()
-            }
-        }
-        if !savedWorks.isEmpty {
-            Section("Saved") {
-                ForEach(savedWorks, content: row).cardRow()
-            }
-        }
-    }
-
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
-                if readingWorks.isEmpty && savedWorks.isEmpty {
-                    if hasHiddenWorks {
-                        MatureContentHiddenView()
-                    } else if filters.hasActiveFilters {
-                        noMatchState
-                    } else {
-                        emptyState
-                    }
+                if isSelecting {
+                    selectList
                 } else {
-                    libraryList
+                    dashboard
                 }
             }
+            .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle(isSelecting
                 ? (selection.isEmpty ? "Select Works" : "\(selection.count) Selected")
                 : "Library")
             #if os(iOS)
-            // Large, left-aligned title kept inline on the toolbar row (alongside the
-            // eye/filter buttons) rather than dropping to its own row. Restores the
-            // proper title size/alignment after the scroll-fix regression made it
-            // small + centered (.inline).
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
-            .navigationDestination(for: SavedWork.self) { work in
-                WorkDetailView(work: work)
-            }
-            // Continue Reading cards resume straight into the reader (these works
-            // all have their EPUB on disk, so no re-download is needed).
-            .navigationDestination(item: $resumeWork) { work in
-                ReaderView(work: work)
-            }
-            .toolbar {
-                if isSelecting {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { exitSelectMode() }
-                    }
-                    #if os(iOS)
-                    ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
-                    #else
-                    ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
-                    #endif
-                } else {
-                    if hideMature && works.contains(where: \.isAdult) {
-                        ToolbarItem { MatureRevealToggle() }
-                    }
-                    if !works.isEmpty {
-                        ToolbarItem { filterButton }
-                    }
-                    if !statisticsWorks.isEmpty {
-                        ToolbarItem {
-                            NavigationLink {
-                                ReadingStatisticsView(works: statisticsWorks)
-                            } label: {
-                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                            }
-                        }
-                    }
-                    #if os(iOS)
-                    if !works.isEmpty {
-                        ToolbarItem {
-                            Button("Select") { enterSelectMode() }
-                        }
-                    }
-                    #endif
-                }
+            .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+            .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
+            .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
+            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .toolbar { toolbarContent }
+            .alert("New Collection", isPresented: $showingNewCollection) {
+                TextField("Name", text: $newCollectionName)
+                Button("Create") { createCollection() }
+                Button("Cancel", role: .cancel) { newCollectionName = "" }
+            } message: {
+                Text("Name your collection.")
             }
             .confirmationDialog(
                 "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
@@ -205,14 +104,8 @@ struct LibraryView: View {
                     .presentationDragIndicator(.visible)
                     #endif
             }
-            .deleteConfirmation(
-                for: $pendingDelete,
-                title: "Delete this work?",
-                confirmLabel: "Delete",
-                message: { "“\($0.title)” will be removed from your Library. This can't be undone." },
-                perform: { delete($0) }
-            )
             .task { await backfillFilterMetadata() }
+            .task(id: auth.isLoggedIn) { await loadMarkedForLater() }
             // A tag tapped on a work's detail page filters the Library to it.
             // `initial: true` catches a tag set just before this view appears.
             .onChange(of: router.pendingLibraryTag, initial: true) { _, tag in
@@ -231,107 +124,289 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: Dashboard
+
+    private var dashboard: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                fandomFilterBar
+                localCarousel(.readingNow)
+                savedForLaterCarousel
+                localCarousel(.finished)
+                collectionsCarousel
+                localCarousel(.downloaded)
+            }
+            .padding(.vertical, 12)
+        }
+    }
+
+    /// A purely local section carousel (Reading Now / Finished / Downloaded). Applies
+    /// the active filters on top of the section's own filter + ordering.
+    private func localCarousel(_ kind: LibrarySectionKind) -> some View {
+        let sectionWorks = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
+        return WorkCarouselSection(
+            title: kind.title,
+            collapseKey: "library.\(kind.rawValue)",
+            hasItems: !sectionWorks.isEmpty,
+            onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
+        ) {
+            ForEach(sectionWorks.prefix(12)) { work in
+                NavigationLink(value: work) {
+                    WorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
+                }
+                .buttonStyle(.plain)
+            }
+        } emptyState: {
+            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
+        }
+    }
+
+    /// Saved for Later merges the user's saved works with their AO3 "Marked for Later"
+    /// list (loaded when signed in). The `>` chevron opens the combined full list.
+    private var savedForLaterCarousel: some View {
+        let kind = LibrarySectionKind.savedForLater
+        let saved = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
+        let mfl = filteredMarkedForLater
+        let hasItems = !saved.isEmpty || !mfl.isEmpty
+        return WorkCarouselSection(
+            title: kind.title,
+            collapseKey: "library.\(kind.rawValue)",
+            hasItems: hasItems,
+            onSeeAll: hasItems ? { path.append(kind) } : nil
+        ) {
+            ForEach(saved.prefix(12)) { work in
+                NavigationLink(value: work) {
+                    WorkCoverCard(work: work, footer: nil, progress: nil)
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(mfl.prefix(12)) { work in
+                NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                    .buttonStyle(.plain)
+            }
+        } emptyState: {
+            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
+        }
+    }
+
+    /// The AO3 Marked-for-Later (remote) list, narrowed by the active fandom
+    /// quick-filter so the chips affect this section too. The other, metadata-only
+    /// filters don't apply to remote summaries (they carry no rating/word count).
+    private var filteredMarkedForLater: [AO3WorkSummary] {
+        guard !filters.fandoms.isEmpty else { return markedForLater }
+        let wanted = Set(filters.fandoms.map { $0.lowercased() })
+        return markedForLater.filter { summary in
+            summary.fandoms.contains { wanted.contains($0.lowercased()) }
+        }
+    }
+
+    /// User-named Collections (shelves). A leading "New" card is always present so
+    /// creating one is one tap away; existing collections follow. Tapping a card
+    /// opens the collection; the `>` chevron isn't used (the New card covers create).
+    private var collectionsCarousel: some View {
+        let kind = LibrarySectionKind.collections
+        return WorkCarouselSection(
+            title: kind.title,
+            collapseKey: "library.\(kind.rawValue)",
+            hasItems: true
+        ) {
+            Button {
+                newCollectionName = ""
+                showingNewCollection = true
+            } label: {
+                NewCollectionCard()
+            }
+            .buttonStyle(.plain)
+
+            ForEach(collections) { collection in
+                NavigationLink(value: collection) {
+                    CollectionCard(collection: collection)
+                }
+                .buttonStyle(.plain)
+            }
+        } emptyState: {
+            EmptyView()
+        }
+    }
+
+    /// The user's most-common fandoms (privacy-filtered), most frequent first —
+    /// the data behind the quick-filter chips.
+    private var topFandoms: [String] {
+        let counts: [String: Int] = works
+            .filter(passesPrivacy)
+            .flatMap(\.workFandoms)
+            .reduce(into: [:]) { $0[$1, default: 0] += 1 }
+        return counts
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .prefix(10)
+            .map(\.key)
+    }
+
+    /// A light, horizontal quick-filter chip row: tap a fandom to filter every
+    /// section to it (the full faceted filters stay behind the "Filters" button).
+    /// Reuses `TagChip` so it matches the Browse/Search chips; a trailing Reset chip
+    /// appears whenever any filter (chip or inspector) is active.
+    @ViewBuilder
+    private var fandomFilterBar: some View {
+        let fandoms = topFandoms
+        if !fandoms.isEmpty || filters.hasActiveFilters {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if !fandoms.isEmpty {
+                        filterChip("All", selected: filters.fandoms.isEmpty) {
+                            filters.fandoms = []
+                        }
+                        ForEach(fandoms, id: \.self) { fandom in
+                            filterChip(fandom, selected: filters.fandoms.contains(fandom)) {
+                                filters.fandoms = filters.fandoms.contains(fandom) ? [] : [fandom]
+                            }
+                        }
+                    }
+                    if filters.hasActiveFilters {
+                        Button {
+                            withAnimation(.snappy) { filters = LibraryFilters() }
+                        } label: {
+                            Label("Reset", systemImage: "xmark")
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .foregroundStyle(.secondary)
+                                .background(.quaternary, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reset filters")
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func filterChip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.snappy) { action() }
+        } label: {
+            TagChip(text: text, tinted: selected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    // MARK: Card details
+
+    private func footer(_ kind: LibrarySectionKind, _ work: SavedWork) -> String? {
+        switch kind {
+        case .readingNow: work.lastSpineIndex > 0 ? "Ch \(work.lastSpineIndex + 1)" : nil
+        case .finished: "Finished"
+        default: nil
+        }
+    }
+
+    private func progress(_ kind: LibrarySectionKind, _ work: SavedWork) -> Double? {
+        kind == .readingNow ? work.readingProgress : nil
+    }
+
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isSelecting {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { exitSelectMode() }
+            }
+            #if os(iOS)
+            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+            #else
+            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+            #endif
+        } else {
+            if hideMature && works.contains(where: \.isAdult) {
+                ToolbarItem { MatureRevealToggle() }
+            }
+            if !works.isEmpty {
+                ToolbarItem { filterButton }
+            }
+            if !statisticsWorks.isEmpty {
+                ToolbarItem {
+                    NavigationLink {
+                        ReadingStatisticsView(works: statisticsWorks)
+                    } label: {
+                        Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                    }
+                }
+            }
+            #if os(iOS)
+            if !works.isEmpty {
+                ToolbarItem {
+                    Button("Select") { enterSelectMode() }
+                }
+            }
+            #endif
+        }
+    }
+
+    /// Opens the filter panel; the icon fills while any filter is active. Routed
+    /// through the shared router so only one inspector is ever open app-wide.
+    private var filterButton: some View {
+        Button {
+            router.toggle(.libraryFilters)
+        } label: {
+            Label("Filter", systemImage: filters.hasActiveFilters
+                ? "line.3.horizontal.decrease.circle.fill"
+                : "line.3.horizontal.decrease.circle")
+        }
+        .help("Filters")
+    }
+
+    // MARK: Loading
+
     /// Fills in the filter metadata (categorized Work Tags, warnings, categories,
-    /// language, word count) for any saved works that predate it, by refreshing
-    /// each from AO3 once. Runs over *all* works — not the filtered subset — so a
-    /// work isn't kept hidden by a filter it would actually match. Sequential, so
-    /// it never bursts requests; each refresh is guarded and skips works that are
-    /// already complete or have no AO3 source.
+    /// language, word count) for any saved works that predate it, by refreshing each
+    /// from AO3 once. Runs over *all* works — not the filtered subset — so a work isn't
+    /// kept hidden by a filter it would actually match. Sequential, so it never bursts
+    /// requests; each refresh is guarded and skips complete works / those with no source.
     private func backfillFilterMetadata() async {
         for work in works where work.needsAO3Refresh {
             await WorkTags.refreshFromAO3(for: work, in: context)
         }
     }
 
-    /// A horizontal shelf of Continue Reading cards; tapping one resumes the reader.
-    private var continueReadingShelf: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(continueReading) { work in
-                    Button { resumeWork = work } label: {
-                        ContinueReadingCard(work: work)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 4)
-        }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
+    /// Loads the user's AO3 "Marked for Later" list for the Saved for Later section.
+    private func loadMarkedForLater() async {
+        markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
     }
 
-    private func row(_ work: SavedWork) -> some View {
-        SensitiveWorkRow(work: work)
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button {
-                WorkLifecycle.setSaved(work, !work.isSaved, in: context)
-            } label: {
-                Label(
-                    work.isSaved ? "Unsave" : "Save",
-                    systemImage: work.isSaved ? "bookmark.slash" : "bookmark"
-                )
-            }
-            .tint(.blue)
-
-            Button {
-                toggleFavorite(work)
-            } label: {
-                Label(
-                    work.isFavorite ? "Unfavorite" : "Favorite",
-                    systemImage: work.isFavorite ? "star.slash" : "star"
-                )
-            }
-            .tint(.yellow)
-        }
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                if confirmBeforeDelete { pendingDelete = work } else { delete(work) }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-    }
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No saved works yet", systemImage: "books.vertical")
-        } description: {
-            Text("Browse AO3 and download a work as EPUB to add it here.")
-        } actions: {
-            Button("Browse AO3") { router.selection = .browse }
-        }
-    }
-
-    /// Filters are active but no saved work matches them.
-    private var noMatchState: some View {
-        ContentUnavailableView {
-            Label("No works match", systemImage: "line.3.horizontal.decrease.circle")
-        } description: {
-            Text("No saved works match the current filters.")
-        } actions: {
-            Button("Reset Filters") { filters = LibraryFilters() }
-        }
-    }
-
-    /// Shown when the library has works but they're all hidden by content privacy.
-    private var hasHiddenWorks: Bool {
-        hideMature && matureMode == .hide && !gate.revealAll && works.contains(where: \.isAdult)
-    }
-
-    private func toggleFavorite(_ work: SavedWork) {
-        work.isFavorite.toggle()
-        try? context.save()
-    }
-
-    private func delete(_ work: SavedWork) {
-        try? FileManager.default.removeItem(at: work.fileURL)
-        try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
-        context.delete(work)
+    private func createCollection() {
+        let trimmed = newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newCollectionName = ""
+        guard !trimmed.isEmpty else { return }
+        context.insert(WorkCollection(name: trimmed))
         try? context.save()
     }
 
     // MARK: Multi-select / bulk actions
+
+    /// All local works visible under privacy + the active filters, for the iOS
+    /// select-mode list. Already newest-first from the query.
+    private var selectableWorks: [SavedWork] {
+        filters.apply(to: works.filter(passesPrivacy))
+    }
+
+    @ViewBuilder
+    private var selectList: some View {
+        #if os(iOS)
+        List(selection: $selection) {
+            Section {
+                ForEach(selectableWorks) { SensitiveWorkRow(work: $0) }
+                    .cardRow()
+            }
+        }
+        .cardList()
+        .environment(\.editMode, $editMode)
+        #else
+        EmptyView()
+        #endif
+    }
 
     /// The bulk-action controls shown while selecting (bottom bar on iOS). Delete
     /// always confirms — it's a batch and can't be undone.
@@ -378,7 +453,7 @@ struct LibraryView: View {
     }
 
     private func bulkDelete() {
-        for work in selectedWorks { delete(work) }
+        for work in selectedWorks { WorkLifecycle.delete(work, in: context) }
         exitSelectMode()
     }
 
@@ -392,37 +467,5 @@ struct LibraryView: View {
         for work in selectedWorks { work.isFavorite = true }
         try? context.save()
         exitSelectMode()
-    }
-}
-
-/// A compact card for the Library's Continue Reading shelf: title, author, and the
-/// chapter to resume at.
-private struct ContinueReadingCard: View {
-    let work: SavedWork
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(work.title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-            if !work.author.isEmpty {
-                Text(work.author)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            Label(resumeText, systemImage: "book")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(12)
-        .frame(width: 168, height: 112, alignment: .topLeading)
-        .background(.regularMaterial, in: .rect(cornerRadius: 14))
-    }
-
-    private var resumeText: String {
-        work.lastSpineIndex > 0 ? "Resume · Ch \(work.lastSpineIndex + 1)" : "Resume"
     }
 }

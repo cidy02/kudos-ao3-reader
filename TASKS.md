@@ -85,7 +85,7 @@ handoff channel between sessions and between agents.
   and rebuild. Use a fresh `-derivedDataPath` for `main` vs `readium-migration`.
 
 ### Bugs
-- _No active bugs._ ↳ [`docs/Bugs.md`](docs/Bugs.md).
+- _No active bugs._ ↳ see the **🐛 Bugs registry** below.
 
 ---
 
@@ -93,10 +93,15 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch(es) | SHA (main / readium-migration) | Date |
 |----|------|-------|------------|--------------------------------|------|
-| T-51 | **Master prompt Phase B** — networking politeness/local-first (pushed to `main` + `readium-migration`). (1) `AO3RequestCoordinator` — polite bounded-concurrency gate (3) complementing `AO3Client`; `FandomCatalog` loads Browse-by-category prefetches concurrently-but-bounded. (2) **Local-first disk cache** (`FandomCatalogCache`, stale-while-revalidate): counts show instantly on relaunch (was 30–60s), fresh categories = zero AO3 traffic. (3) **Request coalescing** (`RequestCoalescer` in `AO3Client.fetchData`): concurrent identical GETs share one round-trip. 10 tests; sim-verified. **Proposed/deferred (need owner OK per prompt):** formalize `DownloadQueue`→DownloadCoordinator (2-concurrent) + `WorkImporter`→ImportCoordinator (serialized writes) — functionality already exists; and wider cache/coalesce rollout. | Claude | both | `ae22b2f`, `aec3554`, `5e28a4c` | 2026-06-21 |
-| T-50 | **Master prompt Phase A** (on `feature/app-foundation`, off `main`): new app icon (red book + heart cutout + black bookmark, vector source `Design/AppIcon.svg`, all sizes regenerated, alpha flattened); first-launch **WelcomeView** (once-only via `hasCompletedOnboarding`, theme-aware, accessible); **shake-to-report** (`ShakeDetector` + `BugReportView` → prefilled GitHub issue, no auto-collection) reachable by shake or About; `AppLinks`. Verified in sim. | Claude | `feature/app-foundation` | `e56e97b`, `b1d23a2` | 2026-06-21 |
-| T-49 | Add canonical **`docs/PROJECT_PHILOSOPHY.md`** (master prompt Part 3); linked from README + AGENTS. Propagated to **all branches** (main `7aa3d26`, readium-migration `fdc580e`, test/home-tab-overhaul `9a5de4e`). | Claude | all | `7aa3d26` | 2026-06-21 |
-| T-48 | **Security:** scrub the Apple `DEVELOPMENT_TEAM` ID from `project.pbxproj` → `""` now that the repo is public. Applied on all branches (main `e36dda5`, readium-migration `3c05e8b`, test/home-tab-overhaul `3510397`, feature `64b1c82`). Note: still present in git **history** — purge needs a force-push rewrite (deferred, owner's call). | Claude | all | `e36dda5` | 2026-06-21 |
+| T-53 | Library **real Collections** (user-named shelves): `WorkCollection` SwiftData model (many-to-many w/ `SavedWork`; registered in the container); Collections dashboard section (leading "New Collection" card + per-collection cards); `CollectionDetailView` (list/remove works, rename/delete); `AddToCollectionView` sheet from a work's detail page (toggle membership, create). Builds iOS+macOS; section + New card sim-verified. | Claude | `test/home-tab-overhaul`→`main` | `2570f8e` | 2026-06-22 |
+| T-52 | Library **top-fandom quick-filter chips** on the dashboard (data-driven `All` + most-common fandoms, reuse `TagChip`; tap → filter all sections incl. AO3 Marked-for-Later; trailing Reset; replaces the plain "Filters active" banner). Chip UI sim-verified. | Claude | `test/home-tab-overhaul`→`main` | `73d7e84` | 2026-06-21 |
+| T-51 | **Master prompt Phase B** — networking politeness/local-first (`main` + `readium-migration`). (1) `AO3RequestCoordinator` — polite bounded-concurrency gate (3) complementing `AO3Client`; `FandomCatalog` loads Browse-by-category prefetches concurrently-but-bounded. (2) **Local-first disk cache** (`FandomCatalogCache`, stale-while-revalidate). (3) **Request coalescing** (`RequestCoalescer` in `AO3Client.fetchData`). 10 tests; sim-verified. **Proposed/deferred:** formalize `DownloadQueue`→DownloadCoordinator + `WorkImporter`→ImportCoordinator; wider cache/coalesce rollout. | Claude | both | `ae22b2f`, `aec3554`, `5e28a4c` | 2026-06-21 |
+| T-50 | **Master prompt Phase A**: new app icon (red book + heart cutout + black bookmark, vector source `Design/AppIcon.svg`); first-launch **WelcomeView** (`hasCompletedOnboarding`, theme-aware, accessible); **shake-to-report** (`ShakeDetector` + `BugReportView` → prefilled GitHub issue) reachable by shake or About; `AppLinks`. Verified in sim. | Claude | `main` + `readium-migration` | `e56e97b`, `b1d23a2` | 2026-06-21 |
+| T-49 | Add canonical **`docs/PROJECT_PHILOSOPHY.md`** (master prompt Part 3); linked from README + AGENTS. On all branches. | Claude | all | `7aa3d26` | 2026-06-21 |
+| T-48 | **Security:** scrub the Apple `DEVELOPMENT_TEAM` ID from `project.pbxproj` → `""` (repo is public). All branches. Still in git **history** — purge needs a force-push rewrite (deferred, owner's call). | Claude | all | `e36dda5` | 2026-06-21 |
+| T-46 | Layout overhaul — **Library** rebuilt as a 5-section carousel dashboard (Reading Now, Saved for Later, Finished, Collections, Downloaded) via shared `WorkCarouselSection`; collapsible, `>` See-all → full list, per-section empty states; Saved for Later merges AO3 Marked for Later; filters/insights/privacy/tag-routing/iOS bulk-select preserved. Verified in sim. | Claude | `test/home-tab-overhaul`→`main` | `3fc9c98` | 2026-06-21 |
+| T-45 | Consolidate the `docs/Bugs.md` + `Feature_Ideas.md` + `UI_Polish_Todo.md` trackers into single BUG-N / FI-N / UI-N registries in `TASKS.md`; remove the three files; update README + AGENTS.md. | Claude | `test/home-tab-overhaul`→`main` | `bb0b224` | 2026-06-21 |
+| T-44 | Layout overhaul — **Home** tab rebuilt as a Books-style dashboard: collapsible horizontal carousels (Reading Now, Recently Updated, Subscriptions, Favorites, Recently Opened) with `>` See-all, per-section empty states, reading-progress bars, and AO3 update detection (`WorkUpdateChecker`, `SavedWork.knownChapterCount`). Added the `Home` tab + `Kudos_Layout_Structure.md`. Verified in sim. | Claude | `test/home-tab-overhaul`→`main` | `5286dda` (+ `5ffa33f`, `306ac6f`) | 2026-06-21 |
 | T-43 | Fix **BUG-4**: Library bulk-select `EditMode` is iOS-only → macOS build broke. Multi-select state guarded `#if os(iOS)`; macOS uses a plain `libraryList`. macOS + iOS both build, all tests pass. | Claude | both | _see git log_ | 2026-06-21 |
 | T-42 | Portable `.kudosbackup` export/import for Library records, EPUBs, User Tags, bookmarks, custom fonts, and app/reader settings; merge-only restore through the system document picker (FI-19) | Codex | both | `6048684` / `5cd9394` | 2026-06-20 |
 | T-41 | Local Reading Insights dashboard: works/words read, activity, completion, and top fandoms (FI-18) | Codex | both | `1cfe4b0` / `be74d8f` | 2026-06-20 |
@@ -143,6 +148,40 @@ _Older UI / reader / Library work predates this board — see `git log`._
 
 ---
 
+## 🐛 Bugs (BUG-N registry)
+
+_Consolidated from the former `docs/Bugs.md`._ **Status:** Open · In Progress · Fixed. Detail for each is in the Completed table / `git log` under its board task.
+
+**Active:** _none._
+
+**Fixed & verified:**
+- **BUG-4** — Library bulk-select `EditMode` broke the macOS build; guarded `#if os(iOS)`, macOS uses a plain list (T-43, 2026-06-21).
+- **BUG-3** — AO3 login was discarded when Keychain was unavailable; now falls back to WebKit's app-scoped cookie store (T-31, 2026-06-20).
+- **BUG-2** — T-09 tag-cycling UI + tag-picker search-field placement regression (T-22, 2026-06-18).
+- **BUG-1** — Sepia theme not applying app-wide; fixed via `.appThemedScroll()`/`.appThemedRows()` (T-08, 2026-06-18).
+
+---
+
+## 💡 Feature Ideas (FI-N registry)
+
+_Consolidated from the former `docs/Feature_Ideas.md`._ **Status:** Idea · Planned · In Progress · Done · Parked. All current FI items are **Done** (board task in parens).
+
+- **Search & Filters:** FI-1 long-press clear filters (T-12) · FI-2 advanced rating (T-09) · FI-3 cycling include/exclude multi-select (T-09/T-23) · FI-4 expandable result cards (T-10).
+- **Browse / Web:** FI-5 sync browser theme (T-15) · FI-9 enrich browse-by-fandom cards (T-24).
+- **AO3 account (auth + Phase-2 reads):** FI-10 auth foundation (T-30) · FI-11 Marked for Later (T-33) · FI-12 AO3 Bookmarks (T-34) · FI-13 Reading History + grouped AO3 section (T-35) · FI-14 work Subscriptions (T-36).
+- **Library:** FI-7 hide privacy eye when nothing hidden (T-13) · FI-8 tap tag → filter Library (T-11) · FI-15 download queue & bulk actions (T-37/T-38) · FI-17 Continue Reading shelf (T-40) · FI-18 reading statistics (T-41).
+- **App:** FI-16 About / Sources & Licenses (T-39) · FI-19 portable Library backup (T-42).
+- **Theming:** FI-6 AO3-red accent + color picker (T-16).
+
+---
+
+## ✨ UI Polish (UI-N registry)
+
+_Consolidated from the former `docs/UI_Polish_Todo.md`._
+- **UI-1** — Refined the Search pagination pill: elevated card, tightly grouped page pills, long-press arrows jump to first/last, nearby-page fallback on narrow cards (Done; T-14/T-25).
+
+---
+
 ## 🧭 Key decisions & open questions
 
 - **macOS reader — decided:** iOS/iPadOS use Readium; **macOS keeps the legacy
@@ -158,6 +197,16 @@ _Older UI / reader / Library work predates this board — see `git log`._
   metadata on Readium vs keep the custom OPF layer?
 - **Cleanup:** `test/card-lists` is abandoned/polluted and local-only — delete it
   eventually; never merge it.
+- **Layout overhaul (`test/home-tab-overhaul`) — decided:** Home & Library both use
+  the shared `WorkCarouselSection`. **Library cards open the work's *detail* page**
+  (the management surface), not straight into the reader as on Home — by design.
+  **Saved for Later = local saved + AO3 Marked for Later** merged; **Collections =
+  placeholder** (no model yet); **no Synced/Local badges yet**. Branch is **not** to
+  be merged into `main`/`readium-migration` until the user says so.
+- **Open — layout follow-ups (deferred):** (1) light filter *quick-chips* on the
+  Library dashboard — only the active-filter banner + full Filters inspector exist
+  so far; (2) a `Collection` model to make Collections real; (3) confirm whether
+  Library cards should offer a reader-direct affordance.
 
 ---
 

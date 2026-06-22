@@ -67,6 +67,14 @@ import SwiftData
     /// "Continue Reading" ordering; nil for works never opened (or pre-migration).
     var lastReadDate: Date?
 
+    /// Update detection (Home → Recently Updated). `knownChapterCount` is the posted
+    /// chapter count the user has "seen" — set to the downloaded count on a native
+    /// import, or baselined on the first update check. When AO3's live posted count
+    /// (parsed from `chapters`) exceeds it, the work has new chapters. `0` = not yet
+    /// baselined. `lastUpdateCheck` is when AO3 was last polled for this work.
+    var knownChapterCount: Int = 0
+    var lastUpdateCheck: Date?
+
     /// AO3's own tags for this work (fandoms, relationships, characters, freeform),
     /// read from the EPUB on import. These are intrinsic to the work — distinct from
     /// `tags`, which are the user's own organizational tags. Shown read-only and
@@ -108,8 +116,40 @@ import SwiftData
     /// The user's own organizational tags (User Tags), shared across works.
     @Relationship(inverse: \Tag.works) var tags: [Tag] = []
 
+    /// The user's Collections (named shelves) this work belongs to. A work can be in
+    /// many collections; a collection holds many works.
+    @Relationship(inverse: \WorkCollection.works) var collections: [WorkCollection] = []
+
     /// Kept works (explicitly saved or favorited) never have their EPUB freed.
     var isProtected: Bool { isSaved || isFavorite }
+
+    /// The posted-chapter count parsed from the `chapters` stats string ("5/10" → 5).
+    var postedChapterCount: Int {
+        Int(chapters.split(separator: "/").first?.trimmingCharacters(in: .whitespaces) ?? "") ?? 0
+    }
+
+    /// AO3 has new chapters the user hasn't seen (live posted count exceeds the
+    /// baseline). Drives Home → Recently Updated.
+    var hasUpdate: Bool {
+        knownChapterCount > 0 && postedChapterCount > knownChapterCount
+    }
+
+    /// Started but not finished, with its EPUB on disk — the in-progress / "Reading
+    /// Now" state shared by the Home and Library shelves.
+    var isInProgress: Bool {
+        hasEPUB && !isFinished && (lastSpineIndex > 0 || lastScrollFraction > 0)
+    }
+
+    /// Reading progress in 0…1 for the Reading Now shelves: chapter position over the
+    /// work's AO3 chapter count ("5/10"), falling back to the in-chapter scroll
+    /// fraction. `nil` when there's nothing meaningful to show.
+    var readingProgress: Double? {
+        let parts = chapters.split(separator: "/")
+        if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
+            return min(1, Double(lastSpineIndex + 1) / Double(total))
+        }
+        return lastScrollFraction > 0 ? lastScrollFraction : nil
+    }
 
     init(
         id: UUID = UUID(),
@@ -175,6 +215,23 @@ import SwiftData
 
     /// Stable identifier used to persist the reader's font selection.
     var selectionID: String { "custom:\(fileName)" }
+}
+
+/// A user-named Collection (shelf) grouping works in the Library. Many-to-many with
+/// `SavedWork` (a work can live in several collections). Named `WorkCollection` to
+/// avoid shadowing Swift's `Collection` protocol.
+@Model final class WorkCollection {
+    var id: UUID = UUID()
+    var name: String = ""
+    var dateAdded: Date = Date()
+
+    /// The works in this collection (inverse of `SavedWork.collections`).
+    var works: [SavedWork] = []
+
+    init(name: String) {
+        self.name = name
+        self.dateAdded = Date()
+    }
 }
 
 extension SavedWork {
