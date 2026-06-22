@@ -320,31 +320,35 @@ struct LibraryView: View {
             ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
             #endif
         } else {
-            // One group so the controls sit tight together (separate ToolbarItems get
-            // spread out by the system, squeezing the large "Library" title).
-            ToolbarItemGroup(placement: .primaryAction) {
-                if hideMature && works.contains(where: \.isAdult) {
-                    MatureRevealToggle()
-                }
-                if !works.isEmpty {
-                    filterButton
-                }
-                if !statisticsWorks.isEmpty {
-                    NavigationLink {
-                        ReadingStatisticsView(works: statisticsWorks)
-                    } label: {
-                        Label("Reading Insights", systemImage: "chart.bar.xaxis")
+            // A single item holding a tight HStack — separate ToolbarItems (and even
+            // a ToolbarItemGroup) get the system's wide spacing, which squeezes the
+            // large "Library" title. Icon-only so they read as a compact cluster.
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 2) {
+                    if hideMature && works.contains(where: \.isAdult) {
+                        MatureRevealToggle()
                     }
-                }
-                #if os(iOS)
-                if !works.isEmpty {
-                    Button {
-                        enterSelectMode()
-                    } label: {
-                        Label("Select", systemImage: "checklist")
+                    if !works.isEmpty {
+                        filterButton
                     }
+                    if !statisticsWorks.isEmpty {
+                        NavigationLink {
+                            ReadingStatisticsView(works: statisticsWorks)
+                        } label: {
+                            Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                        }
+                    }
+                    #if os(iOS)
+                    if !works.isEmpty {
+                        Button {
+                            enterSelectMode()
+                        } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                    }
+                    #endif
                 }
-                #endif
+                .labelStyle(.iconOnly)
             }
         }
     }
