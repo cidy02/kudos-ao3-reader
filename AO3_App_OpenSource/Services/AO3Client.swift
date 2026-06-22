@@ -34,9 +34,20 @@ actor AO3Client {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// Coalesces concurrent identical GETs so two callers requesting the same page
+    /// at once share one network round-trip (politeness: no duplicate requests).
+    private let coalescer = RequestCoalescer<URL, Data>()
+
     /// Fetches a URL's body, validating the HTTP status and retrying transient
-    /// failures with backoff (see `withRetry`).
+    /// failures with backoff (see `withRetry`). Concurrent requests for the same URL
+    /// are coalesced into a single fetch.
     private func fetchData(from url: URL) async throws -> Data {
+        try await coalescer.shared(url) { [self] in
+            try await performFetch(from: url)
+        }
+    }
+
+    private func performFetch(from url: URL) async throws -> Data {
         Log.network.debug("GET \(url.absoluteString, privacy: .public)")
         return try await withRetry {
             let (data, response) = try await session.data(from: url)
