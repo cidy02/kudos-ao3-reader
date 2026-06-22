@@ -19,11 +19,9 @@ handoff channel between sessions and between agents.
 
 ## 🔄 In Progress
 
-_None._ Claim a task from the Backlog and add a row here.
-
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
-| —  | —    | —     | —      | —      | —                 |
+| T-54 | **UI / Navigation / AO3-Parity Refinement** (large product-structure overhaul): 4 core tabs **Home / Library / Browse / Account** + a **global floating Search** action; native **Browse** (Category→Fandom→Works, WebView demoted to fallback); **Account** absorbs the Bookmarks + Settings tabs (AO3 account parity + app settings + help); card/shelf consistency; work-level AO3 actions; privacy/local-data screen; saved searches; error/stale states. | Claude | TBD (feature branch) | 🔄 PLANNING | **Full plan delivered in chat; awaiting approval before any Swift changes** (per prompt Part 14 + Part 16 gates). ⚠️ Referenced docs `Apple_HIG_Key_Principles-REVISED(2).md` + `Kudos_Layout_Structure(2).md` were **not provided** — planning used existing [`docs/Kudos_Layout_Structure.md`](docs/Kudos_Layout_Structure.md) + [`docs/PROJECT_PHILOSOPHY.md`](docs/PROJECT_PHILOSOPHY.md) + Apple HIG. Phases: 1 Nav ownership · 2 Global Search · 3 Native Browse · 4 Card consistency · 5 Work AO3 actions · 6 Privacy/errors/saved-searches. |
 
 ---
 
