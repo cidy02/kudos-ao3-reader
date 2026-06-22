@@ -11,6 +11,7 @@ struct WorkDetailView: View {
     @Query private var allWorks: [SavedWork]
 
     @State private var newTagName = ""
+    @State private var showingAddToCollection = false
     @State private var downloading = false
     @State private var loadError: String?
     @State private var goToReader = false
@@ -121,6 +122,17 @@ struct WorkDetailView: View {
                     } label: {
                         Label("Mark as Finished", systemImage: "checkmark.circle")
                     }
+                }
+
+                Button {
+                    showingAddToCollection = true
+                } label: {
+                    Label(
+                        work.collections.isEmpty
+                            ? "Add to Collection"
+                            : "In \(work.collections.count) Collection\(work.collections.count == 1 ? "" : "s")",
+                        systemImage: "square.stack"
+                    )
                 }
             } footer: {
                 if let loadError {
@@ -265,6 +277,9 @@ struct WorkDetailView: View {
         }
         .navigationDestination(isPresented: $goToReader) {
             ReaderView(work: work)
+        }
+        .sheet(isPresented: $showingAddToCollection) {
+            AddToCollectionView(work: work)
         }
         .navigationTitle(work.title)
         #if !os(macOS)

@@ -17,12 +17,15 @@ struct LibraryView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
     @Query(sort: \Tag.name) private var tags: [Tag]
+    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @State private var path = NavigationPath()
     @State private var filters = LibraryFilters()
     @State private var markedForLater: [AO3WorkSummary] = []
+    @State private var showingNewCollection = false
+    @State private var newCollectionName = ""
 
     // Multi-select / bulk actions. `EditMode` is iOS-only, so macOS has no select mode.
     #if os(iOS)
@@ -72,8 +75,16 @@ struct LibraryView: View {
             #endif
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
+            .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
             .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
             .toolbar { toolbarContent }
+            .alert("New Collection", isPresented: $showingNewCollection) {
+                TextField("Name", text: $newCollectionName)
+                Button("Create") { createCollection() }
+                Button("Cancel", role: .cancel) { newCollectionName = "" }
+            } message: {
+                Text("Name your collection.")
+            }
             .confirmationDialog(
                 "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
                 isPresented: $confirmBulkDelete,
@@ -189,18 +200,32 @@ struct LibraryView: View {
         }
     }
 
-    /// Placeholder: shelves aren't backed by a model yet, so this is always its empty
-    /// state (no `>` chevron).
+    /// User-named Collections (shelves). A leading "New" card is always present so
+    /// creating one is one tap away; existing collections follow. Tapping a card
+    /// opens the collection; the `>` chevron isn't used (the New card covers create).
     private var collectionsCarousel: some View {
         let kind = LibrarySectionKind.collections
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: false
+            hasItems: true
         ) {
-            EmptyView()
+            Button {
+                newCollectionName = ""
+                showingNewCollection = true
+            } label: {
+                NewCollectionCard()
+            }
+            .buttonStyle(.plain)
+
+            ForEach(collections) { collection in
+                NavigationLink(value: collection) {
+                    CollectionCard(collection: collection)
+                }
+                .buttonStyle(.plain)
+            }
         } emptyState: {
-            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
+            EmptyView()
         }
     }
 
@@ -349,6 +374,14 @@ struct LibraryView: View {
     /// Loads the user's AO3 "Marked for Later" list for the Saved for Later section.
     private func loadMarkedForLater() async {
         markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
+    }
+
+    private func createCollection() {
+        let trimmed = newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newCollectionName = ""
+        guard !trimmed.isEmpty else { return }
+        context.insert(WorkCollection(name: trimmed))
+        try? context.save()
     }
 
     // MARK: Multi-select / bulk actions

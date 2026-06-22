@@ -1,0 +1,259 @@
+import SwiftUI
+import SwiftData
+
+// MARK: - Cards
+
+/// A Library Collections carousel card: a tinted tile (hued from the collection
+/// name, with a stack glyph so it reads as a shelf, not a single work), the name,
+/// and a work count. Sized to match `WorkCoverCard`.
+struct CollectionCard: View {
+    let collection: WorkCollection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            tile
+                .frame(width: 120, height: 172)
+            Text(collection.name)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+            Text("\(collection.works.count) work\(collection.works.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 120, alignment: .leading)
+    }
+
+    private var tile: some View {
+        let hue = CoverArt.hue(for: collection.name)
+        return RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(LinearGradient(
+                colors: [
+                    Color(hue: hue, saturation: 0.42, brightness: 0.74),
+                    Color(hue: hue, saturation: 0.58, brightness: 0.46)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ))
+            .overlay {
+                Image(systemName: "square.stack.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+    }
+}
+
+/// The leading "create" card in the Collections carousel.
+struct NewCollectionCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                .frame(width: 120, height: 172)
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            Text("New Collection")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+            Text("Tap to create")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 120, alignment: .leading)
+    }
+}
+
+// MARK: - Collection detail
+
+/// The works in a collection. Rows open the work (via the host stack's `SavedWork`
+/// destination); swipe removes a work from the collection (it isn't deleted). The
+/// menu renames or deletes the collection itself.
+struct CollectionDetailView: View {
+    let collection: WorkCollection
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
+    @State private var showingRename = false
+    @State private var renameText = ""
+    @State private var confirmDelete = false
+
+    private var works: [SavedWork] {
+        collection.works.sorted { $0.dateAdded > $1.dateAdded }
+    }
+
+    var body: some View {
+        Group {
+            if works.isEmpty {
+                ContentUnavailableView {
+                    Label(collection.name, systemImage: "square.stack")
+                } description: {
+                    Text("No works yet. Add works to this collection from a work's page (Add to Collection).")
+                }
+            } else {
+                List {
+                    ForEach(works) { work in
+                        SensitiveWorkRow(work: work)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    remove(work)
+                                } label: {
+                                    Label("Remove", systemImage: "minus.circle")
+                                }
+                            }
+                    }
+                    .cardRow()
+                }
+                .cardList()
+            }
+        }
+        .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
+        .navigationTitle(collection.name)
+        #if !os(macOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem {
+                Menu {
+                    Button {
+                        renameText = collection.name
+                        showingRename = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        confirmDelete = true
+                    } label: {
+                        Label("Delete Collection", systemImage: "trash")
+                    }
+                } label: {
+                    Label("Collection options", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .alert("Rename Collection", isPresented: $showingRename) {
+            TextField("Name", text: $renameText)
+            Button("Save") {
+                let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { collection.name = trimmed; try? context.save() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete “\(collection.name)”?",
+            isPresented: $confirmDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                context.delete(collection)
+                try? context.save()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The collection is removed. The works themselves stay in your Library.")
+        }
+    }
+
+    private func remove(_ work: SavedWork) {
+        work.collections.removeAll { $0.id == collection.id }
+        try? context.save()
+    }
+}
+
+// MARK: - Add to collection
+
+/// A sheet to add/remove a work from collections, and create new ones. Presented
+/// from a work's detail page.
+struct AddToCollectionView: View {
+    let work: SavedWork
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @State private var newName = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        TextField("New collection", text: $newName)
+                            .onSubmit(create)
+                        Button("Add", action: create)
+                            .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                if collections.isEmpty {
+                    Section {
+                        Text("No collections yet. Create one above to start grouping works.")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Section("Collections") {
+                        ForEach(collections) { collection in
+                            Button {
+                                toggle(collection)
+                            } label: {
+                                HStack {
+                                    Text(collection.name).foregroundStyle(.primary)
+                                    Spacer()
+                                    Text("\(collection.works.count)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if isMember(collection) {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.tint)
+                                            .accessibilityLabel("In this collection")
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Add to Collection")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func isMember(_ collection: WorkCollection) -> Bool {
+        work.collections.contains { $0.id == collection.id }
+    }
+
+    private func toggle(_ collection: WorkCollection) {
+        if let index = work.collections.firstIndex(where: { $0.id == collection.id }) {
+            work.collections.remove(at: index)
+        } else {
+            work.collections.append(collection)
+        }
+        try? context.save()
+    }
+
+    private func create() {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let collection = WorkCollection(name: trimmed)
+        context.insert(collection)
+        work.collections.append(collection)
+        try? context.save()
+        newName = ""
+    }
+}

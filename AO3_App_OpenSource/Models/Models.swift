@@ -116,6 +116,10 @@ import SwiftData
     /// The user's own organizational tags (User Tags), shared across works.
     @Relationship(inverse: \Tag.works) var tags: [Tag] = []
 
+    /// The user's Collections (named shelves) this work belongs to. A work can be in
+    /// many collections; a collection holds many works.
+    @Relationship(inverse: \WorkCollection.works) var collections: [WorkCollection] = []
+
     /// Kept works (explicitly saved or favorited) never have their EPUB freed.
     var isProtected: Bool { isSaved || isFavorite }
 
@@ -211,6 +215,23 @@ import SwiftData
 
     /// Stable identifier used to persist the reader's font selection.
     var selectionID: String { "custom:\(fileName)" }
+}
+
+/// A user-named Collection (shelf) grouping works in the Library. Many-to-many with
+/// `SavedWork` (a work can live in several collections). Named `WorkCollection` to
+/// avoid shadowing Swift's `Collection` protocol.
+@Model final class WorkCollection {
+    var id: UUID = UUID()
+    var name: String = ""
+    var dateAdded: Date = Date()
+
+    /// The works in this collection (inverse of `SavedWork.collections`).
+    var works: [SavedWork] = []
+
+    init(name: String) {
+        self.name = name
+        self.dateAdded = Date()
+    }
 }
 
 extension SavedWork {
