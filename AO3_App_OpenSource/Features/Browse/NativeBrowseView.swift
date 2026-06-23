@@ -55,8 +55,27 @@ struct FandomWorksView: View {
     @State private var totalPages = 1
     @State private var phase: Phase = .loading
     @State private var expandAll = false
+    /// The active filters for this fandom's works — seeded to just the fandom, then
+    /// refined via the same filter panel the Search tab uses.
+    @State private var filters: AO3SearchFilters
+    @State private var showingFilters = false
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
+
+    init(fandom: String) {
+        self.fandom = fandom
+        _filters = State(initialValue: Self.baseline(for: fandom))
+    }
+
+    /// Filters scoped to just this page's fandom — also the reset baseline.
+    private static func baseline(for fandom: String) -> AO3SearchFilters {
+        var filters = AO3SearchFilters()
+        filters.fandom = fandom
+        return filters
+    }
+
+    /// True once the reader has set any filter beyond the page's fixed fandom.
+    private var hasExtraFilters: Bool { filters != Self.baseline(for: fandom) }
 
     var body: some View {
         Group {
@@ -85,6 +104,15 @@ struct FandomWorksView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingFilters = true } label: {
+                    Image(systemName: hasExtraFilters
+                        ? "line.3.horizontal.decrease.circle.fill"
+                        : "line.3.horizontal.decrease.circle")
+                }
+                .accessibilityLabel("Filters")
+                .help("Filter works in this fandom")
+            }
             if phase == .loaded && !results.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -97,6 +125,17 @@ struct FandomWorksView: View {
                     .accessibilityLabel(expandAll ? "Collapse all cards" : "Expand all cards")
                 }
             }
+        }
+        .inspector(isPresented: $showingFilters) {
+            AO3FilterPanel(
+                filters: $filters,
+                showFandomPicker: false,
+                canReset: hasExtraFilters,
+                onApply: applyFilters,
+                onReset: resetFilters
+            )
+            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .navigationTitle("Filter Works")
         }
         .task { await load(page: 1) }
     }
@@ -136,8 +175,6 @@ struct FandomWorksView: View {
 
     private func load(page: Int) async {
         if results.isEmpty { phase = .loading }
-        var filters = AO3SearchFilters()
-        filters.fandom = fandom
         do {
             let result = try await AO3Client.shared.search(filters: filters, page: page)
             results = result.works
@@ -149,5 +186,28 @@ struct FandomWorksView: View {
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// Clear the current page (so the first-load skeleton shows) and re-run the fandom
+    /// search with whatever filters are now set — the same single request, just newly
+    /// parameterised.
+    private func reload() {
+        phase = .loading
+        results = []
+        currentPage = 1
+        totalPages = 1
+        Task { await load(page: 1) }
+    }
+
+    /// Apply the chosen filters and close the panel.
+    private func applyFilters() {
+        showingFilters = false
+        reload()
+    }
+
+    /// Reset back to the page's fandom-only filters (keeping the panel open).
+    private func resetFilters() {
+        filters = Self.baseline(for: fandom)
+        reload()
     }
 }
