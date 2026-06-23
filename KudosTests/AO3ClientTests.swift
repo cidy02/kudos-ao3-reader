@@ -149,38 +149,19 @@ struct AO3ClientTests {
     }
 
     @Test func buildsSubscriptionsURL() {
+        // Scoped to ?type=works so AO3 returns only work subscriptions (and pages them).
         #expect(
             AO3Client.subscriptionsURL(username: "alice", page: 1)?.absoluteString
-                == "https://archiveofourown.org/users/alice/subscriptions"
+                == "https://archiveofourown.org/users/alice/subscriptions?type=works"
         )
         #expect(
             AO3Client.subscriptionsURL(username: "alice", page: 2)?.absoluteString
-                == "https://archiveofourown.org/users/alice/subscriptions?page=2"
+                == "https://archiveofourown.org/users/alice/subscriptions?type=works&page=2"
         )
     }
 
-    /// The subscriptions page mixes work, series, and user blurbs; only the work
-    /// blurbs should surface (parseSearchPage selects `li.work.blurb`).
-    static let subscriptionsHTML = """
-    <html><body>
-    <ol class="subscription index group">
-      <li id="work_321" class="work blurb group">
-        <div class="header module">
-          <h4 class="heading"><a href="/works/321">Subscribed Work</a> by <a rel="author" href="/users/ed">ed</a></h4>
-        </div>
-      </li>
-      <li class="user short blurb group"><a href="/users/favauthor">favauthor</a></li>
-      <li class="series blurb group"><a href="/series/9">A Series</a></li>
-    </ol>
-    </body></html>
-    """
-
-    @Test func parsesOnlyWorkSubscriptions() throws {
-        let page = try AO3Client.parseSearchPage(Self.subscriptionsHTML, page: 1)
-        #expect(page.works.count == 1)
-        #expect(page.works.first?.id == 321)
-        #expect(page.works.first?.title == "Subscribed Work")
-    }
+    // Subscriptions-page parsing is covered by AO3SubscriptionsParseTests — the page is
+    // a <dl> of <dt> items, not the li.work.blurb markup this once assumed.
 
     @Test func buildsSeriesPageURL() throws {
         let series = try #require(URL(string: "https://archiveofourown.org/series/55"))

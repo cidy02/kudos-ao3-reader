@@ -63,6 +63,7 @@ struct FandomListView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .hidesFloatingTabBar()
         .task { if fandoms.isEmpty { await load() } }
     }
 

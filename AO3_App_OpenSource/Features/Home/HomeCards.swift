@@ -136,27 +136,22 @@ struct CoverStatsLine: View {
     }
 }
 
-/// How the dashboard opens a tapped work: straight into the reader when the EPUB is
-/// on disk, otherwise its detail page (which can re-download a freed file).
+/// How the dashboard opens a tapped work: the canonical Work Detail, the same screen
+/// every other entry point lands on (tap a card → detail; the detail's Read button
+/// opens the reader). Opening it also clears the work from Recently Updated.
 struct HomeWorkDestination: View {
     let work: SavedWork
     @Environment(\.modelContext) private var context
 
     var body: some View {
-        Group {
-            if work.hasEPUB {
-                ReaderView(work: work)
-            } else {
-                WorkDetailView(work: work)
+        WorkDetailView(work: work)
+            .onAppear {
+                // Opening an updated work marks its current chapters as seen — clears
+                // it from Recently Updated.
+                if work.hasUpdate {
+                    work.knownChapterCount = work.postedChapterCount
+                    try? context.save()
+                }
             }
-        }
-        .onAppear {
-            // Opening an updated work marks its current chapters as seen — clears it
-            // from Recently Updated.
-            if work.hasUpdate {
-                work.knownChapterCount = work.postedChapterCount
-                try? context.save()
-            }
-        }
     }
 }

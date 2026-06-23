@@ -27,7 +27,7 @@ struct BrowseView: View {
                     FandomWorksView(fandom: route.name)
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { work in
-                    AO3WorkDetailView(work: work, path: $path)
+                    WorkDetailView(remote: work)
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
@@ -103,6 +103,7 @@ struct FandomWorksView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .hidesFloatingTabBar()
         .toolbar {
             // One item holding a tight HStack so the icons cluster like Library's
             // (separate ToolbarItems get the system's wider spacing). Filters rightmost.

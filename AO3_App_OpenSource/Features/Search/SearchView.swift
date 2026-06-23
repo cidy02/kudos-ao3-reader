@@ -39,7 +39,7 @@ struct SearchView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .navigationDestination(for: AO3WorkSummary.self) { work in
-                AO3WorkDetailView(work: work, path: $path)
+                WorkDetailView(remote: work)
             }
             .navigationDestination(for: SavedWork.self) { work in
                 WorkDetailView(work: work)

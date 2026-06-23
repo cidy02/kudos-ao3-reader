@@ -79,7 +79,7 @@ struct LibraryView: View {
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
             .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .toolbar { toolbarContent }
             .alert("New Collection", isPresented: $showingNewCollection) {
                 TextField("Name", text: $newCollectionName)

@@ -1,48 +1,160 @@
 import SwiftUI
 import SwiftData
 
-/// Detail screen for a saved work: metadata, tag management, and entry to the reader.
+/// The single, canonical work-detail screen — used for **every** work the app can open,
+/// whether it's a locally saved work or a remote AO3 summary (Home, Library, Browse,
+/// Search, Bookmarks, AO3 lists, …). There is no separate "compact" remote detail.
+///
+/// `Read` always opens the reader; it never pushes another detail page. A remote work
+/// is resolved to a local `SavedWork` lazily — only when the reader or a management
+/// action actually needs it — so merely browsing never imports a work. Once resolved
+/// (or if the work is already in the library), the screen reflects its real local state.
 struct WorkDetailView: View {
+    /// Where the work came from. A `.remote` summary is resolved to a local record on
+    /// demand; a `.saved` work is already local.
+    enum Source: Hashable {
+        case saved(SavedWork)
+        case remote(AO3WorkSummary)
+    }
+
+    let source: Source
+
+    init(work: SavedWork) { self.source = .saved(work) }
+    init(remote: AO3WorkSummary) { self.source = .remote(remote) }
+
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(DownloadQueue.self) private var downloadQueue
-    @Bindable var work: SavedWork
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query private var allWorks: [SavedWork]
 
+    /// The resolved local record: the saved work itself, an existing library match for
+    /// a remote summary, or the record created when a remote work is imported on tap.
+    @State private var localWork: SavedWork?
+    @State private var resolvedExisting = false
+
     @State private var newTagName = ""
     @State private var showingAddToCollection = false
-    @State private var downloading = false
+    @State private var working = false          // a download / import is in flight
     @State private var loadError: String?
-    @State private var goToReader = false
+    @State private var readerWork: SavedWork?    // non-nil → push the reader
     @State private var queuingSeries = false
 
-    /// Quick-add suggestions for My Tags: the user's other tags plus this work's
-    /// own AO3 tags, minus any already applied (case-insensitive, de-duplicated).
-    private var suggestions: [String] {
-        let applied = Set(work.tags.map { $0.name.lowercased() })
-        var seen = Set<String>()
-        var result: [String] = []
-        for name in allTags.map(\.name) + work.workTags {
-            let key = name.lowercased()
-            guard !applied.contains(key), seen.insert(key).inserted else { continue }
-            result.append(name)
+    // MARK: - Source helpers
+
+    /// The remote summary, when this detail was opened from an AO3 listing.
+    private var remote: AO3WorkSummary? {
+        if case .remote(let summary) = source { return summary }
+        return nil
+    }
+
+    var body: some View {
+        Form {
+          // Group so .appThemedRows() reaches every section's rows (it doesn't
+          // propagate from the Form container, only from a Group/Section/ForEach).
+          Group {
+            actionsSection
+            if !displaySummary.isEmpty {
+                Section("Summary") { Text(displaySummary) }
+            }
+            detailsSection
+            tagDiscoverySections
+            statsSection
+            seriesSection
+            myTagsSection
+          }
+          .appThemedRows()
         }
-        return result
+        .formStyle(.grouped)
+        .appThemedScroll()
+        .task {
+            // Resolve an existing library record once (so a browsed work already in the
+            // library shows its real saved state), then run the same Work Tags refresh
+            // the local detail always did — only when we actually have a local record,
+            // so merely viewing a remote work adds no AO3 request. Runs once per open.
+            resolveExistingIfNeeded()
+            guard let work = localWork else { return }
+            backfillWorkTagsIfNeeded(work)
+            await WorkTags.refreshFromAO3(for: work, in: context)
+        }
+        .navigationDestination(item: $readerWork) { ReaderView(work: $0) }
+        .sheet(isPresented: $showingAddToCollection) {
+            if let work = localWork { AddToCollectionView(work: work) }
+        }
+        .navigationTitle(displayTitle)
+        #if !os(macOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .hidesFloatingTabBar()
+        .toolbar { detailToolbar }
     }
 
-    /// Other downloaded works in the same series, ordered by series position.
-    private var seriesWorks: [SavedWork] {
-        guard !work.seriesTitle.isEmpty else { return [] }
-        return allWorks
-            .filter { $0.seriesTitle == work.seriesTitle && $0.id != work.id }
-            .sorted { $0.seriesPosition < $1.seriesPosition }
+    // MARK: - Actions section
+
+    @ViewBuilder
+    private var actionsSection: some View {
+        Section {
+            Button(action: read) {
+                HStack {
+                    Label(readLabel, systemImage: readIcon)
+                    Spacer()
+                    if working { ProgressView() }
+                }
+            }
+            .disabled(working)
+
+            Button {
+                router.open(ao3URL)
+            } label: {
+                Label("Open on AO3", systemImage: "safari")
+            }
+
+            Button {
+                withLocalWork { WorkLifecycle.setSaved($0, !$0.isSaved, in: context) }
+            } label: {
+                Label(
+                    (localWork?.isSaved ?? false) ? "Saved" : "Save to Keep",
+                    systemImage: (localWork?.isSaved ?? false) ? "bookmark.fill" : "bookmark"
+                )
+            }
+
+            if !(localWork?.isFinished ?? false) {
+                Button {
+                    withLocalWork { WorkLifecycle.markFinished($0, in: context) }
+                } label: {
+                    Label("Mark as Finished", systemImage: "checkmark.circle")
+                }
+            }
+
+            Button {
+                withLocalWork { _ in showingAddToCollection = true }
+            } label: {
+                Label(collectionLabel, systemImage: "square.stack")
+            }
+        } footer: {
+            if let loadError {
+                Text(loadError).foregroundStyle(.red)
+            } else {
+                Text(statusFooter)
+            }
+        }
     }
 
-    /// The work's summary as readable plain text (EPUB descriptions arrive as HTML).
-    private var summaryText: String { work.summary.strippingHTML() }
+    private var readLabel: String {
+        if working { return "Downloading…" }
+        return (localWork?.hasEPUB ?? false) ? "Read" : "Download & Read"
+    }
+    private var readIcon: String { (localWork?.hasEPUB ?? false) ? "book" : "arrow.down.circle" }
+
+    private var collectionLabel: String {
+        let count = localWork?.collections.count ?? 0
+        return count == 0 ? "Add to Collection" : "In \(count) Collection\(count == 1 ? "" : "s")"
+    }
 
     private var statusFooter: String {
+        guard let work = localWork else {
+            return "Reading downloads this work to your device. When you finish, the file is freed unless you save or favorite it."
+        }
         if work.isSaved { return "Saved — kept on this device." }
         if !work.hasEPUB { return "Finished. The file was freed to save space; it re-downloads when you read it again." }
         if work.isFinished { return "Finished." }
@@ -50,30 +162,136 @@ struct WorkDetailView: View {
         return "Reading. When you finish, the file is freed unless you save or favorite it."
     }
 
-    /// AO3 Work Tags split into per-category sections (empty categories hidden).
-    /// Before the categorized AO3 refresh lands, falls back to one flat list built
-    /// from the EPUB's subjects.
+    // MARK: - Toolbar (favorite + more)
+
+    @ToolbarContentBuilder
+    private var detailToolbar: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                withLocalWork { work in
+                    work.isFavorite.toggle()
+                    try? context.save()
+                }
+            } label: {
+                let fav = localWork?.isFavorite ?? false
+                Label(fav ? "Unfavorite" : "Favorite", systemImage: fav ? "star.fill" : "star")
+            }
+            .tint((localWork?.isFavorite ?? false) ? .yellow : nil)
+        }
+        ToolbarItem {
+            Menu {
+                if let id = ao3WorkID { AO3WorkActionsMenu(workID: id) }
+            } label: {
+                Label("More actions", systemImage: "ellipsis.circle")
+            }
+            .disabled(ao3WorkID == nil)
+        }
+    }
+
+    // MARK: - Details
+
     @ViewBuilder
-    private var workTagsSections: some View {
+    private var detailsSection: some View {
+        Section("Details") {
+            if !displayAuthor.isEmpty { LabeledContent("Author", value: displayAuthor) }
+            if !displayRating.isEmpty { LabeledContent("Rating", value: displayRating) }
+            if let warnings = remote?.warnings, !warnings.isEmpty {
+                LabeledContent("Warnings", value: warnings.joined(separator: ", "))
+            }
+            if let categories = remote?.categories, !categories.isEmpty {
+                LabeledContent("Category", value: categories.joined(separator: ", "))
+            }
+            if let complete = remote?.isComplete {
+                LabeledContent("Status", value: complete ? "Complete" : "Work in Progress")
+            }
+            if !displayLanguage.isEmpty { LabeledContent("Language", value: displayLanguage) }
+            if let words = displayWords { LabeledContent("Words", value: words.formatted()) }
+            if !displayChapters.isEmpty { LabeledContent("Chapters", value: displayChapters) }
+            if let updated = remote?.dateUpdated, !updated.isEmpty {
+                LabeledContent("Updated", value: updated)
+            }
+            if let work = localWork {
+                LabeledContent("Added", value: work.dateAdded.formatted(date: .abbreviated, time: .shortened))
+            }
+        }
+    }
+
+    private var displayTitle: String { localWork?.title ?? remote?.title ?? "Untitled" }
+    private var displayAuthor: String {
+        if let a = localWork?.author, !a.isEmpty { return a }
+        return remote?.authorText ?? ""
+    }
+    private var displaySummary: String {
+        if let s = localWork?.summary, !s.isEmpty { return s.strippingHTML() }
+        return remote?.summary ?? ""
+    }
+    private var displayRating: String { firstNonEmpty(localWork?.rating, remote?.rating) }
+    private var displayLanguage: String { firstNonEmpty(localWork?.language, remote?.language) }
+    private var displayWords: Int? {
+        if let count = localWork?.wordCount, count > 0 { return count }
+        return remote?.words
+    }
+    private var displayChapters: String { firstNonEmpty(localWork?.chapters, remote?.chapters) }
+
+    private func firstNonEmpty(_ a: String?, _ b: String?) -> String {
+        if let a, !a.isEmpty { return a }
+        return b ?? ""
+    }
+
+    /// The AO3 URL for "Open on AO3" / web fallback (local source URL or remote work URL).
+    private var ao3URL: URL {
+        if let work = localWork, let url = URL(string: work.sourceURL), !work.sourceURL.isEmpty {
+            return url
+        }
+        return remote?.workURL ?? URL(string: "https://archiveofourown.org")!
+    }
+
+    /// The AO3 numeric work id (for the More-actions web menu), from either source.
+    private var ao3WorkID: Int? {
+        if let id = remote?.id { return id }
+        return WorkTags.ao3WorkID(from: localWork?.sourceURL ?? "")
+    }
+
+    // MARK: - Stats (remote summaries carry these; local records don't)
+
+    @ViewBuilder
+    private var statsSection: some View {
+        if let remote, remote.kudos != nil || remote.comments != nil || remote.hits != nil {
+            Section("Stats") {
+                if let kudos = remote.kudos { LabeledContent("Kudos", value: kudos.formatted()) }
+                if let comments = remote.comments { LabeledContent("Comments", value: comments.formatted()) }
+                if let hits = remote.hits { LabeledContent("Hits", value: hits.formatted()) }
+            }
+        }
+    }
+
+    // MARK: - Tags & discovery (Fandoms / Relationships / Characters / Additional)
+
+    @ViewBuilder
+    private var tagDiscoverySections: some View {
         let tapFooter = "Tags from AO3. Tap one to filter your Library; add your own below."
-        if work.hasCategorizedWorkTags {
-            workTagSection("Fandoms", work.workFandoms, field: .fandom)
-            workTagSection("Characters", work.workCharacters, field: .character)
-            workTagSection("Relationships", work.workRelationships, field: .relationship)
-            workTagSection("Additional Tags", work.workFreeforms, field: .additional, footer: tapFooter)
-        } else if !work.workTags.isEmpty {
-            workTagSection("Work Tags", work.workTags, field: .additional, footer: tapFooter)
+        if let work = localWork, work.hasCategorizedWorkTags {
+            tagChipSection("Fandoms", work.workFandoms, field: .fandom)
+            tagChipSection("Relationships", work.workRelationships, field: .relationship)
+            tagChipSection("Characters", work.workCharacters, field: .character)
+            tagChipSection("Additional Tags", work.workFreeforms, field: .additional, footer: tapFooter)
+        } else {
+            // Remote summaries (and pre-categorized local works) only have a fandom list
+            // plus a flat tag list.
+            tagChipSection("Fandoms", remote?.fandoms ?? [], field: .fandom)
+            tagChipSection("Tags", localWork?.workTags ?? remote?.tags ?? [],
+                           field: .additional, footer: tapFooter)
         }
     }
 
     @ViewBuilder
-    private func workTagSection(_ title: String, _ tags: [String],
+    private func tagChipSection(_ title: String, _ tags: [String],
                                 field: LibraryTagFilter.Field, footer: String? = nil) -> some View {
         if !tags.isEmpty {
             Section {
                 FlowLayout(spacing: 8, rowSpacing: 8) {
                     ForEach(tags, id: \.self) { tag in
-                        // Tap a Work Tag → filter the Library to works with that tag.
+                        // Tap a tag → filter the Library to works carrying it.
                         Button { router.filterLibrary(field, tag) } label: {
                             TagChip(text: tag)
                         }
@@ -89,88 +307,54 @@ struct WorkDetailView: View {
         }
     }
 
-    var body: some View {
-        Form {
-          // Group so .appThemedRows() reaches every section's rows (it doesn't
-          // propagate from the Form container, only from a Group/Section/ForEach).
-          Group {
+    // MARK: - Series
+
+    /// Other downloaded works in the same series, ordered by series position.
+    private var seriesWorks: [SavedWork] {
+        guard let work = localWork, !work.seriesTitle.isEmpty else { return [] }
+        return allWorks
+            .filter { $0.seriesTitle == work.seriesTitle && $0.id != work.id }
+            .sorted { $0.seriesPosition < $1.seriesPosition }
+    }
+
+    private var displaySeriesTitle: String {
+        if let t = localWork?.seriesTitle, !t.isEmpty { return t }
+        return remote?.seriesTitle ?? ""
+    }
+    private var displaySeriesPosition: Int { localWork?.seriesPosition ?? remote?.seriesPosition ?? 0 }
+    private var displaySeriesURL: String {
+        if let u = localWork?.seriesURL, !u.isEmpty { return u }
+        return remote?.seriesURL ?? ""
+    }
+
+    @ViewBuilder
+    private var seriesSection: some View {
+        if !displaySeriesTitle.isEmpty {
             Section {
-                Button(action: openReader) {
-                    HStack {
-                        Label(
-                            work.hasEPUB ? "Read" : "Download & Read",
-                            systemImage: work.hasEPUB ? "book" : "arrow.down.circle"
-                        )
-                        Spacer()
-                        if downloading { ProgressView() }
-                    }
-                }
-                .disabled(downloading)
-
-                Button {
-                    WorkLifecycle.setSaved(work, !work.isSaved, in: context)
-                } label: {
-                    Label(
-                        work.isSaved ? "Saved" : "Save to Keep",
-                        systemImage: work.isSaved ? "bookmark.fill" : "bookmark"
-                    )
+                LabeledContent("Series", value: displaySeriesTitle)
+                if displaySeriesPosition > 0 {
+                    LabeledContent("Part", value: "\(displaySeriesPosition)")
                 }
 
-                if work.hasEPUB && !work.isFinished {
-                    Button {
-                        WorkLifecycle.markFinished(work, in: context)
+                ForEach(seriesWorks) { other in
+                    NavigationLink {
+                        WorkDetailView(work: other)
                     } label: {
-                        Label("Mark as Finished", systemImage: "checkmark.circle")
-                    }
-                }
-
-                Button {
-                    showingAddToCollection = true
-                } label: {
-                    Label(
-                        work.collections.isEmpty
-                            ? "Add to Collection"
-                            : "In \(work.collections.count) Collection\(work.collections.count == 1 ? "" : "s")",
-                        systemImage: "square.stack"
-                    )
-                }
-            } footer: {
-                if let loadError {
-                    Text(loadError).foregroundStyle(.red)
-                } else {
-                    Text(statusFooter)
-                }
-            }
-
-            if !summaryText.isEmpty {
-                Section("Summary") {
-                    Text(summaryText)
-                }
-            }
-
-            if !work.seriesTitle.isEmpty {
-                Section {
-                    LabeledContent("Series", value: work.seriesTitle)
-                    if work.seriesPosition > 0 {
-                        LabeledContent("Part", value: "\(work.seriesPosition)")
-                    }
-
-                    ForEach(seriesWorks) { other in
-                        NavigationLink {
-                            WorkDetailView(work: other)
-                        } label: {
-                            HStack {
-                                if other.seriesPosition > 0 {
-                                    Text("\(other.seriesPosition).")
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                }
-                                Text(other.title).lineLimit(1)
+                        HStack {
+                            if other.seriesPosition > 0 {
+                                Text("\(other.seriesPosition).")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
                             }
+                            Text(other.title).lineLimit(1)
                         }
                     }
+                }
 
-                    if !work.seriesURL.isEmpty {
+                if !displaySeriesURL.isEmpty {
+                    // Downloading a whole series needs a local anchor record; offered
+                    // once the work itself is in the library.
+                    if localWork != nil {
                         Button {
                             Task { await downloadSeries() }
                         } label: {
@@ -184,170 +368,175 @@ struct WorkDetailView: View {
                             }
                         }
                         .disabled(queuingSeries)
-
-                        Button {
-                            if let url = URL(string: work.seriesURL) { router.open(url) }
-                        } label: {
-                            Label("View Full Series on AO3", systemImage: "safari")
-                        }
                     }
-                } header: {
-                    Text("Series")
-                } footer: {
-                    if seriesWorks.isEmpty {
-                        Text("Other works in this series will appear here once you download them.")
-                    }
-                }
-            }
 
-            workTagsSections
-
-            Section("My Tags") {
-                if work.tags.isEmpty {
-                    Text("No tags yet — add some to organize your Library.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(work.tags.sorted { $0.name < $1.name }) { tag in
-                        HStack {
-                            // Tap a My Tag → filter the Library to works with it.
-                            Button { router.filterLibrary(.userTag, tag.name) } label: {
-                                Text(tag.name).foregroundStyle(.primary)
-                            }
-                            .buttonStyle(.plain)
-                            Spacer()
-                            Button {
-                                removeTag(tag)
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-
-                HStack {
-                    TextField("Add a tag", text: $newTagName)
-                        .onSubmit(addTypedTag)
-                    Button("Add", action: addTypedTag)
-                        .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-
-                if !suggestions.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(suggestions, id: \.self) { name in
-                                Button {
-                                    apply(tag(named: name))
-                                } label: {
-                                    TagChip(text: name)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
-
-            Section("Details") {
-                if !work.author.isEmpty {
-                    LabeledContent("Author", value: work.author)
-                }
-                if !work.rating.isEmpty {
-                    LabeledContent("Rating", value: work.rating)
-                }
-                LabeledContent("Added", value: work.dateAdded.formatted(date: .abbreviated, time: .shortened))
-                if let url = URL(string: work.sourceURL), !work.sourceURL.isEmpty {
                     Button {
-                        router.open(url)   // open in the in-app Browse tab, not the system browser
+                        if let url = URL(string: displaySeriesURL) { router.open(url) }
                     } label: {
-                        Label("View on AO3", systemImage: "safari")
+                        Label("View Full Series on AO3", systemImage: "safari")
                     }
                 }
-            }
-          }
-          .appThemedRows()
-        }
-        .formStyle(.grouped)
-        .appThemedScroll()
-        .task(id: work.id) {
-            backfillWorkTagsIfNeeded()
-            await WorkTags.refreshFromAO3(for: work, in: context)
-        }
-        .navigationDestination(isPresented: $goToReader) {
-            ReaderView(work: work)
-        }
-        .sheet(isPresented: $showingAddToCollection) {
-            AddToCollectionView(work: work)
-        }
-        .navigationTitle(work.title)
-        #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    work.isFavorite.toggle()
-                    try? context.save()
-                } label: {
-                    Label(
-                        work.isFavorite ? "Unfavorite" : "Favorite",
-                        systemImage: work.isFavorite ? "star.fill" : "star"
-                    )
+            } header: {
+                Text("Series")
+            } footer: {
+                if localWork != nil && seriesWorks.isEmpty {
+                    Text("Other works in this series will appear here once you download them.")
                 }
-                .tint(work.isFavorite ? .yellow : nil)
-            }
-            ToolbarItem {
-                Menu {
-                    if let id = ao3WorkID { AO3WorkActionsMenu(workID: id) }
-                } label: {
-                    Label("More actions", systemImage: "ellipsis.circle")
-                }
-                .disabled(ao3WorkID == nil)
             }
         }
     }
 
-    // MARK: AO3 actions (web fallback)
+    // MARK: - My Tags
 
-    /// The AO3 numeric work id parsed from the source URL (nil for non-AO3 imports).
-    private var ao3WorkID: Int? { WorkTags.ao3WorkID(from: work.sourceURL) }
-
-    /// Opens the reader, re-downloading the EPUB first if this is a freed history
-    /// entry. Reuses the work's stable id, so progress/tags stay attached.
-    private func openReader() {
-        if work.hasEPUB { goToReader = true; return }
-        guard let id = WorkTags.ao3WorkID(from: work.sourceURL) else {
-            loadError = "This work can't be re-downloaded automatically. Open it on AO3."
-            return
+    /// Quick-add suggestions for My Tags: the user's other tags plus this work's own
+    /// AO3 tags, minus any already applied (case-insensitive, de-duplicated).
+    private var suggestions: [String] {
+        let applied = Set((localWork?.tags ?? []).map { $0.name.lowercased() })
+        let workTags = localWork?.workTags ?? remote?.tags ?? []
+        var seen = Set<String>()
+        var result: [String] = []
+        for name in allTags.map(\.name) + workTags {
+            let key = name.lowercased()
+            guard !applied.contains(key), seen.insert(key).inserted else { continue }
+            result.append(name)
         }
+        return result
+    }
+
+    @ViewBuilder
+    private var myTagsSection: some View {
+        Section("My Tags") {
+            let myTags = localWork?.tags ?? []
+            if myTags.isEmpty {
+                Text("No tags yet — add some to organize your Library.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(myTags.sorted { $0.name < $1.name }) { tag in
+                    HStack {
+                        Button { router.filterLibrary(.userTag, tag.name) } label: {
+                            Text(tag.name).foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                        Button {
+                            removeTag(tag)
+                        } label: {
+                            Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            HStack {
+                TextField("Add a tag", text: $newTagName)
+                    .onSubmit(addTypedTag)
+                Button("Add", action: addTypedTag)
+                    .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            if !suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(suggestions, id: \.self) { name in
+                            Button { apply(named: name) } label: { TagChip(text: name) }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    // MARK: - Resolving a local record (lazy import)
+
+    /// On first appearance, adopt an existing library record so a browsed work that's
+    /// already saved shows its real local state. Doesn't import anything.
+    private func resolveExistingIfNeeded() {
+        guard !resolvedExisting else { return }
+        resolvedExisting = true
+        switch source {
+        case .saved(let work):
+            localWork = work
+        case .remote(let summary):
+            localWork = existingWork(forSource: summary.workURL, in: context)
+        }
+    }
+
+    /// Ensures a local `SavedWork` exists, importing the remote work on demand (the
+    /// same download+import the reader already used — no new AO3 request types), then
+    /// runs `action` with it. Local works run `action` immediately.
+    private func withLocalWork(_ action: @escaping (SavedWork) -> Void) {
+        resolveExistingIfNeeded()
+        if let work = localWork { action(work); return }
+        // A remote work needs importing; ignore re-taps while one is already in flight.
+        guard let summary = remote, !working else { return }
         Task {
-            downloading = true
+            working = true
             loadError = nil
             do {
-                let temp = try await AO3Client.shared.downloadEPUB(workID: id)
-                try? FileManager.default.removeItem(at: work.fileURL)
-                try FileManager.default.moveItem(at: temp, to: work.fileURL)
-                work.hasEPUB = true
-                work.isFinished = false
-                work.lastSpineIndex = 0
-                try? context.save()
-                goToReader = true
+                let temp = try await AO3Client.shared.downloadEPUB(workID: summary.id)
+                let posted = Int(summary.chapters.split(separator: "/").first?
+                    .trimmingCharacters(in: .whitespaces) ?? "") ?? 0
+                let saved = try importEPUB(temp, source: summary.workURL,
+                                           isComplete: summary.isComplete ?? false,
+                                           seriesURL: summary.seriesURL ?? "",
+                                           knownChapterCount: posted, into: context)
+                localWork = saved
+                working = false
+                action(saved)
             } catch let error as AO3Error {
                 loadError = error.errorDescription
+                working = false
             } catch {
-                loadError = error.localizedDescription
+                loadError = "The download couldn't be saved."
+                working = false
             }
-            downloading = false
         }
     }
 
-    /// Fetches every work in this work's series from AO3 and hands them to the
-    /// download queue, which downloads + imports them serially (already-saved works
-    /// are skipped). Surfaces a fetch failure in the same footer as the reader.
+    // MARK: - Reading
+
+    /// Opens the reader for this work. Imports a remote work first, and re-downloads a
+    /// freed history entry, before pushing the reader — it never opens another detail.
+    private func read() {
+        withLocalWork { work in
+            if work.hasEPUB { readerWork = work; return }
+            // Freed history entry: re-download into the existing record, keeping its id
+            // (so progress/tags stay attached), then open.
+            guard let id = WorkTags.ao3WorkID(from: work.sourceURL) else {
+                loadError = "This work can't be re-downloaded automatically. Open it on AO3."
+                return
+            }
+            Task {
+                working = true
+                loadError = nil
+                do {
+                    let temp = try await AO3Client.shared.downloadEPUB(workID: id)
+                    try? FileManager.default.removeItem(at: work.fileURL)
+                    try FileManager.default.moveItem(at: temp, to: work.fileURL)
+                    work.hasEPUB = true
+                    work.isFinished = false
+                    work.lastSpineIndex = 0
+                    try? context.save()
+                    working = false
+                    readerWork = work
+                } catch let error as AO3Error {
+                    loadError = error.errorDescription
+                    working = false
+                } catch {
+                    loadError = error.localizedDescription
+                    working = false
+                }
+            }
+        }
+    }
+
+    /// Fetches every work in this work's series from AO3 and hands them to the download
+    /// queue (already-saved works are skipped). Surfaces failures in the action footer.
     private func downloadSeries() async {
-        guard let url = URL(string: work.seriesURL) else { return }
+        guard let work = localWork, let url = URL(string: work.seriesURL) else { return }
         queuingSeries = true
         loadError = nil
         do {
@@ -367,12 +556,11 @@ struct WorkDetailView: View {
         queuingSeries = false
     }
 
-    /// Works imported before Work Tags existed get their tags filled in lazily from
-    /// the on-disk EPUB the first time they're opened (history entries without a
-    /// file are skipped — they re-populate on their next download).
-    private func backfillWorkTagsIfNeeded() {
+    /// Works imported before Work Tags existed get their tags filled in lazily from the
+    /// on-disk EPUB the first time they're opened (history entries without a file are
+    /// skipped — they re-populate on their next download).
+    private func backfillWorkTagsIfNeeded(_ work: SavedWork) {
         guard work.workTags.isEmpty, work.hasEPUB else { return }
-        // Best-effort background backfill: stay silent if the EPUB can't be read.
         guard let meta = try? EPUBDocument.metadata(ofEPUBAt: work.fileURL) else { return }
         let tags = SavedWork.normalizedWorkTags(meta.subjects, excludingRating: meta.rating)
         guard !tags.isEmpty else { return }
@@ -381,21 +569,27 @@ struct WorkDetailView: View {
         try? context.save()
     }
 
+    // MARK: - My Tags editing
+
     private func addTypedTag() {
         let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        apply(tag(named: trimmed))
+        apply(named: trimmed)
         newTagName = ""
     }
 
-    private func apply(_ tag: Tag) {
-        if !work.tags.contains(where: { $0.name == tag.name }) {
-            work.tags.append(tag)
-            try? context.save()
+    private func apply(named name: String) {
+        withLocalWork { work in
+            let tag = tag(named: name)
+            if !work.tags.contains(where: { $0.name == tag.name }) {
+                work.tags.append(tag)
+                try? context.save()
+            }
         }
     }
 
     private func removeTag(_ tag: Tag) {
+        guard let work = localWork else { return }
         work.tags.removeAll { $0.name == tag.name }
         try? context.save()
     }

@@ -56,7 +56,7 @@ struct HomeView: View {
             #endif
             .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
             .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
             .task(id: auth.isLoggedIn) { await loadSubscriptions() }
             .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }

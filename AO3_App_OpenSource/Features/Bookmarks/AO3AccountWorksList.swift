@@ -3,8 +3,8 @@ import SwiftUI
 /// A login-gated list of AO3 works fetched from one of the user's account pages
 /// (Marked for Later, bookmarks, …). Self-contained: signed-out prompt, loading,
 /// empty, error + retry, and a paginated list reusing the search result card.
-/// Navigates to `AO3WorkDetailView` through the host's navigation stack, so the
-/// host must register an `AO3WorkSummary` destination.
+/// Navigates to the canonical `WorkDetailView` through the host's navigation stack,
+/// so the host must register an `AO3WorkSummary` destination.
 struct AO3AccountWorksList: View {
     /// Which account list to show. Holds the page's copy, URL, and fetch method so
     /// the view body is identical across lists.
@@ -91,6 +91,7 @@ struct AO3AccountWorksList: View {
                 signedOutPrompt
             }
         }
+        .hidesFloatingTabBar()
         .task(id: auth.isLoggedIn) {
             // Load on first appearance and again right after a sign-in; skip the
             // signed-out state so we don't fire an unauthenticated request.

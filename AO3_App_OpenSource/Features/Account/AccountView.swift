@@ -42,7 +42,7 @@ struct AccountView: View {
             #endif
             .navigationDestination(for: Route.self, destination: destination)
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .sheet(isPresented: $showingLogin) { AO3LoginView() }
             .sheet(isPresented: $showingAbout) { NavigationStack { AboutView() } }
             .sheet(isPresented: $showingBugReport) { BugReportView() }
