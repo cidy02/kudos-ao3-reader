@@ -338,9 +338,6 @@ struct LibraryView: View {
                     if hideMature && works.contains(where: \.isAdult) {
                         MatureRevealToggle()
                     }
-                    if !works.isEmpty {
-                        filterButton
-                    }
                     if !statisticsWorks.isEmpty {
                         NavigationLink {
                             ReadingStatisticsView(works: statisticsWorks)
@@ -357,6 +354,10 @@ struct LibraryView: View {
                         }
                     }
                     #endif
+                    // Filters sits rightmost — matched on Browse.
+                    if !works.isEmpty {
+                        filterButton
+                    }
                 }
                 .labelStyle(.iconOnly)
             }

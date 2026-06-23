@@ -104,26 +104,28 @@ struct FandomWorksView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            // One item holding a tight HStack so the icons cluster like Library's
+            // (separate ToolbarItems get the system's wider spacing). Filters rightmost.
             ToolbarItem(placement: .primaryAction) {
-                Button { showingFilters = true } label: {
-                    Image(systemName: hasExtraFilters
-                        ? "line.3.horizontal.decrease.circle.fill"
-                        : "line.3.horizontal.decrease.circle")
-                }
-                .accessibilityLabel("Filters")
-                .help("Filter works in this fandom")
-            }
-            if phase == .loaded && !results.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
-                    } label: {
-                        Image(systemName: expandAll
-                            ? "rectangle.compress.vertical"
-                            : "rectangle.expand.vertical")
+                HStack(spacing: 2) {
+                    if phase == .loaded && !results.isEmpty {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
+                        } label: {
+                            Label(expandAll ? "Collapse all cards" : "Expand all cards",
+                                  systemImage: expandAll
+                                    ? "rectangle.compress.vertical"
+                                    : "rectangle.expand.vertical")
+                        }
                     }
-                    .accessibilityLabel(expandAll ? "Collapse all cards" : "Expand all cards")
+                    Button { showingFilters = true } label: {
+                        Label("Filter", systemImage: hasExtraFilters
+                            ? "line.3.horizontal.decrease.circle.fill"
+                            : "line.3.horizontal.decrease.circle")
+                    }
+                    .help("Filter works in this fandom")
                 }
+                .labelStyle(.iconOnly)
             }
         }
         .inspector(isPresented: $showingFilters) {
