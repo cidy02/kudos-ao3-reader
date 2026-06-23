@@ -120,7 +120,7 @@ struct HomeView: View {
             return
         }
         isLoadingSubscriptions = true
-        subscriptions = await auth.accountWorks(from: AO3Client.subscriptionsURL)
+        subscriptions = await auth.accountSubscriptions()
         isLoadingSubscriptions = false
     }
 

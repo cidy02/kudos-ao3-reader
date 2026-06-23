@@ -348,6 +348,20 @@ final class AO3AuthService {
         }
     }
 
+    /// One page of the signed-in user's *work* subscriptions. Separate from
+    /// `accountWorks` because the subscriptions page isn't work-blurb markup and needs
+    /// `subscriptionsPage`. Returns `[]` when signed out or on any failure.
+    func accountSubscriptions(page: Int = 1) async -> [AO3WorkSummary] {
+        guard isLoggedIn, let username,
+              let url = AO3Client.subscriptionsURL(username: username, page: page) else { return [] }
+        do {
+            let request = try authenticatedRequest(for: url)
+            return try await AO3Client.shared.subscriptionsPage(for: request, page: page).works
+        } catch {
+            return []
+        }
+    }
+
     func applyFallbackTheme(_ theme: ReaderTheme) {
         loginPerformer.applyVisibleTheme(theme)
     }

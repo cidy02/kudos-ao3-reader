@@ -33,6 +33,19 @@ struct AO3WorkSummary: Identifiable, Hashable, Sendable {
 
     var workURL: URL { URL(string: "https://archiveofourown.org/works/\(id)")! }
     var authorText: String { authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ") }
+
+    /// A sparse summary for a *work subscription*. AO3's subscriptions page lists only
+    /// each work's title, id, and author — no stats, fandoms, or rating — so those
+    /// fields stay empty here; opening the work loads its full detail page.
+    static func subscription(id: Int, title: String, authors: [String]) -> AO3WorkSummary {
+        AO3WorkSummary(
+            id: id, title: title, authors: authors, fandoms: [], rating: "",
+            warnings: [], categories: [], isComplete: nil, dateUpdated: "",
+            tags: [], summary: "", language: "", words: nil, chapters: "",
+            comments: nil, kudos: nil, hits: nil,
+            seriesTitle: nil, seriesURL: nil, seriesPosition: nil
+        )
+    }
 }
 
 /// One page of search results, with the current page and total page count

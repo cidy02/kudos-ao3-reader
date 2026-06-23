@@ -57,13 +57,14 @@ struct AO3AccountWorksList: View {
         }
         func fetch(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
             switch self {
-            // All of these render standard work blurbs (the bookmarks page needs a
-            // different outer selector). Subscriptions mixes types; parseSearchPage
-            // keeps only the work blurbs.
-            case .markedForLater, .history, .subscriptions:
+            // Marked-for-Later and History render standard work blurbs; bookmarks and
+            // subscriptions each need their own outer selector / parser.
+            case .markedForLater, .history:
                 try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks:
                 try await AO3Client.shared.bookmarksPage(for: request, page: page)
+            case .subscriptions:
+                try await AO3Client.shared.subscriptionsPage(for: request, page: page)
             }
         }
     }
