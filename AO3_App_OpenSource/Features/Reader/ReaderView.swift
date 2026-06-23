@@ -123,7 +123,7 @@ struct ReaderView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView("Opening…")
+                ReaderPageSkeleton()
             } else if document != nil, readRoot != nil, chapterCount > 0 {
                 WebView(webView: controller.webView)
                     // Full-screen so toggling the chrome (status bar / home indicator /

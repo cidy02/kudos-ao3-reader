@@ -349,9 +349,9 @@ struct SearchView: View {
 
     @ViewBuilder
     private var statusOverlay: some View {
+        // First-load (loading + empty) is handled upstream by the skeleton list, so it
+        // never reaches this overlay; only the empty/failed result states do.
         switch phase {
-        case .loading where results.isEmpty:
-            ProgressView("Searching…")
         case .loaded where results.isEmpty:
             ContentUnavailableView.search(text: filters.query)
         case .failed(let message):

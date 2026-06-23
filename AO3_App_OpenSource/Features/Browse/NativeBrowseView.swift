@@ -112,9 +112,9 @@ struct FandomWorksView: View {
 
     @ViewBuilder
     private var statusOverlay: some View {
+        // First-load (loading + empty) is handled upstream by the skeleton list, so it
+        // never reaches this overlay; only the empty/failed result states do.
         switch phase {
-        case .loading where results.isEmpty:
-            ProgressView("Loading \(fandom)…")
         case .loaded where results.isEmpty:
             ContentUnavailableView(
                 "No works found",

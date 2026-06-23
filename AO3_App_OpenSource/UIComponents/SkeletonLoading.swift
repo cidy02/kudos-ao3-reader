@@ -133,6 +133,61 @@ struct FandomRowSkeleton: View {
     }
 }
 
+// MARK: - Reader
+
+/// A reading-page wireframe for the reader's "opening" state: a chapter heading and
+/// several paragraphs of justified-looking text lines, so opening a work shows the
+/// shape of a page instead of a centered spinner.
+struct ReaderPageSkeleton: View {
+    /// Line widths per paragraph (last line of each is short, like real prose).
+    private let paragraphs: [[CGFloat?]] = [
+        [nil, nil, nil, 180],
+        [nil, nil, nil, nil, 120],
+        [nil, nil, 210],
+        [nil, nil, nil, 160],
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SkeletonTextLine(height: 22, width: 220)   // chapter heading
+                .padding(.bottom, 4)
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, widths in
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
+                        SkeletonTextLine(height: 13, width: width)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .skeletonShimmer()
+    }
+}
+
+// MARK: - Inline rows
+
+/// A single placeholder list row (one text line) for inline loading states inside
+/// Forms/Lists — account session restore, tag suggestion fetches, etc.
+struct SkeletonListRow: View {
+    var width: CGFloat? = nil
+    var trailingWidth: CGFloat? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SkeletonTextLine(height: 14, width: width)
+            if let trailingWidth {
+                Spacer(minLength: 16)
+                SkeletonTextLine(height: 14, width: trailingWidth)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .skeletonShimmer()
+    }
+}
+
 // MARK: - Ready-made lists (match the real card lists they replace)
 
 /// A card list of work-row skeletons — Search, Fandom works, and Account AO3 lists.
