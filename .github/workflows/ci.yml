@@ -28,7 +28,7 @@ jobs:
       - name: Install tools
         run: brew install swiftlint swiftformat
       - name: SwiftLint
-        run: swiftlint lint AO3_App_OpenSource
+        run: swiftlint lint kudos-ao3-reader
       - name: SwiftFormat (advisory)
         continue-on-error: true
-        run: swiftformat --lint AO3_App_OpenSource
+        run: swiftformat --lint kudos-ao3-reader

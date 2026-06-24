@@ -39,7 +39,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* AO3_App_OpenSource */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AO3_App_OpenSource;
+			path = kudos-ao3-reader;
 			sourceTree = "<group>";
 		};
 		000000000000000000000510 /* KudosTests */ = {

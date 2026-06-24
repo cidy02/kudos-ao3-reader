@@ -1,7 +1,7 @@
 # SwiftFormat configuration for Kudos.
 #
 # Kept deliberately conservative so it largely agrees with the existing code —
-# running `swiftformat AO3_App_OpenSource` should make only small, safe changes,
+# running `swiftformat kudos-ao3-reader` should make only small, safe changes,
 # not a wholesale reflow. It is advisory (a convenience formatter), not a CI gate.
 # No bulk reformat has been run. Apply opportunistically via `Scripts/lint.sh --fix`.
 

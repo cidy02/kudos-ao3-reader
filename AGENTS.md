@@ -80,7 +80,7 @@ The project uses `objectVersion = 90` with **deterministic IDs** and
 **file-system-synchronized groups**.
 
 - **Adding a Swift file? Do NOT edit `project.pbxproj`.** Files under
-  `AO3_App_OpenSource/` and `KudosTests/` are auto-included by the synchronized group.
+  `kudos-ao3-reader/` and `KudosTests/` are auto-included by the synchronized group.
 - **xcodebuild/Xcode rewrites `project.pbxproj` cosmetically on build** (app
   name/path, quote removal, key reordering). If you did **not** intentionally
   change the project, revert that churn before staging:

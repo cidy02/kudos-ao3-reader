@@ -13,7 +13,7 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-SOURCES="AO3_App_OpenSource"
+SOURCES="kudos-ao3-reader"
 status=0
 
 if [ "${1:-}" = "--fix" ]; then
