@@ -195,14 +195,14 @@ struct WorkDetailView: View {
         Section("Details") {
             if !displayAuthor.isEmpty { LabeledContent("Author", value: displayAuthor) }
             if !displayRating.isEmpty { LabeledContent("Rating", value: displayRating) }
-            if let warnings = remote?.warnings, !warnings.isEmpty {
-                LabeledContent("Warnings", value: warnings.joined(separator: ", "))
+            if !displayWarnings.isEmpty {
+                LabeledContent("Warnings", value: displayWarnings.joined(separator: ", "))
             }
-            if let categories = remote?.categories, !categories.isEmpty {
-                LabeledContent("Category", value: categories.joined(separator: ", "))
+            if !displayCategories.isEmpty {
+                LabeledContent("Category", value: displayCategories.joined(separator: ", "))
             }
-            if let complete = remote?.isComplete {
-                LabeledContent("Status", value: complete ? "Complete" : "Work in Progress")
+            if let status = displayStatus {
+                LabeledContent("Status", value: status)
             }
             if !displayLanguage.isEmpty { LabeledContent("Language", value: displayLanguage) }
             if let words = displayWords { LabeledContent("Words", value: words.formatted()) }
@@ -227,6 +227,38 @@ struct WorkDetailView: View {
     }
     private var displayRating: String { firstNonEmpty(localWork?.rating, remote?.rating) }
     private var displayLanguage: String { firstNonEmpty(localWork?.language, remote?.language) }
+
+    // Warnings / categories / status / stats: prefer the local record's stored values
+    // (canonical once refreshed), falling back to the remote summary while unsaved.
+    private var displayWarnings: [String] {
+        if let w = localWork?.workWarnings, !w.isEmpty { return w }
+        return remote?.warnings ?? []
+    }
+    private var displayCategories: [String] {
+        if let c = localWork?.workCategories, !c.isEmpty { return c }
+        return remote?.categories ?? []
+    }
+    private var displayStatus: String? {
+        // A local work's completion flag is only meaningful for AO3-sourced imports
+        // (a plain EPUB import has no status), so don't assert WIP for those.
+        if let work = localWork, WorkTags.ao3WorkID(from: work.sourceURL) != nil {
+            return work.isComplete ? "Complete" : "Work in Progress"
+        }
+        if let complete = remote?.isComplete { return complete ? "Complete" : "Work in Progress" }
+        return nil
+    }
+    private var displayKudos: Int? {
+        if let k = localWork?.kudos, k > 0 { return k }
+        return remote?.kudos
+    }
+    private var displayComments: Int? {
+        if let c = localWork?.comments, c > 0 { return c }
+        return remote?.comments
+    }
+    private var displayHits: Int? {
+        if let h = localWork?.hits, h > 0 { return h }
+        return remote?.hits
+    }
     private var displayWords: Int? {
         if let count = localWork?.wordCount, count > 0 { return count }
         return remote?.words
@@ -256,11 +288,11 @@ struct WorkDetailView: View {
 
     @ViewBuilder
     private var statsSection: some View {
-        if let remote, remote.kudos != nil || remote.comments != nil || remote.hits != nil {
+        if displayKudos != nil || displayComments != nil || displayHits != nil {
             Section("Stats") {
-                if let kudos = remote.kudos { LabeledContent("Kudos", value: kudos.formatted()) }
-                if let comments = remote.comments { LabeledContent("Comments", value: comments.formatted()) }
-                if let hits = remote.hits { LabeledContent("Hits", value: hits.formatted()) }
+                if let kudos = displayKudos { LabeledContent("Kudos", value: kudos.formatted()) }
+                if let comments = displayComments { LabeledContent("Comments", value: comments.formatted()) }
+                if let hits = displayHits { LabeledContent("Hits", value: hits.formatted()) }
             }
         }
     }
@@ -483,6 +515,7 @@ struct WorkDetailView: View {
                                            isComplete: summary.isComplete ?? false,
                                            seriesURL: summary.seriesURL ?? "",
                                            knownChapterCount: posted, into: context)
+                applyRemoteMetadata(summary, to: saved)
                 localWork = saved
                 working = false
                 action(saved)
@@ -494,6 +527,21 @@ struct WorkDetailView: View {
                 working = false
             }
         }
+    }
+
+    /// Copies the AO3 summary's stats / warnings / categories onto a freshly-imported
+    /// work so the detail (and a later Library open) shows full parity immediately — the
+    /// EPUB carries none of these. The background AO3 refresh keeps them current. Only
+    /// fills blanks, so it never clobbers values the import already set.
+    private func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
+        if work.workWarnings.isEmpty { work.workWarnings = summary.warnings }
+        if work.workCategories.isEmpty { work.workCategories = summary.categories }
+        if work.kudos == 0, let kudos = summary.kudos { work.kudos = kudos }
+        if work.comments == 0, let comments = summary.comments { work.comments = comments }
+        if work.hits == 0, let hits = summary.hits { work.hits = hits }
+        if work.wordCount == 0, let words = summary.words { work.wordCount = words }
+        if work.chapters.isEmpty { work.chapters = summary.chapters }
+        try? context.save()
     }
 
     // MARK: - Reading

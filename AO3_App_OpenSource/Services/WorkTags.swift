@@ -30,6 +30,8 @@ enum WorkTags {
             if let words = groups.words { work.wordCount = words }
             work.chapters = groups.chapters
             if let kudos = groups.kudos { work.kudos = kudos }
+            if let comments = groups.comments { work.comments = comments }
+            if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
             try? context.save()
         } catch {

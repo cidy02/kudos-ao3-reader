@@ -250,6 +250,8 @@ struct AO3ClientTests {
         <dd class="words">12,345</dd>
         <dd class="chapters">5/10</dd>
         <dd class="kudos">890</dd>
+        <dd class="comments">76</dd>
+        <dd class="hits">54,321</dd>
       </dl>
     </dl>
     </body></html>
@@ -267,5 +269,7 @@ struct AO3ClientTests {
         #expect(groups.words == 12345)
         #expect(groups.chapters == "5/10")
         #expect(groups.kudos == 890)
+        #expect(groups.comments == 76)
+        #expect(groups.hits == 54321)
     }
 }

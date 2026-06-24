@@ -354,6 +354,11 @@ actor AO3Client {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let kudosText = (try? doc.select("dd.kudos").first()?.text()) ?? ""
         let kudos = Int(kudosText.filter(\.isNumber))
+        // Comments and hits round out the stats block, mirroring the Search-result card.
+        let commentsText = (try? doc.select("dd.comments").first()?.text()) ?? ""
+        let comments = Int(commentsText.filter(\.isNumber))
+        let hitsText = (try? doc.select("dd.hits").first()?.text()) ?? ""
+        let hits = Int(hitsText.filter(\.isNumber))
 
         return AO3WorkTagGroups(
             fandoms: try tags("fandom"),
@@ -365,7 +370,9 @@ actor AO3Client {
             language: language,
             words: words,
             chapters: chapters,
-            kudos: kudos
+            kudos: kudos,
+            comments: comments,
+            hits: hits
         )
     }
 
