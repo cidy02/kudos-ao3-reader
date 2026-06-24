@@ -24,24 +24,14 @@ and SwiftData.
 
 ## Branch strategy
 
-This repo tracks two versions of the app on two branches:
+Single branch: **`main`**. (The project previously tracked a `main`/`readium-migration`
+split during the reader migration; those were consolidated into `main` in June 2026.)
 
-| Branch | What it is |
-|---|---|
-| `main` | **Stable legacy version.** The custom WKWebView + JavaScript reader with hand-rolled EPUB parsing (`MiniZip` / `OPFParser` / `NCXParser`). |
-| `readium-migration` | **Ongoing migration** to the [Readium Swift Toolkit](https://github.com/readium/swift-toolkit). Replaces the custom reader/parsing piece by piece. |
-
-Both versions live at the same paths; switch between them with Git:
-
-```bash
-git checkout main                # work on / build the stable legacy app
-git checkout readium-migration   # work on / build the Readium migration
-```
-
-> Switching branches rewrites the working tree (e.g. the `readium-migration`
-> branch adds `AO3_App_OpenSource/Features/ReaderReadium/` and the Readium SPM
-> dependency). Anything you have in progress is on its branch — nothing is lost
-> by switching.
+The reader uses the [Readium Swift Toolkit](https://github.com/readium/swift-toolkit)
+on **iOS/iPadOS**, and the original custom WKWebView + JavaScript reader (with
+hand-rolled `MiniZip` / `OPFParser` / `NCXParser` parsing) on **macOS** — Readium's
+navigator is UIKit-only, so macOS keeps the legacy reader. `BookReaderView` routes
+to the right one per platform.
 
 ## What's not tracked
 
@@ -55,8 +45,8 @@ config (`.claude/`), and working notes/prompts/scratch files
 ## Building
 
 Open `AO3_App_OpenSource.xcodeproj` in Xcode and build the `AO3_App_OpenSource`
-scheme. The `readium-migration` branch's Readium reader runs on iOS/iPadOS; for
-Simulator builds from the command line, code signing can be disabled:
+scheme. The Readium reader runs on iOS/iPadOS; for Simulator builds from the
+command line, code signing can be disabled:
 
 ```bash
 xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \

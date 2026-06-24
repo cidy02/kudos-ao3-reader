@@ -5,6 +5,10 @@ This document tracks bugs and issues found during development and testing. It he
 Each bug has a stable ID (`BUG-N`); link active bugs to a task in [`../TASKS.md`](../TASKS.md)
 when work starts. **Status:** `Open` · `In Progress` · `Fixed & Verified` · `Won't fix`.
 
+> **Note (2026-06-24):** the project is now a **single `main` branch** — older entries
+> below that say a fix landed on "`main` + `readium-migration`" are historical; both
+> tracks were consolidated into `main`.
+
 ---
 
 ## Active Bugs

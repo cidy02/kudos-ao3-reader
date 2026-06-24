@@ -5,6 +5,11 @@ import SwiftData
 import UIKit
 #endif
 
+// The legacy WKWebView reader is the **macOS** reader implementation only — iOS uses
+// the Readium navigator (see `BookReaderView`), so this whole file is excluded from
+// iOS builds.
+#if os(macOS)
+
 /// A basic EPUB reader with selectable themes, fonts, and scrolled/paged layout
 /// (including a two-page spread on wide windows, except iPhone). Display options
 /// live in a hideable inspector sidebar.
@@ -518,3 +523,5 @@ private struct PageSwipe: ViewModifier {
         )
     }
 }
+
+#endif

@@ -50,7 +50,7 @@ handoff channel between sessions and between agents.
   History" vs the local "History"); a dedup / clarity sweep over the Phase-2 +
   download-queue / bulk-actions code; general maintainability pass.
 
-### Readium migration — `readium-migration` only (see `READIUM_MIGRATION_NOTES.md`)
+### Readium reader — Phase-4 polish (now on `main`, iOS reader; see `READIUM_MIGRATION_NOTES.md`)
 - **T-20 · Phase-4 interaction polish** — auto-hide chrome on scroll, custom
   page-turn animation, safe-area inset tuning. (Notes ▸ Migration status, Phase 4 = partial.)
 
@@ -68,21 +68,14 @@ handoff channel between sessions and between agents.
 - **Keychain on a signed device build.** Confirm the session actually persists to
   Keychain on real hardware (the WebKit-store fallback is meant to be the
   Simulator/dev backstop only). See [`docs/AO3Authentication.md`](docs/AO3Authentication.md).
-- **Broken intermediate commit `cb8e67b`** (the T-34 split) is on both branches'
-  history and does **not** build on its own; HEAD is fine. Squash it via force-push
-  only with the human's OK (AGENTS.md ▸ ask before force-pushing).
-- **Scratch worktree cleanup.** Leftover `/private/tmp/Kudos-*` worktrees (incl. the
-  `readium-migration` one ports go through). `git worktree prune` + remove when done.
-- **Stashed pollution on `main` (2026-06-21).** `main`'s working tree had
-  `readium-migration` content staged on it (Readium source, async `importEPUB`, rm
-  `pbxproj`/`Package.resolved`). Stashed to **`stash@{0}`** ("POLLUTION: …") to
-  restore a clean `main`. It's recoverable; **`git stash drop`** once confirmed it
-  was accidental (it should not land on `main`).
-- **Contaminated local `build/` derivedData.** It holds cached Readium modules
-  (`ReadiumFuzi.o`, …), so `canImport(ReadiumShared)` wrongly evaluates **true** on
-  `main`, making `KudosBackup`'s `readiumLocator` access fail to compile. `main` is
-  actually fine (Codex's `#if canImport` guard is correct) — just **`rm -rf build/`**
-  and rebuild. Use a fresh `-derivedDataPath` for `main` vs `readium-migration`.
+- **Single-branch consolidation (2026-06-24).** The `main` (legacy) / `readium-migration`
+  split was merged into a **single `main` branch**; all other branches were deleted
+  (local + remote). The old cross-branch hazards once listed here no longer apply — no
+  scratch worktrees, no "pollution stashed on main", and `main` now *legitimately*
+  includes Readium (iOS), so a `readiumLocator` reference is correct, **not** a stale
+  build artifact. The legacy WKWebView reader is now `#if os(macOS)`-guarded (iOS uses
+  the Readium navigator). Still: build **both** iOS (Readium) and macOS (legacy) before
+  claiming a cross-platform change is done.
 
 ### Bugs
 - _No active bugs._ ↳ see the **🐛 Bugs registry** below.
@@ -186,8 +179,8 @@ _Consolidated from the former `docs/UI_Polish_Todo.md`._
 
 - **macOS reader — decided:** iOS/iPadOS use Readium; **macOS keeps the legacy
   reader** (Readium navigator is UIKit-only). Readium SPM is scoped `platformFilter = ios;`.
-- **Workflow — decided:** general work on `main` first, then port to
-  `readium-migration` (see `AGENTS.md` ▸ golden branch rule).
+- **Workflow — decided:** **single `main` branch** (the `main`/`readium-migration`
+  split was consolidated 2026-06-24). Just commit to `main`; no cross-branch porting.
 - **AO3 authentication — decided:** native account UI drives AO3's real form in
   a hidden WebView; mechanism failures reveal the same WebView as a fallback.
   Sessions, never passwords, are stored device-only in Keychain.
@@ -195,14 +188,14 @@ _Consolidated from the former `docs/UI_Polish_Todo.md`._
   `project.pbxproj`.
 - **Open — migration (`READIUM_MIGRATION_NOTES.md` §6):** consolidate Library
   metadata on Readium vs keep the custom OPF layer?
-- **Cleanup:** `test/card-lists` is abandoned/polluted and local-only — delete it
-  eventually; never merge it.
+- **Cleanup — done:** `test/card-lists` (abandoned/polluted) was deleted in the
+  2026-06-24 single-branch consolidation, along with all other non-`main` branches.
 - **Layout overhaul (`test/home-tab-overhaul`) — decided:** Home & Library both use
   the shared `WorkCarouselSection`. **Library cards open the work's *detail* page**
   (the management surface), not straight into the reader as on Home — by design.
   **Saved for Later = local saved + AO3 Marked for Later** merged; **Collections =
-  placeholder** (no model yet); **no Synced/Local badges yet**. Branch is **not** to
-  be merged into `main`/`readium-migration` until the user says so.
+  placeholder** (no model yet); **no Synced/Local badges yet**. (Branch long since
+  merged to `main` and deleted in the single-branch consolidation.)
 - **Open — layout follow-ups (deferred):** (1) light filter *quick-chips* on the
   Library dashboard — only the active-filter banner + full Filters inspector exist
   so far; (2) a `Collection` model to make Collections real; (3) confirm whether
@@ -212,7 +205,7 @@ _Consolidated from the former `docs/UI_Polish_Todo.md`._
 
 ## ↩️ Context for the next session
 
-- **Done & pushed (both branches, in sync with `origin`):** the full AO3 auth
+- **Done & pushed (`main`, in sync with `origin`):** the full AO3 auth
   foundation + **Phase-2 reads** (Marked for Later, Bookmarks, History,
   Subscriptions — all under the Bookmarks tab's "AO3" segment), plus the
   missing-features batch — **download queue & bulk actions, About page, Continue
@@ -222,9 +215,8 @@ _Consolidated from the former `docs/UI_Polish_Todo.md`._
   then start **Highlights / notes / annotations**. Automatic CloudKit backup/sync
   remains a later phase. The **live AO3 verification** debt still needs a real
   signed-in session.
-- **Porting note:** `readium-migration` is checked out in a `/private/tmp/Kudos-*`
-  worktree — port there (cherry-pick), not via `git checkout` in the main repo. See
-  [[legacy-first-workflow]].
+- **Single branch:** the project is now just `main` (consolidated 2026-06-24) — no
+  porting, no worktrees. Build **both** iOS (Readium) and macOS (legacy reader).
 - Quick commands — Build/Test: `xcodebuild … CODE_SIGNING_ALLOWED=NO` ·
   `Scripts/test.sh` · Lint: `Scripts/lint.sh`.
 

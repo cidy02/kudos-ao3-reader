@@ -14,24 +14,19 @@ Kudos is a native **SwiftUI + SwiftData** reader for Archive of Our Own, targeti
 direction, design/engineering principles, and the final guiding principle every
 contribution is measured against.
 
-## Branches — read carefully
+## Branch — single `main`
 
-| Branch | What it is | Rule |
-|---|---|---|
-| `main` | Stable **legacy** reader (custom WKWebView + `EPUB.swift` parsing). | Default branch. General work starts here. |
-| `readium-migration` | The **Readium Swift Toolkit** migration (iOS reader = Readium; macOS still legacy). | Readium-specific work only. |
-| `test/card-lists` | ⛔️ **Abandoned & polluted** — Readium code was copied onto it and UI work reverted. | **Never** branch from, edit, merge, or push it. |
+The project is a **single `main` branch** (origin default; private
+`github.com/cidy02/kudos-ao3-reader`). A `main` (legacy) / `readium-migration` split
+existed during the reader migration; it was **consolidated into `main` in June 2026**,
+and all other branches (`readium-migration`, `test/card-lists`, etc.) were deleted.
+Just commit to `main` — there is no more cross-branch porting / cherry-picking.
 
-`origin` = private `github.com/cidy02/kudos-ao3-reader` (only `main` + `readium-migration` are pushed).
-
-### The golden branch rule
-
-- **General** changes (bug fixes, UI polish, tests, tooling, non-reader features) →
-  land on **`main` first**, then port to `readium-migration` (cherry-pick).
-- **Readium-specific** changes (anything under `Features/ReaderReadium/`,
-  `EPUBPreferences`, the Readium SPM wiring) → **`readium-migration` only**.
-- Make a change **once** and cherry-pick it — never re-implement the same change
-  independently on both branches (that causes the divergence/merge pain).
+**Reader (per-platform, one codebase):** `BookReaderView` routes **iOS → Readium**
+(`Features/ReaderReadium/`, the Readium Swift Toolkit) and **macOS → the legacy
+WKWebView reader** (`Features/Reader/ReaderView.swift` + `ReaderController.swift`, which
+are `#if os(macOS)`-guarded, so they're excluded from iOS). Readium's navigator is
+UIKit-only, hence the macOS fallback. Readium SPM products are scoped `platformFilter = ios`.
 
 ## Roles & responsibilities
 
@@ -69,18 +64,14 @@ branch, touch only its files, and never revert another agent's commits.**
 - **Commit messages:** imperative subject; short body explaining *why*; end with
   your own co-author trailer, e.g.
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- **Branching:** work directly on `main` / `readium-migration` for normal tasks
-  (the human prefers this to PR branches for a solo repo). Use a feature branch
-  only for a risky/large spike, and say so in `TASKS.md`.
-- **Port `main` → `readium-migration`:** `git checkout readium-migration && git cherry-pick <sha>`.
-  Conflicts usually land in `WorkImporter.swift` (it's `async` on that branch) and
-  the import call sites — combine `async` + `throws`. Build + test before
-  `git cherry-pick --continue`.
-- **Pushing:** push as you go (`git push origin <branch>`) unless told to batch.
+- **Branching:** work directly on **`main`** for normal tasks (the human prefers this
+  to PR branches for a solo repo). Use a feature branch only for a risky/large spike,
+  and say so in `TASKS.md`. (No more cross-branch porting — single branch.)
+- **Pushing:** push as you go (`git push origin main`) unless told to batch.
   A `could not resolve host` failure is a transient DNS hiccup — just retry.
-- **Verify before commit:** `Scripts/lint.sh` (SwiftLint gate; currently 0 errors /
-  ~38 advisory warnings) and `Scripts/test.sh` (63 tests on `main`; 67 on
-  `readium-migration`). Build with
+- **Verify before commit:** `Scripts/lint.sh` (SwiftLint gate) and `Scripts/test.sh`.
+  Build **both** iOS (resolves the Readium SPM graph) and **macOS** (legacy reader,
+  no Readium) before claiming a cross-platform change is done. Build with
   `CODE_SIGNING_ALLOWED=NO` for the simulator.
 
 ## `project.pbxproj` — handle with care (top conflict source)
@@ -97,9 +88,8 @@ The project uses `objectVersion = 90` with **deterministic IDs** and
 - **Adding a target or build phase** needs careful hand-editing — mirror the app
   target and use the `…5xxxxx` ID block to avoid collisions. This is high-conflict:
   note it in `TASKS.md` and let **one** agent own pbxproj changes at a time.
-- `readium-migration`'s project has the Readium SPM products (`platformFilter = ios;`)
-  and a Run Script that strips Readium bundle xattrs — don't clobber these when
-  cherry-picking.
+- The project has the Readium SPM products (`platformFilter = ios;`) and a Run Script
+  that strips Readium bundle xattrs — don't clobber these.
 
 ## Sensitive / never-commit
 

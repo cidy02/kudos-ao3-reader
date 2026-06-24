@@ -4,6 +4,10 @@ import WebKit
 import UIKit
 #endif
 
+// Backs the legacy WKWebView reader (`ReaderView`), which is macOS-only now — iOS
+// uses the Readium navigator. Excluded from iOS builds.
+#if os(macOS)
+
 /// Owns the reader's web view: injects the theme/layout stylesheet, turns pages
 /// in paged mode, reports page position, and signals chapter boundaries.
 @Observable
@@ -206,3 +210,5 @@ private final class ReaderScriptProxy: NSObject, WKScriptMessageHandler {
         controller?.handleMessage(message.body)
     }
 }
+
+#endif

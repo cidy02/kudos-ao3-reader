@@ -5,13 +5,12 @@ This document records what the app actually accepts, which metadata it uses, and
 where the legacy parser intentionally falls short of a general-purpose EPUB
 implementation.
 
-## Branch and platform behavior
+## Platform behavior (single `main` branch)
 
-| Branch / platform | Import metadata | Reader |
+| Platform | Import metadata | Reader |
 |---|---|---|
-| `main` — all platforms | Legacy `MiniZip` + `OPFParser` | Legacy `EPUBDocument` + `WKWebView` |
-| `readium-migration` — iOS/iPadOS | Readium `Publication` | Readium EPUB navigator |
-| `readium-migration` — macOS | Legacy parser | Legacy reader |
+| iOS / iPadOS | Readium `Publication` | Readium EPUB navigator |
+| macOS | Legacy `MiniZip` + `OPFParser` | Legacy `EPUBDocument` + `WKWebView` (`#if os(macOS)`) |
 
 The legacy stack therefore remains production code even after the iOS Readium
 migration. Changes to its format assumptions must still be tested on both
@@ -138,10 +137,9 @@ AO3 rating is inferred only when a subject exactly matches one of:
 All other subjects become initial work tags after removing the selected rating.
 The AO3 work-page refresh may later replace or enrich language and tag metadata.
 
-On `readium-migration`, iOS maps Readium's richer metadata into the same Library
-fields. It joins multiple authors, uses the first language and series, and keeps
-the same exact AO3-rating subject matching. macOS continues to use the legacy
-rules above.
+On iOS, the import maps Readium's richer metadata into the same Library fields. It
+joins multiple authors, uses the first language and series, and keeps the same exact
+AO3-rating subject matching. macOS continues to use the legacy rules above.
 
 ## Import and failure behavior
 
@@ -183,7 +181,7 @@ When changing EPUB handling:
 3. Include EPUB 2 NCX and EPUB 3 nav cases when changing TOC logic.
 4. Check nested resource paths, duplicate basenames, percent-encoded hrefs, and
    malformed/missing manifest references.
-5. Verify `main` plus macOS on `readium-migration` for legacy changes.
-6. Verify iOS on `readium-migration` for Readium metadata or navigator changes.
+5. Verify on **macOS** for legacy parser/reader changes.
+6. Verify on **iOS** for Readium metadata or navigator changes.
 7. Do not silently broaden trusted-input assumptions; add path containment,
    compression validation, and active-content policy first.
