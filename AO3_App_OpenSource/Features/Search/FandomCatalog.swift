@@ -34,6 +34,46 @@ final class FandomCatalog {
         fandomsByCategory[category.id]
     }
 
+    /// Clears the cached fandom catalog (disk + memory) — the Privacy & Local Data
+    /// "Clear Browse cache" action. It rebuilds the next time Browse is opened.
+    func clearCache() {
+        cache.clear()
+        fandomsByCategory = [:]
+        entries = [:]
+        didLoadCache = false
+    }
+
+    /// Loads the on-disk fandom cache into memory **without any network**, so other
+    /// surfaces (e.g. Global Search) can match the cached AO3 catalog instantly. The
+    /// cached counts are kept fresh by the browser's stale-while-revalidate refresh;
+    /// running a real search corrects any drift.
+    func warmCache() async {
+        await loadCacheIfNeeded()
+    }
+
+    /// Cached AO3 fandoms (across all categories) whose name contains `query` —
+    /// matched on-device, so typing feels live without scraping AO3 per keystroke.
+    /// Prefix matches first, then by work count. Deduped by name.
+    func cachedFandoms(matching query: String, limit: Int = 12) -> [AO3Fandom] {
+        let q = query.lowercased()
+        guard !q.isEmpty else { return [] }
+        var seen = Set<String>()
+        var matches: [AO3Fandom] = []
+        for list in fandomsByCategory.values {
+            for fandom in list where fandom.name.lowercased().contains(q) {
+                if seen.insert(fandom.name.lowercased()).inserted { matches.append(fandom) }
+            }
+        }
+        return matches.sorted { lhs, rhs in
+            let lp = lhs.name.lowercased().hasPrefix(q)
+            let rp = rhs.name.lowercased().hasPrefix(q)
+            if lp != rp { return lp }
+            return (lhs.workCount ?? 0) > (rhs.workCount ?? 0)
+        }
+        .prefix(limit)
+        .map { $0 }
+    }
+
     /// Shows any disk-cached lists immediately, then fetches the categories that are
     /// missing or stale — **concurrently but bounded** (a few at a time, polite) so
     /// the cards fill in together rather than one slow row at a time. Fresh results

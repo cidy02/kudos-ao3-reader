@@ -94,10 +94,8 @@ struct ReaderOptionsForm: View {
                 Section {
                     switch auth.status {
                     case .restoring:
-                        HStack {
-                            ProgressView()
-                            Text("Checking AO3 session…")
-                        }
+                        // Restoring the AO3 session — show the shape of the signed-in row.
+                        SkeletonListRow(width: 96, trailingWidth: 120)
 
                     case .signedIn(let username):
                         LabeledContent {

@@ -24,6 +24,9 @@ struct LibraryView: View {
     @State private var path = NavigationPath()
     @State private var filters = LibraryFilters()
     @State private var markedForLater: [AO3WorkSummary] = []
+    /// True only while the remote Marked-for-Later request is in flight, so the
+    /// Saved for Later carousel can show cover skeletons instead of its empty state.
+    @State private var isLoadingMarkedForLater = false
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
 
@@ -76,7 +79,7 @@ struct LibraryView: View {
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
             .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .toolbar { toolbarContent }
             .alert("New Collection", isPresented: $showingNewCollection) {
                 TextField("Name", text: $newCollectionName)
@@ -168,21 +171,28 @@ struct LibraryView: View {
         let saved = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
         let mfl = filteredMarkedForLater
         let hasItems = !saved.isEmpty || !mfl.isEmpty
+        // Skeletons only while the remote list is loading and there's nothing yet —
+        // local saved works render immediately and suppress the placeholders.
+        let showSkeleton = isLoadingMarkedForLater && !hasItems
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: hasItems,
+            hasItems: hasItems || showSkeleton,
             onSeeAll: hasItems ? { path.append(kind) } : nil
         ) {
-            ForEach(saved.prefix(12)) { work in
-                NavigationLink(value: work) {
-                    WorkCoverCard(work: work, footer: nil, progress: nil)
-                }
-                .buttonStyle(.plain)
-            }
-            ForEach(mfl.prefix(12)) { work in
-                NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+            if showSkeleton {
+                ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
+            } else {
+                ForEach(saved.prefix(12)) { work in
+                    NavigationLink(value: work) {
+                        WorkCoverCard(work: work, footer: nil, progress: nil)
+                    }
                     .buttonStyle(.plain)
+                }
+                ForEach(mfl.prefix(12)) { work in
+                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                        .buttonStyle(.plain)
+                }
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
@@ -320,28 +330,37 @@ struct LibraryView: View {
             ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
             #endif
         } else {
-            if hideMature && works.contains(where: \.isAdult) {
-                ToolbarItem { MatureRevealToggle() }
-            }
-            if !works.isEmpty {
-                ToolbarItem { filterButton }
-            }
-            if !statisticsWorks.isEmpty {
-                ToolbarItem {
-                    NavigationLink {
-                        ReadingStatisticsView(works: statisticsWorks)
-                    } label: {
-                        Label("Reading Insights", systemImage: "chart.bar.xaxis")
+            // A single item holding a tight HStack — separate ToolbarItems (and even
+            // a ToolbarItemGroup) get the system's wide spacing, which squeezes the
+            // large "Library" title. Icon-only so they read as a compact cluster.
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 2) {
+                    if hideMature && works.contains(where: \.isAdult) {
+                        MatureRevealToggle()
+                    }
+                    if !statisticsWorks.isEmpty {
+                        NavigationLink {
+                            ReadingStatisticsView(works: statisticsWorks)
+                        } label: {
+                            Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                        }
+                    }
+                    #if os(iOS)
+                    if !works.isEmpty {
+                        Button {
+                            enterSelectMode()
+                        } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                    }
+                    #endif
+                    // Filters sits rightmost — matched on Browse.
+                    if !works.isEmpty {
+                        filterButton
                     }
                 }
+                .labelStyle(.iconOnly)
             }
-            #if os(iOS)
-            if !works.isEmpty {
-                ToolbarItem {
-                    Button("Select") { enterSelectMode() }
-                }
-            }
-            #endif
         }
     }
 
@@ -373,7 +392,16 @@ struct LibraryView: View {
 
     /// Loads the user's AO3 "Marked for Later" list for the Saved for Later section.
     private func loadMarkedForLater() async {
+        // No request happens when signed out (accountWorks early-returns), so skip the
+        // loading flag — the local saved works (if any) and empty state show at once.
+        guard auth.isLoggedIn else {
+            markedForLater = []
+            isLoadingMarkedForLater = false
+            return
+        }
+        isLoadingMarkedForLater = true
         markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
+        isLoadingMarkedForLater = false
     }
 
     private func createCollection() {

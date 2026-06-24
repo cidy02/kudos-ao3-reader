@@ -123,7 +123,7 @@ struct ReaderView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView("Opening…")
+                ReaderPageSkeleton()
             } else if document != nil, readRoot != nil, chapterCount > 0 {
                 WebView(webView: controller.webView)
                     // Full-screen so toggling the chrome (status bar / home indicator /
@@ -170,6 +170,16 @@ struct ReaderView: View {
                 } label: {
                     Label("Display Options", systemImage: "textformat.size")
                 }
+            }
+            ToolbarItem {
+                Menu {
+                    if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
+                        AO3WorkActionsMenu(workID: id)
+                    }
+                } label: {
+                    Label("More actions", systemImage: "ellipsis.circle")
+                }
+                .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
             }
         }
         #if os(iOS)

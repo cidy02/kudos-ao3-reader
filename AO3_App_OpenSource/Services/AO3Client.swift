@@ -197,15 +197,18 @@ actor AO3Client {
         return components?.url
     }
 
-    /// The URL of a user's AO3 subscriptions page. The page mixes work, series, and
-    /// author subscriptions; `parseSearchPage` extracts only the `li.work.blurb`
-    /// items, so this surfaces the user's *work* subscriptions.
+    /// The URL of a user's AO3 *work* subscriptions. The subscriptions page is a
+    /// `<dl>` of work/series/user subscriptions — not work-blurb markup — so it needs
+    /// `parseSubscriptionsPage`, not `parseSearchPage`. `?type=works` narrows it to
+    /// work subscriptions server-side (so pagination counts works too).
     static func subscriptionsURL(username: String, page: Int) -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         var components = URLComponents(string: "https://archiveofourown.org")
         components?.path = "/users/\(name)/subscriptions"
-        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        var items = [URLQueryItem(name: "type", value: "works")]
+        if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
+        components?.queryItems = items
         return components?.url
     }
 
@@ -250,6 +253,11 @@ actor AO3Client {
     /// An authenticated AO3 bookmarks page (the user's bookmarked works).
     func bookmarksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
         try Self.parseBookmarksPage(try await authenticatedHTML(for: request), page: page)
+    }
+
+    /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
+    func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
+        try Self.parseSubscriptionsPage(try await authenticatedHTML(for: request), page: page)
     }
 
     /// Builds AO3's `word_count` expression from the from/to fields.
@@ -346,6 +354,11 @@ actor AO3Client {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let kudosText = (try? doc.select("dd.kudos").first()?.text()) ?? ""
         let kudos = Int(kudosText.filter(\.isNumber))
+        // Comments and hits round out the stats block, mirroring the Search-result card.
+        let commentsText = (try? doc.select("dd.comments").first()?.text()) ?? ""
+        let comments = Int(commentsText.filter(\.isNumber))
+        let hitsText = (try? doc.select("dd.hits").first()?.text()) ?? ""
+        let hits = Int(hitsText.filter(\.isNumber))
 
         return AO3WorkTagGroups(
             fandoms: try tags("fandom"),
@@ -357,7 +370,9 @@ actor AO3Client {
             language: language,
             words: words,
             chapters: chapters,
-            kudos: kudos
+            kudos: kudos,
+            comments: comments,
+            hits: hits
         )
     }
 
@@ -484,6 +499,33 @@ actor AO3Client {
     /// link and are skipped — only bookmarked works are surfaced.
     static func parseBookmarksPage(_ html: String, page: Int) throws -> AO3SearchPage {
         try parseWorksList(html, page: page, blurbSelector: "li.bookmark.blurb")
+    }
+
+    /// Parses a user's AO3 subscriptions page. Unlike search/readings, it's a
+    /// `<dl class="subscription index group">` of `<dt>` items mixing work, series, and
+    /// user subscriptions — not `li.work.blurb` markup. Each `<dt>` holds a link to the
+    /// subscribed item plus a byline; we keep the ones linking to `/works/<id>` and
+    /// build a sparse summary (title + author only — the page carries no stats).
+    static func parseSubscriptionsPage(_ html: String, page: Int) throws -> AO3SearchPage {
+        let doc = try SwiftSoup.parse(html)
+        var works: [AO3WorkSummary] = []
+        for dt in try doc.select("dl.subscription dt").array() {
+            // The work link points at /works/<id>; series/user subscriptions have no
+            // such link and are skipped.
+            guard let workLink = try dt.select("a[href*=\"/works/\"]").first(),
+                  let id = Self.workID(fromPath: try workLink.attr("href")) else { continue }
+            let title = try workLink.text()
+            // The remaining links are the byline pseuds (/users/...) — the author(s).
+            let authors = try dt.select("a[href*=\"/users/\"]").array().map { try $0.text() }
+            works.append(.subscription(id: id, title: title, authors: authors))
+        }
+        var totalPages = page
+        for li in try doc.select("ol.pagination li").array() {
+            if let value = Int((try li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
+                totalPages = value
+            }
+        }
+        return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
     private static func parseWorksList(

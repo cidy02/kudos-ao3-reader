@@ -24,7 +24,7 @@ struct FandomListView: View {
         Group {
             switch phase {
             case .loading:
-                ProgressView("Loading fandoms…")
+                FandomRowSkeletonList()
             case .failed(let message):
                 ContentUnavailableView {
                     Label("Couldn't load fandoms", systemImage: "wifi.slash")
@@ -63,6 +63,7 @@ struct FandomListView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .hidesFloatingTabBar()
         .task { if fandoms.isEmpty { await load() } }
     }
 

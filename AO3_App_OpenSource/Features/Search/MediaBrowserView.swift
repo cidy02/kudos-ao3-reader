@@ -29,7 +29,7 @@ struct MediaBrowserView: View {
         Group {
             switch phase {
             case .loading:
-                ProgressView("Loading fandoms…")
+                CategoryCardSkeletonList()
             case .failed(let message):
                 ContentUnavailableView {
                     Label("Couldn't load fandoms", systemImage: "wifi.slash")
@@ -137,7 +137,10 @@ struct MediaBrowserView: View {
                     statItem("doc.text", "~\(compact(works)) works")
                 }
             } else {
-                statItem("ellipsis", "Counting fandoms…")
+                // Counts for this category are still loading (no extra request) — show
+                // a quiet stat-line skeleton instead of a "Counting…" spinner.
+                SkeletonBlock(height: 11, width: 104, cornerRadius: 4)
+                    .skeletonShimmer()
             }
             if stats.savedCount > 0 {
                 statItem("bookmark.fill", "\(stats.savedCount) saved")

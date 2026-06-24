@@ -54,6 +54,7 @@ struct WorkCoverCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            CoverStatsLine(rating: work.rating, chapters: work.chapters)
             if let footer {
                 Text(footer)
                     .font(.caption2)
@@ -106,32 +107,51 @@ struct AO3WorkCoverCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            CoverStatsLine(rating: work.rating, chapters: work.chapters)
         }
         .frame(width: 120, alignment: .leading)
     }
 }
 
-/// How the dashboard opens a tapped work: straight into the reader when the EPUB is
-/// on disk, otherwise its detail page (which can re-download a freed file).
+/// A compact rating + chapter-count line for the cover-card shelves, using the same
+/// `WorkStatLabel` glyphs as the dense rows so every surface's metadata matches.
+struct CoverStatsLine: View {
+    let rating: String
+    let chapters: String
+
+    var body: some View {
+        let ratingShort = WorkStat.ratingShort(rating)
+        if ratingShort != nil || !chapters.isEmpty {
+            HStack(spacing: 10) {
+                if let ratingShort {
+                    WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
+                }
+                if !chapters.isEmpty {
+                    WorkStatLabel(text: chapters, symbol: "book")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// How the dashboard opens a tapped work: the canonical Work Detail, the same screen
+/// every other entry point lands on (tap a card → detail; the detail's Read button
+/// opens the reader). Opening it also clears the work from Recently Updated.
 struct HomeWorkDestination: View {
     let work: SavedWork
     @Environment(\.modelContext) private var context
 
     var body: some View {
-        Group {
-            if work.hasEPUB {
-                ReaderView(work: work)
-            } else {
-                WorkDetailView(work: work)
+        WorkDetailView(work: work)
+            .onAppear {
+                // Opening an updated work marks its current chapters as seen — clears
+                // it from Recently Updated.
+                if work.hasUpdate {
+                    work.knownChapterCount = work.postedChapterCount
+                    try? context.save()
+                }
             }
-        }
-        .onAppear {
-            // Opening an updated work marks its current chapters as seen — clears it
-            // from Recently Updated.
-            if work.hasUpdate {
-                work.knownChapterCount = work.postedChapterCount
-                try? context.save()
-            }
-        }
     }
 }

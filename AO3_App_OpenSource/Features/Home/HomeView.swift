@@ -18,6 +18,9 @@ struct HomeView: View {
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
     @State private var path = NavigationPath()
     @State private var subscriptions: [AO3WorkSummary] = []
+    /// True only while the remote subscriptions request is actually in flight, so the
+    /// carousel can show cover skeletons instead of briefly flashing its empty state.
+    @State private var isLoadingSubscriptions = false
 
     /// Route marker so the Subscriptions header can push the full AO3 list.
     private struct SubscriptionsRoute: Hashable {}
@@ -53,7 +56,7 @@ struct HomeView: View {
             #endif
             .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
             .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { AO3WorkDetailView(work: $0, path: $path) }
+            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
             .task(id: auth.isLoggedIn) { await loadSubscriptions() }
             .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
@@ -81,15 +84,22 @@ struct HomeView: View {
     }
 
     private var subscriptionsSection: some View {
-        WorkCarouselSection(
+        // Show cover skeletons only while the request is in flight and we have nothing
+        // yet; once it finishes (empty or not) the real cards / empty state take over.
+        let showSkeleton = isLoadingSubscriptions && subscriptions.isEmpty
+        return WorkCarouselSection(
             title: "Subscriptions",
             collapseKey: "home.subscriptions",
-            hasItems: !subscriptions.isEmpty,
+            hasItems: !subscriptions.isEmpty || showSkeleton,
             onSeeAll: subscriptions.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
         ) {
-            ForEach(subscriptions.prefix(12)) { work in
-                NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
-                    .buttonStyle(.plain)
+            if showSkeleton {
+                ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
+            } else {
+                ForEach(subscriptions.prefix(12)) { work in
+                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                        .buttonStyle(.plain)
+                }
             }
         } emptyState: {
             SectionEmptyState(
@@ -102,7 +112,16 @@ struct HomeView: View {
     }
 
     private func loadSubscriptions() async {
-        subscriptions = await auth.accountWorks(from: AO3Client.subscriptionsURL)
+        // No request happens when signed out (accountWorks early-returns), so don't
+        // raise the loading flag — the signed-out empty state should show immediately.
+        guard auth.isLoggedIn else {
+            subscriptions = []
+            isLoadingSubscriptions = false
+            return
+        }
+        isLoadingSubscriptions = true
+        subscriptions = await auth.accountSubscriptions()
+        isLoadingSubscriptions = false
     }
 
     // MARK: Card details

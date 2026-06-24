@@ -211,10 +211,14 @@ struct TagPickerView: View {
             .foregroundStyle(.secondary)
     }
 
+    /// Placeholder tag rows shown while suggestions are being fetched — the shape of
+    /// the rows that will replace them, instead of an inline spinner.
     private func loadingRow(_ text: String) -> some View {
-        HStack(spacing: 8) {
-            ProgressView()
-            Text(text).foregroundStyle(.secondary)
+        ForEach([220.0, 160.0, 190.0, 130.0], id: \.self) { width in
+            SkeletonTextLine(height: 15, width: width)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+                .skeletonShimmer()
         }
     }
 
