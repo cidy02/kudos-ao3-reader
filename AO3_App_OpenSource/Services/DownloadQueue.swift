@@ -67,7 +67,7 @@ final class DownloadQueue {
             items[index].status = .downloading
             do {
                 let temp = try await AO3Client.shared.downloadEPUB(workID: item.id)
-                _ = try await importEPUB(
+                _ = try importEPUB(
                     temp, source: item.sourceURL,
                     isComplete: item.isComplete, seriesURL: item.seriesURL, into: context
                 )

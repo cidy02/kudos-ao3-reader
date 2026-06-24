@@ -1,0 +1,75 @@
+import Foundation
+
+/// The local (library-backed) sections of the Home dashboard. `title` drives both
+/// the carousel header and the pushed "See all" page; `works(from:visible:)` is the
+/// single source of each section's filter + ordering, so the carousel and the
+/// full list never drift. (Network sections — Subscriptions, Recently Updated —
+/// are handled separately in `HomeView`.)
+enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
+    case readingNow
+    case recentlyUpdated
+    case favorites
+    case recentlyOpened
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .readingNow: "Reading Now"
+        case .recentlyUpdated: "Recently Updated"
+        case .favorites: "Favorites"
+        case .recentlyOpened: "Recently Opened"
+        }
+    }
+
+    /// Per-section empty-state copy (from the layout spec).
+    var emptyMessage: String {
+        switch self {
+        case .readingNow:
+            "You're not reading anything right now. Start exploring in Browse or open something from your Library."
+        case .recentlyUpdated:
+            "No recent updates from your subscriptions yet."
+        case .favorites:
+            "No favorites yet. Mark works as favorites to see them here."
+        case .recentlyOpened:
+            "Nothing opened recently. Start reading to see your history here."
+        }
+    }
+
+    var emptyIcon: String {
+        switch self {
+        case .readingNow: "book"
+        case .recentlyUpdated: "sparkles"
+        case .favorites: "star"
+        case .recentlyOpened: "clock"
+        }
+    }
+
+    /// The works for this section — filtered + ordered, uncapped. `visible` is the
+    /// privacy predicate (callers pass `passesPrivacy`); carousels cap the result.
+    func works(from works: [SavedWork], visible: (SavedWork) -> Bool) -> [SavedWork] {
+        switch self {
+        case .readingNow:
+            // In-progress (started, not finished, file present) — most recently read first.
+            return works
+                .filter { $0.isInProgress && visible($0) }
+                .sorted { recency($0) > recency($1) }
+        case .favorites:
+            return works
+                .filter { $0.isFavorite && visible($0) }
+                .sorted { recency($0) > recency($1) }
+        case .recentlyUpdated:
+            // Works AO3 has added chapters to since the user last saw them.
+            return works
+                .filter { $0.hasUpdate && visible($0) }
+                .sorted { ($0.lastUpdateCheck ?? .distantPast) > ($1.lastUpdateCheck ?? .distantPast) }
+        case .recentlyOpened:
+            // Anything actually opened (has a read date), newest first.
+            return works
+                .filter { $0.lastReadDate != nil && visible($0) }
+                .sorted { ($0.lastReadDate ?? .distantPast) > ($1.lastReadDate ?? .distantPast) }
+        }
+    }
+
+    private func recency(_ work: SavedWork) -> Date { work.lastReadDate ?? work.dateAdded }
+}

@@ -2,31 +2,32 @@ import SwiftUI
 
 /// The app's top-level sections.
 enum AppTab: String, Hashable, CaseIterable, Identifiable {
-    case search, browse, library, bookmarks, settings
+    case home, library, browse, account, search
 
     var id: String { rawValue }
 
-    /// The tabs shown in the main tab bar / sidebar. Settings is presented
-    /// separately: a trailing search-style button on iOS, a sidebar footer on macOS.
-    static let mainTabs: [AppTab] = [.search, .browse, .library, .bookmarks]
+    /// The four core tabs in the main tab bar / sidebar. `search` is a global action
+    /// presented separately (the iOS search-role slot / a macOS sidebar button);
+    /// Settings and the old Bookmarks lists now live inside Account.
+    static let mainTabs: [AppTab] = [.home, .library, .browse, .account]
 
     var title: String {
         switch self {
-        case .search: "Search"
-        case .browse: "Browse"
+        case .home: "Home"
         case .library: "Library"
-        case .bookmarks: "Bookmarks"
-        case .settings: "Settings"
+        case .browse: "Browse"
+        case .account: "Account"
+        case .search: "Search"
         }
     }
 
     var symbol: String {
         switch self {
-        case .search: "magnifyingglass"
-        case .browse: "safari"
+        case .home: "house"
         case .library: "books.vertical"
-        case .bookmarks: "bookmark"
-        case .settings: "gearshape"
+        case .browse: "safari"
+        case .account: "person.crop.circle"
+        case .search: "magnifyingglass"
         }
     }
 }
@@ -43,7 +44,7 @@ struct LibraryTagFilter: Equatable {
 /// switch to it (e.g. opening a saved bookmark).
 @Observable
 final class AppRouter {
-    var selection: AppTab = .search {
+    var selection: AppTab = .home {
         didSet {
             // Remember where we came from so the focused Search mode's Back button
             // can return there (iOS). Never record Search itself as the target.

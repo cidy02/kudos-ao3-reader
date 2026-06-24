@@ -7,10 +7,8 @@ import SwiftData
 /// work, or throws if the file couldn't be saved. Shared by the Browse tab's
 /// download interception and the native AO3 search/download flow.
 ///
-/// `async` because metadata comes from Readium (which opens the publication
-/// asynchronously) on iOS. Metadata extraction is best-effort: a work still
-/// imports (with a filename fallback title) if its metadata can't be read, since
-/// the file itself is valid. Throws only if the file can't be saved.
+/// Metadata extraction is best-effort: a work still imports (with a filename
+/// fallback title) if its metadata can't be read, since the file itself is valid.
 @MainActor
 @discardableResult
 func importEPUB(
@@ -18,23 +16,10 @@ func importEPUB(
     source: URL?,
     isComplete: Bool = false,
     seriesURL: String = "",
+    knownChapterCount: Int = 0,
     into context: ModelContext
-) async throws -> SavedWork {
-    // Metadata extraction: Readium's `Publication` replaces the custom
-    // `EPUBDocument`/`MiniZip`/`OPFParser` stack on iOS. macOS keeps the old
-    // parser for now (Readium's navigator/shared link UIKit and can't build
-    // there yet); both paths produce the same `ImportedWorkMetadata`.
-    let meta: ImportedWorkMetadata?
-    #if os(iOS)
-    if let publication = try? await ReadiumPublicationLoader.openEPUB(at: tempURL) {
-        meta = ReadiumMetadataMapper.map(publication)
-    } else {
-        meta = nil
-    }
-    #else
-    meta = (try? EPUBDocument.metadata(ofEPUBAt: tempURL)).map(ImportedWorkMetadata.init(legacy:))
-    #endif
-
+) throws -> SavedWork {
+    let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
     if meta == nil { Log.library.notice("EPUB metadata unreadable; importing with the filename as title") }
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
@@ -54,6 +39,10 @@ func importEPUB(
     work.seriesTitle = meta?.seriesTitle ?? ""
     work.seriesPosition = meta?.seriesIndex ?? 0
     work.seriesURL = seriesURL
+    // Baseline for update detection: the posted-chapter count at download time, so
+    // chapters AO3 adds afterwards surface in Home → Recently Updated. Native imports
+    // pass it from the AO3 work page; web imports baseline on the first update check.
+    work.knownChapterCount = knownChapterCount
 
     let destination = work.fileURL
     try? FileManager.default.removeItem(at: destination)

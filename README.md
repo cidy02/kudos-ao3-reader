@@ -55,19 +55,13 @@ config (`.claude/`), and working notes/prompts/scratch files
 ## Building
 
 Open `AO3_App_OpenSource.xcodeproj` in Xcode and build the `AO3_App_OpenSource`
-scheme. The `readium-migration` branch's Readium reader runs on iOS/iPadOS.
-
-A Run Script build phase strips extended attributes from Readium SPM resource
-bundles so that device builds and archives succeed (the provenance/FinderInfo
-xattrs from SPM would otherwise block codesign).
-
-Example command-line archive (then export or manual .ipa packaging):
+scheme. The `readium-migration` branch's Readium reader runs on iOS/iPadOS; for
+Simulator builds from the command line, code signing can be disabled:
 
 ```bash
 xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
-  -destination 'generic/platform=iOS' \
-  -archivePath build/AO3.xcarchive archive \
-  CODE_SIGNING_ALLOWED=NO
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## Testing
@@ -119,6 +113,7 @@ git config core.hooksPath .githooks
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs SwiftLint on every
 push/PR and activates once a remote is added. A build job is omitted until
 GitHub runners ship the iOS 26 / Xcode 27 SDK.
+
 You can also add SwiftLint as an Xcode build phase manually (Target ▸ Build
 Phases ▸ + ▸ New Run Script Phase):
 
@@ -128,13 +123,16 @@ if which swiftlint >/dev/null; then swiftlint; else echo "warning: SwiftLint not
 
 ## Project docs
 
-Planning and tracking notes live in [`docs/`](docs/):
+Planning and tracking notes live in [`TASKS.md`](TASKS.md) and [`docs/`](docs/):
 
 - [`docs/PROJECT_PHILOSOPHY.md`](docs/PROJECT_PHILOSOPHY.md) — the canonical
   product direction, design/engineering principles, and contributor guidance.
-- [`docs/Feature_Ideas.md`](docs/Feature_Ideas.md) — feature backlog.
-- [`docs/UI_Polish_Todo.md`](docs/UI_Polish_Todo.md) — visual / interaction polish items.
-- [`docs/Bugs.md`](docs/Bugs.md) — known issues.
+- [`TASKS.md`](TASKS.md) — the single task board: backlog, completed work, and the
+  consolidated **Bugs (BUG-N)**, **Feature Ideas (FI-N)**, and **UI Polish (UI-N)**
+  registries (these replaced the former `docs/Bugs.md`, `Feature_Ideas.md`, and
+  `UI_Polish_Todo.md`).
+- [`docs/Kudos_Layout_Structure.md`](docs/Kudos_Layout_Structure.md) — navigation
+  and layout model (Home / Library section structure).
 - [`docs/AO3Authentication.md`](docs/AO3Authentication.md) — login, session,
   security, and authenticated-request architecture.
 - [`docs/EPUBParsing.md`](docs/EPUBParsing.md) — supported EPUB structures,

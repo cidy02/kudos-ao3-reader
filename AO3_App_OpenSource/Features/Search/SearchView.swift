@@ -8,7 +8,16 @@ struct SearchView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
 
+    // Local-first search sources (Global Search, Phase 2): matched on-device, live.
+    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var savedWorks: [SavedWork]
+    @Query(sort: \Tag.name) private var allTags: [Tag]
+    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
+
     @State private var filters = AO3SearchFilters()
+    /// Name-entry alert for saving the current search.
+    @State private var showingSaveDialog = false
+    @State private var saveName = ""
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -28,18 +37,19 @@ struct SearchView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
+            .task { await FandomCatalog.shared.warmCache() }
             .navigationTitle("Search")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .navigationDestination(for: AO3WorkSummary.self) { work in
-                AO3WorkDetailView(work: work, path: $path)
+                WorkDetailView(remote: work)
             }
             .navigationDestination(for: SavedWork.self) { work in
-                BookReaderView(work: work)
+                WorkDetailView(work: work)
             }
-            .navigationDestination(for: AO3MediaCategory.self) { category in
-                FandomListView(category: category, onSelect: searchFandomFromBrowse)
+            .navigationDestination(for: WorkCollection.self) { collection in
+                CollectionDetailView(collection: collection)
             }
             .toolbar {
                 #if os(iOS)
@@ -76,15 +86,33 @@ struct SearchView: View {
                     .presentationDragIndicator(.visible)
                     #endif
             }
+            .alert("Save Search", isPresented: $showingSaveDialog) {
+                TextField("Name", text: $saveName)
+                Button("Save") { commitSavedSearch() }
+                    .disabled(saveName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel", role: .cancel) { saveName = "" }
+            } message: {
+                Text("Save the current search and its filters to re-run later.")
+            }
         }
     }
 
-    /// The Media Browser fills the idle state; once a search runs, the results list
-    /// (with its loading / empty / error overlay) takes over.
+    /// Local-first Global Search: with no query, the Media Browser fills the idle
+    /// state; as the user types, on-device matches (works, fandoms, tags,
+    /// collections) appear live plus an explicit "Search AO3" action; once an AO3
+    /// search runs, the results list (with its loading / empty / error overlay)
+    /// takes over.
     @ViewBuilder
     private var content: some View {
         if phase == .idle {
-            MediaBrowserView(onSelectFandom: selectFandom)
+            if localQuery.isEmpty {
+                idleScreen
+            } else {
+                localResultsList
+            }
+        } else if phase == .loading && results.isEmpty {
+            // First load of an AO3 search: show the shape of the incoming results.
+            AO3WorkRowSkeletonList(count: 7)
         } else {
             ScrollViewReader { proxy in
                 List {
@@ -118,6 +146,181 @@ struct SearchView: View {
         }
     }
 
+    // MARK: Local-first results
+
+    /// The empty-query idle state: the user's Saved Searches when they have any,
+    /// otherwise the plain prompt. Fandom/category exploration lives in Browse.
+    @ViewBuilder
+    private var idleScreen: some View {
+        if savedSearches.isEmpty {
+            searchPrompt
+        } else {
+            List {
+                Section {
+                    ForEach(savedSearches) { saved in
+                        Button { runSaved(saved) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(saved.name).foregroundStyle(.primary)
+                                if let subtitle = savedSearchSubtitle(saved.filters) {
+                                    Text(subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete(perform: deleteSavedSearches)
+                    .cardRow()
+                } header: {
+                    Text("Saved Searches")
+                } footer: {
+                    Text("Search your library or AO3 above. Browse fandoms in the Browse tab.")
+                }
+            }
+            .cardList()
+        }
+    }
+
+    /// Shown when nothing's typed yet and there are no saved searches.
+    private var searchPrompt: some View {
+        ContentUnavailableView {
+            Label("Search Kudos", systemImage: "magnifyingglass")
+        } description: {
+            Text("Find works in your library, or search AO3 by title, author, or tag. "
+                 + "Browse fandoms and categories in the Browse tab.")
+        }
+    }
+
+    /// A one-line description of a saved search's filters (the query, then the most
+    /// salient facets) so the row is recognizable beyond its name.
+    private func savedSearchSubtitle(_ f: AO3SearchFilters) -> String? {
+        var parts: [String] = []
+        let q = f.query.trimmingCharacters(in: .whitespaces)
+        if !q.isEmpty { parts.append("“\(q)”") }
+        let fandom = f.fandom.trimmingCharacters(in: .whitespaces)
+        if !fandom.isEmpty { parts.append(fandom) }
+        if f.rating != .any { parts.append(f.rating.title) }
+        if f.completion != .any { parts.append(f.completion.title) }
+        if f.sort != .relevance { parts.append(f.sort.title) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var localQuery: String { filters.query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var matchingWorks: [SavedWork] {
+        let q = localQuery.lowercased()
+        return savedWorks.filter {
+            $0.title.lowercased().contains(q) || $0.author.lowercased().contains(q)
+        }
+    }
+
+    private var matchingFandoms: [String] {
+        let q = localQuery.lowercased()
+        var seen = Set<String>()
+        var out: [String] = []
+        for work in savedWorks {
+            for fandom in work.workFandoms where fandom.lowercased().contains(q) {
+                if seen.insert(fandom.lowercased()).inserted { out.append(fandom) }
+            }
+        }
+        return out
+    }
+
+    private var matchingTags: [Tag] {
+        allTags.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
+    }
+
+    private var matchingCollections: [WorkCollection] {
+        collections.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
+    }
+
+    /// Cached AO3 fandoms matching the query (from the on-disk fandom catalog), minus
+    /// any already shown under the user's own library fandoms. Instant, no scraping;
+    /// tapping one runs the real AO3 search, which corrects any stale cached counts.
+    private var cachedAO3Fandoms: [AO3Fandom] {
+        let inLibrary = Set(matchingFandoms.map { $0.lowercased() })
+        return FandomCatalog.shared.cachedFandoms(matching: localQuery)
+            .filter { !inLibrary.contains($0.name.lowercased()) }
+    }
+
+    /// On-device matches shown live as the user types, plus an explicit AO3 search
+    /// action (no AO3 request fires until the user taps it or submits).
+    private var localResultsList: some View {
+        List {
+            Section {
+                Button(action: runSearch) {
+                    Label("Search AO3 for “\(localQuery)”", systemImage: "magnifyingglass")
+                }
+            } header: {
+                Text("Archive of Our Own")
+            }
+
+            if !matchingWorks.isEmpty {
+                Section("In Your Library") {
+                    ForEach(matchingWorks.prefix(20)) { work in
+                        NavigationLink(value: work) { WorkRow(work: work) }
+                    }
+                    .cardRow()
+                }
+            }
+            if !matchingFandoms.isEmpty {
+                Section("Fandoms in Your Library") {
+                    ForEach(matchingFandoms.prefix(12), id: \.self) { fandom in
+                        Button { router.filterLibrary(.fandom, fandom) } label: {
+                            Label(fandom, systemImage: "books.vertical")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if !cachedAO3Fandoms.isEmpty {
+                Section("Fandoms on AO3") {
+                    ForEach(cachedAO3Fandoms, id: \.id) { fandom in
+                        Button {
+                            setIncludedFandom(fandom.name)
+                            runSearch()
+                        } label: {
+                            HStack {
+                                Label(fandom.name, systemImage: "books.vertical")
+                                Spacer()
+                                if let count = fandom.workCount {
+                                    Text(count.formatted(.number.notation(.compactName)))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if !matchingTags.isEmpty {
+                Section("Your Tags") {
+                    ForEach(matchingTags.prefix(12)) { tag in
+                        Button { router.filterLibrary(.userTag, tag.name) } label: {
+                            Label(tag.name, systemImage: "tag")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if !matchingCollections.isEmpty {
+                Section("Collections") {
+                    ForEach(matchingCollections.prefix(12)) { collection in
+                        NavigationLink(value: collection) {
+                            Label(collection.name, systemImage: "square.stack")
+                        }
+                    }
+                }
+            }
+        }
+        .cardList()
+    }
+
     private var showPagination: Bool { totalPages > 1 && !results.isEmpty }
 
     private let paginationTopID = "pagination-top"
@@ -132,7 +335,7 @@ struct SearchView: View {
     // MARK: Search bar + filter button
 
     private var searchField: some View {
-        GlassFieldBar(text: $filters.query, placeholder: "Search AO3 works", onSubmit: runSearch) {
+        GlassFieldBar(text: $filters.query, placeholder: "Search your library and AO3", onSubmit: runSearch) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -208,9 +411,9 @@ struct SearchView: View {
 
     @ViewBuilder
     private var statusOverlay: some View {
+        // First-load (loading + empty) is handled upstream by the skeleton list, so it
+        // never reaches this overlay; only the empty/failed result states do.
         switch phase {
-        case .loading where results.isEmpty:
-            ProgressView("Searching…")
         case .loaded where results.isEmpty:
             ContentUnavailableView.search(text: filters.query)
         case .failed(let message):
@@ -229,200 +432,21 @@ struct SearchView: View {
     // MARK: Filter sidebar
 
     private var filterPanel: some View {
-        Form {
-          // Group so .appThemedRows() reaches every section's rows (it doesn't
-          // propagate from the Form container, only from a Group/Section/ForEach).
-          Group {
-            Section {
-                Picker("Sort by", selection: $filters.sort) {
-                    ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Rating", selection: $filters.rating) {
-                    ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
-                }
-                .onChange(of: filters.rating) { oldValue, newValue in
-                    if oldValue == .any, newValue != .any {
-                        // A specific rating starts exact and excludes unrated works;
-                        // the separate toggle lets the reader opt them back in.
-                        filters.ratingMatch = .exact
-                        filters.includeNotRated = false
-                    } else if newValue == .any {
-                        filters.ratingMatch = .exact
-                    }
-                }
-                if filters.rating != .any {
-                    Picker("Match", selection: $filters.ratingMatch) {
-                        ForEach(AO3SearchFilters.RatingMatch.allCases) {
-                            Text($0.title).tag($0)
-                        }
-                    }
-                }
-                Toggle("Include Not Rated", isOn: $filters.includeNotRated)
-            }
-
-            Section("Warnings") {
-                ForEach(AO3SearchFilters.Warning.allCases) { warning in
-                    cyclingFacetRow(warning.title, state: warningState(warning)) {
-                        cycle(warning)
-                    }
+        AO3FilterPanel(
+            filters: $filters,
+            canReset: filters.hasActiveFilters,
+            onApply: runSearch,
+            onSave: presentSaveDialog,
+            onReset: {
+                filters = AO3SearchFilters(query: filters.query)
+                // Nothing left to search → return to the Media Browser.
+                if !filters.isSearchable {
+                    results = []
+                    phase = .idle
+                    router.panel = .none
                 }
             }
-
-            Section("Categories") {
-                ForEach(AO3SearchFilters.Category.allCases) { category in
-                    cyclingFacetRow(category.title, state: categoryState(category)) {
-                        cycle(category)
-                    }
-                }
-            }
-
-            Section {
-                Picker("Crossovers", selection: $filters.crossover) {
-                    ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Completion", selection: $filters.completion) {
-                    ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
-                }
-            }
-
-            Section("Word count") {
-                TextField("From", text: $filters.wordsFrom)
-                    #if !os(macOS)
-                    .keyboardType(.numberPad)
-                    #endif
-                TextField("To", text: $filters.wordsTo)
-                    #if !os(macOS)
-                    .keyboardType(.numberPad)
-                    #endif
-            }
-
-            Section {
-                Picker("Updated", selection: $filters.updated) {
-                    ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Language", selection: $filters.language) {
-                    ForEach(AO3SearchFilters.Language.allCases) { Text($0.title).tag($0) }
-                }
-            }
-
-            Section {
-                TagSelectField(title: "Fandoms", kind: .fandom,
-                               included: $filters.fandom, excluded: $filters.excludedFandoms)
-                TagSelectField(title: "Characters", kind: .character,
-                               included: $filters.characters, excluded: $filters.excludedCharacters,
-                               fandomContext: selectedFandoms)
-                TagSelectField(title: "Relationships", kind: .relationship,
-                               included: $filters.relationships, excluded: $filters.excludedRelationships,
-                               fandomContext: selectedFandoms)
-                TagSelectField(title: "Additional Tags", kind: .freeform,
-                               included: $filters.additionalTags, excluded: $filters.excludedAdditionalTags,
-                               fandomContext: selectedFandoms)
-            } header: {
-                Text("Tags")
-            } footer: {
-                Text("Tap a tag once to include it, twice to exclude it, and a third time to clear it.")
-            }
-
-            Section {
-                Button {
-                    runSearch()
-                } label: {
-                    Label("Apply Filters", systemImage: "magnifyingglass")
-                }
-                .disabled(!filters.isSearchable)
-
-                if filters.hasActiveFilters {
-                    Button(role: .destructive) {
-                        filters = AO3SearchFilters(query: filters.query)
-                        // Nothing left to search → return to the Media Browser.
-                        if !filters.isSearchable {
-                            results = []
-                            phase = .idle
-                            router.panel = .none
-                        }
-                    } label: {
-                        Label("Reset Filters", systemImage: "arrow.counterclockwise")
-                    }
-                }
-            }
-          }
-          .appThemedRows()
-        }
-        .formStyle(.grouped)
-        .appThemedScroll()
-    }
-
-    /// The fandoms currently chosen in the filters, used to seed the other tag
-    /// pickers with that fandom's popular tags.
-    private var selectedFandoms: [String] {
-        filters.fandom.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
-
-    /// A tappable multi-select facet row matching the tag pickers' three states.
-    private func cyclingFacetRow(_ title: String, state: FilterSelectionState,
-                                 toggle: @escaping () -> Void) -> some View {
-        Button(action: toggle) {
-            HStack {
-                Text(title).foregroundStyle(.primary)
-                Spacer()
-                switch state {
-                case .clear:
-                    EmptyView()
-                case .included:
-                    Label("Include", systemImage: "plus.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
-                case .excluded:
-                    Label("Exclude", systemImage: "minus.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.red)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func warningState(_ warning: AO3SearchFilters.Warning) -> FilterSelectionState {
-        if filters.warnings.contains(warning) { return .included }
-        if filters.excludedWarnings.contains(warning) { return .excluded }
-        return .clear
-    }
-
-    private func cycle(_ warning: AO3SearchFilters.Warning) {
-        switch warningState(warning).next {
-        case .included:
-            filters.warnings.insert(warning)
-            filters.excludedWarnings.remove(warning)
-        case .excluded:
-            filters.warnings.remove(warning)
-            filters.excludedWarnings.insert(warning)
-        case .clear:
-            filters.warnings.remove(warning)
-            filters.excludedWarnings.remove(warning)
-        }
-    }
-
-    private func categoryState(_ category: AO3SearchFilters.Category) -> FilterSelectionState {
-        if filters.categories.contains(category) { return .included }
-        if filters.excludedCategories.contains(category) { return .excluded }
-        return .clear
-    }
-
-    private func cycle(_ category: AO3SearchFilters.Category) {
-        switch categoryState(category).next {
-        case .included:
-            filters.categories.insert(category)
-            filters.excludedCategories.remove(category)
-        case .excluded:
-            filters.categories.remove(category)
-            filters.excludedCategories.insert(category)
-        case .clear:
-            filters.categories.remove(category)
-            filters.excludedCategories.remove(category)
-        }
+        )
     }
 
     // MARK: Navigation
@@ -453,20 +477,6 @@ struct SearchView: View {
 
     // MARK: Searching
 
-    /// Runs a search for the tapped fandom from the Media Browser (macOS inline path).
-    private func selectFandom(_ name: String) {
-        setIncludedFandom(name)
-        runSearch()
-    }
-
-    /// Same, but pops the pushed fandom detail page so the results become visible
-    /// (the iOS Browse-by-fandom path navigates into a detail page first).
-    private func searchFandomFromBrowse(_ name: String) {
-        setIncludedFandom(name)
-        runSearch()
-        path = NavigationPath()
-    }
-
     private func setIncludedFandom(_ name: String) {
         filters.fandom = name
         filters.excludedFandoms = filters.excludedFandoms.split(separator: ",")
@@ -482,6 +492,47 @@ struct SearchView: View {
         currentPage = 1
         totalPages = 1
         load(page: 1)
+    }
+
+    // MARK: Saved searches
+
+    /// Opens the name-entry alert for saving the current filter set, seeding a sensible
+    /// default name. Invoked from the filter panel's "Save Search…" action.
+    private func presentSaveDialog() {
+        saveName = defaultSavedSearchName
+        showingSaveDialog = true
+    }
+
+    /// A default name for the current search: its query, else its fandom, else a label.
+    private var defaultSavedSearchName: String {
+        let q = filters.query.trimmingCharacters(in: .whitespaces)
+        if !q.isEmpty { return q }
+        let fandom = filters.fandom.trimmingCharacters(in: .whitespaces)
+        if !fandom.isEmpty {
+            return fandom.split(separator: ",").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? fandom
+        }
+        return "Saved Search"
+    }
+
+    /// Persists the current filter set under the entered name.
+    private func commitSavedSearch() {
+        let name = saveName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, filters.isSearchable else { return }
+        context.insert(SavedSearch(name: name, filters: filters))
+        try? context.save()
+        saveName = ""
+    }
+
+    /// Loads a saved search's filters and runs it.
+    private func runSaved(_ saved: SavedSearch) {
+        filters = saved.filters
+        router.panel = .none
+        runSearch()
+    }
+
+    private func deleteSavedSearches(at offsets: IndexSet) {
+        for index in offsets { context.delete(savedSearches[index]) }
+        try? context.save()
     }
 
     /// Navigates to a specific page, replacing the visible results (AO3-style

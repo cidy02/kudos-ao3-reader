@@ -3,8 +3,8 @@ import SwiftUI
 /// A login-gated list of AO3 works fetched from one of the user's account pages
 /// (Marked for Later, bookmarks, …). Self-contained: signed-out prompt, loading,
 /// empty, error + retry, and a paginated list reusing the search result card.
-/// Navigates to `AO3WorkDetailView` through the host's navigation stack, so the
-/// host must register an `AO3WorkSummary` destination.
+/// Navigates to the canonical `WorkDetailView` through the host's navigation stack,
+/// so the host must register an `AO3WorkSummary` destination.
 struct AO3AccountWorksList: View {
     /// Which account list to show. Holds the page's copy, URL, and fetch method so
     /// the view body is identical across lists.
@@ -14,14 +14,6 @@ struct AO3AccountWorksList: View {
         case history
         case subscriptions
 
-        var loadingText: String {
-            switch self {
-            case .markedForLater: "Loading your reading list…"
-            case .bookmarks: "Loading your bookmarks…"
-            case .history: "Loading your history…"
-            case .subscriptions: "Loading your subscriptions…"
-            }
-        }
         var emptyTitle: String {
             switch self {
             case .markedForLater: "Nothing marked for later"
@@ -65,13 +57,14 @@ struct AO3AccountWorksList: View {
         }
         func fetch(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
             switch self {
-            // All of these render standard work blurbs (the bookmarks page needs a
-            // different outer selector). Subscriptions mixes types; parseSearchPage
-            // keeps only the work blurbs.
-            case .markedForLater, .history, .subscriptions:
+            // Marked-for-Later and History render standard work blurbs; bookmarks and
+            // subscriptions each need their own outer selector / parser.
+            case .markedForLater, .history:
                 try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks:
                 try await AO3Client.shared.bookmarksPage(for: request, page: page)
+            case .subscriptions:
+                try await AO3Client.shared.subscriptionsPage(for: request, page: page)
             }
         }
     }
@@ -98,6 +91,7 @@ struct AO3AccountWorksList: View {
                 signedOutPrompt
             }
         }
+        .hidesFloatingTabBar()
         .task(id: auth.isLoggedIn) {
             // Load on first appearance and again right after a sign-in; skip the
             // signed-out state so we don't fire an unauthenticated request.
@@ -128,8 +122,9 @@ struct AO3AccountWorksList: View {
             }
 
         case .loading where works.isEmpty:
-            ProgressView(kind.loadingText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // First page of this AO3 list — show the work-row shape (same skeleton as
+            // Search/Browse) instead of a centered spinner.
+            AO3WorkRowSkeletonList()
 
         default:
             worksList

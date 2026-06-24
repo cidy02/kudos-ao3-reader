@@ -66,10 +66,10 @@ struct AO3WorkRow: View {
             // Stats wrap to a second line rather than truncating when they don't fit
             // (long ratings like "Teen And Up Audiences" no longer clip the row).
             FlowLayout(spacing: 18, rowSpacing: 5) {
-                if !work.rating.isEmpty { statLabel(work.rating, "checkmark.shield") }
-                if let words = work.words { statLabel(words.formatted(), "textformat.size") }
-                if !work.chapters.isEmpty { statLabel(work.chapters, "book") }
-                if let kudos = work.kudos { statLabel(kudos.formatted(), "heart") }
+                if !work.rating.isEmpty { WorkStatLabel(text: work.rating, symbol: "checkmark.shield") }
+                if let words = work.words { WorkStatLabel(text: words.formatted(), symbol: "textformat.size") }
+                if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
+                if let kudos = work.kudos { WorkStatLabel(text: kudos.formatted(), symbol: "heart") }
             }
             .font(.caption2)
             .foregroundStyle(.tertiary)
@@ -95,19 +95,5 @@ struct AO3WorkRow: View {
         // Follow the global expand/collapse-all toggle (also applies on first
         // appearance so cards scrolled into view match the current state).
         .onChange(of: expandAll, initial: true) { _, value in expanded = value }
-    }
-
-    private func statLabel(_ text: String, _ symbol: String) -> some View {
-        // The icon hugs its own label (tight inner spacing) and is bold + tinted in
-        // the theme accent; the wider FlowLayout spacing keeps separate stats apart,
-        // so each glyph reads as belonging to the value beside it.
-        HStack(spacing: 3) {
-            Image(systemName: symbol)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tint)
-            Text(text)
-        }
-        .lineLimit(1)
-        .fixedSize()
     }
 }

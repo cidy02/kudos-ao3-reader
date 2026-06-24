@@ -38,4 +38,14 @@ enum WorkLifecycle {
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         work.hasEPUB = false
     }
+
+    /// Removes a work from the Library entirely: its EPUB, reader cache, and record.
+    /// Saves the context.
+    @MainActor
+    static func delete(_ work: SavedWork, in context: ModelContext) {
+        try? FileManager.default.removeItem(at: work.fileURL)
+        try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
+        context.delete(work)
+        try? context.save()
+    }
 }
