@@ -16,6 +16,9 @@ struct AO3FilterPanel: View {
     var canReset: Bool
     /// Run the search with the current filters.
     var onApply: () -> Void
+    /// Save the current filters as a named Saved Search. When nil (e.g. Browse), no
+    /// Save action is shown.
+    var onSave: (() -> Void)? = nil
     /// Clear filters back to the host's baseline.
     var onReset: () -> Void
 
@@ -103,6 +106,13 @@ struct AO3FilterPanel: View {
                     Label("Apply Filters", systemImage: "magnifyingglass")
                 }
                 .disabled(!filters.isSearchable)
+
+                if let onSave {
+                    Button(action: onSave) {
+                        Label("Save Search…", systemImage: "bookmark")
+                    }
+                    .disabled(!filters.isSearchable)
+                }
 
                 if canReset {
                     Button(role: .destructive, action: onReset) {

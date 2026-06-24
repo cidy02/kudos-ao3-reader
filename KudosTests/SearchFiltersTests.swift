@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Kudos
 
@@ -14,6 +15,32 @@ struct SearchFiltersTests {
         #expect(!filters.hasActiveFilters)
         #expect(filters.searchQuery.isEmpty)
         #expect(filters.structuredRatingID == nil)
+    }
+
+    /// Saved Searches persist the whole filter set via Codable, so a round-trip must
+    /// reproduce every facet exactly.
+    @Test func filtersCodableRoundTripIsLossless() throws {
+        var filters = AO3SearchFilters()
+        filters.query = "found family"
+        filters.fandom = "Naruto, Bleach"
+        filters.excludedAdditionalTags = "Angst"
+        filters.rating = .teen
+        filters.ratingMatch = .orHigher
+        filters.includeNotRated = false
+        filters.warnings = [.noWarnings]
+        filters.categories = [.gen]
+        filters.excludedCategories = [.mm]
+        filters.crossover = .exclude
+        filters.completion = .complete
+        filters.wordsFrom = "1000"
+        filters.wordsTo = "50000"
+        filters.updated = .week
+        filters.language = .english
+        filters.sort = .kudos
+
+        let data = try JSONEncoder().encode(filters)
+        let decoded = try JSONDecoder().decode(AO3SearchFilters.self, from: data)
+        #expect(decoded == filters)
     }
 
     @Test func exactRatingUsesStructuredField() {

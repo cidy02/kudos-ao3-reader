@@ -185,5 +185,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self], inMemory: true)
+        .modelContainer(for: [SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self, SavedSearch.self], inMemory: true)
 }

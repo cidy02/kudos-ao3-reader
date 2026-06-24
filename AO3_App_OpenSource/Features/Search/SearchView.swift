@@ -12,8 +12,12 @@ struct SearchView: View {
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var savedWorks: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
 
     @State private var filters = AO3SearchFilters()
+    /// Name-entry alert for saving the current search.
+    @State private var showingSaveDialog = false
+    @State private var saveName = ""
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -82,6 +86,14 @@ struct SearchView: View {
                     .presentationDragIndicator(.visible)
                     #endif
             }
+            .alert("Save Search", isPresented: $showingSaveDialog) {
+                TextField("Name", text: $saveName)
+                Button("Save") { commitSavedSearch() }
+                    .disabled(saveName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel", role: .cancel) { saveName = "" }
+            } message: {
+                Text("Save the current search and its filters to re-run later.")
+            }
         }
     }
 
@@ -94,7 +106,7 @@ struct SearchView: View {
     private var content: some View {
         if phase == .idle {
             if localQuery.isEmpty {
-                searchPrompt
+                idleScreen
             } else {
                 localResultsList
             }
@@ -136,7 +148,43 @@ struct SearchView: View {
 
     // MARK: Local-first results
 
-    /// Shown when nothing's typed yet. Fandom/category exploration lives in Browse.
+    /// The empty-query idle state: the user's Saved Searches when they have any,
+    /// otherwise the plain prompt. Fandom/category exploration lives in Browse.
+    @ViewBuilder
+    private var idleScreen: some View {
+        if savedSearches.isEmpty {
+            searchPrompt
+        } else {
+            List {
+                Section {
+                    ForEach(savedSearches) { saved in
+                        Button { runSaved(saved) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(saved.name).foregroundStyle(.primary)
+                                if let subtitle = savedSearchSubtitle(saved.filters) {
+                                    Text(subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete(perform: deleteSavedSearches)
+                    .cardRow()
+                } header: {
+                    Text("Saved Searches")
+                } footer: {
+                    Text("Search your library or AO3 above. Browse fandoms in the Browse tab.")
+                }
+            }
+            .cardList()
+        }
+    }
+
+    /// Shown when nothing's typed yet and there are no saved searches.
     private var searchPrompt: some View {
         ContentUnavailableView {
             Label("Search Kudos", systemImage: "magnifyingglass")
@@ -144,6 +192,20 @@ struct SearchView: View {
             Text("Find works in your library, or search AO3 by title, author, or tag. "
                  + "Browse fandoms and categories in the Browse tab.")
         }
+    }
+
+    /// A one-line description of a saved search's filters (the query, then the most
+    /// salient facets) so the row is recognizable beyond its name.
+    private func savedSearchSubtitle(_ f: AO3SearchFilters) -> String? {
+        var parts: [String] = []
+        let q = f.query.trimmingCharacters(in: .whitespaces)
+        if !q.isEmpty { parts.append("“\(q)”") }
+        let fandom = f.fandom.trimmingCharacters(in: .whitespaces)
+        if !fandom.isEmpty { parts.append(fandom) }
+        if f.rating != .any { parts.append(f.rating.title) }
+        if f.completion != .any { parts.append(f.completion.title) }
+        if f.sort != .relevance { parts.append(f.sort.title) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var localQuery: String { filters.query.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -374,6 +436,7 @@ struct SearchView: View {
             filters: $filters,
             canReset: filters.hasActiveFilters,
             onApply: runSearch,
+            onSave: presentSaveDialog,
             onReset: {
                 filters = AO3SearchFilters(query: filters.query)
                 // Nothing left to search → return to the Media Browser.
@@ -429,6 +492,47 @@ struct SearchView: View {
         currentPage = 1
         totalPages = 1
         load(page: 1)
+    }
+
+    // MARK: Saved searches
+
+    /// Opens the name-entry alert for saving the current filter set, seeding a sensible
+    /// default name. Invoked from the filter panel's "Save Search…" action.
+    private func presentSaveDialog() {
+        saveName = defaultSavedSearchName
+        showingSaveDialog = true
+    }
+
+    /// A default name for the current search: its query, else its fandom, else a label.
+    private var defaultSavedSearchName: String {
+        let q = filters.query.trimmingCharacters(in: .whitespaces)
+        if !q.isEmpty { return q }
+        let fandom = filters.fandom.trimmingCharacters(in: .whitespaces)
+        if !fandom.isEmpty {
+            return fandom.split(separator: ",").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? fandom
+        }
+        return "Saved Search"
+    }
+
+    /// Persists the current filter set under the entered name.
+    private func commitSavedSearch() {
+        let name = saveName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, filters.isSearchable else { return }
+        context.insert(SavedSearch(name: name, filters: filters))
+        try? context.save()
+        saveName = ""
+    }
+
+    /// Loads a saved search's filters and runs it.
+    private func runSaved(_ saved: SavedSearch) {
+        filters = saved.filters
+        router.panel = .none
+        runSearch()
+    }
+
+    private func deleteSavedSearches(at offsets: IndexSet) {
+        for index in offsets { context.delete(savedSearches[index]) }
+        try? context.save()
     }
 
     /// Navigates to a specific page, replacing the visible results (AO3-style
