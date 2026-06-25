@@ -481,7 +481,9 @@ struct ReadiumReaderView: View {
             try? context.save()
         }
         book.onOpenExternalURL = { url in
-            router.open(url)
+            // AO3 links in the work (e.g. the preface's tag links) route to the matching
+            // native screen where one exists; everything else opens the in-app web view.
+            router.openAO3Link(url)
         }
         let initialLocator = Locator(persistenceString: work.readiumLocator)
         // No Readium progress yet but a legacy position exists → resume at that chapter.

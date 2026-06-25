@@ -382,6 +382,19 @@ actor AO3Client {
         try Self.parseSearchPage(try await authenticatedHTML(for: request), page: page)
     }
 
+    /// Loads an arbitrary AO3 works listing URL (e.g. a tag's `/tags/<name>/works`
+    /// page, tapped in a work's preface) and parses its work blurbs. Adds the page
+    /// number + `view_adult=true` so paging and adult works resolve like search.
+    func worksPage(at url: URL, page: Int) async throws -> AO3SearchPage {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var items = (components?.queryItems ?? []).filter { $0.name != "page" && $0.name != "view_adult" }
+        items.append(URLQueryItem(name: "view_adult", value: "true"))
+        if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
+        components?.queryItems = items
+        let resolved = components?.url ?? url
+        return try Self.parseSearchPage(try await getHTML(resolved), page: page)
+    }
+
     /// An authenticated AO3 bookmarks page (the user's bookmarked works).
     func bookmarksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
         try Self.parseBookmarksPage(try await authenticatedHTML(for: request), page: page)

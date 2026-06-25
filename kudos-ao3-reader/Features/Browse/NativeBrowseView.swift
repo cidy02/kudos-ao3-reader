@@ -26,6 +26,9 @@ struct BrowseView: View {
                 .navigationDestination(for: FandomRoute.self) { route in
                     FandomWorksView(fandom: route.name)
                 }
+                .navigationDestination(for: AO3TagWorksRequest.self) { request in
+                    TagWorksView(request: request)
+                }
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
                 }
@@ -40,6 +43,13 @@ struct BrowseView: View {
                 // Something asked to open an AO3 URL — surface the website fallback.
                 .onChange(of: router.pendingURL, initial: true) { _, url in
                     if url != nil { showingWebsite = true }
+                }
+                // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
+                .onChange(of: router.pendingTagWorks, initial: true) { _, request in
+                    if let request {
+                        path.append(request)
+                        router.pendingTagWorks = nil
+                    }
                 }
         }
     }
@@ -212,5 +222,109 @@ struct FandomWorksView: View {
     private func resetFilters() {
         filters = Self.baseline(for: fandom)
         reload()
+    }
+}
+
+/// A tag's works, loaded natively from an AO3 `/tags/<name>/works` URL (e.g. a tag
+/// link tapped in a work's preface). Reuses the search result row, pagination, and
+/// first-load skeleton; read-only (no filter panel).
+struct TagWorksView: View {
+    let request: AO3TagWorksRequest
+
+    @State private var results: [AO3WorkSummary] = []
+    @State private var currentPage = 1
+    @State private var totalPages = 1
+    @State private var phase: Phase = .loading
+    @State private var expandAll = false
+
+    private enum Phase: Equatable { case loading, loaded, failed(String) }
+
+    var body: some View {
+        Group {
+            if phase == .loading && results.isEmpty {
+                AO3WorkRowSkeletonList(count: 6)
+            } else {
+                List {
+                    if showPagination { Section { paginationRow } }
+                    Section {
+                        ForEach(results) { work in
+                            NavigationLink(value: work) {
+                                AO3WorkRow(work: work, expandAll: expandAll)
+                            }
+                        }
+                        .cardRow()
+                    }
+                    if showPagination { Section { paginationRow } }
+                }
+                .cardList()
+                .overlay { statusOverlay }
+            }
+        }
+        .navigationTitle(request.title)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .hidesFloatingTabBar()
+        .toolbar {
+            if phase == .loaded && !results.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
+                    } label: {
+                        Image(systemName: expandAll
+                            ? "rectangle.compress.vertical"
+                            : "rectangle.expand.vertical")
+                    }
+                    .accessibilityLabel(expandAll ? "Collapse all cards" : "Expand all cards")
+                }
+            }
+        }
+        .task { await load(page: 1) }
+    }
+
+    private var showPagination: Bool { totalPages > 1 && !results.isEmpty }
+
+    private var paginationRow: some View {
+        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+            Task { await load(page: page) }
+        }
+        .cardRow()
+    }
+
+    @ViewBuilder
+    private var statusOverlay: some View {
+        switch phase {
+        case .loaded where results.isEmpty:
+            ContentUnavailableView(
+                "No works found",
+                systemImage: "tag",
+                description: Text("No works for this tag right now.")
+            )
+        case .failed(let message):
+            ContentUnavailableView {
+                Label("Couldn't load works", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Try Again") { Task { await load(page: currentPage) } }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func load(page: Int) async {
+        if results.isEmpty { phase = .loading }
+        do {
+            let result = try await AO3Client.shared.worksPage(at: request.url, page: page)
+            results = result.works
+            currentPage = result.currentPage
+            totalPages = result.totalPages
+            phase = .loaded
+        } catch let error as AO3Error {
+            phase = .failed(error.errorDescription ?? "Something went wrong.")
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
     }
 }

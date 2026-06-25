@@ -48,6 +48,14 @@ struct AO3TagSearch: Equatable {
     let value: String
 }
 
+/// A request to show a tag's works page natively (from a tapped AO3 link, e.g. in a
+/// work's preface). `url` is AO3's own (already-munged) link; `title` is the readable
+/// tag name for the screen title.
+struct AO3TagWorksRequest: Hashable {
+    let url: URL
+    let title: String
+}
+
 /// Shared navigation state so other tabs can hand a URL to the browser and
 /// switch to it (e.g. opening a saved bookmark).
 @Observable
@@ -69,6 +77,9 @@ final class AppRouter {
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
     /// relationship chip). Consumed + cleared by `SearchView`.
     var pendingTagSearch: AO3TagSearch?
+    /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
+    /// work's preface). Consumed + cleared by `BrowseView`.
+    var pendingTagWorks: AO3TagWorksRequest?
 
     /// The one right-hand inspector panel open anywhere in the app. Routing every
     /// panel (Settings, Search filters, Reader chapters/display) through a single
@@ -84,6 +95,30 @@ final class AppRouter {
     func open(_ url: URL) {
         pendingURL = url
         selection = .browse
+    }
+
+    /// Routes an AO3 link (e.g. tapped in a work's preface) to the matching native
+    /// action where one exists — a tag's `/tags/<name>/works` page opens a native
+    /// works list — falling back to the in-app web view for everything else.
+    func openAO3Link(_ url: URL) {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        if (url.host ?? "").contains("archiveofourown.org"),
+           parts.first == "tags", parts.count >= 2 {
+            pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(parts[1]))
+            selection = .browse
+            return
+        }
+        open(url)
+    }
+
+    /// Turns an AO3 tag URL slug back into a readable name (AO3 escapes `/ & . ? #`).
+    static func unmungeTag(_ slug: String) -> String {
+        (slug.removingPercentEncoding ?? slug)
+            .replacingOccurrences(of: "*s*", with: "/")
+            .replacingOccurrences(of: "*a*", with: "&")
+            .replacingOccurrences(of: "*d*", with: ".")
+            .replacingOccurrences(of: "*q*", with: "?")
+            .replacingOccurrences(of: "*h*", with: "#")
     }
 
     /// Switches to the Library and filters it to works containing `value` in `field`.
