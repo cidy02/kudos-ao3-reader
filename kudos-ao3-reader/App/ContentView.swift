@@ -17,6 +17,10 @@ struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
+    #if os(iOS)
+    /// The screen snapshot grabbed at shake time, offered for attaching to the report.
+    @State private var bugReportScreenshot: UIImage?
+    #endif
 
     var body: some View {
         content
@@ -44,8 +48,20 @@ struct ContentView: View {
                 await auth.restoreSession()
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
-            .onShake { showingBugReport = true }
-            .sheet(isPresented: $showingBugReport) { BugReportView() }
+            .onShake {
+                #if os(iOS)
+                // Grab the screen now, before the report sheet covers it.
+                bugReportScreenshot = ScreenshotCapture.captureKeyWindow()
+                #endif
+                showingBugReport = true
+            }
+            .sheet(isPresented: $showingBugReport) {
+                #if os(iOS)
+                BugReportView(screenshot: bugReportScreenshot)
+                #else
+                BugReportView()
+                #endif
+            }
             // First-launch welcome, shown before normal navigation. The theme is
             // re-injected because presented covers/sheets don't inherit it here.
             #if os(iOS)

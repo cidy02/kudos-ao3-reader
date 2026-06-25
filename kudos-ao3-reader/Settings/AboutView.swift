@@ -86,6 +86,7 @@ struct AboutView: View {
                 Button("Done") { dismiss() }
             }
         }
+        .presentationDragIndicator(.visible)
         .sheet(isPresented: $showingBugReport) { BugReportView() }
     }
 

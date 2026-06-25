@@ -203,6 +203,7 @@ struct TagPickerView: View {
         }
         #if os(iOS)
         .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         #endif
     }
 

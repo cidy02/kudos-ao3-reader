@@ -48,6 +48,7 @@ struct AO3LoginView: View {
             }
         }
         .frame(minWidth: 360, minHeight: 440)
+        .presentationDragIndicator(.visible)
         .onChange(of: auth.isLoggedIn) { _, loggedIn in
             if loggedIn {
                 password = ""

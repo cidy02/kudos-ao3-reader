@@ -232,6 +232,7 @@ struct AddToCollectionView: View {
                 }
             }
         }
+        .presentationDragIndicator(.visible)
     }
 
     private func isMember(_ collection: WorkCollection) -> Bool {

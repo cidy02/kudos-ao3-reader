@@ -336,15 +336,18 @@ struct ReadiumReaderView: View {
             .navigationTitle(work.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem {
-                    Button { router.toggle(.readerChapters) } label: {
-                        Label("Chapters", systemImage: "list.bullet")
+                // One item holding a tight HStack so the icons cluster like the
+                // Library toolbar (separate ToolbarItems get the system's wide spacing).
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 2) {
+                        Button { router.toggle(.readerChapters) } label: {
+                            Label("Chapters", systemImage: "list.bullet")
+                        }
+                        Button { router.toggle(.readerDisplay) } label: {
+                            Label("Display Options", systemImage: "textformat.size")
+                        }
                     }
-                }
-                ToolbarItem {
-                    Button { router.toggle(.readerDisplay) } label: {
-                        Label("Display Options", systemImage: "textformat.size")
-                    }
+                    .labelStyle(.iconOnly)
                 }
             }
             .sheet(isPresented: readerPanelBinding) { readerSheet }

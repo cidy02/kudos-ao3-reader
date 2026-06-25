@@ -193,6 +193,7 @@ private struct AO3CommentComposer: View {
             } message: {
                 Text("This publishes your comment on AO3.")
             }
+            .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(actions.isWorking)
         }
     }
@@ -255,6 +256,7 @@ private struct AO3BookmarkComposer: View {
                     }
                 }
             }
+            .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(actions.isWorking)
         }
     }

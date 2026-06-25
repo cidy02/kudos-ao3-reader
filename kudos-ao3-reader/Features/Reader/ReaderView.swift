@@ -165,29 +165,30 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItem {
-                Button {
-                    router.toggle(.readerChapters)
-                } label: {
-                    Label("Chapters", systemImage: "list.bullet")
-                }
-            }
-            ToolbarItem {
-                Button {
-                    router.toggle(.readerDisplay)
-                } label: {
-                    Label("Display Options", systemImage: "textformat.size")
-                }
-            }
-            ToolbarItem {
-                Menu {
-                    if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
-                        AO3WorkActionsMenu(workID: id, actions: workActions)
+            // One item holding a tight HStack so the icons cluster like the Library
+            // toolbar (separate ToolbarItems get the system's wide spacing).
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 2) {
+                    Button {
+                        router.toggle(.readerChapters)
+                    } label: {
+                        Label("Chapters", systemImage: "list.bullet")
                     }
-                } label: {
-                    Label("More actions", systemImage: "ellipsis.circle")
+                    Button {
+                        router.toggle(.readerDisplay)
+                    } label: {
+                        Label("Display Options", systemImage: "textformat.size")
+                    }
+                    Menu {
+                        if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
+                            AO3WorkActionsMenu(workID: id, actions: workActions)
+                        }
+                    } label: {
+                        Label("More actions", systemImage: "ellipsis.circle")
+                    }
+                    .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
                 }
-                .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
+                .labelStyle(.iconOnly)
             }
         }
         #if os(iOS)

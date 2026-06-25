@@ -249,6 +249,7 @@ private struct LibraryOptionPicker: View {
         }
         #if os(iOS)
         .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         #endif
     }
 }

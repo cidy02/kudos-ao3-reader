@@ -42,6 +42,7 @@ struct AO3WebBrowserView: View {
                     }
                 }
         }
+        .presentationDragIndicator(.visible)
     }
 
     // MARK: Top toolbar (Safari-style)
