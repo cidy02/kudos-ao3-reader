@@ -121,11 +121,13 @@ struct AO3WebBrowserView: View {
     private func configureImport() {
         let context = self.context
         model.onImport = { fileURL, source in
-            do {
-                let work = try importEPUB(fileURL, source: source, into: context)
-                show("Saved “\(work.title)” to Library")
-            } catch {
-                show("Couldn't save EPUB.")
+            Task {
+                do {
+                    let work = try await importEPUB(fileURL, source: source, into: context)
+                    show("Saved “\(work.title)” to Library")
+                } catch {
+                    show("Couldn't save EPUB.")
+                }
             }
         }
     }

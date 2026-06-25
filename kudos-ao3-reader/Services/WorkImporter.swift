@@ -18,8 +18,13 @@ func importEPUB(
     seriesURL: String = "",
     knownChapterCount: Int = 0,
     into context: ModelContext
-) throws -> SavedWork {
-    let meta = try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+) async throws -> SavedWork {
+    // Reading the EPUB's metadata pulls the whole file into memory and unzips it, so
+    // run that off the main actor; everything below (SwiftData + the file move) stays
+    // on the main actor where it belongs.
+    let meta = await Task.detached(priority: .userInitiated) {
+        try? EPUBDocument.metadata(ofEPUBAt: tempURL)
+    }.value
     if meta == nil { Log.library.notice("EPUB metadata unreadable; importing with the filename as title") }
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle

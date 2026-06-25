@@ -475,8 +475,13 @@ struct ReaderView: View {
         isLoading = true
         openError = nil
         let directory = Storage.readerDirectory(for: work.id)
+        let fileURL = work.fileURL
         do {
-            let parsed = try EPUBDocument.open(epubURL: work.fileURL, into: directory)
+            // Extracting + parsing the EPUB unzips the whole book to disk; run it off the
+            // main actor so the loading skeleton stays live, then apply state on main.
+            let parsed = try await Task.detached(priority: .userInitiated) {
+                try EPUBDocument.open(epubURL: fileURL, into: directory)
+            }.value
             document = parsed
             readRoot = directory
             currentIndex = min(max(work.lastSpineIndex, 0), parsed.spineURLs.count - 1)
