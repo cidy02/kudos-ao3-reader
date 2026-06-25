@@ -38,6 +38,14 @@ struct SearchView: View {
         NavigationStack(path: $path) {
             content
             .task { await FandomCatalog.shared.warmCache() }
+            // A tapped tag chip elsewhere (work detail / search results) routes here to
+            // run an AO3 search for that tag. `initial` catches a request that arrived
+            // before this view existed (first visit to Search).
+            .onChange(of: router.pendingTagSearch, initial: true) { _, request in
+                guard let request else { return }
+                applyTagSearch(request)
+                router.pendingTagSearch = nil
+            }
             .navigationTitle("Search")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -492,6 +500,27 @@ struct SearchView: View {
         currentPage = 1
         totalPages = 1
         load(page: 1)
+    }
+
+    /// Runs a fresh AO3 search for a single tag (from a tapped chip), placing it in the
+    /// matching filter field so AO3 returns works with that tag.
+    private func applyTagSearch(_ request: AO3TagSearch) {
+        var newFilters = AO3SearchFilters()
+        switch request.field {
+        case .fandom: newFilters.fandom = request.value
+        case .character: newFilters.characters = request.value
+        case .relationship: newFilters.relationships = request.value
+        case .freeform: newFilters.additionalTags = request.value
+        case .warning:
+            // Map the warning's display text to AO3's structured warning filter.
+            if let warning = AO3SearchFilters.Warning.allCases.first(where: { $0.title == request.value }) {
+                newFilters.warnings = [warning]
+            } else {
+                newFilters.additionalTags = request.value
+            }
+        }
+        filters = newFilters
+        runSearch()
     }
 
     // MARK: Saved searches

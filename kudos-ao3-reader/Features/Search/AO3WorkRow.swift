@@ -9,12 +9,14 @@ struct AO3WorkRow: View {
     /// (and can still be toggled individually afterwards).
     var expandAll: Bool = false
 
+    @Environment(AppRouter.self) private var router
     @State private var expanded = false
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
-    /// a long summary or any tags.
+    /// a long summary or any categorized tags.
     private var isExpandable: Bool {
-        work.summary.count > 120 || !work.tags.isEmpty
+        work.summary.count > 120 || !work.tags.isEmpty || !work.relationships.isEmpty
+            || !work.characters.isEmpty || !work.warnings.isEmpty
     }
 
     var body: some View {
@@ -32,15 +34,19 @@ struct AO3WorkRow: View {
             }
 
             if !work.fandoms.isEmpty {
-                // Tight icon→text gap + bold accent glyph, matching the stats row.
-                HStack(spacing: 4) {
+                // Each fandom is individually tappable → AO3 search for that fandom.
+                HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "books.vertical")
                         .fontWeight(.bold)
-                    Text(work.fandoms.joined(separator: ", "))
+                    FlowLayout(spacing: 4, rowSpacing: 2) {
+                        ForEach(work.fandoms, id: \.self) { fandom in
+                            Button { router.searchAO3(.fandom, fandom) } label: { Text(fandom) }
+                                .buttonStyle(.borderless)
+                        }
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.tint)
-                .lineLimit(1)
             }
 
             if !work.summary.isEmpty {
@@ -51,12 +57,12 @@ struct AO3WorkRow: View {
                     .multilineTextAlignment(.leading)
             }
 
-            // Tags only appear when expanded — they can be numerous on AO3.
-            if expanded && !work.tags.isEmpty {
-                FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(work.tags, id: \.self) { TagChip(text: $0) }
-                }
-                .padding(.top, 1)
+            // Categorized tags appear when expanded — they can be numerous on AO3.
+            if expanded {
+                chipGroup("Archive Warnings", work.warnings, field: .warning)
+                chipGroup("Relationships", work.relationships, field: .relationship)
+                chipGroup("Characters", work.characters, field: .character)
+                chipGroup("Additional Tags", work.tags, field: .freeform)
             }
 
             // Thin divider separates the textual content from the metadata stats,
@@ -95,5 +101,25 @@ struct AO3WorkRow: View {
         // Follow the global expand/collapse-all toggle (also applies on first
         // appearance so cards scrolled into view match the current state).
         .onChange(of: expandAll, initial: true) { _, value in expanded = value }
+    }
+
+    /// A labeled group of tappable tag chips; each chip runs an AO3 search for that
+    /// tag. Borderless so a chip tap doesn't trigger the row's navigation link.
+    @ViewBuilder
+    private func chipGroup(_ label: String, _ tags: [String], field: AO3TagSearch.Field) -> some View {
+        if !tags.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(tags, id: \.self) { tag in
+                        Button { router.searchAO3(field, tag) } label: { TagChip(text: tag) }
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
+            .padding(.top, 2)
+        }
     }
 }

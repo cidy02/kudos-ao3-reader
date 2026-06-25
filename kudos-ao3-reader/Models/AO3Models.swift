@@ -14,9 +14,12 @@ struct AO3WorkSummary: Identifiable, Hashable, Sendable {
     var rating: String
     var warnings: [String]
     var categories: [String]
+    var relationships: [String] = []
+    var characters: [String] = []
     /// nil when AO3 doesn't say (rare); otherwise whether the work is finished.
     var isComplete: Bool?
     var dateUpdated: String
+    /// Freeform / "Additional Tags" (the blurb's `li.freeforms` tags).
     var tags: [String]
     var summary: String
     var language: String

@@ -35,6 +35,8 @@ struct AO3ClientTests {
         </ul>
         <blockquote class="userstuff summary"><p>A short summary.</p></blockquote>
         <ul class="tags commas">
+          <li class="relationships"><a class="tag" href="#">Naruto/Hinata</a></li>
+          <li class="characters"><a class="tag" href="#">Hinata Hyuuga</a></li>
           <li class="freeforms"><a class="tag" href="#">Fluff</a></li>
           <li class="freeforms"><a class="tag" href="#">Angst</a></li>
         </ul>
@@ -67,6 +69,8 @@ struct AO3ClientTests {
         #expect(work.fandoms == ["Naruto"])
         #expect(work.rating == "Teen And Up Audiences")
         #expect(work.isComplete == true)
+        #expect(work.relationships == ["Naruto/Hinata"])
+        #expect(work.characters == ["Hinata Hyuuga"])
         #expect(work.tags == ["Fluff", "Angst"])
         #expect(work.summary == "A short summary.")
         #expect(work.words == 12345)

@@ -40,6 +40,14 @@ struct LibraryTagFilter: Equatable {
     let value: String
 }
 
+/// A request to run an AO3 search for a single tag, handed to the Search tab (e.g.
+/// from a tapped fandom/character/relationship/freeform chip).
+struct AO3TagSearch: Equatable {
+    enum Field { case warning, fandom, character, relationship, freeform }
+    let field: Field
+    let value: String
+}
+
 /// Shared navigation state so other tabs can hand a URL to the browser and
 /// switch to it (e.g. opening a saved bookmark).
 @Observable
@@ -58,6 +66,9 @@ final class AppRouter {
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
     var pendingLibraryTag: LibraryTagFilter?
+    /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
+    /// relationship chip). Consumed + cleared by `SearchView`.
+    var pendingTagSearch: AO3TagSearch?
 
     /// The one right-hand inspector panel open anywhere in the app. Routing every
     /// panel (Settings, Search filters, Reader chapters/display) through a single
@@ -79,6 +90,13 @@ final class AppRouter {
     func filterLibrary(_ field: LibraryTagFilter.Field, _ value: String) {
         pendingLibraryTag = LibraryTagFilter(field: field, value: value)
         selection = .library
+    }
+
+    /// Switches to Search and runs an AO3 search for `value` in the given tag `field`
+    /// (a tapped fandom/character/relationship/freeform chip → "more works with this").
+    func searchAO3(_ field: AO3TagSearch.Field, _ value: String) {
+        pendingTagSearch = AO3TagSearch(field: field, value: value)
+        selection = .search
     }
 
     /// Leaves the focused Search mode, returning to the last non-Search tab.

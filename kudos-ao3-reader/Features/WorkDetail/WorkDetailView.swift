@@ -200,9 +200,6 @@ struct WorkDetailView: View {
         Section("Details") {
             if !displayAuthor.isEmpty { LabeledContent("Author", value: displayAuthor) }
             if !displayRating.isEmpty { LabeledContent("Rating", value: displayRating) }
-            if !displayWarnings.isEmpty {
-                LabeledContent("Warnings", value: displayWarnings.joined(separator: ", "))
-            }
             if !displayCategories.isEmpty {
                 LabeledContent("Category", value: displayCategories.joined(separator: ", "))
             }
@@ -242,6 +239,24 @@ struct WorkDetailView: View {
     private var displayCategories: [String] {
         if let c = localWork?.workCategories, !c.isEmpty { return c }
         return remote?.categories ?? []
+    }
+    // Categorized tag chips: prefer the local record's per-type lists (once the AO3
+    // refresh has run), else the remote summary's (the blurb is grouped too).
+    private var displayFandoms: [String] {
+        if let f = localWork?.workFandoms, !f.isEmpty { return f }
+        return remote?.fandoms ?? []
+    }
+    private var displayRelationships: [String] {
+        if let r = localWork?.workRelationships, !r.isEmpty { return r }
+        return remote?.relationships ?? []
+    }
+    private var displayCharacters: [String] {
+        if let c = localWork?.workCharacters, !c.isEmpty { return c }
+        return remote?.characters ?? []
+    }
+    private var displayFreeforms: [String] {
+        if let f = localWork?.workFreeforms, !f.isEmpty { return f }
+        return remote?.tags ?? []
     }
     private var displayStatus: String? {
         // A local work's completion flag is only meaningful for AO3-sourced imports
@@ -306,30 +321,31 @@ struct WorkDetailView: View {
 
     @ViewBuilder
     private var tagDiscoverySections: some View {
-        let tapFooter = "Tags from AO3. Tap one to filter your Library; add your own below."
-        if let work = localWork, work.hasCategorizedWorkTags {
-            tagChipSection("Fandoms", work.workFandoms, field: .fandom)
-            tagChipSection("Relationships", work.workRelationships, field: .relationship)
-            tagChipSection("Characters", work.workCharacters, field: .character)
-            tagChipSection("Additional Tags", work.workFreeforms, field: .additional, footer: tapFooter)
-        } else {
-            // Remote summaries (and pre-categorized local works) only have a fandom list
-            // plus a flat tag list.
-            tagChipSection("Fandoms", remote?.fandoms ?? [], field: .fandom)
-            tagChipSection("Tags", localWork?.workTags ?? remote?.tags ?? [],
-                           field: .additional, footer: tapFooter)
+        let tapFooter = "Tags from AO3. Tap one to search AO3 for works with that tag."
+        let anyCategorized = !displayWarnings.isEmpty || !displayFandoms.isEmpty
+            || !displayRelationships.isEmpty || !displayCharacters.isEmpty
+            || !displayFreeforms.isEmpty
+        if anyCategorized {
+            tagChipSection("Archive Warnings", displayWarnings, field: .warning)
+            tagChipSection("Fandoms", displayFandoms, field: .fandom)
+            tagChipSection("Relationships", displayRelationships, field: .relationship)
+            tagChipSection("Characters", displayCharacters, field: .character)
+            tagChipSection("Additional Tags", displayFreeforms, field: .freeform, footer: tapFooter)
+        } else if let flat = localWork?.workTags, !flat.isEmpty {
+            // Un-refreshed local imports carry only a flat, uncategorized tag list.
+            tagChipSection("Tags", flat, field: .freeform, footer: tapFooter)
         }
     }
 
     @ViewBuilder
     private func tagChipSection(_ title: String, _ tags: [String],
-                                field: LibraryTagFilter.Field, footer: String? = nil) -> some View {
+                                field: AO3TagSearch.Field, footer: String? = nil) -> some View {
         if !tags.isEmpty {
             Section {
                 FlowLayout(spacing: 8, rowSpacing: 8) {
                     ForEach(tags, id: \.self) { tag in
-                        // Tap a tag → filter the Library to works carrying it.
-                        Button { router.filterLibrary(field, tag) } label: {
+                        // Tap a tag → search AO3 for works carrying it.
+                        Button { router.searchAO3(field, tag) } label: {
                             TagChip(text: tag)
                         }
                         .buttonStyle(.plain)

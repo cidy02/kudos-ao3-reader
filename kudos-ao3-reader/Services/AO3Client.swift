@@ -708,7 +708,11 @@ actor AO3Client {
         let isComplete: Bool? = wipText.isEmpty ? nil : wipText.lowercased().contains("complete")
 
         let date = try el.select("p.datetime").first()?.text() ?? ""
-        let tags = try el.select("ul.tags li a.tag").array().map { try $0.text() }
+        // The blurb groups tags by class inside `ul.tags`: relationships, characters,
+        // and freeforms (Additional Tags). Warnings/categories come from required-tags.
+        let relationships = try el.select("ul.tags li.relationships a.tag").array().map { try $0.text() }
+        let characters = try el.select("ul.tags li.characters a.tag").array().map { try $0.text() }
+        let freeforms = try el.select("ul.tags li.freeforms a.tag").array().map { try $0.text() }
         let summary = try el.select("blockquote.userstuff.summary").first()?.text() ?? ""
 
         func stat(_ cls: String) -> String {
@@ -730,9 +734,11 @@ actor AO3Client {
             rating: rating,
             warnings: warnings,
             categories: categories,
+            relationships: relationships,
+            characters: characters,
             isComplete: isComplete,
             dateUpdated: date,
-            tags: tags,
+            tags: freeforms,
             summary: summary,
             language: stat("language"),
             words: statInt("words"),
