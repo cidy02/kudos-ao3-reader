@@ -8,11 +8,14 @@ import SwiftUI
 struct AO3AccountWorksList: View {
     /// Which account list to show. Holds the page's copy, URL, and fetch method so
     /// the view body is identical across lists.
-    enum Kind {
+    enum Kind: Hashable {
         case markedForLater
         case bookmarks
         case history
         case subscriptions
+        case myWorks
+        /// Works in a named collection (the user's own collections list links here).
+        case collection(name: String, title: String)
 
         var emptyTitle: String {
             switch self {
@@ -20,6 +23,8 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "No bookmarks yet"
             case .history: "No reading history"
             case .subscriptions: "No subscriptions"
+            case .myWorks: "No works yet"
+            case .collection: "No works in this collection"
             }
         }
         var emptyMessage: String {
@@ -28,6 +33,8 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "Bookmark a work on AO3 to see it here."
             case .history: "Works you read on AO3 show up here."
             case .subscriptions: "Works you subscribe to on AO3 show up here."
+            case .myWorks: "Works you post on AO3 show up here."
+            case .collection: "This collection has no works yet."
             }
         }
         var signedOutTitle: String {
@@ -36,6 +43,8 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "AO3 Bookmarks"
             case .history: "AO3 History"
             case .subscriptions: "AO3 Subscriptions"
+            case .myWorks: "My Works"
+            case .collection(_, let title): title
             }
         }
         var signedOutMessage: String {
@@ -44,6 +53,8 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "Log in to AO3 to see the works you've bookmarked."
             case .history: "Log in to AO3 to see your reading history."
             case .subscriptions: "Log in to AO3 to see the works you subscribe to."
+            case .myWorks: "Log in to AO3 to see the works you've posted."
+            case .collection: "Log in to AO3 to see this collection's works."
             }
         }
 
@@ -53,13 +64,15 @@ struct AO3AccountWorksList: View {
             case .bookmarks: AO3Client.bookmarksURL(username: username, page: page)
             case .history: AO3Client.historyURL(username: username, page: page)
             case .subscriptions: AO3Client.subscriptionsURL(username: username, page: page)
+            case .myWorks: AO3Client.myWorksURL(username: username, page: page)
+            case .collection(let name, _): AO3Client.collectionWorksURL(name: name, page: page)
             }
         }
         func fetch(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
             switch self {
-            // Marked-for-Later and History render standard work blurbs; bookmarks and
-            // subscriptions each need their own outer selector / parser.
-            case .markedForLater, .history:
+            // Standard work-blurb pages; bookmarks and subscriptions need their own
+            // outer selector / parser.
+            case .markedForLater, .history, .myWorks, .collection:
                 try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks:
                 try await AO3Client.shared.bookmarksPage(for: request, page: page)

@@ -17,6 +17,7 @@ struct AccountView: View {
     /// Pushable Account destinations (the AO3 lists, local lists, and Settings).
     enum Route: Hashable {
         case subscriptions, ao3Bookmarks, markedForLater, ao3History
+        case myDashboard, myWorks, myCollections
         case localHistory, localFavorites
         case settings, privacy
     }
@@ -41,6 +42,7 @@ struct AccountView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
             .navigationDestination(for: Route.self, destination: destination)
+            .navigationDestination(for: AO3AccountWorksList.Kind.self) { AO3AccountWorksList(kind: $0) }
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .sheet(isPresented: $showingLogin) { AO3LoginView() }
@@ -56,6 +58,9 @@ struct AccountView: View {
         case .ao3Bookmarks: AO3AccountWorksList(kind: .bookmarks)
         case .markedForLater: AO3AccountWorksList(kind: .markedForLater)
         case .ao3History: AO3AccountWorksList(kind: .history)
+        case .myDashboard: AO3DashboardView()
+        case .myWorks: AO3AccountWorksList(kind: .myWorks)
+        case .myCollections: AO3CollectionsList()
         case .localHistory: LocalReadingHistoryView()
         case .localFavorites: LocalFavoritesView()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
@@ -105,6 +110,15 @@ struct AccountView: View {
 
     private var myAO3Section: some View {
         Section("My AO3") {
+            NavigationLink(value: Route.myDashboard) {
+                Label("My Dashboard", systemImage: "rectangle.grid.2x2")
+            }
+            NavigationLink(value: Route.myWorks) {
+                Label("My Works", systemImage: "doc.text")
+            }
+            NavigationLink(value: Route.myCollections) {
+                Label("My Collections", systemImage: "square.stack")
+            }
             NavigationLink(value: Route.subscriptions) {
                 Label("My Subscriptions", systemImage: "bell")
             }
@@ -120,18 +134,15 @@ struct AccountView: View {
         }
     }
 
-    /// AO3 account areas not yet implemented natively — opened on AO3's website as a
-    /// clearly-labeled fallback (Part 7 §3). No faked functionality.
+    /// AO3 account areas kept as a clearly-labeled web fallback — AO3 Preferences is a
+    /// large, site-specific settings form, so it opens on the website (no faked UI).
     private var ao3WebsiteSection: some View {
         Section {
-            webLink("My Dashboard", systemImage: "rectangle.grid.2x2", path: "/users/\(usernameOrEmpty)")
-            webLink("My Works", systemImage: "doc.text", path: "/users/\(usernameOrEmpty)/works")
-            webLink("My Collections", systemImage: "square.stack", path: "/users/\(usernameOrEmpty)/collections")
             webLink("My Preferences", systemImage: "slider.horizontal.3", path: "/preferences")
         } header: {
             Text("On AO3")
         } footer: {
-            Text("These open on the AO3 website.")
+            Text("Opens your AO3 settings on the website.")
         }
     }
 
@@ -178,8 +189,6 @@ struct AccountView: View {
     }
 
     // MARK: Helpers
-
-    private var usernameOrEmpty: String { auth.username ?? "" }
 
     /// A row that opens an AO3 path on the website (via the Browse tab). Disabled
     /// (with a hint) for account-specific paths when signed out.

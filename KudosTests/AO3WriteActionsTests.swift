@@ -75,6 +75,28 @@ struct AO3WriteActionsTests {
         #expect(result.unsubscribePath == nil)
     }
 
+    @Test func parsesCollectionsIndex() throws {
+        let html = """
+        <html><body>
+        <ul class="collection index group">
+          <li class="collection blurb group">
+            <div class="header module">
+              <h4 class="heading"><a href="/collections/cool_fics">Cool Fics</a></h4>
+              <div class="byline">Maintained by someone</div>
+            </div>
+          </li>
+          <li class="collection blurb group">
+            <h4 class="heading"><a href="/collections/another_one/profile">Another One</a></h4>
+          </li>
+        </ul>
+        </body></html>
+        """
+        let collections = try AO3Client.parseCollections(from: html)
+        #expect(collections.count == 2)
+        #expect(collections.map(\.name) == ["cool_fics", "another_one"])
+        #expect(collections.first?.title == "Cool Fics")
+    }
+
     @Test func parsesBookmarkPseudField() {
         let html = """
         <select name="bookmark[pseud_id]">

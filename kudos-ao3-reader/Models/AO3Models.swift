@@ -493,6 +493,17 @@ struct AO3Fandom: Identifiable, Hashable, Sendable, Codable {
     var id: String { name }
 }
 
+/// An AO3 collection (a named shelf), as listed on a user's collections page. `name`
+/// is the URL slug (`/collections/<name>`); `title` is the display name; `byline` is
+/// the maintainers line when shown.
+struct AO3Collection: Identifiable, Hashable, Sendable {
+    var name: String
+    var title: String
+    var byline: String = ""
+    var id: String { name }
+    var url: URL { URL(string: "https://archiveofourown.org/collections/\(name)")! }
+}
+
 /// One of AO3's media categories (e.g. "TV Shows") with its featured fandoms,
 /// scraped from `/media`. `fandomsURL` points at the category's full fandom index
 /// (`/media/<name>/fandoms`), loaded on demand by the fandom detail page.

@@ -222,6 +222,61 @@ actor AO3Client {
         return components?.url
     }
 
+    /// The URL of a user's own posted works (`/users/<name>/works`). Standard
+    /// `li.work.blurb` markup, so `worksPage` / `parseSearchPage` read it directly.
+    static func myWorksURL(username: String, page: Int) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/users/\(name)/works"
+        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        return components?.url
+    }
+
+    /// The URL of a user's collections index (`/users/<name>/collections`).
+    static func collectionsURL(username: String, page: Int) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/users/\(name)/collections"
+        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        return components?.url
+    }
+
+    /// The works in a collection (`/collections/<name>/works`). Standard work-blurb
+    /// markup, so `worksPage` reads it directly.
+    static func collectionWorksURL(name: String, page: Int) -> URL? {
+        let slug = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !slug.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org")
+        components?.path = "/collections/\(slug)/works"
+        if page > 1 { components?.queryItems = [URLQueryItem(name: "page", value: String(page))] }
+        return components?.url
+    }
+
+    /// An authenticated collections-index page parsed into `AO3Collection`s.
+    func collectionsPage(for request: URLRequest) async throws -> [AO3Collection] {
+        try Self.parseCollections(from: try await authenticatedHTML(for: request))
+    }
+
+    /// Parses a collections index (`li.collection.blurb`) into name/title/byline.
+    static func parseCollections(from html: String) throws -> [AO3Collection] {
+        let doc = try SwiftSoup.parse(html)
+        var result: [AO3Collection] = []
+        for li in try doc.select("li.collection.blurb").array() {
+            guard let link = try li.select("h4.heading a[href*=/collections/]").first() else { continue }
+            let href = (try? link.attr("href")) ?? ""
+            // /collections/<name>[/...] → slug
+            guard let range = href.range(of: "/collections/") else { continue }
+            let slug = String(href[range.upperBound...]).split(separator: "/").first.map(String.init) ?? ""
+            guard !slug.isEmpty else { continue }
+            let title = (try? link.text()) ?? slug
+            let byline = (try? li.select(".byline, .heading .byline").first()?.text()) ?? ""
+            result.append(AO3Collection(name: slug, title: title, byline: byline))
+        }
+        return result
+    }
+
     /// Fetches an authenticated AO3 page and returns its HTML. The `request` must
     /// already carry the user's session cookies — build it with
     /// `AO3AuthService.authenticatedRequest(for:)`. A bounce to AO3's login page is
