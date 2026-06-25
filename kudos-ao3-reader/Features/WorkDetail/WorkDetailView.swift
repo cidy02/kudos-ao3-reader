@@ -24,6 +24,7 @@ struct WorkDetailView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(AO3AuthService.self) private var auth
     @Environment(DownloadQueue.self) private var downloadQueue
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query private var allWorks: [SavedWork]
@@ -39,6 +40,7 @@ struct WorkDetailView: View {
     @State private var loadError: String?
     @State private var readerWork: SavedWork?    // non-nil → push the reader
     @State private var queuingSeries = false
+    @State private var workActions = AO3WorkActionsModel()
 
     // MARK: - Source helpers
 
@@ -88,6 +90,7 @@ struct WorkDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .hidesFloatingTabBar()
+        .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
         .toolbar { detailToolbar }
     }
 
@@ -182,7 +185,7 @@ struct WorkDetailView: View {
         }
         ToolbarItem {
             Menu {
-                if let id = ao3WorkID { AO3WorkActionsMenu(workID: id) }
+                if let id = ao3WorkID { AO3WorkActionsMenu(workID: id, actions: workActions) }
             } label: {
                 Label("More actions", systemImage: "ellipsis.circle")
             }

@@ -244,6 +244,65 @@ actor AO3Client {
         return String(decoding: data, as: UTF8.self)
     }
 
+    // MARK: - Write actions (authenticated, single-shot POSTs)
+
+    /// HTML of an authenticated page for a write flow that first needs the page's CSRF
+    /// token (a polite GET — retried/coalesced like other reads).
+    func authenticatedPageHTML(for request: URLRequest) async throws -> String {
+        try await authenticatedHTML(for: request)
+    }
+
+    /// Submits a single authenticated POST and returns its status + body. **Never
+    /// retried or coalesced** — replaying a write would double-post (kudos/comments).
+    /// 429s are surfaced (not auto-retried) so the UI can ask the user to try later.
+    func submitWrite(_ request: URLRequest) async throws -> (status: Int, body: String) {
+        var request = request
+        request.httpShouldHandleCookies = false
+        Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AO3Error.network("No response from AO3.")
+        }
+        if let url = http.url, url.path.contains("/users/login") {
+            throw AO3Error.authenticationRequired
+        }
+        if http.statusCode == 429 {
+            throw AO3Error.rateLimited(retryAfter: Self.retryAfter(from: http))
+        }
+        return (http.statusCode, String(decoding: data, as: UTF8.self))
+    }
+
+    /// The Rails CSRF authenticity token from a page's `<meta name="csrf-token">`.
+    static func parseCSRFToken(from html: String) -> String? {
+        guard let doc = try? SwiftSoup.parse(html),
+              let token = try? doc.select("meta[name=csrf-token]").first()?.attr("content")
+        else { return nil }
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// The default pseud id pre-selected in a work's comment form (`select[name=
+    /// "comment[pseud_id]"]`), so a native comment posts under the user's default
+    /// pseud. nil when the form/selection can't be read (AO3 then uses the default).
+    static func parseDefaultPseudID(from html: String) -> String? {
+        guard let doc = try? SwiftSoup.parse(html) else { return nil }
+        let select = try? doc.select("select[name=\"comment[pseud_id]\"]").first()
+        // Prefer the explicitly-selected option; else the first option.
+        let selected = try? select?.select("option[selected]").first()?.attr("value")
+        if let selected, !selected.isEmpty { return selected }
+        let first = try? select?.select("option").first()?.attr("value")
+        return (first?.isEmpty == false) ? first : nil
+    }
+
+    /// The first form-validation error AO3 renders after a rejected write (so the UI
+    /// can show the real reason), or nil when the page carries no error list.
+    static func writeErrorMessage(in html: String) -> String? {
+        guard let doc = try? SwiftSoup.parse(html) else { return nil }
+        let text = try? doc.select(".errorlist li, .error p, .flash.error").first()?.text()
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
     /// An authenticated reading-list / search-style page (work blurbs + pagination),
     /// e.g. the Marked-for-Later list.
     func worksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {

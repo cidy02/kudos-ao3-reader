@@ -18,6 +18,7 @@ struct ReaderView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerFontID") private var fontID: String = "system"
@@ -43,6 +44,7 @@ struct ReaderView: View {
     @State private var isLoading = true
     @State private var landNextChapterOnLastPage = false
     @State private var availableWidth: CGFloat = 0
+    @State private var workActions = AO3WorkActionsModel()
 
     #if os(iOS)
     /// Whether the reader "chrome" (top bar + bottom chapter controls) is shown.
@@ -157,6 +159,7 @@ struct ReaderView: View {
         // The reader's own theme drives its chrome/Liquid Glass appearance (and the
         // window while reading) — independent of the app theme when they're unlinked.
         .preferredColorScheme(theme.colorScheme)
+        .ao3WorkActions(workActions, workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0, auth: auth)
         .navigationTitle(work.title)
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -179,7 +182,7 @@ struct ReaderView: View {
             ToolbarItem {
                 Menu {
                     if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
-                        AO3WorkActionsMenu(workID: id)
+                        AO3WorkActionsMenu(workID: id, actions: workActions)
                     }
                 } label: {
                     Label("More actions", systemImage: "ellipsis.circle")
