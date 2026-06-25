@@ -38,11 +38,14 @@ enum ReadiumReaderStyleMapper {
         theme: ReaderTheme,
         fontFamily: FontFamily?,
         readingMode: ReadingMode,
-        columnCount: ColumnCount
+        columnCount: ColumnCount?
     ) -> EPUBPreferences {
         EPUBPreferences(
             backgroundColor: ReadiumNavigator.Color(hex: theme.backgroundHex),
-            columnCount: columnCount,
+            // Only set a column count in paged mode. Forcing `.one` in scroll mode makes
+            // Readium lay the text out in screen-height columns (page breaks mid-text +
+            // dead space top/bottom) instead of one continuous flow.
+            columnCount: readingMode == .scroll ? nil : columnCount,
             fontFamily: fontFamily,
             // Legacy CSS emits the selected point size as px. Readium expects a
             // percentage of its 16 px root, so 18 pt becomes 112.5%.
@@ -361,7 +364,14 @@ struct ReadiumReaderView: View {
                 if panel == .none { book.submit(preferences) }
             }
             .onDisappear {
+                // Flush the exact final position so resume lands precisely, even if the
+                // last scroll didn't emit a locator change before we left.
+                if let saved = book.currentLocator?.persistenceString {
+                    work.readiumLocator = saved
+                    work.lastReadDate = Date()
+                }
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
+                try? modelContext.save()
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
                     router.panel = .none
                 }
