@@ -51,6 +51,39 @@ struct AO3WriteActionsTests {
         #expect(AO3Client.writeErrorMessage(in: "<html><body>fine</body></html>") == nil)
     }
 
+    @Test func detectsSubscribedStateAndUnsubscribePath() {
+        let subscribed = """
+        <form action="/users/me/subscriptions/789" method="post">
+          <input type="hidden" name="_method" value="delete">
+          <input type="submit" value="Unsubscribe">
+        </form>
+        """
+        let result = AO3Client.parseSubscription(from: subscribed)
+        #expect(result.isSubscribed)
+        #expect(result.unsubscribePath == "/users/me/subscriptions/789")
+    }
+
+    @Test func detectsNotSubscribedState() {
+        let notSubscribed = """
+        <form action="/users/me/subscriptions" method="post">
+          <input type="hidden" name="subscription[subscribable_type]" value="Work">
+          <input type="submit" value="Subscribe">
+        </form>
+        """
+        let result = AO3Client.parseSubscription(from: notSubscribed)
+        #expect(!result.isSubscribed)
+        #expect(result.unsubscribePath == nil)
+    }
+
+    @Test func parsesBookmarkPseudField() {
+        let html = """
+        <select name="bookmark[pseud_id]">
+          <option value="5" selected>me</option>
+        </select>
+        """
+        #expect(AO3Client.parseDefaultPseudID(from: html, field: "bookmark[pseud_id]") == "5")
+    }
+
     @MainActor
     @Test func formEncodingPercentEncodesKeysAndValues() {
         let body = AO3AuthService.formEncoded([

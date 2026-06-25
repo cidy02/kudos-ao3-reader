@@ -18,11 +18,29 @@ final class AO3WorkActionsModel {
     /// their text.
     var composerError: String?
 
+    /// Drives the bookmark composer sheet.
+    var showingBookmark = false
+    var bookmarkInput = AO3AuthService.BookmarkInput()
+    var bookmarkError: String?
+
     func giveKudos(workID: Int, auth: AO3AuthService) {
+        run { try await auth.giveKudos(workID: workID) }
+    }
+
+    func subscribe(workID: Int, auth: AO3AuthService) {
+        run { try await auth.toggleSubscribe(workID: workID) }
+    }
+
+    func markForLater(workID: Int, auth: AO3AuthService) {
+        run { try await auth.markForLater(workID: workID) }
+    }
+
+    /// Runs a fire-and-forget write whose result is shown as the host banner.
+    private func run(_ action: @escaping () async throws -> String) {
         guard !isWorking else { return }
         isWorking = true
         Task {
-            do { banner = try await auth.giveKudos(workID: workID) }
+            do { banner = try await action() }
             catch { banner = Self.message(for: error) }
             isWorking = false
         }
@@ -46,6 +64,29 @@ final class AO3WorkActionsModel {
                 banner = message
             } catch {
                 composerError = Self.message(for: error)
+            }
+            isWorking = false
+        }
+    }
+
+    func startBookmark() {
+        bookmarkInput = AO3AuthService.BookmarkInput()
+        bookmarkError = nil
+        showingBookmark = true
+    }
+
+    func submitBookmark(workID: Int, auth: AO3AuthService) {
+        guard !isWorking else { return }
+        let input = bookmarkInput
+        isWorking = true
+        bookmarkError = nil
+        Task {
+            do {
+                let message = try await auth.createBookmark(workID: workID, input: input)
+                showingBookmark = false
+                banner = message
+            } catch {
+                bookmarkError = Self.message(for: error)
             }
             isWorking = false
         }
@@ -75,6 +116,9 @@ private struct AO3WorkActionsModifier: ViewModifier {
         content
             .sheet(isPresented: $actions.showingComment) {
                 AO3CommentComposer(actions: actions, workID: workID, auth: auth)
+            }
+            .sheet(isPresented: $actions.showingBookmark) {
+                AO3BookmarkComposer(actions: actions, workID: workID, auth: auth)
             }
             .alert("AO3", isPresented: bannerPresented) {
                 Button("OK", role: .cancel) { actions.banner = nil }
@@ -148,6 +192,68 @@ private struct AO3CommentComposer: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This publishes your comment on AO3.")
+            }
+            .interactiveDismissDisabled(actions.isWorking)
+        }
+    }
+}
+
+/// A compose sheet for a native AO3 bookmark: optional notes + tags, and the
+/// private / rec toggles, posted to the user's account under their default pseud.
+private struct AO3BookmarkComposer: View {
+    @Bindable var actions: AO3WorkActionsModel
+    let workID: Int
+    let auth: AO3AuthService
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Group {
+                    Section("Notes") {
+                        TextEditor(text: $actions.bookmarkInput.notes)
+                            .frame(minHeight: 90)
+                            .disabled(actions.isWorking)
+                    }
+                    Section {
+                        TextField("Comma-separated tags", text: $actions.bookmarkInput.tags)
+                            .disabled(actions.isWorking)
+                    } header: {
+                        Text("Tags")
+                    } footer: {
+                        Text("Your own bookmark tags, separated by commas.")
+                    }
+                    Section {
+                        Toggle("Private", isOn: $actions.bookmarkInput.isPrivate)
+                        Toggle("Recommend", isOn: $actions.bookmarkInput.isRec)
+                    }
+                    if let error = actions.bookmarkError {
+                        Section {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+                .appThemedRows()
+            }
+            .formStyle(.grouped)
+            .appThemedScroll()
+            .navigationTitle("Bookmark on AO3")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(actions.isWorking)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if actions.isWorking {
+                        ProgressView()
+                    } else {
+                        Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
+                    }
+                }
             }
             .interactiveDismissDisabled(actions.isWorking)
         }

@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// The shared "On AO3" overflow-menu content. Give Kudos and Leave a Comment are now
-/// **native** authenticated actions (the host presents the composer + result via
-/// `.ao3WorkActions(…)`); Bookmark / Mark for Later / Subscribe remain honest web
-/// fallbacks for now (they open the work on AO3 so the user completes them there).
-/// Used by Work Detail and the Reader so the two surfaces stay consistent.
+/// The shared "On AO3" overflow-menu content. Give Kudos, Leave a Comment, Bookmark,
+/// Mark for Later, and Subscribe are **native** authenticated actions (the host
+/// presents the composers + result via `.ao3WorkActions(…)`); only "Open on AO3"
+/// opens the website. Used by Work Detail and the Reader so the two stay consistent.
 struct AO3WorkActionsMenu: View {
     let workID: Int
     @Bindable var actions: AO3WorkActionsModel
@@ -23,16 +22,20 @@ struct AO3WorkActionsMenu: View {
                 Label("Leave a Comment", systemImage: "bubble.left")
             }
 
-            // Still honest web fallbacks (a later pass can make these native).
-            Button { openWeb("/works/\(workID)/bookmarks/new") } label: {
+            Button { actions.startBookmark() } label: {
                 Label("Bookmark on AO3", systemImage: "bookmark")
             }
-            Button { openWeb("/works/\(workID)") } label: {
+            Button { actions.markForLater(workID: workID, auth: auth) } label: {
                 Label("Mark for Later", systemImage: "clock.badge")
             }
-            Button { openWeb("/works/\(workID)") } label: {
+            .disabled(actions.isWorking)
+
+            Button { actions.subscribe(workID: workID, auth: auth) } label: {
                 Label("Subscribe", systemImage: "bell")
             }
+            .disabled(actions.isWorking)
+
+            // Always available — opens the work on AO3 in the in-app browser.
             Button { openWeb("/works/\(workID)") } label: {
                 Label("Open on AO3", systemImage: "safari")
             }

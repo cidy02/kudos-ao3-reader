@@ -281,17 +281,35 @@ actor AO3Client {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// The default pseud id pre-selected in a work's comment form (`select[name=
-    /// "comment[pseud_id]"]`), so a native comment posts under the user's default
-    /// pseud. nil when the form/selection can't be read (AO3 then uses the default).
-    static func parseDefaultPseudID(from html: String) -> String? {
+    /// The default pseud id pre-selected in a form's pseud `<select>` (e.g.
+    /// `comment[pseud_id]` for comments, `bookmark[pseud_id]` for bookmarks), so a
+    /// native write posts under the user's default pseud. nil when the form/selection
+    /// can't be read (AO3 then uses the account default).
+    static func parseDefaultPseudID(from html: String, field: String = "comment[pseud_id]") -> String? {
         guard let doc = try? SwiftSoup.parse(html) else { return nil }
-        let select = try? doc.select("select[name=\"comment[pseud_id]\"]").first()
+        let select = try? doc.select("select[name=\"\(field)\"]").first()
         // Prefer the explicitly-selected option; else the first option.
         let selected = try? select?.select("option[selected]").first()?.attr("value")
         if let selected, !selected.isEmpty { return selected }
         let first = try? select?.select("option").first()?.attr("value")
         return (first?.isEmpty == false) ? first : nil
+    }
+
+    /// Whether the user is currently subscribed to the work, read from the work page's
+    /// subscribe/unsubscribe form. When subscribed, AO3 renders a delete form whose
+    /// action is the unsubscribe path (`/users/X/subscriptions/<id>`); that path is
+    /// returned so the caller can unsubscribe.
+    static func parseSubscription(from html: String) -> (isSubscribed: Bool, unsubscribePath: String?) {
+        guard let doc = try? SwiftSoup.parse(html),
+              let form = try? doc.select("form[action*=/subscriptions]").first()
+        else { return (false, nil) }
+        let action = (try? form.attr("action")) ?? ""
+        let method = (try? form.select("input[name=_method]").first()?.attr("value"))?
+            .lowercased() ?? ""
+        if method == "delete" {
+            return (true, action.isEmpty ? nil : action)
+        }
+        return (false, nil)
     }
 
     /// The first form-validation error AO3 renders after a rejected write (so the UI

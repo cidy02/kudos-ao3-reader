@@ -75,6 +75,106 @@ extension AO3AuthService {
         )
     }
 
+    /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
+    /// work page once for the CSRF token + current subscription state, then POSTs the
+    /// matching action. Returns a message describing what happened.
+    func toggleSubscribe(workID: Int) async throws -> String {
+        guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
+        let workURL = Self.workURL(workID)
+        let pageRequest = try authenticatedRequest(for: workURL)
+        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        guard let token = AO3Client.parseCSRFToken(from: html) else { throw AO3WriteError.noCSRFToken }
+
+        let state = AO3Client.parseSubscription(from: html)
+        if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
+            // AO3's unsubscribe form is a POST carrying `_method=delete`.
+            let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
+            let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
+            let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+            if (200...399).contains(status) { return "Unsubscribed." }
+            throw AO3WriteError.rejected(
+                AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unsubscribe."
+            )
+        }
+
+        let body = Self.formEncoded([
+            ("authenticity_token", token),
+            ("subscription[subscribable_id]", String(workID)),
+            ("subscription[subscribable_type]", "Work"),
+        ])
+        let request = try writeRequest(
+            to: Self.subscriptionsEndpoint(username: username),
+            body: body, csrf: token, referer: workURL, ajax: false
+        )
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        if responseBody.localizedCaseInsensitiveContains("already subscribed") {
+            return "You're already subscribed."
+        }
+        if (200...399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+            return "Subscribed."
+        }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't subscribe."
+        )
+    }
+
+    /// Adds the work to the user's Marked-for-Later reading list.
+    func markForLater(workID: Int) async throws -> String {
+        guard isLoggedIn else { throw AO3WriteError.notSignedIn }
+        let workURL = Self.workURL(workID)
+        let token = try await csrfToken(forPageAt: workURL)
+        let body = Self.formEncoded([("authenticity_token", token)])
+        let request = try writeRequest(
+            to: Self.markForLaterEndpoint(workID: workID),
+            body: body, csrf: token, referer: workURL, ajax: false
+        )
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        if (200...399).contains(status) { return "Marked for later." }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't mark for later."
+        )
+    }
+
+    /// The fields of a new AO3 bookmark.
+    struct BookmarkInput: Equatable {
+        var notes = ""
+        var tags = ""        // comma-separated
+        var isPrivate = false
+        var isRec = false
+    }
+
+    /// Creates a bookmark on the work under the user's default pseud.
+    func createBookmark(workID: Int, input: BookmarkInput) async throws -> String {
+        guard isLoggedIn else { throw AO3WriteError.notSignedIn }
+        let workURL = Self.workURL(workID)
+        let pageRequest = try authenticatedRequest(for: workURL)
+        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        guard let token = AO3Client.parseCSRFToken(from: html) else { throw AO3WriteError.noCSRFToken }
+
+        var params: [(String, String)] = [
+            ("authenticity_token", token),
+            ("bookmark[bookmarker_notes]", input.notes),
+            ("bookmark[tag_string]", input.tags),
+            ("bookmark[collection_names]", ""),
+            ("bookmark[private]", input.isPrivate ? "1" : "0"),
+            ("bookmark[rec]", input.isRec ? "1" : "0"),
+        ]
+        if let pseud = AO3Client.parseDefaultPseudID(from: html, field: "bookmark[pseud_id]") {
+            params.append(("bookmark[pseud_id]", pseud))
+        }
+        let request = try writeRequest(
+            to: Self.bookmarksEndpoint(workID: workID),
+            body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
+        )
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        if (200...399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+            return "Bookmarked."
+        }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't bookmark this work."
+        )
+    }
+
     // MARK: - Helpers
 
     private func csrfToken(forPageAt url: URL) async throws -> String {
@@ -113,6 +213,21 @@ extension AO3AuthService {
     static let kudosEndpoint = URL(string: "https://archiveofourown.org/kudos.js")!
     static func commentsEndpoint(workID: Int) -> URL {
         URL(string: "https://archiveofourown.org/works/\(workID)/comments")!
+    }
+    static func subscriptionsEndpoint(username: String) -> URL {
+        URL(string: "https://archiveofourown.org/users/\(username)/subscriptions")!
+    }
+    static func markForLaterEndpoint(workID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/works/\(workID)/mark_for_later")!
+    }
+    static func bookmarksEndpoint(workID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/works/\(workID)/bookmarks")!
+    }
+
+    /// Resolves an AO3 form `action` (usually a site-relative path) to an absolute URL.
+    static func absoluteURL(_ path: String) -> URL? {
+        if path.hasPrefix("http") { return URL(string: path) }
+        return URL(string: "https://archiveofourown.org\(path.hasPrefix("/") ? "" : "/")\(path)")
     }
 
     /// `application/x-www-form-urlencoded` body. Ordered so callers control field
