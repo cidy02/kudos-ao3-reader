@@ -21,16 +21,21 @@ struct AO3WorkRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Title + author share a tight block so the hierarchy reads as one unit.
-            VStack(alignment: .leading, spacing: 2) {
-                Text(work.title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                Text("by \(work.authorText)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            // Title + author share a tight block so the hierarchy reads as one unit;
+            // the expand control sits at the card's top-right corner.
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(work.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Text("by \(work.authorText)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if isExpandable { expandButton }
             }
 
             if !work.fandoms.isEmpty {
@@ -80,27 +85,30 @@ struct AO3WorkRow: View {
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .padding(.top, 1)
-
-            if isExpandable {
-                // Borderless so the tap toggles expansion instead of triggering the
-                // row's navigation link.
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
-                } label: {
-                    Label(expanded ? "Show less" : "Show more",
-                          systemImage: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2.weight(.semibold))
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.tint)
-                .padding(.top, 2)
-            }
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Follow the global expand/collapse-all toggle (also applies on first
         // appearance so cards scrolled into view match the current state).
         .onChange(of: expandAll, initial: true) { _, value in expanded = value }
+    }
+
+    /// Top-right expand/collapse control. A bordered circular button (not plain
+    /// text) so it reads as a tappable affordance; borderless interaction would
+    /// blend into the title. Captures its own tap so it never triggers the row's
+    /// navigation link.
+    private var expandButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+        } label: {
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .controlSize(.small)
+        .tint(.accentColor)
+        .accessibilityLabel(expanded ? "Show less" : "Show more")
     }
 
     /// A labeled group of tappable tag chips; each chip runs an AO3 search for that
