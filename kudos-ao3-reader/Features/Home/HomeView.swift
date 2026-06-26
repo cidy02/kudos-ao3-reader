@@ -129,7 +129,7 @@ struct HomeView: View {
     private func footer(_ kind: HomeSectionKind, _ work: SavedWork) -> String? {
         switch kind {
         case .readingNow, .recentlyOpened:
-            return work.lastSpineIndex > 0 ? "Ch \(work.lastSpineIndex + 1)" : nil
+            return work.readingProgressLabel
         case .recentlyUpdated:
             let new = work.postedChapterCount - work.knownChapterCount
             return new > 0 ? "+\(new) new" : "Updated"

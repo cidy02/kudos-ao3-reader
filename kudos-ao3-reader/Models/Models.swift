@@ -140,21 +140,52 @@ import SwiftData
         knownChapterCount > 0 && postedChapterCount > knownChapterCount
     }
 
+    /// Overall reading fraction (0…1) persisted by the Readium reader, parsed from
+    /// its stored locator JSON. Pure Foundation parsing, so it needs no Readium
+    /// dependency (and works on macOS). `nil` when never read in the Readium reader.
+    var readiumProgress: Double? {
+        guard !readiumLocator.isEmpty,
+              let data = readiumLocator.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let locations = object["locations"] as? [String: Any],
+              let total = locations["totalProgression"] as? Double
+        else { return nil }
+        return total
+    }
+
+    /// The user has opened this work in either reader. The Readium reader records a
+    /// `readiumLocator`; the legacy reader records a spine index / scroll fraction.
+    /// Both stamp `lastReadDate`, which also covers works restored from a backup.
+    var hasStartedReading: Bool {
+        lastReadDate != nil || !readiumLocator.isEmpty
+            || lastSpineIndex > 0 || lastScrollFraction > 0
+    }
+
     /// Started but not finished, with its EPUB on disk — the in-progress / "Reading
     /// Now" state shared by the Home and Library shelves.
     var isInProgress: Bool {
-        hasEPUB && !isFinished && (lastSpineIndex > 0 || lastScrollFraction > 0)
+        hasEPUB && !isFinished && hasStartedReading
     }
 
-    /// Reading progress in 0…1 for the Reading Now shelves: chapter position over the
-    /// work's AO3 chapter count ("5/10"), falling back to the in-chapter scroll
-    /// fraction. `nil` when there's nothing meaningful to show.
+    /// Reading progress in 0…1 for the Reading Now shelves. Prefers the Readium
+    /// reader's exact fraction; falls back to the legacy reader's chapter position
+    /// over the work's AO3 chapter count ("5/10") or its in-chapter scroll fraction.
+    /// `nil` when there's nothing meaningful to show.
     var readingProgress: Double? {
+        if let readium = readiumProgress { return readium }
         let parts = chapters.split(separator: "/")
         if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
             return min(1, Double(lastSpineIndex + 1) / Double(total))
         }
         return lastScrollFraction > 0 ? lastScrollFraction : nil
+    }
+
+    /// Short progress label for the Reading Now / Recently Opened cards: the legacy
+    /// reader's chapter, else the Readium reader's overall percent.
+    var readingProgressLabel: String? {
+        if lastSpineIndex > 0 { return "Ch \(lastSpineIndex + 1)" }
+        if let readium = readiumProgress { return "\(Int((readium * 100).rounded()))%" }
+        return nil
     }
 
     init(

@@ -70,4 +70,35 @@ struct SavedWorkProgressTests {
     @Test func progressIsNilWhenNothingMeaningful() {
         #expect(work().readingProgress == nil)
     }
+
+    // MARK: Readium reader progress (the iOS path)
+
+    /// A minimal persisted Readium locator carrying an overall progression.
+    private static func readiumLocator(total: Double) -> String {
+        #"{"href":"chapter1.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":\#(total),"progression":0.1,"position":5}}"#
+    }
+
+    @Test func readiumReadWorkIsInProgress() {
+        // The Readium reader records only a locator (no spine index / scroll fraction).
+        let reading = work()
+        reading.readiumLocator = Self.readiumLocator(total: 0.42)
+        #expect(reading.isInProgress)
+        #expect(reading.readingProgress == 0.42)
+        #expect(reading.readingProgressLabel == "42%")
+    }
+
+    @Test func openedWorkWithOnlyLastReadDateIsInProgress() {
+        // Defensive: lastReadDate alone (e.g. a restored backup) still counts.
+        let opened = work()
+        opened.lastReadDate = Date()
+        #expect(opened.isInProgress)
+    }
+
+    @Test func readiumProgressTakesPrecedenceOverLegacyChapters() {
+        let reading = work()
+        reading.chapters = "5/10"
+        reading.lastSpineIndex = 4              // legacy would compute 0.5
+        reading.readiumLocator = Self.readiumLocator(total: 0.8)
+        #expect(reading.readingProgress == 0.8)
+    }
 }

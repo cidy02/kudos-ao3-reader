@@ -306,7 +306,7 @@ struct LibraryView: View {
 
     private func footer(_ kind: LibrarySectionKind, _ work: SavedWork) -> String? {
         switch kind {
-        case .readingNow: work.lastSpineIndex > 0 ? "Ch \(work.lastSpineIndex + 1)" : nil
+        case .readingNow: work.readingProgressLabel
         case .finished: "Finished"
         default: nil
         }
