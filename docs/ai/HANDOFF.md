@@ -1,5 +1,141 @@
 # AI Handoff
 
+## Handoff - T-58 - Codex - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit: `02ad56a`
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/build.gradle.kts`
+- `android/gradle/libs.versions.toml`
+- `android/app/build.gradle.kts`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupErrors.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupExporter.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupImporter.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupJson.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupManifest.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupMappers.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupMergeService.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupPaths.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupValidator.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupVersion.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/KudosBackup.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/backup/BackupCompatibilityTest.kt`
+
+Dependencies added:
+
+- Kotlin serialization compiler Gradle plugin
+  `org.jetbrains.kotlin.plugin.serialization` using the existing Kotlin/Compose
+  compiler version `2.3.21`.
+- No new runtime JSON dependency; Phase 3 uses the existing
+  `kotlinx-serialization-json` runtime added in Phase 2.
+
+Backup format implemented:
+
+- Current Apple v1 directory-backed `.kudosbackup` manifest decoding and
+  best-effort directory import where Android can access the package path.
+- Android v2 ZIP `.kudosbackup` export/import with internal paths:
+  `manifest.json`, `Works/<UUID>.epub`, and `Fonts/<fileName>`.
+- v2 manifest includes `exportedBy`, optional collections, saved searches,
+  v2 work stats/update fields, and Readium locator metadata. v2-only fields stay
+  optional and are not treated as Apple v1 parity.
+
+Import/export behavior:
+
+- JSON is UTF-8 and decoded with unknown-field tolerance.
+- UUIDs normalize to canonical lowercase for work, collection, and saved-search
+  identity.
+- Dates validate as ISO-8601 instants.
+- ZIP import rejects missing manifests, unsupported versions, invalid JSON,
+  invalid dates, invalid UUIDs, unsafe paths, absolute paths, traversal, malformed
+  `Works/` or `Fonts/` entries, duplicate entries, truncated archives, and entries
+  over the configured size limits.
+- v2 ZIP output is deterministic where practical: manifest first, then sorted
+  work/font entries with stable ZIP timestamps.
+
+Merge behavior:
+
+- Works merge by UUID without deleting local-only works.
+- Local EPUB state is preserved when the backup lacks the EPUB file; a new work
+  whose manifest claims `hasEPUB = true` is restored with `hasEpub = false` when
+  the file is missing.
+- Backup EPUB bytes are returned as files-to-write by work UUID for later
+  app-private atomic persistence.
+- User tags are trimmed, deduplicated, and unioned with local assignments.
+- Bookmarks merge by URL and update title/date to match Apple restore behavior.
+- Collections merge by UUID; name collisions with different UUIDs create a
+  separate suffixed restored collection.
+- Fonts merge by safe filename. Colliding different/unknown bytes are suffixed,
+  and a restored `readerFontID` is retargeted to the suffixed file when needed.
+- Settings are applied after data merge with enum/range validation. Missing or
+  unsafe custom font references fall back to `system`.
+- `readiumLocator` is preserved for same-platform precision; portable resume
+  fields `lastSpineIndex` and `lastScrollFraction` are preserved as the
+  cross-platform fallback.
+
+Tests added:
+
+- `BackupV1ManifestDecodeTest`
+- `BackupV2ZipDecodeTest`
+- `BackupV2ZipExportTest`
+- `BackupRoundTripBasicTest`
+- `BackupMergeDoesNotDeleteExistingWorkTest`
+- `BackupMergeDoesNotDeleteExistingEpubTest`
+- `BackupMissingEpubMarksHasEpubFalseTest`
+- `BackupUserTagMergeTest`
+- `BackupCollectionMergeTest`
+- `BackupBookmarkMergeByUrlTest`
+- `BackupFontMissingReaderFontFallbackTest`
+- `BackupRejectsUnsupportedVersionTest`
+- `BackupRejectsMissingManifestTest`
+- `BackupRejectsPathTraversalTest`
+- `BackupRejectsAbsolutePathTest`
+- `BackupRejectsInvalidJsonTest`
+- `BackupRejectsTruncatedZipTest`
+- `BackupRejectsDuplicateEntryTest`
+- `BackupPreservesLegacyProgressFieldsTest`
+- `BackupPreservesReadiumLocatorAsPlatformSpecificDataTest`
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+
+Results:
+
+- `:app:compileDebugKotlin` passed.
+- First focused `:app:testDebugUnitTest` run found a test-fixture issue: Java
+  `ZipOutputStream` refuses duplicate entries before the importer can inspect
+  them. Fixed by hand-writing the duplicate-entry ZIP fixture.
+- Final `:app:testDebugUnitTest` passed: 35 tests, 0 failures.
+- Final `:app:assembleDebug` passed.
+- Final `:app:lintDebug` passed and wrote
+  `android/app/build/reports/lint-results-debug.html`.
+
+Known gaps:
+
+- Storage Access Framework picker/share-sheet wiring remains placeholder-only.
+- Backup services return file bytes/maps for later app-private staging and atomic
+  writes; production Room/DataStore persistence and file commit orchestration are
+  not wired yet.
+- Apple v2 ZIP import/export support is not implemented in this branch.
+- No AO3 networking, parsing, search requests, auth, Readium, EPUB download/import
+  from AO3, account lists, comments, or production Library browsing/filtering.
+
+Next recommended agent: Claude or Codex
+
+Recommended next phase:
+
+Phase 4 AO3 networking core from an approved prompt. Keep it limited to request
+policy/client foundations and tests; do not start search parsing, auth, reader,
+or production Library UI unless the phase prompt explicitly allows it.
+
 ## Handoff - T-57 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`

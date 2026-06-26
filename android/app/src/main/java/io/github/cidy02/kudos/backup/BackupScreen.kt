@@ -13,11 +13,11 @@ import io.github.cidy02.kudos.ui.components.PlaceholderScreen
 fun BackupScreen() {
     PlaceholderScreen(
         title = "Backup",
-        subtitle = "Backup import and export are documented but not implemented in Phase 1.",
+        subtitle = "Backup compatibility services are present; Android document picker wiring is deferred.",
         sections = listOf(
-            "Apple v1 facts and Android v2 additions live in BACKUP_FORMAT.md.",
-            "No JSON serializers, filesystem access, or cloud storage integration exists yet.",
-            "Future work must avoid labeling v2-only fields as v1 parity."
+            "Apple v1 directory manifests can be decoded where Android can access the package.",
+            "Android v2 ZIP .kudosbackup import/export and merge logic are covered by JVM tests.",
+            "Storage Access Framework and production restore UI remain later-phase work."
         )
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
