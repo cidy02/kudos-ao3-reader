@@ -19,10 +19,10 @@ fun SearchScreen(onOpenWork: () -> Unit) {
 
     PlaceholderScreen(
         title = "Search",
-        subtitle = "Search UI shell only. AO3 requests and parsing are not implemented.",
+        subtitle = "Search UI shell only. AO3 query building and parsing are not implemented.",
         sections = listOf(
             "Current Apple sort enum is documented in AO3_BEHAVIOR_CONTRACT.md.",
-            "Phase 1 keeps all result data static."
+            "Phase 4 adds the polite AO3 networking foundation, but this screen stays static until Phase 5."
         )
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

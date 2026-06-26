@@ -1,5 +1,152 @@
 # AI Handoff
 
+## Handoff - T-59 - Codex - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit: `c3fe55f`
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/gradle/libs.versions.toml`
+- `android/app/build.gradle.kts`
+- `android/app/src/main/java/io/github/cidy02/kudos/search/SearchScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Client.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Constants.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Error.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3HttpResponse.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3NetworkConfig.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3OverloadDetector.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3RequestCoalescer.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3RequestCoordinator.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Result.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3RetryAfter.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3RetryPolicy.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3UserAgent.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/AO3NetworkingCoreTest.kt`
+
+Dependencies added:
+
+- OkHttp `5.4.0`
+- MockWebServer 3 `5.4.0`
+- kotlinx-coroutines-core `1.11.0`
+- kotlinx-coroutines-test `1.11.0`
+
+Chosen User-Agent:
+
+```text
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15
+```
+
+This matches the Apple browser-like User-Agent and contains no private
+user/device-identifying data.
+
+Concurrency configuration:
+
+- `AO3NetworkConfig.maxConcurrentRequests = 3`, matching the current Apple
+  `AO3RequestCoordinator` parity note.
+- `AO3NetworkConfig.minDelayBetweenRequestsMillis = 500`.
+- `AO3RequestCoordinator` uses a coroutine semaphore plus a spacing mutex, is
+  cancellation-aware through suspending primitives, and does not block the main
+  thread.
+
+Retry/backoff behavior:
+
+- Default `maxRetries = 2`.
+- GET retries only for `AO3Error.Network`, `AO3Error.RateLimited`,
+  `AO3Error.Server`, and `AO3Error.Overloaded`.
+- POST/PUT/PATCH/DELETE are never retryable by policy.
+- Bad request, auth required, forbidden, not found, generic non-429/non-5xx HTTP,
+  and validation errors are not retryable.
+- Backoff is 500 ms for the first retry and 1000 ms for the second retry.
+
+Retry-After behavior:
+
+- `AO3RetryAfter` parses integer seconds and RFC 1123 HTTP-date values.
+- For 429 and overload errors, retry delay is at least the parsed
+  `Retry-After` value when present.
+- Invalid `Retry-After` values fall back to the normal backoff.
+
+Request coalescing behavior:
+
+- Concurrent identical GETs share one in-flight operation.
+- Coalescing keys include method, canonical URL, and normalized headers.
+- Non-GET retry/coalescing policy is documented through `AO3RetryPolicy`; no
+  write client method was added in Phase 4.
+- In-flight entries are removed on success or failure, so errors do not poison
+  future calls.
+- Cancelling one waiter does not automatically cancel the shared operation.
+
+Client behavior:
+
+- `AO3Client.get(url, headers)` returns `AO3Result<AO3HttpResponse>`.
+- `AO3HttpResponse` exposes final URL, status code, headers, and raw body.
+- OkHttp types are kept inside the network layer.
+- Status mapping covers success, 400, 401, 403, 404, 429, 5xx, other HTTP,
+  network failures, login redirects, validation errors, and overload/capacity
+  pages.
+- The conservative overload detector checks obvious AO3/AO3-capacity text so
+  later parsers do not treat those pages as empty results.
+
+Tests added:
+
+- `AO3RetryAfterTest`
+- `AO3RetryPolicyTest`
+- `AO3RequestCoordinatorTest`
+- `AO3RequestCoalescerTest`
+- `AO3ClientStatusMappingTest`
+- `AO3ClientRetryTest`
+- `AO3ClientDoesNotRetryPostOrNonRetryableErrorsTest`
+- `AO3ClientUserAgentTest`
+- `AO3ClientCoalescingTest`
+- `AO3OverloadDetectorTest`
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+
+Results:
+
+- `:app:compileDebugKotlin` passed.
+- Focused `:app:testDebugUnitTest` initially exposed a MockWebServer 5 API update
+  (`close()` instead of `shutdown()`), then a test ordering assumption for
+  concurrent different-URL requests. Both were fixed.
+- One combined assemble/test/lint run failed because stale generated build output
+  contained duplicate `ComposableSingletons$SearchScreenKt` classes after editing
+  the Compose placeholder. A clean Gradle run removed the stale output.
+- Final clean verification passed:
+  - `:app:assembleDebug`
+  - `:app:testDebugUnitTest` with 59 JVM tests
+  - `:app:lintDebug`
+
+Known gaps:
+
+- No AO3 search query builder or search UI integration.
+- No AO3 HTML parsing/Jsoup.
+- No auth/WebView, cookies, authenticated requests, or write actions.
+- No EPUB download/import, Readium, comments, account lists, or production Library
+  networking.
+- No persistent HTTP cache beyond OkHttp defaults.
+- No real AO3 traffic was used in tests.
+
+Deliberate deviations from Apple behavior:
+
+- None requiring human approval. Android matches the documented 3-slot default,
+  browser-like User-Agent, transient GET retry policy, and Retry-After behavior.
+
+Next recommended agent: Claude or Codex
+
+Recommended next phase:
+
+Phase 5 AO3 search/query building and parsing from an approved prompt. Reuse this
+network layer; keep auth, writes, reader, EPUB import/download, and production
+Library wiring out unless the Phase 5 prompt explicitly expands scope.
+
 ## Handoff - T-58 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`
