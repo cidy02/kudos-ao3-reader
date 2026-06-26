@@ -1,5 +1,103 @@
 # AI Handoff
 
+## Handoff - T-57 - Codex - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit: `c1a7475`
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/build.gradle.kts`
+- `android/gradle/libs.versions.toml`
+- `android/app/build.gradle.kts`
+- `android/app/schemas/io.github.cidy02.kudos.data.local.KudosDatabase/1.json`
+- `android/app/src/main/java/io/github/cidy02/kudos/core/model/**`
+- `android/app/src/main/java/io/github/cidy02/kudos/data/local/**`
+- `android/app/src/main/java/io/github/cidy02/kudos/data/preferences/**`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/**`
+
+Dependencies added:
+
+- KSP Gradle plugin `2.3.9`
+- Room runtime/ktx/compiler/testing `2.8.4`
+- DataStore Preferences `1.2.1`
+- Kotlinx serialization JSON `1.11.0`
+- AndroidX Test core `1.7.0`
+- JUnit `4.13.2`
+- Robolectric `4.16.1`
+
+Database schema summary:
+
+- Room database: `KudosDatabase`, name `kudos.db`, schema version `1`, schema
+  export enabled and committed.
+- Tables: `works`, `user_tags`, `work_tag_cross_refs`, `collections`,
+  `collection_work_cross_refs`, `bookmarks`, `custom_fonts`, `saved_searches`.
+- User tags and collections are normalized with cross-reference tables.
+- AO3 tag groups are stored as JSON-encoded string-list columns for Phase 2.
+- Date/time values use `java.time.Instant` converted to epoch milliseconds.
+- `comments`, `hits`, `knownChapterCount`, and `lastUpdateCheck` are nullable
+  Android/local/future-compatible fields, not current Apple v1 backup parity
+  fields.
+- Production destructive migrations were not enabled.
+
+Settings defaults implemented:
+
+- `readerFontID = "system"`
+- `readerMode = "scroll"`
+- `readerTwoPage = false`
+- `readerCustomize = false`
+- `readerBoldText = false`
+- `readerFontPt = 18`
+- `readerLineHeight = 1.65`
+- `readerLetterSpacing = 0`
+- `readerWordSpacing = 0`
+- `readerMargin = 28`
+- `readerJustify = false`
+- `confirmBeforeDelete = true`
+- `hideMatureContent = true`
+- `matureContentMode = "obscure"`
+- `requireBiometricToReveal = false`
+- `appTheme = "light"`
+- `readerTheme = "light"`
+- `matchAppReaderTheme = true`
+- `accentColorHex = "#990000"`
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:lintDebug`
+
+Results:
+
+- `:app:assembleDebug` passed.
+- `:app:testDebugUnitTest` passed: 11 tests, 0 failures, 0 errors.
+- `:app:lintDebug` passed with `0 errors, 6 warnings`; the warnings are the same
+  version-availability notices carried from Phase 1.
+
+Known gaps:
+
+- No AO3 networking, parsing, search requests, auth, backups, Readium, EPUB
+  import/download, account lists, comments, or production Library queries.
+- DataStore repository exists and is tested, but app-wide runtime settings wiring
+  remains minimal; Settings screen only displays default values.
+- Backup import/export is not implemented; `BackupSettings` only preserves the
+  contract field names for future Phase 3 work.
+- Robolectric is included because Room DAO tests run under local JVM unit tests,
+  not instrumentation.
+
+Next recommended agent: Claude or Codex
+
+Recommended next phase:
+
+Phase 3 backup v1/v2 compatibility from an approved prompt. Keep it limited to
+manifest decoding/encoding, ZIP safety, merge semantics, fixtures, and tests.
+
 ## Handoff - T-56 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`

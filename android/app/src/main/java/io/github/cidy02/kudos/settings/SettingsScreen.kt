@@ -7,16 +7,22 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.ui.components.PlaceholderScreen
 
 @Composable
 fun SettingsScreen(onOpenBackup: () -> Unit) {
+    val defaults = KudosSettings.Defaults
+
     PlaceholderScreen(
         title = "Settings",
-        subtitle = "Preference controls are visual placeholders until DataStore work begins.",
+        subtitle = "DataStore settings scaffolding is present; controls stay placeholder-only.",
         sections = listOf(
-            "Theme is handled in memory for Phase 1 only.",
-            "No persistent settings are written by this scaffold.",
+            "Default reader mode: ${defaults.reader.readerMode.storageValue}",
+            "Default reader font: ${defaults.reader.readerFontId}",
+            "Default reader theme: ${defaults.reader.readerTheme.storageValue}",
+            "Default mature-content mode: ${defaults.privacy.matureContentMode.storageValue}",
+            "Default accent: ${defaults.app.accentColorHex}",
             "Backup controls route to the placeholder backup screen."
         )
     ) {

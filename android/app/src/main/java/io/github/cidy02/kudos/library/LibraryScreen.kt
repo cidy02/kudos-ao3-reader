@@ -16,7 +16,7 @@ fun LibraryScreen(
         title = "Library",
         subtitle = "Saved works, collections, and reading progress will be wired in later phases.",
         sections = listOf(
-            "No Room database or backup import exists in Phase 1.",
+            "Room schema exists, but production Library queries are still deferred.",
             "Cards here are static placeholders for navigation and layout review.",
             "Reader progress contract fields remain lastSpineIndex and lastScrollFraction."
         ),
