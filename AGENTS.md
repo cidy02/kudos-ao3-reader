@@ -22,6 +22,12 @@ existed during the reader migration; it was **consolidated into `main` in June 2
 and all other branches (`readium-migration`, `test/card-lists`, etc.) were deleted.
 Just commit to `main` — there is no more cross-branch porting / cherry-picking.
 
+**Android port exception:** the human-approved Android port branch is
+`kudos-ao3-reader-android`. Android-port work must happen on that branch (or a
+short-lived branch/worktree based from it), not directly on `main`, until the
+human explicitly approves a merge. See `docs/android/ANDROID_PORT_PLAN.md` and
+`docs/ai/HANDOFF.md`.
+
 **Reader (per-platform, one codebase):** `BookReaderView` routes **iOS → Readium**
 (`Features/ReaderReadium/`, the Readium Swift Toolkit) and **macOS → the legacy
 WKWebView reader** (`Features/Reader/ReaderView.swift` + `ReaderController.swift`, which
