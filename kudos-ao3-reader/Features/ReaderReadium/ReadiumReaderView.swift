@@ -140,6 +140,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private(set) var toc: [ReadiumShared.Link] = []
     private(set) var currentLocator: Locator?
     private(set) var navigator: EPUBNavigatorViewController?
+    /// Readium's static position list grouped by reading-order item (chapter).
+    /// Drives the progress pill's "Ch. x/x · Pg. x/x" without any extra requests.
+    private(set) var positionsByReadingOrder: [[Locator]] = []
     /// Toggled by tapping the page; the view hides/shows its chrome on this.
     var chromeHidden = false
 
@@ -150,6 +153,38 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     /// Fraction through the whole publication (0...1), when known.
     var totalProgression: Double? { currentLocator?.locations.totalProgression }
+
+    /// A compact reading position for the progress pill: overall percent plus the
+    /// current chapter and the page within it. Pages are Readium "positions"
+    /// (~1 KB of content each), so they stay stable across font-size changes.
+    struct ReadingPosition: Equatable {
+        let percent: Int
+        let chapter: Int
+        let chapterCount: Int
+        let page: Int
+        let pageCount: Int
+    }
+
+    var readingPosition: ReadingPosition? {
+        guard let locator = currentLocator,
+              let globalPos = locator.locations.position,
+              !positionsByReadingOrder.isEmpty
+        else { return nil }
+        // Find the chapter whose global position range contains the current spot.
+        guard let chapterIndex = positionsByReadingOrder.firstIndex(where: { chapter in
+            guard let first = chapter.first?.locations.position,
+                  let last = chapter.last?.locations.position else { return false }
+            return globalPos >= first && globalPos <= last
+        }) else { return nil }
+        let chapterPositions = positionsByReadingOrder[chapterIndex]
+        let pageCount = max(1, chapterPositions.count)
+        let firstPos = chapterPositions.first?.locations.position ?? globalPos
+        let page = min(pageCount, max(1, globalPos - firstPos + 1))
+        let percent = Int(((locator.locations.totalProgression ?? 0) * 100).rounded())
+        return ReadingPosition(percent: percent,
+                               chapter: chapterIndex + 1, chapterCount: positionsByReadingOrder.count,
+                               page: page, pageCount: pageCount)
+    }
 
     /// Opens the work's EPUB and builds the navigator at `initialLocator` with the
     /// given configuration (preferences + custom-font declarations). The file
@@ -176,6 +211,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             let tocLinks = (try? await publication.tableOfContents().get()) ?? []
             self.navigator = navigator
             toc = tocLinks.isEmpty ? publication.readingOrder : tocLinks
+            positionsByReadingOrder = (try? await publication.positionsByReadingOrder().get()) ?? []
             phase = .ready
             Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
         } catch {
@@ -428,21 +464,23 @@ struct ReadiumReaderView: View {
     }
 
     private var progressPill: some View {
-        let percent = book.totalProgression.map { Int(($0 * 100).rounded()) }
-        let chapter = book.currentLocator?.title ?? ""
-        let label = [percent.map { "\($0)%" }, chapter.isEmpty ? nil : chapter]
-            .compactMap { $0 }.joined(separator: " · ")
-        return Text(label.isEmpty ? work.title : label)
+        // Just the essentials: overall percent, chapter, and page within the chapter.
+        let label: String
+        if let pos = book.readingPosition {
+            label = "\(pos.percent)%  ·  Ch. \(pos.chapter)/\(pos.chapterCount)  ·  Pg. \(pos.page)/\(pos.pageCount)"
+        } else if let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) {
+            label = "\(percent)%"
+        } else {
+            label = ""
+        }
+        return Text(label)
             .font(.footnote.weight(.medium))
             .monospacedDigit()
             .lineLimit(1)
-            .truncationMode(.tail)
             .padding(.horizontal, 16)
-            .frame(height: 44)
-            // Stay a compact capsule; a long chapter title truncates rather than
-            // stretching the pill across the whole screen.
-            .frame(maxWidth: 320)
+            .frame(height: 40)
             .glassEffect(.regular, in: .capsule)
+            .opacity(label.isEmpty ? 0 : 1)
     }
 
     // MARK: Chapters / Display sheet
