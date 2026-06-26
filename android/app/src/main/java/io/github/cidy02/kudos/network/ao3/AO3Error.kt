@@ -10,5 +10,6 @@ sealed interface AO3Error {
     data class Http(val statusCode: Int) : AO3Error
     data class Network(val message: String, val cause: Throwable? = null) : AO3Error
     data class Overloaded(val statusCode: Int, val retryAfterMillis: Long?) : AO3Error
+    data class Parse(val message: String) : AO3Error
     data class Validation(val message: String) : AO3Error
 }

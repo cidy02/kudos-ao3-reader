@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.jsoup)
     implementation(libs.okhttp)
 
     ksp(libs.androidx.room.compiler)

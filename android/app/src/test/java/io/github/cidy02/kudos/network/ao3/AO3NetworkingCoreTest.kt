@@ -41,6 +41,7 @@ class AO3RetryPolicyTest {
         assertFalse(policy.shouldRetry(AO3HttpMethod.GET, AO3Error.NotFound, 1))
         assertFalse(policy.shouldRetry(AO3HttpMethod.GET, AO3Error.Forbidden, 1))
         assertFalse(policy.shouldRetry(AO3HttpMethod.GET, AO3Error.AuthenticationRequired, 1))
+        assertFalse(policy.shouldRetry(AO3HttpMethod.GET, AO3Error.Parse("changed markup"), 1))
         assertFalse(policy.shouldRetry(AO3HttpMethod.GET, AO3Error.Server(503), 3))
     }
 

@@ -28,6 +28,7 @@ class AO3RetryPolicy(
             AO3Error.Forbidden,
             AO3Error.NotFound,
             is AO3Error.Http,
+            is AO3Error.Parse,
             is AO3Error.Validation -> false
         }
     }

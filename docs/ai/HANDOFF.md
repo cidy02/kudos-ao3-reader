@@ -1,5 +1,180 @@
 # AI Handoff
 
+## Handoff - T-60 - Codex - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit: `f1ab0fe`
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/gradle/libs.versions.toml`
+- `android/app/build.gradle.kts`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Error.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3RetryPolicy.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchFilters.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchModels.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchParser.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchUrlBuilder.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/search/SearchScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/ui/components/AO3WorkCard.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkDetailScreen.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/AO3NetworkingCoreTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchParserTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchRepositoryTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchUrlBuilderTest.kt`
+- `android/app/src/test/resources/ao3/search_basic.html`
+- `android/app/src/test/resources/ao3/search_locked.html`
+- `android/app/src/test/resources/ao3/search_no_results.html`
+- `android/app/src/test/resources/ao3/search_overload.html`
+- `android/app/src/test/resources/ao3/search_series.html`
+- `android/app/src/test/resources/ao3/search_unicode.html`
+
+Dependencies added:
+
+- Jsoup `1.22.2` (`org.jsoup:jsoup`) for AO3 HTML parsing.
+
+AO3 filter coverage:
+
+- Ported Android search DTOs for the current Apple filter set:
+  query, fandom, characters, relationships, additional tags, excluded fandoms,
+  excluded characters, excluded relationships, excluded additional tags, rating,
+  rating match, include Not Rated, included/excluded warnings, included/excluded
+  categories, crossover, completion, words-from/to, updated window, language,
+  and sort.
+- Rating ids match Apple/AO3:
+  Not Rated `9`, General `10`, Teen `11`, Mature `12`, Explicit `13`.
+- Warning ids match Apple/AO3:
+  `16`, `14`, `17`, `18`, `19`, `20`.
+- Category ids match Apple/AO3:
+  `116`, `22`, `21`, `23`, `2246`, `24`.
+- Excluded tag names are folded into `work_search[query]` as `-"tag"` and
+  deduped in first-seen order.
+- Excluded warnings/categories are folded into search text as
+  `-archive_warning_ids:<id>` and `-category_ids:<id>`.
+- Multiple-rating, rating-plus, rating-minus, and Not Rated combinations are
+  folded into AO3 text-search clauses when the single structured rating field
+  cannot express them.
+
+Sort mapping:
+
+- `relevance` -> omitted
+- `dateUpdated` -> `revised_at`
+- `datePosted` -> `created_at`
+- `words` -> `word_count`
+- `kudos` -> `kudos_count`
+- `hits` -> `hits`
+- `comments` -> `comments_count`
+- `bookmarks` -> `bookmarks_count`
+- No `title` or `author` sort option was added.
+
+URL generation behavior:
+
+- Search path is `https://archiveofourown.org/works/search`.
+- Empty/blank fields are omitted.
+- `page` is 1-based and always emitted, including `page=1`, matching current
+  Apple behavior.
+- Included warnings/categories use repeated
+  `work_search[archive_warning_ids][]` and `work_search[category_ids][]`.
+- Word count expressions are:
+  `from-to`, `> from`, `< to`, or omitted.
+- Android additionally ignores invalid/non-positive word-count sides safely
+  instead of sending malformed expressions.
+
+Parser fixtures added:
+
+- `search_basic.html`
+- `search_no_results.html`
+- `search_series.html`
+- `search_locked.html`
+- `search_unicode.html`
+- `search_overload.html`
+
+Parser behavior:
+
+- Uses Jsoup and AO3-like CSS selectors to parse `li.work.blurb` search results
+  into `AO3WorkSummary`.
+- Extracts id, title, authors, work URL, fandoms, rating, warnings, categories,
+  relationships, characters, freeforms, summary, language, words, chapters,
+  comments, kudos, hits, bookmarks, series title/position/url, completion state,
+  restricted marker, and updated date when present.
+- Preserves first-seen tag order, dedupes normalized tag text, decodes HTML
+  entities, normalizes whitespace, and preserves Unicode.
+- Empty/no-result pages return an empty work list and current page fallback.
+- AO3 overload/capacity fixture throws a typed parser error and repository maps
+  it to `AO3Error.Overloaded`.
+- Single malformed work blurbs are skipped at page level, matching Apple; direct
+  `parseWorkSummary` calls throw a clear missing-structure error.
+
+Repository behavior:
+
+- `AO3SearchRepository` builds the URL, calls the Phase 4 `AO3Client`, parses
+  successful bodies off the main dispatcher, and returns `AO3Result<AO3SearchPage>`.
+- Network errors pass through unchanged.
+- Parser errors surface as non-retryable `AO3Error.Parse`.
+- `AO3RetryPolicy` now explicitly does not retry parse errors.
+
+UI behavior implemented:
+
+- `SearchScreen` is no longer static. It has query input, search action, sort
+  menu, disabled advanced-filter entry point, loading/error/empty states, results
+  list, retry, and previous/next pagination.
+- Results render in `AO3WorkCard` with title, author, fandoms, required tags,
+  relationships/characters/freeforms, summary, and stats.
+- Tapping Details stores the selected remote summary in `AppNavHost` and opens
+  `WorkDetailScreen`.
+- `WorkDetailScreen` displays the selected AO3 result metadata and placeholder
+  actions for Read, Download, Favorite, User Tags, Collections, Open on AO3,
+  Kudos, and Comment. No action performs real save/download/auth/write work.
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+
+Results:
+
+- `:app:compileDebugKotlin` passed.
+- First `:app:testDebugUnitTest` exposed a test fixture helper visibility issue;
+  fixed with local helper names.
+- Final `:app:testDebugUnitTest` passed.
+- Final combined verification passed:
+  - `:app:assembleDebug`
+  - `:app:testDebugUnitTest` with 81 JVM tests, 0 failures, 0 errors
+  - `:app:lintDebug`
+
+Known gaps / intentionally deferred:
+
+- No advanced filter sheet UI yet; only query and sort are exposed visually.
+- No saved-search persistence or local Library search integration.
+- No auth/WebView, cookies, authenticated account lists, comments, kudos,
+  subscriptions, bookmarks, Mark for Later, or writes.
+- No EPUB download/import, save lifecycle, Readium reader, Room work persistence,
+  or production Library wiring.
+- No full AO3 Work Detail page hydration; Work Detail displays only search-result
+  metadata carried from the selected card.
+- No real AO3 traffic was used in tests. Parser behavior is fixture-driven.
+
+Apple/contract ambiguity:
+
+- Apple currently forwards raw word-count strings. The Phase 5 prompt required
+  safe invalid normalization, so Android ignores invalid/non-positive sides while
+  preserving Apple-compatible output for valid values. No human approval appears
+  needed unless exact malformed-input parity is desired.
+
+Next recommended agent: Claude or Codex
+
+Recommended next phase:
+
+Phase 6 Work Detail and Save/Download. Build on `AO3WorkSummary`, fetch canonical
+work tags/detail where needed, implement EPUB download/import and local save
+lifecycle, and keep auth/writes/reader expansion gated to their approved phases.
+
 ## Handoff - T-59 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`
