@@ -1,5 +1,92 @@
 # AI Handoff
 
+## Handoff - T-56 - Codex - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit: `00a25b6`
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/settings.gradle.kts`
+- `android/build.gradle.kts`
+- `android/gradle.properties`
+- `android/.gitignore`
+- `android/gradle/libs.versions.toml`
+- `android/gradlew`
+- `android/gradlew.bat`
+- `android/gradle/wrapper/gradle-wrapper.jar`
+- `android/gradle/wrapper/gradle-wrapper.properties`
+- `android/app/build.gradle.kts`
+- `android/app/src/main/AndroidManifest.xml`
+- `android/app/src/main/res/drawable/ic_kudos_mark.xml`
+- `android/app/src/main/res/values/styles.xml`
+- `android/app/src/main/res/xml/backup_rules.xml`
+- `android/app/src/main/res/xml/data_extraction_rules.xml`
+- `android/app/src/main/java/io/github/cidy02/kudos/**`
+
+Summary:
+
+Phase 1 scaffold only. Added a native Android project under `android/` with
+Gradle Kotlin DSL, a Gradle 9.4.1 wrapper, AGP 9.2.0, Kotlin/Compose compiler
+2.3.21, Compose BOM 2026.06.00, Material 3, and placeholder Compose navigation.
+The app shell has Home, Library, Browse, Account, global Search, Work Detail,
+Reader placeholder, Settings, and Backup placeholder routes. It intentionally
+does not implement AO3 networking, parsing, auth, backup import/export, Readium,
+Room, DataStore, EPUB handling, account data, comments, or production Library
+behavior.
+
+Verification:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:lintDebug`
+
+Results:
+
+- `:app:assembleDebug` passed.
+- `:app:testDebugUnitTest` passed with no unit tests defined yet.
+- `:app:lintDebug` passed and wrote `android/app/build/reports/lint-results-debug.html`.
+- Lint report has `0 errors, 6 warnings`, all version-availability notices for
+  Gradle, AGP, Activity Compose, Lifecycle, Navigation Compose, and the Compose
+  compiler plugin.
+- First assemble without `ANDROID_HOME` failed because Gradle could not locate
+  the Android SDK. Re-running with `ANDROID_HOME=$HOME/Library/Android/sdk`
+  succeeded; Gradle installed the licensed Android SDK Platform 37.0 package
+  into the local SDK.
+
+Version decisions:
+
+- `minSdk = 26`
+- `compileSdk = 37`
+- `targetSdk = 37`
+- Gradle wrapper `9.4.1`
+- Android Gradle Plugin `9.2.0`
+- Compose BOM `2026.06.00`
+- Compose compiler plugin `2.3.21`
+
+Known risks:
+
+- UI has not been emulator/screenshot verified; verification was build/lint only.
+- Placeholder copy and layout are intentionally temporary and should be replaced
+  as each contract-backed implementation phase lands.
+- Version catalog choices are pinned to the official AGP/Compose baseline used
+  for this scaffold; review whether to bump the six lint-reported newer
+  versions before Phase 2.
+- `ANDROID_HOME` must be set to `$HOME/Library/Android/sdk` in this local
+  environment unless Android Studio or shell configuration exports it.
+
+Next recommended agent: Claude or Codex
+
+Next steps:
+
+1. Review the Phase 1 scaffold against the Phase 0 contracts and prompt scope.
+2. If accepted, start Phase 2 only from the approved next-phase prompt.
+3. Keep AO3 networking/parsing/auth, backups, Room/DataStore, Readium, EPUB import,
+   and account/comment behavior out of the scaffold until their phases are approved.
+
 ## Handoff - T-55 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`
