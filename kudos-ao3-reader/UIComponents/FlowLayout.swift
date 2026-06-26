@@ -20,12 +20,22 @@ struct FlowLayout: Layout {
         for row in rows(maxWidth: bounds.width, subviews: subviews) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = clampedSize(subviews[index], maxWidth: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
             y += row.height + rowSpacing
         }
+    }
+
+    /// A subview's size, capped to the available width. A single item wider than the
+    /// row (e.g. a long fandom name like "My Hero Academia | …") is re-measured
+    /// against `maxWidth` so its text wraps within the container instead of spilling
+    /// past the card's edge.
+    private func clampedSize(_ subview: LayoutSubview, maxWidth: CGFloat) -> CGSize {
+        let intrinsic = subview.sizeThatFits(.unspecified)
+        guard maxWidth.isFinite, intrinsic.width > maxWidth else { return intrinsic }
+        return subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
     }
 
     private struct Row {
@@ -38,7 +48,7 @@ struct FlowLayout: Layout {
         var rows: [Row] = []
         var row = Row()
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let size = clampedSize(subviews[index], maxWidth: maxWidth)
             let projected = row.indices.isEmpty ? size.width : row.width + spacing + size.width
             if projected > maxWidth, !row.indices.isEmpty {
                 rows.append(row)

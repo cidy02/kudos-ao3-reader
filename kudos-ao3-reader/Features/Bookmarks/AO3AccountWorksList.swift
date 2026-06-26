@@ -151,7 +151,7 @@ struct AO3AccountWorksList: View {
             }
             Section {
                 ForEach(works) { work in
-                    NavigationLink(value: work) { AO3WorkRow(work: work) }
+                    AO3WorkRow(work: work).cardNavigation(to: work)
                 }
                 .cardRow()
             }

@@ -162,4 +162,15 @@ extension View {
     /// Renders a list row (or every row in a `ForEach`/`Section`) as a rounded card
     /// with ~12pt spacing between cards. Keeps taps, swipe actions, etc. intact.
     func cardRow() -> some View { modifier(CardRow()) }
+
+    /// Value-based row navigation **without** the trailing disclosure chevron — the
+    /// `>` clutters the rounded work cards. The List still makes the whole card
+    /// tappable, and inner controls (tag / fandom / expand buttons) keep their own
+    /// taps because the link sits behind the content rather than wrapping it.
+    func cardNavigation<V: Hashable>(to value: V) -> some View {
+        background {
+            NavigationLink(value: value) { EmptyView() }
+                .opacity(0)
+        }
+    }
 }

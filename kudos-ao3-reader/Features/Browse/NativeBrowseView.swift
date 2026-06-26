@@ -97,9 +97,8 @@ struct FandomWorksView: View {
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(results) { work in
-                            NavigationLink(value: work) {
-                                AO3WorkRow(work: work, expandAll: expandAll)
-                            }
+                            AO3WorkRow(work: work, expandAll: expandAll)
+                                .cardNavigation(to: work)
                         }
                         .cardRow()
                     }
@@ -248,9 +247,8 @@ struct TagWorksView: View {
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(results) { work in
-                            NavigationLink(value: work) {
-                                AO3WorkRow(work: work, expandAll: expandAll)
-                            }
+                            AO3WorkRow(work: work, expandAll: expandAll)
+                                .cardNavigation(to: work)
                         }
                         .cardRow()
                     }

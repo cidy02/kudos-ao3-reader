@@ -108,7 +108,7 @@ struct SensitiveWorkRow: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Hidden mature work. Activate to reveal.")
         } else {
-            NavigationLink(value: work) { WorkRow(work: work) }
+            WorkRow(work: work).cardNavigation(to: work)
         }
     }
 }

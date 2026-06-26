@@ -130,9 +130,8 @@ struct SearchView: View {
 
                     Section {
                         ForEach(results) { work in
-                            NavigationLink(value: work) {
-                                AO3WorkRow(work: work, expandAll: expandAllCards)
-                            }
+                            AO3WorkRow(work: work, expandAll: expandAllCards)
+                                .cardNavigation(to: work)
                         }
                         .cardRow()
                     }
@@ -269,7 +268,7 @@ struct SearchView: View {
             if !matchingWorks.isEmpty {
                 Section("In Your Library") {
                     ForEach(matchingWorks.prefix(20)) { work in
-                        NavigationLink(value: work) { WorkRow(work: work) }
+                        WorkRow(work: work).cardNavigation(to: work)
                     }
                     .cardRow()
                 }
