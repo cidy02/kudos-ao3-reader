@@ -214,6 +214,16 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         chromeHidden.toggle()
     }
 
+    /// Trims Readium's default reflowable content insets. The navigator treats
+    /// iPhone portrait as the `.regular` vertical size class and reserves 62 pt
+    /// top and bottom, which left a large empty band beneath the last line in
+    /// paged mode. Keep the top clear of the status bar / Dynamic Island, but let
+    /// the text run close to the bottom edge.
+    func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
+        let safeTop = (navigator as? UIViewController)?.view.window?.safeAreaInsets.top ?? 0
+        return UIEdgeInsets(top: safeTop, left: 0, bottom: 16, right: 0)
+    }
+
     @discardableResult
     func routeWebURLToBrowse(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased(),
@@ -406,7 +416,12 @@ struct ReadiumReaderView: View {
     /// the position pill — no prev/next buttons.
     private var bottomBar: some View {
         progressPill
-            .padding(.bottom, 12)
+            // Sit close to the screen's bottom edge — roughly the Dynamic Island's
+            // inset from the top — rather than floating above the home-indicator
+            // safe area.
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity)
+            .ignoresSafeArea(.container, edges: .bottom)
             .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
