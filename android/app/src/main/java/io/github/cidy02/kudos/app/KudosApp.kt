@@ -9,11 +9,12 @@ import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 
 @Composable
-fun KudosApp() {
+fun KudosApp(container: KudosAppContainer) {
     var themeMode by remember { mutableStateOf(KudosThemeMode.System) }
 
     KudosTheme(themeMode = themeMode) {
         MainScaffold(
+            container = container,
             themeMode = themeMode,
             onCycleTheme = { themeMode = themeMode.next() }
         )

@@ -20,6 +20,23 @@ interface AO3Client {
         url: String,
         headers: Map<String, String> = emptyMap()
     ): AO3Result<AO3HttpResponse>
+
+    suspend fun getBytes(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): AO3Result<AO3BinaryResponse> {
+        return when (val result = get(url, headers)) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> AO3Result.Success(
+                AO3BinaryResponse(
+                    url = result.value.url,
+                    statusCode = result.value.statusCode,
+                    headers = result.value.headers,
+                    body = result.value.body.toByteArray()
+                )
+            )
+        }
+    }
 }
 
 class OkHttpAO3Client(
@@ -60,6 +77,23 @@ class OkHttpAO3Client(
         }
     }
 
+    override suspend fun getBytes(
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3BinaryResponse> {
+        val key = try {
+            AO3RequestKey.get(url, headers)
+        } catch (error: IllegalArgumentException) {
+            return AO3Result.Failure(AO3Error.Validation("Invalid AO3 URL: $url"))
+        }
+
+        return executeBinaryWithRetry(
+            method = AO3HttpMethod.GET,
+            url = key.canonicalUrl,
+            headers = headers
+        )
+    }
+
     private suspend fun executeWithRetry(
         method: AO3HttpMethod,
         url: String,
@@ -90,6 +124,49 @@ class OkHttpAO3Client(
             val response = okHttpClient.newCall(request).await()
             withContext(Dispatchers.IO) {
                 response.use { mapResponse(it, originalUrl = url) }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            AO3Result.Failure(
+                AO3Error.Network(
+                    message = error.message ?: "Network request failed.",
+                    cause = error
+                )
+            )
+        }
+    }
+
+    private suspend fun executeBinaryWithRetry(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3BinaryResponse> {
+        var retryNumber = 0
+        while (true) {
+            val result = coordinator.coordinate {
+                performBinaryOnce(method, url, headers)
+            }
+            if (result is AO3Result.Success) return result
+
+            val error = (result as AO3Result.Failure).error
+            retryNumber += 1
+            if (!retryPolicy.shouldRetry(method, error, retryNumber)) return result
+
+            delay.delay(retryPolicy.retryDelayMillis(error, retryNumber))
+        }
+    }
+
+    private suspend fun performBinaryOnce(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3BinaryResponse> {
+        val request = buildRequest(method, url, headers)
+        return try {
+            val response = okHttpClient.newCall(request).await()
+            withContext(Dispatchers.IO) {
+                response.use { mapBinaryResponse(it, originalUrl = url) }
             }
         } catch (error: CancellationException) {
             throw error
@@ -150,6 +227,46 @@ class OkHttpAO3Client(
                     statusCode = statusCode,
                     headers = response.headers.toMultimap(),
                     body = body
+                )
+            )
+            400 -> AO3Result.Failure(AO3Error.BadRequest)
+            401 -> AO3Result.Failure(AO3Error.AuthenticationRequired)
+            403 -> AO3Result.Failure(AO3Error.Forbidden)
+            404 -> AO3Result.Failure(AO3Error.NotFound)
+            429 -> AO3Result.Failure(AO3Error.RateLimited(retryAfterMillis))
+            in 500..599 -> AO3Result.Failure(AO3Error.Server(statusCode))
+            else -> AO3Result.Failure(AO3Error.Http(statusCode))
+        }
+    }
+
+    private fun mapBinaryResponse(
+        response: Response,
+        originalUrl: String
+    ): AO3Result<AO3BinaryResponse> {
+        val bytes = response.body.bytes()
+        val statusCode = response.code
+        val retryAfterMillis = AO3RetryAfter.parseMillis(response.header("Retry-After"))
+        val finalUrl = response.request.url.toString()
+
+        if (
+            AO3Constants.isLoginUrl(finalUrl) &&
+            !AO3Constants.isLoginUrl(originalUrl)
+        ) {
+            return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+
+        val textPreview = bytes.decodeToString(endIndex = minOf(bytes.size, 8192))
+        if (AO3OverloadDetector.isOverloadPage(textPreview)) {
+            return AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis))
+        }
+
+        return when (statusCode) {
+            in 200..299 -> AO3Result.Success(
+                AO3BinaryResponse(
+                    url = finalUrl,
+                    statusCode = statusCode,
+                    headers = response.headers.toMultimap(),
+                    body = bytes
                 )
             )
             400 -> AO3Result.Failure(AO3Error.BadRequest)

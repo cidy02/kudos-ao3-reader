@@ -14,18 +14,19 @@ import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.home.HomeScreen
 import io.github.cidy02.kudos.library.LibraryScreen
-import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.reader.ReaderPlaceholderScreen
 import io.github.cidy02.kudos.search.SearchScreen
 import io.github.cidy02.kudos.settings.SettingsScreen
 import io.github.cidy02.kudos.works.WorkDetailScreen
+import io.github.cidy02.kudos.works.WorkDetailSource
 
 @Composable
 fun AppNavHost(
+    container: KudosAppContainer,
     navController: NavHostController,
     modifier: Modifier = Modifier
 ) {
-    var selectedRemoteWork by remember { mutableStateOf<AO3WorkSummary?>(null) }
+    var selectedWorkSource by remember { mutableStateOf<WorkDetailSource?>(null) }
 
     NavHost(
         navController = navController,
@@ -35,7 +36,7 @@ fun AppNavHost(
         composable(Routes.Home) {
             HomeScreen(
                 onOpenWork = {
-                    selectedRemoteWork = null
+                    selectedWorkSource = null
                     navController.navigate(Routes.WorkDetail)
                 },
                 onOpenLibrary = { navController.navigate(Routes.Library) }
@@ -43,18 +44,18 @@ fun AppNavHost(
         }
         composable(Routes.Library) {
             LibraryScreen(
-                onOpenWork = {
-                    selectedRemoteWork = null
+                repository = container.libraryRepository,
+                onOpenWork = { workId ->
+                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
-                },
-                onOpenReader = { navController.navigate(Routes.Reader) }
+                }
             )
         }
         composable(Routes.Browse) {
             BrowseScreen(
                 onOpenSearch = { navController.navigate(Routes.Search) },
                 onOpenWork = {
-                    selectedRemoteWork = null
+                    selectedWorkSource = null
                     navController.navigate(Routes.WorkDetail)
                 }
             )
@@ -68,14 +69,16 @@ fun AppNavHost(
         composable(Routes.Search) {
             SearchScreen(
                 onOpenWork = { work ->
-                    selectedRemoteWork = work
+                    selectedWorkSource = WorkDetailSource.RemoteSummary(work)
                     navController.navigate(Routes.WorkDetail)
                 }
             )
         }
         composable(Routes.WorkDetail) {
             WorkDetailScreen(
-                work = selectedRemoteWork,
+                source = selectedWorkSource,
+                workRepository = container.workRepository,
+                workImporter = container.workImporter,
                 onOpenReader = { navController.navigate(Routes.Reader) }
             )
         }

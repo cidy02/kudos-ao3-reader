@@ -10,8 +10,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val container = (application as KudosApplication).container
         setContent {
-            KudosApp()
+            KudosApp(container = container)
         }
     }
 }

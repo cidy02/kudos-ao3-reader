@@ -20,6 +20,7 @@ import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(
+    container: KudosAppContainer,
     themeMode: KudosThemeMode,
     onCycleTheme: () -> Unit
 ) {
@@ -81,6 +82,7 @@ fun MainScaffold(
         }
     ) { innerPadding ->
         AppNavHost(
+            container = container,
             navController = navController,
             modifier = Modifier.padding(innerPadding)
         )

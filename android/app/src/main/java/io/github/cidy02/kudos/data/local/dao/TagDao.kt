@@ -21,6 +21,12 @@ interface TagDao {
     @Query("SELECT * FROM user_tags WHERE name = :name")
     suspend fun getByName(name: String): TagEntity?
 
+    @Query("SELECT * FROM user_tags WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun getByNameCaseInsensitive(name: String): TagEntity?
+
+    @Query("SELECT * FROM user_tags ORDER BY name COLLATE NOCASE")
+    suspend fun getAll(): List<TagEntity>
+
     @Query(
         """
         SELECT user_tags.* FROM user_tags
@@ -30,4 +36,7 @@ interface TagDao {
         """
     )
     suspend fun getTagsForWork(workId: String): List<TagEntity>
+
+    @Query("DELETE FROM work_tag_cross_refs WHERE workId = :workId AND tagId = :tagId")
+    suspend fun removeFromWork(workId: String, tagId: String)
 }

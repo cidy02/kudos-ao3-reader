@@ -1,5 +1,214 @@
 # AI Handoff
 
+## Handoff - T-61 - Codex - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit: `7b09348`
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/app/src/main/java/io/github/cidy02/kudos/KudosApplication.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/MainActivity.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/KudosApp.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/KudosAppContainer.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/MainScaffold.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/data/local/dao/CollectionDao.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/data/local/dao/TagDao.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/data/local/dao/WorkDao.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/files/FileWriteResult.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/files/WorkFileStore.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Client.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3HttpResponse.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/work/AO3DownloadUrlBuilder.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/work/AO3EpubDownloader.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/work/AO3WorkMetadata.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/work/AO3WorkMetadataParser.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/work/AO3WorkMetadataRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkDetailScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkDetailSource.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkImporter.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkMetadataMerger.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkTags.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/files/WorkFileStoreTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/work/AO3WorkNetworkTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/works/WorkLifecycleTest.kt`
+
+Dependencies added:
+
+- None.
+
+Work Detail behavior implemented:
+
+- `WorkDetailSource` now supports `LocalWork`, `RemoteSummary`, `RemoteUrl`,
+  and `Ao3WorkId`.
+- `AppNavHost` carries the selected source so Search opens remote summaries and
+  Library opens local saved-work ids into the same `WorkDetailScreen`.
+- `WorkDetailScreen` hydrates from either a remote `AO3WorkSummary` or a local
+  `SavedWork` Room record.
+- The screen displays title, author, fandoms, rating, warnings, categories,
+  relationships, characters, freeforms, summary, language, words, chapters,
+  kudos, comments, hits, series metadata, completion state, source URL, saved
+  state, downloaded state, favorite state, and finished state where available.
+- Read and authenticated AO3 actions are visible but disabled/deferred; no
+  reader opening or AO3 write behavior was implemented.
+
+Save/download lifecycle implemented:
+
+- `KudosAppContainer` creates the Room database, app-private file store, AO3
+  client, work repository, metadata repository, EPUB downloader, importer, and
+  Library repository.
+- `WorkImporter.saveMetadataOnly(summary)` creates or updates a saved Room record
+  with `isSaved = true` and `hasEpub = false`.
+- `WorkImporter.download(summary)` creates/updates the saved Room record, then
+  downloads the EPUB and sets `hasEpub = true` only after the file write succeeds.
+- Failed downloads leave the metadata record intact but do not mark `hasEpub`
+  true.
+- Existing saved works are matched by source URL before creating a new UUID,
+  avoiding duplicate local records for the same AO3 work in this phase.
+- Local actions implemented: favorite toggle, finished toggle, add/remove user
+  tags, add/remove collections, delete local EPUB, and remove from Library.
+
+File storage paths:
+
+- EPUB files are written under app-private storage:
+
+```text
+files/works/<UUID>.epub
+```
+
+- `WorkFileStore` uses the local `SavedWork.id` UUID as the filename.
+- Non-UUID/unsafe ids are rejected for EPUB paths.
+- Writes go through a temp file in the works directory, then move to the final
+  UUID path. Atomic move is attempted first with a normal replace fallback.
+- Deleting the local EPUB keeps the Room work record and sets `hasEpub = false`.
+- Removing from Library deletes the EPUB file and the Room work record.
+
+Metadata merge policy:
+
+- `WorkMetadataMerger` merges remote search summary, canonical AO3 metadata, and
+  any existing local `SavedWork`.
+- It preserves local user state: `isFavorite`, `isFinished`, reading progress,
+  `lastReadDate`, `lastSpineIndex`, `lastScrollFraction`, `readiumLocator`,
+  `knownChapterCount`, and `lastUpdateCheck`.
+- Remote metadata fills or updates AO3-derived fields: title, author, summary,
+  source URL, rating, language, word count, chapters, kudos, comments, hits,
+  warnings, categories, fandoms, characters, relationships, freeforms, series,
+  and completion state.
+- Blank remote values do not erase existing non-empty local values.
+
+Canonical tag fetch behavior:
+
+- `AO3WorkMetadataRepository` fetches:
+
+```text
+/works/<workID>?view_adult=true
+```
+
+- `AO3WorkMetadataParser` extracts fandoms, relationships, characters,
+  freeforms, warnings, categories, language, words, chapters, kudos, comments,
+  and hits using Jsoup selectors matching Apple `parseWorkTags`.
+- `workTagsFetched` is set true only when canonical metadata fetch succeeds and
+  returns non-empty metadata.
+- If canonical fetch fails, save/download proceeds from the search summary and
+  `workTagsFetched` remains false.
+
+EPUB download behavior:
+
+- `AO3DownloadUrlBuilder` builds the Apple-matching route:
+
+```text
+/downloads/<workID>/work.epub
+```
+
+- `AO3Client.getBytes` was added for binary GETs while keeping existing text GETs
+  intact.
+- OkHttp binary GETs use the Phase 4 coordinator/retry policy and map HTTP,
+  login redirect, overload, and network errors to `AO3Error`.
+- `AO3EpubDownloader` rejects empty bodies, HTML content types/pages, and
+  non-ZIP signatures before allowing the file write.
+
+Library behavior implemented:
+
+- `LibraryScreen` observes Room-backed saved works through `LibraryRepository`.
+- It shows an empty state, saved work cards, downloaded/offline status, favorite
+  status, finished status, rating, words, chapters, summary, and Details action.
+- Tapping Details opens canonical Work Detail from the local saved-work id.
+- Full filters, sorting controls, bulk actions, privacy filtering, and richer
+  Library UX remain Phase 8 work.
+
+Tests added:
+
+- `WorkMetadataMergerTest`
+- `WorkLifecycleRepositoryTest`
+- `WorkImporterLifecycleTest`
+- `WorkFileStoreTest`
+- `WorkFileStoreRejectsUnsafePathTest`
+- `AO3DownloadUrlBuilderTest`
+- `AO3EpubDownloaderTest`
+- `AO3WorkMetadataParserTest`
+- `AO3WorkMetadataFetchPartialFailureTest`
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.files.*' --tests 'io.github.cidy02.kudos.network.ao3.work.*' --tests 'io.github.cidy02.kudos.works.WorkMetadataMergerTest'`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.works.WorkLifecycleRepositoryTest' --tests 'io.github.cidy02.kudos.works.WorkImporterLifecycleTest'`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+
+Results:
+
+- `:app:compileDebugKotlin` passed.
+- Focused file/network/parser/merger tests passed.
+- Focused Room/lifecycle tests passed.
+- Full `:app:testDebugUnitTest` passed.
+- Non-clean combined assemble/test/lint exposed stale generated Compose output
+  (`AO3WorkCardKt 2.class`), matching the stale-output issue seen in prior phases.
+- Clean combined verification passed:
+  - `:app:assembleDebug`
+  - `:app:testDebugUnitTest` with 99 JVM tests, 0 failures, 0 errors
+  - `:app:lintDebug`
+
+Known gaps / intentionally deferred:
+
+- No Readium integration or real reader opening.
+- No EPUB metadata parsing/import; Phase 6 persists AO3 metadata and stores EPUB
+  bytes, but does not inspect OPF metadata yet.
+- No auth/WebView, cookies, authenticated AO3 lists, comments, kudos,
+  subscriptions, Mark for Later, AO3 bookmarks, or AO3 writes.
+- Direct `RemoteUrl`/`Ao3WorkId` Work Detail hydration is scaffolded but deferred
+  until fuller Work Detail page parsing.
+- No advanced download queue, cancellation, progress percentages, or series
+  download queue.
+- Library has a basic saved-work list only; full filters/sorts/bulk/privacy UX is
+  still Phase 8.
+
+Apple/contract ambiguity:
+
+- Apple's remote Work Detail `Read` action imports/downloads lazily. Android
+  Phase 6 keeps `Read` disabled because the prompt explicitly says not to
+  implement reader opening; users can Save or Download instead.
+- Apple imports EPUB metadata before creating `SavedWork`. Android Phase 6 does
+  not parse EPUB metadata yet; it uses AO3 search/canonical metadata and records
+  this as a Phase 7/import follow-up.
+
+Next recommended agent: Claude or Codex
+
+Recommended next phase:
+
+Phase 7 Readium Reader. Build on the file-backed `hasEpub` state and
+`files/works/<UUID>.epub` storage, open downloaded EPUBs with Readium Kotlin,
+and continuously maintain `lastSpineIndex` plus `lastScrollFraction` alongside
+any Android Readium locator.
+
 ## Handoff - T-60 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`
