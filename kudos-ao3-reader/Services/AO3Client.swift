@@ -721,11 +721,15 @@ actor AO3Client {
         let isComplete: Bool? = wipText.isEmpty ? nil : wipText.lowercased().contains("complete")
 
         let date = try el.select("p.datetime").first()?.text() ?? ""
-        // The blurb groups tags by class inside `ul.tags`: relationships, characters,
-        // and freeforms (Additional Tags). Warnings/categories come from required-tags.
+        // The blurb groups tags by class inside `ul.tags`. Pull out relationships and
+        // characters; "Additional Tags" is the catch-all — every remaining tag in the
+        // list (freeforms, plus anything that doesn't fit a category) so none drop out.
+        let allTagTexts = try el.select("ul.tags li a.tag").array().map { try $0.text() }
         let relationships = try el.select("ul.tags li.relationships a.tag").array().map { try $0.text() }
         let characters = try el.select("ul.tags li.characters a.tag").array().map { try $0.text() }
-        let freeforms = try el.select("ul.tags li.freeforms a.tag").array().map { try $0.text() }
+        let warningTags = try el.select("ul.tags li.warnings a.tag").array().map { try $0.text() }
+        let categorized = Set(relationships + characters + warningTags)
+        let freeforms = allTagTexts.filter { !categorized.contains($0) }
         let summary = try el.select("blockquote.userstuff.summary").first()?.text() ?? ""
 
         func stat(_ cls: String) -> String {

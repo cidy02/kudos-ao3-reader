@@ -39,6 +39,7 @@ struct AO3ClientTests {
           <li class="characters"><a class="tag" href="#">Hinata Hyuuga</a></li>
           <li class="freeforms"><a class="tag" href="#">Fluff</a></li>
           <li class="freeforms"><a class="tag" href="#">Angst</a></li>
+          <li><a class="tag" href="#">Uncategorized</a></li>
         </ul>
         <dl class="stats">
           <dd class="language">English</dd>
@@ -71,7 +72,8 @@ struct AO3ClientTests {
         #expect(work.isComplete == true)
         #expect(work.relationships == ["Naruto/Hinata"])
         #expect(work.characters == ["Hinata Hyuuga"])
-        #expect(work.tags == ["Fluff", "Angst"])
+        // "Additional Tags" is the catch-all: freeforms + any uncategorized tag.
+        #expect(work.tags == ["Fluff", "Angst", "Uncategorized"])
         #expect(work.summary == "A short summary.")
         #expect(work.words == 12345)
         #expect(work.chapters == "5/10")
