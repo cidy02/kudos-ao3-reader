@@ -415,13 +415,15 @@ struct ReadiumReaderView: View {
     /// iOS navigation is gesture-based (swipe / tap zones), so the bar shows only
     /// the position pill — no prev/next buttons.
     private var bottomBar: some View {
+        // A full-bleed, non-interactive layer that bottom-aligns the pill against the
+        // true screen edge (the overlay otherwise stops at the home-indicator safe
+        // area). Hit testing is off so taps still reach the page to toggle chrome.
         progressPill
-            // Sit close to the screen's bottom edge — roughly the Dynamic Island's
-            // inset from the top — rather than floating above the home-indicator
-            // safe area.
-            .padding(.bottom, 14)
-            .frame(maxWidth: .infinity)
-            .ignoresSafeArea(.container, edges: .bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            // Sit as close to the bottom edge as the Dynamic Island is to the top.
+            .padding(.bottom, 11)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
             .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
@@ -434,8 +436,12 @@ struct ReadiumReaderView: View {
             .font(.footnote.weight(.medium))
             .monospacedDigit()
             .lineLimit(1)
+            .truncationMode(.tail)
             .padding(.horizontal, 16)
             .frame(height: 44)
+            // Stay a compact capsule; a long chapter title truncates rather than
+            // stretching the pill across the whole screen.
+            .frame(maxWidth: 320)
             .glassEffect(.regular, in: .capsule)
     }
 
