@@ -1,5 +1,21 @@
 # AI Handoff
 
+## Handoff - T-68 - Claude (Phase 11 Browse + WebView fallback) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android` (merge commit `21ffa1f`).
+
+Phase 11 was built in an isolated worktree branch
+(`kudos-ao3-reader-android-phase-11-browse`, base `1d9a7c9`) in parallel with
+Codex's Phase 10, then merged into `kudos-ao3-reader-android`. The merge had only
+additive `AppNavHost.kt` conflicts (kept both sides); `Routes.kt` /
+`KudosAppContainer.kt` auto-merged; the new `network/ao3/browse`, `browse`, `web`
+packages did not overlap Phase 10. Combined tree verified clean:
+`:app:clean :app:assembleDebug :app:testDebugUnitTest` → 226 tests, 0 failures.
+
+Full detail (design decisions, files, URL/WebView policy, known gaps) lives in
+[`docs/ai/PHASE_11_BROWSE_HANDOFF.md`](PHASE_11_BROWSE_HANDOFF.md). The phase-11
+worktree/branch were removed after merge.
+
 ## Handoff - T-67 - Codex (Phase 10 Authenticated Writes and Comments) - 2026-06-27
 
 Branch: `kudos-ao3-reader-android`
