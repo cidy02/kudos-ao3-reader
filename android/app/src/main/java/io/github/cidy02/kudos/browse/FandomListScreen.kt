@@ -8,10 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +27,10 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.StatusBadge
 import kotlinx.coroutines.launch
 
 @Composable
@@ -65,18 +68,19 @@ fun FandomListScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text(
-                text = category.name,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(onClick = ::webFallback) { Text("Open on AO3") }
-        }
+        KudosScreenHeader(
+            title = category.name,
+            subtitle = "Filter AO3 fandoms in this media category.",
+            trailing = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = onBack) { Text("Back") }
+                    TextButton(onClick = ::webFallback) { Text("AO3") }
+                }
+            }
+        )
 
         when (val current = state) {
-            FandomListState.Loading -> CircularProgressIndicator()
+            FandomListState.Loading -> LoadingStateCard("Loading fandoms")
             is FandomListState.Error -> BrowseErrorBlock(
                 message = current.message,
                 onRetry = ::load,
@@ -94,16 +98,17 @@ fun FandomListScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (matches.isEmpty()) {
-                    Text(
-                        text = "No fandoms match.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyStateCard(
+                        title = "No fandoms match",
+                        message = "Try a broader filter or open the AO3 fallback."
                     )
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(matches, key = { it.name }) { fandom ->
                             FandomRow(fandom = fandom, onOpen = { onOpenFandom(fandom) })
-                            HorizontalDivider()
                         }
                     }
                 }
@@ -114,25 +119,26 @@ fun FandomListScreen(
 
 @Composable
 private fun FandomRow(fandom: AO3Fandom, onOpen: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    Surface(
+        tonalElevation = 1.dp,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = fandom.name,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
-        fandom.workCount?.let { count ->
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Text(
-                text = "%,d".format(count),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = fandom.name,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
             )
+            fandom.workCount?.let { count ->
+                StatusBadge("%,d".format(count))
+            }
+            TextButton(onClick = onOpen) { Text("Works") }
         }
-        TextButton(onClick = onOpen) { Text("Works") }
     }
 }
 

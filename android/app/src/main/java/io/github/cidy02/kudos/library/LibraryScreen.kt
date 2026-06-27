@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +30,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.ErrorStateCard
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
+import io.github.cidy02.kudos.ui.components.StatusBadge
 import java.time.Instant
 import kotlin.math.roundToInt
 
@@ -83,12 +89,17 @@ private fun LibraryContent(
         item { LibraryHeader(state) }
 
         if (state.loading) {
-            item { CircularProgressIndicator() }
+            item { LoadingStateCard("Loading your Library") }
             return@LazyColumn
         }
 
         state.error?.let { error ->
-            item { Text(text = error, color = MaterialTheme.colorScheme.error) }
+            item {
+                ErrorStateCard(
+                    title = "Library could not load",
+                    message = error
+                )
+            }
             return@LazyColumn
         }
 
@@ -151,14 +162,12 @@ private fun LibraryContent(
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(text = "All Saved Works", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = "${state.items.size}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            KudosSectionHeader(
+                title = "All Saved Works",
+                trailing = {
+                    StatusBadge("${state.items.size}")
+                }
+            )
         }
 
         if (state.items.isEmpty()) {
@@ -177,47 +186,33 @@ private fun LibraryContent(
 
 @Composable
 private fun LibraryHeader(state: LibraryUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(text = "Library", style = MaterialTheme.typography.headlineMedium)
-        val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
-            " - $it hidden by privacy"
-        }.orEmpty()
-        Text(
-            text = "${state.totalSaved} saved${hidden}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
+        " - $it hidden by privacy"
+    }.orEmpty()
+    KudosScreenHeader(
+        title = "Library",
+        subtitle = "${state.totalSaved} saved$hidden"
+    )
 }
 
 @Composable
 private fun EmptyLibraryState() {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = "No saved works", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = "Your saved works will appear here.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
+    EmptyStateCard(
+        title = "No saved works",
+        message = "Your saved works will appear here after you save from Search, Browse, or Work Detail."
+    )
 }
 
 @Composable
 private fun NoResultsState(state: LibraryUiState) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = "No matches", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = if (state.hasActiveQueryOrFilters) {
-                    "No saved works match the current Library view."
-                } else {
-                    "No saved works are visible."
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    EmptyStateCard(
+        title = "No matches",
+        message = if (state.hasActiveQueryOrFilters) {
+            "No saved works match the current Library view."
+        } else {
+            "No saved works are visible."
         }
-    }
+    )
 }
 
 @Composable
@@ -229,12 +224,14 @@ private fun LibrarySectionPreview(
     onOpenReader: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
+        KudosSectionHeader(
+            title = title,
+            subtitle = if (items.isEmpty()) null else "${items.size} shown"
+        )
         if (items.isEmpty()) {
-            Text(
-                text = emptyMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            EmptyStateCard(
+                title = "Nothing here yet",
+                message = emptyMessage
             )
         } else {
             items.forEach { display ->
@@ -415,12 +412,8 @@ private fun CompactWorkRow(
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
-                    Text(text = "Mature work hidden", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        text = work.rating.ifBlank { "Mature content" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    StatusBadge("Mature work hidden")
+                    MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
                 } else {
                     Text(
                         text = work.title,
@@ -435,11 +428,7 @@ private fun CompactWorkRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = work.compactStatusLine(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    MetadataChipRow(labels = work.compactStatusLabels(), maxItems = 4)
                 }
             }
             if (work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible) {
@@ -468,11 +457,8 @@ private fun SavedWorkCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
-                Text(text = "Mature work hidden", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = work.rating.ifBlank { "Mature content" },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                StatusBadge("Mature work hidden")
+                MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
             } else {
                 Text(
                     text = work.title,
@@ -486,8 +472,8 @@ private fun SavedWorkCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                work.fandomLine()?.let { MetadataLine(it) }
-                MetadataLine(work.fullStatusLine())
+                MetadataChipRow(labels = work.fandomLabels(), maxItems = 3, prominent = true)
+                MetadataChipRow(labels = work.fullStatusLabels(), maxItems = 10)
                 if (work.summary.isNotBlank()) {
                     Text(
                         text = work.summary,
@@ -509,32 +495,12 @@ private fun SavedWorkCard(
 }
 
 @Composable
-private fun MetadataLine(value: String) {
-    if (value.isNotBlank()) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
 private fun TagLine(tags: List<Tag>, collections: List<WorkCollection>) {
     val labels = (tags.map { "#${it.normalizedName}" } + collections.map { "Shelf: ${it.name}" }).take(4)
-    if (labels.isEmpty()) return
-    Text(
-        text = labels.joinToString("  "),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis
-    )
+    MetadataChipRow(labels = labels, maxItems = 4)
 }
 
-private fun SavedWork.fullStatusLine(): String {
+private fun SavedWork.fullStatusLabels(): List<String> {
     return listOfNotNull(
         if (hasEpub) "Downloaded" else "Not downloaded",
         if (isFavorite) "Favorite" else null,
@@ -548,23 +514,22 @@ private fun SavedWork.fullStatusLine(): String {
         hits?.takeIf { it > 0 }?.let { "$it hits" },
         lastReadDate?.let { "Read ${it.shortDate()}" },
         readingProgressFraction()?.let { "${(it * 100).roundToInt()}%" }
-    ).joinToString(" - ")
+    )
 }
 
-private fun SavedWork.compactStatusLine(): String {
+private fun SavedWork.compactStatusLabels(): List<String> {
     return listOfNotNull(
         if (hasEpub) "Downloaded" else "Not downloaded",
         if (isFinished) "Finished" else null,
         lastReadDate?.let { "Read ${it.shortDate()}" },
         readingProgressFraction()?.let { "${(it * 100).roundToInt()}%" }
-    ).joinToString(" - ")
+    )
 }
 
-private fun SavedWork.fandomLine(): String? {
-    val fandoms = workFandoms.ifEmpty { workTags }
+private fun SavedWork.fandomLabels(): List<String> {
+    return workFandoms.ifEmpty { workTags }
         .filter { it.isNotBlank() }
         .take(3)
-    return fandoms.takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
 
 private fun Instant.shortDate(): String = toString().substringBefore('T')

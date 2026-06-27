@@ -25,6 +25,11 @@ import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.ErrorStateCard
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.StatusBadge
 
 @Composable
 fun AccountScreen(
@@ -44,6 +49,12 @@ fun AccountScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        item {
+            KudosScreenHeader(
+                title = "Account",
+                subtitle = "AO3 session, account lists, app settings, and backup tools."
+            )
+        }
         item {
             AccountStatusCard(
                 authState = state.authState,
@@ -83,21 +94,32 @@ fun AccountListScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(type.title, style = MaterialTheme.typography.headlineSmall)
+        KudosScreenHeader(
+            title = type.title,
+            subtitle = "Read-only AO3 account list."
+        )
         when (val current = state) {
-            AccountListUiState.Loading -> CircularProgressIndicator()
-            AccountListUiState.AuthRequired -> {
-                Text("Your AO3 session needs to be refreshed.")
-                Button(onClick = onLogin) { Text("Log In Again") }
-            }
+            AccountListUiState.Loading -> LoadingStateCard("Loading ${type.title}")
+            AccountListUiState.AuthRequired -> EmptyStateCard(
+                title = "AO3 session required",
+                message = "Your AO3 session needs to be refreshed.",
+                primaryActionLabel = "Log In Again",
+                onPrimaryAction = onLogin
+            )
             is AccountListUiState.Failed -> {
-                Text(current.message, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { viewModel.load(1) }) { Text("Retry") }
+                ErrorStateCard(
+                    title = "Could not load ${type.title}",
+                    message = current.message,
+                    primaryActionLabel = "Retry",
+                    onPrimaryAction = { viewModel.load(1) }
+                )
             }
             is AccountListUiState.Loaded -> {
                 if (current.page.works.isEmpty()) {
-                    Text(type.emptyTitle, style = MaterialTheme.typography.titleMedium)
-                    Text(type.emptyMessage)
+                    EmptyStateCard(
+                        title = type.emptyTitle,
+                        message = type.emptyMessage
+                    )
                 } else {
                     AccountListContent(
                         type = type,
@@ -178,14 +200,13 @@ private fun AccountStatusCard(
             Text("AO3 Account", style = MaterialTheme.typography.titleMedium)
             when (authState) {
                 AO3AuthState.Restoring -> {
-                    CircularProgressIndicator()
-                    Text("Checking saved AO3 session.")
+                    InlineLoading("Checking saved AO3 session.")
                 }
                 AO3AuthState.SigningIn -> {
-                    CircularProgressIndicator()
-                    Text("Capturing AO3 session.")
+                    InlineLoading("Capturing AO3 session.")
                 }
                 is AO3AuthState.SignedIn -> {
+                    StatusBadge("Signed in")
                     Text("Signed in as ${authState.username}.")
                     Text("Session cookies stay app-private and are never included in Kudos backups.")
                     OutlinedButton(onClick = onLogout) { Text("Log Out") }
@@ -201,6 +222,14 @@ private fun AccountStatusCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InlineLoading(message: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        CircularProgressIndicator()
+        Text(message)
     }
 }
 

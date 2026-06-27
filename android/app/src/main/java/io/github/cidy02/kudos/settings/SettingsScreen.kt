@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import kotlinx.coroutines.launch
 
 @Composable
@@ -39,14 +40,10 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(text = "Settings", style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    text = "Reader, privacy, and backup-compatible app preferences.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            KudosScreenHeader(
+                title = "Settings",
+                subtitle = "Reader, privacy, and backup-compatible app preferences."
+            )
         }
         item {
             SettingsGroup(title = "Reader") {

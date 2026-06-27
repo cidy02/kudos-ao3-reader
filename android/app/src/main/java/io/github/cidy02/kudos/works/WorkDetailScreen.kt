@@ -12,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +38,10 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteOutcome
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.ui.components.ErrorStateCard
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
+import io.github.cidy02.kudos.ui.components.StatusBadge
 import kotlinx.coroutines.launch
 
 @Composable
@@ -366,7 +369,7 @@ private fun WorkDetailContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         if (state.loading) {
-            CircularProgressIndicator()
+            LoadingStateCard("Loading work details")
         } else {
             Text(
                 text = state.title,
@@ -389,25 +392,28 @@ private fun WorkDetailContent(
             )
 
             state.error?.let {
-                Text(text = it, color = MaterialTheme.colorScheme.error)
+                ErrorStateCard(
+                    title = "Work action failed",
+                    message = it
+                )
             }
             state.ao3Message?.let {
-                Text(text = it, color = MaterialTheme.colorScheme.primary)
+                StatusBadge(it)
             }
 
             SectionBlock("Summary") {
                 if (state.summary.isNotBlank()) Text(state.summary) else MetadataLine("No summary available.")
             }
             SectionBlock("Details") {
-                MetadataLine(state.fandoms.joinToString(", "))
-                MetadataLine(
-                    (listOf(state.rating) + state.warnings + state.categories)
-                        .filter { it.isNotBlank() }
-                        .joinToString(" - ")
+                MetadataChipRow(labels = state.fandoms, maxItems = 6, prominent = true)
+                MetadataChipRow(
+                    labels = (listOf(state.rating) + state.warnings + state.categories)
+                        .filter { it.isNotBlank() },
+                    maxItems = 8
                 )
                 MetadataLine(state.completionLabel)
                 MetadataLine(state.language.takeIf { it.isNotBlank() }?.let { "Language: $it" }.orEmpty())
-                MetadataLine(state.statsLine)
+                MetadataChipRow(labels = state.statsLabels)
                 MetadataLine(state.seriesLine)
                 MetadataLine(state.sourceUrl)
             }
@@ -453,7 +459,7 @@ private fun StatusLine(state: WorkDetailUiState) {
         if (state.local?.isFavorite == true) "Favorite" else null,
         if (state.local?.isFinished == true) "Finished" else null
     )
-    MetadataLine(labels.joinToString(" - "))
+    MetadataChipRow(labels = labels, prominent = true)
 }
 
 @Composable
@@ -618,13 +624,7 @@ private fun AO3Actions(
 private fun TagSection(title: String, tags: List<String>) {
     if (tags.isEmpty()) return
     SectionBlock(title) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            tags.forEach { tag ->
-                OutlinedButton(enabled = false, onClick = {}) {
-                    Text(tag)
-                }
-            }
-        }
+        MetadataChipRow(labels = tags, maxItems = 24)
     }
 }
 
@@ -675,13 +675,13 @@ private data class WorkDetailUiState(
         false -> "Work in Progress"
         null -> ""
     }
-    val statsLine: String = listOfNotNull(
+    val statsLabels: List<String> = listOfNotNull(
         (local?.wordCount?.takeIf { it > 0 } ?: remote?.wordCount)?.let { "%,d words".format(it) },
         (local?.chapters?.takeIf { it.isNotBlank() } ?: remote?.chapters)?.let { "$it chapters" },
         (local?.kudos?.takeIf { it > 0 } ?: remote?.kudos)?.let { "%,d kudos".format(it) },
         (local?.comments ?: remote?.comments)?.let { "%,d comments".format(it) },
         (local?.hits ?: remote?.hits)?.let { "%,d hits".format(it) }
-    ).joinToString(" - ")
+    )
     val seriesLine: String = local?.seriesTitle?.takeIf { it.isNotBlank() }?.let { title ->
         "Series: $title" + local.seriesPosition.takeIf { it > 0 }?.let { " #$it" }.orEmpty()
     } ?: remote?.seriesTitle?.let { title ->

@@ -7,12 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -20,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +32,12 @@ import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.readingProgressFraction
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
+import io.github.cidy02.kudos.ui.components.StatusBadge
 import kotlin.math.roundToInt
 
 @Composable
@@ -53,7 +59,7 @@ fun HomeScreen(
         item { HomeHeader(state) }
 
         if (state.loading) {
-            item { HomeLoadingState() }
+            item { LoadingStateCard("Loading your reading dashboard") }
             return@LazyColumn
         }
 
@@ -118,28 +124,13 @@ fun HomeScreen(
 
 @Composable
 private fun HomeHeader(state: HomeDashboardState) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(text = "Home", style = MaterialTheme.typography.headlineMedium)
-        val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
-            " - $it hidden by privacy"
-        }.orEmpty()
-        Text(
-            text = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun HomeLoadingState() {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator()
-        Text("Loading your reading dashboard")
-    }
+    val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
+        " - $it hidden by privacy"
+    }.orEmpty()
+    KudosScreenHeader(
+        title = "Home",
+        subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden"
+    )
 }
 
 @Composable
@@ -147,29 +138,14 @@ private fun EmptyHomeState(
     onOpenBrowse: () -> Unit,
     onOpenLibrary: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(text = "No saved works yet", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = "Search AO3, browse fandoms, or save a work to start building your Library.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onOpenBrowse) {
-                    Text("Browse AO3")
-                }
-                OutlinedButton(onClick = onOpenLibrary) {
-                    Text("Library")
-                }
-            }
-        }
-    }
+    EmptyStateCard(
+        title = "No saved works yet",
+        message = "Search AO3, browse fandoms, or save a work to start building your Library.",
+        primaryActionLabel = "Browse AO3",
+        onPrimaryAction = onOpenBrowse,
+        secondaryActionLabel = "Library",
+        onSecondaryAction = onOpenLibrary
+    )
 }
 
 @Composable
@@ -181,20 +157,25 @@ private fun HomeShelf(
     onOpenReader: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
+        KudosSectionHeader(
+            title = title,
+            subtitle = if (items.isEmpty()) null else "${items.size} shown"
+        )
         if (items.isEmpty()) {
-            Text(
-                text = emptyMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            EmptyStateCard(
+                title = "Nothing here yet",
+                message = emptyMessage
             )
         } else {
-            items.forEach { display ->
-                HomeWorkCard(
-                    display = display,
-                    onOpenWork = { onOpenWork(display.item.work.id) },
-                    onOpenReader = { onOpenReader(display.item.work.id) }
-                )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(items, key = { "${title}-${it.item.work.id}" }) { display ->
+                    HomeWorkCard(
+                        display = display,
+                        onOpenWork = { onOpenWork(display.item.work.id) },
+                        onOpenReader = { onOpenReader(display.item.work.id) },
+                        modifier = Modifier.width(300.dp)
+                    )
+                }
             }
         }
     }
@@ -204,14 +185,14 @@ private fun HomeShelf(
 private fun HomeWorkCard(
     display: LibraryDisplayItem,
     onOpenWork: () -> Unit,
-    onOpenReader: () -> Unit
+    onOpenReader: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val work = display.item.work
     val progress = work.readingProgressFraction()
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .semantics {
                 contentDescription = "${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
             }
@@ -221,11 +202,8 @@ private fun HomeWorkCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
-                Text(text = "Mature work hidden", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = work.rating.ifBlank { "Mature content" },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                StatusBadge("Mature work hidden")
+                MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
             } else {
                 Text(
                     text = work.title,
@@ -239,14 +217,14 @@ private fun HomeWorkCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                work.fandomLine()?.let { MetadataLine(it) }
-                MetadataLine(work.homeStatusLine())
+                MetadataChipRow(labels = work.fandomLabels(), maxItems = 3, prominent = true)
+                MetadataChipRow(labels = work.homeStatusLabels(), maxItems = 7)
                 progress?.let { value ->
                     LinearProgressIndicator(
                         progress = { value.toFloat() },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    MetadataLine("${(value * 100).roundToInt()}% read")
+                    StatusBadge("${(value * 100).roundToInt()}% read")
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -263,19 +241,7 @@ private fun HomeWorkCard(
     }
 }
 
-@Composable
-private fun MetadataLine(value: String) {
-    if (value.isBlank()) return
-    Text(
-        text = value,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis
-    )
-}
-
-private fun SavedWork.homeStatusLine(): String {
+private fun SavedWork.homeStatusLabels(): List<String> {
     return listOfNotNull(
         if (hasEpub) "Downloaded" else "Not downloaded",
         if (isFavorite) "Favorite" else null,
@@ -285,14 +251,13 @@ private fun SavedWork.homeStatusLine(): String {
         wordCount.takeIf { it > 0 }?.let { "%,d words".format(it) },
         chapters.takeIf { it.isNotBlank() }?.let { "$it chapters" },
         kudos.takeIf { it > 0 }?.let { "$it kudos" }
-    ).joinToString(" - ")
+    )
 }
 
-private fun SavedWork.fandomLine(): String? {
-    val fandoms = workFandoms.ifEmpty { workTags }
+private fun SavedWork.fandomLabels(): List<String> {
+    return workFandoms.ifEmpty { workTags }
         .filter { it.isNotBlank() }
         .take(3)
-    return fandoms.takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
 
 private const val HomeShelfLimit = 4

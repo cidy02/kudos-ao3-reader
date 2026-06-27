@@ -16,6 +16,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
 
 @Composable
 fun BackupScreen() {
@@ -25,14 +27,10 @@ fun BackupScreen() {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(text = "Backup", style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    text = "Portable Kudos backups keep Library data, EPUB files, fonts, and settings separate from AO3 session data.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            KudosScreenHeader(
+                title = "Backup",
+                subtitle = "Portable Kudos backups keep Library data, EPUB files, fonts, and settings separate from AO3 session data."
+            )
         }
         item {
             BackupInfoCard(
@@ -66,6 +64,10 @@ fun BackupScreen() {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("Import and export", style = MaterialTheme.typography.titleMedium)
+                    MetadataChipRow(
+                        labels = listOf("v1 readable", "v2 ZIP tested", "merge-only", "session excluded"),
+                        prominent = true
+                    )
                     Text(
                         text = "The compatibility engine is ready. Android document picker wiring still needs device verification before import/export buttons are enabled.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant

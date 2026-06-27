@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -23,12 +22,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -58,22 +61,18 @@ fun BrowseScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "Browse by fandom",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedButton(onClick = { onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl()) }) {
-                Text("Open on AO3")
+        KudosScreenHeader(
+            title = "Browse",
+            subtitle = "Explore AO3's media categories, fandom lists, and work results natively.",
+            trailing = {
+                OutlinedButton(onClick = { onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl()) }) {
+                    Text("Open on AO3")
+                }
             }
-        }
+        )
 
         when (val current = state) {
-            BrowseCategoriesState.Loading -> CircularProgressIndicator()
+            BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
             is BrowseCategoriesState.Error -> BrowseErrorBlock(
                 message = current.message,
                 onRetry = ::load,
@@ -81,12 +80,15 @@ fun BrowseScreen(
             )
             is BrowseCategoriesState.Loaded -> {
                 if (current.categories.isEmpty()) {
-                    Text(
-                        text = "No fandom categories available.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyStateCard(
+                        title = "No fandom categories",
+                        message = "AO3 did not return any fandom categories."
                     )
                 } else {
+                    KudosSectionHeader(
+                        title = "Categories",
+                        subtitle = "${current.categories.size} groups"
+                    )
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -111,18 +113,10 @@ private fun CategoryCard(category: AO3MediaCategory, onOpen: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = category.name, style = MaterialTheme.typography.titleMedium)
-            if (category.featuredFandoms.isNotEmpty()) {
-                Text(
-                    text = category.featuredFandoms.take(4).joinToString(", "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            MetadataChipRow(labels = category.featuredFandoms.take(4), maxItems = 4, prominent = true)
             Row {
                 Text(
                     text = "Browse fandoms",

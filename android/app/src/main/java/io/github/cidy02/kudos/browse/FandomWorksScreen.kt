@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -28,6 +27,11 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.launch
 
@@ -62,30 +66,34 @@ fun FandomWorksScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text(
-                text = fandomName,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        KudosScreenHeader(
+            title = fandomName,
+            subtitle = "AO3 works for this fandom.",
+            trailing = {
+                TextButton(onClick = onBack) { Text("Back") }
+            }
+        )
 
         when (val current = state) {
-            FandomWorksState.Loading -> CircularProgressIndicator()
+            FandomWorksState.Loading -> LoadingStateCard("Loading fandom works")
             is FandomWorksState.Error -> BrowseErrorBlock(message = current.message, onRetry = { load(current.page) })
             is FandomWorksState.Loaded -> {
                 if (current.page.works.isEmpty()) {
-                    Text(
-                        text = "No works found for this fandom.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyStateCard(
+                        title = "No works found",
+                        message = "AO3 returned no works for this fandom."
                     )
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        item {
+                            KudosSectionHeader(
+                                title = "Works",
+                                subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
+                            )
+                        }
                         items(current.page.works, key = { it.id }) { work ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
@@ -111,11 +119,7 @@ private fun LocalIndicatorRow(indicator: BrowseLocalIndicator) {
         if (indicator.isFavorite) add("Favorite")
         if (indicator.isFinished) add("Finished")
     }
-    Text(
-        text = labels.joinToString(" · "),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.primary
-    )
+    MetadataChipRow(labels = labels, prominent = true)
 }
 
 @Composable

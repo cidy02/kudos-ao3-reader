@@ -3,17 +3,18 @@ package io.github.cidy02.kudos.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
@@ -28,7 +29,11 @@ fun AO3WorkCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = "${work.title}, by ${work.authorText.ifBlank { "Anonymous" }}"
+            }
     ) {
         Column(
             modifier = Modifier
@@ -51,11 +56,10 @@ fun AO3WorkCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (work.fandoms.isNotEmpty()) {
-                    Text(
-                        text = work.fandoms.joinToString(", "),
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                    MetadataChipRow(
+                        labels = work.fandoms.take(4),
+                        maxItems = 4,
+                        prominent = true
                     )
                 }
             }
@@ -63,25 +67,13 @@ fun AO3WorkCard(
             val requiredTags = (listOf(work.rating) + work.warnings + work.categories)
                 .filter { it.isNotBlank() }
             if (requiredTags.isNotEmpty()) {
-                Text(
-                    text = requiredTags.joinToString(" - "),
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                MetadataChipRow(labels = requiredTags, maxItems = 6)
             }
 
-            val tagLine = (work.relationships + work.characters + work.freeforms)
+            val discoveryTags = (work.relationships + work.characters + work.freeforms)
                 .take(8)
-                .joinToString(", ")
-            if (tagLine.isNotBlank()) {
-                Text(
-                    text = tagLine,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
+            if (discoveryTags.isNotEmpty()) {
+                MetadataChipRow(labels = discoveryTags, maxItems = 8)
             }
 
             if (work.summary.isNotBlank()) {
@@ -93,15 +85,16 @@ fun AO3WorkCard(
                 )
             }
 
-            Row {
-                Text(
-                    text = work.statsLine(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MetadataChipRow(
+                    labels = work.statsLabels(),
+                    maxItems = 6,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { onOpenWork(work) }) {
+                OutlinedButton(onClick = { onOpenWork(work) }) {
                     Text("Details")
                 }
             }
@@ -109,14 +102,13 @@ fun AO3WorkCard(
     }
 }
 
-private fun AO3WorkSummary.statsLine(): String {
+private fun AO3WorkSummary.statsLabels(): List<String> {
     return listOfNotNull(
         wordCount?.let { "%,d words".format(it) },
         chapters.takeIf { it.isNotBlank() }?.let { "$it chapters" },
         kudos?.let { "%,d kudos".format(it) },
         comments?.let { "%,d comments".format(it) },
-        hits?.let { "%,d hits".format(it) }
-    ).joinToString(" - ").ifBlank {
-        updatedDate.takeIf { it.isNotBlank() } ?: workUrl
-    }
+        hits?.let { "%,d hits".format(it) },
+        updatedDate.takeIf { it.isNotBlank() }?.let { "Updated $it" }
+    ).ifEmpty { listOf(workUrl) }
 }

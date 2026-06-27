@@ -1,9 +1,15 @@
 # UI Parity Checklist
 
-Status: Phase 12 Codex pass. Android should be native Material 3, but it must keep
-the same product meaning, information hierarchy, and available actions as the
-Apple app. No item below should be treated as final parity until a human manual
-device audit has passed.
+Status: Phase 12 + T-70 Codex UI refinement pass. Android should be native
+Material 3, but it must keep the same product meaning, information hierarchy,
+and available actions as the Apple app. No item below should be treated as final
+parity until a human manual device audit has passed.
+
+Design contracts now present:
+
+- `docs/contracts/KUDOS_ANDROID_INTERFACE_GUIDELINES.md`
+- `docs/contracts/ANDROID_MATERIAL_HIG_TRANSLATION.md`
+- `docs/contracts/CROSS_PLATFORM_UI_BRIDGE.md`
 
 ## Navigation
 
@@ -28,6 +34,9 @@ Status: Partial.
   comments, and hits when parsed.
 - Complete: Library/Home saved-work cards show local state such as downloaded,
   favorite, finished, progress, rating, words, chapters, and fandoms where known.
+- Complete: shared Material metadata chips/status badges now organize dense AO3
+  and saved-work metadata across Home, Library, Search, Browse, Account lists,
+  and Work Detail.
 - Partial: Android does not yet have Apple-style generated cover cards or
   carousel art; it uses dense Material cards.
 - Needs human review: confirm the card hierarchy remains scannable at large font
@@ -39,7 +48,7 @@ Status: Partial.
 
 - Complete: Home is now a real offline dashboard backed by the Library snapshot.
 - Complete: Continue Reading, Favorites, Recently Opened, and Recently Added
-  shelves are present and privacy-aware.
+  shelves are present, horizontal, and privacy-aware.
 - Complete: Home routes to canonical Work Detail and Reader.
 - Deferred: Android Home does not yet show AO3 Subscriptions or Recently Updated
   shelves.
@@ -53,6 +62,7 @@ Status: Partial.
   Favorites, local search, deterministic sorts, favorite/download/finished
   filters, user tag filters, collection filters, AO3 metadata facet filters, and
   mature-content filtering exist.
+- Complete: loading/error/empty/no-match states use shared Material state cards.
 - Complete: Library remains offline-first and does not call AO3 to populate local
   shelves.
 - Complete: free-text Library search excludes obscured mature-work metadata, so a
@@ -71,6 +81,8 @@ Status: Partial, needs human review.
 - Complete: fandom work lists reuse AO3 search with `work_search[fandom_names]`.
 - Complete: saved/downloaded/favorite/finished local indicators are read-only.
 - Complete: unsupported AO3 pages can use the read-only AO3 WebView fallback.
+- Complete: category, fandom-list, and fandom-work states use shared Material
+  headers, cards, chips, and error/empty/loading treatments.
 - Needs human review: WebView rendering, WebView back behavior, external browser
   handoff, and native Browse visual polish on device.
 
@@ -81,6 +93,8 @@ Status: Partial.
 - Complete: global Search route, query field, sort control, loading/error/empty
   states, result cards, pagination, and canonical Work Detail routing exist.
 - Complete: current AO3 sort enum remains unchanged.
+- Complete: idle Search now presents an explicit no-auto-fetch prompt instead of
+  a blank surface.
 - Deferred: advanced filter UI is not yet implemented on Android, though the
   underlying filter/query models exist.
 - Needs human review: text input behavior, keyboard focus, and result density.
@@ -95,6 +109,8 @@ Status: Partial.
   collection, delete EPUB, remove from Library, and Open on AO3 actions exist.
 - Complete: Phase 10 AO3 actions are surfaced: kudos, subscribe/unsubscribe, Mark
   for Later, AO3 bookmark create, and comments.
+- Complete: Work Detail uses shared metadata chips for fandoms, warnings,
+  categories, tags, stats, local status, and AO3 action feedback.
 - Partial: direct raw AO3 work-id/URL native hydration is not implemented yet.
 - Deferred: native AO3 bookmark edit/update and live AO3 write verification.
 
@@ -120,6 +136,8 @@ Status: Partial, needs human review.
 - Complete: Marked for Later, AO3 Bookmarks, AO3 History, Subscriptions, and My
   Works lists exist where AO3 parsing supports them.
 - Complete: Account links to Settings and Backup.
+- Complete: Account and account-list states use shared top-level headers and
+  loading/error/empty treatments.
 - Partial: account collections and dashboard are not fully native.
 - Needs human review: live AO3 login/session behavior and list selectors.
 
@@ -132,6 +150,8 @@ Status: Partial.
 - Complete: Settings can reset local settings to defaults and opens Backup.
 - Complete: Backup screen states compatibility, merge-only restore behavior, and
   secret/session exclusion rules.
+- Complete: Settings and Backup use the shared screen-header vocabulary, and
+  Backup surfaces v1/v2/session/privacy status as compact labels.
 - Deferred: Android document picker import/export UI is not enabled yet.
 - Needs human review: final settings controls, backup import/export UX, and copy.
 
@@ -145,6 +165,8 @@ Status: Partial, needs human review.
   action buttons use visible text labels.
 - Complete: key state is not color-only; local states are written as labels such
   as Downloaded, Favorite, Finished, and progress percentage.
+- Complete: reusable Material state cards reduce blank/loading/error ambiguity
+  across major non-reader screens.
 - Partial: full TalkBack pass, focus traversal, font-scale clipping audit,
   keyboard behavior, and contrast review still require device/manual testing.
 

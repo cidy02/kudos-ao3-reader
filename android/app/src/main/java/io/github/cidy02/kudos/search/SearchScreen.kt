@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +31,10 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.ErrorStateCard
+import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import kotlinx.coroutines.launch
 
 @Composable
@@ -109,28 +112,24 @@ fun SearchScreen(
         )
 
         when (val current = state) {
-            SearchUiState.Idle -> Unit
-            SearchUiState.Loading -> {
-                CircularProgressIndicator()
-            }
+            SearchUiState.Idle -> EmptyStateCard(
+                title = "Search AO3 works",
+                message = "Enter a title, tag, author, or phrase. Search runs only when you press Search."
+            )
+            SearchUiState.Loading -> LoadingStateCard("Searching AO3")
             is SearchUiState.Error -> {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = current.error.displayMessage(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    OutlinedButton(onClick = ::retry) {
-                        Text("Retry")
-                    }
-                }
+                ErrorStateCard(
+                    title = "AO3 search failed",
+                    message = current.error.displayMessage(),
+                    primaryActionLabel = "Retry",
+                    onPrimaryAction = ::retry
+                )
             }
             is SearchUiState.Results -> {
                 if (current.page.works.isEmpty()) {
-                    Text(
-                        text = "No works found.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyStateCard(
+                        title = "No works found",
+                        message = "AO3 returned no works for this query. Try a broader term or a different sort."
                     )
                 } else {
                     SearchResultsList(
@@ -187,6 +186,12 @@ private fun SearchResultsList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier.fillMaxWidth()
     ) {
+        item {
+            KudosSectionHeader(
+                title = "Results",
+                subtitle = "Page ${page.currentPage} of ${page.totalPages}"
+            )
+        }
         items(page.works, key = { it.id }) { work ->
             AO3WorkCard(work = work, onOpenWork = onOpenWork)
         }

@@ -1,5 +1,98 @@
 # AI Handoff
 
+## Handoff - T-70 - Codex (Android UI refinement / Material-HIG docs) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android`
+
+Scope source:
+
+- `/Users/cidy02/Downloads/Codex_UI_Refinement_Prompt.md`
+- `/Users/cidy02/Downloads/Kudos_Interface_Guidelines_Design_Philosophy.md`
+- `/Users/cidy02/Downloads/ANDROID_MATERIAL_HIG_TRANSLATION_WEB_CONTEXT.md`
+
+Dependencies added: none.
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `docs/contracts/UI_PARITY_CHECKLIST.md`
+- `docs/contracts/KUDOS_ANDROID_INTERFACE_GUIDELINES.md`
+- `docs/contracts/ANDROID_MATERIAL_HIG_TRANSLATION.md`
+- `docs/contracts/CROSS_PLATFORM_UI_BRIDGE.md`
+- `android/app/src/main/java/io/github/cidy02/kudos/ui/components/KudosUi.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/ui/components/AO3WorkCard.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/search/SearchScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/browse/BrowseScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/browse/BrowseUi.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/browse/FandomListScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/browse/FandomWorksScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkDetailScreen.kt`
+- deleted unused `PlaceholderScreen.kt` and `WorkCardPlaceholder.kt`
+
+What changed:
+
+- Added canonical Android UI guidance docs:
+  `KUDOS_ANDROID_INTERFACE_GUIDELINES.md`,
+  `ANDROID_MATERIAL_HIG_TRANSLATION.md`, and
+  `CROSS_PLATFORM_UI_BRIDGE.md`.
+- Added shared Material UI vocabulary in `KudosUi.kt`: screen/section headers,
+  metadata chips, status badges, loading cards, empty cards, and error cards.
+- Reworked shared AO3 work cards to expose fandom, rating/warning/category,
+  discovery tags, and stats as compact Material chips instead of long text blobs.
+- Refined Home shelves into horizontal `LazyRow` sections and kept the existing
+  offline/privacy-aware Library-derived data and Work Detail/Reader routing.
+- Refined Library saved-work cards, previews, no-results states, and compact rows
+  with shared headers/state cards/chips while preserving offline-first behavior,
+  filters, privacy masking, and existing query semantics.
+- Refined Search idle/loading/error/no-result/results states. The idle state now
+  explicitly says Search only runs when the user presses Search.
+- Refined Browse category, fandom-list, and fandom-work surfaces with shared
+  headers/state cards/chips and kept the WebView fallback behavior unchanged.
+- Refined Account/account-list, Settings, Backup, and Work Detail presentation
+  with shared headers/state/message/chip vocabulary. No auth, backup, AO3 write,
+  reader, Room, parsing, or DataStore behavior was changed.
+- Removed unused scaffold-era placeholder components so future UI work does not
+  accidentally reuse debug/sample presentation.
+- Updated `UI_PARITY_CHECKLIST.md` for the T-70 design/docs/component pass.
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug :app:testDebugUnitTest`
+  - Result: failed in `:app:dexBuilderDebug` due stale duplicate generated
+    classes with `" 2.class"` suffixes in `android/app/build/...`.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:clean :app:assembleDebug :app:testDebugUnitTest`
+  - Result: BUILD SUCCESSFUL, 235 JVM tests, 0 failures.
+  - Non-fatal warnings: existing native strip fallback for bundled libraries and
+    existing `ReaderProgressSaverTest` coroutine opt-in warnings.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:lintDebug`
+  - Result: BUILD SUCCESSFUL.
+
+Known gaps / needs human review:
+
+- No emulator/device screenshots were captured.
+- No TalkBack, dynamic font-scale, keyboard/focus, tablet/landscape, or WebView
+  manual verification was performed.
+- Reader chrome/settings were intentionally not redesigned in this pass; the
+  reader should stay quiet and needs a separate device-based audit.
+- Home still lacks AO3 Subscriptions/Recently Updated shelves.
+- Advanced Search filter UI, Backup SAF import/export UI, direct raw AO3
+  work-id/URL hydration, encrypted-at-rest session storage, and live AO3
+  login/write verification remain deferred from prior phase handoffs.
+
+Next step:
+
+- Human/Claude should run a visual device audit on phone and tablet/foldable
+  sizes, especially large font scale, TalkBack order, horizontal Home shelf
+  ergonomics, Work Detail density, and Browse/Search card scanability.
+
 ## Handoff - T-69 - Codex (Phase 12 UI polish/accessibility/release readiness) - 2026-06-27
 
 Branch: `kudos-ao3-reader-android`
