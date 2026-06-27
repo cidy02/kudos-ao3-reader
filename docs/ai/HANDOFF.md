@@ -1,5 +1,232 @@
 # AI Handoff
 
+## Handoff - T-63 - Claude (Phase 7 Readium Reader) - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+### Codex takeover finalization
+
+The human asked Codex to take over after Claude hit a usage limit with this work
+still uncommitted. Codex reviewed the Phase 7 prompt, plan/contract docs, existing
+handoffs, and the uncommitted reader implementation; kept Claude's architecture;
+and made four focused contract fixes before landing:
+
+- `ReaderLocatorCodec` now requires the Android locator envelope version to match
+  the current adapter version before same-platform restore is allowed.
+- `ReadiumProgressAdapter` now stores `lastScrollFraction` from Readium's
+  per-spine `locations.progression` first, falling back to whole-book
+  `totalProgression` only when needed.
+- `ReaderLinkHandler` now validates the parsed URL host instead of substring
+  matching `archiveofourown.org` anywhere in the URL.
+- Reader AO3 work links now route into the native Work Detail destination with
+  `WorkDetailSource.Ao3WorkId`; full raw-id hydration is still deferred to the
+  Work Detail parsing phase.
+
+### Previous phase state observed
+
+- Phases 0–6 implemented and committed (Codex Phases 0–6 + Claude's T-62 Phase 6
+  review fix). Working tree had only the uncommitted T-62 Phase 6 changes
+  (`WorkImporter`/`WorkLifecycleTest`/`TASKS`/`HANDOFF`) plus, now, this Phase 7
+  work. No unexpected third-party changes.
+- Phase 6 gave us: `SavedWork` with `readiumLocator: String?`, `lastSpineIndex`,
+  `lastScrollFraction`, `lastReadDate`; app-private EPUB storage at
+  `files/works/<UUID>.epub` via `WorkFileStore`; `WorkRepository`; Work Detail
+  with a disabled "Read" button and a `Routes.Reader` placeholder.
+
+### Integration approach (Compose ↔ Fragment)
+
+Readium's navigator is Fragment/View-based (reflowable EPUB uses an internal
+WebView), so Compose hosts it through a single seam, `ReadiumNavigatorHost`:
+`AndroidView { FragmentContainerView }` + a `FragmentTransaction` on the
+activity's `supportFragmentManager`, with `EpubNavigatorFactory.createFragmentFactory(...)`
+set as the `fragmentFactory`. `MainActivity` was changed from `ComponentActivity`
+to `androidx.fragment.app.FragmentActivity` to provide `supportFragmentManager`
+(it still uses `setContent`/Compose). All Readium types stay inside
+`reader/readium/`; the rest of the reader layer is engine-agnostic.
+
+### Dependencies added
+
+- `org.readium.kotlin-toolkit:readium-shared:3.3.0`
+- `org.readium.kotlin-toolkit:readium-streamer:3.3.0`
+- `org.readium.kotlin-toolkit:readium-navigator:3.3.0`
+- `com.android.tools:desugar_jdk_libs:2.1.5` (core library desugaring)
+- `androidx.fragment:fragment-ktx:1.8.9` (Readium exposes fragment only at
+  runtime; we need it on the compile classpath; 1.8.9 matches the resolved graph)
+
+### minSdk / desugaring decision
+
+minSdk is **26**, but Readium 3.3.0 publishes AAR metadata that *requires* core
+library desugaring regardless of minSdk (the build fails `checkDebugAarMetadata`
+without it). So `isCoreLibraryDesugaringEnabled = true` + `coreLibraryDesugaring`
+were added. No minSdk change.
+
+### R8 / proguard
+
+None added for debug. Release minification is not configured in this module yet;
+when it is, Readium keep rules will be needed (documented as a follow-up, not a
+Phase 7 deliverable since there is no release build config here).
+
+### Files changed
+
+New (engine-agnostic, `reader/`): `ReaderError`, `ReaderProgress`,
+`ReaderRestoreTarget`, `ReaderLocatorCodec`, `ReaderProgressMapper`,
+`ReaderOpenResult`, `ReaderRepository`, `ReaderProgressSaver`,
+`ReaderLinkHandler`, `EndOfWorkActions`, `ReaderUiState`, `ReaderViewModel`,
+`ReaderScreen`; `reader/settings/`: `ReaderColorTheme`, `ReaderPreferences`,
+`ReaderSettingsMapper`. New (Readium adapter, `reader/readium/`):
+`ReadiumPublicationOpener`, `ReadiumProgressAdapter`, `ReadiumSettingsAdapter`,
+`ReadiumNavigatorHost`.
+Deleted: `reader/ReaderPlaceholderScreen.kt`.
+Modified: `MainActivity.kt`, `app/AppNavHost.kt`, `app/KudosAppContainer.kt`,
+`works/WorkDetailScreen.kt`, `app/build.gradle.kts`, `gradle/libs.versions.toml`.
+New tests (`reader/` + `reader/settings/` + `reader/readium/`): `ReaderProgressMappingTest`
+(locator codec + mapper + fallback + legacy-field preservation),
+`ReaderLinkHandlerTest`, `ReaderProgressSaverTest`, `ReaderRepositoryTest`
+(Robolectric + in-memory Room + temp file store), `ReaderSettingsMapperTest`,
+`ReaderThemeMappingTest`, `ReadiumProgressAdapterTest`.
+
+### Reader open behaviour
+
+`WorkDetail` "Read" is enabled only when `hasEpub`. `ReaderRepository.open`
+returns typed failures: `WorkNotFound`, `NotDownloaded` (no EPUB), `FileMissing`
+(`hasEpub` true but file gone), else `Success(work, path, restoreTarget, prefs)`.
+`ReaderScreen` shows Loading → opens the publication off-thread via
+`ReadiumPublicationOpener` → Reading (navigator) or a friendly error with
+Retry / Back / (for FileMissing) "Remove offline copy" → `markEpubMissing`
+(only explicit, never automatic). Corrupt/missing EPUBs surface errors, never
+crash.
+
+### Progress restore / persistence
+
+Restore order (READER_STATE_CONTRACT): a platform-compatible locator first, then
+`lastSpineIndex`+`lastScrollFraction`, else the beginning. Android-written
+locators are stored as a self-describing envelope
+`{"platform":"android","engine":"readium-kotlin","version":1,"locator":{…}}`
+(`ReaderLocatorCodec`); foreign/Apple, version-incompatible, or unwrapped
+locators decode to null and fall back. On every save,
+`ReaderProgressMapper.applyProgress` refreshes `lastSpineIndex`,
+`lastScrollFraction` (per-spine progression, clamped 0..1), `readiumLocator`
+(envelope), and `lastReadDate`, and never touches favorite/finished/tags/etc.
+Saves are debounced (`ReaderProgressSaver`, 1.5s) and flushed on reader dispose.
+
+### Settings mapping + fallbacks
+
+`ReaderSettingsMapper` → neutral `ReaderPreferences` → `ReadiumSettingsAdapter`
+→ `EpubPreferences`. Mapped: theme **Light/Dark/Sepia** (honors
+`matchAppReaderTheme`; `appTheme=System` falls back to Light), scroll vs paged,
+two-page columns, font size (% of 18pt base), line height, page margins (×28pt
+base, clamped 0.5–2.0), justify, letter/word spacing. Deferred fallbacks: bold
+(`readerBoldText`) and custom fonts (`readerFontID`) are NOT applied to Readium
+yet — Readium's `fontWeight`/`fontFamily` are value-class prefs and custom-font
+import/registration is out of scope; the neutral prefs still carry them.
+
+### Link handling
+
+`ReaderLinkHandler.classify` (pure, tested, host-gated) maps AO3 work URLs →
+WorkDetail, AO3 tag URLs → TagSearch (decoded), other absolute URLs → External (opened via
+`ACTION_VIEW`), relative/in-publication → Unhandled (navigator handles). In-reader
+wiring forwards external links and routes AO3 work links into the native Work
+Detail destination; deep raw-id hydration and tag→Search routing are scaffolded
+but deferred (Search route takes no args yet).
+
+### Tests added / results
+
+- New reader tests cover: locator envelope round-trip + foreign/raw rejection,
+  version-incompatible locator rejection, restore preference order, fallback on
+  invalid/foreign locator, legacy fields populated alongside a locator, per-spine
+  fallback progression, host-gated reader link routing, progress save preserving
+  user state + updating `lastReadDate`, debounce + flush, settings/theme mapping,
+  and repository open states (not-found / not-downloaded / file-missing / success
+  / reopen-restores).
+- `./gradlew :app:compileDebugKotlin` → SUCCESS.
+- `./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.reader.*' --tests 'io.github.cidy02.kudos.reader.readium.*'` → BUILD SUCCESSFUL.
+- `./gradlew :app:clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+  → BUILD SUCCESSFUL, **135 JVM tests, 0 failures, 0 errors** (was 100 after T-62).
+
+### Manual verification
+
+NOT performed — no emulator/device in this environment. The app-owned layer is
+fully unit-tested; the actual Readium rendering, Fragment lifecycle, WebView
+behaviour, on-device progress restore, and theme application can only be
+confirmed on a device. `ReadiumNavigatorHost` compiles against the Readium 3.3.0
+API (verified via the resolved AAR signatures) but is intentionally not exercised
+by JVM tests. Suggested manual checklist is in the Phase 7 prompt.
+
+### Known gaps / deferred
+
+- Live reader rendering + Fragment-in-Compose lifecycle unverified on device.
+- Guaranteed save on process death (only debounced + dispose-flush today).
+- Bold / custom-font application to Readium; full reader chrome & settings sheet.
+- Deep link hydration (raw AO3 work id → full metadata, tag→Search),
+  end-of-work series/next.
+- Release R8 keep rules (no release build config in module yet).
+
+### Recommended next phase
+
+Phase 8 (Library UX) or a device-verification pass for the reader. If verifying
+the reader: build to a device, open a downloaded work, confirm render + resume +
+theme; then iterate on `ReadiumNavigatorHost` lifecycle if needed.
+
+---
+
+## Handoff - T-62 - Claude (Phase 6 takeover review) - 2026-06-26
+
+Branch: `kudos-ao3-reader-android`
+
+Context: Took over for Phase 6 (Work Detail + Save/Download) per the Phase 6
+takeover prompt. On inspection, Codex had **already implemented and committed
+the full Phase 6 lifecycle** in commit `d14e97e` ("Add Android work detail save
+download lifecycle"), with a clean working tree. Per the takeover rules I did
+not rewrite Codex's work; I reviewed it, verified the build/tests, and fixed one
+clear bug.
+
+Verification performed (committed Codex state):
+
+- `./gradlew :app:assembleDebug :app:testDebugUnitTest` — BUILD SUCCESSFUL,
+  99 JVM tests, 0 failures.
+- Reviewed `WorkImporter`, `WorkMetadataMerger`, `WorkFileStore`,
+  `AO3EpubDownloader`, `AO3WorkMetadataParser`, `WorkRepository`, `AppNavHost`,
+  and the lifecycle tests against the contract. All sound: file-store rejects
+  non-UUID/unsafe paths, downloads validate ZIP signature + reject HTML,
+  `hasEpub` is set only after the file write, merge preserves local user state,
+  `workTagsFetched` is gated on a non-empty canonical fetch, and Library/Work
+  Detail share one canonical screen across remote-summary and local-id sources.
+
+Bug fixed:
+
+- `WorkImporter.persistDownloadedEpub` applied `work.copy(..., isFinished =
+  false)` on every successful download, which would silently clear the user's
+  Finished marker whenever a previously-finished work was re-downloaded. This
+  contradicts the contract ("preserve local user state: `isFinished`") and the
+  merger, which already preserves it. Removed the `isFinished = false` override
+  so only the file-backed flags (`hasEpub`, `isSaved`) change on download.
+
+Test added:
+
+- `WorkImporterLifecycleTest.downloadPreservesExistingFinishedState` — saves a
+  finished+favorite work, downloads it, and asserts `hasEpub` becomes true while
+  `isFinished` and `isFavorite` are preserved.
+
+Files changed (this handoff):
+
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkImporter.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/works/WorkLifecycleTest.kt`
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+
+Commands run + results:
+
+- `./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.works.*'` —
+  passed.
+- `./gradlew :app:assembleDebug :app:testDebugUnitTest` — BUILD SUCCESSFUL,
+  100 JVM tests, 0 failures.
+
+Known gaps / deferred: unchanged from Codex's T-61 handoff below (Readium, auth,
+authenticated AO3 writes/lists, EPUB metadata parsing, full Library UX, advanced
+download queue). Recommended next phase remains Phase 7 (Readium Reader).
+
+---
+
 ## Handoff - T-61 - Codex - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`

@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,7 +15,8 @@ import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.home.HomeScreen
 import io.github.cidy02.kudos.library.LibraryScreen
-import io.github.cidy02.kudos.reader.ReaderPlaceholderScreen
+import io.github.cidy02.kudos.reader.ReaderScreen
+import io.github.cidy02.kudos.reader.ReaderViewModel
 import io.github.cidy02.kudos.search.SearchScreen
 import io.github.cidy02.kudos.settings.SettingsScreen
 import io.github.cidy02.kudos.works.WorkDetailScreen
@@ -27,6 +29,7 @@ fun AppNavHost(
     modifier: Modifier = Modifier
 ) {
     var selectedWorkSource by remember { mutableStateOf<WorkDetailSource?>(null) }
+    var readerWorkId by remember { mutableStateOf<String?>(null) }
 
     NavHost(
         navController = navController,
@@ -79,11 +82,34 @@ fun AppNavHost(
                 source = selectedWorkSource,
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,
-                onOpenReader = { navController.navigate(Routes.Reader) }
+                onOpenReader = { workId ->
+                    readerWorkId = workId
+                    navController.navigate(Routes.Reader)
+                }
             )
         }
         composable(Routes.Reader) {
-            ReaderPlaceholderScreen(onBack = { navController.popBackStack() })
+            val workId = readerWorkId
+            if (workId == null) {
+                navController.popBackStack()
+            } else {
+                val readerViewModel: ReaderViewModel = viewModel(
+                    key = workId,
+                    factory = ReaderViewModel.factory(container.readerRepository, workId)
+                )
+                ReaderScreen(
+                    viewModel = readerViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenWorkDetail = { workId ->
+                        // Deep-link hydration from a raw work id is deferred (see HANDOFF),
+                        // but keep the route native so the later parser can fill it in.
+                        selectedWorkSource = WorkDetailSource.Ao3WorkId(workId)
+                        navController.navigate(Routes.WorkDetail) {
+                            popUpTo(Routes.Reader) { inclusive = true }
+                        }
+                    }
+                )
+            }
         }
         composable(Routes.Settings) {
             SettingsScreen(onOpenBackup = { navController.navigate(Routes.Backup) })

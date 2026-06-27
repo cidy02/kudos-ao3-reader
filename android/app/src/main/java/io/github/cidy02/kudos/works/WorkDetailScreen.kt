@@ -41,7 +41,7 @@ fun WorkDetailScreen(
     source: WorkDetailSource?,
     workRepository: WorkRepository,
     workImporter: WorkImporter,
-    onOpenReader: () -> Unit
+    onOpenReader: (String) -> Unit
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
@@ -252,7 +252,7 @@ private fun WorkDetailContent(
     onDeleteEpub: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
-    onOpenReader: () -> Unit
+    onOpenReader: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -351,11 +351,15 @@ private fun ActionButtons(
     onDeleteEpub: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
-    onOpenReader: () -> Unit
+    onOpenReader: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(enabled = false, onClick = onOpenReader, modifier = Modifier.weight(1f)) {
+            OutlinedButton(
+                enabled = !state.working && state.local?.hasEpub == true,
+                onClick = { state.local?.id?.let(onOpenReader) },
+                modifier = Modifier.weight(1f)
+            ) {
                 Text("Read")
             }
             Button(enabled = !state.working, onClick = onDownload, modifier = Modifier.weight(1f)) {

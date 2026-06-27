@@ -219,6 +219,22 @@ class WorkImporterLifecycleTest {
     }
 
     @Test
+    fun downloadPreservesExistingFinishedState() = runTest {
+        repository.upsert(sampleSavedWork().copy(isFinished = true, isFavorite = true))
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Success(epubBytes)
+        )
+
+        val result = importer.download(sampleSummary())
+
+        val work = (result as WorkImportResult.Success).work
+        assertTrue(work.hasEpub)
+        assertTrue(work.isFinished)
+        assertTrue(work.isFavorite)
+    }
+
+    @Test
     fun downloadFailureDoesNotSetHasEpub() = runTest {
         val importer = importer(
             metadata = AO3Result.Failure(AO3Error.NotFound),

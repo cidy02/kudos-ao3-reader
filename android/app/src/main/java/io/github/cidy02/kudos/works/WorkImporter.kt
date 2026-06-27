@@ -71,7 +71,10 @@ class WorkImporter(
                 AO3Error.Validation(write.message)
             )
             is FileWriteResult.Success -> {
-                val updated = workRepository.upsert(work.copy(hasEpub = true, isSaved = true, isFinished = false))
+                // Preserve local user state (isFinished, favorite, progress); only the
+                // file-backed flags change here. A re-download of a finished work must
+                // not silently clear the user's Finished marker.
+                val updated = workRepository.upsert(work.copy(hasEpub = true, isSaved = true))
                 WorkImportResult.Success(updated)
             }
         }
