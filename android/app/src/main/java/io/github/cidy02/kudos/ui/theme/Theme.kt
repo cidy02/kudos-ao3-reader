@@ -49,9 +49,11 @@ private val DarkScheme = darkColorScheme(
 )
 
 private val SepiaScheme = lightColorScheme(
-    primary = Ao3Red,
+    // Apple suppresses the red accent in Sepia and uses a single warm-brown tint
+    // (#9A6732) for controls/links/selection. Match that for parity.
+    primary = SepiaTint,
     onPrimary = Paper,
-    secondary = SuccessGreen,
+    secondary = SepiaTint,
     onSecondary = Paper,
     background = PaperWarm,
     onBackground = Ink,

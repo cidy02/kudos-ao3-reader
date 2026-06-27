@@ -111,6 +111,39 @@ class RoomDaoTest {
     }
 
     @Test
+    fun updatingAWorkPreservesItsTagsAndCollections() = runBlocking {
+        // Regression: @Insert(REPLACE) did a DELETE+INSERT, firing ON DELETE CASCADE
+        // on the cross-ref tables and silently wiping a work's tags/collections on
+        // every scalar update (e.g. favoriting). @Upsert must update in place.
+        val work = sampleWork(id = "work-keep-relations")
+        val tag = TagEntity(
+            id = "tag-keep",
+            name = "Comfort Read",
+            dateCreated = Instant.parse("2026-06-26T12:00:00Z")
+        )
+        val collection = CollectionEntity(
+            id = "collection-keep",
+            name = "Weekend",
+            dateAdded = Instant.parse("2026-06-26T12:10:00Z"),
+            description = null,
+            sortOrder = null
+        )
+
+        database.workDao().upsert(work.toEntity())
+        database.tagDao().upsert(tag)
+        database.tagDao().addToWork(WorkTagCrossRef(work.id, tag.id))
+        database.collectionDao().upsert(collection)
+        database.collectionDao().addWork(CollectionWorkCrossRef(collection.id, work.id))
+
+        // Update a scalar field on the same work id.
+        database.workDao().upsert(work.copy(isFavorite = true).toEntity())
+
+        assertEquals(true, database.workDao().getById(work.id)?.isFavorite)
+        assertEquals(listOf(tag), database.tagDao().getTagsForWork(work.id))
+        assertEquals(listOf(work.id), database.collectionDao().getWorkIdsForCollection(collection.id))
+    }
+
+    @Test
     fun bookmarkDaoInsertsAndReadsByUrl() = runBlocking {
         val bookmark = BookmarkEntity(
             id = "bookmark-1",

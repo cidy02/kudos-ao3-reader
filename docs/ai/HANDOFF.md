@@ -1,5 +1,87 @@
 # AI Handoff
 
+## Handoff - T-66 - Claude (Phase 0-5 verification + Phase 7 follow-ups) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android`
+
+Scope: (a) finalized the Phase 7 reader review fix, (b) verified Codex's Phases
+0-5 the same way Phase 6 was verified (build + tests + multi-agent code review
+against the plan/contracts/Apple), and (c) fixed the confirmed findings. No
+divergence: my Phase 7 work is the committed Phase 7 (`3d08ca1`); Codex's Phases
+8-9 sit cleanly on top; the branch is linear.
+
+Verification method: a 6-reviewer + adversarial-verify workflow (one reviewer per
+phase, each grounded in committed code + contracts + Apple source). The first run
+was rate-limited (session limit) and produced no usable output; the re-run
+confirmed 9 real findings. Build green throughout: `:app:assembleDebug` +
+`:app:testDebugUnitTest` = **177 JVM tests, 0 failures**.
+
+Findings fixed (7):
+
+- [HIGH][bug] `WorkDao` used `@Insert(OnConflictStrategy.REPLACE)`; every scalar
+  update (favorite/finished/progress) did DELETE+INSERT, firing ON DELETE CASCADE
+  on `work_tag_cross_refs` / `collection_work_cross_refs` and silently wiping a
+  work's user tags + collection memberships. Changed both `upsert`/`upsertAll` to
+  `@Upsert` (in-place update). Added `RoomDaoTest.updatingAWorkPreservesItsTagsAndCollections`.
+- [MED][parity] AO3 red accent was `#8B1E1E`; changed `Ao3Red` to `#990000`
+  (matches Apple `ThemeManager.ao3Red` + `accentColorHex` default); re-derived
+  `Ao3RedDark` to `#660000`.
+- [LOW][parity] Sepia theme used the red/green accent; added `SepiaTint`
+  (`#9A6732`) and set the Sepia scheme primary+secondary to it (Apple suppresses
+  red in Sepia).
+- [LOW][parity] `AO3Constants.isLoginUrl` used exact path equality; changed to
+  `.contains("/users/login")` to match Apple and catch login-redirect variants.
+- [LOW][parity] `AO3SearchUrlBuilder.wordCountExpression` coerced sides to
+  positive Int (dropping `10,000`); now passes trimmed raw values through like
+  Apple; updated `AO3SearchUrlBuilderTest`.
+- [LOW][doc] `SETTINGS_CONTRACT.md` appTheme default row said "existing reader
+  theme or light"; corrected to the literal backup-capture default `light` with a
+  note about ThemeManager seeding (Android serializer should use `appTheme ?? "light"`).
+- [LOW][reader, from Phase 7 review] `ReaderProgressSaver` only flushed on Compose
+  dispose; added a `Lifecycle.ON_STOP` flush in `ReaderScreen` (+
+  `lifecycle-runtime-compose` dep) so backgrounding reliably saves progress.
+- [MED→tightened][bug] `AO3OverloadDetector` matched bare substrings ("capacity",
+  "try again later") gated only by ever-present "Archive of Our Own", risking
+  false positives on normal pages; tightened to specific phrases and added a
+  regression test (`doesNotFlagNormalAo3PageContainingCapacitySubstring`).
+
+Findings intentionally NOT changed (match Apple / low value), reported for the owner:
+
+- [LOW] `AO3RequestCoalescer`: a cancelled caller does not cancel the in-flight
+  request (detached SupervisorJob). This MATCHES Apple's detached-Task behavior;
+  changing it risks concurrency bugs. Optional robustness improvement only.
+- [LOW] `BackupMergeService` collection/saved-search update by UUID overwrites a
+  local rename (last-write-wins). This MATCHES Apple's bookmark/font merge
+  convention; recommended follow-up is a documenting test, not a behavior change.
+- [LOW, low-confidence] `BackupMergeService.mergeFonts` may re-suffix an existing
+  font when the snapshot omits its bytes — only reachable once the deferred
+  BackupScreen restore UI builds real snapshots; pin with a test when that lands.
+
+Files changed:
+
+- `android/app/src/main/java/io/github/cidy02/kudos/data/local/dao/WorkDao.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/ui/theme/Color.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/ui/theme/Theme.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Constants.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3OverloadDetector.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchUrlBuilder.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/reader/ReaderScreen.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/data/local/RoomDaoTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/AO3NetworkingCoreTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchUrlBuilderTest.kt`
+- `android/app/build.gradle.kts`, `android/gradle/libs.versions.toml` (lifecycle dep)
+- `docs/contracts/SETTINGS_CONTRACT.md`
+
+Commands run: `:app:assembleDebug :app:testDebugUnitTest` → BUILD SUCCESSFUL, 177
+tests, 0 failures (one earlier run failed spuriously due to two concurrent gradle
+daemons — the stale-Kotlin-daemon flakiness noted in prior handoffs; clean re-run
+green).
+
+Net: Phases 0-5 are faithful to the plan/contracts/Apple. Cross-checked parity
+confirmed for coordinator concurrency (3), reader numeric defaults (18/1.65/28),
+SavedSearch.dateAdded, WorkCollection fields, AO3 rating/warning/category IDs,
+sort_column mapping, and ZIP-slip protection.
+
 ## Handoff - T-65 - Codex (Phase 9 Authentication and Account) - 2026-06-27
 
 Branch: `kudos-ao3-reader-android`

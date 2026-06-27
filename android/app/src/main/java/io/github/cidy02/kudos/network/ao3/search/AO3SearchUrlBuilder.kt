@@ -41,17 +41,17 @@ class AO3SearchUrlBuilder {
     }
 
     fun wordCountExpression(filters: AO3SearchFilters): String? {
-        val from = positiveInt(filters.wordsFrom)
-        val to = positiveInt(filters.wordsTo)
+        // Pass the trimmed values through verbatim to mirror Apple (which trims and
+        // forwards the raw strings). This preserves inputs like "10,000" that a
+        // numeric coercion would silently drop, keeping the AO3 query identical
+        // across platforms. Blank sides are treated as absent.
+        val from = filters.wordsFrom.trim().takeIf { it.isNotEmpty() }
+        val to = filters.wordsTo.trim().takeIf { it.isNotEmpty() }
         return when {
             from != null && to != null -> "$from-$to"
             from != null -> "> $from"
             to != null -> "< $to"
             else -> null
         }
-    }
-
-    private fun positiveInt(value: String): Int? {
-        return value.trim().toIntOrNull()?.takeIf { it > 0 }
     }
 }

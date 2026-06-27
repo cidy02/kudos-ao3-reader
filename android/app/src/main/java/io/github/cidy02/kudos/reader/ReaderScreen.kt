@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorHost
 import io.github.cidy02.kudos.reader.readium.ReadiumOpenResult
 import io.github.cidy02.kudos.reader.readium.ReadiumProgressAdapter
@@ -79,10 +81,13 @@ private fun ReaderReading(
     val linkHandler = remember { ReaderLinkHandler() }
     var attempt by remember { mutableIntStateOf(0) }
 
-    // Persist any pending progress when leaving the reader.
+    // Persist any pending progress when leaving the reader (route change / activity destroy)…
     DisposableEffect(Unit) {
         onDispose { viewModel.flushProgress() }
     }
+    // …and when the app is merely backgrounded, so an OS process kill cannot drop
+    // the last debounce window of reading position.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.flushProgress() }
 
     val opening by produceState<ReadiumOpenResult?>(initialValue = null, state.epubPath, attempt) {
         value = null

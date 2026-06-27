@@ -136,10 +136,16 @@ class AO3SearchWordCountTest {
     }
 
     @Test
-    fun ignoresInvalidWordCountSidesSafely() {
-        assertEquals("< 5000", builder.wordCountExpression(AO3SearchFilters(wordsFrom = "many", wordsTo = "5000")))
-        assertEquals("> 1000", builder.wordCountExpression(AO3SearchFilters(wordsFrom = "1000", wordsTo = "zero")))
-        assertNull(builder.wordCountExpression(AO3SearchFilters(wordsFrom = "-1", wordsTo = "0")))
+    fun passesRawValuesThroughLikeApple() {
+        // Apple trims and forwards the raw strings, so comma-formatted values must
+        // survive and only blank sides are dropped.
+        assertEquals(
+            "10,000-50,000",
+            builder.wordCountExpression(AO3SearchFilters(wordsFrom = "10,000", wordsTo = "50,000"))
+        )
+        assertEquals("> 1000", builder.wordCountExpression(AO3SearchFilters(wordsFrom = " 1000 ")))
+        assertEquals("< 5000", builder.wordCountExpression(AO3SearchFilters(wordsFrom = "   ", wordsTo = "5000")))
+        assertNull(builder.wordCountExpression(AO3SearchFilters(wordsFrom = "  ", wordsTo = "")))
     }
 }
 

@@ -11,6 +11,8 @@ object AO3Constants {
     val baseHttpUrl = BASE_URL.toHttpUrl()
 
     fun isLoginUrl(url: String): Boolean {
-        return runCatching { url.toHttpUrl().encodedPath == LOGIN_PATH }.getOrDefault(false)
+        // Substring match to mirror Apple (AO3Client uses `path.contains("/users/login")`),
+        // catching login-redirect variants, not just the exact `/users/login` path.
+        return runCatching { url.toHttpUrl().encodedPath.contains(LOGIN_PATH) }.getOrDefault(false)
     }
 }

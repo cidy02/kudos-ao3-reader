@@ -54,10 +54,18 @@ Current backup settings fields:
 | `hideMatureContent` | `true` |
 | `matureContentMode` | `obscure` |
 | `requireBiometricToReveal` | `false` |
-| `appTheme` | existing reader theme or `light` |
+| `appTheme` | `light` |
 | `readerTheme` | `light` |
 | `matchAppReaderTheme` | `true` |
 | `accentColorHex` | `#990000` |
+
+> Note: this table documents the literal **backup-capture** fallbacks (reference:
+> `KudosBackup.swift`). `appTheme` captures as `light`. Separately, on first launch
+> Apple's `ThemeManager.init` seeds the in-memory `appTheme` from the stored
+> `readerTheme` so upgraders keep their look — but that is an init detail and does
+> **not** affect backup capture. Android's backup serializer should use
+> `appTheme ?? "light"` to match `KudosBackup.swift` exactly (do not seed from
+> `readerTheme` inside the serializer).
 
 ## Theme Values
 

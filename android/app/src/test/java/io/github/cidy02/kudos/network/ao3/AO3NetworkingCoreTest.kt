@@ -410,7 +410,7 @@ class AO3OverloadDetectorTest {
         """
         val overloaded503 = """
             <html>
-            <head><title>Archive of Our Own capacity issue</title></head>
+            <head><title>Archive of Our Own is over capacity</title></head>
             <body>The Archive of Our Own is temporarily unavailable.</body>
             </html>
         """
@@ -418,6 +418,24 @@ class AO3OverloadDetectorTest {
         assertTrue(AO3OverloadDetector.isOverloadPage(overloaded200))
         assertTrue(AO3OverloadDetector.isOverloadPage(overloaded503))
         assertFalse(AO3OverloadDetector.isOverloadPage("<html><body>No works found.</body></html>"))
+    }
+
+    @Test
+    fun doesNotFlagNormalAo3PageContainingCapacitySubstring() {
+        // Regression: a normal AO3 page (always contains "Archive of Our Own" in
+        // its chrome) whose content merely includes "incapacity" / "try again
+        // later" must NOT be treated as an overload page.
+        val normalWork = """
+            <html>
+            <head><title>A Study in Grief - Archive of Our Own</title></head>
+            <body>
+              <blockquote class="userstuff summary">
+                A meditation on loss and incapacity. They promise to try again later.
+              </blockquote>
+            </body>
+            </html>
+        """
+        assertFalse(AO3OverloadDetector.isOverloadPage(normalWork))
     }
 
     @Test
