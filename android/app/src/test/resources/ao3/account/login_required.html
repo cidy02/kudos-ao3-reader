@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <body class="logged-out">
+    <div id="greeting"><a href="/users/login">Log In</a></div>
+    <main id="main">
+      <p class="flash error">Please log in.</p>
+      <form id="new_user" action="/users/login" method="post">
+        <input id="user_login" name="user[login]">
+        <input id="user_password" name="user[password]" type="password">
+      </form>
+    </main>
+  </body>
+</html>

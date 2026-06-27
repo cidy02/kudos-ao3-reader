@@ -14,6 +14,8 @@ object Routes {
     const val Search = "search"
     const val WorkDetail = "work-detail"
     const val Reader = "reader"
+    const val AccountLogin = "account-login"
+    const val AccountList = "account-list"
     const val Settings = "settings"
     const val Backup = "backup"
 
@@ -33,6 +35,8 @@ object Routes {
             Search -> "Search"
             WorkDetail -> "Work"
             Reader -> "Reader"
+            AccountLogin -> "AO3 Login"
+            AccountList -> "Account List"
             Settings -> "Settings"
             Backup -> "Backup"
             else -> "Kudos"

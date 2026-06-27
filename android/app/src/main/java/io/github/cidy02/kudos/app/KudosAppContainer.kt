@@ -2,6 +2,10 @@ package io.github.cidy02.kudos.app
 
 import android.content.Context
 import androidx.room.Room
+import io.github.cidy02.kudos.account.AccountListRepository
+import io.github.cidy02.kudos.auth.AndroidAO3CookieStore
+import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.FileAO3SessionStore
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.data.preferences.kudosSettingsDataStore
@@ -31,6 +35,20 @@ class KudosAppContainer(context: Context) {
 
     val ao3Client: OkHttpAO3Client by lazy {
         OkHttpAO3Client()
+    }
+
+    val authRepository: AO3AuthRepository by lazy {
+        AO3AuthRepository(
+            sessionStore = FileAO3SessionStore(appContext),
+            cookieStore = AndroidAO3CookieStore()
+        )
+    }
+
+    val accountListRepository: AccountListRepository by lazy {
+        AccountListRepository(
+            client = ao3Client,
+            authRepository = authRepository
+        )
     }
 
     val workRepository: WorkRepository by lazy {

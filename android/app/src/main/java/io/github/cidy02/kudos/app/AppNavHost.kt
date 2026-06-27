@@ -10,7 +10,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import io.github.cidy02.kudos.account.AccountListScreen
+import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
+import io.github.cidy02.kudos.auth.AO3WebLoginScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.home.HomeScreen
@@ -30,6 +33,7 @@ fun AppNavHost(
 ) {
     var selectedWorkSource by remember { mutableStateOf<WorkDetailSource?>(null) }
     var readerWorkId by remember { mutableStateOf<String?>(null) }
+    var selectedAccountListType by remember { mutableStateOf<AccountListType?>(null) }
 
     NavHost(
         navController = navController,
@@ -69,9 +73,38 @@ fun AppNavHost(
         }
         composable(Routes.Account) {
             AccountScreen(
+                authRepository = container.authRepository,
+                onLogin = { navController.navigate(Routes.AccountLogin) },
+                onOpenList = { type ->
+                    selectedAccountListType = type
+                    navController.navigate(Routes.AccountList)
+                },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
                 onOpenSettings = { navController.navigate(Routes.Settings) }
             )
+        }
+        composable(Routes.AccountLogin) {
+            AO3WebLoginScreen(
+                authRepository = container.authRepository,
+                onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
+                onCancel = { navController.popBackStack() }
+            )
+        }
+        composable(Routes.AccountList) {
+            val type = selectedAccountListType
+            if (type == null) {
+                navController.popBackStack()
+            } else {
+                AccountListScreen(
+                    type = type,
+                    repository = container.accountListRepository,
+                    onLogin = { navController.navigate(Routes.AccountLogin) },
+                    onOpenWork = { work ->
+                        selectedWorkSource = WorkDetailSource.RemoteSummary(work)
+                        navController.navigate(Routes.WorkDetail)
+                    }
+                )
+            }
         }
         composable(Routes.Search) {
             SearchScreen(

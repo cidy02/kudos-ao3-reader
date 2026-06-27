@@ -1,5 +1,182 @@
 # AI Handoff
 
+## Handoff - T-65 - Codex (Phase 9 Authentication and Account) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android`
+
+Previous phase state observed:
+
+- Branch was on `kudos-ao3-reader-android` with Phase 7 (`3d08ca1`) and Phase 8
+  (`ce62115`) already committed locally. GitHub CLI auth was available; running
+  `gh auth setup-git` allowed `git push origin kudos-ao3-reader-android` to
+  succeed before Phase 9 started.
+- Existing Phase 4-8 seams were present and reused: `OkHttpAO3Client` with
+  coordinator/retry/coalescing/login-redirect handling, `AO3SearchParser` and
+  `AO3WorkSummary`, canonical `WorkDetailSource.RemoteSummary`, Room-backed
+  saved works, Library UX, and Reader route.
+- The only unrelated untracked path observed was `.idea/`; it was left untouched.
+
+Dependencies added: none.
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/app/src/main/AndroidManifest.xml`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/KudosAppContainer.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/Routes.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountListRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountListType.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountUiState.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountViewModel.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/auth/`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/account/`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/search/AO3SearchParser.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/auth/AO3AuthTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/account/AccountRepositoryTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/account/AO3AccountParserTest.kt`
+- `android/app/src/test/resources/ao3/account/`
+
+Login / WebView behavior:
+
+- Android now uses a visible WebView login flow at
+  `https://archiveofourown.org/users/login`.
+- The user enters credentials only into AO3's real page. Android does not provide
+  a native password form, does not store passwords, and does not implement hidden
+  repeated login attempts.
+- Login completion is detected by AO3 logged-in page signals (`body.logged-in` or
+  logout link/form) plus a username from `#greeting a[href^="/users/"]`.
+- On success, the app captures AO3 cookies from Android `CookieManager`, saves an
+  `AO3Session`, installs cookies back into `CookieManager`, and returns to the
+  Account screen.
+- Cancel and Reload controls are available. Manual/device verification was not
+  performed in this environment.
+
+Session / cookie storage behavior:
+
+- `AO3Session`, `AO3StoredCookie`, `AO3CookieJar`, `AO3CookieStore`,
+  `FileAO3SessionStore`, and `AO3AuthRepository` were added under `auth/`.
+- Cookie headers are generated only for HTTPS AO3 hosts and matching cookie paths.
+  Cookies are not attached to third-party hosts.
+- Logout clears the app session store and expires AO3 cookies known to
+  `CookieManager`; it does not touch Library data, backups, reading history, or
+  saved works.
+- Auth-required account responses call `sessionDidExpire()`, clear local session
+  state, and surface a re-login state.
+
+Secure storage decision / gap:
+
+- Phase 9 stores session JSON in `context.noBackupFilesDir/ao3/session.json`,
+  which is app-private and outside Android Auto Backup/device transfer. The
+  manifest backup rules already exclude all app data, and no `.kudosbackup`
+  code reads this session path.
+- Encryption at rest with Tink/Android Keystore was **deferred** to avoid a large
+  new crypto/storage dependency inside this phase. This is the main security gap:
+  session cookies are app-private and no-backup, but not encrypted by this commit.
+
+Authenticated request behavior:
+
+- Account list requests reuse the Phase 4 `AO3Client.get(url, headers)` path.
+- `AO3AuthRepository.authenticatedHeaders(url)` attaches only the AO3 `Cookie`
+  header; the existing client continues to add the centralized User-Agent and
+  apply coordinator/retry/coalescing behavior.
+- Login redirects and logged-out pages map to `AO3Error.AuthenticationRequired`.
+- No authenticated POST/write support was added.
+
+Account list URLs implemented:
+
+- Marked for Later: `/users/<username>/readings?show=to-read`
+- History: `/users/<username>/readings`
+- AO3 Bookmarks: `/users/<username>/bookmarks`
+- Subscriptions: `/users/<username>/subscriptions?type=works`
+- My Works: `/users/<username>/works`
+- Usernames are path-encoded through OkHttp `HttpUrl.Builder`.
+
+Account parsers implemented:
+
+- `AO3UsernameParser`: logged-in detection, username extraction, login-required
+  page detection.
+- `AO3AccountParser`: typed account-list parsing with overload and
+  login-required errors.
+- Marked for Later, History, and My Works reuse search-style `li.work.blurb`.
+- Bookmarks use the existing AO3 work-summary parser with `li.bookmark.blurb`,
+  skipping non-work bookmarks.
+- Subscriptions parse sparse `dl.subscription dt` work rows and skip series/user
+  subscriptions.
+- `AO3SearchParser` gained `parseWorksListPage(html, page, blurbSelector)` so
+  bookmarks can reuse the same `AO3WorkSummary` path.
+
+Account UI behavior:
+
+- Account screen now has signed-out, restoring, signing-in, signed-in, expired,
+  and error states.
+- Signed-out state explains AO3 login is optional, uses AO3's real login page,
+  never stores the AO3 password, and is unofficial/not AO3/OTW-affiliated.
+- Signed-in state shows the username, session note, Logout, and read-only list
+  entry points.
+- Account list screens show loading, empty, failed/retry, auth-required/re-login,
+  simple pagination, and AO3 work cards.
+- Tapping an account-list work opens canonical Work Detail through
+  `WorkDetailSource.RemoteSummary`; account-derived works are not auto-saved.
+
+Tests added:
+
+- Auth/session/cookie: `AO3SessionStoreTest`, `AO3CookieStoreTest`,
+  `AO3CookieJarTest`, `AO3AuthenticatedRequestTest`,
+  `AO3WebLoginInspectionTest`, `AccountLogoutTest`.
+- Account URLs/parsers: `AO3UsernameParserTest`, `AO3AccountUrlsTest`,
+  `AO3MarkedForLaterParserTest`, `AO3HistoryParserTest`,
+  `AO3BookmarksParserTest`, `AO3SubscriptionsParserTest`,
+  `AO3AccountListEmptyStateParserTest`,
+  `AO3AccountListLoginRequiredParserTest`,
+  `AO3AccountListOverloadParserTest`.
+- Repository: `AccountRepositoryAuthRequiredTest`,
+  `AO3AuthRedirectDetectionTest`, `AccountRepositoryPaginationTest`,
+  `AccountListItemsDoNotAutoSaveTest`.
+- Fixtures are hand-built/sanitized under `android/app/src/test/resources/ao3/account/`.
+
+Commands run:
+
+- `gh auth setup-git`
+  - Result: succeeded.
+- `git push origin kudos-ao3-reader-android`
+  - Result: succeeded before Phase 9 edits; pushed through Phase 8 (`ce62115`).
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.auth.*' --tests 'io.github.cidy02.kudos.account.*' --tests 'io.github.cidy02.kudos.network.ao3.account.*'`
+  - Result: initially found the WebView inspection-result parser bug, then passed
+    after switching to a JVM-safe regex decoder.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.account.*'`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+  - Result: BUILD SUCCESSFUL, 175 JVM tests, 0 failures, 0 errors, 0 skipped.
+
+Manual verification:
+
+- Not performed. No emulator/device AO3 login was run from this environment.
+- Must be manually verified with a non-private test AO3 account before trusting
+  selectors/cookie behavior against live AO3.
+
+Known gaps / deferred:
+
+- Session file is app-private/no-backup but not encrypted at rest. Add Tink or an
+  Android Keystore-backed encryption layer before public release.
+- No hidden/automatic login flow; visible WebView login only.
+- No authenticated writes: kudos, comments, subscribe/unsubscribe, AO3 bookmark
+  create/update, Mark for Later mutation, and destructive account actions remain
+  Phase 10+.
+- No account collections list in Android Phase 9.
+- No live AO3 verification; account selectors and URLs are fixture-tested only.
+- WebView UI has not been screenshot/device verified.
+
+Recommended next phase:
+
+Manual device verification of Phase 9 login/session/account lists first. Then
+Phase 10 authenticated writes/comments only after confirming live auth works and
+after approving the write/CSRF safety scope.
+
 ## Handoff - T-64 - Codex (Phase 8 Library UX) - 2026-06-27
 
 Branch: `kudos-ao3-reader-android`

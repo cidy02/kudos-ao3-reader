@@ -13,13 +13,21 @@ sealed class AO3SearchParseException(message: String) : Exception(message) {
 
 class AO3SearchParser {
     fun parseSearchPage(html: String, page: Int): AO3SearchPage {
+        return parseWorksListPage(html, page, blurbSelector = "li.work.blurb")
+    }
+
+    fun parseWorksListPage(
+        html: String,
+        page: Int,
+        blurbSelector: String
+    ): AO3SearchPage {
         if (AO3OverloadDetector.isOverloadPage(html)) {
             throw AO3SearchParseException.Overloaded()
         }
 
         val currentPage = page.coerceAtLeast(1)
         val document = Jsoup.parse(html, AO3Constants.BASE_URL)
-        val works = document.select("li.work.blurb")
+        val works = document.select(blurbSelector)
             .mapNotNull { element ->
                 runCatching { parseWorkSummary(element) }.getOrNull()
             }
