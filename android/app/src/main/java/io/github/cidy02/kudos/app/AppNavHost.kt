@@ -16,8 +16,13 @@ import io.github.cidy02.kudos.account.AccountScreen
 import io.github.cidy02.kudos.auth.AO3WebLoginScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
+import io.github.cidy02.kudos.browse.FandomListScreen
+import io.github.cidy02.kudos.browse.FandomWorksScreen
 import io.github.cidy02.kudos.comments.CommentsScreen
 import io.github.cidy02.kudos.home.HomeScreen
+import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
+import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
+import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
 import io.github.cidy02.kudos.library.LibraryScreen
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
@@ -37,6 +42,9 @@ fun AppNavHost(
     var readerWorkId by remember { mutableStateOf<String?>(null) }
     var selectedAccountListType by remember { mutableStateOf<AccountListType?>(null) }
     var selectedCommentTarget by remember { mutableStateOf<AO3CommentTarget?>(null) }
+    var selectedBrowseCategory by remember { mutableStateOf<AO3MediaCategory?>(null) }
+    var selectedBrowseFandom by remember { mutableStateOf<AO3Fandom?>(null) }
+    var webFallbackUrl by remember { mutableStateOf<String?>(null) }
 
     NavHost(
         navController = navController,
@@ -67,12 +75,64 @@ fun AppNavHost(
         }
         composable(Routes.Browse) {
             BrowseScreen(
-                onOpenSearch = { navController.navigate(Routes.Search) },
-                onOpenWork = {
-                    selectedWorkSource = null
-                    navController.navigate(Routes.WorkDetail)
+                repository = container.browseRepository,
+                onOpenCategory = { category ->
+                    selectedBrowseCategory = category
+                    navController.navigate(Routes.BrowseFandoms)
+                },
+                onOpenWebFallback = { url ->
+                    webFallbackUrl = url
+                    navController.navigate(Routes.WebFallback)
                 }
             )
+        }
+        composable(Routes.BrowseFandoms) {
+            val category = selectedBrowseCategory
+            if (category == null) {
+                navController.popBackStack()
+            } else {
+                FandomListScreen(
+                    category = category,
+                    repository = container.browseRepository,
+                    onOpenFandom = { fandom ->
+                        selectedBrowseFandom = fandom
+                        navController.navigate(Routes.BrowseWorks)
+                    },
+                    onOpenWebFallback = { url ->
+                        webFallbackUrl = url
+                        navController.navigate(Routes.WebFallback)
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
+        composable(Routes.BrowseWorks) {
+            val fandom = selectedBrowseFandom
+            if (fandom == null) {
+                navController.popBackStack()
+            } else {
+                FandomWorksScreen(
+                    fandomName = fandom.name,
+                    workRepository = container.workRepository,
+                    repository = container.browseRepository,
+                    onOpenWork = { work ->
+                        selectedWorkSource = WorkDetailSource.RemoteSummary(work)
+                        navController.navigate(Routes.WorkDetail)
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
+        composable(Routes.WebFallback) {
+            val url = webFallbackUrl
+            if (url == null) {
+                navController.popBackStack()
+            } else {
+                AO3WebViewFallbackScreen(
+                    url = url,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
         composable(Routes.Account) {
             AccountScreen(

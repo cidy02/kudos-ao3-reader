@@ -19,6 +19,9 @@ object Routes {
     const val AccountList = "account-list"
     const val Settings = "settings"
     const val Backup = "backup"
+    const val BrowseFandoms = "browse-fandoms"
+    const val BrowseWorks = "browse-works"
+    const val WebFallback = "web-fallback"
 
     val topLevelDestinations = listOf(
         TopLevelDestination(Home, "Home", "H"),
@@ -41,6 +44,9 @@ object Routes {
             AccountList -> "Account List"
             Settings -> "Settings"
             Backup -> "Backup"
+            BrowseFandoms -> "Fandoms"
+            BrowseWorks -> "Works"
+            WebFallback -> "AO3"
             else -> "Kudos"
         }
     }

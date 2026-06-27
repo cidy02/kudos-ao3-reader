@@ -16,6 +16,7 @@ import io.github.cidy02.kudos.data.preferences.kudosSettingsDataStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
+import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.reader.ReaderRepository
@@ -109,5 +110,9 @@ class KudosAppContainer(context: Context) {
             fileStore = workFileStore,
             settingsProvider = { settingsRepository.snapshot() }
         )
+    }
+
+    val browseRepository: AO3BrowseRepository by lazy {
+        AO3BrowseRepository(client = ao3Client)
     }
 }
