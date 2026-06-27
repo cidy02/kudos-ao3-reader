@@ -54,12 +54,12 @@ class KudosAppContainer(context: Context) {
         )
     }
 
-    val libraryRepository: LibraryRepository by lazy {
-        LibraryRepository(workRepository)
-    }
-
     val settingsRepository: SettingsRepository by lazy {
         SettingsRepository(appContext.kudosSettingsDataStore)
+    }
+
+    val libraryRepository: LibraryRepository by lazy {
+        LibraryRepository(workRepository, settingsRepository.settings)
     }
 
     val readerRepository: ReaderRepository by lazy {

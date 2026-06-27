@@ -73,6 +73,10 @@ class WorkRepository(
         return tagDao.getTagsForWork(workId).map { it.toDomain() }
     }
 
+    suspend fun allUserTags(): List<Tag> {
+        return tagDao.getAll().map { it.toDomain() }
+    }
+
     suspend fun addUserTag(workId: String, name: String): List<Tag> {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Tag name must not be blank." }
@@ -92,6 +96,12 @@ class WorkRepository(
 
     suspend fun collectionsForWork(workId: String): List<WorkCollection> {
         return collectionDao.getCollectionsForWork(workId).map { entity ->
+            entity.toDomain(collectionDao.getWorkIdsForCollection(entity.id))
+        }
+    }
+
+    suspend fun allCollections(): List<WorkCollection> {
+        return collectionDao.getAll().map { entity ->
             entity.toDomain(collectionDao.getWorkIdsForCollection(entity.id))
         }
     }

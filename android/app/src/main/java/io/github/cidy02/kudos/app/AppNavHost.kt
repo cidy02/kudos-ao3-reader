@@ -51,6 +51,10 @@ fun AppNavHost(
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
+                },
+                onOpenReader = { workId ->
+                    readerWorkId = workId
+                    navController.navigate(Routes.Reader)
                 }
             )
         }

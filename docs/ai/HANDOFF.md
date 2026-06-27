@@ -1,5 +1,139 @@
 # AI Handoff
 
+## Handoff - T-64 - Codex (Phase 8 Library UX) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android`
+
+Base observed:
+
+- Started from local commit `3d08ca1` (`Add Android Readium reader integration`),
+  with the branch clean and ahead of `origin/kudos-ao3-reader-android` by one
+  unpushed Phase 7 commit. GitHub push auth was not configured in this
+  environment, so Phase 7 remained local at pickup.
+- Phase 6/7 pieces were present: Room `SavedWork`, user tag and collection
+  relations, `WorkRepository`, file-backed `hasEpub`, canonical local Work Detail,
+  and Reader route/opening for downloaded works.
+
+Dependencies added: none.
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/KudosAppContainer.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryRepository.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryFilter.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryModels.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryPrivacy.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryQuery.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibrarySort.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryViewModel.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/library/LibraryQueryTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/library/LibraryRepositoryTest.kt`
+
+Library sections implemented:
+
+- Continue Reading: works where `SavedWork.isInProgress` is true, sorted by
+  `lastReadDate ?: dateAdded` descending; direct `Read` is offered when a visible
+  row has `hasEpub`.
+- Reading History: works with `lastReadDate`, sorted descending; opens Work Detail.
+- Recently Added: sorted by `dateAdded` descending.
+- Favorites: favorite works, sorted by last-read recency.
+- All Saved Works: searchable/filterable/sortable saved-work list.
+
+Filters implemented:
+
+- Favorite only.
+- Finished / Unfinished.
+- Downloaded / Not downloaded (`hasEpub`).
+- User tag membership.
+- Collection membership.
+- Query-layer support also exists for completion, rating, warnings, categories,
+  fandoms, relationships, characters, and freeforms, though the Phase 8 UI only
+  exposes the minimum core filters plus tag/collection facets.
+
+Sorts implemented:
+
+- Recently added.
+- Last read.
+- Title.
+- Author.
+- Word count.
+- Kudos.
+
+Local search behavior:
+
+- Pure offline search only; no AO3/network calls.
+- Case-insensitive matching across title, author, summary, rating, language,
+  chapters, series title, AO3 tag fields, user tags, and collection names.
+
+User tags behavior:
+
+- Library snapshots attach each work's existing user tags via `WorkRepository`.
+- The screen lists all user tags as filter chips and shows tags on saved-work cards.
+- Create/remove remains in Work Detail from Phase 6; rename/delete management is
+  deferred.
+
+Collections behavior:
+
+- Library snapshots attach collection membership via existing collection DAOs.
+- The screen lists collections as filter chips and shows collection membership on
+  saved-work cards.
+- Create/remove membership remains in Work Detail from Phase 6; collection
+  rename/delete/detail screens are deferred.
+
+Privacy behavior:
+
+- Added `LibraryPrivacy` classifier. With privacy off, all works are visible.
+- In `Hide` mode, Mature/Explicit works are removed from Library results.
+- In `Obscure` mode, Mature/Explicit works remain in the list but card details are
+  masked. Biometric/session reveal UI is intentionally deferred.
+
+Navigation behavior:
+
+- Tapping Details opens canonical Work Detail with `WorkDetailSource.LocalWork`.
+- Downloaded, visible works expose a direct Read action that uses the existing
+  Phase 7 Reader route; Work Detail still remains the management surface.
+- Search/Browse remote Work Detail behavior was not changed.
+
+Tests added:
+
+- `LibraryRepositoryAllWorksTest` verifies Room-backed Library snapshots include
+  saved works, user tags, and collections, and ignore non-saved/history records.
+- `LibraryQueryTest` covers favorite, finished/unfinished, downloaded/not
+  downloaded, user tag, collection, combined filters, deterministic sorts, local
+  search, Continue Reading, Reading History, Recently Added, UI-state no-results,
+  non-mutating filtering, missing-EPUB state, and privacy hide/obscure behavior.
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.library.*'`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`
+  - Result: BUILD SUCCESSFUL, 155 JVM tests, 0 failures, 0 errors.
+
+Known gaps / deferred:
+
+- No AO3 update checking or Recently Updated section; do not add background
+  crawling without a later approved phase.
+- No biometric reveal UI for obscured Mature/Explicit works.
+- No full tag/collection management screens (rename/delete/detail).
+- No bulk actions.
+- Advanced AO3 metadata facet panel exists only in query support, not UI.
+- Home remains mostly placeholder; light Home data wiring can be a later focused
+  pass.
+- No device/emulator visual verification was performed.
+
+Recommended next phase:
+
+Device verification for Phase 7/8 reader + Library flows, then Phase 9
+Account/Auth only if the human approves that phase.
+
+---
+
 ## Handoff - T-63 - Claude (Phase 7 Readium Reader) - 2026-06-26
 
 Branch: `kudos-ao3-reader-android`
