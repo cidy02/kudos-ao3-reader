@@ -48,6 +48,7 @@ import io.github.cidy02.kudos.reader.readium.ReadiumSettingsAdapter
 fun ReaderScreen(
     viewModel: ReaderViewModel,
     onBack: () -> Unit,
+    onOpenComments: (Long) -> Unit,
     onOpenWorkDetail: (Long) -> Unit
 ) {
     val uiState by viewModel.state.collectAsState()
@@ -64,7 +65,7 @@ fun ReaderScreen(
                     null
                 }
             )
-            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenWorkDetail)
+            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenComments, onOpenWorkDetail)
         }
     }
 }
@@ -74,6 +75,7 @@ private fun ReaderReading(
     state: ReaderUiState.Reading,
     viewModel: ReaderViewModel,
     onBack: () -> Unit,
+    onOpenComments: (Long) -> Unit,
     onOpenWorkDetail: (Long) -> Unit
 ) {
     val context = LocalContext.current
@@ -118,7 +120,9 @@ private fun ReaderReading(
                 ReaderTopBar(
                     title = state.work.title,
                     finished = state.finished,
+                    commentsWorkId = state.endOfWork.workId.takeIf { state.endOfWork.commentsAvailable },
                     onBack = onBack,
+                    onOpenComments = onOpenComments,
                     onMarkFinished = viewModel::markFinished
                 )
                 ReadiumNavigatorHost(
@@ -149,7 +153,9 @@ private fun ReaderReading(
 private fun ReaderTopBar(
     title: String,
     finished: Boolean,
+    commentsWorkId: Long?,
     onBack: () -> Unit,
+    onOpenComments: (Long) -> Unit,
     onMarkFinished: () -> Unit
 ) {
     Surface(color = MaterialTheme.colorScheme.surface) {
@@ -168,6 +174,11 @@ private fun ReaderTopBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+            commentsWorkId?.let { workId ->
+                TextButton(onClick = { onOpenComments(workId) }) {
+                    Text("Comments")
+                }
+            }
             TextButton(onClick = onMarkFinished, enabled = !finished) {
                 Text(if (finished) "Finished" else "Mark Finished")
             }

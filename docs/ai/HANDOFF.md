@@ -1,5 +1,150 @@
 # AI Handoff
 
+## Handoff - T-67 - Codex (Phase 10 Authenticated Writes and Comments) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit observed: `1d9a7c9` (`Verify Android Phases 0-5 and fix confirmed findings`).
+
+Previous phase state observed:
+
+- Phase 9 auth/session/account work was present and reused: visible AO3 WebView
+  login, app-private no-backup session file, AO3-only cookie header generation,
+  authenticated GET support, session expiry handling, and read-only account lists.
+- Phase 4 networking was present and reused: `OkHttpAO3Client`, 3-slot
+  coordinator, retry policy, overload detector, login redirect mapping, and GET
+  coalescing.
+- Phase 6/7 surfaces existed: canonical Work Detail, local save/download actions,
+  `EndOfWorkActions`, and Reader route. Reader did not yet have a true Readium
+  end-of-work trigger.
+
+Dependencies added: none.
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/KudosAppContainer.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/Routes.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/AO3Client.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/writes/`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/comments/`
+- `android/app/src/main/java/io/github/cidy02/kudos/comments/CommentsScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkDetailScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/reader/EndOfWorkActions.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/reader/ReaderScreen.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/AO3AuthenticatedPostTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/writes/`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/comments/`
+- `android/app/src/test/resources/ao3/writes/`
+- `android/app/src/test/resources/ao3/comments/`
+
+Authenticated POST behavior:
+
+- Added explicit form POST support to `OkHttpAO3Client` through
+  `AO3FormPostClient.postForm`.
+- POSTs use the existing AO3 request coordinator and centralized User-Agent.
+- POSTs are not GET-coalesced and the retry policy never auto-retries non-GET
+  methods; 429/overload/auth-required are surfaced for manual retry/re-login.
+- Form bodies use ordered RFC3986-style percent encoding matching Apple's
+  `AO3AuthService.formEncoded`.
+- `DefaultAO3AuthenticatedClient` attaches cookies only through Phase 9
+  `AO3AuthRepository.authenticatedHeaders`, so non-AO3 targets do not receive
+  AO3 cookies.
+
+Token/form parsing behavior:
+
+- Parses fresh `authenticity_token` values from hidden inputs and
+  `<meta name="csrf-token">`.
+- Parses default comment/bookmark pseud IDs.
+- Parses AO3 validation errors from `.errorlist`, `.error`, and `.flash.error`.
+- Parses subscribe vs unsubscribe state from AO3 subscription forms.
+
+Writes implemented:
+
+- Kudos: fetches the work page, parses a token, posts once to `/kudos.js` with
+  AO3 AJAX headers, and treats AO3's "already left kudos" 422 as a confirmed
+  already-done state.
+- Subscribe/unsubscribe: fetches the work page, detects current form state, posts
+  either subscribe fields to `/users/<username>/subscriptions` or `_method=delete`
+  to the unsubscribe form action.
+- Mark for Later: fetches the work page, parses a token, posts once to
+  `/works/<id>/mark_for_later`; does not save to local Library.
+- AO3 bookmark: implements basic native create with notes, tags, private, rec,
+  and default pseud where parseable. Native edit/update of an existing AO3
+  bookmark is deferred; use Open on AO3 as the honest fallback for edit/update.
+
+Comments behavior:
+
+- Added work/chapter `AO3CommentTarget` models.
+- Public comment thread loading uses normal GETs when comments are public.
+- Comment parser reads author, date, body, Unicode, simple nesting/depth, empty
+  state, deleted/hidden-ish comments, form action/token/pseud, auth-required, and
+  overload states.
+- Comment submission fetches the authenticated page/form first, rejects empty
+  comments locally, then posts exactly one form body. Confirmed success can reload
+  the thread; validation errors are surfaced.
+- Work Detail has a Comments action. Reader exposes Comments in reader chrome
+  when the saved work has a canonical AO3 work URL. True end-of-work detection and
+  chapter-context routing remain deferred because the Readium navigator end hook
+  is not wired yet.
+
+UI behavior:
+
+- Work Detail AO3 actions now call real repositories for Kudos,
+  Subscribe/Unsubscribe, Mark for Later, AO3 Bookmark, and Comments.
+- Login remains explicit through the existing AO3 login screen; write failures
+  surface auth-required rather than silently logging in or retrying.
+- Local Library state and AO3 account state remain separate.
+- This phase intentionally did not do final Material/HIG polish.
+
+Tests added:
+
+- POST transport: no auto-retry, auth-required redirect mapping, centralized
+  User-Agent, form-body encoding, overload mapping.
+- Parsers: token hidden/meta parsing, pseud parsing, subscription state, write
+  error parsing, comment Unicode/nesting/empty state.
+- Repositories: kudos body/AJAX headers/already-kudosed, subscribe/unsubscribe,
+  Mark for Later, bookmark create fields, missing-token validation, comment load,
+  empty comment rejection, comment submission body, comment validation errors.
+- Fixtures are small artificial/sanitized snippets under `android/app/src/test/resources/ao3/writes/`
+  and `android/app/src/test/resources/ao3/comments/`.
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.network.ao3.*' --tests 'io.github.cidy02.kudos.network.ao3.writes.*' --tests 'io.github.cidy02.kudos.network.ao3.comments.*'`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest`
+  - Result: BUILD SUCCESSFUL, 201 JVM tests, 0 failures.
+
+Manual verification:
+
+- Not performed. No live AO3 login/write/comment flow was run. Native write
+  selectors/endpoints are fixture-tested and Apple-reference-matched, but must be
+  manually verified with a safe test AO3 account before trust/release.
+
+Known gaps / deferred:
+
+- No encrypted-at-rest session storage yet; Phase 9's app-private/no-backup
+  session storage gap remains.
+- Native AO3 bookmark edit/update remains deferred.
+- Reader has a Comments entry, but not a true end-of-work panel and not
+  chapter-specific routing because current Android Readium integration does not
+  expose that context.
+- Work Detail subscribe button uses a generic "Subscribe/Unsubscribe" label until
+  the fetched form state is known.
+- No live AO3 write verification and no screenshots/device verification.
+- No final UI polish pass.
+
+Recommended next phase:
+
+Manual device verification of Phase 9 login plus Phase 10 writes/comments with a
+safe AO3 test account. Then Phase 11 Browse/WebView fallback or a focused Claude
+review of Phase 10's live-selector assumptions before broader UI work.
+
 ## Handoff - T-66 - Claude (Phase 0-5 verification + Phase 7 follow-ups) - 2026-06-27
 
 Branch: `kudos-ao3-reader-android`

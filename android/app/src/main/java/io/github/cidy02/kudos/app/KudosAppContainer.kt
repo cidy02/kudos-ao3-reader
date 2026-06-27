@@ -6,6 +6,10 @@ import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.auth.AndroidAO3CookieStore
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.FileAO3SessionStore
+import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
+import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.data.preferences.kudosSettingsDataStore
@@ -48,6 +52,25 @@ class KudosAppContainer(context: Context) {
         AccountListRepository(
             client = ao3Client,
             authRepository = authRepository
+        )
+    }
+
+    val authenticatedClient: AO3AuthenticatedClient by lazy {
+        DefaultAO3AuthenticatedClient(
+            getClient = ao3Client,
+            postClient = ao3Client,
+            authRepository = authRepository
+        )
+    }
+
+    val writeRepository: AO3WriteRepository by lazy {
+        AO3WriteRepository(authenticatedClient)
+    }
+
+    val commentRepository: AO3CommentRepository by lazy {
+        AO3CommentRepository(
+            publicClient = ao3Client,
+            authenticatedClient = authenticatedClient
         )
     }
 

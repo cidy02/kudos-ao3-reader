@@ -16,8 +16,10 @@ import io.github.cidy02.kudos.account.AccountScreen
 import io.github.cidy02.kudos.auth.AO3WebLoginScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
+import io.github.cidy02.kudos.comments.CommentsScreen
 import io.github.cidy02.kudos.home.HomeScreen
 import io.github.cidy02.kudos.library.LibraryScreen
+import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
 import io.github.cidy02.kudos.reader.ReaderViewModel
 import io.github.cidy02.kudos.search.SearchScreen
@@ -34,6 +36,7 @@ fun AppNavHost(
     var selectedWorkSource by remember { mutableStateOf<WorkDetailSource?>(null) }
     var readerWorkId by remember { mutableStateOf<String?>(null) }
     var selectedAccountListType by remember { mutableStateOf<AccountListType?>(null) }
+    var selectedCommentTarget by remember { mutableStateOf<AO3CommentTarget?>(null) }
 
     NavHost(
         navController = navController,
@@ -119,6 +122,12 @@ fun AppNavHost(
                 source = selectedWorkSource,
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,
+                writeRepository = container.writeRepository,
+                onLogin = { navController.navigate(Routes.AccountLogin) },
+                onOpenComments = { workId ->
+                    selectedCommentTarget = AO3CommentTarget.Work(workId)
+                    navController.navigate(Routes.Comments)
+                },
                 onOpenReader = { workId ->
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
@@ -137,6 +146,10 @@ fun AppNavHost(
                 ReaderScreen(
                     viewModel = readerViewModel,
                     onBack = { navController.popBackStack() },
+                    onOpenComments = { workId ->
+                        selectedCommentTarget = AO3CommentTarget.Work(workId)
+                        navController.navigate(Routes.Comments)
+                    },
                     onOpenWorkDetail = { workId ->
                         // Deep-link hydration from a raw work id is deferred (see HANDOFF),
                         // but keep the route native so the later parser can fill it in.
@@ -147,6 +160,13 @@ fun AppNavHost(
                     }
                 )
             }
+        }
+        composable(Routes.Comments) {
+            CommentsScreen(
+                target = selectedCommentTarget,
+                repository = container.commentRepository,
+                onLogin = { navController.navigate(Routes.AccountLogin) }
+            )
         }
         composable(Routes.Settings) {
             SettingsScreen(onOpenBackup = { navController.navigate(Routes.Backup) })

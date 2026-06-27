@@ -1,0 +1,24 @@
+<html>
+<body class="works-show logged-in">
+  <ol class="thread">
+    <li id="comment_1" class="comment depth-0">
+      <h4 class="heading"><a rel="author" href="/users/AO3_Reader">AO3_Reader</a></h4>
+      <p class="datetime">27 Jun 2026</p>
+      <blockquote class="userstuff"><p>Hello, café ☕</p></blockquote>
+      <ol class="thread">
+        <li id="comment_2" class="comment depth-1">
+          <h4 class="heading"><a rel="author" href="/users/ReplyUser">ReplyUser</a></h4>
+          <p class="datetime">28 Jun 2026</p>
+          <blockquote class="userstuff"><p>A nested reply.</p></blockquote>
+        </li>
+      </ol>
+    </li>
+  </ol>
+  <form id="new_comment" action="/works/123/comments" method="post">
+    <input type="hidden" name="authenticity_token" value="comment-token">
+    <select name="comment[pseud_id]">
+      <option value="5" selected="selected">AO3_Reader</option>
+    </select>
+  </form>
+</body>
+</html>

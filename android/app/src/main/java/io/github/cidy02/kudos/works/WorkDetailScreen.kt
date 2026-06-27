@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +34,11 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.network.ao3.AO3Error
+import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteOutcome
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,12 +46,20 @@ fun WorkDetailScreen(
     source: WorkDetailSource?,
     workRepository: WorkRepository,
     workImporter: WorkImporter,
+    writeRepository: AO3WriteRepository,
+    onLogin: () -> Unit,
+    onOpenComments: (Long) -> Unit,
     onOpenReader: (String) -> Unit
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
     var newCollectionName by remember { mutableStateOf("") }
     var confirmRemove by remember { mutableStateOf(false) }
+    var bookmarkDialog by remember { mutableStateOf(false) }
+    var bookmarkNotes by remember { mutableStateOf("") }
+    var bookmarkTags by remember { mutableStateOf("") }
+    var bookmarkPrivate by remember { mutableStateOf(false) }
+    var bookmarkRecommendation by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
 
@@ -96,7 +109,7 @@ fun WorkDetailScreen(
 
     fun runWorkAction(block: suspend () -> Unit) {
         scope.launch {
-            state = state.copy(working = true, error = null)
+            state = state.copy(working = true, error = null, ao3Message = null)
             block()
             state = state.copy(working = false)
         }
@@ -142,6 +155,23 @@ fun WorkDetailScreen(
         }
     }
 
+    fun handleWriteResult(result: AO3Result<AO3WriteOutcome>) {
+        state = when (result) {
+            is AO3Result.Success -> state.copy(ao3Message = result.value.message)
+            is AO3Result.Failure -> state.copy(error = result.error.displayMessage())
+        }
+    }
+
+    fun runAo3Write(action: suspend (Long) -> AO3Result<AO3WriteOutcome>) {
+        val workId = state.ao3WorkId ?: run {
+            state = state.copy(error = "This action needs a canonical AO3 work URL.")
+            return
+        }
+        runWorkAction {
+            handleWriteResult(action(workId))
+        }
+    }
+
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
@@ -163,6 +193,59 @@ fun WorkDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (bookmarkDialog) {
+        AlertDialog(
+            onDismissRequest = { bookmarkDialog = false },
+            title = { Text("AO3 Bookmark") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = bookmarkNotes,
+                        onValueChange = { bookmarkNotes = it },
+                        label = { Text("Notes") },
+                        minLines = 3
+                    )
+                    OutlinedTextField(
+                        value = bookmarkTags,
+                        onValueChange = { bookmarkTags = it },
+                        label = { Text("Tags, comma-separated") },
+                        singleLine = true
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(checked = bookmarkPrivate, onCheckedChange = { bookmarkPrivate = it })
+                        Text("Private")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(
+                            checked = bookmarkRecommendation,
+                            onCheckedChange = { bookmarkRecommendation = it }
+                        )
+                        Text("Recommendation")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        bookmarkDialog = false
+                        val input = AO3BookmarkInput(
+                            notes = bookmarkNotes,
+                            tags = bookmarkTags,
+                            isPrivate = bookmarkPrivate,
+                            isRecommendation = bookmarkRecommendation
+                        )
+                        runAo3Write { writeRepository.createBookmark(it, input) }
+                    }
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { bookmarkDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -230,6 +313,21 @@ fun WorkDetailScreen(
         onOpenAo3 = {
             state.sourceUrl.takeIf { it.isNotBlank() }?.let(uriHandler::openUri)
         },
+        onLogin = onLogin,
+        onKudos = {
+            runAo3Write { writeRepository.giveKudos(it) }
+        },
+        onSubscribe = {
+            runAo3Write { writeRepository.toggleSubscribe(it) }
+        },
+        onMarkForLater = {
+            runAo3Write { writeRepository.markForLater(it) }
+        },
+        onBookmark = { bookmarkDialog = true },
+        onComments = {
+            state.ao3WorkId?.let(onOpenComments)
+                ?: run { state = state.copy(error = "This action needs a canonical AO3 work URL.") }
+        },
         onOpenReader = onOpenReader
     )
 }
@@ -252,6 +350,12 @@ private fun WorkDetailContent(
     onDeleteEpub: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
+    onLogin: () -> Unit,
+    onKudos: () -> Unit,
+    onSubscribe: () -> Unit,
+    onMarkForLater: () -> Unit,
+    onBookmark: () -> Unit,
+    onComments: () -> Unit,
     onOpenReader: (String) -> Unit
 ) {
     Column(
@@ -286,6 +390,9 @@ private fun WorkDetailContent(
 
             state.error?.let {
                 Text(text = it, color = MaterialTheme.colorScheme.error)
+            }
+            state.ao3Message?.let {
+                Text(text = it, color = MaterialTheme.colorScheme.primary)
             }
 
             SectionBlock("Summary") {
@@ -324,7 +431,15 @@ private fun WorkDetailContent(
                 onRemove = onRemoveCollection
             )
             SectionBlock("AO3 Actions") {
-                DisabledActions()
+                AO3Actions(
+                    enabled = !state.working && state.ao3WorkId != null,
+                    onLogin = onLogin,
+                    onKudos = onKudos,
+                    onSubscribe = onSubscribe,
+                    onMarkForLater = onMarkForLater,
+                    onBookmark = onBookmark,
+                    onComments = onComments
+                )
             }
         }
     }
@@ -468,12 +583,33 @@ private fun CollectionEditor(
 }
 
 @Composable
-private fun DisabledActions() {
+private fun AO3Actions(
+    enabled: Boolean,
+    onLogin: () -> Unit,
+    onKudos: () -> Unit,
+    onSubscribe: () -> Unit,
+    onMarkForLater: () -> Unit,
+    onBookmark: () -> Unit,
+    onComments: () -> Unit
+) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("Kudos", "Subscribe", "Mark for Later", "AO3 Bookmark", "Comment").forEach { label ->
-            OutlinedButton(enabled = false, onClick = {}) {
-                Text(label)
-            }
+        OutlinedButton(enabled = enabled, onClick = onKudos) {
+            Text("Kudos")
+        }
+        OutlinedButton(enabled = enabled, onClick = onSubscribe) {
+            Text("Subscribe/Unsubscribe")
+        }
+        OutlinedButton(enabled = enabled, onClick = onMarkForLater) {
+            Text("Mark for Later")
+        }
+        OutlinedButton(enabled = enabled, onClick = onBookmark) {
+            Text("AO3 Bookmark")
+        }
+        OutlinedButton(enabled = enabled, onClick = onComments) {
+            Text("Comments")
+        }
+        OutlinedButton(onClick = onLogin) {
+            Text("AO3 Login")
         }
     }
 }
@@ -518,12 +654,14 @@ private data class WorkDetailUiState(
     val collections: List<WorkCollection> = emptyList(),
     val loading: Boolean = false,
     val working: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val ao3Message: String? = null
 ) {
     val title: String = local?.title ?: remote?.title ?: "Work"
     val author: String = local?.author ?: remote?.authorText ?: ""
     val summary: String = local?.summary ?: remote?.summary ?: ""
     val sourceUrl: String = local?.sourceUrl ?: remote?.workUrl ?: ""
+    val ao3WorkId: Long? = WorkTags.ao3WorkIdFromUrl(sourceUrl)
     val fandoms: List<String> = local?.workFandoms?.takeIf { it.isNotEmpty() } ?: remote?.fandoms.orEmpty()
     val rating: String = local?.rating ?: remote?.rating ?: ""
     val warnings: List<String> = local?.workWarnings?.takeIf { it.isNotEmpty() } ?: remote?.warnings.orEmpty()
