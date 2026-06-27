@@ -279,6 +279,55 @@ class LibraryPrivacyFilterTest {
         val mature = state.items.first { it.item.work.id == "gamma" }
         assertEquals(LibraryPrivacyVisibility.Obscured, mature.privacyVisibility)
     }
+
+    @Test
+    fun freeTextSearchDoesNotRevealObscuredWorkMetadata() {
+        val state = LibraryQuery.buildState(
+            snapshot = LibrarySnapshot(
+                items = sampleItems().map { it.item },
+                userTags = emptyList(),
+                collections = emptyList(),
+                privacy = PrivacySettings(
+                    hideMatureContent = true,
+                    matureContentMode = MatureContentMode.Obscure
+                )
+            ),
+            searchQuery = "Gamma",
+            filters = LibraryFilterState(),
+            sort = LibrarySort.RecentlyAdded
+        )
+
+        assertTrue(state.items.isEmpty())
+    }
+}
+
+class ReadingProgressFractionTest {
+    @Test
+    fun progressPrefersChapterRatioForMultiChapterWorks() {
+        val work = work(
+            id = "chapter-progress",
+            title = "Chapter Progress",
+            author = "A Writer",
+            dateAddedOffset = 0,
+            lastSpineIndex = 2,
+            lastScrollFraction = 0.2
+        )
+
+        assertEquals(0.6, work.readingProgressFraction() ?: -1.0, 0.0)
+    }
+
+    @Test
+    fun progressFallsBackToScrollFractionWithoutMultiChapterData() {
+        val work = work(
+            id = "scroll-progress",
+            title = "Scroll Progress",
+            author = "A Writer",
+            dateAddedOffset = 0,
+            lastScrollFraction = 0.2
+        ).copy(chapters = "")
+
+        assertEquals(0.2, work.readingProgressFraction() ?: -1.0, 0.0)
+    }
 }
 
 private val baseTime: Instant = Instant.parse("2026-06-26T12:00:00Z")

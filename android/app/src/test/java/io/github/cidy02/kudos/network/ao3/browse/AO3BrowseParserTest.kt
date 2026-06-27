@@ -27,6 +27,30 @@ class AO3BrowseParserTest {
     }
 
     @Test
+    fun skipsCategoriesWithNoFeaturedFandoms() {
+        // Parity with Apple mediaCategories() which drops featured-fandom-less categories.
+        val categories = parser.parseMediaCategories(fixture("ao3/browse/categories_with_featureless.html"))
+        assertEquals(listOf("Anime & Manga"), categories.map { it.name })
+    }
+
+    @Test
+    fun pageOfOnlyFeaturelessCategoriesThrowsMissingStructure() {
+        val html = """
+            <ul class="media fandom index group">
+              <li class="medium listbox group">
+                <h3 class="heading"><a href="/media/Featureless/fandoms">Featureless</a></h3>
+              </li>
+            </ul>
+        """.trimIndent()
+        try {
+            parser.parseMediaCategories(html)
+            fail("Expected missing-structure error when no category has featured fandoms.")
+        } catch (_: AO3BrowseParseException.MissingRequiredStructure) {
+            // expected
+        }
+    }
+
+    @Test
     fun parsesFandomListWithCountsAndDedupesFirstSeen() {
         val fandoms = parser.parseFandomList(fixture("ao3/browse/fandom_list.html"))
 

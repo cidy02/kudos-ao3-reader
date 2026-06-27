@@ -157,7 +157,7 @@ private fun SearchOptionsRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         OutlinedButton(onClick = { expanded = true }) {
-            Text(selectedSort.title)
+            Text("Sort: ${selectedSort.title}")
         }
         DropdownMenu(
             expanded = expanded,
@@ -172,12 +172,6 @@ private fun SearchOptionsRow(
                     }
                 )
             }
-        }
-        OutlinedButton(
-            enabled = false,
-            onClick = {}
-        ) {
-            Text("Filters")
         }
     }
 }

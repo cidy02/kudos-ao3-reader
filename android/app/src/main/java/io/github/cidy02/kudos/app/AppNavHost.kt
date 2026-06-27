@@ -53,11 +53,17 @@ fun AppNavHost(
     ) {
         composable(Routes.Home) {
             HomeScreen(
-                onOpenWork = {
-                    selectedWorkSource = null
+                repository = container.libraryRepository,
+                onOpenWork = { workId ->
+                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
                 },
-                onOpenLibrary = { navController.navigate(Routes.Library) }
+                onOpenReader = { workId ->
+                    readerWorkId = workId
+                    navController.navigate(Routes.Reader)
+                },
+                onOpenLibrary = { navController.navigate(Routes.Library) },
+                onOpenBrowse = { navController.navigate(Routes.Browse) }
             )
         }
         composable(Routes.Library) {
@@ -229,7 +235,10 @@ fun AppNavHost(
             )
         }
         composable(Routes.Settings) {
-            SettingsScreen(onOpenBackup = { navController.navigate(Routes.Backup) })
+            SettingsScreen(
+                repository = container.settingsRepository,
+                onOpenBackup = { navController.navigate(Routes.Backup) }
+            )
         }
         composable(Routes.Backup) {
             BackupScreen()

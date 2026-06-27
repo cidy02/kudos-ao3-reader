@@ -51,7 +51,7 @@ object LibraryQuery {
         val query = searchQuery.trim()
         return sortDisplayItems(
             items.filter { display ->
-                matchesFilters(display.item, filters) && matchesSearch(display.item, query)
+                matchesFilters(display.item, filters) && matchesSearch(display, query)
             },
             sort
         )
@@ -134,10 +134,11 @@ object LibraryQuery {
         return true
     }
 
-    private fun matchesSearch(item: LibraryWorkListItem, query: String): Boolean {
+    private fun matchesSearch(display: LibraryDisplayItem, query: String): Boolean {
         if (query.isBlank()) return true
+        if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) return false
         val needle = query.lowercase()
-        return searchableText(item).any { it.lowercase().contains(needle) }
+        return searchableText(display.item).any { it.lowercase().contains(needle) }
     }
 
     private fun searchableText(item: LibraryWorkListItem): List<String> {
@@ -193,11 +194,11 @@ object LibraryQuery {
 }
 
 fun SavedWork.readingProgressFraction(): Double? {
-    if (lastScrollFraction > 0.0) return lastScrollFraction.coerceIn(0.0, 1.0)
     val posted = chapters.substringBefore('/').trim().toIntOrNull()
     val total = chapters.substringAfter('/', missingDelimiterValue = "").trim().toIntOrNull()
     if (posted != null && total != null && total > 1 && lastSpineIndex >= 0) {
         return ((lastSpineIndex + 1).toDouble() / total.toDouble()).coerceIn(0.0, 1.0)
     }
+    if (lastScrollFraction > 0.0) return lastScrollFraction.coerceIn(0.0, 1.0)
     return null
 }

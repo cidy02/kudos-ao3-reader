@@ -29,6 +29,10 @@ class AO3BrowseParser {
                     .map { it.normalizedText() }
                     .filter { it.isNotEmpty() }
                     .dedupeFirstSeen()
+                // Mirror Apple's mediaCategories() guard (`!name.isEmpty, !fandoms.isEmpty`):
+                // drop categories with no featured fandoms so both platforms render the
+                // same category list from the same /media markup.
+                if (featured.isEmpty()) return@mapNotNull null
                 AO3MediaCategory(name = name, fandomsPath = fandomsPath, featuredFandoms = featured)
             }
         if (categories.isEmpty()) {

@@ -94,11 +94,11 @@ fun WorkDetailScreen(
             }
             is WorkDetailSource.Ao3WorkId -> state = WorkDetailUiState(
                 loading = false,
-                error = "Direct AO3 work-id hydration is deferred until full Work Detail parsing."
+                error = "This AO3 work link needs full native detail parsing before it can open in Kudos."
             )
             is WorkDetailSource.RemoteUrl -> state = WorkDetailUiState(
                 loading = false,
-                error = "Direct AO3 URL hydration is deferred until full Work Detail parsing."
+                error = "This AO3 link needs full native detail parsing before it can open in Kudos."
             )
             null -> state = WorkDetailUiState(
                 loading = false,

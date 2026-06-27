@@ -259,7 +259,7 @@ private fun AppActionsCard(
                 }
             }
             HorizontalDivider()
-            Text("Authenticated writes, comments, kudos, AO3 bookmarks, subscriptions changes, and Mark for Later changes are deferred.")
+            Text("AO3 lists live here. User-initiated kudos, comments, bookmarks, subscriptions, and Mark for Later actions are available from each work detail.")
         }
     }
 }

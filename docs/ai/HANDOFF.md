@@ -1,5 +1,151 @@
 # AI Handoff
 
+## Handoff - T-69 - Codex (Phase 12 UI polish/accessibility/release readiness) - 2026-06-27
+
+Branch: `kudos-ao3-reader-android`
+
+Base commit observed: `2aed965` (`Record Phase 11 Browse in TASKS and HANDOFF`).
+
+Previous phase state observed:
+
+- Phase 10 authenticated writes/comments were present (`c167ef0`): Work Detail
+  exposes kudos, subscribe/unsubscribe, Mark for Later, AO3 bookmark create, and
+  comments through user-initiated authenticated POST repositories.
+- Phase 11 Browse/WebView fallback was present (`21ffa1f`, doc commit
+  `2aed965`): native `/media` Browse, category fandom lists, fandom work lists via
+  Phase 5 search, read-only local indicators, and AO3-only WebView fallback.
+- `docs/contracts/CROSS_PLATFORM_UI_BRIDGE.md` and
+  `docs/contracts/ANDROID_MATERIAL_HIG_TRANSLATION.md` were still absent. I used
+  the downloaded Phase 12 prompt, `docs/android/ANDROID_PORT_PLAN.md`, Apple
+  Home/Library/Account source, and `UI_PARITY_CHECKLIST.md` as the effective UI
+  bridge, and recorded the missing docs as a known documentation gap.
+
+Dependencies added: none.
+
+Files changed:
+
+- `TASKS.md`
+- `docs/ai/HANDOFF.md`
+- `docs/contracts/UI_PARITY_CHECKLIST.md`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/MainScaffold.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/home/HomeDashboard.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/home/HomeViewModel.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/library/LibraryQuery.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/network/ao3/browse/AO3BrowseParser.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/backup/BackupScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/account/AccountScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/search/SearchScreen.kt`
+- `android/app/src/main/java/io/github/cidy02/kudos/works/WorkDetailScreen.kt`
+- `android/app/src/main/res/drawable/ic_kudos_mark.xml`
+- `android/app/src/test/java/io/github/cidy02/kudos/home/HomeDashboardTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/app/NavigationRoutesTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/library/LibraryQueryTest.kt`
+- `android/app/src/test/java/io/github/cidy02/kudos/network/ao3/browse/AO3BrowseParserTest.kt`
+- `android/app/src/test/resources/ao3/browse/categories_with_featureless.html`
+
+Screens/components polished:
+
+- Home: replaced the Phase 1 placeholder with a real offline dashboard derived
+  from the existing Library snapshot. Shelves: Continue Reading, Favorites,
+  Recently Opened, Recently Added. It is privacy-aware, does not call AO3, and
+  routes to canonical Work Detail/Reader.
+- App shell: kept Home/Library/Browse/Account as the only peer destinations,
+  Search as a global action, and Reader out of app chrome. Added Material
+  navigation rail for wider screens while retaining bottom navigation on phones.
+- Settings: replaced sample/scaffold copy with current DataStore-backed reader,
+  privacy, and app setting summaries plus a real reset-to-defaults action.
+- Backup: replaced placeholder copy with compatibility/privacy status, v1/v2
+  backup notes, merge-only behavior, and disabled import/export buttons with an
+  honest document-picker/device-verification explanation.
+- Search: removed the disabled Filters button; advanced filters remain a
+  documented gap instead of a fake control.
+- Account: removed stale text claiming Phase 10 writes/comments were deferred.
+- Work Detail: replaced raw AO3 hydration "deferred" errors with calmer
+  product-facing copy.
+- Library: fixed Claude-flagged Phase 8 issues by excluding obscured mature works
+  from free-text search and preferring chapter-ratio progress over in-chapter
+  scroll fraction for multi-chapter works.
+- Browse parser: incorporated Claude's parity fix so featureless media categories
+  are skipped like Apple `mediaCategories()`.
+- Launcher mark: changed the vector red from old `#8B1E1E` to AO3 red `#990000`.
+
+Accessibility/adaptive/theme changes:
+
+- Home work cards include concise title/author semantics and visible text actions.
+- Navigation uses Material bottom navigation on compact widths and navigation rail
+  at wider widths (`>= 840dp`).
+- Home state labels are textual (Downloaded, Favorite, Finished, percentage read),
+  not color-only.
+- Settings/Backup use readable grouped cards instead of placeholder prose.
+- No new color palette or dependency was introduced; icon/theme red now matches
+  the existing `Ao3Red`/settings-contract value.
+
+Security/privacy/release checks:
+
+- Did not change backup schema, auth/session storage, AO3 request cadence/write
+  semantics, Readium progress semantics, Apple source, or Xcode project.
+- Confirmed Android manifest already disables Auto Backup and excludes root data
+  from cloud/device transfer.
+- Backup UI explicitly states AO3 passwords, cookies, CSRF tokens, and sessions
+  are excluded.
+- Release minification remains disabled; R8 keep-rule smoke testing is still a
+  pre-release follow-up if minification is enabled later.
+
+Tests added:
+
+- `HomeDashboardTest`: verifies Home uses Library-derived shelves and respects
+  mature-content hide privacy.
+- `NavigationRoutesTest`: verifies top-level destinations remain Home/Library/
+  Browse/Account and Search stays out of the peer tab set; also pins titles for
+  Phase 10/11 routes.
+- `LibraryQueryTest`: verifies free-text search does not reveal obscured work
+  metadata and progress prefers chapter ratio before scroll offset.
+- `AO3BrowseParserTest`: verifies featureless media categories are skipped and
+  an all-featureless media page surfaces a parser structure error.
+
+Commands run:
+
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:compileDebugKotlin`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.home.*' --tests 'io.github.cidy02.kudos.app.*'`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest --tests 'io.github.cidy02.kudos.library.*'`
+  - Result: BUILD SUCCESSFUL.
+- `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease`
+  - Result: BUILD SUCCESSFUL, 235 JVM tests, 0 failures.
+  - Non-fatal warnings: release native strip fallback for bundled libraries
+    (`libandroidx.graphics.path.so`, `libdatastore_shared_counter.so`) and existing
+    Readium experimental API opt-in warnings in release Kotlin compilation.
+
+Known gaps / needs human review:
+
+- No emulator/device screenshots were captured in this session.
+- No TalkBack, dynamic font-scale, keyboard/focus, tablet/landscape, or WebView
+  manual verification was performed.
+- Missing Material/HIG translation docs named in the Phase 12 prompt remain a doc
+  gap.
+- Home does not yet include AO3 Subscriptions or Recently Updated shelves.
+- Advanced Search filter UI is still deferred on Android.
+- Backup document picker import/export UI is still disabled.
+- Direct raw AO3 work-id/URL native hydration is still deferred until full work
+  detail parsing.
+- Live AO3 login/account-list/write/comment verification with a safe test account
+  is still required.
+- Encrypted-at-rest AO3 session storage remains a known Phase 9 gap.
+- Account collections/dashboard, native bookmark edit/update, custom font import,
+  and full reader settings UI remain incomplete.
+- Distribution policy, AO3/OTW policy, GPL/source-offer, and third-party NOTICE
+  review still require human release review.
+
+Final parity audit recommendation:
+
+- Android is ready for a final human parity audit pass, not for public release yet.
+  The code builds, tests, lints, and assembles release, but manual device and live
+  AO3 verification are still required before declaring feature parity complete.
+
 ## Handoff - T-68 - Claude (Phase 11 Browse + WebView fallback) - 2026-06-27
 
 Branch: `kudos-ao3-reader-android` (merge commit `21ffa1f`).
