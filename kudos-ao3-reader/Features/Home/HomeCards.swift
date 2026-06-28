@@ -24,7 +24,7 @@ struct WorkCoverCard: View {
     var progress: Double?
 
     var body: some View {
-        WorkSummaryCardSurface {
+        WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(work.title)
                     .font(.subheadline.weight(.semibold))
@@ -99,9 +99,12 @@ struct WorkCoverCard: View {
     }
 
     private var progressText: String {
-        guard let progressValue else { return footer ?? "Progress" }
-        if let footer { return footer }
-        return progressValue >= 1 ? "Finished" : "Progress"
+        // The bar's trailing label already shows the percent, so don't echo a footer
+        // that's itself a percentage (the Readium reading-progress label) — that's the
+        // duplicate. A chapter footer ("Ch 3") carries different info and is kept.
+        if let footer, !footer.hasSuffix("%") { return footer }
+        guard let progressValue else { return "Progress" }
+        return progressValue >= 1 ? "Finished" : "Reading"
     }
 
     private var completionStatus: String? {
@@ -153,7 +156,7 @@ struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
 
     var body: some View {
-        WorkSummaryCardSurface {
+        WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(work.title)
                     .font(.subheadline.weight(.semibold))
@@ -214,6 +217,9 @@ struct AO3WorkCoverCard: View {
 
 private struct WorkSummaryCardSurface<Content: View>: View {
     @Environment(ThemeManager.self) private var themeManager
+    /// Stable per-title hue (0...1) used to tint the card so adjacent cards stay
+    /// distinguishable — replaces the per-title cover art the summary layout dropped.
+    var hue: Double?
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -225,9 +231,10 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             .background(
                 RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)
+                    .overlay(hueTint)
                     .overlay(
                         RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(themeManager.appTheme.carouselCardBorder, lineWidth: 0.5)
+                            .strokeBorder(themeManager.appTheme.carouselCardBorder(hue: hue), lineWidth: 0.5)
                     )
                     .shadow(color: themeManager.appTheme.carouselCardShadow.color,
                             radius: themeManager.appTheme.carouselCardShadow.radius,
@@ -237,6 +244,14 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             .contentShape(
                 RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
             )
+    }
+
+    @ViewBuilder
+    private var hueTint: some View {
+        if let hue {
+            RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                .fill(themeManager.appTheme.carouselCardTint(hue: hue))
+        }
     }
 }
 
@@ -270,14 +285,38 @@ private extension ReaderTheme {
         #endif
     }
 
-    var carouselCardBorder: Color {
+    /// A per-title hue wash over the elevated surface so neighbouring cards read as
+    /// distinct works. Kept subtle — saturation/opacity stay low enough that title and
+    /// metadata text remain legible on every theme.
+    func carouselCardTint(hue: Double) -> Color {
         switch self {
         case .dark:
-            Color.white.opacity(0.12)
+            Color(hue: hue, saturation: 0.55, brightness: 0.85).opacity(0.16)
         case .light:
-            Color.black.opacity(0.08)
+            Color(hue: hue, saturation: 0.60, brightness: 0.80).opacity(0.14)
         case .sepia:
-            Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
+            Color(hue: hue, saturation: 0.45, brightness: 0.75).opacity(0.12)
+        }
+    }
+
+    func carouselCardBorder(hue: Double?) -> Color {
+        if let hue {
+            switch self {
+            case .dark:
+                return Color(hue: hue, saturation: 0.50, brightness: 0.90).opacity(0.28)
+            case .light:
+                return Color(hue: hue, saturation: 0.55, brightness: 0.55).opacity(0.24)
+            case .sepia:
+                return Color(hue: hue, saturation: 0.40, brightness: 0.55).opacity(0.22)
+            }
+        }
+        switch self {
+        case .dark:
+            return Color.white.opacity(0.12)
+        case .light:
+            return Color.black.opacity(0.08)
+        case .sepia:
+            return Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
         }
     }
 
