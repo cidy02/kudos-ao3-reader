@@ -55,6 +55,7 @@ struct WorkDetailView: View {
           // Group so .appThemedRows() reaches every section's rows (it doesn't
           // propagate from the Form container, only from a Group/Section/ForEach).
           Group {
+            overviewSection
             actionsSection
             if !displaySummary.isEmpty {
                 Section("Summary") { Text(displaySummary) }
@@ -92,6 +93,55 @@ struct WorkDetailView: View {
         .hidesFloatingTabBar()
         .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
         .toolbar { detailToolbar }
+    }
+
+    // MARK: - Overview
+
+    @ViewBuilder
+    private var overviewSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(displayTitle)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !displayAuthor.isEmpty {
+                    Label(displayAuthor, systemImage: "person")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if !displayFandoms.isEmpty {
+                    Label(displayFandoms.joined(separator: ", "), systemImage: "sparkles")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+
+                FlowLayout(spacing: 10, rowSpacing: 6) {
+                    if !displayRating.isEmpty {
+                        WorkStatLabel(text: displayRating, symbol: "checkmark.shield")
+                    }
+                    if !displayChapters.isEmpty {
+                        WorkStatLabel(text: displayChapters, symbol: "book")
+                    }
+                    if let status = displayStatus {
+                        WorkStatLabel(
+                            text: status,
+                            symbol: status == "Complete" ? "checkmark.seal" : "circle.dashed"
+                        )
+                    }
+                    if let words = displayWords {
+                        WorkStatLabel(text: words.formatted(), symbol: "textformat.size")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        }
     }
 
     // MARK: - Actions section

@@ -1,30 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// A generated "cover" placeholder — EPUBs carry no cover art, so each work gets a
-/// stable gradient (hued from its title) with a book glyph, giving the dashboard a
-/// Books-like, cover-forward feel without real artwork.
-struct CoverArt: View {
-    let title: String
-
-    var body: some View {
-        let hue = Self.hue(for: title)
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(LinearGradient(
-                colors: [
-                    Color(hue: hue, saturation: 0.42, brightness: 0.74),
-                    Color(hue: hue, saturation: 0.58, brightness: 0.46)
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ))
-            .overlay {
-                Image(systemName: "book.closed.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.white.opacity(0.55))
-            }
-            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-    }
-
+/// Shared stable hue helper for non-work decorative tiles, such as Collections.
+enum CoverArt {
     /// A stable hue in 0...1 derived from the title (djb2-ish hash).
     static func hue(for string: String) -> Double {
         let hash = string.unicodeScalars.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1.value) }
@@ -32,106 +10,286 @@ struct CoverArt: View {
     }
 }
 
-/// Standard carousel card: cover + title + author + an optional footer (e.g. "Ch 3").
+enum WorkSummaryCardMetrics {
+    static let width: CGFloat = 164
+    static let height: CGFloat = 228
+    static let cornerRadius: CGFloat = 12
+}
+
+/// Standard carousel card: a compact AO3 work summary surface with the title, author,
+/// status, metadata, and reading progress all inside the tappable card.
 struct WorkCoverCard: View {
     let work: SavedWork
     var footer: String?
-
     var progress: Double?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            CoverArt(title: work.title)
-                .frame(width: 120, height: 172)
-                .overlay(alignment: .bottom) { progressBar }
-            Text(work.title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            if !work.author.isEmpty {
-                Text(work.author)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            CoverStatsLine(rating: work.rating, chapters: work.chapters)
-            if let footer {
-                Text(footer)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(width: 120, alignment: .leading)
-    }
+        WorkSummaryCardSurface {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(3)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-    /// A thin reading-progress bar overlaid on the cover (Reading Now).
-    @ViewBuilder
-    private var progressBar: some View {
-        if let progress {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.black.opacity(0.3)).frame(height: 4)
-                    Capsule().fill(.white)
-                        .frame(width: geo.size.width * max(0.03, min(1, progress)), height: 4)
+                if !work.author.isEmpty {
+                    Label(work.author, systemImage: "person")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let fandom = work.workFandoms.first, !fandom.isEmpty {
+                    Label(fandom, systemImage: "sparkles")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                cardStats
+
+                if !stateBadges.isEmpty {
+                    FlowLayout(spacing: 6, rowSpacing: 5) {
+                        ForEach(stateBadges, id: \.text) { badge in
+                            WorkStateBadge(text: badge.text, symbol: badge.symbol)
+                        }
+                    }
+                    .font(.caption2)
+                }
+
+                Spacer(minLength: 4)
+
+                if let progressValue {
+                    progressGroup(progressValue)
+                } else if let footer {
+                    WorkStateBadge(text: footer, symbol: footerSymbol)
+                        .font(.caption2)
                 }
             }
-            .frame(height: 4)
-            .padding(8)
+        }
+    }
+
+    @ViewBuilder
+    private var cardStats: some View {
+        FlowLayout(spacing: 8, rowSpacing: 5) {
+            let ratingShort = WorkStat.ratingShort(work.rating)
+            if let ratingShort {
+                WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
+            }
+            if !work.chapters.isEmpty {
+                WorkStatLabel(text: work.chapters, symbol: "book")
+            }
+            if let completion = completionStatus {
+                WorkStatLabel(text: completion, symbol: work.isComplete ? "checkmark.seal" : "circle.dashed")
+            }
+            if work.wordCount > 0 {
+                WorkStatLabel(text: work.wordCount.formatted(.number.notation(.compactName)), symbol: "textformat.size")
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+    }
+
+    private var progressValue: Double? {
+        if let progress { return min(1, max(0, progress)) }
+        if work.isFinished { return 1 }
+        return work.readingProgress.map { min(1, max(0, $0)) }
+    }
+
+    private var progressText: String {
+        guard let progressValue else { return footer ?? "Progress" }
+        if let footer { return footer }
+        return progressValue >= 1 ? "Finished" : "Progress"
+    }
+
+    private var completionStatus: String? {
+        guard WorkTags.ao3WorkID(from: work.sourceURL) != nil else { return nil }
+        return work.isComplete ? "Complete" : "WIP"
+    }
+
+    private var stateBadges: [(text: String, symbol: String)] {
+        var badges: [(text: String, symbol: String)] = []
+        if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
+        if work.hasEPUB { badges.append((text: "Offline", symbol: "arrow.down.circle.fill")) }
+        if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
+        return badges
+    }
+
+    private var footerSymbol: String {
+        if work.isFinished { return "checkmark.circle.fill" }
+        if footer?.contains("new") == true { return "sparkle" }
+        return "clock"
+    }
+
+    private func progressGroup(_ value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(progressText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text("\(Int((value * 100).rounded()))%")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary)
+                    Capsule().fill(.tint)
+                        .frame(width: geo.size.width * max(0.03, value))
+                }
+            }
+            .frame(height: 5)
         }
     }
 }
 
-/// Carousel card for a remote AO3 work (Subscriptions / Recently Updated): cover +
-/// title + author + fandom. Tapping opens the native AO3 work page (download + read).
+/// Carousel card for a remote AO3 work (Subscriptions / Recently Updated). It uses
+/// the same self-contained summary shape as local Library/Home work cards.
 struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            CoverArt(title: work.title)
-                .frame(width: 120, height: 172)
-            Text(work.title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            if let author = work.authors.first, !author.isEmpty {
-                Text(author)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        WorkSummaryCardSurface {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(3)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let author = work.authors.first, !author.isEmpty {
+                    Label(author, systemImage: "person")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let fandom = work.fandoms.first, !fandom.isEmpty {
+                    Label(fandom, systemImage: "sparkles")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                cardStats
+
+                Spacer(minLength: 4)
+
+                if !work.dateUpdated.isEmpty {
+                    WorkStateBadge(text: work.dateUpdated, symbol: "calendar")
+                        .font(.caption2)
+                }
             }
-            if let fandom = work.fandoms.first {
-                Text(fandom)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            CoverStatsLine(rating: work.rating, chapters: work.chapters)
         }
-        .frame(width: 120, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var cardStats: some View {
+        FlowLayout(spacing: 8, rowSpacing: 5) {
+            let ratingShort = WorkStat.ratingShort(work.rating)
+            if let ratingShort {
+                WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
+            }
+            if !work.chapters.isEmpty {
+                WorkStatLabel(text: work.chapters, symbol: "book")
+            }
+            if let isComplete = work.isComplete {
+                WorkStatLabel(text: isComplete ? "Complete" : "WIP",
+                              symbol: isComplete ? "checkmark.seal" : "circle.dashed")
+            }
+            if let words = work.words {
+                WorkStatLabel(text: words.formatted(.number.notation(.compactName)), symbol: "textformat.size")
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
     }
 }
 
-/// A compact rating + chapter-count line for the cover-card shelves, using the same
-/// `WorkStatLabel` glyphs as the dense rows so every surface's metadata matches.
-struct CoverStatsLine: View {
-    let rating: String
-    let chapters: String
+private struct WorkSummaryCardSurface<Content: View>: View {
+    @Environment(ThemeManager.self) private var themeManager
+    @ViewBuilder var content: () -> Content
 
     var body: some View {
-        let ratingShort = WorkStat.ratingShort(rating)
-        if ratingShort != nil || !chapters.isEmpty {
-            HStack(spacing: 10) {
-                if let ratingShort {
-                    WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
-                }
-                if !chapters.isEmpty {
-                    WorkStatLabel(text: chapters, symbol: "book")
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+        content()
+            .padding(12)
+            .frame(width: WorkSummaryCardMetrics.width,
+                   height: WorkSummaryCardMetrics.height,
+                   alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                    .fill(themeManager.appTheme.carouselCardSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(themeManager.appTheme.carouselCardBorder, lineWidth: 0.5)
+                    )
+                    .shadow(color: themeManager.appTheme.carouselCardShadow.color,
+                            radius: themeManager.appTheme.carouselCardShadow.radius,
+                            x: 0,
+                            y: themeManager.appTheme.carouselCardShadow.y)
+            )
+            .contentShape(
+                RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+            )
+    }
+}
+
+private struct WorkStateBadge: View {
+    let text: String
+    let symbol: String
+
+    var body: some View {
+        Label(text, systemImage: symbol)
+            .labelStyle(.titleAndIcon)
+            .lineLimit(1)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.quaternary, in: Capsule())
+    }
+}
+
+private struct CarouselCardShadow {
+    let color: Color
+    let radius: CGFloat
+    let y: CGFloat
+}
+
+private extension ReaderTheme {
+    var carouselCardSurface: Color {
+        #if os(iOS)
+        appElevatedBackground ?? Color(uiColor: .secondarySystemGroupedBackground)
+        #else
+        appElevatedBackground ?? Color(nsColor: .controlBackgroundColor)
+        #endif
+    }
+
+    var carouselCardBorder: Color {
+        switch self {
+        case .dark: .clear
+        case .light: Color.black.opacity(0.06)
+        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.15)
+        }
+    }
+
+    var carouselCardShadow: CarouselCardShadow {
+        switch self {
+        case .dark:
+            CarouselCardShadow(color: .clear, radius: 0, y: 0)
+        case .light:
+            CarouselCardShadow(color: Color.black.opacity(0.10), radius: 4, y: 2)
+        case .sepia:
+            CarouselCardShadow(
+                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18),
+                radius: 4,
+                y: 2
+            )
         }
     }
 }

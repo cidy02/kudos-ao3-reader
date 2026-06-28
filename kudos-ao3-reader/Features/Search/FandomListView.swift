@@ -38,18 +38,7 @@ struct FandomListView: View {
                     Button {
                         onSelect(fandom.name)
                     } label: {
-                        HStack(spacing: 12) {
-                            Text(fandom.name)
-                                .foregroundStyle(.primary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            if let count = fandom.workCount {
-                                Text(count.formatted())
-                                    .font(.footnote)
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .contentShape(Rectangle())
+                        FandomListRow(fandom: fandom)
                     }
                     .buttonStyle(.plain)
                     .cardRow()
@@ -80,5 +69,55 @@ struct FandomListView: View {
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+}
+
+private struct FandomListRow: View {
+    let fandom: AO3Fandom
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 24)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(nameLines, id: \.offset) { line in
+                    Text(line.text)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .font(.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let count = fandom.workCount {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.text")
+                        .font(.caption.weight(.semibold))
+                    Text(count.formatted())
+                        .monospacedDigit()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.top, 1)
+                .accessibilityLabel("\(count.formatted()) works")
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private var nameLines: [(offset: Int, text: String)] {
+        let parts = fandom.name
+            .split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let lines = parts.isEmpty ? [fandom.name] : parts
+        return lines.enumerated().map { ($0.offset, $0.element) }
     }
 }

@@ -89,18 +89,34 @@ struct AO3WorkRowSkeleton: View {
 /// Wireframe matching the carousel cover cards (`WorkCoverCard` / `AO3WorkCoverCard`).
 struct WorkCoverCardSkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SkeletonBlock(height: 172, width: 120, cornerRadius: 10)   // cover
-            SkeletonTextLine(height: 13, width: 112)                   // title
-            SkeletonTextLine(height: 11, width: 78)                    // author
-            SkeletonBlock(height: 10, width: 60, cornerRadius: 4)      // stat line
+        VStack(alignment: .leading, spacing: 8) {
+            SkeletonTextLine(height: 15, width: 132)       // title
+            SkeletonTextLine(height: 12, width: 92)        // author
+            SkeletonTextLine(height: 10, width: 118)       // fandom
+            HStack(spacing: 8) {
+                SkeletonBlock(height: 10, width: 32, cornerRadius: 4)
+                SkeletonBlock(height: 10, width: 44, cornerRadius: 4)
+            }
+            HStack(spacing: 6) {
+                SkeletonBlock(height: 18, width: 58, cornerRadius: 9)
+                SkeletonBlock(height: 18, width: 62, cornerRadius: 9)
+            }
+            Spacer(minLength: 4)
+            SkeletonTextLine(height: 10, width: 112)
+            SkeletonBlock(height: 5, width: 140, cornerRadius: 3)
         }
-        .frame(width: 120, alignment: .leading)
+        .padding(12)
+        .frame(width: WorkSummaryCardMetrics.width,
+               height: WorkSummaryCardMetrics.height,
+               alignment: .topLeading)
+        .background(Color.primary.opacity(0.04),
+                    in: RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius,
+                                         style: .continuous))
         .skeletonShimmer()
     }
 }
 
-/// Wireframe matching the Browse category card (icon + name, divider, stats line).
+/// Wireframe matching the Browse category card (icon + name, stats line).
 struct CategoryCardSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -108,7 +124,6 @@ struct CategoryCardSkeleton: View {
                 SkeletonBlock(height: 24, width: 24, cornerRadius: 6)
                 SkeletonTextLine(height: 16, width: 170)
             }
-            Divider().opacity(0.4)
             HStack(spacing: 16) {
                 SkeletonBlock(height: 11, width: 90)
                 SkeletonBlock(height: 11, width: 72)
@@ -123,10 +138,14 @@ struct CategoryCardSkeleton: View {
 /// Wireframe matching the fandom-list rows (name + work count).
 struct FandomRowSkeleton: View {
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
+            SkeletonBlock(height: 22, width: 24, cornerRadius: 6)
             SkeletonTextLine(height: 15, width: 200)
             Spacer(minLength: 24)
-            SkeletonBlock(height: 12, width: 56, cornerRadius: 4)
+            HStack(spacing: 4) {
+                SkeletonBlock(height: 12, width: 14, cornerRadius: 3)
+                SkeletonBlock(height: 12, width: 56, cornerRadius: 4)
+            }
         }
         .padding(.vertical, 8)
         .skeletonShimmer()

@@ -101,8 +101,8 @@ struct MediaBrowserView: View {
 
     // MARK: - Card
 
-    /// The enriched category card: an emphasized icon + regular-weight name, a thin
-    /// divider, a stats line, and (when present) a divider + recently-read chips.
+    /// The enriched category card: an emphasized icon + regular-weight name, a stats
+    /// line, and (when present) a divider + recently-read chips.
     private func categoryCard(_ category: AO3MediaCategory) -> some View {
         let stats = stats(for: category)
         return VStack(alignment: .leading, spacing: 8) {
@@ -116,7 +116,6 @@ struct MediaBrowserView: View {
                     .foregroundStyle(.primary)
             }
 
-            Divider()
             statsLine(stats)
 
             if !stats.recentFandoms.isEmpty {
