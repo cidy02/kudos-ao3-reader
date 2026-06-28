@@ -272,23 +272,26 @@ private extension ReaderTheme {
 
     var carouselCardBorder: Color {
         switch self {
-        case .dark: .clear
-        case .light: Color.black.opacity(0.06)
-        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.15)
+        case .dark:
+            Color.white.opacity(0.12)
+        case .light:
+            Color.black.opacity(0.08)
+        case .sepia:
+            Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
         }
     }
 
     var carouselCardShadow: CarouselCardShadow {
         switch self {
         case .dark:
-            CarouselCardShadow(color: .clear, radius: 0, y: 0)
+            CarouselCardShadow(color: Color.black.opacity(0.34), radius: 8, y: 4)
         case .light:
-            CarouselCardShadow(color: Color.black.opacity(0.10), radius: 4, y: 2)
+            CarouselCardShadow(color: Color.black.opacity(0.13), radius: 8, y: 3)
         case .sepia:
             CarouselCardShadow(
-                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18),
-                radius: 4,
-                y: 2
+                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.22),
+                radius: 8,
+                y: 3
             )
         }
     }

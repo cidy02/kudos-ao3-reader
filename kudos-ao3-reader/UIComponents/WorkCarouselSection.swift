@@ -41,6 +41,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 14) { cards() }
                             .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
                     }
                 } else {
                     emptyState()

@@ -15,7 +15,7 @@ struct AO3WorkRow: View {
     /// Worth an expand toggle only when there's more to show than the clamped view:
     /// a long summary or any categorized tags.
     private var isExpandable: Bool {
-        work.summary.count > 120 || !work.tags.isEmpty || !work.relationships.isEmpty
+        work.summary.count > 120 || !additionalTags.isEmpty || !work.relationships.isEmpty
             || !work.characters.isEmpty || !work.warnings.isEmpty
     }
 
@@ -67,7 +67,7 @@ struct AO3WorkRow: View {
                 chipGroup("Archive Warnings", work.warnings, field: .warning)
                 chipGroup("Relationships", work.relationships, field: .relationship)
                 chipGroup("Characters", work.characters, field: .character)
-                chipGroup("Additional Tags", work.tags, field: .freeform)
+                chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
 
             // Thin divider separates the textual content from the metadata stats,
@@ -109,6 +109,23 @@ struct AO3WorkRow: View {
         .controlSize(.small)
         .tint(.accentColor)
         .accessibilityLabel(expanded ? "Show less" : "Show more")
+    }
+
+    /// AO3's freeform/additional tags, defensively filtered against the categorized
+    /// groups before display so expanded cards never repeat a tag across sections.
+    private var additionalTags: [String] {
+        let categorized = Set((work.fandoms + work.warnings + work.relationships + work.characters)
+            .map(normalizedTag))
+        var seen = Set<String>()
+        return work.tags.filter { tag in
+            let key = normalizedTag(tag)
+            guard !categorized.contains(key), seen.insert(key).inserted else { return false }
+            return true
+        }
+    }
+
+    private func normalizedTag(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     /// A labeled group of tappable tag chips; each chip runs an AO3 search for that
