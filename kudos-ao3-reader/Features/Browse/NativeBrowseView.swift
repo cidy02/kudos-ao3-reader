@@ -114,28 +114,13 @@ struct FandomWorksView: View {
         #endif
         .hidesFloatingTabBar()
         .toolbar {
-            // One item holding a tight HStack so the icons cluster like Library's
-            // (separate ToolbarItems get the system's wider spacing). Filters rightmost.
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 2) {
-                    if phase == .loaded && !results.isEmpty {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
-                        } label: {
-                            Label(expandAll ? "Collapse all cards" : "Expand all cards",
-                                  systemImage: expandAll
-                                    ? "rectangle.compress.vertical"
-                                    : "rectangle.expand.vertical")
-                        }
-                    }
-                    Button { showingFilters = true } label: {
-                        Label("Filter", systemImage: hasExtraFilters
-                            ? "line.3.horizontal.decrease.circle.fill"
-                            : "line.3.horizontal.decrease.circle")
-                    }
-                    .help("Filter works in this fandom")
+            if phase == .loaded && !results.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkCardListControls(expandAll: $expandAll,
+                                         filtersActive: hasExtraFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter works in this fandom")
                 }
-                .labelStyle(.iconOnly)
             }
         }
         .inspector(isPresented: $showingFilters) {
@@ -166,6 +151,16 @@ struct FandomWorksView: View {
         // First-load (loading + empty) is handled upstream by the skeleton list, so it
         // never reaches this overlay; only the empty/failed result states do.
         switch phase {
+        case .loaded where results.isEmpty && hasExtraFilters:
+            // Over-filtered to nothing — the toolbar's hidden with no results, so offer
+            // the reset here (re-runs the fandom search with just the fandom).
+            ContentUnavailableView {
+                Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("No works in this fandom match the current filters.")
+            } actions: {
+                Button("Clear Filters", action: resetFilters)
+            }
         case .loaded where results.isEmpty:
             ContentUnavailableView(
                 "No works found",
@@ -235,8 +230,15 @@ struct TagWorksView: View {
     @State private var totalPages = 1
     @State private var phase: Phase = .loading
     @State private var expandAll = false
+    /// Client-side refine of this tag's loaded works — narrows what's on screen in
+    /// place, contextual to the page (the tag itself stays fixed).
+    @State private var filters = AO3SearchFilters()
+    @State private var showingFilters = false
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
+
+    /// This page's works narrowed by the active refine filters.
+    private var visibleResults: [AO3WorkSummary] { filters.apply(to: results) }
 
     var body: some View {
         Group {
@@ -246,7 +248,7 @@ struct TagWorksView: View {
                 List {
                     if showPagination { Section { paginationRow } }
                     Section {
-                        ForEach(results) { work in
+                        ForEach(visibleResults) { work in
                             AO3WorkRow(work: work, expandAll: expandAll)
                                 .cardNavigation(to: work)
                         }
@@ -266,16 +268,36 @@ struct TagWorksView: View {
         .toolbar {
             if phase == .loaded && !results.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
-                    } label: {
-                        Image(systemName: expandAll
-                            ? "rectangle.compress.vertical"
-                            : "rectangle.expand.vertical")
+                    HStack(spacing: 2) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
+                        } label: {
+                            Label(expandAll ? "Collapse all cards" : "Expand all cards",
+                                  systemImage: expandAll
+                                    ? "rectangle.compress.vertical"
+                                    : "rectangle.expand.vertical")
+                        }
+                        Button { showingFilters = true } label: {
+                            Label("Filter", systemImage: filters.hasActiveFilters
+                                ? "line.3.horizontal.decrease.circle.fill"
+                                : "line.3.horizontal.decrease.circle")
+                        }
+                        .help("Filter the works on this page")
                     }
-                    .accessibilityLabel(expandAll ? "Collapse all cards" : "Expand all cards")
+                    .labelStyle(.iconOnly)
                 }
             }
+        }
+        .inspector(isPresented: $showingFilters) {
+            AO3FilterPanel(
+                filters: $filters,
+                mode: .refine,
+                canReset: filters.hasActiveFilters,
+                onApply: { showingFilters = false },
+                onReset: { filters = AO3SearchFilters() }
+            )
+            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .navigationTitle("Filter Works")
         }
         .task { await load(page: 1) }
     }
@@ -298,6 +320,15 @@ struct TagWorksView: View {
                 systemImage: "tag",
                 description: Text("No works for this tag right now.")
             )
+        case .loaded where visibleResults.isEmpty:
+            // The page loaded works, but the active refine filters hid them all.
+            ContentUnavailableView {
+                Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("No works on this page match the current filters.")
+            } actions: {
+                Button("Clear Filters") { filters = AO3SearchFilters() }
+            }
         case .failed(let message):
             ContentUnavailableView {
                 Label("Couldn't load works", systemImage: "exclamationmark.triangle")

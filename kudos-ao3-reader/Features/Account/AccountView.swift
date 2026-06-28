@@ -224,10 +224,24 @@ private struct LocalReadingHistoryView: View {
 
     @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB }, sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]
+    @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?
+    @State private var expandAll = false
+    /// Filters scoped to this history list, applied live to its works.
+    @State private var filters = LibraryFilters()
+    @State private var showingFilters = false
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
+    }
+
+    /// Privacy-visible history (the base the filter panel narrows further).
+    private var visibleHistory: [SavedWork] { history.filter(passesPrivacy) }
+
+    /// History after the active filters. With no filter set, the newest-first order is
+    /// kept rather than re-sorted by the filter's default sort.
+    private var displayedHistory: [SavedWork] {
+        filters.hasActiveFilters ? filters.apply(to: visibleHistory) : visibleHistory
     }
 
     var body: some View {
@@ -238,12 +252,12 @@ private struct LocalReadingHistoryView: View {
                 } description: {
                     Text("Works you finish without saving land here. Their files are freed, but you can re-download and revisit them anytime.")
                 }
-            } else if history.filter(passesPrivacy).isEmpty {
+            } else if visibleHistory.isEmpty {
                 MatureContentHiddenView()
             } else {
                 List {
-                    ForEach(history.filter(passesPrivacy)) { work in
-                        SensitiveWorkRow(work: work)
+                    ForEach(displayedHistory) { work in
+                        SensitiveWorkRow(work: work, expandAll: expandAll)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     if confirmBeforeDelete { pendingDelete = work } else { remove(work) }
@@ -255,6 +269,17 @@ private struct LocalReadingHistoryView: View {
                     .cardRow()
                 }
                 .cardList()
+                .overlay {
+                    if displayedHistory.isEmpty {
+                        ContentUnavailableView {
+                            Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+                        } description: {
+                            Text("No works in your history match the current filters.")
+                        } actions: {
+                            Button("Clear Filters") { filters = LibraryFilters() }
+                        }
+                    }
+                }
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -262,6 +287,23 @@ private struct LocalReadingHistoryView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            if !visibleHistory.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkCardListControls(expandAll: $expandAll,
+                                         filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in your history")
+                }
+            }
+        }
+        .inspector(isPresented: $showingFilters) {
+            LibraryFilterPanel(filters: $filters, works: visibleHistory, userTagNames: allTags.map(\.name))
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                #if os(iOS)
+                .presentationDragIndicator(.visible)
+                #endif
+        }
         .deleteConfirmation(
             for: $pendingDelete,
             title: "Remove from History?",
@@ -287,9 +329,23 @@ private struct LocalFavoritesView: View {
 
     @Query(filter: #Predicate<SavedWork> { $0.isFavorite }, sort: \SavedWork.dateAdded, order: .reverse)
     private var favorites: [SavedWork]
+    @Query(sort: \Tag.name) private var allTags: [Tag]
+    @State private var expandAll = false
+    /// Filters scoped to this favorites list, applied live to its works.
+    @State private var filters = LibraryFilters()
+    @State private var showingFilters = false
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
+    }
+
+    /// Privacy-visible favorites (the base the filter panel narrows further).
+    private var visibleFavorites: [SavedWork] { favorites.filter(passesPrivacy) }
+
+    /// Favorites after the active filters. With no filter set, the newest-first order is
+    /// kept rather than re-sorted by the filter's default sort.
+    private var displayedFavorites: [SavedWork] {
+        filters.hasActiveFilters ? filters.apply(to: visibleFavorites) : visibleFavorites
     }
 
     var body: some View {
@@ -300,12 +356,12 @@ private struct LocalFavoritesView: View {
                 } description: {
                     Text("Swipe a work in your Library, or tap the star on its page, to favorite it.")
                 }
-            } else if favorites.filter(passesPrivacy).isEmpty {
+            } else if visibleFavorites.isEmpty {
                 MatureContentHiddenView()
             } else {
                 List {
-                    ForEach(favorites.filter(passesPrivacy)) { work in
-                        SensitiveWorkRow(work: work)
+                    ForEach(displayedFavorites) { work in
+                        SensitiveWorkRow(work: work, expandAll: expandAll)
                             .swipeActions(edge: .trailing) {
                                 Button {
                                     work.isFavorite = false
@@ -319,6 +375,17 @@ private struct LocalFavoritesView: View {
                     .cardRow()
                 }
                 .cardList()
+                .overlay {
+                    if displayedFavorites.isEmpty {
+                        ContentUnavailableView {
+                            Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+                        } description: {
+                            Text("No favorites match the current filters.")
+                        } actions: {
+                            Button("Clear Filters") { filters = LibraryFilters() }
+                        }
+                    }
+                }
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -326,5 +393,22 @@ private struct LocalFavoritesView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            if !visibleFavorites.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkCardListControls(expandAll: $expandAll,
+                                         filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter your favorites")
+                }
+            }
+        }
+        .inspector(isPresented: $showingFilters) {
+            LibraryFilterPanel(filters: $filters, works: visibleFavorites, userTagNames: allTags.map(\.name))
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                #if os(iOS)
+                .presentationDragIndicator(.visible)
+                #endif
+        }
     }
 }

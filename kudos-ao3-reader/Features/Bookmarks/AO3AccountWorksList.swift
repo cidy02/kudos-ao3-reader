@@ -91,10 +91,18 @@ struct AO3AccountWorksList: View {
     @State private var totalPages = 1
     @State private var phase: Phase = .idle
     @State private var showLogin = false
+    @State private var expandAll = false
+    /// Client-side refine of the loaded page — narrows the works on screen in place,
+    /// contextual to this account list rather than a fresh AO3 search.
+    @State private var filters = AO3SearchFilters()
+    @State private var showingFilters = false
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
     }
+
+    /// The loaded page narrowed by the active refine filters.
+    private var visibleWorks: [AO3WorkSummary] { filters.apply(to: works) }
 
     var body: some View {
         Group {
@@ -105,6 +113,26 @@ struct AO3AccountWorksList: View {
             }
         }
         .hidesFloatingTabBar()
+        .toolbar {
+            if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkCardListControls(expandAll: $expandAll,
+                                         filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters)
+                }
+            }
+        }
+        .inspector(isPresented: $showingFilters) {
+            AO3FilterPanel(
+                filters: $filters,
+                mode: .refine,
+                canReset: filters.hasActiveFilters,
+                onApply: { showingFilters = false },
+                onReset: { filters = AO3SearchFilters() }
+            )
+            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .navigationTitle("Filter Works")
+        }
         .task(id: auth.isLoggedIn) {
             // Load on first appearance and again right after a sign-in; skip the
             // signed-out state so we don't fire an unauthenticated request.
@@ -150,8 +178,8 @@ struct AO3AccountWorksList: View {
                 Section { paginationRow }
             }
             Section {
-                ForEach(works) { work in
-                    AO3WorkRow(work: work).cardNavigation(to: work)
+                ForEach(visibleWorks) { work in
+                    AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
                 }
                 .cardRow()
             }
@@ -161,7 +189,18 @@ struct AO3AccountWorksList: View {
         }
         .cardList()
         .overlay {
-            if phase == .loading { ProgressView().controlSize(.large) }
+            if phase == .loading {
+                ProgressView().controlSize(.large)
+            } else if visibleWorks.isEmpty && !works.isEmpty {
+                // Everything on the page was filtered out by the refine facets.
+                ContentUnavailableView {
+                    Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+                } description: {
+                    Text("No works on this page match the current filters.")
+                } actions: {
+                    Button("Clear Filters") { filters = AO3SearchFilters() }
+                }
+            }
         }
         .refreshable { await load(page: currentPage) }
     }

@@ -8,7 +8,14 @@ import SwiftUI
 /// `onApply` and decides what "reset" means via `onReset` (Search clears everything;
 /// Browse resets back to the page's fixed fandom).
 struct AO3FilterPanel: View {
+    /// How the panel applies. `.search` re-runs an AO3 query (Search tab, Browse →
+    /// Fandom); `.refine` narrows the already-loaded works on the page in place, so it
+    /// hides the facets that need a fresh query (Sort, Crossover, Updated) and its
+    /// primary button just confirms rather than searching.
+    enum Mode { case search, refine }
+
     @Binding var filters: AO3SearchFilters
+    var mode: Mode = .search
     /// Show the Fandoms include/exclude picker. Hidden in Browse, where the page's
     /// fandom is fixed and shouldn't be edited away.
     var showFandomPicker: Bool = true
@@ -28,8 +35,12 @@ struct AO3FilterPanel: View {
           // propagate from the Form container, only from a Group/Section/ForEach).
           Group {
             Section {
-                Picker("Sort by", selection: $filters.sort) {
-                    ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
+                // Sort needs AO3 to re-order results, so it only appears when the panel
+                // actually issues a query.
+                if mode == .search {
+                    Picker("Sort by", selection: $filters.sort) {
+                        ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
+                    }
                 }
                 Picker("Rating", selection: $filters.rating) {
                     ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
@@ -71,8 +82,11 @@ struct AO3FilterPanel: View {
             }
 
             Section {
-                Picker("Crossovers", selection: $filters.crossover) {
-                    ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
+                // Crossover status isn't carried on a blurb, so it's query-only.
+                if mode == .search {
+                    Picker("Crossovers", selection: $filters.crossover) {
+                        ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
+                    }
                 }
                 Picker("Completion", selection: $filters.completion) {
                     ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
@@ -91,8 +105,11 @@ struct AO3FilterPanel: View {
             }
 
             Section {
-                Picker("Updated", selection: $filters.updated) {
-                    ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
+                // "Updated within" filters on a date AO3 computes; not derivable from a blurb.
+                if mode == .search {
+                    Picker("Updated", selection: $filters.updated) {
+                        ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
+                    }
                 }
                 Picker("Language", selection: $filters.language) {
                     ForEach(AO3SearchFilters.Language.allCases) { Text($0.title).tag($0) }
@@ -103,9 +120,12 @@ struct AO3FilterPanel: View {
 
             Section {
                 Button(action: onApply) {
-                    Label("Apply Filters", systemImage: "magnifyingglass")
+                    // Refine narrows live as facets change, so its button just confirms;
+                    // search needs a query/filter before it can run.
+                    Label(mode == .refine ? "Done" : "Apply Filters",
+                          systemImage: mode == .refine ? "checkmark" : "magnifyingglass")
                 }
-                .disabled(!filters.isSearchable)
+                .disabled(mode == .search && !filters.isSearchable)
 
                 if let onSave {
                     Button(action: onSave) {

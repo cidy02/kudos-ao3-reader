@@ -83,6 +83,9 @@ final class PrivacyGate {
 /// navigation row. The caller still attaches its own `.swipeActions`.
 struct SensitiveWorkRow: View {
     let work: SavedWork
+    /// Forwarded to the underlying `WorkRow` so a list's expand/collapse-all toggle
+    /// reaches local cards too.
+    var expandAll: Bool = false
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -108,7 +111,7 @@ struct SensitiveWorkRow: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Hidden mature work. Activate to reveal.")
         } else {
-            WorkRow(work: work).cardNavigation(to: work)
+            WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
         }
     }
 }

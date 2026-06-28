@@ -80,12 +80,23 @@ struct CollectionDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var showingRename = false
     @State private var renameText = ""
     @State private var confirmDelete = false
+    @State private var expandAll = false
+    /// Filters scoped to this one collection, applied live to its works.
+    @State private var filters = LibraryFilters()
+    @State private var showingFilters = false
 
     private var works: [SavedWork] {
         collection.works.sorted { $0.dateAdded > $1.dateAdded }
+    }
+
+    /// The collection's works after the active filters. With no filter set, the default
+    /// newest-first order is kept rather than re-sorted by the filter's default sort.
+    private var visibleWorks: [SavedWork] {
+        filters.hasActiveFilters ? filters.apply(to: works) : works
     }
 
     var body: some View {
@@ -98,8 +109,8 @@ struct CollectionDetailView: View {
                 }
             } else {
                 List {
-                    ForEach(works) { work in
-                        SensitiveWorkRow(work: work)
+                    ForEach(visibleWorks) { work in
+                        SensitiveWorkRow(work: work, expandAll: expandAll)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     remove(work)
@@ -111,6 +122,18 @@ struct CollectionDetailView: View {
                     .cardRow()
                 }
                 .cardList()
+                .overlay {
+                    // Collection has works, but the active filters hid them all.
+                    if visibleWorks.isEmpty {
+                        ContentUnavailableView {
+                            Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+                        } description: {
+                            Text("No works in this collection match the current filters.")
+                        } actions: {
+                            Button("Clear Filters") { filters = LibraryFilters() }
+                        }
+                    }
+                }
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -118,7 +141,22 @@ struct CollectionDetailView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .inspector(isPresented: $showingFilters) {
+            LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                #if os(iOS)
+                .presentationDragIndicator(.visible)
+                #endif
+        }
         .toolbar {
+            if !works.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkCardListControls(expandAll: $expandAll,
+                                         filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in this collection")
+                }
+            }
             ToolbarItem {
                 Menu {
                     Button {
