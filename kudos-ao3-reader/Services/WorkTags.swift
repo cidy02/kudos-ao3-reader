@@ -34,9 +34,36 @@ enum WorkTags {
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
             try? context.save()
+        } catch AO3Error.notFound {
+            // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
+            // whatever tags it already has (EPUB-derived or a prior AO3 fetch).
+            work.ao3Unavailable = true
+            try? context.save()
         } catch {
-            // Network or parse failure: keep the EPUB-derived tags and retry next time.
+            // Other network or parse failure: keep the EPUB-derived tags and retry next time.
         }
+    }
+
+    /// Seeds `workTags` from the on-disk EPUB for a downloaded work that has none yet
+    /// (imported before Work Tags existed, or whose tags were never populated). Pure
+    /// local — no network — so a downloaded work always keeps the tags its EPUB carries,
+    /// even when AO3 is unreachable or the work has been deleted there. No-ops once tags
+    /// exist or when the work has no EPUB on disk.
+    @MainActor
+    static func backfillFromEPUB(for work: SavedWork, in context: ModelContext) async {
+        guard work.workTags.isEmpty, work.hasEPUB else { return }
+        // Reading the EPUB pulls the whole file into memory + unzips it — do it off the
+        // main actor, then apply the result back on the main actor.
+        let url = work.fileURL
+        let meta = await Task.detached(priority: .utility) {
+            try? EPUBDocument.metadata(ofEPUBAt: url)
+        }.value
+        guard let meta else { return }
+        let tags = SavedWork.normalizedWorkTags(meta.subjects, excludingRating: meta.rating)
+        guard !tags.isEmpty else { return }
+        work.workTags = tags
+        if work.rating.isEmpty { work.rating = meta.rating }
+        try? context.save()
     }
 
     /// Extracts the numeric AO3 work id from a `…/works/<id>` source URL.

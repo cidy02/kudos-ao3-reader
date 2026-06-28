@@ -380,13 +380,19 @@ struct LibraryView: View {
     // MARK: Loading
 
     /// Fills in the filter metadata (categorized Work Tags, warnings, categories,
-    /// language, word count) for any saved works that predate it, by refreshing each
-    /// from AO3 once. Runs over *all* works — not the filtered subset — so a work isn't
-    /// kept hidden by a filter it would actually match. Sequential, so it never bursts
-    /// requests; each refresh is guarded and skips complete works / those with no source.
+    /// language, word count) for any saved works that predate it. First seeds tags from
+    /// each downloaded work's on-disk EPUB (pure local — so downloaded works always keep
+    /// their tags, even when deleted from AO3), then refreshes from AO3 once for works
+    /// that still need the categorized/extra data. Runs over *all* works — not the
+    /// filtered subset — so a work isn't kept hidden by a filter it would actually match.
+    /// Sequential, so it never bursts requests; each step is guarded and skips works that
+    /// are already complete, have no EPUB, or no AO3 source.
     private func backfillFilterMetadata() async {
-        for work in works where work.needsAO3Refresh {
-            await WorkTags.refreshFromAO3(for: work, in: context)
+        for work in works {
+            await WorkTags.backfillFromEPUB(for: work, in: context)
+            if work.needsAO3Refresh {
+                await WorkTags.refreshFromAO3(for: work, in: context)
+            }
         }
     }
 

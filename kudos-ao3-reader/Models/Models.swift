@@ -101,6 +101,12 @@ import SwiftData
     /// the background and retries on failure, so this only flips on success.
     var workTagsFetched: Bool = false
 
+    /// Set once AO3 returns 404 for this work — it's been deleted (or hidden) on the
+    /// site, so the background refresh stops re-fetching it and the work keeps whatever
+    /// tags it already has (EPUB-derived or a prior AO3 fetch). Distinct from a locked /
+    /// login-gated page, which returns content (no tags) and stays retryable.
+    var ao3Unavailable: Bool = false
+
     /// True once the type-split Work Tags are available (after an AO3 refresh).
     var hasCategorizedWorkTags: Bool {
         !(workFandoms.isEmpty && workCharacters.isEmpty
@@ -112,7 +118,10 @@ import SwiftData
     /// count. Drives both the on-demand refresh and the Library's background
     /// backfill, so the two never diverge on what counts as "needs refreshing".
     var needsAO3Refresh: Bool {
-        !workTagsFetched || !hasCategorizedWorkTags
+        // A work deleted from AO3 can't be refreshed — keep the tags we have and stop
+        // hitting the site for it.
+        guard !ao3Unavailable else { return false }
+        return !workTagsFetched || !hasCategorizedWorkTags
             || (workWarnings.isEmpty && workCategories.isEmpty
                 && language.isEmpty && wordCount == 0)
             // Backfill the newer card stats for works saved before they existed.

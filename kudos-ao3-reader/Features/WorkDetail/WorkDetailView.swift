@@ -77,7 +77,7 @@ struct WorkDetailView: View {
             // so merely viewing a remote work adds no AO3 request. Runs once per open.
             resolveExistingIfNeeded()
             guard let work = localWork else { return }
-            await backfillWorkTagsIfNeeded(work)
+            await WorkTags.backfillFromEPUB(for: work, in: context)
             await WorkTags.refreshFromAO3(for: work, in: context)
         }
         // BookReaderView routes to the Readium navigator on iOS, the legacy reader on
@@ -673,25 +673,6 @@ struct WorkDetailView: View {
             loadError = "Couldn't load the series from AO3."
         }
         queuingSeries = false
-    }
-
-    /// Works imported before Work Tags existed get their tags filled in lazily from the
-    /// on-disk EPUB the first time they're opened (history entries without a file are
-    /// skipped — they re-populate on their next download).
-    private func backfillWorkTagsIfNeeded(_ work: SavedWork) async {
-        guard work.workTags.isEmpty, work.hasEPUB else { return }
-        // Reading the EPUB pulls the whole file into memory + unzips it — do it off the
-        // main actor, then apply the result back on the main actor below.
-        let url = work.fileURL
-        let meta = await Task.detached(priority: .utility) {
-            try? EPUBDocument.metadata(ofEPUBAt: url)
-        }.value
-        guard let meta else { return }
-        let tags = SavedWork.normalizedWorkTags(meta.subjects, excludingRating: meta.rating)
-        guard !tags.isEmpty else { return }
-        work.workTags = tags
-        if work.rating.isEmpty { work.rating = meta.rating }
-        try? context.save()
     }
 
     // MARK: - My Tags editing
