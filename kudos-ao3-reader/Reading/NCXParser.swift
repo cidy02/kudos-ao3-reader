@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses an EPUB2 NCX document into (title, src) pairs in document order.
-final class NCXParser: NSObject, XMLParserDelegate {
+nonisolated final class NCXParser: NSObject, XMLParserDelegate {
     var entries: [(title: String, src: String)] = []
 
     private var inText = false

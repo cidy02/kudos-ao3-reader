@@ -14,7 +14,7 @@ private struct ZipEntry {
 
 /// A tiny, dependency-free ZIP reader good enough for EPUB files
 /// (stored or DEFLATE-compressed entries, no ZIP64).
-struct MiniZip {
+nonisolated struct MiniZip {
     private let data: Data
     private let entries: [ZipEntry]
 
@@ -121,12 +121,12 @@ struct MiniZip {
 
 private extension Data {
     /// Little-endian unsigned 16-bit read at an absolute index.
-    func u16(_ index: Int) -> UInt16 {
+    nonisolated func u16(_ index: Int) -> UInt16 {
         UInt16(self[index]) | (UInt16(self[index + 1]) << 8)
     }
 
     /// Little-endian unsigned 32-bit read at an absolute index.
-    func u32(_ index: Int) -> UInt32 {
+    nonisolated func u32(_ index: Int) -> UInt32 {
         UInt32(self[index]) | (UInt32(self[index + 1]) << 8)
             | (UInt32(self[index + 2]) << 16) | (UInt32(self[index + 3]) << 24)
     }

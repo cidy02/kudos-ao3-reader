@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses an EPUB3 navigation document's `toc` nav into (title, src) pairs.
-final class NavTOCParser: NSObject, XMLParserDelegate {
+nonisolated final class NavTOCParser: NSObject, XMLParserDelegate {
     var entries: [(title: String, src: String)] = []
 
     private var inToc = false

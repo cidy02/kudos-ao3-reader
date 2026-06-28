@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -42,6 +43,62 @@ struct EPUBTests {
         #expect(meta.subjects.contains("Angst"))
         #expect(meta.seriesTitle == "My Series")
         #expect(meta.seriesIndex == 2)
+    }
+
+    @Test func packageInspectionReportsReadableItems() throws {
+        let package = try EPUBDocument.inspectPackage(ofEPUBAt: try Self.sampleEPUB)
+        #expect(package.readableItemCount == 2)
+        #expect(package.metadata.title == "A Test Work")
+    }
+
+    @Test func canonicalAO3WorkURLNormalizesWorkAndDownloadLinks() {
+        let workText = "Source: https://archiveofourown.org/works/12345?view_full_work=true"
+        let downloadText = "https://archiveofourown.org/downloads/98765/example.epub"
+        #expect(EPUBMetadata.canonicalAO3WorkURL(in: workText) == "https://archiveofourown.org/works/12345")
+        #expect(EPUBMetadata.canonicalAO3WorkURL(in: downloadText) == "https://archiveofourown.org/works/98765")
+    }
+
+    @Test @MainActor func userImportCreatesSavedWorkAndDetectsDuplicate() async throws {
+        let schema = Schema([SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        var copiedEPUB: URL?
+        defer {
+            if let copiedEPUB {
+                try? FileManager.default.removeItem(at: copiedEPUB)
+            }
+        }
+
+        let importedOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
+        let imported: SavedWork
+        switch importedOutcome {
+        case .imported(let work):
+            imported = work
+        case .restored, .duplicate:
+            Issue.record("Expected a new EPUB import")
+            return
+        }
+        copiedEPUB = imported.fileURL
+
+        #expect(imported.title == "A Test Work")
+        #expect(imported.author == "Test Author")
+        #expect(imported.rating == "Teen And Up Audiences")
+        #expect(imported.workTags == ["Fluff", "Angst"])
+        #expect(imported.chapters == "2/2")
+        #expect(imported.isSaved)
+        #expect(imported.hasEPUB)
+        #expect(FileManager.default.fileExists(atPath: imported.fileURL.path))
+
+        let duplicateOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
+        switch duplicateOutcome {
+        case .duplicate(let duplicate):
+            #expect(duplicate.id == imported.id)
+        case .imported, .restored:
+            Issue.record("Expected the second import to be treated as a duplicate")
+        }
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
     }
 
     @Test func tableOfContentsFromNCX() throws {

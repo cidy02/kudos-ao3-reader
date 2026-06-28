@@ -458,7 +458,7 @@ nonisolated enum FilterSelectionState: Equatable, Sendable {
 /// saved-work tags under per-category headers. Also carries the work's archive
 /// warnings, categories, language, and word count so the Library can filter on
 /// the same facets Search offers.
-struct AO3WorkTagGroups: Sendable {
+nonisolated struct AO3WorkTagGroups: Sendable {
     var fandoms: [String] = []
     var relationships: [String] = []
     var characters: [String] = []

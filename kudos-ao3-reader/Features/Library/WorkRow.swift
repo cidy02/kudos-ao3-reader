@@ -30,6 +30,7 @@ struct WorkRow: View {
     private var isExpandable: Bool {
         summaryText.count > 120 || !work.workRelationships.isEmpty
             || !work.workCharacters.isEmpty || !work.workFreeforms.isEmpty
+            || (!work.hasCategorizedWorkTags && !work.workTags.isEmpty)
     }
 
     var body: some View {
@@ -87,9 +88,13 @@ struct WorkRow: View {
 
             // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
             if expanded {
-                chipGroup("Relationships", work.workRelationships, field: .relationship)
-                chipGroup("Characters", work.workCharacters, field: .character)
-                chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
+                if work.hasCategorizedWorkTags {
+                    chipGroup("Relationships", work.workRelationships, field: .relationship)
+                    chipGroup("Characters", work.workCharacters, field: .character)
+                    chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
+                } else {
+                    chipGroup("Tags", work.workTags, field: .freeform)
+                }
             }
 
             // Thin divider separates the textual content from the metadata stats,

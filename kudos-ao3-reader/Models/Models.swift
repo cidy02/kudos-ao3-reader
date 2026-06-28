@@ -41,6 +41,11 @@ import SwiftData
     /// EPUB doesn't carry it); used by the Library word-count filter and sort.
     var wordCount: Int = 0
 
+    /// Best-effort AO3/EPUB date text. Remote AO3 summaries already carry their own
+    /// dates; these persist dates parsed from a locally imported EPUB.
+    var datePublished: String = ""
+    var dateUpdated: String = ""
+
     /// AO3 work stats shown on the Library card, mirroring the Search results.
     /// Both come from the AO3 refresh (the EPUB carries neither): `chapters` is
     /// printed as AO3 shows it (e.g. "5/10"); `kudos` is 0 until known.

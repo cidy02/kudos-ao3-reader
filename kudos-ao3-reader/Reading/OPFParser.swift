@@ -1,14 +1,20 @@
 import Foundation
 
 /// Parses an OPF package document: Dublin Core metadata + manifest + spine.
-final class OPFParser: NSObject, XMLParserDelegate {
+nonisolated final class OPFParser: NSObject, XMLParserDelegate {
     var title = ""
     var author = ""
     var summary = ""
     var subjects: [String] = []
+    var identifiers: [String] = []
+    var sources: [String] = []
+    var dates: [String] = []
     var language = ""
+    var publishedDate = ""
+    var updatedDate = ""
     var seriesTitle = ""
     var seriesIndex: Int?
+    var metaContents: [String] = []
     var manifest: [String: String] = [:]        // item id -> href
     var manifestMedia: [String: String] = [:]   // item id -> media-type
     var manifestProps: [String: String] = [:]   // item id -> properties
@@ -17,6 +23,7 @@ final class OPFParser: NSObject, XMLParserDelegate {
 
     private var currentElement = ""
     private var buffer = ""
+    private var currentMetaName = ""
 
     func parse(_ data: Data) -> Bool {
         let parser = XMLParser(data: data)
@@ -50,6 +57,11 @@ final class OPFParser: NSObject, XMLParserDelegate {
             if let toc = attributes["toc"] { tocID = toc }
         case "meta":
             // calibre encodes series via <meta name="calibre:series" content="…">.
+            currentMetaName = attributes["name"] ?? attributes["property"] ?? ""
+            if let content = attributes["content"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !content.isEmpty {
+                metaContents.append(content)
+            }
             switch attributes["name"] {
             case "calibre:series": seriesTitle = attributes["content"] ?? ""
             case "calibre:series_index":
@@ -85,13 +97,52 @@ final class OPFParser: NSObject, XMLParserDelegate {
             author = value
         case "description" where summary.isEmpty:
             summary = value
+        case "identifier":
+            Self.append(value, to: &identifiers)
+        case "source":
+            Self.append(value, to: &sources)
+        case "date":
+            recordDate(value)
         case "subject":
-            if !value.isEmpty { subjects.append(value) }
+            Self.append(value, to: &subjects)
         case "language" where language.isEmpty:
             language = value
+        case "meta":
+            recordMeta(value)
+            currentMetaName = ""
         default:
             break
         }
         buffer = ""
+    }
+
+    /// Text corpus used for best-effort source URL detection without caring which
+    /// OPF metadata bucket an exporter chose.
+    var metadataSearchText: String {
+        ([title, author, summary, language, publishedDate, updatedDate]
+            + identifiers + sources + dates + subjects + metaContents)
+            .joined(separator: "\n")
+    }
+
+    private static func append(_ value: String, to values: inout [String]) {
+        if !value.isEmpty { values.append(value) }
+    }
+
+    private func recordDate(_ value: String) {
+        guard !value.isEmpty else { return }
+        dates.append(value)
+        if publishedDate.isEmpty { publishedDate = value }
+    }
+
+    private func recordMeta(_ value: String) {
+        guard !value.isEmpty else { return }
+        metaContents.append(value)
+        let name = currentMetaName.lowercased()
+        if updatedDate.isEmpty, name.contains("modified") {
+            updatedDate = value
+        } else if publishedDate.isEmpty,
+                  name.contains("published") || name.contains("issued") {
+            publishedDate = value
+        }
     }
 }

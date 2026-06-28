@@ -165,6 +165,8 @@ struct KudosBackupWork: Codable, Equatable {
     let rating: String
     let language: String
     let wordCount: Int
+    let datePublished: String?
+    let dateUpdated: String?
     let chapters: String
     let kudos: Int
     let workWarnings: [String]
@@ -200,6 +202,8 @@ struct KudosBackupWork: Codable, Equatable {
         rating = work.rating
         language = work.language
         wordCount = work.wordCount
+        datePublished = work.datePublished
+        dateUpdated = work.dateUpdated
         chapters = work.chapters
         kudos = work.kudos
         workWarnings = work.workWarnings
@@ -529,6 +533,8 @@ enum KudosBackupService {
         work.rating = archived.rating
         work.language = archived.language
         work.wordCount = archived.wordCount
+        work.datePublished = archived.datePublished ?? ""
+        work.dateUpdated = archived.dateUpdated ?? ""
         work.chapters = archived.chapters
         work.kudos = archived.kudos
         work.workWarnings = archived.workWarnings

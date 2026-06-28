@@ -1,14 +1,14 @@
 import Foundation
 
 /// Local name of an XML element, ignoring any namespace prefix.
-func localName(_ name: String) -> String {
+nonisolated func localName(_ name: String) -> String {
     name.contains(":") ? String(name.split(separator: ":").last!) : name
 }
 
 extension String {
     /// Resolves HTML/XML character references (named and numeric) one level.
     /// Used to undo double-encoding left behind after XML parsing.
-    func decodingHTMLEntities() -> String {
+    nonisolated func decodingHTMLEntities() -> String {
         guard contains("&") else { return self }
         let named: [String: String] = [
             "&amp;": "&", "&lt;": "<", "&gt;": ">",

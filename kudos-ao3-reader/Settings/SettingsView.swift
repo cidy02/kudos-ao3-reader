@@ -37,10 +37,14 @@ struct ReaderOptionsForm: View {
     @State private var showAbout = false
     @State private var exportingBackup = false
     @State private var importingBackup = false
+    @State private var importingEPUB = false
+    @State private var isImportingEPUB = false
+    @State private var epubImportProgress: String?
     @State private var showImportConfirmation = false
     @State private var backupDocument: KudosBackupDocument?
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
+    @State private var epubNotice: BackupNotice?
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -234,6 +238,12 @@ struct ReaderOptionsForm: View {
                     onImport: { importingBackup = true }
                 )
 
+                EPUBImportSettingsSection(
+                    isImporting: isImportingEPUB,
+                    progressText: epubImportProgress,
+                    onImport: { importingEPUB = true }
+                )
+
                 Section {
                     Toggle("Hide mature content", isOn: $hideMatureContent)
                     if hideMatureContent {
@@ -249,8 +259,10 @@ struct ReaderOptionsForm: View {
                 } footer: {
                     Text(hideMatureContent
                         ? (matureMode == .hide
-                            ? "Mature and Explicit works are hidden from your Library, History, and Favorites until you reveal them."
-                            : "Mature and Explicit works are blurred in your Library, History, and Favorites until you tap to reveal them.")
+                            ? "Mature and Explicit works are hidden from your Library, "
+                                + "History, and Favorites until you reveal them."
+                            : "Mature and Explicit works are blurred in your Library, "
+                                + "History, and Favorites until you tap to reveal them.")
                         : "Mature and Explicit works are shown normally.")
                 }
 
@@ -301,6 +313,13 @@ struct ReaderOptionsForm: View {
         ) { result in
             importBackup(result)
         }
+        .fileImporter(
+            isPresented: $importingEPUB,
+            allowedContentTypes: [Self.epubContentType],
+            allowsMultipleSelection: true
+        ) { result in
+            importEPUBSelection(result)
+        }
         .confirmationDialog(
             "Import this backup?",
             isPresented: $showImportConfirmation,
@@ -319,6 +338,13 @@ struct ReaderOptionsForm: View {
             }
         }
         .alert(item: $backupNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .alert(item: $epubNotice) { notice in
             Alert(
                 title: Text(notice.title),
                 message: Text(notice.message),
@@ -371,6 +397,49 @@ struct ReaderOptionsForm: View {
             context.delete(font)
         }
         try? context.save()
+    }
+
+    // MARK: EPUB import
+
+    private func importEPUBSelection(_ result: Result<[URL], Error>) {
+        do {
+            let urls = try result.get()
+            guard !urls.isEmpty else { return }
+            Task { await importEPUBs(urls) }
+        } catch {
+            guard !error.isUserCancellation else {
+                return
+            }
+            epubNotice = BackupNotice(
+                title: "Couldn't Import EPUB",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    @MainActor
+    private func importEPUBs(_ urls: [URL]) async {
+        isImportingEPUB = true
+        epubImportProgress = nil
+        defer {
+            isImportingEPUB = false
+            epubImportProgress = nil
+        }
+
+        var summary = EPUBImportNoticeSummary()
+        for (index, url) in urls.enumerated() {
+            epubImportProgress = "Importing \(index + 1) of \(urls.count)…"
+            let accessed = url.startAccessingSecurityScopedResource()
+            do {
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                let outcome = try await importUserEPUB(url, into: context)
+                summary.record(outcome)
+            } catch {
+                summary.recordFailure(fileName: url.lastPathComponent, message: error.localizedDescription)
+            }
+        }
+
+        epubNotice = BackupNotice(title: summary.title, message: summary.message)
     }
 
     // MARK: Backup export / import
@@ -445,6 +514,11 @@ struct ReaderOptionsForm: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+
+    private static let epubContentType: UTType = {
+        UTType(filenameExtension: "epub")
+            ?? UTType(importedAs: "org.idpf.epub-container", conformingTo: .data)
+    }()
 }
 
 struct BackupSettingsSection: View {
@@ -467,5 +541,88 @@ struct BackupSettingsSection: View {
                  + "items already on this device. AO3 sessions and passwords are "
                  + "never included.")
         }
+    }
+}
+
+struct EPUBImportSettingsSection: View {
+    let isImporting: Bool
+    let progressText: String?
+    let onImport: () -> Void
+
+    var body: some View {
+        Section {
+            Button(action: onImport) {
+                Label("Import EPUB", systemImage: "doc.badge.plus")
+            }
+            .disabled(isImporting)
+            .accessibilityLabel("Import EPUB")
+
+            if isImporting {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text(progressText ?? "Importing EPUB…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("EPUB")
+        } footer: {
+            Text("Import AO3 EPUB files into your local Library. Files are copied "
+                 + "into Kudos storage and remain readable offline.")
+        }
+    }
+}
+
+private struct EPUBImportNoticeSummary {
+    var imported = 0
+    var restored = 0
+    var duplicates = 0
+    var failures: [(fileName: String, message: String)] = []
+
+    var title: String {
+        failures.isEmpty ? "EPUB Import Complete" : "EPUB Import Finished"
+    }
+
+    var message: String {
+        var parts: [String] = []
+        if imported > 0 { parts.append("Imported \(imported.formatted()).") }
+        if restored > 0 {
+            parts.append("Restored \(restored.formatted()) existing Library file\(restored == 1 ? "" : "s").")
+        }
+        if duplicates > 0 {
+            parts.append("Skipped \(duplicates.formatted()) duplicate\(duplicates == 1 ? "" : "s").")
+        }
+        if failures.isEmpty {
+            return parts.isEmpty ? "No EPUB files were selected." : parts.joined(separator: " ")
+        }
+        let failureText = failures.prefix(3)
+            .map { "\($0.fileName): \($0.message)" }
+            .joined(separator: "\n")
+        let extra = failures.count > 3 ? "\n…and \(failures.count - 3) more." : ""
+        return (parts.isEmpty ? "No EPUBs were imported." : parts.joined(separator: " "))
+            + "\n\n" + failureText + extra
+    }
+
+    mutating func record(_ outcome: UserEPUBImportOutcome) {
+        switch outcome {
+        case .imported:
+            imported += 1
+        case .restored:
+            restored += 1
+        case .duplicate:
+            duplicates += 1
+        }
+    }
+
+    mutating func recordFailure(fileName: String, message: String) {
+        failures.append((fileName, message))
+    }
+}
+
+private extension Error {
+    var isUserCancellation: Bool {
+        let error = self as NSError
+        return error.domain == NSCocoaErrorDomain
+            && error.code == CocoaError.Code.userCancelled.rawValue
     }
 }

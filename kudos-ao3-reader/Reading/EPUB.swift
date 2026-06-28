@@ -9,7 +9,7 @@ import Foundation
 /// A typed failure from reading an EPUB, with a user-facing description. Replaces
 /// the parser's old silent `nil` returns so callers can tell the user *why* a
 /// file wouldn't open.
-enum EPUBError: LocalizedError {
+nonisolated enum EPUBError: LocalizedError {
     /// The file's bytes couldn't be read from disk.
     case unreadableFile
     /// Not a valid ZIP container (so not an EPUB).
@@ -41,11 +41,13 @@ enum EPUBError: LocalizedError {
 // MARK: - EPUB parsing
 
 /// Metadata pulled from an EPUB's OPF package document.
-struct EPUBMetadata {
+nonisolated struct EPUBMetadata: Sendable {
     var title: String
     var author: String
     var summary: String
     var subjects: [String]
+    /// Canonical AO3 work URL when the OPF exposes one.
+    var sourceURL: String
     /// calibre series metadata (AO3 EPUBs set these when a work is in a series).
     var seriesTitle: String
     var seriesIndex: Int?
@@ -53,6 +55,9 @@ struct EPUBMetadata {
     var rating: String
     /// `dc:language` code (e.g. "en"); empty when absent.
     var language: String
+    /// Best-effort date strings from OPF metadata. Kept as text because EPUBs vary.
+    var publishedDate: String
+    var updatedDate: String
 
     /// The AO3 ratings, in the exact spelling AO3 writes into EPUB subjects.
     private static let ratings: Set<String> = [
@@ -63,17 +68,38 @@ struct EPUBMetadata {
     static func rating(in subjects: [String]) -> String {
         subjects.first { ratings.contains($0) } ?? ""
     }
+
+    /// Finds an AO3 work URL in arbitrary OPF metadata text and normalizes it to the
+    /// canonical work page. AO3/calibre exports may prefix it with `url:` or store a
+    /// download URL; the Library only needs `/works/<id>`.
+    static func canonicalAO3WorkURL(in text: String) -> String? {
+        let pattern = #"(?i)(?:https?://)?(?:www\.)?archiveofourown\.org/(?:works|downloads)/([0-9]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              match.numberOfRanges > 1,
+              let idRange = Range(match.range(at: 1), in: text)
+        else { return nil }
+        return "https://archiveofourown.org/works/\(text[idRange])"
+    }
 }
 
 /// A table-of-contents entry pointing at a spine index.
-struct TOCEntry: Identifiable {
+nonisolated struct TOCEntry: Identifiable {
     let id = UUID()
     let title: String
     let spineIndex: Int
 }
 
+/// Lightweight EPUB package inspection that does not extract the archive.
+nonisolated struct EPUBPackageInspection: Sendable {
+    let metadata: EPUBMetadata
+    /// Number of OPF spine items that resolve through the manifest.
+    let readableItemCount: Int
+}
+
 /// Reads structure and metadata out of an EPUB (a ZIP with an OPF manifest).
-struct EPUBDocument {
+nonisolated struct EPUBDocument {
     /// OPF spine in reading order, as absolute file URLs after unzipping.
     let spineURLs: [URL]
     let metadata: EPUBMetadata
@@ -105,10 +131,13 @@ struct EPUBDocument {
             author: parser.author,
             summary: parser.summary,
             subjects: parser.subjects,
+            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText) ?? "",
             seriesTitle: parser.seriesTitle,
             seriesIndex: parser.seriesIndex,
             rating: EPUBMetadata.rating(in: parser.subjects),
-            language: parser.language
+            language: parser.language,
+            publishedDate: parser.publishedDate,
+            updatedDate: parser.updatedDate
         )
         self.chapters = EPUBDocument.tableOfContents(parser: parser, opfDir: opfDir, spineCount: spineURLs.count)
     }
@@ -198,6 +227,12 @@ struct EPUBDocument {
     /// Reads just the metadata from an EPUB file without unzipping to disk.
     /// Throws `EPUBError` on failure.
     static func metadata(ofEPUBAt url: URL) throws -> EPUBMetadata {
+        try inspectPackage(ofEPUBAt: url).metadata
+    }
+
+    /// Validates the ZIP/container/OPF enough to confirm there is readable spine
+    /// content, without extracting arbitrary publisher files to disk.
+    static func inspectPackage(ofEPUBAt url: URL) throws -> EPUBPackageInspection {
         guard let data = try? Data(contentsOf: url) else { throw EPUBError.unreadableFile }
         guard let zip = MiniZip(data: data) else { throw EPUBError.notAnEPUB }
         guard let containerData = zip.data(named: "META-INF/container.xml") else { throw EPUBError.missingContainer }
@@ -205,16 +240,22 @@ struct EPUBDocument {
         guard let opfData = zip.data(named: opfPath) else { throw EPUBError.missingPackage }
         let parser = OPFParser()
         guard parser.parse(opfData) else { throw EPUBError.malformedPackage }
-        return EPUBMetadata(
+        let readableItemCount = parser.spine.compactMap { parser.manifest[$0] }.count
+        guard readableItemCount > 0 else { throw EPUBError.noReadableContent }
+        let metadata = EPUBMetadata(
             title: parser.title,
             author: parser.author,
             summary: parser.summary,
             subjects: parser.subjects,
+            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText) ?? "",
             seriesTitle: parser.seriesTitle,
             seriesIndex: parser.seriesIndex,
             rating: EPUBMetadata.rating(in: parser.subjects),
-            language: parser.language
+            language: parser.language,
+            publishedDate: parser.publishedDate,
+            updatedDate: parser.updatedDate
         )
+        return EPUBPackageInspection(metadata: metadata, readableItemCount: readableItemCount)
     }
 
     /// Pulls the OPF path out of META-INF/container.xml.

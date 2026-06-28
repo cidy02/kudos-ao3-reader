@@ -158,10 +158,12 @@ struct WorkDetailView: View {
             }
             .disabled(working)
 
-            Button {
-                router.open(ao3URL)
-            } label: {
-                Label("Open on AO3", systemImage: "safari")
+            if let ao3URL {
+                Button {
+                    router.open(ao3URL)
+                } label: {
+                    Label("Open on AO3", systemImage: "safari")
+                }
             }
 
             Button {
@@ -208,10 +210,16 @@ struct WorkDetailView: View {
 
     private var statusFooter: String {
         guard let work = localWork else {
-            return "Reading downloads this work to your device. When you finish, the file is freed unless you save or favorite it."
+            return "Reading downloads this work to your device. When you finish, "
+                + "the file is freed unless you save or favorite it."
         }
         if work.isSaved { return "Saved — kept on this device." }
-        if !work.hasEPUB { return "Finished. The file was freed to save space; it re-downloads when you read it again." }
+        if WorkTags.ao3WorkID(from: work.sourceURL) == nil {
+            return "Imported EPUB — kept on this device for offline reading."
+        }
+        if !work.hasEPUB {
+            return "Finished. The file was freed to save space; it re-downloads when you read it again."
+        }
         if work.isFinished { return "Finished." }
         if work.isFavorite { return "Favorited, so its file is kept when finished." }
         return "Reading. When you finish, the file is freed unless you save or favorite it."
@@ -259,7 +267,12 @@ struct WorkDetailView: View {
             if !displayLanguage.isEmpty { LabeledContent("Language", value: displayLanguage) }
             if let words = displayWords { LabeledContent("Words", value: words.formatted()) }
             if !displayChapters.isEmpty { LabeledContent("Chapters", value: displayChapters) }
-            if let updated = remote?.dateUpdated, !updated.isEmpty {
+            if !displayPublishedDate.isEmpty {
+                LabeledContent("Published", value: displayPublishedDate)
+            }
+            if !displayUpdatedDate.isEmpty {
+                LabeledContent("Updated", value: displayUpdatedDate)
+            } else if let updated = remote?.dateUpdated, !updated.isEmpty {
                 LabeledContent("Updated", value: updated)
             }
             if let work = localWork {
@@ -279,6 +292,8 @@ struct WorkDetailView: View {
     }
     private var displayRating: String { firstNonEmpty(localWork?.rating, remote?.rating) }
     private var displayLanguage: String { firstNonEmpty(localWork?.language, remote?.language) }
+    private var displayPublishedDate: String { localWork?.datePublished ?? "" }
+    private var displayUpdatedDate: String { firstNonEmpty(localWork?.dateUpdated, remote?.dateUpdated) }
 
     // Warnings / categories / status / stats: prefer the local record's stored values
     // (canonical once refreshed), falling back to the remote summary while unsaved.
@@ -341,11 +356,11 @@ struct WorkDetailView: View {
     }
 
     /// The AO3 URL for "Open on AO3" / web fallback (local source URL or remote work URL).
-    private var ao3URL: URL {
+    private var ao3URL: URL? {
         if let work = localWork, let url = URL(string: work.sourceURL), !work.sourceURL.isEmpty {
             return url
         }
-        return remote?.workURL ?? URL(string: "https://archiveofourown.org")!
+        return remote?.workURL
     }
 
     /// The AO3 numeric work id (for the More-actions web menu), from either source.
