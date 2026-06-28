@@ -194,7 +194,12 @@ private fun HomeWorkCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = modifier
             .semantics {
-                contentDescription = "${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
+                contentDescription =
+                    if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+                        "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
+                    } else {
+                        "${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
+                    }
             }
     ) {
         Column(
