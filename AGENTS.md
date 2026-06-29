@@ -84,7 +84,7 @@ The project uses `objectVersion = 90` with **deterministic IDs** and
 - **xcodebuild/Xcode rewrites `project.pbxproj` cosmetically on build** (app
   name/path, quote removal, key reordering). If you did **not** intentionally
   change the project, revert that churn before staging:
-  `git checkout -- AO3_App_OpenSource.xcodeproj/project.pbxproj`.
+  `git checkout -- kudos-ao3-reader.xcodeproj/project.pbxproj`.
 - **Adding a target or build phase** needs careful hand-editing — mirror the app
   target and use the `…5xxxxx` ID block to avoid collisions. This is high-conflict:
   note it in `TASKS.md` and let **one** agent own pbxproj changes at a time.

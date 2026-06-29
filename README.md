@@ -44,12 +44,12 @@ config (`.claude/`), and working notes/prompts/scratch files
 
 ## Building
 
-Open `AO3_App_OpenSource.xcodeproj` in Xcode and build the `AO3_App_OpenSource`
+Open `kudos-ao3-reader.xcodeproj` in Xcode and build the `kudos-ao3-reader`
 scheme. The Readium reader runs on iOS/iPadOS; for Simulator builds from the
 command line, code signing can be disabled:
 
 ```bash
-xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
+xcodebuild -project kudos-ao3-reader.xcodeproj -scheme kudos-ao3-reader \
   -destination 'platform=iOS Simulator,name=iPhone 17' \
   CODE_SIGNING_ALLOWED=NO build
 ```
@@ -69,7 +69,7 @@ and unsupported format versions. A minimal hand-built
 ```bash
 Scripts/test.sh        # runs on the default iOS Simulator
 # or directly:
-xcodebuild test -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
+xcodebuild test -project kudos-ao3-reader.xcodeproj -scheme kudos-ao3-reader \
   -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
 ```
 
