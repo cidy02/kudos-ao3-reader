@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="${1:-platform=iOS Simulator,name=iPhone 17}"
 
 xcodebuild test \
-  -project "$ROOT/AO3_App_OpenSource.xcodeproj" \
-  -scheme AO3_App_OpenSource \
+  -project "$ROOT/kudos-ao3-reader.xcodeproj" \
+  -scheme kudos-ao3-reader \
   -destination "$DEST" \
   CODE_SIGNING_ALLOWED=NO

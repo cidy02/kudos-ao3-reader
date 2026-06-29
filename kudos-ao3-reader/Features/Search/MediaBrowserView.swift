@@ -108,8 +108,8 @@ struct MediaBrowserView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Image(systemName: category.symbol)
-                    .font(.headline)              // icon stays emphasized
-                    .foregroundStyle(.primary)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.tint)
                     .frame(width: 24)
                 Text(category.name)
                     .font(.headline.weight(.regular))   // regular weight (was bold)
