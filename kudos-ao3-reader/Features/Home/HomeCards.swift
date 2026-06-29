@@ -33,19 +33,13 @@ struct WorkCoverCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !work.author.isEmpty {
-                    Label(work.author, systemImage: "person")
-                        .labelStyle(.titleAndIcon)
+                    CardMetaLabel(text: work.author, symbol: "person")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
 
                 if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                    Label(fandom, systemImage: "books.vertical")
-                        .labelStyle(.titleAndIcon)
+                    CardMetaLabel(text: fandom, symbol: "books.vertical")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
 
                 cardStats
@@ -165,19 +159,13 @@ struct AO3WorkCoverCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let author = work.authors.first, !author.isEmpty {
-                    Label(author, systemImage: "person")
-                        .labelStyle(.titleAndIcon)
+                    CardMetaLabel(text: author, symbol: "person")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
 
                 if let fandom = work.fandoms.first, !fandom.isEmpty {
-                    Label(fandom, systemImage: "books.vertical")
-                        .labelStyle(.titleAndIcon)
+                    CardMetaLabel(text: fandom, symbol: "books.vertical", lineLimit: 2)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
                 }
 
                 cardStats
@@ -267,6 +255,24 @@ private struct WorkStateBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
+    }
+}
+
+/// Author/fandom meta row for work cards: a theme-tinted icon paired with
+/// secondary text, matching the tinted-icon style of `WorkStatLabel`.
+private struct CardMetaLabel: View {
+    let text: String
+    let symbol: String
+    var lineLimit: Int = 1
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: symbol)
+                .foregroundStyle(.tint)
+            Text(text)
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(lineLimit)
     }
 }
 

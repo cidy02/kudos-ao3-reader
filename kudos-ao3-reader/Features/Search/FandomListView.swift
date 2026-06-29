@@ -76,12 +76,11 @@ private struct FandomListRow: View {
     let fandom: AO3Fandom
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             Image(systemName: "books.vertical")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.tint)
                 .frame(width: 24)
-                .padding(.top, 2)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -106,7 +105,6 @@ private struct FandomListRow: View {
                 .font(.footnote)
                 .lineLimit(1)
                 .fixedSize()
-                .padding(.top, 1)
                 .accessibilityLabel("\(count.formatted()) works")
             }
         }
