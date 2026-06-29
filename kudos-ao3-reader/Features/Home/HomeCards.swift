@@ -41,7 +41,7 @@ struct WorkCoverCard: View {
                 }
 
                 if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                    Label(fandom, systemImage: "sparkles")
+                    Label(fandom, systemImage: "books.vertical")
                         .labelStyle(.titleAndIcon)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -173,7 +173,7 @@ struct AO3WorkCoverCard: View {
                 }
 
                 if let fandom = work.fandoms.first, !fandom.isEmpty {
-                    Label(fandom, systemImage: "sparkles")
+                    Label(fandom, systemImage: "books.vertical")
                         .labelStyle(.titleAndIcon)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

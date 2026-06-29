@@ -114,7 +114,7 @@ struct WorkDetailView: View {
                 }
 
                 if !displayFandoms.isEmpty {
-                    Label(displayFandoms.joined(separator: ", "), systemImage: "sparkles")
+                    Label(displayFandoms.joined(separator: ", "), systemImage: "books.vertical")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)

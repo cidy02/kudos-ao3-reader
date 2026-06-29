@@ -77,7 +77,7 @@ private struct FandomListRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "sparkles")
+            Image(systemName: "books.vertical")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.tint)
                 .frame(width: 24)
@@ -98,11 +98,12 @@ private struct FandomListRow: View {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.text")
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
                     Text(count.formatted())
                         .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
                 .font(.footnote)
-                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
                 .padding(.top, 1)
