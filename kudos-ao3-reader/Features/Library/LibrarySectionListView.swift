@@ -116,7 +116,7 @@ struct LibrarySectionListView: View {
                     Section {
                         ForEach(visibleItems, content: row).cardRow()
                     } header: {
-                        if showsMarkedForLater { Text("Saved in Kudos") }
+                        if showsMarkedForLater { Text("Saved for Later in Kudos") }
                     }
                 }
                 if showsMarkedForLater {

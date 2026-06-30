@@ -6,6 +6,10 @@ import SwiftData
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self, SavedSearch.self])
+        .modelContainer(for: [
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self
+        ])
     }
 }

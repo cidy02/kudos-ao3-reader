@@ -7,6 +7,7 @@ import UIKit
 /// Root of the app. On macOS it's a sidebar split with the Settings button pinned
 /// at the bottom of the sidebar; on iOS it's an adaptive tab bar / sidebar.
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var router = AppRouter()
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
@@ -46,6 +47,8 @@ struct ContentView: View {
             }
             .task {
                 await auth.restoreSession()
+                ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
+                ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
             .onShake {
@@ -201,5 +204,9 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self, SavedSearch.self], inMemory: true)
+        .modelContainer(for: [
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self
+        ], inMemory: true)
 }

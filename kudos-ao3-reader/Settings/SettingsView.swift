@@ -22,6 +22,7 @@ struct ReaderOptionsForm: View {
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @Query(sort: \SavedWork.dateAdded) private var works: [SavedWork]
     @Query(sort: \Bookmark.dateAdded) private var bookmarks: [Bookmark]
+    @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -30,6 +31,10 @@ struct ReaderOptionsForm: View {
     @AppStorage("hideMatureContent") private var hideMatureContent = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("requireBiometricToReveal") private var requireBiometric = false
+    @AppStorage("autoPreserveSmallSeriesOnSaveForLater")
+    private var autoPreserveSmallSeriesOnSaveForLater = false
+    @AppStorage("autoPreserveSeriesWorkThreshold")
+    private var autoPreserveSeriesWorkThreshold = 5
 
     @State private var importing = false
     @State private var showCustomize = false
@@ -245,6 +250,24 @@ struct ReaderOptionsForm: View {
                 )
 
                 Section {
+                    Toggle(
+                        "Auto-preserve small series",
+                        isOn: $autoPreserveSmallSeriesOnSaveForLater
+                    )
+                    Stepper(
+                        "Series limit: \(autoPreserveSeriesWorkThreshold)",
+                        value: $autoPreserveSeriesWorkThreshold,
+                        in: 2...25
+                    )
+                    .disabled(!autoPreserveSmallSeriesOnSaveForLater)
+                } header: {
+                    Text("Reading Queues")
+                } footer: {
+                    Text("Saved for Later keeps a local EPUB. Series preservation asks first "
+                         + "unless this option is enabled and the series is within the limit.")
+                }
+
+                Section {
                     Toggle("Hide mature content", isOn: $hideMatureContent)
                     if hideMatureContent {
                         Picker("When locked", selection: $matureMode) {
@@ -449,7 +472,8 @@ struct ReaderOptionsForm: View {
             backupDocument = try KudosBackupService.makeDocument(
                 works: works,
                 bookmarks: bookmarks,
-                fonts: customFonts
+                fonts: customFonts,
+                readingQueues: readingQueues
             )
             exportingBackup = true
         } catch {
@@ -536,10 +560,10 @@ struct BackupSettingsSection: View {
         } header: {
             Text("Backup")
         } footer: {
-            Text("Backups include Library records, EPUBs, User Tags, saved links, "
-                 + "custom fonts, and app settings. Import merges without deleting "
-                 + "items already on this device. AO3 sessions and passwords are "
-                 + "never included.")
+            Text("Backups include Library records, Reading Queues, preserved EPUBs, "
+                 + "User Tags, saved links, custom fonts, and app settings. Import "
+                 + "merges without deleting items already on this device. AO3 sessions "
+                 + "and passwords are never included.")
         }
     }
 }

@@ -50,7 +50,7 @@ struct KudosBackupTests {
         defer { try? FileManager.default.removeItem(at: backupURL) }
         let decoded = try KudosBackupContents.read(from: backupURL)
 
-        #expect(decoded.manifest.version == 1)
+        #expect(decoded.manifest.version == KudosBackupManifest.currentVersion)
         #expect(decoded.manifest.works.first?.title == "Backup Work")
         #expect(decoded.manifest.works.first?.userTags == ["Comfort Read"])
         #expect(decoded.manifest.bookmarks.first?.urlString == bookmark.urlString)
@@ -88,7 +88,10 @@ struct KudosBackupTests {
             defaults: sourceDefaults
         )
 
-        let schema = Schema([SavedWork.self, Tag.self, Bookmark.self, CustomFont.self])
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            ReadingQueue.self, ReadingQueueMembership.self
+        ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
         let context = ModelContext(container)
@@ -127,6 +130,60 @@ struct KudosBackupTests {
         #expect(restoredTags.map { $0.name } == ["Re-read"])
         #expect(targetDefaults.bool(forKey: "hideMatureContent") == false)
         #expect(targetDefaults.string(forKey: "appTheme") == "dark")
+
+        try? FileManager.default.removeItem(at: restored.fileURL)
+    }
+
+    @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let sourceContainer = try ModelContainer(for: schema, configurations: [configuration])
+        let sourceContext = ModelContext(sourceContainer)
+
+        let work = SavedWork(
+            title: "Queued Work",
+            author: "Queue Writer",
+            sourceURL: "https://archiveofourown.org/works/789"
+        )
+        work.hasEPUB = true
+        work.ao3WorkID = 789
+        sourceContext.insert(work)
+        try Data("queued-epub".utf8).write(to: work.fileURL)
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: sourceContext)
+        ReadingQueueService.add(work, to: queue, in: sourceContext)
+        work.epubPreservationStatus = .preserved
+        try sourceContext.save()
+
+        let document = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [queue],
+            defaults: try testDefaults()
+        )
+
+        let targetContainer = try ModelContainer(for: schema, configurations: [configuration])
+        let targetContext = ModelContext(targetContainer)
+        let summary = try KudosBackupService.restore(
+            document.contents,
+            into: targetContext,
+            defaults: try testDefaults()
+        )
+
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        let restoredQueues = try targetContext.fetch(FetchDescriptor<ReadingQueue>())
+        let restoredQueue = try #require(restoredQueues.first { $0.kind == .savedForLater })
+
+        #expect(summary.works == 1)
+        #expect(restored.ao3WorkID == 789)
+        #expect(restored.isQueuedForLater)
+        #expect(restored.isInSavedForLaterQueue)
+        #expect(restored.epubPreservationStatus == .preserved)
+        #expect(restoredQueue.memberships.count == 1)
+        #expect(try Data(contentsOf: restored.fileURL) == Data("queued-epub".utf8))
 
         try? FileManager.default.removeItem(at: restored.fileURL)
     }

@@ -11,7 +11,8 @@ enum WorkTags {
     /// un-flagged in those last cases so a later attempt can still succeed.
     @MainActor
     static func refreshFromAO3(for work: SavedWork, in context: ModelContext) async {
-        guard let id = ao3WorkID(from: work.sourceURL) else { return }
+        guard let id = work.ao3WorkID ?? ao3WorkID(from: work.sourceURL) else { return }
+        work.ao3WorkID = id
         // Fetch when never fetched, when fetched before categorized tags existed, or
         // when the newer filter metadata (warnings/categories/language/word count) is
         // still absent — so works saved by an older build gain all of it.

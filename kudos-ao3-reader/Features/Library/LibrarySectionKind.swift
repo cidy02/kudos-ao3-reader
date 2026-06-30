@@ -63,23 +63,25 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .readingNow:
             // In-progress (started, not finished, file present) — most recently read first.
             return works
-                .filter { $0.isInProgress && visible($0) }
+                .filter { $0.isInProgress && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .savedForLater:
-            // Works the user explicitly saved to keep around.
+            // Native Saved for Later queue members plus legacy "saved" works that
+            // predate queues. Queue-only works intentionally live here, not in the
+            // normal downloaded/finished shelves.
             return works
-                .filter { $0.isSaved && visible($0) }
+                .filter { ($0.isInSavedForLaterQueue || ($0.isSaved && !$0.isQueuedForLater)) && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .finished:
             return works
-                .filter { $0.isFinished && visible($0) }
+                .filter { $0.isFinished && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { ($0.lastReadDate ?? .distantPast) > ($1.lastReadDate ?? .distantPast) }
         case .collections:
             return []
         case .downloaded:
             // Everything with its EPUB on disk — the full offline shelf, newest first.
             return works
-                .filter { $0.hasEPUB && visible($0) }
+                .filter { $0.hasEPUB && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { $0.dateAdded > $1.dateAdded }
         }
     }

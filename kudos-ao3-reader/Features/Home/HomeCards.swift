@@ -102,12 +102,13 @@ struct WorkCoverCard: View {
     }
 
     private var completionStatus: String? {
-        guard WorkTags.ao3WorkID(from: work.sourceURL) != nil else { return nil }
+        guard work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil else { return nil }
         return work.isComplete ? "Complete" : "WIP"
     }
 
     private var stateBadges: [(text: String, symbol: String)] {
         var badges: [(text: String, symbol: String)] = []
+        if work.isInSavedForLaterQueue { badges.append((text: "Later", symbol: "bookmark.fill")) }
         if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
         if work.hasEPUB { badges.append((text: "Offline", symbol: "arrow.down.circle.fill")) }
         if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }

@@ -1,6 +1,29 @@
 import Foundation
 import SwiftData
 
+nonisolated enum EPUBPreservationStatus: String, Codable, CaseIterable {
+    case notPreserved
+    case queued
+    case preserving
+    case preserved
+    case failed
+    case missingFile
+}
+
+nonisolated enum MetadataSyncStatus: String, Codable, CaseIterable {
+    case unknown
+    case pending
+    case syncing
+    case complete
+    case incomplete
+    case failed
+}
+
+nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
+    case savedForLater
+    case custom
+}
+
 /// A work the user has saved from AO3, backed by an EPUB file on disk.
 @Model final class SavedWork {
     /// Stable identifier; also used as the on-disk EPUB file name.
@@ -28,6 +51,21 @@ import SwiftData
     /// Whether AO3 marks the work complete (known only for native imports).
     /// Reaching the end auto-finishes only complete works; WIPs need a manual mark.
     var isComplete: Bool = false
+
+    /// Reading Queue membership/protection state. This says the work belongs to at
+    /// least one native queue; it does *not* guarantee the EPUB is present.
+    var isQueuedForLater: Bool = false
+
+    /// Durable preservation state for queued works. Stored as raw strings so future
+    /// app versions and other platforms can decode unknown/default values safely.
+    var epubPreservationStatusRaw: String = EPUBPreservationStatus.notPreserved.rawValue
+    var metadataSyncStatusRaw: String = MetadataSyncStatus.unknown.rawValue
+    var preservedAt: Date?
+    var lastPreservationAttemptAt: Date?
+    var lastAvailabilityCheck: Date?
+
+    /// Stable AO3 identity, when known. Legacy works can derive it from `sourceURL`.
+    var ao3WorkID: Int?
 
     /// AO3 rating (e.g. "Mature"), read from the EPUB metadata. Used by the
     /// mature-content privacy feature and tag display.
@@ -66,6 +104,7 @@ import SwiftData
     var seriesTitle: String = ""
     var seriesPosition: Int = 0
     var seriesURL: String = ""
+    var ao3SeriesID: Int?
 
     /// Reading progress so the reader can resume where the user left off. The legacy
     /// WKWebView reader uses spine index + scroll fraction; the Readium reader persists
@@ -140,8 +179,31 @@ import SwiftData
     /// many collections; a collection holds many works.
     @Relationship(inverse: \WorkCollection.works) var collections: [WorkCollection] = []
 
-    /// Kept works (explicitly saved or favorited) never have their EPUB freed.
-    var isProtected: Bool { isSaved || isFavorite }
+    /// Reading Queue memberships this work belongs to. Queue membership protects
+    /// preserved EPUBs but remains distinct from Library saved/favorite state.
+    @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.work)
+    var queueMemberships: [ReadingQueueMembership] = []
+
+    var epubPreservationStatus: EPUBPreservationStatus {
+        get { EPUBPreservationStatus(rawValue: epubPreservationStatusRaw) ?? .notPreserved }
+        set { epubPreservationStatusRaw = newValue.rawValue }
+    }
+
+    var metadataSyncStatus: MetadataSyncStatus {
+        get { MetadataSyncStatus(rawValue: metadataSyncStatusRaw) ?? .unknown }
+        set { metadataSyncStatusRaw = newValue.rawValue }
+    }
+
+    /// Queue-only works are preserved/readable but intentionally hidden from normal
+    /// Library shelves until the user explicitly saves or favorites them.
+    var isQueueOnlyWork: Bool { isQueuedForLater && !isSaved && !isFavorite }
+
+    /// Kept works (saved, favorited, or queued) never have their EPUB freed.
+    var isProtected: Bool { isSaved || isFavorite || isQueuedForLater }
+
+    var isInSavedForLaterQueue: Bool {
+        queueMemberships.contains { $0.queue?.kind == .savedForLater }
+    }
 
     /// The posted-chapter count parsed from the `chapters` stats string ("5/10" → 5).
     var postedChapterCount: Int {
@@ -282,6 +344,73 @@ import SwiftData
     init(name: String) {
         self.name = name
         self.dateAdded = Date()
+    }
+}
+
+/// A native reading queue. The built-in Saved for Later queue is identified by
+/// `kind == .savedForLater`; names are display labels, not stable identities.
+@Model final class ReadingQueue {
+    var id: UUID = UUID()
+    var name: String = ""
+    var kindRaw: String = ReadingQueueKind.custom.rawValue
+    var sortOrder: Int = 0
+    var dateCreated: Date = Date()
+    var dateUpdated: Date = Date()
+
+    @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
+    var memberships: [ReadingQueueMembership] = []
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        kind: ReadingQueueKind = .custom,
+        sortOrder: Int = 0,
+        dateCreated: Date = Date(),
+        dateUpdated: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.kindRaw = kind.rawValue
+        self.sortOrder = sortOrder
+        self.dateCreated = dateCreated
+        self.dateUpdated = dateUpdated
+    }
+
+    var kind: ReadingQueueKind {
+        get { ReadingQueueKind(rawValue: kindRaw) ?? .custom }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var displayName: String {
+        kind == .savedForLater ? "Saved for Later" : name
+    }
+}
+
+/// Join record between a work and a reading queue. Duplicate queue/work pairs are
+/// prevented in `ReadingQueueService` rather than with a fragile unique attribute.
+@Model final class ReadingQueueMembership {
+    var id: UUID = UUID()
+    var queuedAt: Date = Date()
+    var sortOrderInQueue: Int = 0
+    var note: String = ""
+
+    var queue: ReadingQueue?
+    var work: SavedWork?
+
+    init(
+        id: UUID = UUID(),
+        queue: ReadingQueue,
+        work: SavedWork,
+        queuedAt: Date = Date(),
+        sortOrderInQueue: Int = 0,
+        note: String = ""
+    ) {
+        self.id = id
+        self.queue = queue
+        self.work = work
+        self.queuedAt = queuedAt
+        self.sortOrderInQueue = sortOrderInQueue
+        self.note = note
     }
 }
 

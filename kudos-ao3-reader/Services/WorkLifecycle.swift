@@ -37,6 +37,9 @@ enum WorkLifecycle {
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         work.hasEPUB = false
+        if work.isQueuedForLater {
+            work.epubPreservationStatus = .missingFile
+        }
     }
 
     /// Removes a work from the Library entirely: its EPUB, reader cache, and record.

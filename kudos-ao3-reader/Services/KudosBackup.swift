@@ -52,7 +52,7 @@ struct KudosBackupContents {
         }
 
         manifest = try Self.decoder.decode(KudosBackupManifest.self, from: manifestData)
-        guard manifest.version == KudosBackupManifest.currentVersion else {
+        guard KudosBackupManifest.supportedVersions.contains(manifest.version) else {
             throw KudosBackupError.unsupportedVersion(manifest.version)
         }
 
@@ -124,13 +124,16 @@ struct KudosBackupContents {
 }
 
 struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 1
+    static let currentVersion = 2
+    static let supportedVersions: Set<Int> = [1, currentVersion]
 
     let version: Int
     let exportedAt: Date
     let works: [KudosBackupWork]
     let bookmarks: [KudosBackupBookmark]
     let fonts: [KudosBackupFont]
+    let readingQueues: [KudosBackupReadingQueue]
+    let readingQueueMemberships: [KudosBackupReadingQueueMembership]
     let settings: KudosBackupSettings
 
     init(
@@ -139,6 +142,8 @@ struct KudosBackupManifest: Codable, Equatable {
         works: [KudosBackupWork],
         bookmarks: [KudosBackupBookmark],
         fonts: [KudosBackupFont],
+        readingQueues: [KudosBackupReadingQueue] = [],
+        readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
         settings: KudosBackupSettings
     ) {
         self.version = version
@@ -146,7 +151,38 @@ struct KudosBackupManifest: Codable, Equatable {
         self.works = works
         self.bookmarks = bookmarks
         self.fonts = fonts
+        self.readingQueues = readingQueues
+        self.readingQueueMemberships = readingQueueMemberships
         self.settings = settings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case exportedAt
+        case works
+        case bookmarks
+        case fonts
+        case readingQueues
+        case readingQueueMemberships
+        case settings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        works = try container.decode([KudosBackupWork].self, forKey: .works)
+        bookmarks = try container.decode([KudosBackupBookmark].self, forKey: .bookmarks)
+        fonts = try container.decode([KudosBackupFont].self, forKey: .fonts)
+        readingQueues = try container.decodeIfPresent(
+            [KudosBackupReadingQueue].self,
+            forKey: .readingQueues
+        ) ?? []
+        readingQueueMemberships = try container.decodeIfPresent(
+            [KudosBackupReadingQueueMembership].self,
+            forKey: .readingQueueMemberships
+        ) ?? []
+        settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
     }
 }
 
@@ -169,11 +205,14 @@ struct KudosBackupWork: Codable, Equatable {
     let dateUpdated: String?
     let chapters: String
     let kudos: Int
+    let comments: Int
+    let hits: Int
     let workWarnings: [String]
     let workCategories: [String]
     let seriesTitle: String
     let seriesPosition: Int
     let seriesURL: String
+    let ao3SeriesID: Int?
     let lastSpineIndex: Int
     let lastScrollFraction: Double
     let lastReadDate: Date?
@@ -183,6 +222,14 @@ struct KudosBackupWork: Codable, Equatable {
     let workRelationships: [String]
     let workFreeforms: [String]
     let workTagsFetched: Bool
+    let ao3Unavailable: Bool
+    let isQueuedForLater: Bool
+    let epubPreservationStatusRaw: String
+    let metadataSyncStatusRaw: String
+    let preservedAt: Date?
+    let lastPreservationAttemptAt: Date?
+    let lastAvailabilityCheck: Date?
+    let ao3WorkID: Int?
     let userTags: [String]
     let readiumLocator: String?
 
@@ -206,11 +253,14 @@ struct KudosBackupWork: Codable, Equatable {
         dateUpdated = work.dateUpdated
         chapters = work.chapters
         kudos = work.kudos
+        comments = work.comments
+        hits = work.hits
         workWarnings = work.workWarnings
         workCategories = work.workCategories
         seriesTitle = work.seriesTitle
         seriesPosition = work.seriesPosition
         seriesURL = work.seriesURL
+        ao3SeriesID = work.ao3SeriesID
         lastSpineIndex = work.lastSpineIndex
         lastScrollFraction = work.lastScrollFraction
         lastReadDate = work.lastReadDate
@@ -220,12 +270,126 @@ struct KudosBackupWork: Codable, Equatable {
         workRelationships = work.workRelationships
         workFreeforms = work.workFreeforms
         workTagsFetched = work.workTagsFetched
+        ao3Unavailable = work.ao3Unavailable
+        isQueuedForLater = work.isQueuedForLater
+        epubPreservationStatusRaw = work.epubPreservationStatusRaw
+        metadataSyncStatusRaw = work.metadataSyncStatusRaw
+        preservedAt = work.preservedAt
+        lastPreservationAttemptAt = work.lastPreservationAttemptAt
+        lastAvailabilityCheck = work.lastAvailabilityCheck
+        ao3WorkID = work.ao3WorkID
         userTags = work.tags.map(\.name).sorted()
         #if canImport(ReadiumShared)
         readiumLocator = work.readiumLocator
         #else
         readiumLocator = nil
         #endif
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case author
+        case summary
+        case sourceURL
+        case dateAdded
+        case isFavorite
+        case isSaved
+        case isFinished
+        case hasEPUB
+        case isComplete
+        case rating
+        case language
+        case wordCount
+        case datePublished
+        case dateUpdated
+        case chapters
+        case kudos
+        case comments
+        case hits
+        case workWarnings
+        case workCategories
+        case seriesTitle
+        case seriesPosition
+        case seriesURL
+        case ao3SeriesID
+        case lastSpineIndex
+        case lastScrollFraction
+        case lastReadDate
+        case workTags
+        case workFandoms
+        case workCharacters
+        case workRelationships
+        case workFreeforms
+        case workTagsFetched
+        case ao3Unavailable
+        case isQueuedForLater
+        case epubPreservationStatusRaw
+        case metadataSyncStatusRaw
+        case preservedAt
+        case lastPreservationAttemptAt
+        case lastAvailabilityCheck
+        case ao3WorkID
+        case userTags
+        case readiumLocator
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        author = try container.decodeIfPresent(String.self, forKey: .author) ?? ""
+        summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
+        dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
+        isFinished = try container.decodeIfPresent(Bool.self, forKey: .isFinished) ?? false
+        hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
+        isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
+        rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
+        language = try container.decodeIfPresent(String.self, forKey: .language) ?? ""
+        wordCount = try container.decodeIfPresent(Int.self, forKey: .wordCount) ?? 0
+        datePublished = try container.decodeIfPresent(String.self, forKey: .datePublished)
+        dateUpdated = try container.decodeIfPresent(String.self, forKey: .dateUpdated)
+        chapters = try container.decodeIfPresent(String.self, forKey: .chapters) ?? ""
+        kudos = try container.decodeIfPresent(Int.self, forKey: .kudos) ?? 0
+        comments = try container.decodeIfPresent(Int.self, forKey: .comments) ?? 0
+        hits = try container.decodeIfPresent(Int.self, forKey: .hits) ?? 0
+        workWarnings = try container.decodeIfPresent([String].self, forKey: .workWarnings) ?? []
+        workCategories = try container.decodeIfPresent([String].self, forKey: .workCategories) ?? []
+        seriesTitle = try container.decodeIfPresent(String.self, forKey: .seriesTitle) ?? ""
+        seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition) ?? 0
+        seriesURL = try container.decodeIfPresent(String.self, forKey: .seriesURL) ?? ""
+        ao3SeriesID = try container.decodeIfPresent(Int.self, forKey: .ao3SeriesID)
+        lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
+        lastScrollFraction = try container.decodeIfPresent(Double.self, forKey: .lastScrollFraction) ?? 0
+        lastReadDate = try container.decodeIfPresent(Date.self, forKey: .lastReadDate)
+        workTags = try container.decodeIfPresent([String].self, forKey: .workTags) ?? []
+        workFandoms = try container.decodeIfPresent([String].self, forKey: .workFandoms) ?? []
+        workCharacters = try container.decodeIfPresent([String].self, forKey: .workCharacters) ?? []
+        workRelationships = try container.decodeIfPresent([String].self, forKey: .workRelationships) ?? []
+        workFreeforms = try container.decodeIfPresent([String].self, forKey: .workFreeforms) ?? []
+        workTagsFetched = try container.decodeIfPresent(Bool.self, forKey: .workTagsFetched) ?? false
+        ao3Unavailable = try container.decodeIfPresent(Bool.self, forKey: .ao3Unavailable) ?? false
+        isQueuedForLater = try container.decodeIfPresent(Bool.self, forKey: .isQueuedForLater) ?? false
+        epubPreservationStatusRaw = try container.decodeIfPresent(
+            String.self,
+            forKey: .epubPreservationStatusRaw
+        ) ?? EPUBPreservationStatus.notPreserved.rawValue
+        metadataSyncStatusRaw = try container.decodeIfPresent(
+            String.self,
+            forKey: .metadataSyncStatusRaw
+        ) ?? MetadataSyncStatus.unknown.rawValue
+        preservedAt = try container.decodeIfPresent(Date.self, forKey: .preservedAt)
+        lastPreservationAttemptAt = try container.decodeIfPresent(
+            Date.self,
+            forKey: .lastPreservationAttemptAt
+        )
+        lastAvailabilityCheck = try container.decodeIfPresent(Date.self, forKey: .lastAvailabilityCheck)
+        ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
+        userTags = try container.decodeIfPresent([String].self, forKey: .userTags) ?? []
+        readiumLocator = try container.decodeIfPresent(String.self, forKey: .readiumLocator)
     }
 }
 
@@ -255,6 +419,47 @@ struct KudosBackupFont: Codable, Equatable {
     }
 }
 
+struct KudosBackupReadingQueue: Codable, Equatable {
+    let id: UUID
+    let name: String
+    let kindRaw: String
+    let sortOrder: Int
+    let dateCreated: Date
+    let dateUpdated: Date
+
+    @MainActor
+    init(queue: ReadingQueue) {
+        id = queue.id
+        name = queue.name
+        kindRaw = queue.kindRaw
+        sortOrder = queue.sortOrder
+        dateCreated = queue.dateCreated
+        dateUpdated = queue.dateUpdated
+    }
+}
+
+struct KudosBackupReadingQueueMembership: Codable, Equatable {
+    let id: UUID
+    let queueID: UUID
+    let workID: UUID
+    let queuedAt: Date
+    let sortOrderInQueue: Int
+    let note: String
+
+    @MainActor
+    init?(membership: ReadingQueueMembership) {
+        guard let queueID = membership.queue?.id,
+              let workID = membership.work?.id
+        else { return nil }
+        id = membership.id
+        self.queueID = queueID
+        self.workID = workID
+        queuedAt = membership.queuedAt
+        sortOrderInQueue = membership.sortOrderInQueue
+        note = membership.note
+    }
+}
+
 struct KudosBackupSettings: Codable, Equatable {
     var readerFontID: String
     var readerMode: String
@@ -275,6 +480,122 @@ struct KudosBackupSettings: Codable, Equatable {
     var readerTheme: String
     var matchAppReaderTheme: Bool
     var accentColorHex: String
+    var autoPreserveSmallSeriesOnSaveForLater: Bool
+    var autoPreserveSeriesWorkThreshold: Int
+
+    init(
+        readerFontID: String,
+        readerMode: String,
+        readerTwoPage: Bool,
+        readerCustomize: Bool,
+        readerBoldText: Bool,
+        readerFontPt: Double,
+        readerLineHeight: Double,
+        readerLetterSpacing: Double,
+        readerWordSpacing: Double,
+        readerMargin: Double,
+        readerJustify: Bool,
+        confirmBeforeDelete: Bool,
+        hideMatureContent: Bool,
+        matureContentMode: String,
+        requireBiometricToReveal: Bool,
+        appTheme: String,
+        readerTheme: String,
+        matchAppReaderTheme: Bool,
+        accentColorHex: String,
+        autoPreserveSmallSeriesOnSaveForLater: Bool,
+        autoPreserveSeriesWorkThreshold: Int
+    ) {
+        self.readerFontID = readerFontID
+        self.readerMode = readerMode
+        self.readerTwoPage = readerTwoPage
+        self.readerCustomize = readerCustomize
+        self.readerBoldText = readerBoldText
+        self.readerFontPt = readerFontPt
+        self.readerLineHeight = readerLineHeight
+        self.readerLetterSpacing = readerLetterSpacing
+        self.readerWordSpacing = readerWordSpacing
+        self.readerMargin = readerMargin
+        self.readerJustify = readerJustify
+        self.confirmBeforeDelete = confirmBeforeDelete
+        self.hideMatureContent = hideMatureContent
+        self.matureContentMode = matureContentMode
+        self.requireBiometricToReveal = requireBiometricToReveal
+        self.appTheme = appTheme
+        self.readerTheme = readerTheme
+        self.matchAppReaderTheme = matchAppReaderTheme
+        self.accentColorHex = accentColorHex
+        self.autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater
+        self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case readerFontID
+        case readerMode
+        case readerTwoPage
+        case readerCustomize
+        case readerBoldText
+        case readerFontPt
+        case readerLineHeight
+        case readerLetterSpacing
+        case readerWordSpacing
+        case readerMargin
+        case readerJustify
+        case confirmBeforeDelete
+        case hideMatureContent
+        case matureContentMode
+        case requireBiometricToReveal
+        case appTheme
+        case readerTheme
+        case matchAppReaderTheme
+        case accentColorHex
+        case autoPreserveSmallSeriesOnSaveForLater
+        case autoPreserveSeriesWorkThreshold
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            readerFontID: try container.decodeIfPresent(String.self, forKey: .readerFontID) ?? "system",
+            readerMode: try container.decodeIfPresent(String.self, forKey: .readerMode)
+                ?? ReadingMode.scroll.rawValue,
+            readerTwoPage: try container.decodeIfPresent(Bool.self, forKey: .readerTwoPage) ?? false,
+            readerCustomize: try container.decodeIfPresent(Bool.self, forKey: .readerCustomize) ?? false,
+            readerBoldText: try container.decodeIfPresent(Bool.self, forKey: .readerBoldText) ?? false,
+            readerFontPt: try container.decodeIfPresent(Double.self, forKey: .readerFontPt)
+                ?? ReaderTextStyle.defaultFontSizePt,
+            readerLineHeight: try container.decodeIfPresent(Double.self, forKey: .readerLineHeight)
+                ?? ReaderTextStyle.defaultLineHeight,
+            readerLetterSpacing: try container.decodeIfPresent(Double.self, forKey: .readerLetterSpacing) ?? 0,
+            readerWordSpacing: try container.decodeIfPresent(Double.self, forKey: .readerWordSpacing) ?? 0,
+            readerMargin: try container.decodeIfPresent(Double.self, forKey: .readerMargin)
+                ?? ReaderTextStyle.defaultMargin,
+            readerJustify: try container.decodeIfPresent(Bool.self, forKey: .readerJustify) ?? false,
+            confirmBeforeDelete: try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeDelete) ?? true,
+            hideMatureContent: try container.decodeIfPresent(Bool.self, forKey: .hideMatureContent) ?? true,
+            matureContentMode: try container.decodeIfPresent(String.self, forKey: .matureContentMode)
+                ?? MaturePrivacyMode.obscure.rawValue,
+            requireBiometricToReveal: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .requireBiometricToReveal
+            ) ?? false,
+            appTheme: try container.decodeIfPresent(String.self, forKey: .appTheme)
+                ?? ReaderTheme.light.rawValue,
+            readerTheme: try container.decodeIfPresent(String.self, forKey: .readerTheme)
+                ?? ReaderTheme.light.rawValue,
+            matchAppReaderTheme: try container.decodeIfPresent(Bool.self, forKey: .matchAppReaderTheme) ?? true,
+            accentColorHex: try container.decodeIfPresent(String.self, forKey: .accentColorHex)
+                ?? ThemeManager.ao3Red,
+            autoPreserveSmallSeriesOnSaveForLater: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .autoPreserveSmallSeriesOnSaveForLater
+            ) ?? false,
+            autoPreserveSeriesWorkThreshold: try container.decodeIfPresent(
+                Int.self,
+                forKey: .autoPreserveSeriesWorkThreshold
+            ) ?? 5
+        )
+    }
 
     static func capture(defaults: UserDefaults = .standard) -> Self {
         Self(
@@ -313,7 +634,17 @@ struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            accentColorHex: defaults.string(forKey: "accentColorHex") ?? ThemeManager.ao3Red
+            accentColorHex: defaults.string(forKey: "accentColorHex") ?? ThemeManager.ao3Red,
+            autoPreserveSmallSeriesOnSaveForLater: bool(
+                defaults,
+                "autoPreserveSmallSeriesOnSaveForLater",
+                fallback: false
+            ),
+            autoPreserveSeriesWorkThreshold: Int(number(
+                defaults,
+                "autoPreserveSeriesWorkThreshold",
+                fallback: 5
+            ))
         )
     }
 
@@ -337,6 +668,8 @@ struct KudosBackupSettings: Codable, Equatable {
         defaults.set(readerTheme, forKey: "readerTheme")
         defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
         defaults.set(accentColorHex, forKey: "accentColorHex")
+        defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
+        defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
     }
 
     private static func bool(
@@ -382,6 +715,7 @@ enum KudosBackupService {
         works: [SavedWork],
         bookmarks: [Bookmark],
         fonts: [CustomFont],
+        readingQueues: [ReadingQueue] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupDocument {
         var epubFiles: [UUID: Data] = [:]
@@ -398,10 +732,14 @@ enum KudosBackupService {
             }
         }
 
+        let queueMemberships = readingQueues.flatMap(\.memberships)
+            .compactMap(KudosBackupReadingQueueMembership.init)
         let manifest = KudosBackupManifest(
             works: works.map(KudosBackupWork.init),
             bookmarks: bookmarks.map(KudosBackupBookmark.init),
             fonts: fonts.map(KudosBackupFont.init),
+            readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
+            readingQueueMemberships: queueMemberships,
             settings: .capture(defaults: defaults)
         )
         return KudosBackupDocument(contents: KudosBackupContents(
@@ -461,6 +799,62 @@ enum KudosBackupService {
                 work.hasEPUB = false
             }
         }
+
+        let savedForLaterQueue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        let existingQueues = try context.fetch(FetchDescriptor<ReadingQueue>())
+        var queuesByID = Dictionary(
+            existingQueues.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var queueIDMap: [UUID: ReadingQueue] = [:]
+        for archived in contents.manifest.readingQueues {
+            let queue: ReadingQueue
+            let kind = ReadingQueueKind(rawValue: archived.kindRaw) ?? .custom
+            if kind == .savedForLater {
+                queue = savedForLaterQueue
+            } else if let existing = queuesByID[archived.id] {
+                queue = existing
+            } else {
+                queue = ReadingQueue(
+                    id: archived.id,
+                    name: archived.name,
+                    kind: kind,
+                    sortOrder: archived.sortOrder,
+                    dateCreated: archived.dateCreated,
+                    dateUpdated: archived.dateUpdated
+                )
+                context.insert(queue)
+                queuesByID[archived.id] = queue
+            }
+            queue.name = kind == .savedForLater ? ReadingQueueService.savedForLaterName : archived.name
+            queue.kind = kind
+            queue.sortOrder = archived.sortOrder
+            queue.dateCreated = archived.dateCreated
+            queue.dateUpdated = archived.dateUpdated
+            queueIDMap[archived.id] = queue
+        }
+
+        for archived in contents.manifest.readingQueueMemberships {
+            guard let work = worksByID[archived.workID] else { continue }
+            let queue = queueIDMap[archived.queueID] ?? savedForLaterQueue
+            if work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) {
+                work.isQueuedForLater = true
+                continue
+            }
+            let membership = ReadingQueueMembership(
+                id: archived.id,
+                queue: queue,
+                work: work,
+                queuedAt: archived.queuedAt,
+                sortOrderInQueue: archived.sortOrderInQueue,
+                note: archived.note
+            )
+            context.insert(membership)
+            queue.memberships.append(membership)
+            work.queueMemberships.append(membership)
+            work.isQueuedForLater = true
+        }
+        ReadingQueueService.normalizeAllQueuedWorks(in: context)
 
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
@@ -537,11 +931,14 @@ enum KudosBackupService {
         work.dateUpdated = archived.dateUpdated ?? ""
         work.chapters = archived.chapters
         work.kudos = archived.kudos
+        work.comments = archived.comments
+        work.hits = archived.hits
         work.workWarnings = archived.workWarnings
         work.workCategories = archived.workCategories
         work.seriesTitle = archived.seriesTitle
         work.seriesPosition = archived.seriesPosition
         work.seriesURL = archived.seriesURL
+        work.ao3SeriesID = archived.ao3SeriesID
         work.lastSpineIndex = archived.lastSpineIndex
         work.lastScrollFraction = archived.lastScrollFraction
         work.lastReadDate = archived.lastReadDate
@@ -551,6 +948,14 @@ enum KudosBackupService {
         work.workRelationships = archived.workRelationships
         work.workFreeforms = archived.workFreeforms
         work.workTagsFetched = archived.workTagsFetched
+        work.ao3Unavailable = archived.ao3Unavailable
+        work.isQueuedForLater = archived.isQueuedForLater
+        work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw
+        work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
+        work.preservedAt = archived.preservedAt
+        work.lastPreservationAttemptAt = archived.lastPreservationAttemptAt
+        work.lastAvailabilityCheck = archived.lastAvailabilityCheck
+        work.ao3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL)
         #if canImport(ReadiumShared)
         work.readiumLocator = archived.readiumLocator ?? ""
         #endif

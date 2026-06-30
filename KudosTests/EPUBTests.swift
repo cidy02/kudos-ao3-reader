@@ -59,7 +59,10 @@ struct EPUBTests {
     }
 
     @Test @MainActor func userImportCreatesSavedWorkAndDetectsDuplicate() async throws {
-        let schema = Schema([SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, WorkCollection.self])
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
         let context = ModelContext(container)

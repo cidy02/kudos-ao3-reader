@@ -18,6 +18,7 @@ struct LibraryView: View {
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
     @Query(sort: \Tag.name) private var tags: [Tag]
     @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -29,6 +30,8 @@ struct LibraryView: View {
     @State private var isLoadingMarkedForLater = false
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
+    @State private var showingNewQueue = false
+    @State private var newQueueName = ""
 
     // Multi-select / bulk actions. `EditMode` is iOS-only, so macOS has no select mode.
     #if os(iOS)
@@ -48,7 +51,7 @@ struct LibraryView: View {
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
     private var statisticsWorks: [SavedWork] {
-        works.filter { !hideMature || !$0.isAdult || gate.isRevealed($0) }
+        works.filter { !$0.isQueueOnlyWork && (!hideMature || !$0.isAdult || gate.isRevealed($0)) }
     }
 
     /// Drops Mature/Explicit works in Hide mode (until revealed); Blur mode keeps them
@@ -79,6 +82,7 @@ struct LibraryView: View {
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
             .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
+            .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .toolbar { toolbarContent }
             .alert("New Collection", isPresented: $showingNewCollection) {
@@ -87,6 +91,13 @@ struct LibraryView: View {
                 Button("Cancel", role: .cancel) { newCollectionName = "" }
             } message: {
                 Text("Name your collection.")
+            }
+            .alert("New Queue", isPresented: $showingNewQueue) {
+                TextField("Name", text: $newQueueName)
+                Button("Create") { createQueue() }
+                Button("Cancel", role: .cancel) { newQueueName = "" }
+            } message: {
+                Text("Name your reading queue.")
             }
             .confirmationDialog(
                 "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
@@ -107,7 +118,11 @@ struct LibraryView: View {
                     .presentationDragIndicator(.visible)
                     #endif
             }
-            .task { await backfillFilterMetadata() }
+            .task {
+                ReadingQueueService.ensureSavedForLaterQueue(in: context)
+                ReadingQueueService.normalizeAllQueuedWorks(in: context)
+                await backfillFilterMetadata()
+            }
             .task(id: auth.isLoggedIn) { await loadMarkedForLater() }
             // A tag tapped on a work's detail page filters the Library to it.
             // `initial: true` catches a tag set just before this view appears.
@@ -136,6 +151,7 @@ struct LibraryView: View {
                 localCarousel(.readingNow)
                 savedForLaterCarousel
                 localCarousel(.finished)
+                readingQueuesCarousel
                 collectionsCarousel
                 localCarousel(.downloaded)
             }
@@ -239,11 +255,39 @@ struct LibraryView: View {
         }
     }
 
+    private var readingQueuesCarousel: some View {
+        let customQueues = readingQueues
+            .filter { $0.kind == .custom }
+            .sorted { $0.sortOrder < $1.sortOrder }
+        return WorkCarouselSection(
+            title: "Reading Queues",
+            collapseKey: "library.readingQueues",
+            hasItems: true
+        ) {
+            Button {
+                newQueueName = ""
+                showingNewQueue = true
+            } label: {
+                NewReadingQueueCard()
+            }
+            .buttonStyle(.plain)
+
+            ForEach(customQueues) { queue in
+                NavigationLink(value: queue) {
+                    ReadingQueueCard(queue: queue)
+                }
+                .buttonStyle(.plain)
+            }
+        } emptyState: {
+            EmptyView()
+        }
+    }
+
     /// The user's most-common fandoms (privacy-filtered), most frequent first —
     /// the data behind the quick-filter chips.
     private var topFandoms: [String] {
         let counts: [String: Int] = works
-            .filter(passesPrivacy)
+            .filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
             .flatMap(\.workFandoms)
             .reduce(into: [:]) { $0[$1, default: 0] += 1 }
         return counts
@@ -388,7 +432,7 @@ struct LibraryView: View {
     /// Sequential, so it never bursts requests; each step is guarded and skips works that
     /// are already complete, have no EPUB, or no AO3 source.
     private func backfillFilterMetadata() async {
-        for work in works {
+        for work in works where !work.isQueueOnlyWork {
             await WorkTags.backfillFromEPUB(for: work, in: context)
             if work.needsAO3Refresh {
                 await WorkTags.refreshFromAO3(for: work, in: context)
@@ -418,12 +462,19 @@ struct LibraryView: View {
         try? context.save()
     }
 
+    private func createQueue() {
+        let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newQueueName = ""
+        guard !trimmed.isEmpty else { return }
+        _ = ReadingQueueService.createQueue(named: trimmed, in: context)
+    }
+
     // MARK: Multi-select / bulk actions
 
     /// All local works visible under privacy + the active filters, for the iOS
     /// select-mode list. Already newest-first from the query.
     private var selectableWorks: [SavedWork] {
-        filters.apply(to: works.filter(passesPrivacy))
+        filters.apply(to: works.filter { !$0.isQueueOnlyWork && passesPrivacy($0) })
     }
 
     @ViewBuilder

@@ -47,6 +47,11 @@ func importEPUB(
     }
     work.isComplete = isComplete || work.isComplete
     work.seriesURL = seriesURL
+    work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
+    work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: seriesURL)
+    if work.hasEPUB {
+        work.epubPreservationStatus = .notPreserved
+    }
     // Baseline for update detection: the posted-chapter count at download time, so
     // chapters AO3 adds afterwards surface in Home → Recently Updated. Native imports
     // pass it from the AO3 work page; web imports baseline on the first update check.
@@ -163,6 +168,8 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     )
     work.isSaved = true
     applyUserImportMetadata(inspection, to: work, fillOnly: false)
+    work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
+    work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
 
     try copyImportedEPUB(from: url, to: work.fileURL)
 
@@ -206,6 +213,12 @@ private func applyUserImportMetadata(
         to: work,
         fillOnly: fillOnly
     )
+    if work.ao3WorkID == nil {
+        work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
+    }
+    if work.ao3SeriesID == nil {
+        work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
+    }
 }
 
 private func applyEPUBMetadata(
@@ -364,7 +377,9 @@ private func existingWork(
 ) -> SavedWork? {
     let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
     if let importedID = WorkTags.ao3WorkID(from: inspection.sourceURL),
-       let byID = works.first(where: { WorkTags.ao3WorkID(from: $0.sourceURL) == importedID }) {
+       let byID = works.first(where: {
+           $0.ao3WorkID == importedID || WorkTags.ao3WorkID(from: $0.sourceURL) == importedID
+       }) {
         return byID
     }
 
@@ -660,8 +675,11 @@ private extension ExtractedAO3EPUBMetadata {
 @MainActor
 func existingWork(forSource source: URL, in context: ModelContext) -> SavedWork? {
     let target = source.absoluteString
-    let descriptor = FetchDescriptor<SavedWork>(
-        predicate: #Predicate { $0.sourceURL == target }
-    )
-    return try? context.fetch(descriptor).first
+    let sourceID = WorkTags.ao3WorkID(from: target)
+    let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+    return works.first {
+        $0.sourceURL == target
+            || (sourceID != nil && ($0.ao3WorkID == sourceID
+                || WorkTags.ao3WorkID(from: $0.sourceURL) == sourceID))
+    }
 }

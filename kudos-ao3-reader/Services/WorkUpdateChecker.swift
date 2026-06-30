@@ -20,7 +20,7 @@ enum WorkUpdateChecker {
         Log.network.info("Checking \(due.count) work(s) for AO3 updates")
 
         for work in due {
-            guard let id = WorkTags.ao3WorkID(from: work.sourceURL) else { continue }
+            guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else { continue }
             do {
                 let groups = try await AO3Client.shared.workTags(workID: id)
                 guard !groups.isEmpty, !groups.chapters.isEmpty else { continue }
@@ -38,7 +38,9 @@ enum WorkUpdateChecker {
     }
 
     private static func shouldCheck(_ work: SavedWork) -> Bool {
-        guard !work.isComplete, !work.sourceURL.isEmpty else { return false }
+        guard !work.isQueueOnlyWork, !work.isComplete,
+              work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil
+        else { return false }
         if let last = work.lastUpdateCheck, Date().timeIntervalSince(last) < minInterval {
             return false
         }

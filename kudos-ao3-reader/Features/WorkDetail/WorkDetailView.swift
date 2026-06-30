@@ -40,7 +40,16 @@ struct WorkDetailView: View {
     @State private var loadError: String?
     @State private var readerWork: SavedWork?    // non-nil → push the reader
     @State private var queuingSeries = false
+    @State private var showingAddToQueue = false
+    @State private var showingSeriesQueuePrompt = false
+    @State private var preservingSeries = false
+    @State private var queueNotice: String?
     @State private var workActions = AO3WorkActionsModel()
+
+    @AppStorage("autoPreserveSmallSeriesOnSaveForLater")
+    private var autoPreserveSmallSeriesOnSaveForLater = false
+    @AppStorage("autoPreserveSeriesWorkThreshold")
+    private var autoPreserveSeriesWorkThreshold = 5
 
     // MARK: - Source helpers
 
@@ -77,6 +86,7 @@ struct WorkDetailView: View {
             // so merely viewing a remote work adds no AO3 request. Runs once per open.
             resolveExistingIfNeeded()
             guard let work = localWork else { return }
+            ReadingQueueService.normalize(work)
             await WorkTags.backfillFromEPUB(for: work, in: context)
             await WorkTags.refreshFromAO3(for: work, in: context)
         }
@@ -85,6 +95,19 @@ struct WorkDetailView: View {
         .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
         .sheet(isPresented: $showingAddToCollection) {
             if let work = localWork { AddToCollectionView(work: work) }
+        }
+        .sheet(isPresented: $showingAddToQueue) {
+            if let work = localWork { AddToQueueView(work: work) }
+        }
+        .confirmationDialog(
+            "Preserve the rest of this series?",
+            isPresented: $showingSeriesQueuePrompt,
+            titleVisibility: .visible
+        ) {
+            Button("Preserve Entire Series") { preserveSeriesForLater() }
+            Button("Only This Work", role: .cancel) {}
+        } message: {
+            Text(seriesQueuePromptMessage)
         }
         .navigationTitle(displayTitle)
         #if !os(macOS)
@@ -175,6 +198,39 @@ struct WorkDetailView: View {
                 )
             }
 
+            Button {
+                saveForLater()
+            } label: {
+                HStack {
+                    Label(
+                        (localWork?.isInSavedForLaterQueue ?? false) ? "Saved for Later" : "Save for Later",
+                        systemImage: (localWork?.isInSavedForLaterQueue ?? false)
+                            ? "bookmark.fill"
+                            : "bookmark"
+                    )
+                    Spacer()
+                    if preservingStatusIsBusy { ProgressView() }
+                }
+            }
+            .disabled(working || preservingStatusIsBusy || (localWork?.isInSavedForLaterQueue ?? false))
+
+            Button {
+                withLocalWork { _ in showingAddToQueue = true }
+            } label: {
+                Label(queueLabel, systemImage: "list.bullet.rectangle")
+            }
+            .disabled(working)
+
+            if let work = localWork,
+               work.isQueuedForLater,
+               work.epubPreservationStatus == .failed || work.epubPreservationStatus == .missingFile {
+                Button {
+                    retryPreservation(work)
+                } label: {
+                    Label("Retry Queue Preservation", systemImage: "arrow.clockwise")
+                }
+            }
+
             if !(localWork?.isFinished ?? false) {
                 Button {
                     withLocalWork { WorkLifecycle.markFinished($0, in: context) }
@@ -191,6 +247,8 @@ struct WorkDetailView: View {
         } footer: {
             if let loadError {
                 Text(loadError).foregroundStyle(.red)
+            } else if let queueNotice {
+                Text(queueNotice)
             } else {
                 Text(statusFooter)
             }
@@ -208,13 +266,39 @@ struct WorkDetailView: View {
         return count == 0 ? "Add to Collection" : "In \(count) Collection\(count == 1 ? "" : "s")"
     }
 
+    private var queueLabel: String {
+        let count = localWork?.queueMemberships.count ?? 0
+        return count == 0 ? "Add to Queue" : "In \(count) Queue\(count == 1 ? "" : "s")"
+    }
+
+    private var preservingStatusIsBusy: Bool {
+        working || preservingSeries || localWork?.epubPreservationStatus == .preserving
+    }
+
     private var statusFooter: String {
         guard let work = localWork else {
             return "Reading downloads this work to your device. When you finish, "
                 + "the file is freed unless you save or favorite it."
         }
+        if work.isInSavedForLaterQueue {
+            switch work.epubPreservationStatus {
+            case .preserved:
+                return "Saved for Later — a local EPUB is kept for offline reading."
+            case .preserving:
+                return "Saving for Later — preserving a local EPUB."
+            case .failed, .missingFile:
+                return "Saved for Later, but the local EPUB needs to be restored."
+            case .queued:
+                return "Saved for Later — preservation is queued."
+            case .notPreserved:
+                return "Saved for Later."
+            }
+        }
+        if work.isQueuedForLater {
+            return "In a Reading Queue — its EPUB is protected while queued."
+        }
         if work.isSaved { return "Saved — kept on this device." }
-        if WorkTags.ao3WorkID(from: work.sourceURL) == nil {
+        if work.ao3WorkID == nil && WorkTags.ao3WorkID(from: work.sourceURL) == nil {
             return "Imported EPUB — kept on this device for offline reading."
         }
         if !work.hasEPUB {
@@ -326,7 +410,8 @@ struct WorkDetailView: View {
     private var displayStatus: String? {
         // A local work's completion flag is only meaningful for AO3-sourced imports
         // (a plain EPUB import has no status), so don't assert WIP for those.
-        if let work = localWork, WorkTags.ao3WorkID(from: work.sourceURL) != nil {
+        if let work = localWork,
+           work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil {
             return work.isComplete ? "Complete" : "Work in Progress"
         }
         if let complete = remote?.isComplete { return complete ? "Complete" : "Work in Progress" }
@@ -620,14 +705,90 @@ struct WorkDetailView: View {
     /// EPUB carries none of these. The background AO3 refresh keeps them current. Only
     /// fills blanks, so it never clobbers values the import already set.
     private func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
-        if work.workWarnings.isEmpty { work.workWarnings = summary.warnings }
-        if work.workCategories.isEmpty { work.workCategories = summary.categories }
-        if work.kudos == 0, let kudos = summary.kudos { work.kudos = kudos }
-        if work.comments == 0, let comments = summary.comments { work.comments = comments }
-        if work.hits == 0, let hits = summary.hits { work.hits = hits }
-        if work.wordCount == 0, let words = summary.words { work.wordCount = words }
-        if work.chapters.isEmpty { work.chapters = summary.chapters }
+        ReadingQueueService.applyRemoteMetadata(summary, to: work)
         try? context.save()
+    }
+
+    // MARK: - Reading Queues
+
+    private func saveForLater() {
+        resolveExistingIfNeeded()
+        queueNotice = nil
+        loadError = nil
+
+        if let work = localWork {
+            Task {
+                working = true
+                _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                working = false
+                queueNotice = "Saved for Later."
+                maybeOfferSeriesPreservation(for: work)
+            }
+            return
+        }
+
+        guard let summary = remote, !working else { return }
+        Task {
+            working = true
+            loadError = nil
+            do {
+                let work = try await ReadingQueueService.addToSavedForLater(summary, in: context)
+                localWork = work
+                working = false
+                queueNotice = "Saved for Later."
+                maybeOfferSeriesPreservation(for: work)
+            } catch let error as AO3Error {
+                loadError = error.errorDescription
+                working = false
+            } catch {
+                loadError = "The work couldn't be saved for later."
+                working = false
+            }
+        }
+    }
+
+    private func retryPreservation(_ work: SavedWork) {
+        Task {
+            queueNotice = nil
+            await ReadingQueueService.preserve(work, in: context)
+            if work.epubPreservationStatus == .preserved {
+                queueNotice = "The queued EPUB is available offline."
+            } else {
+                loadError = "The EPUB couldn't be preserved right now."
+            }
+        }
+    }
+
+    private func maybeOfferSeriesPreservation(for work: SavedWork) {
+        guard !work.seriesURL.isEmpty else { return }
+        showingSeriesQueuePrompt = true
+    }
+
+    private var seriesQueuePromptMessage: String {
+        let base = "Kudos has preserved this work. It can also preserve the other works in this AO3 series, "
+            + "one at a time, using the normal AO3 request throttling."
+        if autoPreserveSmallSeriesOnSaveForLater {
+            return base + " Series size is checked only after you confirm; your current automatic limit is "
+                + "\(autoPreserveSeriesWorkThreshold) works."
+        }
+        return base
+    }
+
+    private func preserveSeriesForLater() {
+        guard let work = localWork, !preservingSeries else { return }
+        Task {
+            preservingSeries = true
+            queueNotice = "Preserving series…"
+            let result = await ReadingQueueService.preserveSeries(anchoredAt: work, in: context)
+            preservingSeries = false
+            if result.failed > 0 {
+                queueNotice = "Preserved \(result.preserved) work\(result.preserved == 1 ? "" : "s") "
+                    + "from the series. \(result.failed) could not be saved."
+            } else {
+                queueNotice = "Preserved \(result.preserved) series work\(result.preserved == 1 ? "" : "s") "
+                    + "for later."
+            }
+        }
     }
 
     // MARK: - Reading
@@ -639,7 +800,7 @@ struct WorkDetailView: View {
             if work.hasEPUB { readerWork = work; return }
             // Freed history entry: re-download into the existing record, keeping its id
             // (so progress/tags stay attached), then open.
-            guard let id = WorkTags.ao3WorkID(from: work.sourceURL) else {
+            guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
                 loadError = "This work can't be re-downloaded automatically. Open it on AO3."
                 return
             }
@@ -652,6 +813,10 @@ struct WorkDetailView: View {
                     try FileManager.default.moveItem(at: temp, to: work.fileURL)
                     work.hasEPUB = true
                     work.isFinished = false
+                    if work.isQueuedForLater {
+                        work.epubPreservationStatus = .preserved
+                        work.preservedAt = Date()
+                    }
                     work.lastSpineIndex = 0
                     try? context.save()
                     working = false
