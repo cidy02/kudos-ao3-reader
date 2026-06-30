@@ -188,6 +188,30 @@ struct KudosBackupTests {
         try? FileManager.default.removeItem(at: restored.fileURL)
     }
 
+    @Test func versionOneBackupDefaultsQueueFields() throws {
+        let manifest = """
+        {
+          "version": 1,
+          "exportedAt": "2026-06-30T00:00:00Z",
+          "works": [],
+          "bookmarks": [],
+          "fonts": [],
+          "settings": {}
+        }
+        """
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: Data(manifest.utf8))
+        ])
+
+        let contents = try KudosBackupContents(fileWrapper: wrapper)
+
+        #expect(contents.manifest.version == 1)
+        #expect(contents.manifest.readingQueues.isEmpty)
+        #expect(contents.manifest.readingQueueMemberships.isEmpty)
+        #expect(contents.manifest.settings.autoPreserveSmallSeriesOnSaveForLater == false)
+        #expect(contents.manifest.settings.autoPreserveSeriesWorkThreshold == 5)
+    }
+
     @Test func unsupportedBackupVersionIsRejected() throws {
         let manifest = KudosBackupManifest(
             version: 99,

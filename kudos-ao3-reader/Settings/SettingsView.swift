@@ -46,6 +46,9 @@ struct ReaderOptionsForm: View {
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
     @State private var showImportConfirmation = false
+    @State private var showSavedWorkMigrationConfirmation = false
+    @State private var isMigratingSavedWorks = false
+    @State private var savedWorkMigrationProgress: String?
     @State private var backupDocument: KudosBackupDocument?
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
@@ -64,6 +67,10 @@ struct ReaderOptionsForm: View {
         #else
         return true
         #endif
+    }
+
+    private var legacySavedWorksForQueueMigration: [SavedWork] {
+        works.filter { $0.isSaved && !$0.isQueuedForLater }
     }
 
     // Bindings into the central ThemeManager (an @Observable in the environment).
@@ -250,6 +257,12 @@ struct ReaderOptionsForm: View {
                 )
 
                 Section {
+                    NavigationLink {
+                        ReadingQueueStorageView()
+                    } label: {
+                        Label("Queue Storage", systemImage: "externaldrive")
+                    }
+
                     Toggle(
                         "Auto-preserve small series",
                         isOn: $autoPreserveSmallSeriesOnSaveForLater
@@ -260,6 +273,23 @@ struct ReaderOptionsForm: View {
                         in: 2...25
                     )
                     .disabled(!autoPreserveSmallSeriesOnSaveForLater)
+
+                    if !legacySavedWorksForQueueMigration.isEmpty {
+                        Button {
+                            showSavedWorkMigrationConfirmation = true
+                        } label: {
+                            Label("Add Saved Works to Saved for Later", systemImage: "arrow.right.doc.on.clipboard")
+                        }
+                        .disabled(isMigratingSavedWorks)
+                    }
+
+                    if isMigratingSavedWorks {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Text("Reading Queues")
                 } footer: {
@@ -359,6 +389,21 @@ struct ReaderOptionsForm: View {
                         + "be deleted."
                 )
             }
+        }
+        .confirmationDialog(
+            "Add saved works to Saved for Later?",
+            isPresented: $showSavedWorkMigrationConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(savedWorkMigrationButtonTitle) {
+                Task { await migrateLegacySavedWorksToSavedForLater() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Kudos will add existing saved works to the native Saved for Later queue. "
+                    + "It keeps their current saved state and preserves EPUBs one at a time."
+            )
         }
         .alert(item: $backupNotice) { notice in
             Alert(
@@ -524,6 +569,35 @@ struct ReaderOptionsForm: View {
         themeManager.readerTheme = ReaderTheme(rawValue: settings.readerTheme) ?? .light
         themeManager.accentHex = settings.accentColorHex
         themeManager.matchAppAndReader = settings.matchAppReaderTheme
+    }
+
+    private var savedWorkMigrationButtonTitle: String {
+        let count = legacySavedWorksForQueueMigration.count
+        return "Add \(count) Work\(count == 1 ? "" : "s")"
+    }
+
+    @MainActor
+    private func migrateLegacySavedWorksToSavedForLater() async {
+        let candidates = legacySavedWorksForQueueMigration
+        guard !candidates.isEmpty, !isMigratingSavedWorks else { return }
+
+        isMigratingSavedWorks = true
+        savedWorkMigrationProgress = nil
+        defer {
+            isMigratingSavedWorks = false
+            savedWorkMigrationProgress = nil
+        }
+
+        for (index, work) in candidates.enumerated() {
+            savedWorkMigrationProgress = "Updating \(index + 1) of \(candidates.count)…"
+            _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+        }
+
+        backupNotice = BackupNotice(
+            title: "Saved for Later Updated",
+            message: "Added \(candidates.count.formatted()) saved work"
+                + "\(candidates.count == 1 ? "" : "s") to Saved for Later."
+        )
     }
 
     private struct BackupNotice: Identifiable {

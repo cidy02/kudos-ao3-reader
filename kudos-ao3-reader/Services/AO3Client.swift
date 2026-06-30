@@ -444,6 +444,21 @@ actor AO3Client {
         return all
     }
 
+    /// The first page of a series, including AO3's parsed total page count. This is
+    /// intentionally bounded to one request so callers can decide whether an
+    /// automatic small-series action is safe before crawling every page.
+    func seriesPreview(seriesURL: URL) async throws -> AO3SeriesPreview {
+        guard let pageURL = Self.seriesPageURL(seriesURL, page: 1) else {
+            throw AO3Error.network("Bad series URL.")
+        }
+        let result = try Self.parseSearchPage(try await getHTML(pageURL), page: 1)
+        return AO3SeriesPreview(
+            works: result.works,
+            currentPage: result.currentPage,
+            totalPages: result.totalPages
+        )
+    }
+
     func downloadEPUB(workID: Int) async throws -> URL {
         Log.network.info("Downloading EPUB for work \(workID)")
         guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {

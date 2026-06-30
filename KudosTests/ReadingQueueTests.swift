@@ -61,4 +61,34 @@ struct ReadingQueueTests {
         #expect(work.queueMemberships.count == 1)
         #expect(queue.memberships.count == 1)
     }
+
+    @Test func queuedWorkKeepsEPUBWhenMarkedFinished() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(
+            title: "Protected Queue Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/456"
+        )
+        work.hasEPUB = true
+        context.insert(work)
+        try Data("queued-finished".utf8).write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        ReadingQueueService.add(work, to: queue, in: context)
+
+        WorkLifecycle.markFinished(work, in: context)
+
+        #expect(work.isFinished)
+        #expect(work.hasEPUB)
+        #expect(FileManager.default.fileExists(atPath: work.fileURL.path))
+        #expect(work.epubPreservationStatus == .preserved)
+    }
 }

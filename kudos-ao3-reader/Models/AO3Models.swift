@@ -59,6 +59,18 @@ struct AO3SearchPage: Sendable {
     var totalPages: Int
 }
 
+/// A bounded look at a series page. Used before automatic series preservation so
+/// Kudos can avoid crawling an unknown large series merely to decide whether to ask.
+struct AO3SeriesPreview: Sendable {
+    var works: [AO3WorkSummary]
+    var currentPage: Int
+    var totalPages: Int
+
+    var isComplete: Bool {
+        totalPages <= currentPage
+    }
+}
+
 /// The inputs to an AO3 works search. Maps directly to AO3's `work_search[...]`
 /// query parameters; the ids/values are taken from AO3's own search form. Covers
 /// the same filters as AO3's faceted sidebar, minus the live per-fandom counts

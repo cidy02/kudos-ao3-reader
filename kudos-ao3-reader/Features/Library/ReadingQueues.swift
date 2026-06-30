@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import SwiftData
 
@@ -222,6 +223,164 @@ struct ReadingQueueDetailView: View {
         context.delete(queue)
         try? context.save()
         dismiss()
+    }
+}
+
+// MARK: - Queue storage
+
+struct ReadingQueueStorageView: View {
+    @Environment(\.modelContext) private var context
+    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @State private var pendingEPUBRemoval: SavedWork?
+
+    private var queuedWorks: [SavedWork] {
+        works.filter(\.isQueuedForLater)
+    }
+
+    private var preservedWorks: [SavedWork] {
+        queuedWorks.filter { work in
+            work.hasEPUB && FileManager.default.fileExists(atPath: work.fileURL.path)
+        }
+    }
+
+    private var queueOnlyWorks: [SavedWork] {
+        queuedWorks.filter(\.isQueueOnlyWork)
+    }
+
+    private var preservedByteCount: Int64 {
+        preservedWorks.reduce(0) { total, work in
+            total + fileSize(for: work.fileURL)
+        }
+    }
+
+    var body: some View {
+        List {
+            Group {
+                Section("Summary") {
+                    LabeledContent("Queued Works", value: queuedWorks.count.formatted())
+                    LabeledContent("Queue-only Works", value: queueOnlyWorks.count.formatted())
+                    LabeledContent("Preserved EPUBs", value: preservedWorks.count.formatted())
+                    LabeledContent("Preserved Storage", value: byteString(preservedByteCount))
+                }
+
+                Section {
+                    if preservedWorks.isEmpty {
+                        Text("No queued EPUBs are currently stored on this device.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(preservedWorks) { work in
+                            preservedWorkRow(work)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        pendingEPUBRemoval = work
+                                    } label: {
+                                        Label("Remove EPUB", systemImage: "trash")
+                                    }
+                                    Button {
+                                        WorkLifecycle.setSaved(work, true, in: context)
+                                    } label: {
+                                        Label("Save to Keep", systemImage: "bookmark")
+                                    }
+                                    .tint(.blue)
+                                }
+                                .contextMenu {
+                                    Button {
+                                        WorkLifecycle.setSaved(work, true, in: context)
+                                    } label: {
+                                        Label("Save to Keep", systemImage: "bookmark")
+                                    }
+                                    Button(role: .destructive) {
+                                        pendingEPUBRemoval = work
+                                    } label: {
+                                        Label("Remove Preserved EPUB", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    }
+                } header: {
+                    Text("Preserved EPUBs")
+                } footer: {
+                    Text("Removing a preserved EPUB keeps the work in its queue, "
+                         + "but it will need to be restored before offline reading.")
+                }
+            }
+            .appThemedRows()
+        }
+        .appThemedScroll()
+        .navigationTitle("Queue Storage")
+        #if !os(macOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .confirmationDialog(
+            "Remove preserved EPUB?",
+            isPresented: Binding(
+                get: { pendingEPUBRemoval != nil },
+                set: { if !$0 { pendingEPUBRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove EPUB", role: .destructive) {
+                if let work = pendingEPUBRemoval {
+                    removePreservedEPUB(for: work)
+                }
+                pendingEPUBRemoval = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingEPUBRemoval = nil
+            }
+        } message: {
+            Text("The queue entry stays in Kudos. This only removes the local EPUB file and reader cache.")
+        }
+    }
+
+    private func preservedWorkRow(_ work: SavedWork) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: work.isInSavedForLaterQueue ? "bookmark.fill" : "list.bullet.rectangle")
+                .foregroundStyle(.tint)
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                if !work.author.isEmpty {
+                    Text(work.author)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(byteString(fileSize(for: work.fileURL)))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if work.isQueueOnlyWork {
+                Text("Queue")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary, in: Capsule())
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private func removePreservedEPUB(for work: SavedWork) {
+        WorkLifecycle.freeEPUB(work)
+        work.epubPreservationStatus = .missingFile
+        try? context.save()
+    }
+
+    private func fileSize(for url: URL) -> Int64 {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values?.fileSize ?? 0)
+    }
+
+    private func byteString(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }
 

@@ -43,6 +43,7 @@ struct WorkDetailView: View {
     @State private var showingAddToQueue = false
     @State private var showingSeriesQueuePrompt = false
     @State private var preservingSeries = false
+    @State private var seriesPreservationTask: Task<Void, Never>?
     @State private var queueNotice: String?
     @State private var workActions = AO3WorkActionsModel()
 
@@ -228,6 +229,14 @@ struct WorkDetailView: View {
                     retryPreservation(work)
                 } label: {
                     Label("Retry Queue Preservation", systemImage: "arrow.clockwise")
+                }
+            }
+
+            if preservingSeries {
+                Button(role: .cancel) {
+                    cancelSeriesPreservation()
+                } label: {
+                    Label("Cancel Series Preservation", systemImage: "xmark.circle")
                 }
             }
 
@@ -761,34 +770,99 @@ struct WorkDetailView: View {
 
     private func maybeOfferSeriesPreservation(for work: SavedWork) {
         guard !work.seriesURL.isEmpty else { return }
-        showingSeriesQueuePrompt = true
+        guard autoPreserveSmallSeriesOnSaveForLater else {
+            showingSeriesQueuePrompt = true
+            return
+        }
+        Task {
+            await autoPreserveSeriesIfSmall(work)
+        }
+    }
+
+    private func autoPreserveSeriesIfSmall(_ work: SavedWork) async {
+        guard let url = URL(string: work.seriesURL) else {
+            showingSeriesQueuePrompt = true
+            return
+        }
+        queueNotice = "Checking series size…"
+        do {
+            let preview = try await AO3Client.shared.seriesPreview(seriesURL: url)
+            if preview.isComplete, preview.works.count <= autoPreserveSeriesWorkThreshold {
+                startSeriesPreservation(with: preview.works)
+            } else {
+                queueNotice = "Saved for Later."
+                showingSeriesQueuePrompt = true
+            }
+        } catch {
+            queueNotice = "Saved for Later."
+            showingSeriesQueuePrompt = true
+        }
     }
 
     private var seriesQueuePromptMessage: String {
         let base = "Kudos has preserved this work. It can also preserve the other works in this AO3 series, "
             + "one at a time, using the normal AO3 request throttling."
         if autoPreserveSmallSeriesOnSaveForLater {
-            return base + " Series size is checked only after you confirm; your current automatic limit is "
-                + "\(autoPreserveSeriesWorkThreshold) works."
+            return base + " Automatic preservation only starts when the first AO3 series page proves the "
+                + "whole series is within your \(autoPreserveSeriesWorkThreshold)-work limit."
         }
         return base
     }
 
     private func preserveSeriesForLater() {
-        guard let work = localWork, !preservingSeries else { return }
-        Task {
-            preservingSeries = true
-            queueNotice = "Preserving series…"
-            let result = await ReadingQueueService.preserveSeries(anchoredAt: work, in: context)
-            preservingSeries = false
-            if result.failed > 0 {
-                queueNotice = "Preserved \(result.preserved) work\(result.preserved == 1 ? "" : "s") "
-                    + "from the series. \(result.failed) could not be saved."
+        startSeriesPreservation()
+    }
+
+    private func startSeriesPreservation(with summaries: [AO3WorkSummary]? = nil) {
+        guard let work = localWork, seriesPreservationTask == nil else { return }
+        preservingSeries = true
+        queueNotice = "Preserving series…"
+        seriesPreservationTask = Task {
+            let result: ReadingQueueService.SeriesPreservationResult
+            if let summaries {
+                result = await ReadingQueueService.preserveSeries(
+                    summaries,
+                    in: context,
+                    progress: { queueNotice = seriesProgressText($0) }
+                )
             } else {
-                queueNotice = "Preserved \(result.preserved) series work\(result.preserved == 1 ? "" : "s") "
-                    + "for later."
+                result = await ReadingQueueService.preserveSeries(
+                    anchoredAt: work,
+                    in: context,
+                    progress: { queueNotice = seriesProgressText($0) }
+                )
             }
+            preservingSeries = false
+            seriesPreservationTask = nil
+            queueNotice = seriesCompletionText(result)
         }
+    }
+
+    private func cancelSeriesPreservation() {
+        seriesPreservationTask?.cancel()
+        queueNotice = "Cancelling series preservation…"
+    }
+
+    private func seriesProgressText(_ result: ReadingQueueService.SeriesPreservationResult) -> String {
+        guard result.total > 0 else { return "Preserving series…" }
+        return "Preserving series \(result.completed) of \(result.total)…"
+    }
+
+    private func seriesCompletionText(_ result: ReadingQueueService.SeriesPreservationResult) -> String {
+        if result.cancelled > 0 {
+            return "Series preservation cancelled. Preserved "
+                + "\(result.preserved) work\(result.preserved == 1 ? "" : "s")."
+        }
+        if result.total == 0 { return "No other series works were found." }
+        if result.failed > 0 {
+            return "Preserved \(result.preserved) work\(result.preserved == 1 ? "" : "s") "
+                + "from the series. \(result.failed) could not be saved."
+        }
+        if result.preserved == 0, result.skipped > 0 {
+            return "Series works are already preserved for later."
+        }
+        return "Preserved \(result.preserved) series work\(result.preserved == 1 ? "" : "s") "
+            + "for later."
     }
 
     // MARK: - Reading

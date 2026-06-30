@@ -11,6 +11,11 @@ enum ReadingQueueService {
         var preserved = 0
         var skipped = 0
         var failed = 0
+        var cancelled = 0
+
+        var completed: Int {
+            preserved + skipped + failed + cancelled
+        }
     }
 
     @discardableResult
@@ -266,7 +271,8 @@ enum ReadingQueueService {
 
     static func preserveSeries(
         anchoredAt anchor: SavedWork,
-        in context: ModelContext
+        in context: ModelContext,
+        progress: ((SeriesPreservationResult) -> Void)? = nil
     ) async -> SeriesPreservationResult {
         guard let url = URL(string: anchor.seriesURL), !anchor.seriesURL.isEmpty else {
             return SeriesPreservationResult()
@@ -274,28 +280,55 @@ enum ReadingQueueService {
 
         do {
             let summaries = try await AO3Client.shared.seriesWorks(seriesURL: url)
-            var result = SeriesPreservationResult(total: summaries.count)
-            for summary in summaries {
-                if let existing = existingWork(for: summary, in: context),
-                   existing.isInSavedForLaterQueue,
-                   existing.epubPreservationStatus == .preserved {
-                    result.skipped += 1
-                    continue
-                }
-                do {
-                    _ = try await addToSavedForLater(summary, in: context)
-                    result.preserved += 1
-                } catch {
-                    result.failed += 1
-                }
-            }
-            return result
+            return await preserveSeries(summaries, in: context, progress: progress)
+        } catch is CancellationError {
+            return SeriesPreservationResult(cancelled: 1)
         } catch {
             Log.library.error(
                 "Couldn't load series for queue preservation: \(error.localizedDescription, privacy: .public)"
             )
             return SeriesPreservationResult(failed: 1)
         }
+    }
+
+    static func preserveSeries(
+        _ summaries: [AO3WorkSummary],
+        in context: ModelContext,
+        progress: ((SeriesPreservationResult) -> Void)? = nil
+    ) async -> SeriesPreservationResult {
+        var result = SeriesPreservationResult(total: summaries.count)
+        progress?(result)
+
+        for summary in summaries {
+            if Task.isCancelled {
+                result.cancelled += max(0, result.total - result.completed)
+                progress?(result)
+                break
+            }
+
+            if let existing = existingWork(for: summary, in: context),
+               existing.isInSavedForLaterQueue,
+               existing.epubPreservationStatus == .preserved {
+                result.skipped += 1
+                progress?(result)
+                continue
+            }
+
+            do {
+                try Task.checkCancellation()
+                _ = try await addToSavedForLater(summary, in: context)
+                result.preserved += 1
+            } catch is CancellationError {
+                result.cancelled += max(1, result.total - result.completed)
+                progress?(result)
+                break
+            } catch {
+                result.failed += 1
+            }
+            progress?(result)
+        }
+
+        return result
     }
 
     static func remove(_ work: SavedWork, from queue: ReadingQueue, in context: ModelContext) {
