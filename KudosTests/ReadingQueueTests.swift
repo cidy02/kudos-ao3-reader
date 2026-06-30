@@ -91,4 +91,67 @@ struct ReadingQueueTests {
         #expect(FileManager.default.fileExists(atPath: work.fileURL.path))
         #expect(work.epubPreservationStatus == .preserved)
     }
+
+    @Test func removingLastQueueDeletesQueueOnlyWork() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(
+            title: "Queue Only Removal",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/654"
+        )
+        work.hasEPUB = true
+        context.insert(work)
+        try Data("queue-only-removal".utf8).write(to: work.fileURL)
+        let fileURL = work.fileURL
+
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        ReadingQueueService.add(work, to: queue, in: context)
+
+        ReadingQueueService.remove(work, from: queue, in: context)
+
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+        #expect(queue.memberships.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    @Test func removingQueueFromSavedWorkKeepsRecordAndFile() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(
+            title: "Saved Queue Removal",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/987"
+        )
+        work.isSaved = true
+        work.hasEPUB = true
+        context.insert(work)
+        try Data("saved-queue-removal".utf8).write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        ReadingQueueService.add(work, to: queue, in: context)
+
+        ReadingQueueService.remove(work, from: queue, in: context)
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.id == work.id)
+        #expect(restored.isSaved)
+        #expect(!restored.isQueuedForLater)
+        #expect(restored.queueMemberships.isEmpty)
+        #expect(restored.hasEPUB)
+        #expect(FileManager.default.fileExists(atPath: restored.fileURL.path))
+    }
 }

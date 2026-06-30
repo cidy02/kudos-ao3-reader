@@ -37,6 +37,7 @@ struct KudosBackupTests {
             works: [work],
             bookmarks: [bookmark],
             fonts: [font],
+            readingQueues: [],
             defaults: defaults
         )
         let backupURL = FileManager.default.temporaryDirectory
@@ -85,6 +86,7 @@ struct KudosBackupTests {
             works: [archivedWork],
             bookmarks: [archivedBookmark],
             fonts: [],
+            readingQueues: [],
             defaults: sourceDefaults
         )
 

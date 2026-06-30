@@ -49,6 +49,9 @@ struct ReaderOptionsForm: View {
     @State private var showSavedWorkMigrationConfirmation = false
     @State private var isMigratingSavedWorks = false
     @State private var savedWorkMigrationProgress: String?
+    @State private var savedWorkMigrationCompleted = 0
+    @State private var savedWorkMigrationTotal = 0
+    @State private var savedWorkMigrationTask: Task<Void, Never>?
     @State private var backupDocument: KudosBackupDocument?
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
@@ -284,10 +287,20 @@ struct ReaderOptionsForm: View {
                     }
 
                     if isMigratingSavedWorks {
-                        HStack(spacing: 12) {
-                            ProgressView()
-                            Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            ProgressView(
+                                value: Double(savedWorkMigrationCompleted),
+                                total: Double(max(savedWorkMigrationTotal, 1))
+                            )
+                            HStack(spacing: 12) {
+                                Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Cancel") {
+                                    cancelSavedWorkMigration()
+                                }
+                            }
                         }
                     }
                 } header: {
@@ -396,13 +409,14 @@ struct ReaderOptionsForm: View {
             titleVisibility: .visible
         ) {
             Button(savedWorkMigrationButtonTitle) {
-                Task { await migrateLegacySavedWorksToSavedForLater() }
+                startSavedWorkMigration()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
                 "Kudos will add existing saved works to the native Saved for Later queue. "
-                    + "It keeps their current saved state and preserves EPUBs one at a time."
+                    + "It keeps their current saved state and preserves EPUBs one at a time, "
+                    + "with a pause between AO3 requests."
             )
         }
         .alert(item: $backupNotice) { notice in
@@ -576,27 +590,81 @@ struct ReaderOptionsForm: View {
         return "Add \(count) Work\(count == 1 ? "" : "s")"
     }
 
+    private func startSavedWorkMigration() {
+        guard savedWorkMigrationTask == nil else { return }
+        savedWorkMigrationTask = Task(priority: .utility) { @MainActor in
+            await migrateLegacySavedWorksToSavedForLater()
+            savedWorkMigrationTask = nil
+        }
+    }
+
+    private func cancelSavedWorkMigration() {
+        savedWorkMigrationTask?.cancel()
+        savedWorkMigrationProgress = "Cancelling after the current work…"
+    }
+
     @MainActor
     private func migrateLegacySavedWorksToSavedForLater() async {
         let candidates = legacySavedWorksForQueueMigration
         guard !candidates.isEmpty, !isMigratingSavedWorks else { return }
 
         isMigratingSavedWorks = true
-        savedWorkMigrationProgress = nil
+        savedWorkMigrationCompleted = 0
+        savedWorkMigrationTotal = candidates.count
+        savedWorkMigrationProgress = "Preparing Saved for Later…"
         defer {
             isMigratingSavedWorks = false
             savedWorkMigrationProgress = nil
+            savedWorkMigrationCompleted = 0
+            savedWorkMigrationTotal = 0
         }
 
+        var added = 0
+        var unavailableOffline = 0
+        var cancelled = false
+
         for (index, work) in candidates.enumerated() {
+            if Task.isCancelled {
+                cancelled = true
+                break
+            }
+
             savedWorkMigrationProgress = "Updating \(index + 1) of \(candidates.count)…"
             _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+            if work.isInSavedForLaterQueue { added += 1 }
+            if !work.hasEPUB || work.epubPreservationStatus == .failed
+                || work.epubPreservationStatus == .missingFile {
+                unavailableOffline += 1
+            }
+            savedWorkMigrationCompleted = index + 1
+
+            if Task.isCancelled {
+                cancelled = true
+                break
+            }
+
+            guard index + 1 < candidates.count else { continue }
+            savedWorkMigrationProgress = "Pausing before the next AO3 request…"
+            do {
+                try await Task.sleep(nanoseconds: ReadingQueueService.preservationRequestPauseNanos)
+            } catch {
+                cancelled = true
+                break
+            }
+        }
+
+        var message = "Added \(added.formatted()) saved work"
+            + "\(added == 1 ? "" : "s") to Saved for Later."
+        if unavailableOffline > 0 {
+            message += " \(unavailableOffline.formatted()) need preservation retry before offline reading."
+        }
+        if cancelled {
+            message += " Migration was cancelled before the remaining works were touched."
         }
 
         backupNotice = BackupNotice(
-            title: "Saved for Later Updated",
-            message: "Added \(candidates.count.formatted()) saved work"
-                + "\(candidates.count == 1 ? "" : "s") to Saved for Later."
+            title: cancelled ? "Migration Cancelled" : "Saved for Later Updated",
+            message: message
         )
     }
 

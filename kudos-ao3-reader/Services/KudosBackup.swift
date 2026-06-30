@@ -715,7 +715,7 @@ enum KudosBackupService {
         works: [SavedWork],
         bookmarks: [Bookmark],
         fonts: [CustomFont],
-        readingQueues: [ReadingQueue] = [],
+        readingQueues: [ReadingQueue],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupDocument {
         var epubFiles: [UUID: Data] = [:]

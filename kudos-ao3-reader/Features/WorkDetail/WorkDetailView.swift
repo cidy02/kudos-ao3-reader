@@ -44,6 +44,7 @@ struct WorkDetailView: View {
     @State private var showingSeriesQueuePrompt = false
     @State private var preservingSeries = false
     @State private var seriesPreservationTask: Task<Void, Never>?
+    @State private var seriesPreservationProgress: ReadingQueueService.SeriesPreservationResult?
     @State private var queueNotice: String?
     @State private var workActions = AO3WorkActionsModel()
 
@@ -254,12 +255,23 @@ struct WorkDetailView: View {
                 Label(collectionLabel, systemImage: "square.stack")
             }
         } footer: {
-            if let loadError {
-                Text(loadError).foregroundStyle(.red)
-            } else if let queueNotice {
-                Text(queueNotice)
-            } else {
-                Text(statusFooter)
+            VStack(alignment: .leading, spacing: 8) {
+                if preservingSeries,
+                   let progress = seriesPreservationProgress,
+                   progress.total > 0 {
+                    ProgressView(
+                        value: Double(progress.completed),
+                        total: Double(progress.total)
+                    )
+                }
+
+                if let loadError {
+                    Text(loadError).foregroundStyle(.red)
+                } else if let queueNotice {
+                    Text(queueNotice)
+                } else {
+                    Text(statusFooter)
+                }
             }
         }
     }
@@ -759,7 +771,15 @@ struct WorkDetailView: View {
     private func retryPreservation(_ work: SavedWork) {
         Task {
             queueNotice = nil
-            await ReadingQueueService.preserve(work, in: context)
+            do {
+                try await ReadingQueueService.preserve(work, in: context)
+            } catch is CancellationError {
+                queueNotice = "Preservation was cancelled."
+                return
+            } catch {
+                loadError = "The EPUB couldn't be preserved right now."
+                return
+            }
             if work.epubPreservationStatus == .preserved {
                 queueNotice = "The queued EPUB is available offline."
             } else {
@@ -817,23 +837,31 @@ struct WorkDetailView: View {
         guard let work = localWork, seriesPreservationTask == nil else { return }
         preservingSeries = true
         queueNotice = "Preserving series…"
-        seriesPreservationTask = Task {
+        seriesPreservationProgress = nil
+        seriesPreservationTask = Task { @MainActor in
             let result: ReadingQueueService.SeriesPreservationResult
             if let summaries {
                 result = await ReadingQueueService.preserveSeries(
                     summaries,
                     in: context,
-                    progress: { queueNotice = seriesProgressText($0) }
+                    progress: {
+                        seriesPreservationProgress = $0
+                        queueNotice = seriesProgressText($0)
+                    }
                 )
             } else {
                 result = await ReadingQueueService.preserveSeries(
                     anchoredAt: work,
                     in: context,
-                    progress: { queueNotice = seriesProgressText($0) }
+                    progress: {
+                        seriesPreservationProgress = $0
+                        queueNotice = seriesProgressText($0)
+                    }
                 )
             }
             preservingSeries = false
             seriesPreservationTask = nil
+            seriesPreservationProgress = nil
             queueNotice = seriesCompletionText(result)
         }
     }

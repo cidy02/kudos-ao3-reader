@@ -211,8 +211,8 @@ struct ReadingQueueDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The queue is removed. The works themselves stay in Kudos if they are saved, "
-                 + "favorited, or in another queue.")
+            Text("The queue is removed. Saved, favorited, or still-queued works stay in Kudos; "
+                 + "queue-only works with no remaining queue are removed.")
         }
     }
 
@@ -231,7 +231,7 @@ struct ReadingQueueDetailView: View {
 struct ReadingQueueStorageView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
-    @State private var pendingEPUBRemoval: SavedWork?
+    @State private var pendingQueueRemoval: SavedWork?
 
     private var queuedWorks: [SavedWork] {
         works.filter(\.isQueuedForLater)
@@ -272,9 +272,9 @@ struct ReadingQueueStorageView: View {
                             preservedWorkRow(work)
                                 .swipeActions(edge: .trailing) {
                                     Button(role: .destructive) {
-                                        pendingEPUBRemoval = work
+                                        pendingQueueRemoval = work
                                     } label: {
-                                        Label("Remove EPUB", systemImage: "trash")
+                                        Label("Remove from Queues", systemImage: "minus.circle")
                                     }
                                     Button {
                                         WorkLifecycle.setSaved(work, true, in: context)
@@ -290,9 +290,9 @@ struct ReadingQueueStorageView: View {
                                         Label("Save to Keep", systemImage: "bookmark")
                                     }
                                     Button(role: .destructive) {
-                                        pendingEPUBRemoval = work
+                                        pendingQueueRemoval = work
                                     } label: {
-                                        Label("Remove Preserved EPUB", systemImage: "trash")
+                                        Label("Remove from Reading Queues", systemImage: "minus.circle")
                                     }
                                 }
                         }
@@ -300,8 +300,8 @@ struct ReadingQueueStorageView: View {
                 } header: {
                     Text("Preserved EPUBs")
                 } footer: {
-                    Text("Removing a preserved EPUB keeps the work in its queue, "
-                         + "but it will need to be restored before offline reading.")
+                    Text("Removing a work here only removes queue membership. Saved or favorited works stay "
+                         + "in Kudos; queue-only works are removed when no queues remain.")
                 }
             }
             .appThemedRows()
@@ -312,24 +312,24 @@ struct ReadingQueueStorageView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .confirmationDialog(
-            "Remove preserved EPUB?",
+            "Remove from reading queues?",
             isPresented: Binding(
-                get: { pendingEPUBRemoval != nil },
-                set: { if !$0 { pendingEPUBRemoval = nil } }
+                get: { pendingQueueRemoval != nil },
+                set: { if !$0 { pendingQueueRemoval = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Remove EPUB", role: .destructive) {
-                if let work = pendingEPUBRemoval {
-                    removePreservedEPUB(for: work)
+            Button("Remove from Queues", role: .destructive) {
+                if let work = pendingQueueRemoval {
+                    removeFromQueues(work)
                 }
-                pendingEPUBRemoval = nil
+                pendingQueueRemoval = nil
             }
             Button("Cancel", role: .cancel) {
-                pendingEPUBRemoval = nil
+                pendingQueueRemoval = nil
             }
         } message: {
-            Text("The queue entry stays in Kudos. This only removes the local EPUB file and reader cache.")
+            Text(queueRemovalMessage)
         }
     }
 
@@ -368,10 +368,16 @@ struct ReadingQueueStorageView: View {
         .contentShape(Rectangle())
     }
 
-    private func removePreservedEPUB(for work: SavedWork) {
-        WorkLifecycle.freeEPUB(work)
-        work.epubPreservationStatus = .missingFile
-        try? context.save()
+    private var queueRemovalMessage: String {
+        guard let work = pendingQueueRemoval else { return "" }
+        if work.isSaved || work.isFavorite {
+            return "This keeps the work in your Library and only removes its reading queue membership."
+        }
+        return "This queue-only work will be removed from Kudos if it has no remaining queues."
+    }
+
+    private func removeFromQueues(_ work: SavedWork) {
+        ReadingQueueService.removeFromAllQueues(work, in: context)
     }
 
     private func fileSize(for url: URL) -> Int64 {
