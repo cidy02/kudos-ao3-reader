@@ -190,6 +190,189 @@ struct KudosBackupTests {
         try? FileManager.default.removeItem(at: restored.fileURL)
     }
 
+    @Test func restoreMergesByAO3WorkIDBeforeUUID() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+
+        let archivedWork = SavedWork(
+            title: "Archived AO3 Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/13579"
+        )
+        archivedWork.ao3WorkID = 13_579
+        let document = try KudosBackupService.makeDocument(
+            works: [archivedWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let existing = SavedWork(
+            title: "Existing AO3 Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/13579?view_full_work=true"
+        )
+        existing.ao3WorkID = 13_579
+        context.insert(existing)
+
+        _ = try KudosBackupService.restore(
+            document.contents,
+            into: context,
+            defaults: try testDefaults()
+        )
+
+        let works = try context.fetch(FetchDescriptor<SavedWork>())
+        let restored = try #require(works.first)
+        #expect(works.count == 1)
+        #expect(restored.id == existing.id)
+        #expect(restored.title == "Archived AO3 Work")
+    }
+
+    @Test func restoreMergesByCanonicalAO3URLBeforeUUID() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+
+        let archivedWork = SavedWork(
+            title: "Archived URL Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/downloads/24680/work.epub"
+        )
+        let document = try KudosBackupService.makeDocument(
+            works: [archivedWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let existing = SavedWork(
+            title: "Existing URL Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/24680?view_full_work=true#main"
+        )
+        context.insert(existing)
+
+        _ = try KudosBackupService.restore(
+            document.contents,
+            into: context,
+            defaults: try testDefaults()
+        )
+
+        let works = try context.fetch(FetchDescriptor<SavedWork>())
+        let restored = try #require(works.first)
+        #expect(works.count == 1)
+        #expect(restored.id == existing.id)
+        #expect(restored.title == "Archived URL Work")
+    }
+
+    @Test func restorePreservedStatusWithMissingEPUBBecomesMissingFile() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let sourceContainer = try ModelContainer(for: schema, configurations: [configuration])
+        let sourceContext = ModelContext(sourceContainer)
+
+        let work = SavedWork(
+            title: "Missing Preserved EPUB",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/8642"
+        )
+        work.hasEPUB = true
+        work.ao3WorkID = 8_642
+        sourceContext.insert(work)
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: sourceContext)
+        ReadingQueueService.add(work, to: queue, in: sourceContext)
+        work.epubPreservationStatus = .preserved
+        try? FileManager.default.removeItem(at: work.fileURL)
+        try sourceContext.save()
+
+        let document = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [queue],
+            defaults: try testDefaults()
+        )
+
+        let targetContainer = try ModelContainer(for: schema, configurations: [configuration])
+        let targetContext = ModelContext(targetContainer)
+        _ = try KudosBackupService.restore(
+            document.contents,
+            into: targetContext,
+            defaults: try testDefaults()
+        )
+
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.isQueuedForLater)
+        #expect(!restored.hasEPUB)
+        #expect(restored.epubPreservationStatus == .missingFile)
+    }
+
+    @Test func restoreSkipsMembershipReferencingMissingWork() throws {
+        let queueID = UUID()
+        let missingWorkID = UUID()
+        let membershipID = UUID()
+        let manifest = """
+        {
+          "version": 2,
+          "exportedAt": "2026-06-30T00:00:00Z",
+          "works": [],
+          "bookmarks": [],
+          "fonts": [],
+          "readingQueues": [
+            {
+              "id": "\(queueID.uuidString)",
+              "name": "Broken Queue",
+              "kindRaw": "custom",
+              "sortOrder": 3,
+              "dateCreated": "2026-06-30T00:00:00Z",
+              "dateUpdated": "2026-06-30T00:00:00Z"
+            }
+          ],
+          "readingQueueMemberships": [
+            {
+              "id": "\(membershipID.uuidString)",
+              "queueID": "\(queueID.uuidString)",
+              "workID": "\(missingWorkID.uuidString)",
+              "queuedAt": "2026-06-30T00:00:00Z",
+              "sortOrderInQueue": 0,
+              "note": ""
+            }
+          ],
+          "settings": {}
+        }
+        """
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: Data(manifest.utf8))
+        ])
+        let contents = try KudosBackupContents(fileWrapper: wrapper)
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<ReadingQueueMembership>()).isEmpty)
+    }
+
     @Test func versionOneBackupDefaultsQueueFields() throws {
         let manifest = """
         {

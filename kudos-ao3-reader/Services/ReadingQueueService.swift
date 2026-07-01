@@ -71,14 +71,16 @@ enum ReadingQueueService {
     }
 
     static func normalizeAllQueuedWorks(in context: ModelContext) {
-        let savedForLater = ensureSavedForLaterQueue(in: context)
+        let memberships = (try? context.fetch(FetchDescriptor<ReadingQueueMembership>())) ?? []
+        for membership in memberships where membership.queue == nil || membership.work == nil {
+            membership.queue?.memberships.removeAll { $0.id == membership.id }
+            membership.work?.queueMemberships.removeAll { $0.id == membership.id }
+            context.delete(membership)
+        }
+
         let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
         for work in works {
-            if work.isQueuedForLater && work.queueMemberships.isEmpty {
-                add(work, to: savedForLater, in: context)
-            } else {
-                normalize(work)
-            }
+            normalize(work)
         }
         try? context.save()
     }
@@ -91,17 +93,18 @@ enum ReadingQueueService {
             work.ao3SeriesID = ao3SeriesID(from: work.seriesURL)
         }
 
+        let hasMembership = work.queueMemberships.contains { $0.queue != nil }
+        work.isQueuedForLater = hasMembership
+
         let hasFile = FileManager.default.fileExists(atPath: work.fileURL.path)
-        if work.hasEPUB && !hasFile {
+        if !hasFile {
             work.hasEPUB = false
-            if work.isQueuedForLater {
+            if work.epubPreservationStatus == .preserved {
                 work.epubPreservationStatus = .missingFile
             }
         }
 
-        let hasMembership = !work.queueMemberships.isEmpty
-        work.isQueuedForLater = hasMembership || work.isQueuedForLater
-        if work.isQueuedForLater {
+        if hasMembership {
             if work.hasEPUB && hasFile {
                 if work.epubPreservationStatus != .preserving {
                     work.epubPreservationStatus = .preserved
@@ -182,35 +185,31 @@ enum ReadingQueueService {
         _ summary: AO3WorkSummary,
         in context: ModelContext
     ) async throws -> SavedWork {
+        let saved: SavedWork
+        let createdNewWork: Bool
         if let existing = existingWork(for: summary, in: context) {
-            applyRemoteMetadata(summary, to: existing)
-            existing.ao3WorkID = summary.id
-            if existing.seriesURL.isEmpty { existing.seriesURL = summary.seriesURL ?? "" }
-            if existing.ao3SeriesID == nil { existing.ao3SeriesID = ao3SeriesID(from: existing.seriesURL) }
-            let queue = ensureSavedForLaterQueue(in: context)
-            _ = try await addAndPreserveCancellable(existing, to: queue, in: context)
-            return existing
+            saved = existing
+            createdNewWork = false
+        } else {
+            saved = SavedWork(
+                title: summary.title,
+                author: summary.authorText,
+                summary: summary.summary,
+                sourceURL: summary.workURL.absoluteString
+            )
+            saved.ao3WorkID = summary.id
+            saved.knownChapterCount = postedChapterCount(from: summary.chapters)
+            context.insert(saved)
+            createdNewWork = true
         }
 
-        let temp = try await AO3Client.shared.downloadEPUB(workID: summary.id)
-        let saved = try await importEPUB(
-            temp,
-            source: summary.workURL,
-            isComplete: summary.isComplete ?? false,
-            seriesURL: summary.seriesURL ?? "",
-            knownChapterCount: postedChapterCount(from: summary.chapters),
-            into: context
-        )
         saved.ao3WorkID = summary.id
-        saved.ao3SeriesID = ao3SeriesID(from: saved.seriesURL)
         applyRemoteMetadata(summary, to: saved)
-        saved.isSaved = false
+        if createdNewWork { saved.isSaved = false }
         let queue = ensureSavedForLaterQueue(in: context)
-        add(saved, to: queue, in: context)
-        saved.epubPreservationStatus = .preserved
-        saved.preservedAt = Date()
+        _ = add(saved, to: queue, in: context)
         try? context.save()
-        await syncMetadata(for: saved, in: context)
+        try await preserve(saved, in: context)
         return saved
     }
 
@@ -260,8 +259,9 @@ enum ReadingQueueService {
             work.metadataSyncStatus = .failed
             try? context.save()
         } catch {
+            let message = error.localizedDescription
             Log.library.error(
-                "Couldn't preserve queued work \(work.id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                "Queue preserve failed for \(work.id.uuidString, privacy: .public): \(message, privacy: .public)"
             )
             work.epubPreservationStatus = .failed
             try? context.save()
@@ -391,10 +391,11 @@ enum ReadingQueueService {
 
     static func existingWork(for summary: AO3WorkSummary, in context: ModelContext) -> SavedWork? {
         let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        let canonicalURL = WorkTags.canonicalAO3WorkURL(from: summary.workURL.absoluteString)
         return works.first { work in
             work.ao3WorkID == summary.id
                 || WorkTags.ao3WorkID(from: work.sourceURL) == summary.id
-                || work.sourceURL == summary.workURL.absoluteString
+                || WorkTags.canonicalAO3WorkURL(from: work.sourceURL) == canonicalURL
         }
     }
 
@@ -442,9 +443,13 @@ enum ReadingQueueService {
         return summary.tags.filter { !categorized.contains(normalizedTag($0)) }
     }
 
-    private static func replaceEPUB(for work: SavedWork, with temp: URL) throws {
+    static func replaceEPUB(for work: SavedWork, with temp: URL) throws {
         let destination = work.fileURL
         _ = try EPUBDocument.inspectPackage(ofEPUBAt: temp)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         if FileManager.default.fileExists(atPath: destination.path) {
             _ = try FileManager.default.replaceItemAt(
                 destination,

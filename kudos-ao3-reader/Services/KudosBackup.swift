@@ -755,10 +755,8 @@ enum KudosBackupService {
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupRestoreSummary {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
-        var worksByID = Dictionary(
-            existingWorks.map { ($0.id, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        var workIndex = WorkRestoreIndex(existingWorks)
+        var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
 
         let existingTags = try context.fetch(FetchDescriptor<Tag>())
         var tagsByName = Dictionary(
@@ -768,7 +766,7 @@ enum KudosBackupService {
 
         for archived in contents.manifest.works {
             let work: SavedWork
-            if let existing = worksByID[archived.id] {
+            if let existing = workIndex.existingWork(for: archived) {
                 work = existing
             } else {
                 work = SavedWork(
@@ -777,9 +775,10 @@ enum KudosBackupService {
                     author: archived.author
                 )
                 context.insert(work)
-                worksByID[archived.id] = work
             }
             apply(archived, to: work)
+            restoredWorksByArchivedID[archived.id] = work
+            workIndex.index(work)
 
             var seenTags = Set<String>()
             work.tags = archived.userTags.compactMap { name in
@@ -797,6 +796,9 @@ enum KudosBackupService {
                 work.hasEPUB = true
             } else if !FileManager.default.fileExists(atPath: work.fileURL.path) {
                 work.hasEPUB = false
+                if work.epubPreservationStatus == .preserved {
+                    work.epubPreservationStatus = .missingFile
+                }
             }
         }
 
@@ -835,7 +837,7 @@ enum KudosBackupService {
         }
 
         for archived in contents.manifest.readingQueueMemberships {
-            guard let work = worksByID[archived.workID] else { continue }
+            guard let work = restoredWorksByArchivedID[archived.workID] else { continue }
             let queue = queueIDMap[archived.queueID] ?? savedForLaterQueue
             if work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) {
                 work.isQueuedForLater = true
@@ -912,6 +914,40 @@ enum KudosBackupService {
             bookmarks: contents.manifest.bookmarks.count,
             fonts: restoredFonts
         )
+    }
+
+    private struct WorkRestoreIndex {
+        private var worksByID: [UUID: SavedWork] = [:]
+        private var worksByAO3WorkID: [Int: SavedWork] = [:]
+        private var worksByCanonicalSourceURL: [String: SavedWork] = [:]
+
+        init(_ works: [SavedWork]) {
+            for work in works {
+                index(work)
+            }
+        }
+
+        mutating func index(_ work: SavedWork) {
+            worksByID[work.id] = work
+            if let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) {
+                worksByAO3WorkID[id] = work
+            }
+            if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: work.sourceURL) {
+                worksByCanonicalSourceURL[canonicalURL] = work
+            }
+        }
+
+        func existingWork(for archived: KudosBackupWork) -> SavedWork? {
+            if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
+               let work = worksByAO3WorkID[archivedAO3WorkID] {
+                return work
+            }
+            if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: archived.sourceURL),
+               let work = worksByCanonicalSourceURL[canonicalURL] {
+                return work
+            }
+            return worksByID[archived.id]
+        }
     }
 
     private static func apply(_ archived: KudosBackupWork, to work: SavedWork) {

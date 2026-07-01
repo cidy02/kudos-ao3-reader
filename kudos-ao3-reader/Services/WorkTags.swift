@@ -84,6 +84,14 @@ enum WorkTags {
         return Int(parts[index + 1])
     }
 
+    /// Normalizes AO3 work/download URL variants to the stable work page identity.
+    static func canonicalAO3WorkURL(from urlString: String) -> String? {
+        if let id = ao3WorkID(from: urlString) {
+            return "https://archiveofourown.org/works/\(id)"
+        }
+        return EPUBMetadata.canonicalAO3WorkURL(in: urlString)
+    }
+
     private static func merged(_ existing: [String], _ incoming: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []

@@ -304,7 +304,10 @@ struct WorkDetailView: View {
         if work.isInSavedForLaterQueue {
             switch work.epubPreservationStatus {
             case .preserved:
-                return "Saved for Later — a local EPUB is kept for offline reading."
+                if hasReadableEPUB(for: work) {
+                    return "Saved for Later — a local EPUB is kept for offline reading."
+                }
+                return "Saved for Later, but the local EPUB needs to be restored."
             case .preserving:
                 return "Saving for Later — preserving a local EPUB."
             case .failed, .missingFile:
@@ -328,6 +331,10 @@ struct WorkDetailView: View {
         if work.isFinished { return "Finished." }
         if work.isFavorite { return "Favorited, so its file is kept when finished." }
         return "Reading. When you finish, the file is freed unless you save or favorite it."
+    }
+
+    private func hasReadableEPUB(for work: SavedWork) -> Bool {
+        work.hasEPUB && FileManager.default.fileExists(atPath: work.fileURL.path)
     }
 
     // MARK: - Toolbar (favorite + more)
@@ -911,8 +918,7 @@ struct WorkDetailView: View {
                 loadError = nil
                 do {
                     let temp = try await AO3Client.shared.downloadEPUB(workID: id)
-                    try? FileManager.default.removeItem(at: work.fileURL)
-                    try FileManager.default.moveItem(at: temp, to: work.fileURL)
+                    try ReadingQueueService.replaceEPUB(for: work, with: temp)
                     work.hasEPUB = true
                     work.isFinished = false
                     if work.isQueuedForLater {

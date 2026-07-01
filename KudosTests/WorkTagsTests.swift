@@ -19,4 +19,17 @@ struct WorkTagsTests {
     @Test func emptyInputYieldsEmpty() {
         #expect(SavedWork.normalizedWorkTags([], excludingRating: "Mature").isEmpty)
     }
+
+    @Test func canonicalAO3WorkURLStripsVariants() {
+        #expect(
+            WorkTags.canonicalAO3WorkURL(
+                from: "https://archiveofourown.org/works/12345/?view_full_work=true#main"
+            ) == "https://archiveofourown.org/works/12345"
+        )
+        #expect(
+            WorkTags.canonicalAO3WorkURL(
+                from: "https://archiveofourown.org/downloads/98765/work.epub"
+            ) == "https://archiveofourown.org/works/98765"
+        )
+    }
 }

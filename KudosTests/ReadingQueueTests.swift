@@ -5,6 +5,14 @@ import Testing
 
 @MainActor
 struct ReadingQueueTests {
+    final class BundleAnchor {}
+
+    private var sampleEPUB: URL {
+        get throws {
+            try #require(Bundle(for: BundleAnchor.self).url(forResource: "sample", withExtension: "epub"))
+        }
+    }
+
     @Test func queueOnlyWorkStaysOutOfNormalLibrarySections() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
@@ -153,5 +161,121 @@ struct ReadingQueueTests {
         #expect(restored.queueMemberships.isEmpty)
         #expect(restored.hasEPUB)
         #expect(FileManager.default.fileExists(atPath: restored.fileURL.path))
+    }
+
+    @Test func normalizeClearsStaleQueueFlagWithoutMembership() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(title: "Stale Queue Flag", author: "Writer")
+        work.isQueuedForLater = true
+        work.epubPreservationStatus = .preserved
+        context.insert(work)
+
+        ReadingQueueService.normalizeAllQueuedWorks(in: context)
+
+        #expect(!work.isQueuedForLater)
+        #expect(work.queueMemberships.isEmpty)
+        #expect(work.epubPreservationStatus == .notPreserved)
+        #expect(try context.fetch(FetchDescriptor<ReadingQueueMembership>()).isEmpty)
+    }
+
+    @Test func existingWorkMatchesCanonicalAO3URLVariants() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(
+            title: "Canonical Match",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/downloads/2468/work.epub"
+        )
+        context.insert(work)
+
+        let summary = AO3WorkSummary(
+            id: 2468,
+            title: "Canonical Match",
+            authors: ["Writer"],
+            fandoms: [],
+            rating: "",
+            warnings: [],
+            categories: [],
+            isComplete: nil,
+            dateUpdated: "",
+            tags: [],
+            summary: "",
+            language: "",
+            words: nil,
+            chapters: "",
+            comments: nil,
+            kudos: nil,
+            hits: nil,
+            seriesTitle: nil,
+            seriesURL: nil,
+            seriesPosition: nil
+        )
+
+        #expect(ReadingQueueService.existingWork(for: summary, in: context)?.id == work.id)
+    }
+
+    @Test func atomicEPUBReplaceFailureKeepsExistingFile() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(title: "Atomic Failure", author: "Writer")
+        context.insert(work)
+        let original = Data("original-epub".utf8)
+        try original.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let invalid = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("epub")
+        try Data("not an epub".utf8).write(to: invalid)
+        defer { try? FileManager.default.removeItem(at: invalid) }
+
+        #expect(throws: (any Error).self) {
+            try ReadingQueueService.replaceEPUB(for: work, with: invalid)
+        }
+        #expect(try Data(contentsOf: work.fileURL) == original)
+    }
+
+    @Test func atomicEPUBReplaceSuccessUpdatesFile() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(title: "Atomic Success", author: "Writer")
+        context.insert(work)
+        try Data("old".utf8).write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let replacement = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("epub")
+        try FileManager.default.copyItem(at: try sampleEPUB, to: replacement)
+
+        try ReadingQueueService.replaceEPUB(for: work, with: replacement)
+
+        #expect(try EPUBDocument.metadata(ofEPUBAt: work.fileURL).title == "A Test Work")
+        #expect(!FileManager.default.fileExists(atPath: replacement.path))
     }
 }

@@ -57,10 +57,9 @@ func importEPUB(
     // pass it from the AO3 work page; web imports baseline on the first update check.
     work.knownChapterCount = knownChapterCount
 
-    let destination = work.fileURL
-    try? FileManager.default.removeItem(at: destination)
     do {
-        try FileManager.default.moveItem(at: tempURL, to: destination)
+        try ReadingQueueService.replaceEPUB(for: work, with: tempURL)
+        work.hasEPUB = true
     } catch {
         Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
         throw error
@@ -404,9 +403,31 @@ private func fileSize(of url: URL) -> UInt64? {
 }
 
 private func copyImportedEPUB(from source: URL, to destination: URL) throws {
-    try? FileManager.default.removeItem(at: destination)
+    _ = try EPUBDocument.inspectPackage(ofEPUBAt: source)
+    try FileManager.default.createDirectory(
+        at: destination.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
     do {
-        try FileManager.default.copyItem(at: source, to: destination)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            let staged = destination.deletingLastPathComponent()
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("epub")
+            try FileManager.default.copyItem(at: source, to: staged)
+            do {
+                _ = try FileManager.default.replaceItemAt(
+                    destination,
+                    withItemAt: staged,
+                    backupItemName: nil,
+                    options: .usingNewMetadataOnly
+                )
+            } catch {
+                try? FileManager.default.removeItem(at: staged)
+                throw error
+            }
+        } else {
+            try FileManager.default.copyItem(at: source, to: destination)
+        }
     } catch {
         Log.library.error("Couldn't copy imported EPUB: \(error.localizedDescription, privacy: .public)")
         throw error
@@ -676,9 +697,12 @@ private extension ExtractedAO3EPUBMetadata {
 func existingWork(forSource source: URL, in context: ModelContext) -> SavedWork? {
     let target = source.absoluteString
     let sourceID = WorkTags.ao3WorkID(from: target)
+    let canonicalTarget = WorkTags.canonicalAO3WorkURL(from: target)
     let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
     return works.first {
         $0.sourceURL == target
+            || (canonicalTarget != nil
+                && WorkTags.canonicalAO3WorkURL(from: $0.sourceURL) == canonicalTarget)
             || (sourceID != nil && ($0.ao3WorkID == sourceID
                 || WorkTags.ao3WorkID(from: $0.sourceURL) == sourceID))
     }
