@@ -5,17 +5,83 @@ import SwiftData
 @MainActor
 enum ReadingQueueService {
     static let savedForLaterName = "Saved for Later"
-    static let preservationRequestPauseNanos: UInt64 = 2_000_000_000
+    nonisolated static let preservationRequestPauseNanos: UInt64 = 2_000_000_000
 
     struct SeriesPreservationResult: Equatable {
         var total = 0
         var preserved = 0
+        var alreadyPreserved = 0
         var skipped = 0
         var failed = 0
+        var unavailable = 0
         var cancelled = 0
 
         var completed: Int {
-            preserved + skipped + failed + cancelled
+            preserved + alreadyPreserved + skipped + failed + unavailable + cancelled
+        }
+    }
+
+    struct SeriesPreservationPrompt: Equatable {
+        var preview: AO3SeriesPreview?
+        var threshold: Int
+        var previewFailed = false
+
+        var knownCount: Int {
+            preview?.works.count ?? 0
+        }
+
+        var canAutoPreserve: Bool {
+            guard let preview else { return false }
+            return preview.isComplete && preview.works.count <= threshold
+        }
+
+        var canUsePreviewForPreservation: Bool {
+            preview?.isComplete == true
+        }
+
+        var message: String {
+            if previewFailed || preview == nil {
+                return "Kudos couldn't confirm the series size. Preserve the entire series only if "
+                    + "you are comfortable with a larger AO3 request, paced one work at a time."
+            }
+            if canUsePreviewForPreservation {
+                return "This series has \(knownCount) work\(knownCount == 1 ? "" : "s"). "
+                    + "Preserve the entire series?"
+            }
+            return "This series has at least \(knownCount) work\(knownCount == 1 ? "" : "s") "
+                + "and may span multiple pages. Preserve the entire series?"
+        }
+
+        var autoPreserveLabel: String {
+            "Always auto-preserve series under \(threshold) works"
+        }
+    }
+
+    typealias SeriesWorkPreserver = @MainActor (
+        AO3WorkSummary,
+        [ReadingQueue],
+        ModelContext
+    ) async throws -> SavedWork
+
+    static func seriesPrompt(
+        for preview: AO3SeriesPreview?,
+        threshold: Int,
+        previewFailed: Bool = false
+    ) -> SeriesPreservationPrompt {
+        SeriesPreservationPrompt(
+            preview: preview,
+            threshold: threshold,
+            previewFailed: previewFailed
+        )
+    }
+
+    private static func saveBestEffort(_ context: ModelContext, reason: StaticString) {
+        do {
+            try context.save()
+        } catch {
+            Log.library.error(
+                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
@@ -44,7 +110,7 @@ enum ReadingQueueService {
                 }
                 context.delete(duplicate)
             }
-            try? context.save()
+            saveBestEffort(context, reason: "Saving merged Saved for Later queue failed")
             return primary
         }
 
@@ -54,7 +120,7 @@ enum ReadingQueueService {
             sortOrder: -1_000
         )
         context.insert(queue)
-        try? context.save()
+        saveBestEffort(context, reason: "Saving Saved for Later queue failed")
         return queue
     }
 
@@ -66,7 +132,7 @@ enum ReadingQueueService {
             sortOrder: nextQueueSortOrder(in: context)
         )
         context.insert(queue)
-        try? context.save()
+        saveBestEffort(context, reason: "Saving reading queue failed")
         return queue
     }
 
@@ -82,7 +148,7 @@ enum ReadingQueueService {
         for work in works {
             normalize(work)
         }
-        try? context.save()
+        saveBestEffort(context, reason: "Saving queue normalization failed")
     }
 
     static func normalize(_ work: SavedWork) {
@@ -144,7 +210,7 @@ enum ReadingQueueService {
         queue.dateUpdated = Date()
         work.isQueuedForLater = true
         normalize(work)
-        try? context.save()
+        saveBestEffort(context, reason: "Saving queue membership failed")
         return membership
     }
 
@@ -183,7 +249,8 @@ enum ReadingQueueService {
 
     static func addToSavedForLater(
         _ summary: AO3WorkSummary,
-        in context: ModelContext
+        in context: ModelContext,
+        downloadEPUB: ((Int) async throws -> URL)? = nil
     ) async throws -> SavedWork {
         let saved: SavedWork
         let createdNewWork: Bool
@@ -208,12 +275,16 @@ enum ReadingQueueService {
         if createdNewWork { saved.isSaved = false }
         let queue = ensureSavedForLaterQueue(in: context)
         _ = add(saved, to: queue, in: context)
-        try? context.save()
-        try await preserve(saved, in: context)
+        try context.save()
+        try await preserve(saved, in: context, downloadEPUB: downloadEPUB)
         return saved
     }
 
-    static func preserve(_ work: SavedWork, in context: ModelContext) async throws {
+    static func preserve(
+        _ work: SavedWork,
+        in context: ModelContext,
+        downloadEPUB: ((Int) async throws -> URL)? = nil
+    ) async throws {
         normalize(work)
         guard work.isQueuedForLater else { return }
 
@@ -222,7 +293,7 @@ enum ReadingQueueService {
         if work.hasEPUB && existingFile {
             work.epubPreservationStatus = .preserved
             work.preservedAt = Date()
-            try? context.save()
+            try context.save()
             await syncMetadata(for: work, in: context)
             return
         }
@@ -230,41 +301,46 @@ enum ReadingQueueService {
         guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
             work.epubPreservationStatus = .failed
             work.metadataSyncStatus = .incomplete
-            try? context.save()
+            try context.save()
             return
         }
 
         work.ao3WorkID = id
         work.epubPreservationStatus = .preserving
-        try? context.save()
+        try context.save()
 
         do {
-            let temp = try await AO3Client.shared.downloadEPUB(workID: id)
+            let temp: URL
+            if let downloadEPUB {
+                temp = try await downloadEPUB(id)
+            } else {
+                temp = try await AO3Client.shared.downloadEPUB(workID: id)
+            }
             try replaceEPUB(for: work, with: temp)
             work.hasEPUB = true
             work.epubPreservationStatus = .preserved
             work.preservedAt = Date()
             work.lastAvailabilityCheck = Date()
-            try? context.save()
+            try context.save()
             await WorkTags.backfillFromEPUB(for: work, in: context)
             await syncMetadata(for: work, in: context)
         } catch is CancellationError {
             work.epubPreservationStatus = work.hasEPUB
                 && FileManager.default.fileExists(atPath: work.fileURL.path) ? .preserved : .queued
-            try? context.save()
+            try context.save()
             throw CancellationError()
         } catch AO3Error.notFound {
             work.ao3Unavailable = true
             work.epubPreservationStatus = .failed
             work.metadataSyncStatus = .failed
-            try? context.save()
+            try context.save()
         } catch {
             let message = error.localizedDescription
             Log.library.error(
                 "Queue preserve failed for \(work.id.uuidString, privacy: .public): \(message, privacy: .public)"
             )
             work.epubPreservationStatus = .failed
-            try? context.save()
+            try context.save()
         }
     }
 
@@ -272,29 +348,31 @@ enum ReadingQueueService {
         normalize(work)
         guard work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil else {
             work.metadataSyncStatus = work.workTags.isEmpty ? .incomplete : .complete
-            try? context.save()
+            saveBestEffort(context, reason: "Saving queue metadata status failed")
             return
         }
         guard work.needsAO3Refresh else {
             work.metadataSyncStatus = .complete
-            try? context.save()
+            saveBestEffort(context, reason: "Saving queue metadata completion failed")
             return
         }
 
         work.metadataSyncStatus = .syncing
-        try? context.save()
+        saveBestEffort(context, reason: "Saving queue metadata sync start failed")
         await WorkTags.refreshFromAO3(for: work, in: context)
         if work.needsAO3Refresh {
             work.metadataSyncStatus = work.ao3Unavailable ? .failed : .incomplete
         } else {
             work.metadataSyncStatus = .complete
         }
-        try? context.save()
+        saveBestEffort(context, reason: "Saving queue metadata sync result failed")
     }
 
     static func preserveSeries(
         anchoredAt anchor: SavedWork,
+        to queues: [ReadingQueue]? = nil,
         in context: ModelContext,
+        pauseNanos: UInt64 = preservationRequestPauseNanos,
         progress: ((SeriesPreservationResult) -> Void)? = nil
     ) async -> SeriesPreservationResult {
         guard let url = URL(string: anchor.seriesURL), !anchor.seriesURL.isEmpty else {
@@ -303,7 +381,13 @@ enum ReadingQueueService {
 
         do {
             let summaries = try await AO3Client.shared.seriesWorks(seriesURL: url)
-            return await preserveSeries(summaries, in: context, progress: progress)
+            return await preserveSeries(
+                summaries,
+                to: queues,
+                in: context,
+                pauseNanos: pauseNanos,
+                progress: progress
+            )
         } catch is CancellationError {
             return SeriesPreservationResult(cancelled: 1)
         } catch {
@@ -316,10 +400,14 @@ enum ReadingQueueService {
 
     static func preserveSeries(
         _ summaries: [AO3WorkSummary],
+        to queues: [ReadingQueue]? = nil,
         in context: ModelContext,
+        preserveWork: SeriesWorkPreserver? = nil,
+        pauseNanos: UInt64 = preservationRequestPauseNanos,
         progress: ((SeriesPreservationResult) -> Void)? = nil
     ) async -> SeriesPreservationResult {
         var result = SeriesPreservationResult(total: summaries.count)
+        let targetQueues = queues ?? [ensureSavedForLaterQueue(in: context)]
         progress?(result)
 
         for summary in summaries {
@@ -329,9 +417,31 @@ enum ReadingQueueService {
                 break
             }
 
-            if let existing = existingWork(for: summary, in: context),
-               existing.isInSavedForLaterQueue,
-               existing.epubPreservationStatus == .preserved {
+            if let existing = existingWork(for: summary, in: context) {
+                if existing.ao3Unavailable {
+                    result.unavailable += 1
+                    progress?(result)
+                    continue
+                }
+                if existing.epubPreservationStatus == .preserved,
+                   targetQueues.allSatisfy({ queue in
+                       existing.queueMemberships.contains { $0.queue?.id == queue.id }
+                   }) {
+                    result.alreadyPreserved += 1
+                    progress?(result)
+                    continue
+                }
+                if existing.epubPreservationStatus == .preserved {
+                    for queue in targetQueues {
+                        _ = add(existing, to: queue, in: context)
+                    }
+                    result.alreadyPreserved += 1
+                    progress?(result)
+                    continue
+                }
+            }
+
+            if targetQueues.isEmpty {
                 result.skipped += 1
                 progress?(result)
                 continue
@@ -339,12 +449,20 @@ enum ReadingQueueService {
 
             do {
                 try Task.checkCancellation()
-                _ = try await addToSavedForLater(summary, in: context)
-                result.preserved += 1
+                let saved = try await (preserveWork ?? addAndPreserveSummary)(summary, targetQueues, context)
+                if saved.ao3Unavailable {
+                    result.unavailable += 1
+                } else if saved.epubPreservationStatus == .preserved {
+                    result.preserved += 1
+                } else {
+                    result.failed += 1
+                }
             } catch is CancellationError {
                 result.cancelled += max(1, result.total - result.completed)
                 progress?(result)
                 break
+            } catch AO3Error.notFound {
+                result.unavailable += 1
             } catch {
                 result.failed += 1
             }
@@ -352,7 +470,9 @@ enum ReadingQueueService {
 
             guard result.completed < result.total else { continue }
             do {
-                try await Task.sleep(nanoseconds: preservationRequestPauseNanos)
+                if pauseNanos > 0 {
+                    try await Task.sleep(nanoseconds: pauseNanos)
+                }
             } catch {
                 result.cancelled += max(0, result.total - result.completed)
                 progress?(result)
@@ -363,8 +483,42 @@ enum ReadingQueueService {
         return result
     }
 
-    static func remove(_ work: SavedWork, from queue: ReadingQueue, in context: ModelContext) {
-        let shouldDeleteIfUnqueued = work.isQueueOnlyWork
+    @discardableResult
+    private static func addAndPreserveSummary(
+        _ summary: AO3WorkSummary,
+        to queues: [ReadingQueue],
+        in context: ModelContext
+    ) async throws -> SavedWork {
+        let saved: SavedWork
+        let createdNewWork: Bool
+        if let existing = existingWork(for: summary, in: context) {
+            saved = existing
+            createdNewWork = false
+        } else {
+            saved = SavedWork(
+                title: summary.title,
+                author: summary.authorText,
+                summary: summary.summary,
+                sourceURL: summary.workURL.absoluteString
+            )
+            saved.ao3WorkID = summary.id
+            saved.knownChapterCount = postedChapterCount(from: summary.chapters)
+            context.insert(saved)
+            createdNewWork = true
+        }
+
+        saved.ao3WorkID = summary.id
+        applyRemoteMetadata(summary, to: saved)
+        if createdNewWork { saved.isSaved = false }
+        for queue in queues {
+            _ = add(saved, to: queue, in: context)
+        }
+        try context.save()
+        try await preserve(saved, in: context)
+        return saved
+    }
+
+    static func removeFromQueue(_ work: SavedWork, from queue: ReadingQueue, in context: ModelContext) {
         let matches = work.queueMemberships.filter { $0.queue?.id == queue.id }
         for membership in matches {
             work.queueMemberships.removeAll { $0.id == membership.id }
@@ -373,19 +527,34 @@ enum ReadingQueueService {
         }
         queue.dateUpdated = Date()
         work.isQueuedForLater = !work.queueMemberships.isEmpty
-        if shouldDeleteIfUnqueued && !work.isQueuedForLater {
-            WorkLifecycle.delete(work, in: context)
-            return
-        }
         normalize(work)
-        WorkLifecycle.freeEPUBIfFinished(work, in: context)
-        try? context.save()
+        saveBestEffort(context, reason: "Saving queue removal failed")
+    }
+
+    static func removeFromQueueAndDeleteIfQueueOnly(
+        _ work: SavedWork,
+        from queue: ReadingQueue,
+        in context: ModelContext
+    ) {
+        let wasQueueOnly = work.isQueueOnlyWork
+        removeFromQueue(work, from: queue, in: context)
+        if wasQueueOnly, !work.isQueuedForLater, !work.isSaved, !work.isFavorite {
+            WorkLifecycle.delete(work, in: context)
+        }
     }
 
     static func removeFromAllQueues(_ work: SavedWork, in context: ModelContext) {
         let queues = work.queueMemberships.compactMap(\.queue)
         for queue in queues {
-            remove(work, from: queue, in: context)
+            removeFromQueue(work, from: queue, in: context)
+        }
+    }
+
+    static func removeFromAllQueuesAndDeleteIfQueueOnly(_ work: SavedWork, in context: ModelContext) {
+        let wasQueueOnly = work.isQueueOnlyWork
+        removeFromAllQueues(work, in: context)
+        if wasQueueOnly, !work.isQueuedForLater, !work.isSaved, !work.isFavorite {
+            WorkLifecycle.delete(work, in: context)
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 import SwiftData
 
@@ -126,9 +127,9 @@ struct ReadingQueueDetailView: View {
                         SensitiveWorkRow(work: work, expandAll: expandAll)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    ReadingQueueService.remove(work, from: queue, in: context)
+                                    ReadingQueueService.removeFromQueue(work, from: queue, in: context)
                                 } label: {
-                                    Label("Remove", systemImage: "minus.circle")
+                                    Label("Remove from Queue", systemImage: "minus.circle")
                                 }
                             }
                     }
@@ -196,7 +197,7 @@ struct ReadingQueueDetailView: View {
                 if !trimmed.isEmpty {
                     queue.name = trimmed
                     queue.dateUpdated = Date()
-                    try? context.save()
+                    saveBestEffort("Saving queue rename failed")
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -211,18 +212,27 @@ struct ReadingQueueDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The queue is removed. Saved, favorited, or still-queued works stay in Kudos; "
-                 + "queue-only works with no remaining queue are removed.")
+            Text("The queue is removed. Works stay in Kudos; only this queue membership is cleared.")
         }
     }
 
     private func deleteQueue() {
         for work in works {
-            ReadingQueueService.remove(work, from: queue, in: context)
+            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
         }
         context.delete(queue)
-        try? context.save()
+        saveBestEffort("Saving queue deletion failed")
         dismiss()
+    }
+
+    private func saveBestEffort(_ reason: StaticString) {
+        do {
+            try context.save()
+        } catch {
+            Log.library.error(
+                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 }
 
@@ -319,7 +329,7 @@ struct ReadingQueueStorageView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("Remove from Queues", role: .destructive) {
+            Button(queueRemovalButtonTitle, role: .destructive) {
                 if let work = pendingQueueRemoval {
                     removeFromQueues(work)
                 }
@@ -376,8 +386,13 @@ struct ReadingQueueStorageView: View {
         return "This queue-only work will be removed from Kudos if it has no remaining queues."
     }
 
+    private var queueRemovalButtonTitle: String {
+        guard let work = pendingQueueRemoval else { return "Remove from Queues" }
+        return work.isQueueOnlyWork ? "Remove Queues & Delete" : "Remove from Queues"
+    }
+
     private func removeFromQueues(_ work: SavedWork) {
-        ReadingQueueService.removeFromAllQueues(work, in: context)
+        ReadingQueueService.removeFromAllQueuesAndDeleteIfQueueOnly(work, in: context)
     }
 
     private func fileSize(for url: URL) -> Int64 {
@@ -400,6 +415,12 @@ struct AddToQueueView: View {
     @Query(sort: \ReadingQueue.sortOrder) private var queues: [ReadingQueue]
     @State private var newName = ""
     @State private var workingQueueIDs: Set<UUID> = []
+    @State private var includeSeries = false
+    @State private var checkingSeriesPreview = false
+    @State private var seriesPrompt: ReadingQueueService.SeriesPreservationPrompt?
+    @State private var preservingSeries = false
+    @State private var seriesResult: ReadingQueueService.SeriesPreservationResult?
+    @State private var seriesTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -439,6 +460,55 @@ struct AddToQueueView: View {
                 } footer: {
                     Text("Queue membership keeps a local EPUB available without marking the work as saved.")
                 }
+
+                if hasSeries {
+                    Section {
+                        Toggle("Also add works from this AO3 series", isOn: $includeSeries)
+
+                        if includeSeries {
+                            if checkingSeriesPreview {
+                                HStack {
+                                    ProgressView()
+                                    Text("Checking series size…")
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else if let seriesPrompt {
+                                Text(seriesPrompt.message)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Button {
+                                preserveSelectedSeries()
+                            } label: {
+                                HStack {
+                                    Label("Add Series to Selected Queues", systemImage: "square.stack.3d.up")
+                                    Spacer()
+                                    if preservingSeries { ProgressView() }
+                                }
+                            }
+                            .disabled(preservingSeries || selectedQueuesForSeries.isEmpty)
+
+                            if preservingSeries {
+                                Button(role: .cancel) {
+                                    cancelSeriesPreservation()
+                                } label: {
+                                    Label("Cancel Series Addition", systemImage: "xmark.circle")
+                                }
+                            }
+
+                            if let seriesResult {
+                                Text(seriesCompletionText(seriesResult))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } header: {
+                        Text("Series")
+                    } footer: {
+                        Text("Series works are added only after you tap the series action. Requests are paced.")
+                    }
+                }
             }
             .formStyle(.grouped)
             .navigationTitle("Add to Queue")
@@ -452,6 +522,14 @@ struct AddToQueueView: View {
             }
             .task {
                 ReadingQueueService.ensureSavedForLaterQueue(in: context)
+            }
+            .onChange(of: includeSeries) { _, isEnabled in
+                if isEnabled {
+                    Task { await loadSeriesPreview() }
+                } else {
+                    seriesPrompt = nil
+                    seriesResult = nil
+                }
             }
         }
         .presentationDragIndicator(.visible)
@@ -473,9 +551,65 @@ struct AddToQueueView: View {
         queue.kind == .savedForLater ? "bookmark" : "list.bullet.rectangle"
     }
 
+    private var hasSeries: Bool {
+        URL(string: work.seriesURL) != nil && !work.seriesURL.isEmpty
+    }
+
+    private var selectedQueuesForSeries: [ReadingQueue] {
+        sortedQueues.filter(isMember)
+    }
+
+    private func loadSeriesPreview() async {
+        guard includeSeries, let url = URL(string: work.seriesURL) else { return }
+        checkingSeriesPreview = true
+        do {
+            let preview = try await AO3Client.shared.seriesPreview(seriesURL: url)
+            seriesPrompt = ReadingQueueService.seriesPrompt(for: preview, threshold: 5)
+        } catch {
+            seriesPrompt = ReadingQueueService.seriesPrompt(for: nil, threshold: 5, previewFailed: true)
+        }
+        checkingSeriesPreview = false
+    }
+
+    private func preserveSelectedSeries() {
+        guard !preservingSeries, URL(string: work.seriesURL) != nil else { return }
+        let queues = selectedQueuesForSeries
+        guard !queues.isEmpty else { return }
+        preservingSeries = true
+        seriesResult = nil
+        seriesTask = Task { @MainActor in
+            let result: ReadingQueueService.SeriesPreservationResult
+            if let seriesPrompt,
+               seriesPrompt.canUsePreviewForPreservation,
+               let summaries = seriesPrompt.preview?.works {
+                result = await ReadingQueueService.preserveSeries(
+                    summaries,
+                    to: queues,
+                    in: context,
+                    progress: { seriesResult = $0 }
+                )
+            } else {
+                result = await ReadingQueueService.preserveSeries(
+                    anchoredAt: work,
+                    to: queues,
+                    in: context,
+                    progress: { seriesResult = $0 }
+                )
+            }
+            seriesResult = result
+            preservingSeries = false
+            seriesTask = nil
+        }
+    }
+
+    private func cancelSeriesPreservation() {
+        seriesTask?.cancel()
+        preservingSeries = false
+    }
+
     private func toggle(_ queue: ReadingQueue) {
         if isMember(queue) {
-            ReadingQueueService.remove(work, from: queue, in: context)
+            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
             return
         }
         workingQueueIDs.insert(queue.id)
@@ -483,6 +617,34 @@ struct AddToQueueView: View {
             _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
             workingQueueIDs.remove(queue.id)
         }
+    }
+
+    private func seriesCompletionText(_ result: ReadingQueueService.SeriesPreservationResult) -> String {
+        if preservingSeries, result.total > 0 {
+            return "Adding \(result.completed) of \(result.total) series works…"
+        }
+        if result.cancelled > 0 {
+            return "Series preservation cancelled. Added \(result.preserved) work"
+                + "\(result.preserved == 1 ? "" : "s")."
+        }
+        if result.total == 0 { return "No series works were found." }
+        var parts: [String] = []
+        if result.preserved > 0 {
+            parts.append("\(result.preserved) added")
+        }
+        if result.alreadyPreserved > 0 {
+            parts.append("\(result.alreadyPreserved) already preserved")
+        }
+        if result.unavailable > 0 {
+            parts.append("\(result.unavailable) unavailable")
+        }
+        if result.failed > 0 {
+            parts.append("\(result.failed) failed")
+        }
+        if result.skipped > 0 {
+            parts.append("\(result.skipped) skipped")
+        }
+        return parts.isEmpty ? "Series works are already in the selected queues." : parts.joined(separator: ", ") + "."
     }
 
     private func create() {

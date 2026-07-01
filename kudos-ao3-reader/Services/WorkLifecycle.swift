@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// Transitions for a work's storage lifecycle: Reading → (finished) → History or
@@ -11,7 +12,7 @@ enum WorkLifecycle {
     static func markFinished(_ work: SavedWork, in context: ModelContext) {
         work.isFinished = true
         if !work.isProtected { freeEPUB(work) }
-        try? context.save()
+        saveBestEffort(context, reason: "Saving finished state failed")
     }
 
     /// Frees a finished, unprotected work's EPUB if it still has one. Safe to call
@@ -20,14 +21,14 @@ enum WorkLifecycle {
     static func freeEPUBIfFinished(_ work: SavedWork, in context: ModelContext) {
         guard work.isFinished, !work.isProtected, work.hasEPUB else { return }
         freeEPUB(work)
-        try? context.save()
+        saveBestEffort(context, reason: "Saving freed EPUB state failed")
     }
 
     /// Saves (keeps) or un-saves a work. Saving protects its EPUB from being freed.
     @MainActor
     static func setSaved(_ work: SavedWork, _ saved: Bool, in context: ModelContext) {
         work.isSaved = saved
-        try? context.save()
+        saveBestEffort(context, reason: "Saving saved state failed")
     }
 
     /// Deletes the on-disk EPUB and its unzipped reader cache, keeping the record
@@ -49,6 +50,17 @@ enum WorkLifecycle {
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         context.delete(work)
-        try? context.save()
+        saveBestEffort(context, reason: "Saving work deletion failed")
+    }
+
+    @MainActor
+    private static func saveBestEffort(_ context: ModelContext, reason: StaticString) {
+        do {
+            try context.save()
+        } catch {
+            Log.library.error(
+                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 }

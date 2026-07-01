@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// The single, canonical work-detail screen — used for **every** work the app can open,
 /// whether it's a locally saved work or a remote AO3 summary (Home, Library, Browse,
@@ -45,6 +46,7 @@ struct WorkDetailView: View {
     @State private var preservingSeries = false
     @State private var seriesPreservationTask: Task<Void, Never>?
     @State private var seriesPreservationProgress: ReadingQueueService.SeriesPreservationResult?
+    @State private var seriesPrompt: ReadingQueueService.SeriesPreservationPrompt?
     @State private var queueNotice: String?
     @State private var workActions = AO3WorkActionsModel()
 
@@ -101,15 +103,24 @@ struct WorkDetailView: View {
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork { AddToQueueView(work: work) }
         }
-        .confirmationDialog(
-            "Preserve the rest of this series?",
-            isPresented: $showingSeriesQueuePrompt,
-            titleVisibility: .visible
-        ) {
-            Button("Preserve Entire Series") { preserveSeriesForLater() }
-            Button("Only This Work", role: .cancel) {}
-        } message: {
-            Text(seriesQueuePromptMessage)
+        .sheet(isPresented: $showingSeriesQueuePrompt) {
+            if let seriesPrompt {
+                SeriesPreservationPromptSheet(
+                    prompt: seriesPrompt,
+                    autoPreserveSmallSeries: $autoPreserveSmallSeriesOnSaveForLater,
+                    threshold: autoPreserveSeriesWorkThreshold,
+                    onOnlyThisWork: {
+                        showingSeriesQueuePrompt = false
+                    },
+                    onPreserveSeries: {
+                        showingSeriesQueuePrompt = false
+                        preserveSeriesForLater()
+                    }
+                )
+            } else {
+                ProgressView("Checking series size…")
+                    .padding()
+            }
         }
         .navigationTitle(displayTitle)
         #if !os(macOS)
@@ -345,7 +356,7 @@ struct WorkDetailView: View {
             Button {
                 withLocalWork { work in
                     work.isFavorite.toggle()
-                    try? context.save()
+                    saveBestEffort("Saving favorite state failed")
                 }
             } label: {
                 let fav = localWork?.isFavorite ?? false
@@ -734,7 +745,7 @@ struct WorkDetailView: View {
     /// fills blanks, so it never clobbers values the import already set.
     private func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
         ReadingQueueService.applyRemoteMetadata(summary, to: work)
-        try? context.save()
+        saveBestEffort("Saving remote metadata failed")
     }
 
     // MARK: - Reading Queues
@@ -797,47 +808,51 @@ struct WorkDetailView: View {
 
     private func maybeOfferSeriesPreservation(for work: SavedWork) {
         guard !work.seriesURL.isEmpty else { return }
-        guard autoPreserveSmallSeriesOnSaveForLater else {
-            showingSeriesQueuePrompt = true
-            return
-        }
         Task {
-            await autoPreserveSeriesIfSmall(work)
+            await prepareSeriesPreservationPrompt(for: work)
         }
     }
 
-    private func autoPreserveSeriesIfSmall(_ work: SavedWork) async {
+    private func prepareSeriesPreservationPrompt(for work: SavedWork) async {
         guard let url = URL(string: work.seriesURL) else {
+            seriesPrompt = ReadingQueueService.seriesPrompt(
+                for: nil,
+                threshold: autoPreserveSeriesWorkThreshold,
+                previewFailed: true
+            )
             showingSeriesQueuePrompt = true
             return
         }
         queueNotice = "Checking series size…"
         do {
             let preview = try await AO3Client.shared.seriesPreview(seriesURL: url)
-            if preview.isComplete, preview.works.count <= autoPreserveSeriesWorkThreshold {
+            let prompt = ReadingQueueService.seriesPrompt(
+                for: preview,
+                threshold: autoPreserveSeriesWorkThreshold
+            )
+            if autoPreserveSmallSeriesOnSaveForLater, prompt.canAutoPreserve {
                 startSeriesPreservation(with: preview.works)
             } else {
                 queueNotice = "Saved for Later."
+                seriesPrompt = prompt
                 showingSeriesQueuePrompt = true
             }
         } catch {
             queueNotice = "Saved for Later."
+            seriesPrompt = ReadingQueueService.seriesPrompt(
+                for: nil,
+                threshold: autoPreserveSeriesWorkThreshold,
+                previewFailed: true
+            )
             showingSeriesQueuePrompt = true
         }
     }
 
-    private var seriesQueuePromptMessage: String {
-        let base = "Kudos has preserved this work. It can also preserve the other works in this AO3 series, "
-            + "one at a time, using the normal AO3 request throttling."
-        if autoPreserveSmallSeriesOnSaveForLater {
-            return base + " Automatic preservation only starts when the first AO3 series page proves the "
-                + "whole series is within your \(autoPreserveSeriesWorkThreshold)-work limit."
-        }
-        return base
-    }
-
     private func preserveSeriesForLater() {
-        startSeriesPreservation()
+        let previewWorks = seriesPrompt?.canUsePreviewForPreservation == true
+            ? seriesPrompt?.preview?.works
+            : nil
+        startSeriesPreservation(with: previewWorks)
     }
 
     private func startSeriesPreservation(with summaries: [AO3WorkSummary]? = nil) {
@@ -889,15 +904,26 @@ struct WorkDetailView: View {
                 + "\(result.preserved) work\(result.preserved == 1 ? "" : "s")."
         }
         if result.total == 0 { return "No other series works were found." }
-        if result.failed > 0 {
-            return "Preserved \(result.preserved) work\(result.preserved == 1 ? "" : "s") "
-                + "from the series. \(result.failed) could not be saved."
+        var parts: [String] = []
+        if result.preserved > 0 {
+            parts.append("\(result.preserved) preserved")
         }
-        if result.preserved == 0, result.skipped > 0 {
+        if result.alreadyPreserved > 0 {
+            parts.append("\(result.alreadyPreserved) already preserved")
+        }
+        if result.unavailable > 0 {
+            parts.append("\(result.unavailable) unavailable")
+        }
+        if result.failed > 0 {
+            parts.append("\(result.failed) failed")
+        }
+        if result.skipped > 0 {
+            parts.append("\(result.skipped) skipped")
+        }
+        if parts.isEmpty {
             return "Series works are already preserved for later."
         }
-        return "Preserved \(result.preserved) series work\(result.preserved == 1 ? "" : "s") "
-            + "for later."
+        return "Series preservation complete: " + parts.joined(separator: ", ") + "."
     }
 
     // MARK: - Reading
@@ -926,7 +952,7 @@ struct WorkDetailView: View {
                         work.preservedAt = Date()
                     }
                     work.lastSpineIndex = 0
-                    try? context.save()
+                    try context.save()
                     working = false
                     readerWork = work
                 } catch let error as AO3Error {
@@ -977,7 +1003,7 @@ struct WorkDetailView: View {
             let tag = tag(named: name)
             if !work.tags.contains(where: { $0.name == tag.name }) {
                 work.tags.append(tag)
-                try? context.save()
+                saveBestEffort("Saving tag assignment failed")
             }
         }
     }
@@ -985,7 +1011,7 @@ struct WorkDetailView: View {
     private func removeTag(_ tag: Tag) {
         guard let work = localWork else { return }
         work.tags.removeAll { $0.name == tag.name }
-        try? context.save()
+        saveBestEffort("Saving tag removal failed")
     }
 
     /// Returns an existing tag with this name (case-insensitive) or creates one.
@@ -996,5 +1022,76 @@ struct WorkDetailView: View {
         let created = Tag(name: name)
         context.insert(created)
         return created
+    }
+
+    private func saveBestEffort(_ reason: StaticString) {
+        do {
+            try context.save()
+        } catch {
+            Log.library.error(
+                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+}
+
+private struct SeriesPreservationPromptSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let prompt: ReadingQueueService.SeriesPreservationPrompt
+    @Binding var autoPreserveSmallSeries: Bool
+    let threshold: Int
+    let onOnlyThisWork: () -> Void
+    let onPreserveSeries: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(prompt.message)
+                    Text("Kudos preserves series works one at a time using the normal AO3 request pacing.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle(prompt.autoPreserveLabel, isOn: $autoPreserveSmallSeries)
+                    Text("Automatic preservation only runs when the first AO3 series page proves the whole "
+                         + "series is within your \(threshold)-work limit.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Button {
+                        dismiss()
+                        onPreserveSeries()
+                    } label: {
+                        Label("Preserve Entire Series", systemImage: "square.stack.3d.up")
+                    }
+
+                    Button(role: .cancel) {
+                        dismiss()
+                        onOnlyThisWork()
+                    } label: {
+                        Label("Only This Work", systemImage: "bookmark")
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Preserve Series?")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                        onOnlyThisWork()
+                    }
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
     }
 }

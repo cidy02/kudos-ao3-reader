@@ -61,7 +61,7 @@ struct AO3SearchPage: Sendable {
 
 /// A bounded look at a series page. Used before automatic series preservation so
 /// Kudos can avoid crawling an unknown large series merely to decide whether to ask.
-struct AO3SeriesPreview: Sendable {
+struct AO3SeriesPreview: Equatable, Sendable {
     var works: [AO3WorkSummary]
     var currentPage: Int
     var totalPages: Int
