@@ -124,6 +124,22 @@ enum ReadiumReaderStyleMapper {
     }
 }
 
+enum ReaderPageTurnDirection: Equatable {
+    case forward, backward
+
+    var horizontalSign: CGFloat {
+        switch self {
+        case .forward: 1
+        case .backward: -1
+        }
+    }
+}
+
+struct ReaderPageTurnEvent: Equatable {
+    let sequence: Int
+    let direction: ReaderPageTurnDirection
+}
+
 /// Owns a Readium `EPUBNavigatorViewController` for one work: opens the EPUB,
 /// builds the navigator, applies preferences live, and reports position + taps.
 @Observable
@@ -140,6 +156,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private(set) var toc: [ReadiumShared.Link] = []
     private(set) var currentLocator: Locator?
     private(set) var navigator: EPUBNavigatorViewController?
+    private(set) var pageTurnEvent: ReaderPageTurnEvent?
     /// Readium's static position list grouped by reading-order item (chapter).
     /// Drives the progress pill's "Ch. x/x · Pg. x/x" without any extra requests.
     private(set) var positionsByReadingOrder: [[Locator]] = []
@@ -150,6 +167,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var onLocatorChange: ((Locator) -> Void)?
     /// Hands web links in EPUB content to the app's in-app Browse tab.
     var onOpenExternalURL: ((URL) -> Void)?
+
+    private var pageTurnSequence = 0
 
     /// Fraction through the whole publication (0...1), when known.
     var totalProgression: Double? { currentLocator?.locations.totalProgression }
@@ -228,8 +247,28 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     // MARK: EPUBNavigatorDelegate
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+        if let direction = pageTurnDirection(from: currentLocator, to: locator) {
+            pageTurnSequence += 1
+            pageTurnEvent = ReaderPageTurnEvent(sequence: pageTurnSequence, direction: direction)
+        }
         currentLocator = locator
         onLocatorChange?(locator)
+    }
+
+    private func pageTurnDirection(from oldLocator: Locator?, to newLocator: Locator) -> ReaderPageTurnDirection? {
+        guard let oldLocator else { return nil }
+
+        if let oldPosition = oldLocator.locations.position,
+           let newPosition = newLocator.locations.position,
+           oldPosition != newPosition {
+            return newPosition > oldPosition ? .forward : .backward
+        }
+
+        let oldProgression = oldLocator.locations.totalProgression ?? oldLocator.locations.progression
+        let newProgression = newLocator.locations.totalProgression ?? newLocator.locations.progression
+        guard let oldProgression, let newProgression,
+              abs(newProgression - oldProgression) > 0.0001 else { return nil }
+        return newProgression > oldProgression ? .forward : .backward
     }
 
     // The only delegate method without a default implementation.
@@ -274,9 +313,131 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 /// Thin SwiftUI host for an already-built `EPUBNavigatorViewController`.
 struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
     let controller: EPUBNavigatorViewController
+    let readingMode: ReadingMode
+    let onDismissDragChanged: (CGFloat) -> Void
+    let onDismissDragEnded: (Bool) -> Void
 
-    func makeUIViewController(context: Context) -> EPUBNavigatorViewController { controller }
-    func updateUIViewController(_ controller: EPUBNavigatorViewController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIViewController(context: Context) -> EPUBNavigatorViewController {
+        context.coordinator.update(readingMode: readingMode,
+                                   onDismissDragChanged: onDismissDragChanged,
+                                   onDismissDragEnded: onDismissDragEnded)
+        context.coordinator.install(on: controller)
+        return controller
+    }
+
+    func updateUIViewController(_ controller: EPUBNavigatorViewController, context: Context) {
+        context.coordinator.update(readingMode: readingMode,
+                                   onDismissDragChanged: onDismissDragChanged,
+                                   onDismissDragEnded: onDismissDragEnded)
+        context.coordinator.install(on: controller)
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private var readingMode: ReadingMode = .scroll
+        private var onDismissDragChanged: (CGFloat) -> Void = { _ in }
+        private var onDismissDragEnded: (Bool) -> Void = { _ in }
+        private weak var installedView: UIView?
+        private var dismissPan: UIPanGestureRecognizer?
+
+        func update(
+            readingMode: ReadingMode,
+            onDismissDragChanged: @escaping (CGFloat) -> Void,
+            onDismissDragEnded: @escaping (Bool) -> Void
+        ) {
+            self.readingMode = readingMode
+            self.onDismissDragChanged = onDismissDragChanged
+            self.onDismissDragEnded = onDismissDragEnded
+        }
+
+        func install(on controller: EPUBNavigatorViewController) {
+            guard let view = controller.view else { return }
+            guard installedView !== view else { return }
+
+            if let dismissPan {
+                dismissPan.view?.removeGestureRecognizer(dismissPan)
+            }
+
+            let dismissPan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan))
+            dismissPan.cancelsTouchesInView = false
+            dismissPan.delegate = self
+            view.addGestureRecognizer(dismissPan)
+            self.dismissPan = dismissPan
+            installedView = view
+        }
+
+        @objc private func handleDismissPan(_ gesture: UIPanGestureRecognizer) {
+            guard let view = gesture.view else { return }
+            let translation = gesture.translation(in: view)
+            let velocity = gesture.velocity(in: view)
+
+            switch gesture.state {
+            case .changed:
+                guard translation.y > 0,
+                      translation.y > abs(translation.x) * 1.1,
+                      readingMode != .scroll || isAtTop(in: view)
+                else {
+                    onDismissDragChanged(0)
+                    return
+                }
+                onDismissDragChanged(rubberBandedDistance(translation.y))
+            case .ended:
+                let verticalDominates = translation.y > 0
+                    && translation.y > abs(translation.x) * 1.2
+                let passesDistance = translation.y > 120
+                let passesVelocity = translation.y > 44 && velocity.y > 1_100
+                onDismissDragEnded(verticalDominates && (passesDistance || passesVelocity))
+            case .cancelled, .failed:
+                onDismissDragEnded(false)
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+                  let view = pan.view else { return true }
+            let velocity = pan.velocity(in: view)
+            let translation = pan.translation(in: view)
+            let downwardIntent = velocity.y > 0 || translation.y > 0
+            let verticalVelocity = abs(velocity.y) > abs(velocity.x) * 1.25
+            let verticalTranslation = translation.y > abs(translation.x) * 1.25
+            guard downwardIntent, verticalVelocity || verticalTranslation else { return false }
+            return readingMode != .scroll || isAtTop(in: view)
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool { true }
+
+        private func rubberBandedDistance(_ distance: CGFloat) -> CGFloat {
+            guard distance > 160 else { return distance }
+            return min(320, 160 + (distance - 160) * 0.35)
+        }
+
+        private func isAtTop(in view: UIView) -> Bool {
+            guard let scrollView = primaryScrollView(in: view) else { return true }
+            let top = -scrollView.adjustedContentInset.top
+            return scrollView.contentOffset.y <= top + 18
+        }
+
+        private func primaryScrollView(in view: UIView) -> UIScrollView? {
+            let scrollViews = collectScrollViews(in: view)
+            return scrollViews.first {
+                !$0.isHidden && $0.alpha > 0 && $0.contentSize.height > $0.bounds.height + 1
+            } ?? scrollViews.first
+        }
+
+        private func collectScrollViews(in view: UIView) -> [UIScrollView] {
+            var result = (view as? UIScrollView).map { [$0] } ?? []
+            for subview in view.subviews {
+                result.append(contentsOf: collectScrollViews(in: subview))
+            }
+            return result
+        }
+    }
 }
 
 /// The Readium-backed reader screen. Mirrors the legacy `ReaderView`'s chrome
@@ -290,6 +451,7 @@ struct ReadiumReaderView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -307,6 +469,12 @@ struct ReadiumReaderView: View {
     @AppStorage("readerJustify") private var justifyText = false
 
     @State private var book = ReadiumBook()
+    @State private var dismissDragOffset: CGFloat = 0
+    @State private var isDismissingByDrag = false
+    @State private var pageTurnDirection: ReaderPageTurnDirection?
+    @State private var pageTurnProgress: CGFloat = 1
+    @State private var pageTurnResetTask: Task<Void, Never>?
+    @State private var suppressNextPageTurn = false
 
     private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
@@ -377,6 +545,12 @@ struct ReadiumReaderView: View {
 
     var body: some View {
         content
+            .modifier(ReaderPageTurnStyle(direction: pageTurnDirection,
+                                          progress: pageTurnProgress,
+                                          reduceMotion: reduceMotion,
+                                          theme: readerTheme))
+            .modifier(ReaderInteractiveDismissStyle(offset: dismissDragOffset,
+                                                    reduceMotion: reduceMotion))
             .background(readerTheme.backgroundColor)
             .preferredColorScheme(readerTheme.colorScheme)
             .navigationTitle(work.title)
@@ -404,21 +578,22 @@ struct ReadiumReaderView: View {
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
             .animation(.easeInOut(duration: 0.25), value: book.chromeHidden)
             // Readium's WebView swallows the system edge-swipe; add our own.
-            .edgeSwipeToGoBack { dismiss() }
+            .edgeSwipeToGoBack { dismissReader() }
             .task(id: bookLoadToken) { await openBook() }
             .onChange(of: preferencesToken) { _, _ in book.submit(preferences) }
+            .onChange(of: book.pageTurnEvent) { _, event in
+                handlePageTurnEvent(event)
+            }
             // The Display / Customize controls live in a sheet over the reader; a
             // behind-the-sheet onChange can be missed, so re-apply when it closes.
             .onChange(of: router.panel) { _, panel in
                 if panel == .none { book.submit(preferences) }
             }
             .onDisappear {
+                pageTurnResetTask?.cancel()
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll didn't emit a locator change before we left.
-                if let saved = book.currentLocator?.persistenceString {
-                    work.readiumLocator = saved
-                    work.lastReadDate = Date()
-                }
+                persistCurrentProgress()
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 try? modelContext.save()
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
@@ -437,11 +612,88 @@ struct ReadiumReaderView: View {
                                    description: Text(message))
         case .ready:
             if let navigator = book.navigator {
-                ReadiumNavigatorContainer(controller: navigator)
+                ReadiumNavigatorContainer(
+                    controller: navigator,
+                    readingMode: readingMode,
+                    onDismissDragChanged: handleDismissDragChanged,
+                    onDismissDragEnded: handleDismissDragEnded
+                )
                     .ignoresSafeArea()
                     .overlay(alignment: .bottom) {
                         if chromeVisible { bottomBar }
                     }
+            }
+        }
+    }
+
+    private func handleDismissDragChanged(_ offset: CGFloat) {
+        guard !isDismissingByDrag else { return }
+        dismissDragOffset = offset
+    }
+
+    private func handleDismissDragEnded(_ shouldDismiss: Bool) {
+        guard !isDismissingByDrag else { return }
+        if shouldDismiss {
+            isDismissingByDrag = true
+            persistCurrentProgress()
+            withAnimation(reduceMotion ? .easeOut(duration: 0.05) : .easeOut(duration: 0.16)) {
+                dismissDragOffset = max(dismissDragOffset, 180)
+            }
+            Task { @MainActor in
+                if !reduceMotion {
+                    try? await Task.sleep(nanoseconds: 90_000_000)
+                }
+                dismissReader()
+            }
+        } else {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                dismissDragOffset = 0
+            }
+        }
+    }
+
+    private func dismissReader() {
+        persistCurrentProgress()
+        dismiss()
+    }
+
+    private func persistCurrentProgress() {
+        if let saved = book.currentLocator?.persistenceString {
+            work.readiumLocator = saved
+            work.lastReadDate = Date()
+            try? modelContext.save()
+        }
+    }
+
+    private func handlePageTurnEvent(_ event: ReaderPageTurnEvent?) {
+        guard let event else { return }
+        if suppressNextPageTurn {
+            suppressNextPageTurn = false
+            return
+        }
+        guard readingMode == .paged else { return }
+        animatePageTurn(event.direction)
+    }
+
+    private func animatePageTurn(_ direction: ReaderPageTurnDirection) {
+        pageTurnResetTask?.cancel()
+        var immediate = Transaction()
+        immediate.animation = nil
+        withTransaction(immediate) {
+            pageTurnDirection = direction
+            pageTurnProgress = 0
+        }
+        withAnimation(reduceMotion ? .easeOut(duration: 0.16) : .smooth(duration: 0.32)) {
+            pageTurnProgress = 1
+        }
+
+        let delay: UInt64 = reduceMotion ? 180_000_000 : 340_000_000
+        pageTurnResetTask = Task {
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                pageTurnDirection = nil
+                pageTurnProgress = 1
             }
         }
     }
@@ -511,6 +763,7 @@ struct ReadiumReaderView: View {
     private var chapterRows: some View {
         ForEach(Array(book.toc.enumerated()), id: \.offset) { _, link in
             Button {
+                suppressNextPageTurn = true
                 book.go(to: link)
                 router.panel = .none
             } label: {
@@ -555,6 +808,83 @@ struct ReadiumReaderView: View {
         )
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
                         fallbackSpineIndex: fallbackSpineIndex, config: config)
+    }
+}
+
+private struct ReaderInteractiveDismissStyle: ViewModifier {
+    typealias Body = AnyView
+
+    let offset: CGFloat
+    let reduceMotion: Bool
+
+    func body(content: Self.Content) -> AnyView {
+        let clampedOffset = max(0, offset)
+        let progress = min(clampedOffset / 280, 1)
+        return AnyView(content
+            .offset(y: clampedOffset)
+            .scaleEffect(reduceMotion ? 1 : 1 - progress * 0.035)
+            .opacity(Double(1 - progress * 0.16))
+            .shadow(color: .black.opacity(Double(reduceMotion ? 0 : 0.18 * progress)),
+                    radius: 22 * progress, x: 0, y: -2 * progress))
+    }
+}
+
+private struct ReaderPageTurnStyle: ViewModifier {
+    typealias Body = AnyView
+
+    let direction: ReaderPageTurnDirection?
+    let progress: CGFloat
+    let reduceMotion: Bool
+    let theme: ReaderTheme
+
+    func body(content: Self.Content) -> AnyView {
+        let clampedProgress = min(max(progress, 0), 1)
+        let isActive = direction != nil && clampedProgress < 1
+        let sign = direction?.horizontalSign ?? 0
+        let travel: CGFloat = reduceMotion ? 8 : 42
+
+        return AnyView(content
+            .scaleEffect(isActive && !reduceMotion ? 0.985 + 0.015 * clampedProgress : 1)
+            .offset(x: isActive ? sign * travel * (1 - clampedProgress) : 0)
+            .opacity(Double(isActive && reduceMotion ? 0.9 + 0.1 * clampedProgress : 1))
+            .shadow(color: .black.opacity(Double(isActive && !reduceMotion ? 0.16 * (1 - clampedProgress) : 0)),
+                    radius: isActive && !reduceMotion ? 20 * (1 - clampedProgress) : 0,
+                    x: isActive ? -sign * 6 * (1 - clampedProgress) : 0,
+                    y: isActive ? 2 * (1 - clampedProgress) : 0)
+            .overlay {
+                if let direction, isActive && !reduceMotion {
+                    ReaderPageTurnStackOverlay(direction: direction,
+                                               progress: clampedProgress,
+                                               theme: theme)
+                }
+            })
+    }
+}
+
+private struct ReaderPageTurnStackOverlay: View {
+    let direction: ReaderPageTurnDirection
+    let progress: CGFloat
+    let theme: ReaderTheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = min(max(proxy.size.width * 0.12, 28), 84)
+            HStack(spacing: 0) {
+                if direction == .forward { Spacer(minLength: 0) }
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(theme.backgroundColor)
+                    .frame(width: width)
+                    .shadow(color: .black.opacity(Double(0.12 * (1 - progress))),
+                            radius: 16 * (1 - progress),
+                            x: direction == .forward ? -6 : 6,
+                            y: 0)
+                    .opacity(Double(0.24 * (1 - progress)))
+                    .offset(x: direction == .forward ? -18 * progress : 18 * progress)
+                if direction == .backward { Spacer(minLength: 0) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .allowsHitTesting(false)
     }
 }
 
