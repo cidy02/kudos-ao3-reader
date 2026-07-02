@@ -11,7 +11,7 @@ import SwiftUI
 /// A rounded wireframe block. `width: nil` fills the available width.
 struct SkeletonBlock: View {
     var height: CGFloat = 12
-    var width: CGFloat? = nil
+    var width: CGFloat?
     var cornerRadius: CGFloat = 6
 
     var body: some View {
@@ -25,7 +25,7 @@ struct SkeletonBlock: View {
 /// A placeholder text line — a block rounded and sized like a line of text.
 struct SkeletonTextLine: View {
     var height: CGFloat = 13
-    var width: CGFloat? = nil
+    var width: CGFloat?
 
     var body: some View {
         SkeletonBlock(height: height, width: width, cornerRadius: height / 2.5)
@@ -190,8 +190,8 @@ struct ReaderPageSkeleton: View {
 /// A single placeholder list row (one text line) for inline loading states inside
 /// Forms/Lists — account session restore, tag suggestion fetches, etc.
 struct SkeletonListRow: View {
-    var width: CGFloat? = nil
-    var trailingWidth: CGFloat? = nil
+    var width: CGFloat?
+    var trailingWidth: CGFloat?
 
     var body: some View {
         HStack(spacing: 12) {

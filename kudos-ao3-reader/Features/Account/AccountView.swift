@@ -253,7 +253,8 @@ private struct LocalReadingHistoryView: View {
                 ContentUnavailableView {
                     Label("No history", systemImage: "clock.arrow.circlepath")
                 } description: {
-                    Text("Works you finish without saving land here. Their files are freed, but you can re-download and revisit them anytime.")
+                    Text("Works you finish without saving land here. Their files are freed, "
+                         + "but you can re-download and revisit them anytime.")
                 }
             } else if visibleHistory.isEmpty {
                 MatureContentHiddenView()

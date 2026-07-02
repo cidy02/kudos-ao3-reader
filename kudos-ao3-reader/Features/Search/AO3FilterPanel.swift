@@ -25,7 +25,7 @@ struct AO3FilterPanel: View {
     var onApply: () -> Void
     /// Save the current filters as a named Saved Search. When nil (e.g. Browse), no
     /// Save action is shown.
-    var onSave: (() -> Void)? = nil
+    var onSave: (() -> Void)?
     /// Clear filters back to the host's baseline.
     var onReset: () -> Void
 

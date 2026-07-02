@@ -580,7 +580,7 @@ nonisolated struct AO3WorkMetadata: Sendable {
 /// tagged with the fandom, shown on the fandom list when available.
 struct AO3Fandom: Identifiable, Hashable, Sendable, Codable {
     var name: String
-    var workCount: Int? = nil
+    var workCount: Int?
     var id: String { name }
 }
 

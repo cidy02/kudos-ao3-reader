@@ -216,8 +216,11 @@ private struct LibraryOptionPicker: View {
                 } else {
                     ForEach(filtered, id: \.self) { value in
                         Button {
-                            if selection.contains(value) { selection.remove(value) }
-                            else { selection.insert(value) }
+                            if selection.contains(value) {
+                                selection.remove(value)
+                            } else {
+                                selection.insert(value)
+                            }
                         } label: {
                             HStack {
                                 Text(value).foregroundStyle(.primary)

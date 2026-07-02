@@ -5,10 +5,11 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+// Lint: this existing form is kept together to avoid behavior refactors.
 /// The toggleable reading options, grouped into categories. Shared between the
 /// reader's inspector (quick access while reading) and the Settings page, so the
 /// two always show the same controls and stay in sync via `@AppStorage`.
-struct ReaderOptionsForm: View {
+struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// Whether the two-page spread can take effect (the reader passes its window
     /// width; Settings has no window context, so it allows the toggle freely).
     var twoPageAvailable: Bool = true

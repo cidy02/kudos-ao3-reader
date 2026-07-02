@@ -55,19 +55,19 @@ final class FandomCatalog {
     /// matched on-device, so typing feels live without scraping AO3 per keystroke.
     /// Prefix matches first, then by work count. Deduped by name.
     func cachedFandoms(matching query: String, limit: Int = 12) -> [AO3Fandom] {
-        let q = query.lowercased()
-        guard !q.isEmpty else { return [] }
+        let normalizedQuery = query.lowercased()
+        guard !normalizedQuery.isEmpty else { return [] }
         var seen = Set<String>()
         var matches: [AO3Fandom] = []
         for list in fandomsByCategory.values {
-            for fandom in list where fandom.name.lowercased().contains(q) {
+            for fandom in list where fandom.name.lowercased().contains(normalizedQuery) {
                 if seen.insert(fandom.name.lowercased()).inserted { matches.append(fandom) }
             }
         }
         return matches.sorted { lhs, rhs in
-            let lp = lhs.name.lowercased().hasPrefix(q)
-            let rp = rhs.name.lowercased().hasPrefix(q)
-            if lp != rp { return lp }
+            let leftHasPrefix = lhs.name.lowercased().hasPrefix(normalizedQuery)
+            let rightHasPrefix = rhs.name.lowercased().hasPrefix(normalizedQuery)
+            if leftHasPrefix != rightHasPrefix { return leftHasPrefix }
             return (lhs.workCount ?? 0) > (rhs.workCount ?? 0)
         }
         .prefix(limit)

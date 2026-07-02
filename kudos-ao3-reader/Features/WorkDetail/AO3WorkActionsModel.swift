@@ -40,8 +40,11 @@ final class AO3WorkActionsModel {
         guard !isWorking else { return }
         isWorking = true
         Task {
-            do { banner = try await action() }
-            catch { banner = Self.message(for: error) }
+            do {
+                banner = try await action()
+            } catch {
+                banner = Self.message(for: error)
+            }
             isWorking = false
         }
     }

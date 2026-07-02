@@ -3,6 +3,8 @@ import OSLog
 import SwiftData
 
 @MainActor
+// Queue lifecycle rules are centralized here; avoid behavior refactors for lint.
+// swiftlint:disable:next type_body_length
 enum ReadingQueueService {
     static let savedForLaterName = "Saved for Later"
     nonisolated static let preservationRequestPauseNanos: UInt64 = 2_000_000_000
@@ -387,6 +389,8 @@ enum ReadingQueueService {
         }
     }
 
+    // Series preservation keeps its accounting in one place for safety.
+    // swiftlint:disable:next cyclomatic_complexity
     static func preserveSeries(
         _ summaries: [AO3WorkSummary],
         to queues: [ReadingQueue]? = nil,
@@ -557,6 +561,8 @@ enum ReadingQueueService {
         }
     }
 
+    // Metadata merge is a field-by-field guard sequence by design.
+    // swiftlint:disable:next cyclomatic_complexity
     static func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
         work.ao3WorkID = summary.id
         if work.author.isEmpty { work.author = summary.authorText }

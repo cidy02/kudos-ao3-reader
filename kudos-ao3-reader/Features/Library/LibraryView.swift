@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import OSLog
 
+// Lint: this existing dashboard owns many stateful sections.
 /// The Library tab: a Books-style dashboard of the user's saved works. Every section
 /// is a collapsible horizontal card carousel with a `>` chevron that opens its full
 /// vertical list. Sections, in order: Reading Now, Saved for Later, Finished,
@@ -10,7 +11,7 @@ import OSLog
 ///
 /// Filtering (the inspector panel), Reading Insights, content privacy, and — on iOS —
 /// multi-select bulk actions are kept from the previous list-based Library.
-struct LibraryView: View {
+struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth

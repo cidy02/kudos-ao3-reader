@@ -9,8 +9,9 @@ import SwiftSoup
 // against live AO3 HTML. AO3 has no official API, so this is HTML scraping — kept
 // polite and personal.
 
+// Lint: the existing client keeps scraping/parsing behavior centralized.
 /// Serialized network access to AO3 (one request at a time keeps us polite).
-actor AO3Client {
+actor AO3Client { // swiftlint:disable:this type_body_length
     static let shared = AO3Client()
 
     private let base = "https://archiveofourown.org"
@@ -31,7 +32,13 @@ actor AO3Client {
 
     private func getHTML(_ url: URL) async throws -> String {
         let data = try await fetchData(from: url)
-        return String(decoding: data, as: UTF8.self)
+        return Self.htmlString(from: data)
+    }
+
+    private static func htmlString(from data: Data) -> String {
+        // Preserve the existing lossy UTF-8 behavior for AO3 HTML with bad bytes.
+        // swiftlint:disable:next optional_data_string_conversion
+        String(decoding: data, as: UTF8.self)
     }
 
     /// Coalesces concurrent identical GETs so two callers requesting the same page
@@ -296,7 +303,7 @@ actor AO3Client {
         if let url = response.url, url.path.contains("/users/login") {
             throw AO3Error.authenticationRequired
         }
-        return String(decoding: data, as: UTF8.self)
+        return Self.htmlString(from: data)
     }
 
     // MARK: - Write actions (authenticated, single-shot POSTs)
@@ -324,7 +331,7 @@ actor AO3Client {
         if http.statusCode == 429 {
             throw AO3Error.rateLimited(retryAfter: Self.retryAfter(from: http))
         }
-        return (http.statusCode, String(decoding: data, as: UTF8.self))
+        return (http.statusCode, Self.htmlString(from: data))
     }
 
     /// The Rails CSRF authenticity token from a page's `<meta name="csrf-token">`.
@@ -505,9 +512,13 @@ actor AO3Client {
         try parseWorkMetadata(from: html).tagGroups
     }
 
+    // Lint: parser stays cohesive to avoid changing scraping behavior.
     /// Parses a work page's refreshable metadata from its HTML. This intentionally
     /// returns a value type, leaving merge/safety decisions to the refresh service.
-    static func parseWorkMetadata(from html: String, workID: Int = 0) throws -> AO3WorkMetadata {
+    static func parseWorkMetadata( // swiftlint:disable:this function_body_length
+        from html: String,
+        workID: Int = 0
+    ) throws -> AO3WorkMetadata {
         let doc = try SwiftSoup.parse(html)
 
         func clean(_ text: String?) -> String {

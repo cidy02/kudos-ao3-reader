@@ -43,9 +43,10 @@ struct LibraryFilters: Equatable {
         works.filter(matches).sorted(by: isOrderedBefore)
     }
 
+    // Lint: multi-facet predicate reads safest as one guard sequence.
     /// Whether a single work passes every active filter (AND across fields; AND
     /// within a multi-select field, matching AO3's "include all" tag behavior).
-    func matches(_ work: SavedWork) -> Bool {
+    func matches(_ work: SavedWork) -> Bool { // swiftlint:disable:this cyclomatic_complexity
         if !userTags.isSubset(of: Set(work.tags.map(\.name))) { return false }
         if !fandoms.isSubset(of: tagSet(work.workFandoms, fallback: work.workTags)) { return false }
         if !characters.isSubset(of: tagSet(work.workCharacters, fallback: work.workTags)) { return false }
@@ -88,12 +89,12 @@ struct LibraryFilters: Equatable {
         return true
     }
 
-    private func isOrderedBefore(_ a: SavedWork, _ b: SavedWork) -> Bool {
+    private func isOrderedBefore(_ first: SavedWork, _ second: SavedWork) -> Bool {
         switch sort {
-        case .dateAdded: a.dateAdded > b.dateAdded
-        case .title: a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
-        case .author: a.author.localizedCaseInsensitiveCompare(b.author) == .orderedAscending
-        case .wordCount: a.wordCount > b.wordCount
+        case .dateAdded: first.dateAdded > second.dateAdded
+        case .title: first.title.localizedCaseInsensitiveCompare(second.title) == .orderedAscending
+        case .author: first.author.localizedCaseInsensitiveCompare(second.author) == .orderedAscending
+        case .wordCount: first.wordCount > second.wordCount
         }
     }
 
@@ -136,14 +137,14 @@ extension AO3SearchFilters.Rating {
     /// Whether a stored rating string (e.g. "Teen And Up Audiences") matches this
     /// rating. Lenient because EPUB and AO3 spellings differ slightly.
     func matchesRatingText(_ text: String) -> Bool {
-        let r = text.lowercased()
+        let ratingText = text.lowercased()
         switch self {
         case .any: return true
-        case .general: return r.contains("general")
-        case .teen: return r.contains("teen")
-        case .mature: return r.contains("mature")
-        case .explicit: return r.contains("explicit")
-        case .notRated: return r.contains("not rated")
+        case .general: return ratingText.contains("general")
+        case .teen: return ratingText.contains("teen")
+        case .mature: return ratingText.contains("mature")
+        case .explicit: return ratingText.contains("explicit")
+        case .notRated: return ratingText.contains("not rated")
         }
     }
 }

@@ -1,10 +1,11 @@
 import SwiftUI
 import SwiftData
 
+// Lint: this existing screen coordinates local and remote search state.
 /// Native AO3 work search. A search field with an adjacent filter button, results
 /// paged like AO3 (numbered pages + first/prev/next/last), and a filter sidebar
 /// for fandom, rating, sort, and completion.
-struct SearchView: View {
+struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
 
@@ -207,33 +208,33 @@ struct SearchView: View {
 
     /// A one-line description of a saved search's filters (the query, then the most
     /// salient facets) so the row is recognizable beyond its name.
-    private func savedSearchSubtitle(_ f: AO3SearchFilters) -> String? {
+    private func savedSearchSubtitle(_ savedFilters: AO3SearchFilters) -> String? {
         var parts: [String] = []
-        let q = f.query.trimmingCharacters(in: .whitespaces)
-        if !q.isEmpty { parts.append("“\(q)”") }
-        let fandom = f.fandom.trimmingCharacters(in: .whitespaces)
+        let query = savedFilters.query.trimmingCharacters(in: .whitespaces)
+        if !query.isEmpty { parts.append("“\(query)”") }
+        let fandom = savedFilters.fandom.trimmingCharacters(in: .whitespaces)
         if !fandom.isEmpty { parts.append(fandom) }
-        if f.rating != .any { parts.append(f.rating.title) }
-        if f.completion != .any { parts.append(f.completion.title) }
-        if f.sort != .relevance { parts.append(f.sort.title) }
+        if savedFilters.rating != .any { parts.append(savedFilters.rating.title) }
+        if savedFilters.completion != .any { parts.append(savedFilters.completion.title) }
+        if savedFilters.sort != .relevance { parts.append(savedFilters.sort.title) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var localQuery: String { filters.query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var matchingWorks: [SavedWork] {
-        let q = localQuery.lowercased()
+        let query = localQuery.lowercased()
         return savedWorks.filter {
-            $0.title.lowercased().contains(q) || $0.author.lowercased().contains(q)
+            $0.title.lowercased().contains(query) || $0.author.lowercased().contains(query)
         }
     }
 
     private var matchingFandoms: [String] {
-        let q = localQuery.lowercased()
+        let query = localQuery.lowercased()
         var seen = Set<String>()
         var out: [String] = []
         for work in savedWorks {
-            for fandom in work.workFandoms where fandom.lowercased().contains(q) {
+            for fandom in work.workFandoms where fandom.lowercased().contains(query) {
                 if seen.insert(fandom.lowercased()).inserted { out.append(fandom) }
             }
         }
@@ -537,11 +538,14 @@ struct SearchView: View {
 
     /// A default name for the current search: its query, else its fandom, else a label.
     private var defaultSavedSearchName: String {
-        let q = filters.query.trimmingCharacters(in: .whitespaces)
-        if !q.isEmpty { return q }
+        let query = filters.query.trimmingCharacters(in: .whitespaces)
+        if !query.isEmpty { return query }
         let fandom = filters.fandom.trimmingCharacters(in: .whitespaces)
         if !fandom.isEmpty {
-            return fandom.split(separator: ",").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? fandom
+            return fandom
+                .split(separator: ",")
+                .first
+                .map { String($0).trimmingCharacters(in: .whitespaces) } ?? fandom
         }
         return "Saved Search"
     }

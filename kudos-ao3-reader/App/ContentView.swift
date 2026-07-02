@@ -42,8 +42,8 @@ struct ContentView: View {
             // Segmented controls (UISegmentedControl) draw a white selected segment
             // in Sepia's light scheme; warm them via the appearance proxy. Reset for
             // Light/Dark. `initial` covers launch; new controls pick it up on change.
-            .onChange(of: theme.appTheme, initial: true) { _, t in
-                applySegmentedControlAppearance(for: t)
+            .onChange(of: theme.appTheme, initial: true) { _, appTheme in
+                applySegmentedControlAppearance(for: appTheme)
             }
             .task {
                 await auth.restoreSession()

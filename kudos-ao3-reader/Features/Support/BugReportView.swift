@@ -14,7 +14,7 @@ struct BugReportView: View {
 
     #if os(iOS)
     /// The screen snapshot captured at shake time (nil when opened from Settings).
-    var screenshot: UIImage? = nil
+    var screenshot: UIImage?
     @State private var includeScreenshot = true
     #endif
 

@@ -3,6 +3,9 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Backup archive schema/restore logic is cohesive; avoid behavior refactors for lint.
+// swiftlint:disable file_length
+
 extension UTType {
     /// A directory-backed document package containing a JSON manifest and assets.
     static let kudosBackup = UTType(
@@ -749,6 +752,8 @@ enum KudosBackupService {
         ))
     }
 
+    // Restore is transactional and intentionally linear for data-safety review.
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     static func restore(
         _ contents: KudosBackupContents,
         into context: ModelContext,

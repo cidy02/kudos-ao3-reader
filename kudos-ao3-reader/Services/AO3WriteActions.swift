@@ -236,9 +236,9 @@ extension AO3AuthService {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         let pairs = params.map { key, value -> String in
-            let k = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
-            let v = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
-            return "\(k)=\(v)"
+            let encodedKey = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
+            let encodedValue = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+            return "\(encodedKey)=\(encodedValue)"
         }
         return Data(pairs.joined(separator: "&").utf8)
     }

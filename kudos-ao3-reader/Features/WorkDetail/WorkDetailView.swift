@@ -2,6 +2,10 @@ import SwiftUI
 import SwiftData
 import OSLog
 
+// Existing canonical detail screen is large; lint cleanup avoids behavior refactors.
+// swiftlint:disable file_length
+
+// Lint: this canonical detail screen intentionally stays cohesive.
 /// The single, canonical work-detail screen — used for **every** work the app can open,
 /// whether it's a locally saved work or a remote AO3 summary (Home, Library, Browse,
 /// Search, Bookmarks, AO3 lists, …). There is no separate "compact" remote detail.
@@ -10,7 +14,7 @@ import OSLog
 /// is resolved to a local `SavedWork` lazily — only when the reader or a management
 /// action actually needs it — so merely browsing never imports a work. Once resolved
 /// (or if the work is already in the library), the screen reflects its real local state.
-struct WorkDetailView: View {
+struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Where the work came from. A `.remote` summary is resolved to a local record on
     /// demand; a `.saved` work is already local.
     enum Source: Hashable {
@@ -420,11 +424,11 @@ struct WorkDetailView: View {
 
     private var displayTitle: String { localWork?.title ?? remote?.title ?? "Untitled" }
     private var displayAuthor: String {
-        if let a = localWork?.author, !a.isEmpty { return a }
+        if let author = localWork?.author, !author.isEmpty { return author }
         return remote?.authorText ?? ""
     }
     private var displaySummary: String {
-        if let s = localWork?.summary, !s.isEmpty { return s.strippingHTML() }
+        if let summary = localWork?.summary, !summary.isEmpty { return summary.strippingHTML() }
         return remote?.summary ?? ""
     }
     private var displayRating: String { firstNonEmpty(localWork?.rating, remote?.rating) }
@@ -435,29 +439,29 @@ struct WorkDetailView: View {
     // Warnings / categories / status / stats: prefer the local record's stored values
     // (canonical once refreshed), falling back to the remote summary while unsaved.
     private var displayWarnings: [String] {
-        if let w = localWork?.workWarnings, !w.isEmpty { return w }
+        if let warnings = localWork?.workWarnings, !warnings.isEmpty { return warnings }
         return remote?.warnings ?? []
     }
     private var displayCategories: [String] {
-        if let c = localWork?.workCategories, !c.isEmpty { return c }
+        if let categories = localWork?.workCategories, !categories.isEmpty { return categories }
         return remote?.categories ?? []
     }
     // Categorized tag chips: prefer the local record's per-type lists (once the AO3
     // refresh has run), else the remote summary's (the blurb is grouped too).
     private var displayFandoms: [String] {
-        if let f = localWork?.workFandoms, !f.isEmpty { return f }
+        if let fandoms = localWork?.workFandoms, !fandoms.isEmpty { return fandoms }
         return remote?.fandoms ?? []
     }
     private var displayRelationships: [String] {
-        if let r = localWork?.workRelationships, !r.isEmpty { return r }
+        if let relationships = localWork?.workRelationships, !relationships.isEmpty { return relationships }
         return remote?.relationships ?? []
     }
     private var displayCharacters: [String] {
-        if let c = localWork?.workCharacters, !c.isEmpty { return c }
+        if let characters = localWork?.workCharacters, !characters.isEmpty { return characters }
         return remote?.characters ?? []
     }
     private var displayFreeforms: [String] {
-        if let f = localWork?.workFreeforms, !f.isEmpty { return f }
+        if let freeforms = localWork?.workFreeforms, !freeforms.isEmpty { return freeforms }
         return remote?.tags ?? []
     }
     private var displayStatus: String? {
@@ -471,15 +475,15 @@ struct WorkDetailView: View {
         return nil
     }
     private var displayKudos: Int? {
-        if let k = localWork?.kudos, k > 0 { return k }
+        if let kudos = localWork?.kudos, kudos > 0 { return kudos }
         return remote?.kudos
     }
     private var displayComments: Int? {
-        if let c = localWork?.comments, c > 0 { return c }
+        if let comments = localWork?.comments, comments > 0 { return comments }
         return remote?.comments
     }
     private var displayHits: Int? {
-        if let h = localWork?.hits, h > 0 { return h }
+        if let hits = localWork?.hits, hits > 0 { return hits }
         return remote?.hits
     }
     private var displayWords: Int? {
@@ -488,9 +492,9 @@ struct WorkDetailView: View {
     }
     private var displayChapters: String { firstNonEmpty(localWork?.chapters, remote?.chapters) }
 
-    private func firstNonEmpty(_ a: String?, _ b: String?) -> String {
-        if let a, !a.isEmpty { return a }
-        return b ?? ""
+    private func firstNonEmpty(_ first: String?, _ second: String?) -> String {
+        if let first, !first.isEmpty { return first }
+        return second ?? ""
     }
 
     /// The AO3 URL for "Open on AO3" / web fallback (local source URL or remote work URL).
@@ -575,12 +579,12 @@ struct WorkDetailView: View {
     }
 
     private var displaySeriesTitle: String {
-        if let t = localWork?.seriesTitle, !t.isEmpty { return t }
+        if let title = localWork?.seriesTitle, !title.isEmpty { return title }
         return remote?.seriesTitle ?? ""
     }
     private var displaySeriesPosition: Int { localWork?.seriesPosition ?? remote?.seriesPosition ?? 0 }
     private var displaySeriesURL: String {
-        if let u = localWork?.seriesURL, !u.isEmpty { return u }
+        if let url = localWork?.seriesURL, !url.isEmpty { return url }
         return remote?.seriesURL ?? ""
     }
 

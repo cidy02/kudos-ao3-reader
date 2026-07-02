@@ -83,7 +83,8 @@ struct CustomizeThemeView: View {
                 } header: {
                     Text("Accessibility & Layout")
                 } footer: {
-                    Text("When Customize is off, the reader uses comfortable defaults. Bold Text and the font apply either way.")
+                    Text("When Customize is off, the reader uses comfortable defaults. "
+                         + "Bold Text and the font apply either way.")
                 }
 
                 Section {
@@ -270,7 +271,10 @@ private struct ThemePreview: UIViewRepresentable {
             // Trim the reader's tall vertical padding AND the first element's top
             // margin (the sample's <h3>) so the preview starts snug at the top —
             // space is precious here with all the options below.
-            let preview = css + "\nhtml, body { height: auto !important; } body { padding-top: 0.5em !important; padding-bottom: 0.7em !important; } body > *:first-child { margin-top: 0 !important; }"
+            let preview = css
+                + "\nhtml, body { height: auto !important; } "
+                + "body { padding-top: 0.5em !important; padding-bottom: 0.7em !important; } "
+                + "body > *:first-child { margin-top: 0 !important; }"
             let base64 = Data(preview.utf8).base64EncodedString()
             web.evaluateJavaScript("""
             (function(){var id='preview-style';var s=document.getElementById(id);
@@ -286,11 +290,16 @@ private struct ThemePreview: UIViewRepresentable {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     </head><body>
     <h3>A Study in Starlight</h3>
-    <p>The lantern guttered as she turned the final page, and for a moment the whole library seemed to lean in to listen.</p>
-    <p>Outside, the rain had softened to a whisper against the glass — patient and unhurried, the way the best stories always are.</p>
-    <p>She traced the last line with one finger, unwilling to let it end, and wondered how many readers before her had paused in exactly this place.</p>
-    <p>Somewhere a clock counted the small hours. The words stayed with her, warm as a held breath, long after the candle had burned low.</p>
-    <p>When at last she rose, the room felt larger than before — as though the story had quietly made room for one more.</p>
+    <p>The lantern guttered as she turned the final page, and for a moment the whole
+    library seemed to lean in to listen.</p>
+    <p>Outside, the rain had softened to a whisper against the glass — patient and
+    unhurried, the way the best stories always are.</p>
+    <p>She traced the last line with one finger, unwilling to let it end, and wondered
+    how many readers before her had paused in exactly this place.</p>
+    <p>Somewhere a clock counted the small hours. The words stayed with her, warm as a
+    held breath, long after the candle had burned low.</p>
+    <p>When at last she rose, the room felt larger than before — as though the story had
+    quietly made room for one more.</p>
     </body></html>
     """
 }

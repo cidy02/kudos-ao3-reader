@@ -95,6 +95,8 @@ enum WorkMetadataRefresh {
         return error.localizedDescription
     }
 
+    // Field-level merge guards are deliberately explicit for refresh safety.
+    // swiftlint:disable:next cyclomatic_complexity
     private static func apply(_ metadata: AO3WorkMetadata, to work: SavedWork) {
         work.ao3WorkID = metadata.id
         work.ao3Unavailable = false
