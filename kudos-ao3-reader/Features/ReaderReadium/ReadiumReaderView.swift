@@ -124,22 +124,6 @@ enum ReadiumReaderStyleMapper {
     }
 }
 
-enum ReaderPageTurnDirection: Equatable {
-    case forward, backward
-
-    var horizontalSign: CGFloat {
-        switch self {
-        case .forward: 1
-        case .backward: -1
-        }
-    }
-}
-
-struct ReaderPageTurnEvent: Equatable {
-    let sequence: Int
-    let direction: ReaderPageTurnDirection
-}
-
 /// Owns a Readium `EPUBNavigatorViewController` for one work: opens the EPUB,
 /// builds the navigator, applies preferences live, and reports position + taps.
 @Observable
@@ -156,7 +140,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private(set) var toc: [ReadiumShared.Link] = []
     private(set) var currentLocator: Locator?
     private(set) var navigator: EPUBNavigatorViewController?
-    private(set) var pageTurnEvent: ReaderPageTurnEvent?
     /// Readium's static position list grouped by reading-order item (chapter).
     /// Drives the progress pill's "Ch. x/x · Pg. x/x" without any extra requests.
     private(set) var positionsByReadingOrder: [[Locator]] = []
@@ -167,8 +150,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var onLocatorChange: ((Locator) -> Void)?
     /// Hands web links in EPUB content to the app's in-app Browse tab.
     var onOpenExternalURL: ((URL) -> Void)?
-
-    private var pageTurnSequence = 0
 
     /// Fraction through the whole publication (0...1), when known.
     var totalProgression: Double? { currentLocator?.locations.totalProgression }
@@ -247,28 +228,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     // MARK: EPUBNavigatorDelegate
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
-        if let direction = pageTurnDirection(from: currentLocator, to: locator) {
-            pageTurnSequence += 1
-            pageTurnEvent = ReaderPageTurnEvent(sequence: pageTurnSequence, direction: direction)
-        }
         currentLocator = locator
         onLocatorChange?(locator)
-    }
-
-    private func pageTurnDirection(from oldLocator: Locator?, to newLocator: Locator) -> ReaderPageTurnDirection? {
-        guard let oldLocator else { return nil }
-
-        if let oldPosition = oldLocator.locations.position,
-           let newPosition = newLocator.locations.position,
-           oldPosition != newPosition {
-            return newPosition > oldPosition ? .forward : .backward
-        }
-
-        let oldProgression = oldLocator.locations.totalProgression ?? oldLocator.locations.progression
-        let newProgression = newLocator.locations.totalProgression ?? newLocator.locations.progression
-        guard let oldProgression, let newProgression,
-              abs(newProgression - oldProgression) > 0.0001 else { return nil }
-        return newProgression > oldProgression ? .forward : .backward
     }
 
     // The only delegate method without a default implementation.
@@ -310,7 +271,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 }
 
-/// Thin SwiftUI host for an already-built `EPUBNavigatorViewController`.
+/// Thin SwiftUI host for an already-built `EPUBNavigatorViewController`. Adds a
+/// downward swipe gesture on top of Readium so the reader can be dismissed without
+/// interfering with the navigator's built-in page turns.
 struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
     let controller: EPUBNavigatorViewController
     let readingMode: ReadingMode
@@ -340,6 +303,9 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
         private var onDismissDragEnded: (Bool) -> Void = { _ in }
         private weak var installedView: UIView?
         private var dismissPan: UIPanGestureRecognizer?
+        /// Latched once a drag is recognized as a downward dismiss, so minor sideways
+        /// wobble mid-drag doesn't snap the sheet back to rest (the old jank source).
+        private var dismissLatched = false
 
         func update(
             readingMode: ReadingMode,
@@ -364,8 +330,11 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
             dismissPan.delegate = self
             view.addGestureRecognizer(dismissPan)
             self.dismissPan = dismissPan
+
             installedView = view
         }
+
+        // MARK: Swipe-down dismiss
 
         @objc private func handleDismissPan(_ gesture: UIPanGestureRecognizer) {
             guard let view = gesture.view else { return }
@@ -373,23 +342,28 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
             let velocity = gesture.velocity(in: view)
 
             switch gesture.state {
+            case .began:
+                dismissLatched = false
             case .changed:
-                guard translation.y > 0,
-                      translation.y > abs(translation.x) * 1.1,
-                      readingMode != .scroll || isAtTop(in: view)
-                else {
-                    onDismissDragChanged(0)
-                    return
+                if !dismissLatched {
+                    // Latch as a dismiss once a clearly downward, vertical-dominant drag
+                    // starts (and, in scroll mode, only from the top of the page).
+                    let startsDismiss = translation.y > 12
+                        && translation.y > abs(translation.x) * 1.1
+                        && (readingMode != .scroll || isAtTop(in: view))
+                    guard startsDismiss else { return }
+                    dismissLatched = true
                 }
-                onDismissDragChanged(rubberBandedDistance(translation.y))
+                onDismissDragChanged(rubberBandedDistance(max(0, translation.y)))
             case .ended:
-                let verticalDominates = translation.y > 0
-                    && translation.y > abs(translation.x) * 1.2
-                let passesDistance = translation.y > 120
-                let passesVelocity = translation.y > 44 && velocity.y > 1_100
-                onDismissDragEnded(verticalDominates && (passesDistance || passesVelocity))
+                guard dismissLatched else { onDismissDragEnded(false); return }
+                let passesDistance = translation.y > 110
+                let passesVelocity = translation.y > 40 && velocity.y > 900
+                onDismissDragEnded(passesDistance || passesVelocity)
+                dismissLatched = false
             case .cancelled, .failed:
                 onDismissDragEnded(false)
+                dismissLatched = false
             default:
                 break
             }
@@ -400,6 +374,8 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
                   let view = pan.view else { return true }
             let velocity = pan.velocity(in: view)
             let translation = pan.translation(in: view)
+
+            // Dismiss pan: downward, vertical-dominant, top-of-page in scroll mode.
             let downwardIntent = velocity.y > 0 || translation.y > 0
             let verticalVelocity = abs(velocity.y) > abs(velocity.x) * 1.25
             let verticalTranslation = translation.y > abs(translation.x) * 1.25
@@ -413,8 +389,8 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
         ) -> Bool { true }
 
         private func rubberBandedDistance(_ distance: CGFloat) -> CGFloat {
-            guard distance > 160 else { return distance }
-            return min(320, 160 + (distance - 160) * 0.35)
+            guard distance > 150 else { return distance }
+            return 150 + (distance - 150) * 0.5
         }
 
         private func isAtTop(in view: UIView) -> Bool {
@@ -471,10 +447,6 @@ struct ReadiumReaderView: View {
     @State private var book = ReadiumBook()
     @State private var dismissDragOffset: CGFloat = 0
     @State private var isDismissingByDrag = false
-    @State private var pageTurnDirection: ReaderPageTurnDirection?
-    @State private var pageTurnProgress: CGFloat = 1
-    @State private var pageTurnResetTask: Task<Void, Never>?
-    @State private var suppressNextPageTurn = false
 
     private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
@@ -545,10 +517,6 @@ struct ReadiumReaderView: View {
 
     var body: some View {
         content
-            .modifier(ReaderPageTurnStyle(direction: pageTurnDirection,
-                                          progress: pageTurnProgress,
-                                          reduceMotion: reduceMotion,
-                                          theme: readerTheme))
             .modifier(ReaderInteractiveDismissStyle(offset: dismissDragOffset,
                                                     reduceMotion: reduceMotion))
             .background(readerTheme.backgroundColor)
@@ -581,16 +549,12 @@ struct ReadiumReaderView: View {
             .edgeSwipeToGoBack { dismissReader() }
             .task(id: bookLoadToken) { await openBook() }
             .onChange(of: preferencesToken) { _, _ in book.submit(preferences) }
-            .onChange(of: book.pageTurnEvent) { _, event in
-                handlePageTurnEvent(event)
-            }
             // The Display / Customize controls live in a sheet over the reader; a
             // behind-the-sheet onChange can be missed, so re-apply when it closes.
             .onChange(of: router.panel) { _, panel in
                 if panel == .none { book.submit(preferences) }
             }
             .onDisappear {
-                pageTurnResetTask?.cancel()
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll didn't emit a locator change before we left.
                 persistCurrentProgress()
@@ -636,17 +600,24 @@ struct ReadiumReaderView: View {
         if shouldDismiss {
             isDismissingByDrag = true
             persistCurrentProgress()
-            withAnimation(reduceMotion ? .easeOut(duration: 0.05) : .easeOut(duration: 0.16)) {
-                dismissDragOffset = max(dismissDragOffset, 180)
+            if reduceMotion {
+                dismissReader()
+                return
+            }
+            // Slide the page the rest of the way off, then pop without the navigation
+            // stack's own animation (the view is already off-screen) for a seamless exit.
+            withAnimation(.easeIn(duration: 0.22)) {
+                dismissDragOffset = 1400
             }
             Task { @MainActor in
-                if !reduceMotion {
-                    try? await Task.sleep(nanoseconds: 90_000_000)
-                }
-                dismissReader()
+                try? await Task.sleep(nanoseconds: 210_000_000)
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { dismissReader() }
             }
         } else {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            // Spring back to rest tracking; a snappy, well-damped return (no overshoot).
+            withAnimation(.interpolatingSpring(stiffness: 340, damping: 32)) {
                 dismissDragOffset = 0
             }
         }
@@ -662,39 +633,6 @@ struct ReadiumReaderView: View {
             work.readiumLocator = saved
             work.lastReadDate = Date()
             try? modelContext.save()
-        }
-    }
-
-    private func handlePageTurnEvent(_ event: ReaderPageTurnEvent?) {
-        guard let event else { return }
-        if suppressNextPageTurn {
-            suppressNextPageTurn = false
-            return
-        }
-        guard readingMode == .paged else { return }
-        animatePageTurn(event.direction)
-    }
-
-    private func animatePageTurn(_ direction: ReaderPageTurnDirection) {
-        pageTurnResetTask?.cancel()
-        var immediate = Transaction()
-        immediate.animation = nil
-        withTransaction(immediate) {
-            pageTurnDirection = direction
-            pageTurnProgress = 0
-        }
-        withAnimation(reduceMotion ? .easeOut(duration: 0.16) : .smooth(duration: 0.32)) {
-            pageTurnProgress = 1
-        }
-
-        let delay: UInt64 = reduceMotion ? 180_000_000 : 340_000_000
-        pageTurnResetTask = Task {
-            try? await Task.sleep(nanoseconds: delay)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                pageTurnDirection = nil
-                pageTurnProgress = 1
-            }
         }
     }
 
@@ -763,7 +701,6 @@ struct ReadiumReaderView: View {
     private var chapterRows: some View {
         ForEach(Array(book.toc.enumerated()), id: \.offset) { _, link in
             Button {
-                suppressNextPageTurn = true
                 book.go(to: link)
                 router.panel = .none
             } label: {
@@ -820,71 +757,15 @@ private struct ReaderInteractiveDismissStyle: ViewModifier {
     func body(content: Self.Content) -> AnyView {
         let clampedOffset = max(0, offset)
         let progress = min(clampedOffset / 280, 1)
+        // The page follows the finger down, shrinking and rounding into a card as it
+        // goes (Apple Books). No per-frame drop shadow — that offscreen pass on the
+        // full-screen web view was the source of the drag jank.
         return AnyView(content
+            .scaleEffect(reduceMotion ? 1 : 1 - progress * 0.06, anchor: .center)
+            .clipShape(RoundedRectangle(cornerRadius: reduceMotion ? 0 : progress * 20,
+                                        style: .continuous))
             .offset(y: clampedOffset)
-            .scaleEffect(reduceMotion ? 1 : 1 - progress * 0.035)
-            .opacity(Double(1 - progress * 0.16))
-            .shadow(color: .black.opacity(Double(reduceMotion ? 0 : 0.18 * progress)),
-                    radius: 22 * progress, x: 0, y: -2 * progress))
-    }
-}
-
-private struct ReaderPageTurnStyle: ViewModifier {
-    typealias Body = AnyView
-
-    let direction: ReaderPageTurnDirection?
-    let progress: CGFloat
-    let reduceMotion: Bool
-    let theme: ReaderTheme
-
-    func body(content: Self.Content) -> AnyView {
-        let clampedProgress = min(max(progress, 0), 1)
-        let isActive = direction != nil && clampedProgress < 1
-        let sign = direction?.horizontalSign ?? 0
-        let travel: CGFloat = reduceMotion ? 8 : 42
-
-        return AnyView(content
-            .scaleEffect(isActive && !reduceMotion ? 0.985 + 0.015 * clampedProgress : 1)
-            .offset(x: isActive ? sign * travel * (1 - clampedProgress) : 0)
-            .opacity(Double(isActive && reduceMotion ? 0.9 + 0.1 * clampedProgress : 1))
-            .shadow(color: .black.opacity(Double(isActive && !reduceMotion ? 0.16 * (1 - clampedProgress) : 0)),
-                    radius: isActive && !reduceMotion ? 20 * (1 - clampedProgress) : 0,
-                    x: isActive ? -sign * 6 * (1 - clampedProgress) : 0,
-                    y: isActive ? 2 * (1 - clampedProgress) : 0)
-            .overlay {
-                if let direction, isActive && !reduceMotion {
-                    ReaderPageTurnStackOverlay(direction: direction,
-                                               progress: clampedProgress,
-                                               theme: theme)
-                }
-            })
-    }
-}
-
-private struct ReaderPageTurnStackOverlay: View {
-    let direction: ReaderPageTurnDirection
-    let progress: CGFloat
-    let theme: ReaderTheme
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = min(max(proxy.size.width * 0.12, 28), 84)
-            HStack(spacing: 0) {
-                if direction == .forward { Spacer(minLength: 0) }
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(theme.backgroundColor)
-                    .frame(width: width)
-                    .shadow(color: .black.opacity(Double(0.12 * (1 - progress))),
-                            radius: 16 * (1 - progress),
-                            x: direction == .forward ? -6 : 6,
-                            y: 0)
-                    .opacity(Double(0.24 * (1 - progress)))
-                    .offset(x: direction == .forward ? -18 * progress : 18 * progress)
-                if direction == .backward { Spacer(minLength: 0) }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .allowsHitTesting(false)
+            .opacity(Double(1 - progress * 0.2)))
     }
 }
 
