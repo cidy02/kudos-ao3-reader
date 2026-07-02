@@ -97,6 +97,9 @@ struct ReadingQueueDetailView: View {
     @State private var expandAll = false
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
+    /// (see `cancelRefreshOnTabChange`) — a queue can hold a large number of works.
+    @State private var refreshTask: Task<Void, Never>?
 
     private var works: [SavedWork] {
         queue.memberships
@@ -136,7 +139,12 @@ struct ReadingQueueDetailView: View {
                     .cardRow()
                 }
                 .cardList()
-                .refreshable { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                .refreshable {
+                    let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                    refreshTask = task
+                    await task.value
+                }
+                .cancelRefreshOnTabChange($refreshTask)
                 .overlay {
                     if visibleWorks.isEmpty {
                         ContentUnavailableView {

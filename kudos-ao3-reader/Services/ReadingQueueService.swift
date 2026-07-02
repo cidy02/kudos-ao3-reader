@@ -567,7 +567,7 @@ enum ReadingQueueService {
         if work.workRelationships.isEmpty { work.workRelationships = summary.relationships }
         if work.workCharacters.isEmpty { work.workCharacters = summary.characters }
         if work.workFreeforms.isEmpty { work.workFreeforms = additionalTags(from: summary) }
-        work.workTags = merged(
+        work.workTags = TagMerge.merged(
             work.workTags,
             work.workFandoms + work.workRelationships + work.workCharacters + work.workFreeforms
         )
@@ -596,9 +596,9 @@ enum ReadingQueueService {
         let categorized = Set(
             (summary.fandoms + summary.warnings + summary.categories
                 + summary.relationships + summary.characters)
-                .map(normalizedTag)
+                .map(TagMerge.key)
         )
-        return summary.tags.filter { !categorized.contains(normalizedTag($0)) }
+        return summary.tags.filter { !categorized.contains(TagMerge.key($0)) }
     }
 
     static func replaceEPUB(for work: SavedWork, with temp: URL) throws {
@@ -627,20 +627,5 @@ enum ReadingQueueService {
 
     private static func nextMembershipSortOrder(in queue: ReadingQueue) -> Int {
         (queue.memberships.map(\.sortOrderInQueue).max() ?? -1) + 1
-    }
-
-    private static func merged(_ existing: [String], _ incoming: [String]) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for value in existing + incoming {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, seen.insert(normalizedTag(trimmed)).inserted else { continue }
-            result.append(trimmed)
-        }
-        return result
-    }
-
-    private static func normalizedTag(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

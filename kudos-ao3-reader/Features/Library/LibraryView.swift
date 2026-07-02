@@ -39,6 +39,9 @@ struct LibraryView: View {
     #endif
     @State private var selection = Set<UUID>()
     @State private var confirmBulkDelete = false
+    /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
+    /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
+    @State private var refreshTask: Task<Void, Never>?
 
     private var isSelecting: Bool {
         #if os(iOS)
@@ -491,7 +494,12 @@ struct LibraryView: View {
             }
         }
         .cardList()
-        .refreshable { await refreshSelectableWorks() }
+        .refreshable {
+            let task = Task { await refreshSelectableWorks() }
+            refreshTask = task
+            await task.value
+        }
+        .cancelRefreshOnTabChange($refreshTask)
         .environment(\.editMode, $editMode)
         #else
         EmptyView()

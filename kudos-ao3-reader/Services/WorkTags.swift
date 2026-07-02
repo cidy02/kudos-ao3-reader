@@ -20,21 +20,21 @@ enum WorkTags {
         do {
             let groups = try await AO3Client.shared.workTags(workID: id)
             guard !groups.isEmpty else { return }   // locked/empty page — keep EPUB tags, retry later
-            work.workFandoms = merged(work.workFandoms, groups.fandoms)
-            work.workRelationships = merged(work.workRelationships, groups.relationships)
-            work.workCharacters = merged(work.workCharacters, groups.characters)
-            work.workFreeforms = merged(work.workFreeforms, groups.freeforms)
-            work.workWarnings = merged(work.workWarnings, groups.warnings)
-            work.workCategories = merged(work.workCategories, groups.categories)
+            work.workFandoms = TagMerge.merged(work.workFandoms, groups.fandoms)
+            work.workRelationships = TagMerge.merged(work.workRelationships, groups.relationships)
+            work.workCharacters = TagMerge.merged(work.workCharacters, groups.characters)
+            work.workFreeforms = TagMerge.merged(work.workFreeforms, groups.freeforms)
+            work.workWarnings = TagMerge.merged(work.workWarnings, groups.warnings)
+            work.workCategories = TagMerge.merged(work.workCategories, groups.categories)
             let categorized = work.workFandoms + work.workRelationships + work.workCharacters
                 + work.workWarnings + work.workCategories
-            let categorizedKeys = Set(categorized.map(tagKey))
+            let categorizedKeys = Set(categorized.map(TagMerge.key))
             work.workFreeforms.removeAll {
-                categorizedKeys.contains(tagKey($0))
+                categorizedKeys.contains(TagMerge.key($0))
             }
             // Flat union for the Library filter. Warnings/categories stay in their
             // dedicated fields and are not duplicated into Additional Tags.
-            work.workTags = merged([], work.workFandoms + work.workRelationships
+            work.workTags = TagMerge.merged([], work.workFandoms + work.workRelationships
                 + work.workCharacters + work.workFreeforms)
             if !groups.language.isEmpty { work.language = groups.language }
             if let words = groups.words { work.wordCount = words }
@@ -90,21 +90,5 @@ enum WorkTags {
             return "https://archiveofourown.org/works/\(id)"
         }
         return EPUBMetadata.canonicalAO3WorkURL(in: urlString)
-    }
-
-    private static func merged(_ existing: [String], _ incoming: [String]) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for raw in existing + incoming {
-            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = value.lowercased()
-            guard !value.isEmpty, seen.insert(key).inserted else { continue }
-            result.append(value)
-        }
-        return result
-    }
-
-    private static func tagKey(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

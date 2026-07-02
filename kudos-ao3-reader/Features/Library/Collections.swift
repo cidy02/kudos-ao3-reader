@@ -88,6 +88,9 @@ struct CollectionDetailView: View {
     /// Filters scoped to this one collection, applied live to its works.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
+    /// (see `cancelRefreshOnTabChange`) — a collection can hold a large number of works.
+    @State private var refreshTask: Task<Void, Never>?
 
     private var works: [SavedWork] {
         collection.works.sorted { $0.dateAdded > $1.dateAdded }
@@ -122,7 +125,12 @@ struct CollectionDetailView: View {
                     .cardRow()
                 }
                 .cardList()
-                .refreshable { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                .refreshable {
+                    let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                    refreshTask = task
+                    await task.value
+                }
+                .cancelRefreshOnTabChange($refreshTask)
                 .overlay {
                     // Collection has works, but the active filters hid them all.
                     if visibleWorks.isEmpty {

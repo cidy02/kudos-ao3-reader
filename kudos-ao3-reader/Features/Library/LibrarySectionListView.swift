@@ -22,6 +22,9 @@ struct LibrarySectionListView: View {
     @State private var pendingDelete: SavedWork?
     @State private var markedForLater: [AO3WorkSummary] = []
     @State private var expandAll = false
+    /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
+    /// (see `cancelRefreshOnTabChange`) — this section can list a large number of works.
+    @State private var refreshTask: Task<Void, Never>?
     /// Filters scoped to this one section — applied live to the works already on the
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
@@ -129,7 +132,12 @@ struct LibrarySectionListView: View {
                 }
             }
             .cardList()
-            .refreshable { await refreshSection() }
+            .refreshable {
+                let task = Task { await refreshSection() }
+                refreshTask = task
+                await task.value
+            }
+            .cancelRefreshOnTabChange($refreshTask)
             .overlay {
                 // Section has works, but the active filters hid them all.
                 if visibleItems.isEmpty && !showsMarkedForLater {

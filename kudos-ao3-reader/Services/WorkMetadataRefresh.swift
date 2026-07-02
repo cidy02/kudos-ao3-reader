@@ -104,18 +104,18 @@ enum WorkMetadataRefresh {
         if !metadata.summary.isEmpty { work.summary = metadata.summary }
         if !metadata.rating.isEmpty { work.rating = metadata.rating }
 
-        work.workFandoms = merged(work.workFandoms, metadata.fandoms)
-        work.workRelationships = merged(work.workRelationships, metadata.relationships)
-        work.workCharacters = merged(work.workCharacters, metadata.characters)
-        work.workFreeforms = merged(work.workFreeforms, metadata.freeforms)
-        work.workWarnings = merged(work.workWarnings, metadata.warnings)
-        work.workCategories = merged(work.workCategories, metadata.categories)
+        work.workFandoms = TagMerge.merged(work.workFandoms, metadata.fandoms)
+        work.workRelationships = TagMerge.merged(work.workRelationships, metadata.relationships)
+        work.workCharacters = TagMerge.merged(work.workCharacters, metadata.characters)
+        work.workFreeforms = TagMerge.merged(work.workFreeforms, metadata.freeforms)
+        work.workWarnings = TagMerge.merged(work.workWarnings, metadata.warnings)
+        work.workCategories = TagMerge.merged(work.workCategories, metadata.categories)
 
         let categorized = work.workFandoms + work.workRelationships + work.workCharacters
             + work.workWarnings + work.workCategories
-        let categorizedKeys = Set(categorized.map(tagKey))
-        work.workFreeforms.removeAll { categorizedKeys.contains(tagKey($0)) }
-        work.workTags = merged(
+        let categorizedKeys = Set(categorized.map(TagMerge.key))
+        work.workFreeforms.removeAll { categorizedKeys.contains(TagMerge.key($0)) }
+        work.workTags = TagMerge.merged(
             work.workTags,
             work.workFandoms + work.workRelationships + work.workCharacters + work.workFreeforms
         )
@@ -137,20 +137,5 @@ enum WorkMetadataRefresh {
         if let position = metadata.seriesPosition, position > 0 { work.seriesPosition = position }
         if !metadata.tagGroups.isEmpty { work.workTagsFetched = true }
         work.lastUpdateCheck = Date()
-    }
-
-    private static func merged(_ existing: [String], _ incoming: [String]) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for raw in existing + incoming {
-            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty, seen.insert(value.lowercased()).inserted else { continue }
-            result.append(value)
-        }
-        return result
-    }
-
-    private static func tagKey(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
