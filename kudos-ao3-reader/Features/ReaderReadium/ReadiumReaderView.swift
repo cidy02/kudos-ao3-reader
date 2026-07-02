@@ -519,6 +519,14 @@ struct ReadiumReaderView: View {
         content
             .modifier(ReaderInteractiveDismissStyle(offset: dismissDragOffset,
                                                     reduceMotion: reduceMotion))
+            // The pill sits outside the dismiss-style transform (not inside `content`)
+            // so it's immune to the swipe-to-dismiss pan's scale/offset/clip — including
+            // its brief spring-back when an ordinary tap's incidental finger movement
+            // crosses the pan's own latch threshold without becoming a real dismiss.
+            // That spring-back is a legitimate, real animation (not a no-op), so it
+            // can't be skipped; keeping the pill out of the transformed subtree means
+            // it never rides along with it, whatever the cause.
+            .overlay(alignment: .bottom) { bottomBar }
             .background(readerTheme.backgroundColor)
             .preferredColorScheme(readerTheme.colorScheme)
             .navigationTitle(work.title)
@@ -583,9 +591,6 @@ struct ReadiumReaderView: View {
                     onDismissDragEnded: handleDismissDragEnded
                 )
                     .ignoresSafeArea()
-                    .overlay(alignment: .bottom) {
-                        if chromeVisible { bottomBar }
-                    }
             }
         }
     }
@@ -615,8 +620,13 @@ struct ReadiumReaderView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { dismissReader() }
             }
-        } else {
+        } else if dismissDragOffset != 0 {
             // Spring back to rest tracking; a snappy, well-damped return (no overshoot).
+            // The dismiss-pan recognizer doesn't cancel other touches, so it also sees
+            // every ordinary tap-to-toggle-chrome — those never latch as a dismiss, so
+            // `dismissDragOffset` is already 0 here. Skipping the no-op reset means an
+            // ordinary tap never opens a spring-animation transaction that can bleed
+            // into (and jitter) the chrome toggle's own animation for the same tap.
             withAnimation(.interpolatingSpring(stiffness: 340, damping: 32)) {
                 dismissDragOffset = 0
             }
@@ -644,13 +654,24 @@ struct ReadiumReaderView: View {
         // A full-bleed, non-interactive layer that bottom-aligns the pill against the
         // true screen edge (the overlay otherwise stops at the home-indicator safe
         // area). Hit testing is off so taps still reach the page to toggle chrome.
+        //
+        // Always present (not conditionally inserted via `if chromeVisible`) and
+        // shown/hidden with a fixed offset + opacity rather than
+        // `.transition(.move(edge:))`: that transition computes its off-screen
+        // distance from this view's own resolved frame, which is ambiguous here — a
+        // `.frame(maxHeight: .infinity)` inside a container whose nav bar/status bar
+        // visibility is *also* animating at the same moment. SwiftUI can get that
+        // computation wrong for the transition's first frame or two and then
+        // visibly correct itself, which reads as the pill jumping up before sliding
+        // down. A fixed offset has no such ambiguity.
         progressPill
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             // Sit as close to the bottom edge as the Dynamic Island is to the top.
             .padding(.bottom, 11)
             .ignoresSafeArea()
             .allowsHitTesting(false)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .offset(y: chromeVisible ? 0 : 120)
+            .opacity(chromeVisible ? 1 : 0)
     }
 
     private var progressPill: some View {
