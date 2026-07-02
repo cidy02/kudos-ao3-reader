@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// Fills the Search tab's idle state with a live browse of AO3's media categories
 /// (scraped from `/media`). On iOS, tapping a category pushes a dedicated fandom
@@ -15,6 +16,7 @@ struct MediaBrowserView: View {
 
     @State private var categories: [AO3MediaCategory] = []
     @State private var phase: Phase = .loading
+    @State private var visibleCategoryIDs: Set<String> = []
     /// Shared, per-launch cache of each category's fandom list.
     private let catalog = FandomCatalog.shared
     #if os(macOS)
@@ -49,27 +51,31 @@ struct MediaBrowserView: View {
         List {
             Section {
                 ForEach(categories) { category in
-                    #if os(iOS)
-                    NavigationLink(value: category) {
-                        categoryCard(category)
-                    }
-                    #else
-                    DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
-                        ForEach(category.fandoms) { fandom in
-                            Button {
-                                onSelectFandom(fandom.name)
-                            } label: {
-                                Text(fandom.name)
-                                    .foregroundStyle(.primary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
+                    Group {
+                        #if os(iOS)
+                        NavigationLink(value: category) {
+                            categoryCard(category)
                         }
-                    } label: {
-                        categoryCard(category)
+                        #else
+                        DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
+                            ForEach(category.fandoms) { fandom in
+                                Button {
+                                    onSelectFandom(fandom.name)
+                                } label: {
+                                    Text(fandom.name)
+                                        .foregroundStyle(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } label: {
+                            categoryCard(category)
+                        }
+                        #endif
                     }
-                    #endif
+                    .onAppear { visibleCategoryIDs.insert(category.id) }
+                    .onDisappear { visibleCategoryIDs.remove(category.id) }
                 }
                 .cardRow()   // cards only on the category rows
             } header: {
@@ -88,6 +94,7 @@ struct MediaBrowserView: View {
                 .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
         }
         .cardList()
+        .refreshable { await refresh() }
     }
 
     /// Instructional caption shown under the category list.
@@ -247,6 +254,30 @@ struct MediaBrowserView: View {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func refresh() async {
+        do {
+            let loaded = try await AO3Client.shared.mediaCategories()
+            categories = loaded
+            phase = .loaded
+            // Refresh only category rows currently visible in this list. The catalog
+            // keeps existing counts if an individual category request fails.
+            let visible = loaded.filter { visibleCategoryIDs.contains($0.id) }
+            await catalog.refresh(visible.isEmpty ? Array(loaded.prefix(4)) : visible)
+        } catch let error as AO3Error {
+            if categories.isEmpty {
+                phase = .failed(error.errorDescription ?? "Something went wrong.")
+            } else {
+                Log.network.notice("Browse refresh failed: \(error.localizedDescription, privacy: .public)")
+            }
+        } catch {
+            if categories.isEmpty {
+                phase = .failed(error.localizedDescription)
+            } else {
+                Log.network.notice("Browse refresh failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }

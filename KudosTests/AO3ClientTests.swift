@@ -241,7 +241,13 @@ struct AO3ClientTests {
 
     static let workHTML = """
     <html><body>
+    <h2 class="title heading">A Test Work</h2>
+    <h3 class="byline heading"><a rel="author" href="/users/alice">alice</a></h3>
+    <div class="summary module">
+      <blockquote class="userstuff"><p>A fuller summary.</p></blockquote>
+    </div>
     <dl class="work meta group">
+      <dd class="rating tags"><ul><li><a class="tag" href="#">Teen And Up Audiences</a></li></ul></dd>
       <dd class="fandom tags"><ul class="commas"><li><a class="tag" href="#">Naruto</a></li></ul></dd>
       <dd class="warning tags"><ul><li><a class="tag" href="#">No Archive Warnings Apply</a></li></ul></dd>
       <dd class="relationship tags"><ul><li><a class="tag" href="#">Naruto/Hinata</a></li></ul></dd>
@@ -252,6 +258,9 @@ struct AO3ClientTests {
       <dd class="freeform tags"><ul><li><a class="tag" href="#">Fluff</a></li></ul></dd>
       <dd class="category tags"><ul><li><a class="tag" href="#">Gen</a></li></ul></dd>
       <dd class="language">English</dd>
+      <dd class="published">01 Jan 2026</dd>
+      <dt>Completed:</dt><dd class="status">02 Jan 2026</dd>
+      <dd class="series"><span class="position">Part 2 of <a href="/series/777">My Series</a></span></dd>
       <dl class="stats">
         <dd class="words">12,345</dd>
         <dd class="chapters">5/10</dd>
@@ -277,5 +286,53 @@ struct AO3ClientTests {
         #expect(groups.kudos == 890)
         #expect(groups.comments == 76)
         #expect(groups.hits == 54321)
+    }
+
+    @Test func parsesWorkPageMetadata() throws {
+        let metadata = try AO3Client.parseWorkMetadata(from: Self.workHTML, workID: 12345)
+        #expect(metadata.id == 12345)
+        #expect(metadata.title == "A Test Work")
+        #expect(metadata.authors == ["alice"])
+        #expect(metadata.summary == "A fuller summary.")
+        #expect(metadata.rating == "Teen And Up Audiences")
+        #expect(metadata.fandoms == ["Naruto"])
+        #expect(metadata.relationships == ["Naruto/Hinata"])
+        #expect(metadata.characters == ["Hinata Hyuuga", "Naruto Uzumaki"])
+        #expect(metadata.freeforms == ["Fluff"])
+        #expect(metadata.warnings == ["No Archive Warnings Apply"])
+        #expect(metadata.categories == ["Gen"])
+        #expect(metadata.language == "English")
+        #expect(metadata.words == 12345)
+        #expect(metadata.chapters == "5/10")
+        #expect(metadata.kudos == 890)
+        #expect(metadata.comments == 76)
+        #expect(metadata.hits == 54321)
+        #expect(metadata.datePublished == "01 Jan 2026")
+        #expect(metadata.dateUpdated == "02 Jan 2026")
+        #expect(metadata.isComplete == true)
+        #expect(metadata.seriesTitle == "My Series")
+        #expect(metadata.seriesURL == "https://archiveofourown.org/series/777")
+        #expect(metadata.seriesPosition == 2)
+    }
+
+    /// AO3 doesn't class the "Completed:"/"Updated:" `<dt>` label itself — only its
+    /// sibling `<dd class="status">` carries a class. This guards against reading the
+    /// label from a nonexistent `dt.status` selector (which would silently always miss
+    /// and fall back to the chapters-ratio heuristic).
+    @Test func parsesWorkInProgressStatusFromUnclassedLabel() throws {
+        let wipHTML = """
+        <html><body>
+        <h2 class="title heading">A WIP</h2>
+        <dl class="work meta group">
+          <dt>Updated:</dt><dd class="status">03 Jan 2026</dd>
+          <dl class="stats">
+            <dd class="chapters">3/?</dd>
+          </dl>
+        </dl>
+        </body></html>
+        """
+        let metadata = try AO3Client.parseWorkMetadata(from: wipHTML, workID: 1)
+        #expect(metadata.dateUpdated == "03 Jan 2026")
+        #expect(metadata.isComplete == false)
     }
 }

@@ -146,6 +146,7 @@ struct SearchView: View {
                 // Card-based list: each result is a fully-rounded card with ~12pt
                 // spacing, over the themed backdrop (replaces the grouped style).
                 .cardList()
+                .refreshable { await refreshCurrentResults() }
                 .overlay { statusOverlay }
                 .onChange(of: currentPage) { _, _ in
                     withAnimation {
@@ -595,6 +596,29 @@ struct SearchView: View {
                 guard token == loadToken else { return }
                 phase = .failed(error.localizedDescription)
             }
+        }
+    }
+
+    private func refreshCurrentResults() async {
+        guard filters.isSearchable, phase != .idle else { return }
+        loadToken += 1
+        let token = loadToken
+        let current = filters
+        let page = currentPage
+        if results.isEmpty { phase = .loading }
+        do {
+            let result = try await AO3Client.shared.search(filters: current, page: page)
+            guard token == loadToken else { return }
+            results = result.works
+            currentPage = result.currentPage
+            totalPages = result.totalPages
+            phase = .loaded
+        } catch let error as AO3Error {
+            guard token == loadToken else { return }
+            phase = .failed(error.errorDescription ?? "Something went wrong.")
+        } catch {
+            guard token == loadToken else { return }
+            phase = .failed(error.localizedDescription)
         }
     }
 }

@@ -7,6 +7,7 @@ import SwiftData
 struct HomeSectionListView: View {
     let kind: HomeSectionKind
 
+    @Environment(\.modelContext) private var context
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -43,6 +44,7 @@ struct HomeSectionListView: View {
                     .cardRow()
                 }
                 .cardList()
+                .refreshable { _ = await WorkMetadataRefresh.refresh(visibleItems, in: context) }
                 .overlay {
                     // Section has works, but the active filters hid them all.
                     if visibleItems.isEmpty {

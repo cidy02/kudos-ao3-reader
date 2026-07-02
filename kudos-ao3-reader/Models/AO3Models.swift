@@ -478,12 +478,12 @@ nonisolated struct AO3WorkTagGroups: Sendable {
     var warnings: [String] = []
     var categories: [String] = []
     var language: String = ""
-    var words: Int? = nil
+    var words: Int?
     /// Chapter count as AO3 prints it (e.g. "5/10", "3/?"); "" when unknown.
     var chapters: String = ""
-    var kudos: Int? = nil
-    var comments: Int? = nil
-    var hits: Int? = nil
+    var kudos: Int?
+    var comments: Int?
+    var hits: Int?
 
     /// Whether the page yielded no *tags* — the signal for a locked/empty work
     /// page, where the caller keeps the EPUB tags and retries later. (Warnings,
@@ -495,6 +495,82 @@ nonisolated struct AO3WorkTagGroups: Sendable {
     /// Flat union in AO3's canonical order, for the Library filter and the
     /// pre-refresh fallback list.
     var flattened: [String] { fandoms + relationships + characters + freeforms }
+}
+
+/// A single AO3 work page's refreshable metadata. Unlike `AO3WorkSummary`, which
+/// mirrors result blurbs, this can include fields only present on the work page
+/// (for example the published date). Callers merge it into local records only after
+/// a full successful parse, so refresh never becomes a destructive sync operation.
+nonisolated struct AO3WorkMetadata: Sendable {
+    var id: Int
+    var title: String = ""
+    var authors: [String] = []
+    var summary: String = ""
+    var rating: String = ""
+    var fandoms: [String] = []
+    var relationships: [String] = []
+    var characters: [String] = []
+    var freeforms: [String] = []
+    var warnings: [String] = []
+    var categories: [String] = []
+    var language: String = ""
+    var words: Int?
+    var chapters: String = ""
+    var kudos: Int?
+    var comments: Int?
+    var hits: Int?
+    var datePublished: String = ""
+    var dateUpdated: String = ""
+    var isComplete: Bool?
+    var seriesTitle: String?
+    var seriesURL: String?
+    var seriesPosition: Int?
+
+    var authorText: String { authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ") }
+
+    var tagGroups: AO3WorkTagGroups {
+        AO3WorkTagGroups(
+            fandoms: fandoms,
+            relationships: relationships,
+            characters: characters,
+            freeforms: freeforms,
+            warnings: warnings,
+            categories: categories,
+            language: language,
+            words: words,
+            chapters: chapters,
+            kudos: kudos,
+            comments: comments,
+            hits: hits
+        )
+    }
+
+    var summaryValue: AO3WorkSummary {
+        AO3WorkSummary(
+            id: id,
+            title: title,
+            authors: authors,
+            fandoms: fandoms,
+            rating: rating,
+            warnings: warnings,
+            categories: categories,
+            relationships: relationships,
+            characters: characters,
+            isComplete: isComplete,
+            dateUpdated: dateUpdated,
+            tags: freeforms,
+            summary: summary,
+            language: language,
+            words: words,
+            chapters: chapters,
+            comments: comments,
+            kudos: kudos,
+            hits: hits,
+            seriesTitle: seriesTitle,
+            seriesURL: seriesURL,
+            seriesPosition: seriesPosition
+        )
+    }
 }
 
 // MARK: - Media browser

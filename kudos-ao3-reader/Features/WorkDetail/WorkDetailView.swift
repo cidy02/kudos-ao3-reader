@@ -33,6 +33,7 @@ struct WorkDetailView: View {
     /// The resolved local record: the saved work itself, an existing library match for
     /// a remote summary, or the record created when a remote work is imported on tap.
     @State private var localWork: SavedWork?
+    @State private var refreshedRemote: AO3WorkSummary?
     @State private var resolvedExisting = false
 
     @State private var newTagName = ""
@@ -57,11 +58,15 @@ struct WorkDetailView: View {
 
     // MARK: - Source helpers
 
-    /// The remote summary, when this detail was opened from an AO3 listing.
-    private var remote: AO3WorkSummary? {
+    /// The original remote summary, when this detail was opened from an AO3 listing.
+    private var sourceRemote: AO3WorkSummary? {
         if case .remote(let summary) = source { return summary }
         return nil
     }
+
+    /// The currently displayed remote summary. Pull-to-refresh can replace this
+    /// value in memory without importing/saving a browsed work.
+    private var remote: AO3WorkSummary? { refreshedRemote ?? sourceRemote }
 
     var body: some View {
         Form {
@@ -83,6 +88,7 @@ struct WorkDetailView: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
+        .refreshable { await refreshDetails() }
         .task {
             // Resolve an existing library record once (so a browsed work already in the
             // library shows its real saved state), then run the same Work Tags refresh
@@ -498,6 +504,7 @@ struct WorkDetailView: View {
     /// The AO3 numeric work id (for the More-actions web menu), from either source.
     private var ao3WorkID: Int? {
         if let id = remote?.id { return id }
+        if let id = localWork?.ao3WorkID { return id }
         return WorkTags.ao3WorkID(from: localWork?.sourceURL ?? "")
     }
 
@@ -711,6 +718,25 @@ struct WorkDetailView: View {
             localWork = work
         case .remote(let summary):
             localWork = existingWork(forSource: summary.workURL, in: context)
+        }
+    }
+
+    private func refreshDetails() async {
+        loadError = nil
+        queueNotice = nil
+        resolveExistingIfNeeded()
+        do {
+            if let work = localWork {
+                try await WorkMetadataRefresh.refresh(work, in: context)
+            } else if let summary = remote {
+                refreshedRemote = try await WorkMetadataRefresh.remoteSummary(workID: summary.id)
+            } else {
+                return
+            }
+            queueNotice = "Details refreshed."
+        } catch {
+            loadError = "Refresh failed; existing details were left unchanged. "
+                + WorkMetadataRefresh.message(for: error)
         }
     }
 

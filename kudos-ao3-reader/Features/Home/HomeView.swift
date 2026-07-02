@@ -50,6 +50,7 @@ struct HomeView: View {
                 }
                 .padding(.vertical, 12)
             }
+            .refreshable { await refreshHome() }
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
@@ -127,6 +128,25 @@ struct HomeView: View {
         isLoadingSubscriptions = true
         subscriptions = await auth.accountSubscriptions()
         isLoadingSubscriptions = false
+    }
+
+    private func refreshHome() async {
+        _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context)
+        await loadSubscriptions()
+    }
+
+    private var visibleHomeWorks: [SavedWork] {
+        unique(
+            Array(readingNow.prefix(12))
+                + Array(recentlyUpdated.prefix(12))
+                + Array(favorites.prefix(12))
+                + Array(recentlyOpened.prefix(12))
+        )
+    }
+
+    private func unique(_ works: [SavedWork]) -> [SavedWork] {
+        var seen = Set<UUID>()
+        return works.filter { seen.insert($0.id).inserted }
     }
 
     private func markUpdateSeen(_ work: SavedWork) {

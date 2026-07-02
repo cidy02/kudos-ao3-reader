@@ -105,6 +105,7 @@ struct FandomWorksView: View {
                     if showPagination { Section { paginationRow } }
                 }
                 .cardList()
+                .refreshable { await load(page: currentPage) }
                 .overlay { statusOverlay }
             }
         }
@@ -257,6 +258,7 @@ struct TagWorksView: View {
                     if showPagination { Section { paginationRow } }
                 }
                 .cardList()
+                .refreshable { await load(page: currentPage) }
                 .overlay { statusOverlay }
             }
         }

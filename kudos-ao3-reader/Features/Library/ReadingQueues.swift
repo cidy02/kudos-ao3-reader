@@ -136,6 +136,7 @@ struct ReadingQueueDetailView: View {
                     .cardRow()
                 }
                 .cardList()
+                .refreshable { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
                 .overlay {
                     if visibleWorks.isEmpty {
                         ContentUnavailableView {

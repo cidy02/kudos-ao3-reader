@@ -116,6 +116,43 @@ final class FandomCatalog {
         }
     }
 
+    /// User-triggered refresh for the categories currently on screen. Unlike
+    /// `loadMissing`, this bypasses staleness so pull-to-refresh really updates the
+    /// visible counts, but failures keep the previous cached lists in place.
+    func refresh(_ categories: [AO3MediaCategory]) async {
+        await loadCacheIfNeeded()
+
+        let pending = categories.filter {
+            !inFlight.contains($0.id) && !$0.fandomsURL.isEmpty
+        }
+        guard !pending.isEmpty else { return }
+        for category in pending { inFlight.insert(category.id) }
+
+        await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
+            for category in pending {
+                let key = category.id
+                let path = category.fandomsURL
+                group.addTask {
+                    let list = try? await AO3RequestCoordinator.shared.withSlot {
+                        try await AO3Client.shared.fandoms(atPath: path)
+                    }
+                    return (key, list)
+                }
+            }
+            var changed = false
+            for await (key, list) in group {
+                if let list {
+                    fandomsByCategory[key] = list
+                    entries[key] = FandomCatalogCache.Entry(fandoms: list, fetchedAt: Date())
+                    changed = true
+                }
+                inFlight.remove(key)
+                if Task.isCancelled { group.cancelAll() }
+            }
+            if changed { persist() }
+        }
+    }
+
     /// Loads the disk cache once (off the main actor) and shows cached lists so the
     /// cards aren't blank on relaunch.
     private func loadCacheIfNeeded() async {

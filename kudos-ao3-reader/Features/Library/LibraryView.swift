@@ -158,6 +158,7 @@ struct LibraryView: View {
             }
             .padding(.vertical, 12)
         }
+        .refreshable { await refreshLibraryDashboard() }
     }
 
     /// A purely local section carousel (Reading Now / Finished / Downloaded). Applies
@@ -490,6 +491,7 @@ struct LibraryView: View {
             }
         }
         .cardList()
+        .refreshable { await refreshSelectableWorks() }
         .environment(\.editMode, $editMode)
         #else
         EmptyView()
@@ -563,5 +565,32 @@ struct LibraryView: View {
         for work in selectedWorks { work.isFavorite = true }
         try? context.save()
         exitSelectMode()
+    }
+
+    private func refreshLibraryDashboard() async {
+        _ = await WorkMetadataRefresh.refresh(visibleDashboardWorks, in: context)
+        await loadMarkedForLater()
+    }
+
+    private func refreshSelectableWorks() async {
+        _ = await WorkMetadataRefresh.refresh(selectableWorks, in: context)
+    }
+
+    private var visibleDashboardWorks: [SavedWork] {
+        unique(
+            dashboardWorks(for: .readingNow)
+                + dashboardWorks(for: .savedForLater)
+                + dashboardWorks(for: .finished)
+                + dashboardWorks(for: .downloaded)
+        )
+    }
+
+    private func dashboardWorks(for kind: LibrarySectionKind) -> [SavedWork] {
+        Array(filters.apply(to: kind.works(from: works, visible: passesPrivacy)).prefix(12))
+    }
+
+    private func unique(_ works: [SavedWork]) -> [SavedWork] {
+        var seen = Set<UUID>()
+        return works.filter { seen.insert($0.id).inserted }
     }
 }

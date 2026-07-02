@@ -122,6 +122,7 @@ struct CollectionDetailView: View {
                     .cardRow()
                 }
                 .cardList()
+                .refreshable { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
                 .overlay {
                     // Collection has works, but the active filters hid them all.
                     if visibleWorks.isEmpty {

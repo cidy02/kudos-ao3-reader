@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// A dedicated page listing every fandom in a media category (loaded from AO3's
 /// `/media/<name>/fandoms` index), sorted most-popular first with work counts and a
@@ -45,6 +46,7 @@ struct FandomListView: View {
                 }
                 // Card-based list, matching the Media Browser it's pushed from.
                 .cardList()
+                .refreshable { await refresh() }
                 .searchable(text: $query, prompt: "Filter \(category.name)")
             }
         }
@@ -58,6 +60,10 @@ struct FandomListView: View {
 
     private func load() async {
         phase = .loading
+        await refresh()
+    }
+
+    private func refresh() async {
         do {
             var list = try await AO3Client.shared.fandoms(atPath: category.fandomsURL)
             // Surface the biggest fandoms first; the index arrives alphabetically.
@@ -65,9 +71,17 @@ struct FandomListView: View {
             fandoms = list
             phase = .loaded
         } catch let error as AO3Error {
-            phase = .failed(error.errorDescription ?? "Something went wrong.")
+            if fandoms.isEmpty {
+                phase = .failed(error.errorDescription ?? "Something went wrong.")
+            } else {
+                Log.network.notice("Fandom list refresh failed: \(error.localizedDescription, privacy: .public)")
+            }
         } catch {
-            phase = .failed(error.localizedDescription)
+            if fandoms.isEmpty {
+                phase = .failed(error.localizedDescription)
+            } else {
+                Log.network.notice("Fandom list refresh failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }

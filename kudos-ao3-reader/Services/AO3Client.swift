@@ -487,53 +487,165 @@ actor AO3Client {
         return try Self.parseWorkTags(from: html)
     }
 
+    /// Fetches a work's refreshable metadata from its AO3 page. Callers must treat
+    /// any thrown error as a non-destructive refresh failure; only this successful,
+    /// fully parsed value should be merged into local `SavedWork` records.
+    func workMetadata(workID: Int) async throws -> AO3WorkMetadata {
+        guard let url = URL(string: "\(base)/works/\(workID)?view_adult=true") else {
+            throw AO3Error.network("Bad work URL.")
+        }
+        let html = try await getHTML(url)
+        return try Self.parseWorkMetadata(from: html, workID: workID)
+    }
+
     /// Parses a work page's canonical tag groups + stats from its HTML. Split out
     /// from `workTags(workID:)` so it can be unit-tested against fixture HTML
     /// without a network round-trip.
     static func parseWorkTags(from html: String) throws -> AO3WorkTagGroups {
+        try parseWorkMetadata(from: html).tagGroups
+    }
+
+    /// Parses a work page's refreshable metadata from its HTML. This intentionally
+    /// returns a value type, leaving merge/safety decisions to the refresh service.
+    static func parseWorkMetadata(from html: String, workID: Int = 0) throws -> AO3WorkMetadata {
         let doc = try SwiftSoup.parse(html)
+
+        func clean(_ text: String?) -> String {
+            (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        func firstText(_ selectors: [String]) -> String {
+            for selector in selectors {
+                let value = clean(try? doc.select(selector).first()?.text())
+                if !value.isEmpty { return value }
+            }
+            return ""
+        }
+
+        func unique(_ values: [String]) -> [String] {
+            var seen = Set<String>()
+            var result: [String] = []
+            for raw in values {
+                let value = clean(raw)
+                guard !value.isEmpty, seen.insert(value.lowercased()).inserted else { continue }
+                result.append(value)
+            }
+            return result
+        }
 
         func tags(_ kind: String) throws -> [String] {
             var seen = Set<String>()
             var result: [String] = []
             for element in try doc.select("dd.\(kind).tags a.tag").array() {
-                let tag = try element.text().trimmingCharacters(in: .whitespacesAndNewlines)
-                if !tag.isEmpty, seen.insert(tag).inserted { result.append(tag) }
+                let tag = clean(try element.text())
+                if !tag.isEmpty, seen.insert(tag.lowercased()).inserted { result.append(tag) }
             }
             return result
         }
 
-        // Language is plain text in `dd.language`; word count is `dd.words` (e.g.
-        // "12,345") in the stats block — strip the grouping separators before parsing.
-        let language = (try? doc.select("dd.language").first()?.text())?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let wordsText = (try? doc.select("dd.words").first()?.text()) ?? ""
-        let words = Int(wordsText.filter(\.isNumber))
-        // Chapters read as printed ("5/10"); kudos is a count in `dd.kudos`.
-        let chapters = (try? doc.select("dd.chapters").first()?.text())?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let kudosText = (try? doc.select("dd.kudos").first()?.text()) ?? ""
-        let kudos = Int(kudosText.filter(\.isNumber))
-        // Comments and hits round out the stats block, mirroring the Search-result card.
-        let commentsText = (try? doc.select("dd.comments").first()?.text()) ?? ""
-        let comments = Int(commentsText.filter(\.isNumber))
-        let hitsText = (try? doc.select("dd.hits").first()?.text()) ?? ""
-        let hits = Int(hitsText.filter(\.isNumber))
+        func stat(_ cls: String) -> String {
+            firstText(["dl.stats dd.\(cls)", "dd.\(cls)"])
+        }
 
-        return AO3WorkTagGroups(
-            fandoms: try tags("fandom"),
-            relationships: try tags("relationship"),
-            characters: try tags("character"),
-            freeforms: try tags("freeform"),
-            warnings: try tags("warning"),
-            categories: try tags("category"),
+        func statInt(_ cls: String) -> Int? {
+            Int(stat(cls).filter(\.isNumber))
+        }
+
+        func authorNames() throws -> [String] {
+            let selectors = [
+                "h3.byline.heading a[rel=author]",
+                "h3.byline a[rel=author]",
+                "h3.byline.heading a",
+                "h3.byline a"
+            ]
+            for selector in selectors {
+                let names = unique(try doc.select(selector).array().map { try $0.text() })
+                if !names.isEmpty { return names }
+            }
+            return []
+        }
+
+        func absoluteAO3URL(_ href: String) -> String? {
+            let trimmed = clean(href)
+            guard !trimmed.isEmpty else { return nil }
+            return trimmed.hasPrefix("http") ? trimmed : "https://archiveofourown.org\(trimmed)"
+        }
+
+        func firstNumber(in text: String) -> Int? {
+            let parts = text.components(separatedBy: CharacterSet.decimalDigits.inverted)
+            return parts.lazy.compactMap { Int($0) }.first
+        }
+
+        func completionStatus(chapters: String, statusLabel: String) -> Bool? {
+            let label = statusLabel.lowercased()
+            if label.contains("completed") { return true }
+            if label.contains("updated") { return false }
+            let parts = chapters.split(separator: "/")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard parts.count == 2 else { return nil }
+            if let posted = Int(parts[0]), let total = Int(parts[1]), total > 0 {
+                return posted >= total
+            }
+            if parts[1] == "?" { return false }
+            return nil
+        }
+
+        // AO3 doesn't class the "Completed:"/"Updated:" <dt> label itself — only its
+        // sibling <dd class="status"> carries a class. Read the label from that dt's
+        // text instead of a (nonexistent) `dt.status` selector.
+        func statusDTLabel() -> String {
+            guard let statusDD = try? doc.select("dd.status").first() else { return "" }
+            return clean(try? statusDD.previousElementSibling()?.text())
+        }
+
+        let title = firstText(["h2.title.heading", "h2.title"])
+        let authors = try authorNames()
+        let fandoms = try tags("fandom")
+        let relationships = try tags("relationship")
+        let characters = try tags("character")
+        let freeforms = try tags("freeform")
+        let warnings = try tags("warning")
+        let categories = try tags("category")
+        let rating = try tags("rating").first ?? firstText(["dd.rating.tags"])
+        let language = firstText(["dd.language"])
+        let chapters = stat("chapters")
+        let seriesLink = try doc.select("dd.series a[href*=\"/series/\"]").first()
+        let seriesTitle = clean(try seriesLink?.text())
+        let rawSeriesURL = try seriesLink?.attr("href")
+        let seriesPositionText = firstText(["dd.series span.position", "dd.series"])
+
+        let metadata = AO3WorkMetadata(
+            id: workID,
+            title: title,
+            authors: authors,
+            summary: firstText(["div.summary blockquote.userstuff", "blockquote.userstuff.summary"]),
+            rating: rating,
+            fandoms: fandoms,
+            relationships: relationships,
+            characters: characters,
+            freeforms: freeforms,
+            warnings: warnings,
+            categories: categories,
             language: language,
-            words: words,
+            words: statInt("words"),
             chapters: chapters,
-            kudos: kudos,
-            comments: comments,
-            hits: hits
+            kudos: statInt("kudos"),
+            comments: statInt("comments"),
+            hits: statInt("hits"),
+            datePublished: firstText(["dd.published"]),
+            dateUpdated: firstText(["dd.status", "dd.updated"]),
+            isComplete: completionStatus(chapters: chapters, statusLabel: statusDTLabel()),
+            seriesTitle: seriesTitle.isEmpty ? nil : seriesTitle,
+            seriesURL: rawSeriesURL.flatMap(absoluteAO3URL),
+            seriesPosition: firstNumber(in: seriesPositionText)
         )
+
+        guard !metadata.title.isEmpty
+                || !metadata.tagGroups.isEmpty
+                || metadata.words != nil
+                || !metadata.chapters.isEmpty
+        else { throw AO3Error.parse }
+        return metadata
     }
 
     /// Live tag search via AO3's autocomplete endpoints (returns canonical tag

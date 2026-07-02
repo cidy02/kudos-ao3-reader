@@ -129,6 +129,7 @@ struct LibrarySectionListView: View {
                 }
             }
             .cardList()
+            .refreshable { await refreshSection() }
             .overlay {
                 // Section has works, but the active filters hid them all.
                 if visibleItems.isEmpty && !showsMarkedForLater {
@@ -189,5 +190,10 @@ struct LibrarySectionListView: View {
 
     private func loadMarkedForLater() async {
         markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
+    }
+
+    private func refreshSection() async {
+        _ = await WorkMetadataRefresh.refresh(visibleItems, in: context)
+        if kind == .savedForLater { await loadMarkedForLater() }
     }
 }
