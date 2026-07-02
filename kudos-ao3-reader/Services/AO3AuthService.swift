@@ -331,35 +331,29 @@ final class AO3AuthService {
     }
 
     /// Fetches one page of the signed-in user's works from an account-list URL built
-    /// from their username (e.g. Subscriptions, Marked for Later). Returns `[]` when
-    /// signed out or on any failure — the Home/Library carousels degrade to their
-    /// empty state rather than surfacing an error. `makeURL` is a `AO3Client` URL
-    /// builder such as `AO3Client.subscriptionsURL`.
+    /// from their username (e.g. Subscriptions, Marked for Later). Returns `[]` only
+    /// when signed out (not an error — the caller's empty state should show
+    /// immediately); throws on any fetch/parse failure so a caller refreshing a list
+    /// that already has content can keep it instead of wiping it with an empty
+    /// result. `makeURL` is a `AO3Client` URL builder such as `AO3Client.subscriptionsURL`.
     func accountWorks(
         from makeURL: (_ username: String, _ page: Int) -> URL?,
         page: Int = 1
-    ) async -> [AO3WorkSummary] {
+    ) async throws -> [AO3WorkSummary] {
         guard isLoggedIn, let username, let url = makeURL(username, page) else { return [] }
-        do {
-            let request = try authenticatedRequest(for: url)
-            return try await AO3Client.shared.worksPage(for: request, page: page).works
-        } catch {
-            return []
-        }
+        let request = try authenticatedRequest(for: url)
+        return try await AO3Client.shared.worksPage(for: request, page: page).works
     }
 
     /// One page of the signed-in user's *work* subscriptions. Separate from
     /// `accountWorks` because the subscriptions page isn't work-blurb markup and needs
-    /// `subscriptionsPage`. Returns `[]` when signed out or on any failure.
-    func accountSubscriptions(page: Int = 1) async -> [AO3WorkSummary] {
+    /// `subscriptionsPage`. Returns `[]` only when signed out; throws on any
+    /// fetch/parse failure (see `accountWorks`).
+    func accountSubscriptions(page: Int = 1) async throws -> [AO3WorkSummary] {
         guard isLoggedIn, let username,
               let url = AO3Client.subscriptionsURL(username: username, page: page) else { return [] }
-        do {
-            let request = try authenticatedRequest(for: url)
-            return try await AO3Client.shared.subscriptionsPage(for: request, page: page).works
-        } catch {
-            return []
-        }
+        let request = try authenticatedRequest(for: url)
+        return try await AO3Client.shared.subscriptionsPage(for: request, page: page).works
     }
 
     func applyFallbackTheme(_ theme: ReaderTheme) {

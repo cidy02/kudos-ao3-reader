@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// The full, vertically scrolling list behind a Library section's `>` chevron.
 /// Mirrors `HomeSectionListView`, but adds the Library's per-row swipe actions and,
@@ -197,7 +198,15 @@ struct LibrarySectionListView: View {
     }
 
     private func loadMarkedForLater() async {
-        markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
+        do {
+            markedForLater = try await auth.accountWorks(from: AO3Client.markedForLaterURL)
+        } catch {
+            // A refresh failure (network, rate limit, expired session) must not wipe
+            // out a previously successful fetch — keep showing what's already there.
+            Log.network.notice(
+                "Marked for Later refresh failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     private func refreshSection() async {

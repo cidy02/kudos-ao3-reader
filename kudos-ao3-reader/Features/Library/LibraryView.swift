@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// The Library tab: a Books-style dashboard of the user's saved works. Every section
 /// is a collapsible horizontal card carousel with a `>` chevron that opens its full
@@ -457,7 +458,15 @@ struct LibraryView: View {
             return
         }
         isLoadingMarkedForLater = true
-        markedForLater = await auth.accountWorks(from: AO3Client.markedForLaterURL)
+        do {
+            markedForLater = try await auth.accountWorks(from: AO3Client.markedForLaterURL)
+        } catch {
+            // A refresh failure (network, rate limit, expired session) must not wipe
+            // out a previously successful fetch — keep showing what's already there.
+            Log.network.notice(
+                "Marked for Later refresh failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
         isLoadingMarkedForLater = false
     }
 

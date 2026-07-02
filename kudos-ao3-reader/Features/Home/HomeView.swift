@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// The Home tab: a personal, Books-style dashboard. Every section is a collapsible
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
@@ -126,7 +127,15 @@ struct HomeView: View {
             return
         }
         isLoadingSubscriptions = true
-        subscriptions = await auth.accountSubscriptions()
+        do {
+            subscriptions = try await auth.accountSubscriptions()
+        } catch {
+            // A refresh failure (network, rate limit, expired session) must not wipe
+            // out a previously successful fetch — keep showing what's already there.
+            Log.network.notice(
+                "Subscriptions refresh failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
         isLoadingSubscriptions = false
     }
 
