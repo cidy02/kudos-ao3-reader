@@ -502,7 +502,10 @@ struct LibraryView: View {
         #if os(iOS)
         List(selection: $selection) {
             Section {
-                ForEach(selectableWorks) { SensitiveWorkRow(work: $0, openMode: .reader) }
+                ForEach(selectableWorks) { work in
+                    SensitiveWorkRow(work: work, openMode: .reader)
+                        .tag(work.id)
+                }
                     .cardRow()
             }
         }
