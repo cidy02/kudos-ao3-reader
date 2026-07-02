@@ -179,6 +179,7 @@ struct AO3WorkCoverCard: View {
                 }
             }
         }
+        .remoteWorkContextMenu(work: work)
     }
 
     @ViewBuilder
@@ -343,9 +344,8 @@ private extension ReaderTheme {
     }
 }
 
-/// How the dashboard opens a tapped work: the canonical Work Detail, the same screen
-/// every other entry point lands on (tap a card → detail; the detail's Read button
-/// opens the reader). Opening it also clears the work from Recently Updated.
+/// Fallback detail route for any legacy `SavedWork` link that still reaches Home.
+/// Opening it also clears the work from Recently Updated.
 struct HomeWorkDestination: View {
     let work: SavedWork
     @Environment(\.modelContext) private var context

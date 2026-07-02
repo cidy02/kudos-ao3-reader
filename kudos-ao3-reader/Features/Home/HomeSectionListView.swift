@@ -3,7 +3,7 @@ import SwiftData
 
 /// The full, vertically scrolling list behind a Home section's header ("See all").
 /// Reuses the Library's privacy-aware `SensitiveWorkRow`; rows open works the same
-/// way the dashboard cards do (via Home's `SavedWork` navigation destination).
+/// way the dashboard cards do (straight into the reader).
 struct HomeSectionListView: View {
     let kind: HomeSectionKind
 
@@ -38,7 +38,7 @@ struct HomeSectionListView: View {
             } else {
                 List {
                     ForEach(visibleItems) { work in
-                        SensitiveWorkRow(work: work, expandAll: expandAll)
+                        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
                     }
                     .cardRow()
                 }

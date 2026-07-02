@@ -15,6 +15,14 @@ enum WorkLifecycle {
         saveBestEffort(context, reason: "Saving finished state failed")
     }
 
+    /// Returns a finished work to the in-progress/reading state. If its EPUB was freed,
+    /// the normal reader-open path restores it before reading.
+    @MainActor
+    static func markStillReading(_ work: SavedWork, in context: ModelContext) {
+        work.isFinished = false
+        saveBestEffort(context, reason: "Saving still-reading state failed")
+    }
+
     /// Frees a finished, unprotected work's EPUB if it still has one. Safe to call
     /// repeatedly (e.g. when leaving the reader). Saves only if something changed.
     @MainActor

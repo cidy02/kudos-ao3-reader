@@ -80,6 +80,7 @@ struct LibraryView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+            .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
             .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
             .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
             .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
@@ -170,10 +171,11 @@ struct LibraryView: View {
             onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
-                NavigationLink(value: work) {
+                NavigationLink(value: LocalWorkDestination.reader(work)) {
                     WorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
                 }
                 .buttonStyle(.plain)
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
@@ -200,10 +202,11 @@ struct LibraryView: View {
                 ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
             } else {
                 ForEach(saved.prefix(12)) { work in
-                    NavigationLink(value: work) {
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
                         WorkCoverCard(work: work, footer: nil, progress: nil)
                     }
                     .buttonStyle(.plain)
+                    .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                 }
                 ForEach(mfl.prefix(12)) { work in
                     NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
@@ -482,7 +485,7 @@ struct LibraryView: View {
         #if os(iOS)
         List(selection: $selection) {
             Section {
-                ForEach(selectableWorks) { SensitiveWorkRow(work: $0) }
+                ForEach(selectableWorks) { SensitiveWorkRow(work: $0, openMode: .reader) }
                     .cardRow()
             }
         }
@@ -524,11 +527,19 @@ struct LibraryView: View {
     }
 
     #if os(iOS)
-    private func enterSelectMode() {
-        selection = []
+    private func enterSelectMode(selecting work: SavedWork? = nil) {
+        selection = work.map { Set([$0.id]) } ?? []
         editMode = .active
     }
     #endif
+
+    private func selectAction(for work: SavedWork) -> (() -> Void)? {
+        #if os(iOS)
+        return { enterSelectMode(selecting: work) }
+        #else
+        return nil
+        #endif
+    }
 
     private func exitSelectMode() {
         #if os(iOS)

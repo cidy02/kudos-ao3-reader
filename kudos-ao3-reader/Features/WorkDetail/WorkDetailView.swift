@@ -252,12 +252,20 @@ struct WorkDetailView: View {
                 }
             }
 
-            if !(localWork?.isFinished ?? false) {
-                Button {
-                    withLocalWork { WorkLifecycle.markFinished($0, in: context) }
-                } label: {
-                    Label("Mark as Finished", systemImage: "checkmark.circle")
+            Button {
+                withLocalWork { work in
+                    if work.isFinished {
+                        WorkLifecycle.markStillReading(work, in: context)
+                    } else {
+                        WorkLifecycle.markFinished(work, in: context)
+                    }
                 }
+            } label: {
+                let finished = localWork?.isFinished ?? false
+                Label(
+                    finished ? "Mark as Still Reading" : "Mark as Finished",
+                    systemImage: finished ? "arrow.uturn.backward.circle" : "checkmark.circle"
+                )
             }
 
             Button {
@@ -932,27 +940,14 @@ struct WorkDetailView: View {
     /// freed history entry, before pushing the reader — it never opens another detail.
     private func read() {
         withLocalWork { work in
-            if work.hasEPUB { readerWork = work; return }
+            if WorkReaderPreparation.hasReadableEPUB(for: work) { readerWork = work; return }
             // Freed history entry: re-download into the existing record, keeping its id
             // (so progress/tags stay attached), then open.
-            guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
-                loadError = "This work can't be re-downloaded automatically. Open it on AO3."
-                return
-            }
             Task {
                 working = true
                 loadError = nil
                 do {
-                    let temp = try await AO3Client.shared.downloadEPUB(workID: id)
-                    try ReadingQueueService.replaceEPUB(for: work, with: temp)
-                    work.hasEPUB = true
-                    work.isFinished = false
-                    if work.isQueuedForLater {
-                        work.epubPreservationStatus = .preserved
-                        work.preservedAt = Date()
-                    }
-                    work.lastSpineIndex = 0
-                    try context.save()
+                    try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
                     working = false
                     readerWork = work
                 } catch let error as AO3Error {

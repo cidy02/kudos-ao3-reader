@@ -71,8 +71,8 @@ struct NewCollectionCard: View {
 
 // MARK: - Collection detail
 
-/// The works in a collection. Rows open the work (via the host stack's `SavedWork`
-/// destination); swipe removes a work from the collection (it isn't deleted). The
+/// The works in a collection. Rows open the reader; Work Details remains in the
+/// long-press menu. Swipe removes a work from the collection (it isn't deleted). The
 /// menu renames or deletes the collection itself.
 struct CollectionDetailView: View {
     let collection: WorkCollection
@@ -110,7 +110,7 @@ struct CollectionDetailView: View {
             } else {
                 List {
                     ForEach(visibleWorks) { work in
-                        SensitiveWorkRow(work: work, expandAll: expandAll)
+                        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     remove(work)

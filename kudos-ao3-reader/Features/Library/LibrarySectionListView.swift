@@ -4,8 +4,8 @@ import SwiftData
 /// The full, vertically scrolling list behind a Library section's `>` chevron.
 /// Mirrors `HomeSectionListView`, but adds the Library's per-row swipe actions and,
 /// for Saved for Later, also surfaces the user's AO3 "Marked for Later" list in a
-/// second section. Navigation resolves through the Library's root stack (which
-/// registers the `SavedWork` and `AO3WorkSummary` destinations).
+/// second section. Local rows open the reader; Work Details remains in the
+/// long-press menu.
 struct LibrarySectionListView: View {
     let kind: LibrarySectionKind
 
@@ -145,9 +145,9 @@ struct LibrarySectionListView: View {
     }
 
     /// A local work row with the Library's standard swipe actions (save / favorite /
-    /// delete). Tapping opens the work via the root `SavedWork` destination.
+    /// delete). Tapping opens the reader via the root `LocalWorkDestination`.
     private func row(_ work: SavedWork) -> some View {
-        SensitiveWorkRow(work: work, expandAll: expandAll)
+        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
                     WorkLifecycle.setSaved(work, !work.isSaved, in: context)

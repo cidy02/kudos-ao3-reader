@@ -88,6 +88,7 @@ struct AO3WorkRow: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .remoteWorkContextMenu(work: work)
         // Follow the global expand/collapse-all toggle (also applies on first
         // appearance so cards scrolled into view match the current state).
         .onChange(of: expandAll, initial: true) { _, value in expanded = value }

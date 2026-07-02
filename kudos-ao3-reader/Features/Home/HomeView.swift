@@ -3,7 +3,8 @@ import SwiftData
 
 /// The Home tab: a personal, Books-style dashboard. Every section is a collapsible
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
-/// Tapping a card opens the work (reader if downloaded, else its detail page).
+/// Tapping a local card opens the reader; long-press opens management actions,
+/// including Work Details. Remote cards still tap through to Work Details.
 /// Sections, in order: Reading Now, Recently Updated, Subscriptions, Favorites,
 /// Recently Opened.
 struct HomeView: View {
@@ -55,6 +56,9 @@ struct HomeView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
             .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
+            .navigationDestination(for: LocalWorkDestination.self) { destination in
+                LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
+            }
             .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
@@ -73,10 +77,11 @@ struct HomeView: View {
             onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
-                NavigationLink(value: work) {
+                NavigationLink(value: LocalWorkDestination.reader(work)) {
                     WorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
                 }
                 .buttonStyle(.plain)
+                .localWorkContextMenu(work: work)
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
@@ -122,6 +127,12 @@ struct HomeView: View {
         isLoadingSubscriptions = true
         subscriptions = await auth.accountSubscriptions()
         isLoadingSubscriptions = false
+    }
+
+    private func markUpdateSeen(_ work: SavedWork) {
+        guard work.hasUpdate else { return }
+        work.knownChapterCount = work.postedChapterCount
+        try? context.save()
     }
 
     // MARK: Card details

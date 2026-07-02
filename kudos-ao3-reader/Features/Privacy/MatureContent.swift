@@ -86,6 +86,8 @@ struct SensitiveWorkRow: View {
     /// Forwarded to the underlying `WorkRow` so a list's expand/collapse-all toggle
     /// reaches local cards too.
     var expandAll: Bool = false
+    var openMode: LocalWorkRowOpenMode = .detail
+    var onSelect: (() -> Void)?
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -111,7 +113,19 @@ struct SensitiveWorkRow: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Hidden mature work. Activate to reveal.")
         } else {
-            WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
+            visibleRow
+        }
+    }
+
+    @ViewBuilder
+    private var visibleRow: some View {
+        let row = WorkRow(work: work, expandAll: expandAll)
+            .localWorkContextMenu(work: work, onSelect: onSelect)
+        switch openMode {
+        case .detail:
+            row.cardNavigation(to: work)
+        case .reader:
+            row.cardNavigation(to: LocalWorkDestination.reader(work))
         }
     }
 }

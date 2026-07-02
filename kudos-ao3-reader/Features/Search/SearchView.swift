@@ -56,6 +56,9 @@ struct SearchView: View {
             .navigationDestination(for: SavedWork.self) { work in
                 WorkDetailView(work: work)
             }
+            .navigationDestination(for: LocalWorkDestination.self) { destination in
+                LocalWorkDestinationView(destination: destination)
+            }
             .navigationDestination(for: WorkCollection.self) { collection in
                 CollectionDetailView(collection: collection)
             }

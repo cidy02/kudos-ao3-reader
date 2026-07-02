@@ -124,7 +124,7 @@ struct ReadingQueueDetailView: View {
             } else {
                 List {
                     ForEach(visibleWorks) { work in
-                        SensitiveWorkRow(work: work, expandAll: expandAll)
+                        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     ReadingQueueService.removeFromQueue(work, from: queue, in: context)
