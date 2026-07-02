@@ -222,7 +222,10 @@ private struct LocalReadingHistoryView: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
 
-    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB }, sort: \SavedWork.dateAdded, order: .reverse)
+    // Queued works whose preservation is pending/failed have hasEPUB == false but are
+    // protected; keep them out of the reading-history list.
+    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater },
+           sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?

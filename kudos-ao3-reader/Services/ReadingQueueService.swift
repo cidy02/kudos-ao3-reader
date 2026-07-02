@@ -231,17 +231,6 @@ enum ReadingQueueService {
     }
 
     @discardableResult
-    private static func addAndPreserveCancellable(
-        _ work: SavedWork,
-        to queue: ReadingQueue,
-        in context: ModelContext
-    ) async throws -> ReadingQueueMembership {
-        let membership = add(work, to: queue, in: context)
-        try await preserve(work, in: context)
-        return membership
-    }
-
-    @discardableResult
     static func addToSavedForLater(_ work: SavedWork, in context: ModelContext) async -> ReadingQueueMembership {
         let queue = ensureSavedForLaterQueue(in: context)
         return await addAndPreserve(work, to: queue, in: context)
@@ -265,7 +254,7 @@ enum ReadingQueueService {
                 sourceURL: summary.workURL.absoluteString
             )
             saved.ao3WorkID = summary.id
-            saved.knownChapterCount = postedChapterCount(from: summary.chapters)
+            saved.knownChapterCount = SavedWork.postedChapterCount(from: summary.chapters)
             context.insert(saved)
             createdNewWork = true
         }
@@ -502,7 +491,7 @@ enum ReadingQueueService {
                 sourceURL: summary.workURL.absoluteString
             )
             saved.ao3WorkID = summary.id
-            saved.knownChapterCount = postedChapterCount(from: summary.chapters)
+            saved.knownChapterCount = SavedWork.postedChapterCount(from: summary.chapters)
             context.insert(saved)
             createdNewWork = true
         }
@@ -638,10 +627,6 @@ enum ReadingQueueService {
 
     private static func nextMembershipSortOrder(in queue: ReadingQueue) -> Int {
         (queue.memberships.map(\.sortOrderInQueue).max() ?? -1) + 1
-    }
-
-    private static func postedChapterCount(from chapters: String) -> Int {
-        Int(chapters.split(separator: "/").first?.trimmingCharacters(in: .whitespaces) ?? "") ?? 0
     }
 
     private static func merged(_ existing: [String], _ incoming: [String]) -> [String] {

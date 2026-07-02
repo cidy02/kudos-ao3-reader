@@ -206,9 +206,7 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     }
 
     /// The posted-chapter count parsed from the `chapters` stats string ("5/10" → 5).
-    var postedChapterCount: Int {
-        Int(chapters.split(separator: "/").first?.trimmingCharacters(in: .whitespaces) ?? "") ?? 0
-    }
+    var postedChapterCount: Int { Self.postedChapterCount(from: chapters) }
 
     /// AO3 has new chapters the user hasn't seen (live posted count exceeds the
     /// baseline). Drives Home → Recently Updated.
@@ -415,6 +413,12 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
 }
 
 extension SavedWork {
+    /// Parses AO3's "5/10" chapter stat into the posted-chapter count (the "5" side).
+    /// Shared by `postedChapterCount` and the queue's metadata baseline.
+    static func postedChapterCount(from chapters: String) -> Int {
+        Int(chapters.split(separator: "/").first?.trimmingCharacters(in: .whitespaces) ?? "") ?? 0
+    }
+
     /// Cleans an EPUB subject list into display-ready Work Tags: trims whitespace,
     /// drops blanks and the rating (shown separately), and removes duplicates while
     /// preserving order. Shared by import and the lazy backfill.

@@ -8,7 +8,11 @@ struct PrivacyDataView: View {
     @Environment(\.modelContext) private var context
     @Environment(AO3AuthService.self) private var auth
 
-    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB }, sort: \SavedWork.dateAdded, order: .reverse)
+    // Exclude queued works: a queued work whose preservation is still pending or failed
+    // has hasEPUB == false but is protected — it must not be swept into (or cleared with)
+    // reading history.
+    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater },
+           sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]
 
     @State private var confirmClearHistory = false

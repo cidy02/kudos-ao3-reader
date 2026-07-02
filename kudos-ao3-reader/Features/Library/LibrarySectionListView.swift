@@ -167,10 +167,22 @@ struct LibrarySectionListView: View {
                 .tint(.yellow)
             }
             .swipeActions(edge: .trailing) {
-                Button(role: .destructive) {
-                    if confirmBeforeDelete { pendingDelete = work } else { WorkLifecycle.delete(work, in: context) }
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                if work.isQueueOnlyWork {
+                    // Queue-only works keep a preserved EPUB and must never be hard-deleted
+                    // by a generic Library swipe. Removing the queue membership is
+                    // non-destructive (the record and EPUB survive); explicit deletion of a
+                    // preserved copy lives behind confirmation in Queue Storage.
+                    Button(role: .destructive) {
+                        ReadingQueueService.removeFromAllQueues(work, in: context)
+                    } label: {
+                        Label("Remove from Queue", systemImage: "minus.circle")
+                    }
+                } else {
+                    Button(role: .destructive) {
+                        if confirmBeforeDelete { pendingDelete = work } else { WorkLifecycle.delete(work, in: context) }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
             }
     }
