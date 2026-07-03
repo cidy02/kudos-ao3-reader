@@ -1,21 +1,6 @@
 import SwiftData
 import SwiftUI
 
-/// Shared stable hue helper for non-work decorative tiles, such as Collections.
-enum CoverArt {
-    /// A stable hue in 0...1 derived from the title (djb2-ish hash).
-    static func hue(for string: String) -> Double {
-        let hash = string.unicodeScalars.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1.value) }
-        return Double(hash % 360) / 360
-    }
-}
-
-enum WorkSummaryCardMetrics {
-    static let width: CGFloat = 164
-    static let height: CGFloat = 228
-    static let cornerRadius: CGFloat = 12
-}
-
 /// Standard carousel card: a compact AO3 work summary surface with the title, author,
 /// status, metadata, and reading progress all inside the tappable card.
 struct WorkCoverCard: View {
@@ -219,7 +204,7 @@ struct SelectableWorkCoverCard: View {
                     .padding(8)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
             }
     }
@@ -259,15 +244,15 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     var body: some View {
         content()
             .padding(12)
-            .frame(width: WorkSummaryCardMetrics.width,
-                   height: WorkSummaryCardMetrics.height,
+            .frame(width: CarouselCardMetrics.width,
+                   height: CarouselCardMetrics.height,
                    alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)
                     .overlay(hueTint)
                     .overlay(
-                        RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(themeManager.appTheme.carouselCardBorder(hue: hue), lineWidth: 0.5)
                     )
                     .shadow(color: themeManager.appTheme.carouselCardShadow.color,
@@ -276,14 +261,14 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                             y: themeManager.appTheme.carouselCardShadow.y)
             )
             .contentShape(
-                RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
             )
     }
 
     @ViewBuilder
     private var hueTint: some View {
         if let hue {
-            RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.carouselCardTint(hue: hue))
         }
     }
@@ -319,72 +304,6 @@ private struct CardMetaLabel: View {
                 .foregroundStyle(.secondary)
         }
         .lineLimit(lineLimit)
-    }
-}
-
-private struct CarouselCardShadow {
-    let color: Color
-    let radius: CGFloat
-    let y: CGFloat
-}
-
-private extension ReaderTheme {
-    var carouselCardSurface: Color {
-        #if os(iOS)
-        appElevatedBackground ?? Color(uiColor: .secondarySystemGroupedBackground)
-        #else
-        appElevatedBackground ?? Color(nsColor: .controlBackgroundColor)
-        #endif
-    }
-
-    /// A per-title hue wash over the elevated surface so neighbouring cards read as
-    /// distinct works. Kept subtle — saturation/opacity stay low enough that title and
-    /// metadata text remain legible on every theme.
-    func carouselCardTint(hue: Double) -> Color {
-        switch self {
-        case .dark:
-            Color(hue: hue, saturation: 0.55, brightness: 0.85).opacity(0.16)
-        case .light:
-            Color(hue: hue, saturation: 0.60, brightness: 0.80).opacity(0.14)
-        case .sepia:
-            Color(hue: hue, saturation: 0.45, brightness: 0.75).opacity(0.12)
-        }
-    }
-
-    func carouselCardBorder(hue: Double?) -> Color {
-        if let hue {
-            switch self {
-            case .dark:
-                return Color(hue: hue, saturation: 0.50, brightness: 0.90).opacity(0.28)
-            case .light:
-                return Color(hue: hue, saturation: 0.55, brightness: 0.55).opacity(0.24)
-            case .sepia:
-                return Color(hue: hue, saturation: 0.40, brightness: 0.55).opacity(0.22)
-            }
-        }
-        switch self {
-        case .dark:
-            return Color.white.opacity(0.12)
-        case .light:
-            return Color.black.opacity(0.08)
-        case .sepia:
-            return Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
-        }
-    }
-
-    var carouselCardShadow: CarouselCardShadow {
-        switch self {
-        case .dark:
-            CarouselCardShadow(color: Color.black.opacity(0.34), radius: 8, y: 4)
-        case .light:
-            CarouselCardShadow(color: Color.black.opacity(0.13), radius: 8, y: 3)
-        case .sepia:
-            CarouselCardShadow(
-                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.22),
-                radius: 8,
-                y: 3
-            )
-        }
     }
 }
 

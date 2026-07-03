@@ -108,11 +108,11 @@ struct WorkCoverCardSkeleton: View {
             SkeletonBlock(height: 5, width: 140, cornerRadius: 3)
         }
         .padding(12)
-        .frame(width: WorkSummaryCardMetrics.width,
-               height: WorkSummaryCardMetrics.height,
+        .frame(width: CarouselCardMetrics.width,
+               height: CarouselCardMetrics.height,
                alignment: .topLeading)
         .background(Color.primary.opacity(0.04),
-                    in: RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius,
+                    in: RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius,
                                          style: .continuous))
         .skeletonShimmer()
     }

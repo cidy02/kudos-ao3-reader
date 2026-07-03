@@ -6,6 +6,7 @@ import SwiftUI
 // MARK: - Cards
 
 struct ReadingQueueCard: View {
+    @Environment(ThemeManager.self) private var themeManager
     let queue: ReadingQueue
 
     private var works: [SavedWork] {
@@ -15,7 +16,7 @@ struct ReadingQueueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
-                .frame(width: 120, height: 172)
+                .frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height)
             Text(queue.displayName)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
@@ -25,21 +26,21 @@ struct ReadingQueueCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: 120, alignment: .leading)
+        .frame(width: CarouselCardMetrics.width, alignment: .leading)
     }
 
     private var tile: some View {
         let hue = CoverArt.hue(for: queue.displayName)
-        return RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
             .fill(.regularMaterial)
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(hue: hue, saturation: 0.32, brightness: 0.72).opacity(0.22))
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                    .fill(themeManager.appTheme.carouselQueueTint(hue: hue))
             }
             .overlay(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 10) {
                     Image(systemName: queue.kind == .savedForLater ? "bookmark.fill" : "list.bullet.rectangle")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(size: 34, weight: .semibold))
                         .foregroundStyle(.tint)
                     Spacer()
                     Text(queue.displayName)
@@ -51,7 +52,7 @@ struct ReadingQueueCard: View {
                 .padding(12)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(.quaternary, lineWidth: 0.75)
             }
             .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
@@ -61,12 +62,12 @@ struct ReadingQueueCard: View {
 struct NewReadingQueueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(width: 120, height: 172)
+                .frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height)
                 .overlay {
                     Image(systemName: "plus")
-                        .font(.system(size: 28, weight: .medium))
+                        .font(.system(size: 34, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
             Text("New Queue")
@@ -78,7 +79,7 @@ struct NewReadingQueueCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: 120, alignment: .leading)
+        .frame(width: CarouselCardMetrics.width, alignment: .leading)
     }
 }
 

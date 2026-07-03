@@ -1,0 +1,121 @@
+import SwiftUI
+
+/// Shared sizing, shadow, and theme-color tokens for Library/Home carousel cards
+/// (Work, Reading Queue, Collection), so all three read as the same visual weight
+/// and pull their colors from one place.
+
+/// Shared stable hue helper for non-work decorative tiles, such as Collections and
+/// Reading Queues.
+enum CoverArt {
+    /// A stable hue in 0...1 derived from the title (djb2-ish hash).
+    static func hue(for string: String) -> Double {
+        let hash = string.unicodeScalars.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1.value) }
+        return Double(hash % 360) / 360
+    }
+}
+
+/// Common tile size for every carousel card type (Work, Reading Queue, Collection),
+/// so they read as the same visual weight side by side.
+enum CarouselCardMetrics {
+    static let width: CGFloat = 164
+    static let height: CGFloat = 228
+    static let cornerRadius: CGFloat = 12
+}
+
+struct CarouselCardShadow {
+    let color: Color
+    let radius: CGFloat
+    let y: CGFloat
+}
+
+extension ReaderTheme {
+    var carouselCardSurface: Color {
+        #if os(iOS)
+        appElevatedBackground ?? Color(uiColor: .secondarySystemGroupedBackground)
+        #else
+        appElevatedBackground ?? Color(nsColor: .controlBackgroundColor)
+        #endif
+    }
+
+    /// A per-title hue wash over the elevated surface so neighbouring Work cards read
+    /// as distinct works. Bright enough to give the card real color at a glance while
+    /// keeping title/metadata text legible on every theme.
+    func carouselCardTint(hue: Double) -> Color {
+        switch self {
+        case .dark:
+            Color(hue: hue, saturation: 0.58, brightness: 0.85).opacity(0.22)
+        case .light:
+            Color(hue: hue, saturation: 0.62, brightness: 0.80).opacity(0.20)
+        case .sepia:
+            Color(hue: hue, saturation: 0.48, brightness: 0.75).opacity(0.18)
+        }
+    }
+
+    func carouselCardBorder(hue: Double?) -> Color {
+        if let hue {
+            switch self {
+            case .dark:
+                return Color(hue: hue, saturation: 0.52, brightness: 0.90).opacity(0.34)
+            case .light:
+                return Color(hue: hue, saturation: 0.58, brightness: 0.55).opacity(0.30)
+            case .sepia:
+                return Color(hue: hue, saturation: 0.42, brightness: 0.55).opacity(0.28)
+            }
+        }
+        switch self {
+        case .dark:
+            return Color.white.opacity(0.12)
+        case .light:
+            return Color.black.opacity(0.08)
+        case .sepia:
+            return Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
+        }
+    }
+
+    var carouselCardShadow: CarouselCardShadow {
+        switch self {
+        case .dark:
+            CarouselCardShadow(color: Color.black.opacity(0.34), radius: 8, y: 4)
+        case .light:
+            CarouselCardShadow(color: Color.black.opacity(0.13), radius: 8, y: 3)
+        case .sepia:
+            CarouselCardShadow(
+                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.22),
+                radius: 8,
+                y: 3
+            )
+        }
+    }
+
+    /// Collection tile gradient: a per-name-hue two-tone wash, brighter and slightly
+    /// more saturated than the Work-card tint so a shelf of works reads as its own
+    /// distinct thing at a glance. Sepia stays a touch less saturated to keep the
+    /// warm, paper-like palette from clashing.
+    func carouselCollectionGradient(hue: Double) -> (start: Color, end: Color) {
+        switch self {
+        case .dark:
+            (Color(hue: hue, saturation: 0.50, brightness: 0.80),
+             Color(hue: hue, saturation: 0.62, brightness: 0.55))
+        case .light:
+            (Color(hue: hue, saturation: 0.45, brightness: 0.85),
+             Color(hue: hue, saturation: 0.58, brightness: 0.62))
+        case .sepia:
+            (Color(hue: hue, saturation: 0.40, brightness: 0.80),
+             Color(hue: hue, saturation: 0.52, brightness: 0.58))
+        }
+    }
+
+    /// Reading Queue tile tint: sits over `.regularMaterial`, so it's a wash rather
+    /// than a solid fill — brighter than before so the per-queue hue reads clearly
+    /// through the glass instead of nearly disappearing.
+    func carouselQueueTint(hue: Double) -> Color {
+        switch self {
+        case .dark:
+            Color(hue: hue, saturation: 0.38, brightness: 0.78).opacity(0.30)
+        case .light:
+            Color(hue: hue, saturation: 0.42, brightness: 0.75).opacity(0.26)
+        case .sepia:
+            Color(hue: hue, saturation: 0.34, brightness: 0.70).opacity(0.22)
+        }
+    }
+}

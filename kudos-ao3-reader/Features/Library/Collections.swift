@@ -7,12 +7,13 @@ import SwiftUI
 /// name, with a stack glyph so it reads as a shelf, not a single work), the name,
 /// and a work count. Sized to match `WorkCoverCard`.
 struct CollectionCard: View {
+    @Environment(ThemeManager.self) private var themeManager
     let collection: WorkCollection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
-                .frame(width: 120, height: 172)
+                .frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height)
             Text(collection.name)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
@@ -22,22 +23,20 @@ struct CollectionCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: 120, alignment: .leading)
+        .frame(width: CarouselCardMetrics.width, alignment: .leading)
     }
 
     private var tile: some View {
         let hue = CoverArt.hue(for: collection.name)
-        return RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
+        return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
             .fill(LinearGradient(
-                colors: [
-                    Color(hue: hue, saturation: 0.42, brightness: 0.74),
-                    Color(hue: hue, saturation: 0.58, brightness: 0.46)
-                ],
+                colors: [gradient.start, gradient.end],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             ))
             .overlay {
                 Image(systemName: "square.stack.fill")
-                    .font(.system(size: 30))
+                    .font(.system(size: 38))
                     .foregroundStyle(.white.opacity(0.6))
             }
             .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
@@ -48,12 +47,12 @@ struct CollectionCard: View {
 struct NewCollectionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(width: 120, height: 172)
+                .frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height)
                 .overlay {
                     Image(systemName: "plus")
-                        .font(.system(size: 28, weight: .medium))
+                        .font(.system(size: 34, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
             Text("New Collection")
@@ -65,7 +64,7 @@ struct NewCollectionCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: 120, alignment: .leading)
+        .frame(width: CarouselCardMetrics.width, alignment: .leading)
     }
 }
 
