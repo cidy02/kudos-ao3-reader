@@ -95,6 +95,11 @@ struct SensitiveWorkRow: View {
     var expandAll: Bool = false
     var openMode: LocalWorkRowOpenMode = .detail
     var onSelect: (() -> Void)?
+    /// When true, taps toggle selection instead of navigating/revealing, and the
+    /// row shows a selection bubble (mirrors the carousel's `SelectableWorkCoverCard`).
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
+    var onToggleSelection: (() -> Void)?
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -105,7 +110,7 @@ struct SensitiveWorkRow: View {
 
     var body: some View {
         if blurred {
-            WorkRow(work: work)
+            let row = WorkRow(work: work, isSelecting: isSelecting, isSelected: isSelected)
                 .blur(radius: 6)
                 .overlay {
                     Label("Tap to reveal", systemImage: "eye.slash.fill")
@@ -116,9 +121,19 @@ struct SensitiveWorkRow: View {
                         .background(.regularMaterial, in: Capsule())
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { gate.reveal(work) }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Hidden mature work. Activate to reveal.")
+            if isSelecting {
+                row
+                    .onTapGesture { onToggleSelection?() }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(work.title)
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+            } else {
+                row
+                    .onTapGesture { gate.reveal(work) }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Hidden mature work. Activate to reveal.")
+            }
         } else {
             visibleRow
         }
@@ -126,13 +141,26 @@ struct SensitiveWorkRow: View {
 
     @ViewBuilder
     private var visibleRow: some View {
-        let row = WorkRow(work: work, expandAll: expandAll)
+        let row = WorkRow(work: work, expandAll: expandAll, isSelecting: isSelecting, isSelected: isSelected)
             .localWorkContextMenu(work: work, onSelect: onSelect)
-        switch openMode {
-        case .detail:
-            row.cardNavigation(to: work)
-        case .reader:
-            row.cardNavigation(to: LocalWorkDestination.reader(work))
+        if isSelecting {
+            Button {
+                onToggleSelection?()
+            } label: {
+                row
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(work.title)
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else {
+            switch openMode {
+            case .detail:
+                row.cardNavigation(to: work)
+            case .reader:
+                row.cardNavigation(to: LocalWorkDestination.reader(work))
+            }
         }
     }
 }

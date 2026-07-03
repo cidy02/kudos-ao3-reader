@@ -506,11 +506,16 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var selectList: some View {
         #if os(iOS)
-        List(selection: $selection) {
+        List {
             Section {
                 ForEach(selectableWorks) { work in
-                    SensitiveWorkRow(work: work, openMode: .reader)
-                        .tag(work.id)
+                    SensitiveWorkRow(
+                        work: work,
+                        openMode: .reader,
+                        isSelecting: true,
+                        isSelected: selection.contains(work.id),
+                        onToggleSelection: { toggleSelection(work) }
+                    )
                 }
                     .cardRow()
             }
@@ -522,7 +527,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             await task.value
         }
         .cancelRefreshOnTabChange($refreshTask)
-        .environment(\.editMode, $editMode)
         #else
         EmptyView()
         #endif

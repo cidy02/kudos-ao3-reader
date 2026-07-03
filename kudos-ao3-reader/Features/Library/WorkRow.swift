@@ -10,6 +10,11 @@ struct WorkRow: View {
     /// Driven by a list's "expand/collapse all" toggle; each card follows it and can
     /// still be toggled individually afterwards. Mirrors `AO3WorkRow`.
     var expandAll: Bool = false
+    /// When true, a selection bubble takes the top-right corner (where the expand
+    /// control normally sits) and the expand control shifts to its left instead of
+    /// disappearing.
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
 
     @Environment(AppRouter.self) private var router
     @State private var expanded = false
@@ -51,6 +56,9 @@ struct WorkRow: View {
                             .foregroundStyle(.yellow)
                     }
                     if isExpandable { expandButton }
+                    if isSelecting {
+                        WorkSelectionBubble(isSelected: isSelected)
+                    }
                 }
                 if !work.author.isEmpty {
                     Text("by \(work.author)")
