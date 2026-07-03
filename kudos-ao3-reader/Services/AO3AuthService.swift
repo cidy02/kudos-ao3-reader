@@ -81,7 +81,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-        guard (200...299).contains(http.statusCode) else {
+        guard (200 ... 299).contains(http.statusCode) else {
             // Only an explicit 401 is treated as expiry. Every other non-2xx is
             // thrown, which the caller treats as "couldn't verify" and keeps the
             // session — deliberately erring toward not logging the user out on a
@@ -98,10 +98,10 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         return .valid(Self.merging(refreshed, into: storedSession, username: username))
     }
 
-    // NOTE: This logged-in / username detection mirrors the JavaScript in
-    // `AO3WebLoginCoordinator.inspectPage()`. One runs here over URLSession-fetched
-    // HTML (SwiftSoup); the other runs inside the live WKWebView page. Keep the
-    // selectors in sync when AO3's markup changes.
+    /// NOTE: This logged-in / username detection mirrors the JavaScript in
+    /// `AO3WebLoginCoordinator.inspectPage()`. One runs here over URLSession-fetched
+    /// HTML (SwiftSoup); the other runs inside the live WKWebView page. Keep the
+    /// selectors in sync when AO3's markup changes.
     static func isLoggedIn(html: String) -> Bool {
         guard let document = try? SwiftSoup.parse(html) else { return false }
         if document.body()?.hasClass("logged-in") == true { return true }
@@ -184,11 +184,16 @@ final class AO3AuthService {
     }
 
     var username: String? {
-        if case .signedIn(let username) = status { username } else { nil }
+        if case let .signedIn(username) = status { username } else { nil }
     }
 
-    var isUsingFallback: Bool { status == .usingFallback }
-    var loginWebView: WKWebView { loginPerformer.webView }
+    var isUsingFallback: Bool {
+        status == .usingFallback
+    }
+
+    var loginWebView: WKWebView {
+        loginPerformer.webView
+    }
 
     private let vault: AO3SessionPersisting
     private let validator: AO3SessionValidating
@@ -259,11 +264,11 @@ final class AO3AuthService {
                 password: password
             )
             await accept(session)
-        } catch AO3WebLoginError.invalidCredentials(let message) {
+        } catch let AO3WebLoginError.invalidCredentials(message) {
             status = .signedOut
             errorMessage = message
             Log.auth.notice("AO3 rejected the supplied login credentials")
-        } catch AO3WebLoginError.fallbackRequired(let message) {
+        } catch let AO3WebLoginError.fallbackRequired(message) {
             beginFallback(expectedUsername: trimmedUsername, reason: message)
         } catch is CancellationError {
             status = .signedOut
@@ -433,7 +438,7 @@ final class AO3AuthService {
 
         do {
             switch try await validator.validate(saved) {
-            case .valid(let refreshed):
+            case let .valid(refreshed):
                 do {
                     try vault.save(refreshed)
                 } catch {

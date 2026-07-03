@@ -14,7 +14,9 @@ struct AO3AccountSection: View {
         case bookmarks = "Bookmarks"
         case history = "History"
         case subscriptions = "Subs"
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
     }
 
     var body: some View {

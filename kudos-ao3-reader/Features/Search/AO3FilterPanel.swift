@@ -31,123 +31,122 @@ struct AO3FilterPanel: View {
 
     var body: some View {
         Form {
-          // Group so .appThemedRows() reaches every section's rows (it doesn't
-          // propagate from the Form container, only from a Group/Section/ForEach).
-          Group {
-            Section {
-                // Sort needs AO3 to re-order results, so it only appears when the panel
-                // actually issues a query.
-                if mode == .search {
-                    Picker("Sort by", selection: $filters.sort) {
-                        ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
+            // Group so .appThemedRows() reaches every section's rows (it doesn't
+            // propagate from the Form container, only from a Group/Section/ForEach).
+            Group {
+                Section {
+                    // Sort needs AO3 to re-order results, so it only appears when the panel
+                    // actually issues a query.
+                    if mode == .search {
+                        Picker("Sort by", selection: $filters.sort) {
+                            ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
+                        }
                     }
-                }
-                Picker("Rating", selection: $filters.rating) {
-                    ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
-                }
-                .onChange(of: filters.rating) { oldValue, newValue in
-                    if oldValue == .any, newValue != .any {
-                        // A specific rating starts exact and excludes unrated works;
-                        // the separate toggle lets the reader opt them back in.
-                        filters.ratingMatch = .exact
-                        filters.includeNotRated = false
-                    } else if newValue == .any {
-                        filters.ratingMatch = .exact
+                    Picker("Rating", selection: $filters.rating) {
+                        ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
                     }
+                    .onChange(of: filters.rating) { oldValue, newValue in
+                        if oldValue == .any, newValue != .any {
+                            // A specific rating starts exact and excludes unrated works;
+                            // the separate toggle lets the reader opt them back in.
+                            filters.ratingMatch = .exact
+                            filters.includeNotRated = false
+                        } else if newValue == .any {
+                            filters.ratingMatch = .exact
+                        }
+                    }
+                    if filters.rating != .any {
+                        Picker("Match", selection: $filters.ratingMatch) {
+                            ForEach(AO3SearchFilters.RatingMatch.allCases) {
+                                Text($0.title).tag($0)
+                            }
+                        }
+                    }
+                    Toggle("Include Not Rated", isOn: $filters.includeNotRated)
                 }
-                if filters.rating != .any {
-                    Picker("Match", selection: $filters.ratingMatch) {
-                        ForEach(AO3SearchFilters.RatingMatch.allCases) {
-                            Text($0.title).tag($0)
+
+                Section("Warnings") {
+                    ForEach(AO3SearchFilters.Warning.allCases) { warning in
+                        cyclingFacetRow(warning.title, state: warningState(warning)) {
+                            cycle(warning)
                         }
                     }
                 }
-                Toggle("Include Not Rated", isOn: $filters.includeNotRated)
-            }
 
-            Section("Warnings") {
-                ForEach(AO3SearchFilters.Warning.allCases) { warning in
-                    cyclingFacetRow(warning.title, state: warningState(warning)) {
-                        cycle(warning)
+                Section("Categories") {
+                    ForEach(AO3SearchFilters.Category.allCases) { category in
+                        cyclingFacetRow(category.title, state: categoryState(category)) {
+                            cycle(category)
+                        }
                     }
                 }
-            }
 
-            Section("Categories") {
-                ForEach(AO3SearchFilters.Category.allCases) { category in
-                    cyclingFacetRow(category.title, state: categoryState(category)) {
-                        cycle(category)
+                Section {
+                    // Crossover status isn't carried on a blurb, so it's query-only.
+                    if mode == .search {
+                        Picker("Crossovers", selection: $filters.crossover) {
+                            ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
+                        }
+                    }
+                    Picker("Completion", selection: $filters.completion) {
+                        ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
                     }
                 }
-            }
 
-            Section {
-                // Crossover status isn't carried on a blurb, so it's query-only.
-                if mode == .search {
-                    Picker("Crossovers", selection: $filters.crossover) {
-                        ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
-                    }
-                }
-                Picker("Completion", selection: $filters.completion) {
-                    ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
-                }
-            }
-
-            Section("Word count") {
-                TextField("From", text: $filters.wordsFrom)
+                Section("Word count") {
+                    TextField("From", text: $filters.wordsFrom)
                     #if !os(macOS)
-                    .keyboardType(.numberPad)
+                        .keyboardType(.numberPad)
                     #endif
-                TextField("To", text: $filters.wordsTo)
+                    TextField("To", text: $filters.wordsTo)
                     #if !os(macOS)
-                    .keyboardType(.numberPad)
+                        .keyboardType(.numberPad)
                     #endif
-            }
+                }
 
-            Section {
-                // "Updated within" filters on a date AO3 computes; not derivable from a blurb.
-                if mode == .search {
-                    Picker("Updated", selection: $filters.updated) {
-                        ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
+                Section {
+                    // "Updated within" filters on a date AO3 computes; not derivable from a blurb.
+                    if mode == .search {
+                        Picker("Updated", selection: $filters.updated) {
+                            ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
+                        }
+                    }
+                    Picker("Language", selection: $filters.language) {
+                        ForEach(AO3SearchFilters.Language.allCases) { Text($0.title).tag($0) }
                     }
                 }
-                Picker("Language", selection: $filters.language) {
-                    ForEach(AO3SearchFilters.Language.allCases) { Text($0.title).tag($0) }
-                }
-            }
 
-            tagSection
+                tagSection
 
-            Section {
-                Button(action: onApply) {
-                    // Refine narrows live as facets change, so its button just confirms;
-                    // search needs a query/filter before it can run.
-                    Label(mode == .refine ? "Done" : "Apply Filters",
-                          systemImage: mode == .refine ? "checkmark" : "magnifyingglass")
-                }
-                .disabled(mode == .search && !filters.isSearchable)
-
-                if let onSave {
-                    Button(action: onSave) {
-                        Label("Save Search…", systemImage: "bookmark")
+                Section {
+                    Button(action: onApply) {
+                        // Refine narrows live as facets change, so its button just confirms;
+                        // search needs a query/filter before it can run.
+                        Label(mode == .refine ? "Done" : "Apply Filters",
+                              systemImage: mode == .refine ? "checkmark" : "magnifyingglass")
                     }
-                    .disabled(!filters.isSearchable)
-                }
+                    .disabled(mode == .search && !filters.isSearchable)
 
-                if canReset {
-                    Button(role: .destructive, action: onReset) {
-                        Label("Reset Filters", systemImage: "arrow.counterclockwise")
+                    if let onSave {
+                        Button(action: onSave) {
+                            Label("Save Search…", systemImage: "bookmark")
+                        }
+                        .disabled(!filters.isSearchable)
+                    }
+
+                    if canReset {
+                        Button(role: .destructive, action: onReset) {
+                            Label("Reset Filters", systemImage: "arrow.counterclockwise")
+                        }
                     }
                 }
             }
-          }
-          .appThemedRows()
+            .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
     }
 
-    @ViewBuilder
     private var tagSection: some View {
         Section {
             if showFandomPicker {

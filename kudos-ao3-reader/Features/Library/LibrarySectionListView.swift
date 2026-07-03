@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import OSLog
+import SwiftData
+import SwiftUI
 
 /// The full, vertically scrolling list behind a Library section's `>` chevron.
 /// Mirrors `HomeSectionListView`, but adds the Library's per-row swipe actions and,
@@ -36,7 +36,9 @@ struct LibrarySectionListView: View {
     }
 
     /// This section's works (before the filter panel narrows them further).
-    private var items: [SavedWork] { kind.works(from: works, visible: passesPrivacy) }
+    private var items: [SavedWork] {
+        kind.works(from: works, visible: passesPrivacy)
+    }
 
     /// This section's works after the active filters — what the list renders. When no
     /// filter is set, the section's own ordering (e.g. most-recently-read first) is kept
@@ -56,7 +58,9 @@ struct LibrarySectionListView: View {
     }
 
     /// Saved for Later is the one section that merges in a remote (AO3) list.
-    private var showsMarkedForLater: Bool { kind == .savedForLater && !visibleMarkedForLater.isEmpty }
+    private var showsMarkedForLater: Bool {
+        kind == .savedForLater && !visibleMarkedForLater.isEmpty
+    }
 
     /// Whether the section has any works at all (pre-filter) — drives the toolbar.
     private var hasAnyContent: Bool {
@@ -67,9 +71,9 @@ struct LibrarySectionListView: View {
         content
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle(kind.title)
-            #if os(iOS)
+        #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
+        #endif
             .toolbar {
                 if hasAnyContent {
                     ToolbarItem(placement: .primaryAction) {
@@ -83,9 +87,9 @@ struct LibrarySectionListView: View {
             .inspector(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                    #if os(iOS)
+                #if os(iOS)
                     .presentationDragIndicator(.visible)
-                    #endif
+                #endif
             }
             .deleteConfirmation(
                 for: $pendingDelete,
@@ -141,7 +145,7 @@ struct LibrarySectionListView: View {
             .cancelRefreshOnTabChange($refreshTask)
             .overlay {
                 // Section has works, but the active filters hid them all.
-                if visibleItems.isEmpty && !showsMarkedForLater {
+                if visibleItems.isEmpty, !showsMarkedForLater {
                     ContentUnavailableView {
                         Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {

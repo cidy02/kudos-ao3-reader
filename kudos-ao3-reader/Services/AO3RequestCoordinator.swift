@@ -28,7 +28,7 @@ actor AO3RequestCoordinator {
     init(limit: Int = 3) {
         precondition(limit >= 1, "AO3RequestCoordinator needs at least one slot")
         self.limit = limit
-        self.available = limit
+        available = limit
     }
 
     /// Runs `operation` once a concurrency slot is free, releasing the slot when it

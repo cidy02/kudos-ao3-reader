@@ -11,7 +11,9 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     case favorites
     case recentlyOpened
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -51,25 +53,27 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
         switch self {
         case .readingNow:
             // In-progress (started, not finished, file present) — most recently read first.
-            return works
+            works
                 .filter { $0.isInProgress && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .favorites:
-            return works
+            works
                 .filter { $0.isFavorite && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .recentlyUpdated:
             // Works AO3 has added chapters to since the user last saw them.
-            return works
+            works
                 .filter { $0.hasUpdate && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { ($0.lastUpdateCheck ?? .distantPast) > ($1.lastUpdateCheck ?? .distantPast) }
         case .recentlyOpened:
             // Anything actually opened (has a read date), newest first.
-            return works
+            works
                 .filter { $0.lastReadDate != nil && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { ($0.lastReadDate ?? .distantPast) > ($1.lastReadDate ?? .distantPast) }
         }
     }
 
-    private func recency(_ work: SavedWork) -> Date { work.lastReadDate ?? work.dateAdded }
+    private func recency(_ work: SavedWork) -> Date {
+        work.lastReadDate ?? work.dateAdded
+    }
 }

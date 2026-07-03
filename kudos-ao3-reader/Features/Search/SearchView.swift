@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // Lint: this existing screen coordinates local and remote search state.
 /// Native AO3 work search. A search field with an adjacent filter button, results
@@ -38,74 +38,74 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         NavigationStack(path: $path) {
             content
-            .task { await FandomCatalog.shared.warmCache() }
-            // A tapped tag chip elsewhere (work detail / search results) routes here to
-            // run an AO3 search for that tag. `initial` catches a request that arrived
-            // before this view existed (first visit to Search).
-            .onChange(of: router.pendingTagSearch, initial: true) { _, request in
-                guard let request else { return }
-                applyTagSearch(request)
-                router.pendingTagSearch = nil
-            }
-            .navigationTitle("Search")
+                .task { await FandomCatalog.shared.warmCache() }
+                // A tapped tag chip elsewhere (work detail / search results) routes here to
+                // run an AO3 search for that tag. `initial` catches a request that arrived
+                // before this view existed (first visit to Search).
+                .onChange(of: router.pendingTagSearch, initial: true) { _, request in
+                    guard let request else { return }
+                    applyTagSearch(request)
+                    router.pendingTagSearch = nil
+                }
+                .navigationTitle("Search")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .navigationDestination(for: AO3WorkSummary.self) { work in
-                WorkDetailView(remote: work)
-            }
-            .navigationDestination(for: SavedWork.self) { work in
-                WorkDetailView(work: work)
-            }
-            .navigationDestination(for: LocalWorkDestination.self) { destination in
-                LocalWorkDestinationView(destination: destination)
-            }
-            .navigationDestination(for: WorkCollection.self) { collection in
-                CollectionDetailView(collection: collection)
-            }
-            .toolbar {
-                #if os(iOS)
-                // Search is a focused, full-screen mode. Results replace the
-                // Browse-by-fandom view in place (no navigation push), so Back steps
-                // back through that: results → Browse, then Browse → previous tab —
-                // landing on the page the user actually came from, not skipping it.
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: goBack) {
-                        Image(systemName: "chevron.backward")
+                .navigationDestination(for: AO3WorkSummary.self) { work in
+                    WorkDetailView(remote: work)
+                }
+                .navigationDestination(for: SavedWork.self) { work in
+                    WorkDetailView(work: work)
+                }
+                .navigationDestination(for: LocalWorkDestination.self) { destination in
+                    LocalWorkDestinationView(destination: destination)
+                }
+                .navigationDestination(for: WorkCollection.self) { collection in
+                    CollectionDetailView(collection: collection)
+                }
+                .toolbar {
+                    #if os(iOS)
+                    // Search is a focused, full-screen mode. Results replace the
+                    // Browse-by-fandom view in place (no navigation push), so Back steps
+                    // back through that: results → Browse, then Browse → previous tab —
+                    // landing on the page the user actually came from, not skipping it.
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: goBack) {
+                            Image(systemName: "chevron.backward")
+                        }
+                        .accessibilityLabel("Back")
                     }
-                    .accessibilityLabel("Back")
+                    #endif
+                    ToolbarItem(placement: .principal) { searchField }
+                    if phase == .loaded, !results.isEmpty {
+                        ToolbarItem(placement: .primaryAction) { expandAllButton }
+                    }
+                    ToolbarItem(placement: .primaryAction) { filterButton }
                 }
-                #endif
-                ToolbarItem(placement: .principal) { searchField }
-                if phase == .loaded && !results.isEmpty {
-                    ToolbarItem(placement: .primaryAction) { expandAllButton }
-                }
-                ToolbarItem(placement: .primaryAction) { filterButton }
-            }
             #if os(iOS)
-            .toolbar(.hidden, for: .tabBar)
-            // Focused Search has a custom Back button (results → Browse → previous
-            // tab, not a navigation pop), so mirror it with a left-edge swipe.
-            // Only at the root — pushed detail pages use the normal swipe-to-pop.
-            .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
+                .toolbar(.hidden, for: .tabBar)
+                // Focused Search has a custom Back button (results → Browse → previous
+                // tab, not a navigation pop), so mirror it with a left-edge swipe.
+                // Only at the root — pushed detail pages use the normal swipe-to-pop.
+                .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
             #endif
-            .inspector(isPresented: router.isShowing(.searchFilters)) {
-                filterPanel
-                    .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                .inspector(isPresented: router.isShowing(.searchFilters)) {
+                    filterPanel
+                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                     // On iPhone the inspector collapses into a bottom sheet; show the
                     // standard grabber so it reads as swipe-to-dismiss.
                     #if os(iOS)
-                    .presentationDragIndicator(.visible)
+                        .presentationDragIndicator(.visible)
                     #endif
-            }
-            .alert("Save Search", isPresented: $showingSaveDialog) {
-                TextField("Name", text: $saveName)
-                Button("Save") { commitSavedSearch() }
-                    .disabled(saveName.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Cancel", role: .cancel) { saveName = "" }
-            } message: {
-                Text("Save the current search and its filters to re-run later.")
-            }
+                }
+                .alert("Save Search", isPresented: $showingSaveDialog) {
+                    TextField("Name", text: $saveName)
+                    Button("Save") { commitSavedSearch() }
+                        .disabled(saveName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Cancel", role: .cancel) { saveName = "" }
+                } message: {
+                    Text("Save the current search and its filters to re-run later.")
+                }
         }
     }
 
@@ -122,7 +122,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             } else {
                 localResultsList
             }
-        } else if phase == .loading && results.isEmpty {
+        } else if phase == .loading, results.isEmpty {
             // First load of an AO3 search: show the shape of the incoming results.
             AO3WorkRowSkeletonList(count: 7)
         } else {
@@ -202,7 +202,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             Label("Search Kudos", systemImage: "magnifyingglass")
         } description: {
             Text("Find works in your library, or search AO3 by title, author, or tag. "
-                 + "Browse fandoms and categories in the Browse tab.")
+                + "Browse fandoms and categories in the Browse tab.")
         }
     }
 
@@ -220,7 +220,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var localQuery: String { filters.query.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var localQuery: String {
+        filters.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private var matchingWorks: [SavedWork] {
         let query = localQuery.lowercased()
@@ -333,7 +335,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         .cardList()
     }
 
-    private var showPagination: Bool { totalPages > 1 && !results.isEmpty }
+    private var showPagination: Bool {
+        totalPages > 1 && !results.isEmpty
+    }
 
     private let paginationTopID = "pagination-top"
 
@@ -428,7 +432,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         switch phase {
         case .loaded where results.isEmpty:
             ContentUnavailableView.search(text: filters.query)
-        case .failed(let message):
+        case let .failed(message):
             ContentUnavailableView {
                 Label("Search failed", systemImage: "exclamationmark.triangle")
             } description: {
@@ -478,7 +482,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// Restores the Browse-by-fandom idle state, clearing the search the results
     /// came from (a typed query or a tapped fandom chip) so Browse shows fresh.
     private func returnToBrowse() {
-        loadToken += 1   // discard any in-flight load so it can't re-show results
+        loadToken += 1 // discard any in-flight load so it can't re-show results
         filters = AO3SearchFilters()
         results = []
         currentPage = 1
@@ -567,7 +571,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     private func deleteSavedSearches(at offsets: IndexSet) {
-        for index in offsets { context.delete(savedSearches[index]) }
+        for index in offsets {
+            context.delete(savedSearches[index])
+        }
         try? context.save()
     }
 

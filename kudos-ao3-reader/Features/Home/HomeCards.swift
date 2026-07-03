@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 /// Shared stable hue helper for non-work decorative tiles, such as Collections.
 enum CoverArt {
@@ -65,7 +65,6 @@ struct WorkCoverCard: View {
         }
     }
 
-    @ViewBuilder
     private var cardStats: some View {
         FlowLayout(spacing: 8, rowSpacing: 5) {
             let ratingShort = WorkStat.ratingShort(work.rating)
@@ -182,7 +181,6 @@ struct AO3WorkCoverCard: View {
         .remoteWorkContextMenu(work: work)
     }
 
-    @ViewBuilder
     private var cardStats: some View {
         FlowLayout(spacing: 8, rowSpacing: 5) {
             let ratingShort = WorkStat.ratingShort(work.rating)

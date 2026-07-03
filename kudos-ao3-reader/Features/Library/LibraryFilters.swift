@@ -54,7 +54,7 @@ struct LibraryFilters: Equatable {
         if !additionalTags.isSubset(of: tagSet(work.workFreeforms, fallback: work.workTags)) { return false }
         if !excludeTags.isDisjoint(with: Set(work.workTags)) { return false }
 
-        if rating != .any && !rating.matchesRatingText(work.rating) { return false }
+        if rating != .any, !rating.matchesRatingText(work.rating) { return false }
 
         if !warnings.isEmpty {
             let present = lowercased(work.workWarnings.isEmpty ? work.workTags : work.workWarnings)
@@ -118,9 +118,12 @@ struct LibraryFilters: Equatable {
 
 /// The Library's sort options — limited to fields stored locally for saved works
 /// (AO3's kudos/hits/comments counts aren't kept, so they aren't offered).
-enum LibrarySort: String, CaseIterable, Identifiable, Equatable, Sendable {
+enum LibrarySort: String, CaseIterable, Identifiable, Equatable {
     case dateAdded, title, author, wordCount
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
+
     var title: String {
         switch self {
         case .dateAdded: "Date Added"
@@ -161,5 +164,7 @@ extension AO3SearchFilters.Warning {
 }
 
 private extension String {
-    var isLibraryBlank: Bool { trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var isLibraryBlank: Bool {
+        trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }

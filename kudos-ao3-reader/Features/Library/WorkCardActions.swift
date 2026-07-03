@@ -17,9 +17,9 @@ struct LocalWorkDestinationView: View {
 
     var body: some View {
         switch destination {
-        case .reader(let work):
+        case let .reader(work):
             LocalWorkReaderDestination(work: work, onOpen: onReaderOpen)
-        case .detail(let work):
+        case let .detail(work):
             WorkDetailView(work: work)
         }
     }
@@ -57,7 +57,7 @@ private struct LocalWorkReaderDestination: View {
         case .opening, .restoring:
             ProgressView(phase == .restoring ? "Restoring EPUB…" : "Opening…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .failed(let message):
+        case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't Open Reader", systemImage: "exclamationmark.triangle")
             } description: {

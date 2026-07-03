@@ -3,7 +3,7 @@ import Foundation
 /// A serializable representation of an HTTP cookie. `HTTPCookie` itself is not
 /// Codable, so AO3 sessions use this value type for Keychain persistence and for
 /// building authenticated requests outside WebKit.
-struct AO3StoredCookie: Codable, Hashable, Sendable {
+struct AO3StoredCookie: Codable, Hashable {
     let name: String
     let value: String
     let domain: String
@@ -45,10 +45,10 @@ struct AO3StoredCookie: Codable, Hashable, Sendable {
         if let expiresDate { expiresDate <= Date() } else { false }
     }
 
-    // `HTTPCookie` wants its `.secure` flag as a "TRUE"/"FALSE" string, and there is
-    // no public property key for HttpOnly — Foundation only recognises the literal
-    // "HttpOnly" key. Both are long-standing Foundation contracts; documented here
-    // because the string/private-key reliance is otherwise surprising.
+    /// `HTTPCookie` wants its `.secure` flag as a "TRUE"/"FALSE" string, and there is
+    /// no public property key for HttpOnly — Foundation only recognises the literal
+    /// "HttpOnly" key. Both are long-standing Foundation contracts; documented here
+    /// because the string/private-key reliance is otherwise surprising.
     var httpCookie: HTTPCookie? {
         var properties: [HTTPCookiePropertyKey: Any] = [
             .name: name,
@@ -85,7 +85,7 @@ struct AO3StoredCookie: Codable, Hashable, Sendable {
 
 /// The authenticated AO3 session persisted by the app. It intentionally contains
 /// cookies and the resolved account name only—never the user's password.
-struct AO3Session: Codable, Equatable, Sendable {
+struct AO3Session: Codable, Equatable {
     let username: String
     let cookies: [AO3StoredCookie]
     let savedAt: Date

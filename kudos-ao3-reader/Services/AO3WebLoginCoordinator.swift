@@ -8,7 +8,7 @@ enum AO3WebLoginError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .invalidCredentials(let message), .fallbackRequired(let message):
+        case let .invalidCredentials(message), let .fallbackRequired(message):
             message
         }
     }
@@ -17,7 +17,7 @@ enum AO3WebLoginError: LocalizedError, Equatable {
 /// The small, testable snapshot returned by JavaScript after each AO3 navigation.
 /// A session cookie alone is not proof of authentication because AO3 also gives
 /// logged-out visitors an anonymous `_otwarchive_session` cookie.
-struct AO3LoginPageObservation: Equatable, Sendable {
+struct AO3LoginPageObservation: Equatable {
     let isLoggedIn: Bool
     let username: String?
     let errorMessage: String?
@@ -241,7 +241,7 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
     private func inspectManualPage() {
         Task { [weak self] in
             guard let self else { return }
-            await self.handleFinishedNavigation()
+            await handleFinishedNavigation()
         }
     }
 
@@ -403,25 +403,25 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
 }
 
 extension AO3WebLoginCoordinator: WKNavigationDelegate {
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func webView(_: WKWebView, didFinish _: WKNavigation!) {
         Task { [weak self] in
             guard let self else { return }
-            await self.handleFinishedNavigation()
+            await handleFinishedNavigation()
         }
     }
 
     func webView(
-        _ webView: WKWebView,
-        didFail navigation: WKNavigation!,
-        withError error: Error
+        _: WKWebView,
+        didFail _: WKNavigation!,
+        withError _: Error
     ) {
         handleNavigationFailure()
     }
 
     func webView(
-        _ webView: WKWebView,
-        didFailProvisionalNavigation navigation: WKNavigation!,
-        withError error: Error
+        _: WKWebView,
+        didFailProvisionalNavigation _: WKNavigation!,
+        withError _: Error
     ) {
         handleNavigationFailure()
     }

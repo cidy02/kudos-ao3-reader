@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses an OPF package document: Dublin Core metadata + manifest + spine.
-nonisolated final class OPFParser: NSObject, XMLParserDelegate {
+final nonisolated class OPFParser: NSObject, XMLParserDelegate {
     var title = ""
     var author = ""
     var summary = ""
@@ -15,11 +15,11 @@ nonisolated final class OPFParser: NSObject, XMLParserDelegate {
     var seriesTitle = ""
     var seriesIndex: Int?
     var metaContents: [String] = []
-    var manifest: [String: String] = [:]        // item id -> href
-    var manifestMedia: [String: String] = [:]   // item id -> media-type
-    var manifestProps: [String: String] = [:]   // item id -> properties
-    var spine: [String] = []                     // itemref idref order
-    var tocID: String?                           // <spine toc="..."> (NCX id)
+    var manifest: [String: String] = [:] // item id -> href
+    var manifestMedia: [String: String] = [:] // item id -> media-type
+    var manifestProps: [String: String] = [:] // item id -> properties
+    var spine: [String] = [] // itemref idref order
+    var tocID: String? // <spine toc="..."> (NCX id)
 
     private var currentElement = ""
     private var buffer = ""
@@ -32,10 +32,10 @@ nonisolated final class OPFParser: NSObject, XMLParserDelegate {
     }
 
     func parser(
-        _ parser: XMLParser,
+        _: XMLParser,
         didStartElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?,
+        namespaceURI _: String?,
+        qualifiedName _: String?,
         attributes: [String: String]
     ) {
         let name = elementName.contains(":")
@@ -66,7 +66,7 @@ nonisolated final class OPFParser: NSObject, XMLParserDelegate {
             case "calibre:series": seriesTitle = attributes["content"] ?? ""
             case "calibre:series_index":
                 if let content = attributes["content"], let value = Double(content) {
-                    seriesIndex = Int(value)   // calibre writes "1" or "1.0"
+                    seriesIndex = Int(value) // calibre writes "1" or "1.0"
                 }
             default: break
             }
@@ -75,15 +75,15 @@ nonisolated final class OPFParser: NSObject, XMLParserDelegate {
         }
     }
 
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
+    func parser(_: XMLParser, foundCharacters string: String) {
         buffer += string
     }
 
     func parser(
-        _ parser: XMLParser,
+        _: XMLParser,
         didEndElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?
+        namespaceURI _: String?,
+        qualifiedName _: String?
     ) {
         let name = elementName.contains(":")
             ? String(elementName.split(separator: ":").last!)

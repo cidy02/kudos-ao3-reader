@@ -27,6 +27,7 @@ struct AO3AccountWorksList: View {
             case .collection: "No works in this collection"
             }
         }
+
         var emptyMessage: String {
             switch self {
             case .markedForLater: "Tap “Mark for Later” on a work on AO3 to queue it up here."
@@ -37,6 +38,7 @@ struct AO3AccountWorksList: View {
             case .collection: "This collection has no works yet."
             }
         }
+
         var signedOutTitle: String {
             switch self {
             case .markedForLater: "Marked for Later"
@@ -44,9 +46,10 @@ struct AO3AccountWorksList: View {
             case .history: "AO3 History"
             case .subscriptions: "AO3 Subscriptions"
             case .myWorks: "My Works"
-            case .collection(_, let title): title
+            case let .collection(_, title): title
             }
         }
+
         var signedOutMessage: String {
             switch self {
             case .markedForLater: "Log in to AO3 to see the works you've marked to read later."
@@ -65,9 +68,10 @@ struct AO3AccountWorksList: View {
             case .history: AO3Client.historyURL(username: username, page: page)
             case .subscriptions: AO3Client.subscriptionsURL(username: username, page: page)
             case .myWorks: AO3Client.myWorksURL(username: username, page: page)
-            case .collection(let name, _): AO3Client.collectionWorksURL(name: name, page: page)
+            case let .collection(name, _): AO3Client.collectionWorksURL(name: name, page: page)
             }
         }
+
         func fetch(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
             switch self {
             // Standard work-blurb pages; bookmarks and subscriptions need their own
@@ -102,7 +106,9 @@ struct AO3AccountWorksList: View {
     }
 
     /// The loaded page narrowed by the active refine filters.
-    private var visibleWorks: [AO3WorkSummary] { filters.apply(to: works) }
+    private var visibleWorks: [AO3WorkSummary] {
+        filters.apply(to: works)
+    }
 
     var body: some View {
         Group {
@@ -153,7 +159,7 @@ struct AO3AccountWorksList: View {
                 Text(kind.emptyMessage)
             }
 
-        case .failed(let message):
+        case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't load your list", systemImage: "exclamationmark.triangle")
             } description: {
@@ -191,7 +197,7 @@ struct AO3AccountWorksList: View {
         .overlay {
             if phase == .loading {
                 ProgressView().controlSize(.large)
-            } else if visibleWorks.isEmpty && !works.isEmpty {
+            } else if visibleWorks.isEmpty, !works.isEmpty {
                 // Everything on the page was filtered out by the refine facets.
                 ContentUnavailableView {
                     Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
@@ -205,7 +211,9 @@ struct AO3AccountWorksList: View {
         .refreshable { await load(page: currentPage) }
     }
 
-    private var showPagination: Bool { totalPages > 1 && !works.isEmpty }
+    private var showPagination: Bool {
+        totalPages > 1 && !works.isEmpty
+    }
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
@@ -246,7 +254,7 @@ struct AO3AccountWorksList: View {
         } catch AO3Error.authenticationRequired {
             await auth.sessionDidExpire()
             works = []
-            phase = .idle   // back to the signed-out prompt
+            phase = .idle // back to the signed-out prompt
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {

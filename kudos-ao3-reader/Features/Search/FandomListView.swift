@@ -1,5 +1,5 @@
-import SwiftUI
 import OSLog
+import SwiftUI
 
 /// A dedicated page listing every fandom in a media category (loaded from AO3's
 /// `/media/<name>/fandoms` index), sorted most-popular first with work counts and a
@@ -26,7 +26,7 @@ struct FandomListView: View {
             switch phase {
             case .loading:
                 FandomRowSkeletonList()
-            case .failed(let message):
+            case let .failed(message):
                 ContentUnavailableView {
                     Label("Couldn't load fandoms", systemImage: "wifi.slash")
                 } description: {
@@ -52,10 +52,10 @@ struct FandomListView: View {
         }
         .navigationTitle(category.name)
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
-        .task { if fandoms.isEmpty { await load() } }
+            .hidesFloatingTabBar()
+            .task { if fandoms.isEmpty { await load() } }
     }
 
     private func load() async {

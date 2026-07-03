@@ -1,6 +1,6 @@
 import OSLog
-import SwiftUI
 import SwiftData
+import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -56,8 +56,13 @@ struct ReaderView: View {
     /// Window width at which a two-page spread becomes available.
     private let twoPageThreshold: CGFloat = 820
 
-    private var chapterCount: Int { document?.spineURLs.count ?? 0 }
-    private var isWideEnough: Bool { availableWidth >= twoPageThreshold }
+    private var chapterCount: Int {
+        document?.spineURLs.count ?? 0
+    }
+
+    private var isWideEnough: Bool {
+        availableWidth >= twoPageThreshold
+    }
 
     /// Two-page spread is offered on iPad and macOS, but never on iPhone — its
     /// screen is too narrow for a useful spread. (iPad reports `os(iOS)` too, so this
@@ -75,16 +80,21 @@ struct ReaderView: View {
     }
 
     /// The reader's effective theme — the app theme while the two are linked.
-    private var theme: ReaderTheme { themeManager.readerTheme }
+    private var theme: ReaderTheme {
+        themeManager.readerTheme
+    }
 
     #if os(iOS)
     /// iPhone only (iPad reports `os(iOS)` too): drives the slimmed-down bottom bar.
-    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    private var isPhone: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+    }
     #endif
 
     private var currentFont: ReaderFontOption {
         ReaderFontOption.current(id: fontID, customFonts: customFonts)
     }
+
     /// The current custom typography settings, read live from `@AppStorage`.
     private var textStyle: ReaderTextStyle {
         ReaderTextStyle(
@@ -93,9 +103,15 @@ struct ReaderView: View {
             margin: pageMargin, justify: justifyText
         )
     }
-    private var css: String { ReaderStylesheet.css(theme: theme, font: currentFont, style: textStyle) }
+
+    private var css: String {
+        ReaderStylesheet.css(theme: theme, font: currentFont, style: textStyle)
+    }
+
     /// Horizontal page margin in px, shared by scrolled (CSS) and paged (column) modes.
-    private var resolvedMargin: Int { Int(textStyle.resolved.margin) }
+    private var resolvedMargin: Int {
+        Int(textStyle.resolved.margin)
+    }
 
     /// Applies the current style/layout to the controller, including the device's
     /// fixed safe-area insets so the full-screen reader pads past the notch / home
@@ -162,76 +178,76 @@ struct ReaderView: View {
         .ao3WorkActions(workActions, workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0, auth: auth)
         .navigationTitle(work.title)
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            // One item holding a tight HStack so the icons cluster like the Library
-            // toolbar (separate ToolbarItems get the system's wide spacing).
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 2) {
-                    Button {
-                        router.toggle(.readerChapters)
-                    } label: {
-                        Label("Chapters", systemImage: "list.bullet")
-                    }
-                    Button {
-                        router.toggle(.readerDisplay)
-                    } label: {
-                        Label("Display Options", systemImage: "textformat.size")
-                    }
-                    Menu {
-                        if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
-                            AO3WorkActionsMenu(workID: id, actions: workActions)
+            .toolbar {
+                // One item holding a tight HStack so the icons cluster like the Library
+                // toolbar (separate ToolbarItems get the system's wide spacing).
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 2) {
+                        Button {
+                            router.toggle(.readerChapters)
+                        } label: {
+                            Label("Chapters", systemImage: "list.bullet")
                         }
-                    } label: {
-                        Label("More actions", systemImage: "ellipsis.circle")
+                        Button {
+                            router.toggle(.readerDisplay)
+                        } label: {
+                            Label("Display Options", systemImage: "textformat.size")
+                        }
+                        Menu {
+                            if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
+                                AO3WorkActionsMenu(workID: id, actions: workActions)
+                            }
+                        } label: {
+                            Label("More actions", systemImage: "ellipsis.circle")
+                        }
+                        .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
                     }
-                    .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
+                    .labelStyle(.iconOnly)
                 }
-                .labelStyle(.iconOnly)
             }
-        }
         #if os(iOS)
-        // Chapters / Display open as clean half-height sheets that float over the
-        // text instead of a side inspector that crowds the reading column.
-        .sheet(isPresented: readerInspectorBinding) { readerSheet }
-        // Immersive reading: no tab bar, and the top bar hides while reading and
-        // reappears on tap. The status bar and home indicator follow the chrome.
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
-        .statusBarHidden(!chromeVisible)
-        .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
-        .animation(.easeInOut(duration: 0.25), value: chromeVisible)
-        // The web view swallows the system edge swipe and immersive mode hides the
-        // nav bar, so add our own left-edge swipe-to-go-back.
-        .edgeSwipeToGoBack { dismiss() }
+            // Chapters / Display open as clean half-height sheets that float over the
+            // text instead of a side inspector that crowds the reading column.
+            .sheet(isPresented: readerInspectorBinding) { readerSheet }
+            // Immersive reading: no tab bar, and the top bar hides while reading and
+            // reappears on tap. The status bar and home indicator follow the chrome.
+            .toolbar(.hidden, for: .tabBar)
+            .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
+            .statusBarHidden(!chromeVisible)
+            .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
+            .animation(.easeInOut(duration: 0.25), value: chromeVisible)
+            // The web view swallows the system edge swipe and immersive mode hides the
+            // nav bar, so add our own left-edge swipe-to-go-back.
+            .edgeSwipeToGoBack { dismiss() }
         #else
-        .inspector(isPresented: readerInspectorBinding) {
-            Group {
-                if router.panel == .readerChapters {
-                    chaptersInspector
-                } else {
-                    optionsSidebar
+            .inspector(isPresented: readerInspectorBinding) {
+                Group {
+                    if router.panel == .readerChapters {
+                        chaptersInspector
+                    } else {
+                        optionsSidebar
+                    }
+                }
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            }
+        #endif
+            .task(id: work.id) { await load() }
+            .onAppear(perform: wireController)
+            .onDisappear {
+                WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
+                // Leaving the reader closes its panel so it doesn't linger as state.
+                if router.panel == .readerChapters || router.panel == .readerDisplay {
+                    router.panel = .none
                 }
             }
-            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-        }
-        #endif
-        .task(id: work.id) { await load() }
-        .onAppear(perform: wireController)
-        .onDisappear {
-            WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
-            // Leaving the reader closes its panel so it doesn't linger as state.
-            if router.panel == .readerChapters || router.panel == .readerDisplay {
-                router.panel = .none
+            .onChange(of: currentIndex) { _, _ in
+                if !isLoading { loadCurrentChapter() }
             }
-        }
-        .onChange(of: currentIndex) { _, _ in
-            if !isLoading { loadCurrentChapter() }
-        }
-        .onChange(of: renderToken) { _, _ in
-            configureController()
-        }
+            .onChange(of: renderToken) { _, _ in
+                configureController()
+            }
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -251,11 +267,13 @@ struct ReaderView: View {
     private var prevDisabled: Bool {
         readingMode == .paged ? (currentIndex == 0 && controller.page <= 1) : currentIndex == 0
     }
+
     private var nextDisabled: Bool {
         readingMode == .paged
             ? (currentIndex == chapterCount - 1 && controller.page >= controller.pageTotal)
             : currentIndex == chapterCount - 1
     }
+
     private var positionLabel: String {
         readingMode == .paged
             ? "Ch \(currentIndex + 1)/\(chapterCount) · Pg \(controller.page)/\(controller.pageTotal)"
@@ -348,7 +366,6 @@ struct ReaderView: View {
     /// options so the two panels share one consistent column. The section header
     /// labels the panel without touching the window title (which stays the work
     /// title), mirroring the "Theme"/"Font" headers in the options panel.
-    @ViewBuilder
     private var chapterRows: some View {
         ForEach(document?.chapters ?? []) { chapter in
             let isCurrent = chapter.spineIndex == currentIndex
@@ -408,12 +425,12 @@ struct ReaderView: View {
     private func jump(to index: Int) {
         landNextChapterOnLastPage = false
         if index == currentIndex {
-            loadCurrentChapter()   // same chapter: reset to first page
+            loadCurrentChapter() // same chapter: reset to first page
         } else {
-            currentIndex = index   // triggers load via onChange
+            currentIndex = index // triggers load via onChange
         }
         #if os(iOS)
-        router.panel = .none       // dismiss the chapters sheet after picking
+        router.panel = .none // dismiss the chapters sheet after picking
         #endif
     }
 
@@ -433,7 +450,7 @@ struct ReaderView: View {
                 landNextChapterOnLastPage = false
                 currentIndex += 1
             } else {
-                autoFinishIfComplete()   // paged: past the last page of the last chapter
+                autoFinishIfComplete() // paged: past the last page of the last chapter
             }
         }
         controller.onReachedStart = {
@@ -444,7 +461,7 @@ struct ReaderView: View {
         }
         controller.onReachedScrollBottom = {
             if currentIndex == chapterCount - 1 {
-                autoFinishIfComplete()   // scrolled: bottom of the last chapter
+                autoFinishIfComplete() // scrolled: bottom of the last chapter
             }
         }
         // AO3 links in the EPUB (e.g. the preface's tag links) route to the matching

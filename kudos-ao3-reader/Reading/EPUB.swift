@@ -41,7 +41,7 @@ nonisolated enum EPUBError: LocalizedError {
 // MARK: - EPUB parsing
 
 /// Metadata pulled from an EPUB's OPF package document.
-nonisolated struct EPUBMetadata: Sendable {
+nonisolated struct EPUBMetadata {
     var title: String
     var author: String
     var summary: String
@@ -75,7 +75,7 @@ nonisolated struct EPUBMetadata: Sendable {
     static func canonicalAO3WorkURL(in text: String) -> String? {
         let pattern = #"(?i)(?:https?://)?(?:www\.)?archiveofourown\.org/(?:works|downloads)/([0-9]+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let range = NSRange(text.startIndex ..< text.endIndex, in: text)
         guard let match = regex.firstMatch(in: text, range: range),
               match.numberOfRanges > 1,
               let idRange = Range(match.range(at: 1), in: text)
@@ -92,7 +92,7 @@ nonisolated struct TOCEntry: Identifiable {
 }
 
 /// Lightweight EPUB package inspection that does not extract the archive.
-nonisolated struct EPUBPackageInspection: Sendable {
+nonisolated struct EPUBPackageInspection {
     let metadata: EPUBMetadata
     /// Number of OPF spine items that resolve through the manifest.
     let readableItemCount: Int
@@ -126,7 +126,7 @@ nonisolated struct EPUBDocument {
         }
         guard !spineURLs.isEmpty else { throw EPUBError.noReadableContent }
         self.spineURLs = spineURLs
-        self.metadata = EPUBMetadata(
+        metadata = EPUBMetadata(
             title: parser.title,
             author: parser.author,
             summary: parser.summary,
@@ -139,7 +139,7 @@ nonisolated struct EPUBDocument {
             publishedDate: parser.publishedDate,
             updatedDate: parser.updatedDate
         )
-        self.chapters = EPUBDocument.tableOfContents(parser: parser, opfDir: opfDir, spineCount: spineURLs.count)
+        chapters = EPUBDocument.tableOfContents(parser: parser, opfDir: opfDir, spineCount: spineURLs.count)
     }
 
     /// Builds the chapter list from the EPUB3 nav document or the NCX, falling
@@ -178,7 +178,7 @@ nonisolated struct EPUBDocument {
         }
 
         // Nav parsing can fail silently (bad XHTML, namespace issues); try NCX as fallback.
-        if isNav && pairs.isEmpty {
+        if isNav, pairs.isEmpty {
             let ncxID = parser.tocID
                 ?? parser.manifestMedia.first(where: { $0.value == "application/x-dtbncx+xml" })?.key
             if let ncxID,
@@ -204,7 +204,7 @@ nonisolated struct EPUBDocument {
         }
 
         if chapters.isEmpty {
-            chapters = (0..<spineCount).map { TOCEntry(title: "Section \($0 + 1)", spineIndex: $0) }
+            chapters = (0 ..< spineCount).map { TOCEntry(title: "Section \($0 + 1)", spineIndex: $0) }
         }
         return chapters
     }
@@ -263,10 +263,10 @@ nonisolated struct EPUBDocument {
         final class ContainerDelegate: NSObject, XMLParserDelegate {
             var path: String?
             func parser(
-                _ parser: XMLParser,
+                _: XMLParser,
                 didStartElement elementName: String,
-                namespaceURI: String?,
-                qualifiedName qName: String?,
+                namespaceURI _: String?,
+                qualifiedName _: String?,
                 attributes: [String: String]
             ) {
                 if elementName == "rootfile", path == nil {

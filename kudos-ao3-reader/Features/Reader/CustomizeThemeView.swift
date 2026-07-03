@@ -1,6 +1,6 @@
 #if os(iOS)
-import SwiftUI
 import SwiftData
+import SwiftUI
 import WebKit
 
 /// An Apple Books–style "Customize Theme" sheet (iOS only). A live sample at the
@@ -15,7 +15,9 @@ struct CustomizeThemeView: View {
 
     /// The reader's effective theme (mirrors the app theme while linked). Selecting a
     /// swatch writes through here, so when linked it re-themes the whole app too.
-    private var theme: ReaderTheme { themeManager.readerTheme }
+    private var theme: ReaderTheme {
+        themeManager.readerTheme
+    }
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerCustomize") private var customize = false
@@ -29,7 +31,7 @@ struct CustomizeThemeView: View {
 
     /// Readium accepts only non-negative letter spacing. Keep this branch's iOS
     /// control honest instead of displaying values the navigator must clamp.
-    private let supportedLetterSpacingRange = 0.0...ReaderTextStyle.letterSpacingRange.upperBound
+    private let supportedLetterSpacingRange = 0.0 ... ReaderTextStyle.letterSpacingRange.upperBound
 
     /// The sheet's full height, so the preview can scale to a generous fraction of it.
     @State private var sheetHeight: CGFloat = 0
@@ -37,9 +39,11 @@ struct CustomizeThemeView: View {
     private var fontOptions: [ReaderFontOption] {
         ReaderFontOption.options(customFonts: customFonts)
     }
+
     private var currentFont: ReaderFontOption {
         ReaderFontOption.current(id: fontID, customFonts: customFonts)
     }
+
     private var style: ReaderTextStyle {
         ReaderTextStyle(
             customize: customize, bold: boldText, fontSizePt: fontSizePt,
@@ -47,53 +51,56 @@ struct CustomizeThemeView: View {
             margin: pageMargin, justify: justify
         )
     }
-    private var css: String { ReaderStylesheet.css(theme: theme, font: currentFont, style: style) }
+
+    private var css: String {
+        ReaderStylesheet.css(theme: theme, font: currentFont, style: style)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-              // Group so .appThemedRows() reaches every section's rows — it doesn't
-              // propagate from the Form container, only from a Group/Section/ForEach.
-              Group {
-                Section("Text") {
-                    Picker("Font", selection: $fontID) {
-                        ForEach(fontOptions) { Text($0.name).tag($0.id) }
+                // Group so .appThemedRows() reaches every section's rows — it doesn't
+                // propagate from the Form container, only from a Group/Section/ForEach.
+                Group {
+                    Section("Text") {
+                        Picker("Font", selection: $fontID) {
+                            ForEach(fontOptions) { Text($0.name).tag($0.id) }
+                        }
+                        .pickerStyle(.navigationLink)
+
+                        Toggle("Bold Text", isOn: $boldText)
                     }
-                    .pickerStyle(.navigationLink)
 
-                    Toggle("Bold Text", isOn: $boldText)
-                }
+                    Section {
+                        Toggle("Customize", isOn: $customize.animation(.easeInOut(duration: 0.2)))
 
-                Section {
-                    Toggle("Customize", isOn: $customize.animation(.easeInOut(duration: 0.2)))
-
-                    Group {
-                        sliderRow("Line Spacing", icon: "arrow.up.and.down.text.horizontal",
-                                  value: $lineHeight, range: ReaderTextStyle.lineHeightRange,
-                                  valueLabel: String(format: "%.2f", lineHeight))
-                        sliderRow("Character Spacing", icon: "textformat.abc",
-                                  value: $letterSpacing, range: supportedLetterSpacingRange)
-                        sliderRow("Word Spacing", icon: "line.3.horizontal",
-                                  value: $wordSpacing, range: ReaderTextStyle.wordSpacingRange)
-                        sliderRow("Margins", icon: "rectangle.inset.filled",
-                                  value: $pageMargin, range: ReaderTextStyle.marginRange)
-                        Toggle("Justify Text", isOn: $justify)
+                        Group {
+                            sliderRow("Line Spacing", icon: "arrow.up.and.down.text.horizontal",
+                                      value: $lineHeight, range: ReaderTextStyle.lineHeightRange,
+                                      valueLabel: String(format: "%.2f", lineHeight))
+                            sliderRow("Character Spacing", icon: "textformat.abc",
+                                      value: $letterSpacing, range: supportedLetterSpacingRange)
+                            sliderRow("Word Spacing", icon: "line.3.horizontal",
+                                      value: $wordSpacing, range: ReaderTextStyle.wordSpacingRange)
+                            sliderRow("Margins", icon: "rectangle.inset.filled",
+                                      value: $pageMargin, range: ReaderTextStyle.marginRange)
+                            Toggle("Justify Text", isOn: $justify)
+                        }
+                        .disabled(!customize)
+                    } header: {
+                        Text("Accessibility & Layout")
+                    } footer: {
+                        Text("When Customize is off, the reader uses comfortable defaults. "
+                            + "Bold Text and the font apply either way.")
                     }
-                    .disabled(!customize)
-                } header: {
-                    Text("Accessibility & Layout")
-                } footer: {
-                    Text("When Customize is off, the reader uses comfortable defaults. "
-                         + "Bold Text and the font apply either way.")
-                }
 
-                Section {
-                    Button(role: .destructive, action: reset) {
-                        Label("Reset Theme", systemImage: "arrow.counterclockwise")
+                    Section {
+                        Button(role: .destructive, action: reset) {
+                            Label("Reset Theme", systemImage: "arrow.counterclockwise")
+                        }
                     }
                 }
-              }
-              .appThemedRows()
+                .appThemedRows()
             }
             .safeAreaInset(edge: .top) { previewHeader }
             .appThemedScroll()
@@ -233,7 +240,9 @@ struct CustomizeThemeView: View {
 private struct ThemePreview: UIViewRepresentable {
     let css: String
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let web = WKWebView()
@@ -255,7 +264,7 @@ private struct ThemePreview: UIViewRepresentable {
         var pendingCSS: String?
         private var loaded = false
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
             loaded = true
             if let css = pendingCSS { inject(css, into: webView) }
         }

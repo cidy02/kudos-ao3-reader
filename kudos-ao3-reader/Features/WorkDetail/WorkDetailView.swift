@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import OSLog
+import SwiftData
+import SwiftUI
 
 // Existing canonical detail screen is large; lint cleanup avoids behavior refactors.
 // swiftlint:disable file_length
@@ -24,8 +24,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     let source: Source
 
-    init(work: SavedWork) { self.source = .saved(work) }
-    init(remote: AO3WorkSummary) { self.source = .remote(remote) }
+    init(work: SavedWork) {
+        source = .saved(work)
+    }
+
+    init(remote: AO3WorkSummary) {
+        source = .remote(remote)
+    }
 
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -42,9 +47,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @State private var newTagName = ""
     @State private var showingAddToCollection = false
-    @State private var working = false          // a download / import is in flight
+    @State private var working = false // a download / import is in flight
     @State private var loadError: String?
-    @State private var readerWork: SavedWork?    // non-nil → push the reader
+    @State private var readerWork: SavedWork? // non-nil → push the reader
     @State private var queuingSeries = false
     @State private var showingAddToQueue = false
     @State private var showingSeriesQueuePrompt = false
@@ -64,31 +69,33 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     /// The original remote summary, when this detail was opened from an AO3 listing.
     private var sourceRemote: AO3WorkSummary? {
-        if case .remote(let summary) = source { return summary }
+        if case let .remote(summary) = source { return summary }
         return nil
     }
 
     /// The currently displayed remote summary. Pull-to-refresh can replace this
     /// value in memory without importing/saving a browsed work.
-    private var remote: AO3WorkSummary? { refreshedRemote ?? sourceRemote }
+    private var remote: AO3WorkSummary? {
+        refreshedRemote ?? sourceRemote
+    }
 
     var body: some View {
         Form {
-          // Group so .appThemedRows() reaches every section's rows (it doesn't
-          // propagate from the Form container, only from a Group/Section/ForEach).
-          Group {
-            overviewSection
-            actionsSection
-            if !displaySummary.isEmpty {
-                Section("Summary") { Text(displaySummary) }
+            // Group so .appThemedRows() reaches every section's rows (it doesn't
+            // propagate from the Form container, only from a Group/Section/ForEach).
+            Group {
+                overviewSection
+                actionsSection
+                if !displaySummary.isEmpty {
+                    Section("Summary") { Text(displaySummary) }
+                }
+                detailsSection
+                tagDiscoverySections
+                statsSection
+                seriesSection
+                myTagsSection
             }
-            detailsSection
-            tagDiscoverySections
-            statsSection
-            seriesSection
-            myTagsSection
-          }
-          .appThemedRows()
+            .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
@@ -134,16 +141,15 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         .navigationTitle(displayTitle)
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
-        .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
-        .toolbar { detailToolbar }
+            .hidesFloatingTabBar()
+            .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
+            .toolbar { detailToolbar }
     }
 
     // MARK: - Overview
 
-    @ViewBuilder
     private var overviewSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
@@ -192,7 +198,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     // MARK: - Actions section
 
-    @ViewBuilder
     private var actionsSection: some View {
         Section {
             Button(action: read) {
@@ -309,7 +314,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if working { return "Downloading…" }
         return (localWork?.hasEPUB ?? false) ? "Read" : "Download & Read"
     }
-    private var readIcon: String { (localWork?.hasEPUB ?? false) ? "book" : "arrow.down.circle" }
+
+    private var readIcon: String {
+        (localWork?.hasEPUB ?? false) ? "book" : "arrow.down.circle"
+    }
 
     private var collectionLabel: String {
         let count = localWork?.collections.count ?? 0
@@ -351,7 +359,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             return "In a Reading Queue — its EPUB is protected while queued."
         }
         if work.isSaved { return "Saved — kept on this device." }
-        if work.ao3WorkID == nil && WorkTags.ao3WorkID(from: work.sourceURL) == nil {
+        if work.ao3WorkID == nil, WorkTags.ao3WorkID(from: work.sourceURL) == nil {
             return "Imported EPUB — kept on this device for offline reading."
         }
         if !work.hasEPUB {
@@ -394,7 +402,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     // MARK: - Details
 
-    @ViewBuilder
     private var detailsSection: some View {
         Section("Details") {
             if !displayAuthor.isEmpty { LabeledContent("Author", value: displayAuthor) }
@@ -422,48 +429,70 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    private var displayTitle: String { localWork?.title ?? remote?.title ?? "Untitled" }
+    private var displayTitle: String {
+        localWork?.title ?? remote?.title ?? "Untitled"
+    }
+
     private var displayAuthor: String {
         if let author = localWork?.author, !author.isEmpty { return author }
         return remote?.authorText ?? ""
     }
+
     private var displaySummary: String {
         if let summary = localWork?.summary, !summary.isEmpty { return summary.strippingHTML() }
         return remote?.summary ?? ""
     }
-    private var displayRating: String { firstNonEmpty(localWork?.rating, remote?.rating) }
-    private var displayLanguage: String { firstNonEmpty(localWork?.language, remote?.language) }
-    private var displayPublishedDate: String { localWork?.datePublished ?? "" }
-    private var displayUpdatedDate: String { firstNonEmpty(localWork?.dateUpdated, remote?.dateUpdated) }
 
-    // Warnings / categories / status / stats: prefer the local record's stored values
-    // (canonical once refreshed), falling back to the remote summary while unsaved.
+    private var displayRating: String {
+        firstNonEmpty(localWork?.rating, remote?.rating)
+    }
+
+    private var displayLanguage: String {
+        firstNonEmpty(localWork?.language, remote?.language)
+    }
+
+    private var displayPublishedDate: String {
+        localWork?.datePublished ?? ""
+    }
+
+    private var displayUpdatedDate: String {
+        firstNonEmpty(localWork?.dateUpdated, remote?.dateUpdated)
+    }
+
+    /// Warnings / categories / status / stats: prefer the local record's stored values
+    /// (canonical once refreshed), falling back to the remote summary while unsaved.
     private var displayWarnings: [String] {
         if let warnings = localWork?.workWarnings, !warnings.isEmpty { return warnings }
         return remote?.warnings ?? []
     }
+
     private var displayCategories: [String] {
         if let categories = localWork?.workCategories, !categories.isEmpty { return categories }
         return remote?.categories ?? []
     }
-    // Categorized tag chips: prefer the local record's per-type lists (once the AO3
-    // refresh has run), else the remote summary's (the blurb is grouped too).
+
+    /// Categorized tag chips: prefer the local record's per-type lists (once the AO3
+    /// refresh has run), else the remote summary's (the blurb is grouped too).
     private var displayFandoms: [String] {
         if let fandoms = localWork?.workFandoms, !fandoms.isEmpty { return fandoms }
         return remote?.fandoms ?? []
     }
+
     private var displayRelationships: [String] {
         if let relationships = localWork?.workRelationships, !relationships.isEmpty { return relationships }
         return remote?.relationships ?? []
     }
+
     private var displayCharacters: [String] {
         if let characters = localWork?.workCharacters, !characters.isEmpty { return characters }
         return remote?.characters ?? []
     }
+
     private var displayFreeforms: [String] {
         if let freeforms = localWork?.workFreeforms, !freeforms.isEmpty { return freeforms }
         return remote?.tags ?? []
     }
+
     private var displayStatus: String? {
         // A local work's completion flag is only meaningful for AO3-sourced imports
         // (a plain EPUB import has no status), so don't assert WIP for those.
@@ -474,23 +503,30 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if let complete = remote?.isComplete { return complete ? "Complete" : "Work in Progress" }
         return nil
     }
+
     private var displayKudos: Int? {
         if let kudos = localWork?.kudos, kudos > 0 { return kudos }
         return remote?.kudos
     }
+
     private var displayComments: Int? {
         if let comments = localWork?.comments, comments > 0 { return comments }
         return remote?.comments
     }
+
     private var displayHits: Int? {
         if let hits = localWork?.hits, hits > 0 { return hits }
         return remote?.hits
     }
+
     private var displayWords: Int? {
         if let count = localWork?.wordCount, count > 0 { return count }
         return remote?.words
     }
-    private var displayChapters: String { firstNonEmpty(localWork?.chapters, remote?.chapters) }
+
+    private var displayChapters: String {
+        firstNonEmpty(localWork?.chapters, remote?.chapters)
+    }
 
     private func firstNonEmpty(_ first: String?, _ second: String?) -> String {
         if let first, !first.isEmpty { return first }
@@ -582,7 +618,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if let title = localWork?.seriesTitle, !title.isEmpty { return title }
         return remote?.seriesTitle ?? ""
     }
-    private var displaySeriesPosition: Int { localWork?.seriesPosition ?? remote?.seriesPosition ?? 0 }
+
+    private var displaySeriesPosition: Int {
+        localWork?.seriesPosition ?? remote?.seriesPosition ?? 0
+    }
+
     private var displaySeriesURL: String {
         if let url = localWork?.seriesURL, !url.isEmpty { return url }
         return remote?.seriesURL ?? ""
@@ -640,7 +680,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             } header: {
                 Text("Series")
             } footer: {
-                if localWork != nil && seriesWorks.isEmpty {
+                if localWork != nil, seriesWorks.isEmpty {
                     Text("Other works in this series will appear here once you download them.")
                 }
             }
@@ -664,7 +704,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         return result
     }
 
-    @ViewBuilder
     private var myTagsSection: some View {
         Section("My Tags") {
             let myTags = localWork?.tags ?? []
@@ -718,9 +757,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         guard !resolvedExisting else { return }
         resolvedExisting = true
         switch source {
-        case .saved(let work):
+        case let .saved(work):
             localWork = work
-        case .remote(let summary):
+        case let .remote(summary):
             localWork = existingWork(forSource: summary.workURL, in: context)
         }
     }
@@ -899,9 +938,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         queueNotice = "Preserving series…"
         seriesPreservationProgress = nil
         seriesPreservationTask = Task { @MainActor in
-            let result: ReadingQueueService.SeriesPreservationResult
-            if let summaries {
-                result = await ReadingQueueService.preserveSeries(
+            let result: ReadingQueueService.SeriesPreservationResult = if let summaries {
+                await ReadingQueueService.preserveSeries(
                     summaries,
                     in: context,
                     progress: {
@@ -910,7 +948,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     }
                 )
             } else {
-                result = await ReadingQueueService.preserveSeries(
+                await ReadingQueueService.preserveSeries(
                     anchoredAt: work,
                     in: context,
                     progress: {
@@ -1082,7 +1120,7 @@ private struct SeriesPreservationPromptSheet: View {
                 Section {
                     Toggle(prompt.autoPreserveLabel, isOn: $autoPreserveSmallSeries)
                     Text("Automatic preservation only runs when the first AO3 series page proves the whole "
-                         + "series is within your \(threshold)-work limit.")
+                        + "series is within your \(threshold)-work limit.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -1106,16 +1144,16 @@ private struct SeriesPreservationPromptSheet: View {
             .formStyle(.grouped)
             .navigationTitle("Preserve Series?")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                        onOnlyThisWork()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            dismiss()
+                            onOnlyThisWork()
+                        }
                     }
                 }
-            }
         }
         .presentationDragIndicator(.visible)
     }

@@ -1,10 +1,10 @@
 import OSLog
-import SwiftUI
 import SwiftData
+import SwiftUI
 #if os(iOS)
-import UIKit
-import ReadiumShared
 import ReadiumNavigator
+import ReadiumShared
+import UIKit
 #endif
 
 /// Platform router for the book reader. iOS/iPadOS use the new Readium navigator;
@@ -95,14 +95,13 @@ enum ReadiumReaderStyleMapper {
             guard let family = fontFamily(for: option) else { return nil }
             let stack = fontStack(in: option.cssFamily)
             let alternates = stack.filter { $0 != family }
-            let faces: [CSSFontFace]
-            if let file = option.customFileURL?.fileURL {
+            let faces: [CSSFontFace] = if let file = option.customFileURL?.fileURL {
                 // Readium serves imported files through a separate custom-scheme
                 // host. Preloading that URL trips WebKit's cross-origin check;
                 // allowing the @font-face rule to request it normally works.
-                faces = [CSSFontFace(file: file)]
+                [CSSFontFace(file: file)]
             } else {
-                faces = []
+                []
             }
             return CSSFontFamilyDeclaration(
                 fontFamily: family,
@@ -152,7 +151,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var onOpenExternalURL: ((URL) -> Void)?
 
     /// Fraction through the whole publication (0...1), when known.
-    var totalProgression: Double? { currentLocator?.locations.totalProgression }
+    var totalProgression: Double? {
+        currentLocator?.locations.totalProgression
+    }
 
     /// A compact reading position for the progress pill: overall percent plus the
     /// current chapter and the page within it. Pages are Readium "positions"
@@ -208,10 +209,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 config: config
             )
             navigator.delegate = self
-            let tocLinks = (try? await publication.tableOfContents().get()) ?? []
+            let tocLinks = await (try? publication.tableOfContents().get()) ?? []
             self.navigator = navigator
             toc = tocLinks.isEmpty ? publication.readingOrder : tocLinks
-            positionsByReadingOrder = (try? await publication.positionsByReadingOrder().get()) ?? []
+            positionsByReadingOrder = await (try? publication.positionsByReadingOrder().get()) ?? []
             phase = .ready
             Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
         } catch {
@@ -220,33 +221,44 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
     }
 
-    func submit(_ preferences: EPUBPreferences) { navigator?.submitPreferences(preferences) }
-    func goForward() { Task { @MainActor in await navigator?.goForward() } }
-    func goBackward() { Task { @MainActor in await navigator?.goBackward() } }
-    func go(to link: ReadiumShared.Link) { Task { @MainActor in await navigator?.go(to: link) } }
+    func submit(_ preferences: EPUBPreferences) {
+        navigator?.submitPreferences(preferences)
+    }
+
+    func goForward() {
+        Task { @MainActor in await navigator?.goForward() }
+    }
+
+    func goBackward() {
+        Task { @MainActor in await navigator?.goBackward() }
+    }
+
+    func go(to link: ReadiumShared.Link) {
+        Task { @MainActor in await navigator?.go(to: link) }
+    }
 
     // MARK: EPUBNavigatorDelegate
 
-    func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+    func navigator(_: Navigator, locationDidChange locator: Locator) {
         currentLocator = locator
         onLocatorChange?(locator)
     }
 
-    // The only delegate method without a default implementation.
-    func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
+    /// The only delegate method without a default implementation.
+    func navigator(_: Navigator, presentError error: NavigatorError) {
         phase = .failed(error.localizedDescription)
     }
 
     /// Readium's default implementation opens every external URL in the system
     /// browser. Keep HTTP(S) links inside Kudos, matching the legacy reader, while
     /// preserving the system behavior for schemes such as `mailto:`.
-    func navigator(_ navigator: Navigator, presentExternalURL url: URL) {
+    func navigator(_: Navigator, presentExternalURL url: URL) {
         if !routeWebURLToBrowse(url) {
             UIApplication.shared.open(url)
         }
     }
 
-    func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
+    func navigator(_: VisualNavigator, didTapAt _: CGPoint) {
         chromeHidden.toggle()
     }
 
@@ -280,7 +292,9 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
     let onDismissDragChanged: (CGFloat) -> Void
     let onDismissDragEnded: (Bool) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIViewController(context: Context) -> EPUBNavigatorViewController {
         context.coordinator.update(readingMode: readingMode,
@@ -384,9 +398,11 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
         }
 
         func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
-        ) -> Bool { true }
+            _: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
 
         private func rubberBandedDistance(_ distance: CGFloat) -> CGFloat {
             guard distance > 150 else { return distance }
@@ -448,7 +464,9 @@ struct ReadiumReaderView: View {
     @State private var dismissDragOffset: CGFloat = 0
     @State private var isDismissingByDrag = false
 
-    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    private var isPhone: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+    }
 
     /// The effective typography (layout options collapse to defaults when Customize
     /// is off; font weight + size always apply) — same rule as the legacy reader.
@@ -461,10 +479,14 @@ struct ReadiumReaderView: View {
     }
 
     /// Reader chrome (bars) visibility — driven by tapping the page.
-    private var chromeVisible: Bool { !book.chromeHidden }
+    private var chromeVisible: Bool {
+        !book.chromeHidden
+    }
 
     /// The reader's effective theme (app theme while linked).
-    private var readerTheme: ReaderTheme { themeManager.readerTheme }
+    private var readerTheme: ReaderTheme {
+        themeManager.readerTheme
+    }
 
     private var preferences: EPUBPreferences {
         ReadiumReaderStyleMapper.preferences(
@@ -590,7 +612,7 @@ struct ReadiumReaderView: View {
                     onDismissDragChanged: handleDismissDragChanged,
                     onDismissDragEnded: handleDismissDragEnded
                 )
-                    .ignoresSafeArea()
+                .ignoresSafeArea()
             }
         }
     }
@@ -676,13 +698,12 @@ struct ReadiumReaderView: View {
 
     private var progressPill: some View {
         // Just the essentials: overall percent, chapter, and page within the chapter.
-        let label: String
-        if let pos = book.readingPosition {
-            label = "\(pos.percent)%  ·  Ch. \(pos.chapter)/\(pos.chapterCount)  ·  Pg. \(pos.page)/\(pos.pageCount)"
+        let label = if let pos = book.readingPosition {
+            "\(pos.percent)%  ·  Ch. \(pos.chapter)/\(pos.chapterCount)  ·  Pg. \(pos.page)/\(pos.pageCount)"
         } else if let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) {
-            label = "\(percent)%"
+            "\(percent)%"
         } else {
-            label = ""
+            ""
         }
         return Text(label)
             .font(.footnote.weight(.medium))
@@ -718,7 +739,6 @@ struct ReadiumReaderView: View {
         .preferredColorScheme(readerTheme.colorScheme)
     }
 
-    @ViewBuilder
     private var chapterRows: some View {
         ForEach(Array(book.toc.enumerated()), id: \.offset) { _, link in
             Button {
@@ -742,7 +762,7 @@ struct ReadiumReaderView: View {
         let router = router
         book.onLocatorChange = { locator in
             work.readiumLocator = locator.persistenceString ?? work.readiumLocator
-            work.lastReadDate = Date()   // drives the Library's Continue Reading shelf
+            work.lastReadDate = Date() // drives the Library's Continue Reading shelf
             // Finish a completed work once the user reaches the end (WIPs are manual).
             if let progress = locator.locations.totalProgression, progress >= 0.99,
                work.isComplete, !work.isFinished {

@@ -14,10 +14,14 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     case collections
     case downloaded
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     /// Collections has no backing model yet — it always shows its placeholder state.
-    var isPlaceholder: Bool { self == .collections }
+    var isPlaceholder: Bool {
+        self == .collections
+    }
 
     var title: String {
         switch self {
@@ -62,29 +66,31 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         switch self {
         case .readingNow:
             // In-progress (started, not finished, file present) — most recently read first.
-            return works
+            works
                 .filter { $0.isInProgress && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .savedForLater:
             // Native Saved for Later queue members plus legacy "saved" works that
             // predate queues. Queue-only works intentionally live here, not in the
             // normal downloaded/finished shelves.
-            return works
+            works
                 .filter { ($0.isInSavedForLaterQueue || ($0.isSaved && !$0.isQueuedForLater)) && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .finished:
-            return works
+            works
                 .filter { $0.isFinished && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { ($0.lastReadDate ?? .distantPast) > ($1.lastReadDate ?? .distantPast) }
         case .collections:
-            return []
+            []
         case .downloaded:
             // Everything with its EPUB on disk — the full offline shelf, newest first.
-            return works
+            works
                 .filter { $0.hasEPUB && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { $0.dateAdded > $1.dateAdded }
         }
     }
 
-    private func recency(_ work: SavedWork) -> Date { work.lastReadDate ?? work.dateAdded }
+    private func recency(_ work: SavedWork) -> Date {
+        work.lastReadDate ?? work.dateAdded
+    }
 }

@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import OSLog
+import SwiftData
+import SwiftUI
 
 /// Fills the Search tab's idle state with a live browse of AO3's media categories
 /// (scraped from `/media`). On iOS, tapping a category pushes a dedicated fandom
@@ -32,7 +32,7 @@ struct MediaBrowserView: View {
             switch phase {
             case .loading:
                 CategoryCardSkeletonList()
-            case .failed(let message):
+            case let .failed(message):
                 ContentUnavailableView {
                     Label("Couldn't load fandoms", systemImage: "wifi.slash")
                 } description: {
@@ -77,7 +77,7 @@ struct MediaBrowserView: View {
                     .onAppear { visibleCategoryIDs.insert(category.id) }
                     .onDisappear { visibleCategoryIDs.remove(category.id) }
                 }
-                .cardRow()   // cards only on the category rows
+                .cardRow() // cards only on the category rows
             } header: {
                 Text("Browse by fandom")
             }
@@ -115,11 +115,11 @@ struct MediaBrowserView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Image(systemName: category.symbol)
-                    .font(.headline)              // icon stays emphasized
+                    .font(.headline) // icon stays emphasized
                     .foregroundStyle(.tint)
                     .frame(width: 24)
                 Text(category.name)
-                    .font(.headline.weight(.regular))   // regular weight (was bold)
+                    .font(.headline.weight(.regular)) // regular weight (was bold)
                     .foregroundStyle(.primary)
             }
 
@@ -134,7 +134,6 @@ struct MediaBrowserView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
     private func statsLine(_ stats: CategoryStats) -> some View {
         FlowLayout(spacing: 16, rowSpacing: 4) {
             if let count = stats.fandomCount {
@@ -211,7 +210,7 @@ struct MediaBrowserView: View {
 
         var recent: [String] = []
         var seen = Set<String>()
-        for work in library.filter({ $0.hasBeenRead }).sorted(by: { $0.dateAdded > $1.dateAdded }) {
+        for work in library.filter(\.hasBeenRead).sorted(by: { $0.dateAdded > $1.dateAdded }) {
             for fandom in work.workFandoms where nameSet.contains(fandom.lowercased()) {
                 if seen.insert(fandom.lowercased()).inserted { recent.append(fandom) }
             }

@@ -13,8 +13,13 @@ struct TagSelectField: View {
 
     @State private var showPicker = false
 
-    private var includedTags: [String] { Self.tags(in: included) }
-    private var excludedTags: [String] { Self.tags(in: excluded) }
+    private var includedTags: [String] {
+        Self.tags(in: included)
+    }
+
+    private var excludedTags: [String] {
+        Self.tags(in: excluded)
+    }
 
     private var selectionSummary: String {
         let includeCount = includedTags.count
@@ -131,75 +136,83 @@ struct TagPickerView: View {
     @State private var popular: [String] = []
     @State private var loadingPopular = false
 
-    private var hasFandomContext: Bool { kind != .fandom && !fandomContext.isEmpty }
-    private var isSearchEmpty: Bool { query.trimmingCharacters(in: .whitespaces).isEmpty }
-    private var selectedTags: [String] { Array(included.union(excluded)).sorted() }
+    private var hasFandomContext: Bool {
+        kind != .fandom && !fandomContext.isEmpty
+    }
+
+    private var isSearchEmpty: Bool {
+        query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var selectedTags: [String] {
+        Array(included.union(excluded)).sorted()
+    }
 
     var body: some View {
         NavigationStack {
             List {
-              // Group so .appThemedRows() reaches every section's rows (it doesn't
-              // propagate from the List container, only from a Group/Section/ForEach).
-              Group {
-                if !selectedTags.isEmpty {
-                    Section("Selected") {
-                        FlowLayout(spacing: 6, rowSpacing: 6) {
-                            ForEach(selectedTags, id: \.self) { tag in
-                                FilterTagChip(tag: tag, state: state(of: tag)) {
-                                    cycle(tag)
+                // Group so .appThemedRows() reaches every section's rows (it doesn't
+                // propagate from the List container, only from a Group/Section/ForEach).
+                Group {
+                    if !selectedTags.isEmpty {
+                        Section("Selected") {
+                            FlowLayout(spacing: 6, rowSpacing: 6) {
+                                ForEach(selectedTags, id: \.self) { tag in
+                                    FilterTagChip(tag: tag, state: state(of: tag)) {
+                                        cycle(tag)
+                                    }
                                 }
                             }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
                     }
-                }
 
-                if isSearchEmpty && hasFandomContext {
-                    Section("Popular in \(fandomContext[0])") {
-                        if loadingPopular {
-                            loadingRow("Loading…")
-                        } else if popular.isEmpty {
-                            searchPrompt
-                        } else {
-                            tagRows(popular)
+                    if isSearchEmpty, hasFandomContext {
+                        Section("Popular in \(fandomContext[0])") {
+                            if loadingPopular {
+                                loadingRow("Loading…")
+                            } else if popular.isEmpty {
+                                searchPrompt
+                            } else {
+                                tagRows(popular)
+                            }
                         }
-                    }
-                } else {
-                    Section("Results") {
-                        if isSearching {
-                            loadingRow("Searching…")
-                        } else if isSearchEmpty {
-                            searchPrompt
-                        } else if results.isEmpty {
-                            Text("No tags found for “\(query)”.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            tagRows(results)
+                    } else {
+                        Section("Results") {
+                            if isSearching {
+                                loadingRow("Searching…")
+                            } else if isSearchEmpty {
+                                searchPrompt
+                            } else if results.isEmpty {
+                                Text("No tags found for “\(query)”.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                tagRows(results)
+                            }
                         }
                     }
                 }
-              }
-              .appThemedRows()
+                .appThemedRows()
             }
             .appThemedScroll()
             .navigationTitle(title)
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $query,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search \(title)"
-            )
+                .navigationBarTitleDisplayMode(.inline)
+                .searchable(
+                    text: $query,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search \(title)"
+                )
             #else
-            .searchable(text: $query, prompt: "Search \(title)")
+                .searchable(text: $query, prompt: "Search \(title)")
             #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
                 }
-            }
-            .task { await loadPopular() }
-            .task(id: query) { await runSearch() }
+                .task { await loadPopular() }
+                .task(id: query) { await runSearch() }
         }
         #if os(iOS)
         .presentationDetents([.large])
@@ -214,7 +227,7 @@ struct TagPickerView: View {
 
     /// Placeholder tag rows shown while suggestions are being fetched — the shape of
     /// the rows that will replace them, instead of an inline spinner.
-    private func loadingRow(_ text: String) -> some View {
+    private func loadingRow(_: String) -> some View {
         ForEach([220.0, 160.0, 190.0, 130.0], id: \.self) { width in
             SkeletonTextLine(height: 15, width: width)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -223,7 +236,6 @@ struct TagPickerView: View {
         }
     }
 
-    @ViewBuilder
     private func tagRows(_ tags: [String]) -> some View {
         ForEach(tags, id: \.self) { tag in
             Button {
@@ -283,7 +295,7 @@ struct TagPickerView: View {
     private func loadPopular() async {
         guard popular.isEmpty, hasFandomContext, let fandom = fandomContext.first else { return }
         loadingPopular = true
-        popular = (try? await AO3Client.shared.popularTags(forFandom: fandom, kind: kind)) ?? []
+        popular = await (try? AO3Client.shared.popularTags(forFandom: fandom, kind: kind)) ?? []
         loadingPopular = false
     }
 
@@ -311,8 +323,14 @@ private struct FilterTagChip: View {
     let state: FilterSelectionState
     let onCycle: () -> Void
 
-    private var color: Color { state == .excluded ? .red : .accentColor }
-    private var symbol: String { state == .excluded ? "minus.circle.fill" : "plus.circle.fill" }
+    private var color: Color {
+        state == .excluded ? .red : .accentColor
+    }
+
+    private var symbol: String {
+        state == .excluded ? "minus.circle.fill" : "plus.circle.fill"
+    }
+
     private var nextStateLabel: String {
         switch state.next {
         case .included: "Include"

@@ -11,9 +11,9 @@ import SwiftData
     var filters: AO3SearchFilters = AO3SearchFilters()
 
     init(name: String, filters: AO3SearchFilters) {
-        self.id = UUID()
+        id = UUID()
         self.name = name
         self.filters = filters
-        self.dateAdded = Date()
+        dateAdded = Date()
     }
 }

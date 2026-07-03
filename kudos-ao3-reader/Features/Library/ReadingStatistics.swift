@@ -8,7 +8,9 @@ struct ReadingStatistics {
         let name: String
         let count: Int
 
-        var id: String { name }
+        var id: String {
+            name
+        }
     }
 
     let totalWorks: Int

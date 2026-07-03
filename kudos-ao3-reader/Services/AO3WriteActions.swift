@@ -20,14 +20,14 @@ extension AO3AuthService {
         let body = Self.formEncoded([
             ("authenticity_token", token),
             ("kudo[commentable_id]", String(workID)),
-            ("kudo[commentable_type]", "Work"),
+            ("kudo[commentable_type]", "Work")
         ])
         let request = try writeRequest(
             to: Self.kudosEndpoint, body: body, csrf: token, referer: workURL, ajax: true
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
         switch status {
-        case 200...299:
+        case 200 ... 299:
             return "Kudos left."
         case 422 where responseBody.localizedCaseInsensitiveContains("already left kudos"):
             return "You've already left kudos here."
@@ -55,7 +55,7 @@ extension AO3AuthService {
 
         var params: [(String, String)] = [
             ("authenticity_token", token),
-            ("comment[comment_content]", text),
+            ("comment[comment_content]", text)
         ]
         if let pseud = AO3Client.parseDefaultPseudID(from: html) {
             params.append(("comment[pseud_id]", pseud))
@@ -67,7 +67,7 @@ extension AO3AuthService {
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
         // Success is a 2xx/3xx with no re-rendered error list (AO3 re-renders the form
         // with an error list when a comment is rejected).
-        if (200...399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
             return "Comment posted."
         }
         throw AO3WriteError.rejected(
@@ -91,7 +91,7 @@ extension AO3AuthService {
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
             let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
             let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-            if (200...399).contains(status) { return "Unsubscribed." }
+            if (200 ... 399).contains(status) { return "Unsubscribed." }
             throw AO3WriteError.rejected(
                 AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unsubscribe."
             )
@@ -100,7 +100,7 @@ extension AO3AuthService {
         let body = Self.formEncoded([
             ("authenticity_token", token),
             ("subscription[subscribable_id]", String(workID)),
-            ("subscription[subscribable_type]", "Work"),
+            ("subscription[subscribable_type]", "Work")
         ])
         let request = try writeRequest(
             to: Self.subscriptionsEndpoint(username: username),
@@ -110,7 +110,7 @@ extension AO3AuthService {
         if responseBody.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
-        if (200...399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
             return "Subscribed."
         }
         throw AO3WriteError.rejected(
@@ -129,7 +129,7 @@ extension AO3AuthService {
             body: body, csrf: token, referer: workURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200...399).contains(status) { return "Marked for later." }
+        if (200 ... 399).contains(status) { return "Marked for later." }
         throw AO3WriteError.rejected(
             AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't mark for later."
         )
@@ -138,7 +138,7 @@ extension AO3AuthService {
     /// The fields of a new AO3 bookmark.
     struct BookmarkInput: Equatable {
         var notes = ""
-        var tags = ""        // comma-separated
+        var tags = "" // comma-separated
         var isPrivate = false
         var isRec = false
     }
@@ -157,7 +157,7 @@ extension AO3AuthService {
             ("bookmark[tag_string]", input.tags),
             ("bookmark[collection_names]", ""),
             ("bookmark[private]", input.isPrivate ? "1" : "0"),
-            ("bookmark[rec]", input.isRec ? "1" : "0"),
+            ("bookmark[rec]", input.isRec ? "1" : "0")
         ]
         if let pseud = AO3Client.parseDefaultPseudID(from: html, field: "bookmark[pseud_id]") {
             params.append(("bookmark[pseud_id]", pseud))
@@ -167,7 +167,7 @@ extension AO3AuthService {
             body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200...399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
             return "Bookmarked."
         }
         throw AO3WriteError.rejected(
@@ -210,16 +210,20 @@ extension AO3AuthService {
     static func workURL(_ workID: Int) -> URL {
         URL(string: "https://archiveofourown.org/works/\(workID)")!
     }
+
     static let kudosEndpoint = URL(string: "https://archiveofourown.org/kudos.js")!
     static func commentsEndpoint(workID: Int) -> URL {
         URL(string: "https://archiveofourown.org/works/\(workID)/comments")!
     }
+
     static func subscriptionsEndpoint(username: String) -> URL {
         URL(string: "https://archiveofourown.org/users/\(username)/subscriptions")!
     }
+
     static func markForLaterEndpoint(workID: Int) -> URL {
         URL(string: "https://archiveofourown.org/works/\(workID)/mark_for_later")!
     }
+
     static func bookmarksEndpoint(workID: Int) -> URL {
         URL(string: "https://archiveofourown.org/works/\(workID)/bookmarks")!
     }
@@ -257,7 +261,7 @@ enum AO3WriteError: LocalizedError, Equatable {
         case .notSignedIn: "Log in to AO3 first."
         case .noCSRFToken: "Couldn't prepare the request. Try again, or open the work on AO3."
         case .emptyComment: "Write a comment first."
-        case .rejected(let reason): reason
+        case let .rejected(reason): reason
         }
     }
 }

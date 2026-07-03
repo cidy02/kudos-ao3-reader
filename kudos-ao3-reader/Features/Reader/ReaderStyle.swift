@@ -1,10 +1,12 @@
-import SwiftUI
 import Foundation
+import SwiftUI
 
 /// How the reader lays out a chapter.
 enum ReadingMode: String, CaseIterable, Identifiable {
     case scroll, paged
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -24,7 +26,9 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 /// A reading color theme applied to the EPUB content.
 enum ReaderTheme: String, CaseIterable, Identifiable {
     case light, sepia, dark
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -98,9 +102,9 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
 
     // MARK: App-wide surface colours (Sepia only)
 
-    /// Warm surfaces used to theme the whole app for Sepia. Light and Dark return
-    /// `nil` so they keep the native system surfaces (which already look right);
-    /// only Sepia substitutes its own colours, since the system has no sepia scheme.
+    // Warm surfaces used to theme the whole app for Sepia. Light and Dark return
+    // `nil` so they keep the native system surfaces (which already look right);
+    // only Sepia substitutes its own colours, since the system has no sepia scheme.
 
     /// The recessed base behind grouped content (≈ `systemGroupedBackground`).
     var appBaseBackground: Color? {
@@ -132,7 +136,9 @@ struct ReaderFontOption: Identifiable {
     /// For imported fonts, the on-disk file to embed via `@font-face`.
     let customFileURL: URL?
 
-    var isCustom: Bool { customFileURL != nil }
+    var isCustom: Bool {
+        customFileURL != nil
+    }
 
     /// Built-in families available on Apple platforms.
     static let builtIns: [ReaderFontOption] = [
@@ -163,7 +169,7 @@ struct ReaderFontOption: Identifiable {
             customFileURL: nil
         ),
         .init(id: "avenir", name: "Avenir", cssFamily: "'Avenir Next', Avenir, sans-serif", customFileURL: nil),
-        .init(id: "menlo", name: "Menlo", cssFamily: "Menlo, ui-monospace, monospace", customFileURL: nil),
+        .init(id: "menlo", name: "Menlo", cssFamily: "Menlo, ui-monospace, monospace", customFileURL: nil)
     ]
 
     /// All selectable fonts: the built-ins followed by the user's imported fonts.
@@ -208,12 +214,12 @@ struct ReaderTextStyle: Equatable {
 
     // Slider bounds, kept here so the reader CSS and the Customize sheet agree.
     static let defaultFontSizePt: Double = 18
-    static let fontSizeRange = 12.0...34.0
+    static let fontSizeRange = 12.0 ... 34.0
     static let fontSizeStep = 1.0
-    static let lineHeightRange = 1.2...2.4
-    static let letterSpacingRange = -0.03...0.12
-    static let wordSpacingRange = 0.0...0.6
-    static let marginRange = 8.0...64.0
+    static let lineHeightRange = 1.2 ... 2.4
+    static let letterSpacingRange = -0.03 ... 0.12
+    static let wordSpacingRange = 0.0 ... 0.6
+    static let marginRange = 8.0 ... 64.0
 
     /// The effective style: when Customize is off, layout options fall back to the
     /// defaults while the always-on font weight and text size are preserved.

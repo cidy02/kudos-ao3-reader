@@ -14,7 +14,9 @@ struct WorkRow: View {
     @Environment(AppRouter.self) private var router
     @State private var expanded = false
 
-    private var summaryText: String { work.summary.strippingHTML() }
+    private var summaryText: String {
+        work.summary.strippingHTML()
+    }
 
     /// Real content warnings only — AO3's "No Archive Warnings Apply" / "Creator
     /// Chose Not To Use Archive Warnings" aren't warnings worth flagging.

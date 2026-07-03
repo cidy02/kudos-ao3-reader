@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 /// The AO3 website fallback: a web view with floating Liquid Glass controls that
 /// captures EPUB downloads into the library and bookmarks pages. Presented from the
@@ -19,9 +19,9 @@ struct AO3WebBrowserView: View {
                 .ignoresSafeArea(edges: .bottom)
                 .overlay(alignment: .bottom) { bannerView }
                 .navigationTitle("AO3 Website")
-                #if os(iOS)
+            #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
-                #endif
+            #endif
                 .toolbar { browserToolbar }
                 .onAppear {
                     configureImport()
@@ -120,7 +120,7 @@ struct AO3WebBrowserView: View {
     // MARK: Actions
 
     private func configureImport() {
-        let context = self.context
+        let context = context
         model.onImport = { fileURL, source in
             Task {
                 do {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses an EPUB2 NCX document into (title, src) pairs in document order.
-nonisolated final class NCXParser: NSObject, XMLParserDelegate {
+final nonisolated class NCXParser: NSObject, XMLParserDelegate {
     var entries: [(title: String, src: String)] = []
 
     private var inText = false
@@ -15,10 +15,10 @@ nonisolated final class NCXParser: NSObject, XMLParserDelegate {
     }
 
     func parser(
-        _ parser: XMLParser,
+        _: XMLParser,
         didStartElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?,
+        namespaceURI _: String?,
+        qualifiedName _: String?,
         attributes: [String: String]
     ) {
         switch localName(elementName) {
@@ -34,15 +34,15 @@ nonisolated final class NCXParser: NSObject, XMLParserDelegate {
         }
     }
 
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
+    func parser(_: XMLParser, foundCharacters string: String) {
         if inText { buffer += string }
     }
 
     func parser(
-        _ parser: XMLParser,
+        _: XMLParser,
         didEndElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?
+        namespaceURI _: String?,
+        qualifiedName _: String?
     ) {
         if localName(elementName) == "text" {
             inText = false

@@ -1,11 +1,14 @@
+import LocalAuthentication
 import OSLog
 import SwiftUI
-import LocalAuthentication
 
 /// How Mature/Explicit works are presented when content privacy is on.
 enum MaturePrivacyMode: String, CaseIterable, Identifiable {
     case obscure, hide
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
+
     var title: String {
         switch self {
         case .obscure: "Blur"
@@ -16,7 +19,9 @@ enum MaturePrivacyMode: String, CaseIterable, Identifiable {
 
 extension SavedWork {
     /// AO3-rated Mature or Explicit — the works the privacy feature shields.
-    var isAdult: Bool { rating == "Mature" || rating == "Explicit" }
+    var isAdult: Bool {
+        rating == "Mature" || rating == "Explicit"
+    }
 }
 
 /// Tracks which sensitive works the user has temporarily revealed this session,
@@ -28,7 +33,9 @@ final class PrivacyGate {
     /// When true, every sensitive work is shown until toggled back off.
     private(set) var revealAll = false
 
-    func isRevealed(_ work: SavedWork) -> Bool { revealAll || revealedIDs.contains(work.id) }
+    func isRevealed(_ work: SavedWork) -> Bool {
+        revealAll || revealedIDs.contains(work.id)
+    }
 
     /// Reveals a single work (a Blur-mode tap), authenticating first if required.
     func reveal(_ work: SavedWork) {

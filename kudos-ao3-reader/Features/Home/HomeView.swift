@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import OSLog
+import SwiftData
+import SwiftUI
 
 /// The Home tab: a personal, Books-style dashboard. Every section is a collapsible
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
@@ -34,10 +34,22 @@ struct HomeView: View {
     private func section(_ kind: HomeSectionKind) -> [SavedWork] {
         kind.works(from: works, visible: passesPrivacy)
     }
-    private var readingNow: [SavedWork] { section(.readingNow) }
-    private var recentlyUpdated: [SavedWork] { section(.recentlyUpdated) }
-    private var favorites: [SavedWork] { section(.favorites) }
-    private var recentlyOpened: [SavedWork] { section(.recentlyOpened) }
+
+    private var readingNow: [SavedWork] {
+        section(.readingNow)
+    }
+
+    private var recentlyUpdated: [SavedWork] {
+        section(.recentlyUpdated)
+    }
+
+    private var favorites: [SavedWork] {
+        section(.favorites)
+    }
+
+    private var recentlyOpened: [SavedWork] {
+        section(.recentlyOpened)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -55,17 +67,17 @@ struct HomeView: View {
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
-            .toolbarTitleDisplayMode(.inlineLarge)
+                .toolbarTitleDisplayMode(.inlineLarge)
             #endif
-            .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
-            .navigationDestination(for: LocalWorkDestination.self) { destination in
-                LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
-            }
-            .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
-            .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
-            .task(id: auth.isLoggedIn) { await loadSubscriptions() }
-            .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
+                .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
+                .navigationDestination(for: LocalWorkDestination.self) { destination in
+                    LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
+                }
+                .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
+                .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
+                .task(id: auth.isLoggedIn) { await loadSubscriptions() }
+                .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
         }
     }
 
@@ -101,7 +113,7 @@ struct HomeView: View {
             onSeeAll: subscriptions.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
         ) {
             if showSkeleton {
-                ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
+                ForEach(0 ..< 6, id: \.self) { _ in WorkCoverCardSkeleton() }
             } else {
                 ForEach(subscriptions.prefix(12)) { work in
                     NavigationLink(value: work) { AO3WorkCoverCard(work: work) }

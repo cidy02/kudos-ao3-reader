@@ -11,7 +11,7 @@ extension Notification.Name {
 extension UIWindow {
     /// `motionEnded` is part of the responder chain; catching it on the window lets
     /// any screen offer shake-to-report without each view wiring up motion handling.
-    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+    override open func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         if motion == .motionShake {
             NotificationCenter.default.post(name: .deviceDidShake, object: nil)
         }
@@ -39,6 +39,8 @@ extension View {
 #else
 extension View {
     /// No-op on platforms without a shake gesture (macOS).
-    func onShake(perform action: @escaping () -> Void) -> some View { self }
+    func onShake(perform _: @escaping () -> Void) -> some View {
+        self
+    }
 }
 #endif

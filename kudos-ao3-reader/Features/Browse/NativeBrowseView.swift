@@ -17,9 +17,9 @@ struct BrowseView: View {
         NavigationStack(path: $path) {
             MediaBrowserView(onSelectFandom: { path.append(FandomRoute(name: $0)) })
                 .navigationTitle("Browse")
-                #if os(iOS)
+            #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
-                #endif
+            #endif
                 .navigationDestination(for: AO3MediaCategory.self) { category in
                     FandomListView(category: category) { path.append(FandomRoute(name: $0)) }
                 }
@@ -85,11 +85,13 @@ struct FandomWorksView: View {
     }
 
     /// True once the reader has set any filter beyond the page's fixed fandom.
-    private var hasExtraFilters: Bool { filters != Self.baseline(for: fandom) }
+    private var hasExtraFilters: Bool {
+        filters != Self.baseline(for: fandom)
+    }
 
     var body: some View {
         Group {
-            if phase == .loading && results.isEmpty {
+            if phase == .loading, results.isEmpty {
                 // First load of this fandom's works — show the shape of the results.
                 AO3WorkRowSkeletonList(count: 6)
             } else {
@@ -111,34 +113,36 @@ struct FandomWorksView: View {
         }
         .navigationTitle(fandom)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
-        .toolbar {
-            if phase == .loaded && !results.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: hasExtraFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter works in this fandom")
+            .hidesFloatingTabBar()
+            .toolbar {
+                if phase == .loaded, !results.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        WorkCardListControls(expandAll: $expandAll,
+                                             filtersActive: hasExtraFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter works in this fandom")
+                    }
                 }
             }
-        }
-        .inspector(isPresented: $showingFilters) {
-            AO3FilterPanel(
-                filters: $filters,
-                showFandomPicker: false,
-                canReset: hasExtraFilters,
-                onApply: applyFilters,
-                onReset: resetFilters
-            )
-            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-            .navigationTitle("Filter Works")
-        }
-        .task { await load(page: 1) }
+            .inspector(isPresented: $showingFilters) {
+                AO3FilterPanel(
+                    filters: $filters,
+                    showFandomPicker: false,
+                    canReset: hasExtraFilters,
+                    onApply: applyFilters,
+                    onReset: resetFilters
+                )
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationTitle("Filter Works")
+            }
+            .task { await load(page: 1) }
     }
 
-    private var showPagination: Bool { totalPages > 1 && !results.isEmpty }
+    private var showPagination: Bool {
+        totalPages > 1 && !results.isEmpty
+    }
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
@@ -168,7 +172,7 @@ struct FandomWorksView: View {
                 systemImage: "books.vertical",
                 description: Text("No works for this fandom right now.")
             )
-        case .failed(let message):
+        case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't load works", systemImage: "exclamationmark.triangle")
             } description: {
@@ -239,11 +243,13 @@ struct TagWorksView: View {
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
     /// This page's works narrowed by the active refine filters.
-    private var visibleResults: [AO3WorkSummary] { filters.apply(to: results) }
+    private var visibleResults: [AO3WorkSummary] {
+        filters.apply(to: results)
+    }
 
     var body: some View {
         Group {
-            if phase == .loading && results.isEmpty {
+            if phase == .loading, results.isEmpty {
                 AO3WorkRowSkeletonList(count: 6)
             } else {
                 List {
@@ -264,47 +270,49 @@ struct TagWorksView: View {
         }
         .navigationTitle(request.title)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
-        .toolbar {
-            if phase == .loaded && !results.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 2) {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
-                        } label: {
-                            Label(expandAll ? "Collapse all cards" : "Expand all cards",
-                                  systemImage: expandAll
-                                    ? "rectangle.compress.vertical"
-                                    : "rectangle.expand.vertical")
+            .hidesFloatingTabBar()
+            .toolbar {
+                if phase == .loaded, !results.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack(spacing: 2) {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
+                            } label: {
+                                Label(expandAll ? "Collapse all cards" : "Expand all cards",
+                                      systemImage: expandAll
+                                          ? "rectangle.compress.vertical"
+                                          : "rectangle.expand.vertical")
+                            }
+                            Button { showingFilters = true } label: {
+                                Label("Filter", systemImage: filters.hasActiveFilters
+                                    ? "line.3.horizontal.decrease.circle.fill"
+                                    : "line.3.horizontal.decrease.circle")
+                            }
+                            .help("Filter the works on this page")
                         }
-                        Button { showingFilters = true } label: {
-                            Label("Filter", systemImage: filters.hasActiveFilters
-                                ? "line.3.horizontal.decrease.circle.fill"
-                                : "line.3.horizontal.decrease.circle")
-                        }
-                        .help("Filter the works on this page")
+                        .labelStyle(.iconOnly)
                     }
-                    .labelStyle(.iconOnly)
                 }
             }
-        }
-        .inspector(isPresented: $showingFilters) {
-            AO3FilterPanel(
-                filters: $filters,
-                mode: .refine,
-                canReset: filters.hasActiveFilters,
-                onApply: { showingFilters = false },
-                onReset: { filters = AO3SearchFilters() }
-            )
-            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-            .navigationTitle("Filter Works")
-        }
-        .task { await load(page: 1) }
+            .inspector(isPresented: $showingFilters) {
+                AO3FilterPanel(
+                    filters: $filters,
+                    mode: .refine,
+                    canReset: filters.hasActiveFilters,
+                    onApply: { showingFilters = false },
+                    onReset: { filters = AO3SearchFilters() }
+                )
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationTitle("Filter Works")
+            }
+            .task { await load(page: 1) }
     }
 
-    private var showPagination: Bool { totalPages > 1 && !results.isEmpty }
+    private var showPagination: Bool {
+        totalPages > 1 && !results.isEmpty
+    }
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
@@ -331,7 +339,7 @@ struct TagWorksView: View {
             } actions: {
                 Button("Clear Filters") { filters = AO3SearchFilters() }
             }
-        case .failed(let message):
+        case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't load works", systemImage: "exclamationmark.triangle")
             } description: {

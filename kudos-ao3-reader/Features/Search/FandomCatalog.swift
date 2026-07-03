@@ -26,7 +26,7 @@ final class FandomCatalog {
     private var didLoadCache = false
 
     private init() {
-        self.cache = FandomCatalogCache()
+        cache = FandomCatalogCache()
     }
 
     /// The cached fandom list for a category, or nil while it's still loading.
@@ -71,7 +71,7 @@ final class FandomCatalog {
             return (lhs.workCount ?? 0) > (rhs.workCount ?? 0)
         }
         .prefix(limit)
-        .map { $0 }
+        .map(\.self)
     }
 
     /// Shows any disk-cached lists immediately, then fetches the categories that are
@@ -89,7 +89,9 @@ final class FandomCatalog {
                 && !$0.fandomsURL.isEmpty
         }
         guard !pending.isEmpty else { return }
-        for category in pending { inFlight.insert(category.id) }
+        for category in pending {
+            inFlight.insert(category.id)
+        }
 
         await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
             for category in pending {
@@ -126,7 +128,9 @@ final class FandomCatalog {
             !inFlight.contains($0.id) && !$0.fandomsURL.isEmpty
         }
         guard !pending.isEmpty else { return }
-        for category in pending { inFlight.insert(category.id) }
+        for category in pending {
+            inFlight.insert(category.id)
+        }
 
         await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
             for category in pending {
@@ -158,7 +162,7 @@ final class FandomCatalog {
     private func loadCacheIfNeeded() async {
         guard !didLoadCache else { return }
         didLoadCache = true
-        let cache = self.cache
+        let cache = cache
         let loaded = await Task.detached(priority: .utility) { cache.load() }.value
         for (key, entry) in loaded {
             entries[key] = entry
@@ -169,7 +173,7 @@ final class FandomCatalog {
     /// Writes the cache off the main actor (the payload can be a few MB).
     private func persist() {
         let snapshot = entries
-        let cache = self.cache
+        let cache = cache
         Task.detached(priority: .utility) { cache.save(snapshot) }
     }
 }

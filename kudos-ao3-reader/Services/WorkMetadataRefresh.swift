@@ -13,8 +13,13 @@ enum WorkMetadataRefresh {
         var failed = 0
         var skipped = 0
 
-        var attempted: Int { refreshed + failed + skipped }
-        var hasFailures: Bool { failed > 0 }
+        var attempted: Int {
+            refreshed + failed + skipped
+        }
+
+        var hasFailures: Bool {
+            failed > 0
+        }
     }
 
     enum RefreshError: LocalizedError {

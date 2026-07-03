@@ -108,9 +108,9 @@ private extension ReaderTheme {
 /// Card-list spacing constants, kept in one place so every adopting list matches.
 private enum CardListMetrics {
     static let cornerRadius: CGFloat = 16
-    static let interCardSpacing: CGFloat = 12   // vertical gap between cards
-    static let sideMargin: CGFloat = 16         // card inset from the screen edges
-    static let innerVertical: CGFloat = 10      // padding inside the card (on top of row content)
+    static let interCardSpacing: CGFloat = 12 // vertical gap between cards
+    static let sideMargin: CGFloat = 16 // card inset from the screen edges
+    static let innerVertical: CGFloat = 10 // padding inside the card (on top of row content)
     static let innerHorizontal: CGFloat = 16
 }
 
@@ -168,17 +168,21 @@ private struct CardRow: ViewModifier {
 
 extension View {
     /// Plain, card-style list over the themed backdrop. Pair with `.cardRow()` on rows.
-    func cardList() -> some View { modifier(CardList()) }
+    func cardList() -> some View {
+        modifier(CardList())
+    }
 
     /// Renders a list row (or every row in a `ForEach`/`Section`) as a rounded card
     /// with ~12pt spacing between cards. Keeps taps, swipe actions, etc. intact.
-    func cardRow() -> some View { modifier(CardRow()) }
+    func cardRow() -> some View {
+        modifier(CardRow())
+    }
 
     /// Value-based row navigation **without** the trailing disclosure chevron — the
     /// `>` clutters the rounded work cards. The List still makes the whole card
     /// tappable, and inner controls (tag / fandom / expand buttons) keep their own
     /// taps because the link sits behind the content rather than wrapping it.
-    func cardNavigation<V: Hashable>(to value: V) -> some View {
+    func cardNavigation(to value: some Hashable) -> some View {
         background {
             NavigationLink(value: value) { EmptyView() }
                 .opacity(0)
