@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // MARK: - Cards
 
@@ -148,64 +148,64 @@ struct CollectionDetailView: View {
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .navigationTitle(collection.name)
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .inspector(isPresented: $showingFilters) {
-            LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
-                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .inspector(isPresented: $showingFilters) {
+                LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
+                    .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 #if os(iOS)
-                .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.visible)
                 #endif
-        }
-        .toolbar {
-            if !works.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter the works in this collection")
+            }
+            .toolbar {
+                if !works.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        WorkCardListControls(expandAll: $expandAll,
+                                             filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter the works in this collection")
+                    }
+                }
+                ToolbarItem {
+                    Menu {
+                        Button {
+                            renameText = collection.name
+                            showingRename = true
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            confirmDelete = true
+                        } label: {
+                            Label("Delete Collection", systemImage: "trash")
+                        }
+                    } label: {
+                        Label("Collection options", systemImage: "ellipsis.circle")
+                    }
                 }
             }
-            ToolbarItem {
-                Menu {
-                    Button {
-                        renameText = collection.name
-                        showingRename = true
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    Button(role: .destructive) {
-                        confirmDelete = true
-                    } label: {
-                        Label("Delete Collection", systemImage: "trash")
-                    }
-                } label: {
-                    Label("Collection options", systemImage: "ellipsis.circle")
+            .alert("Rename Collection", isPresented: $showingRename) {
+                TextField("Name", text: $renameText)
+                Button("Save") {
+                    let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { collection.name = trimmed; try? context.save() }
                 }
+                Button("Cancel", role: .cancel) {}
             }
-        }
-        .alert("Rename Collection", isPresented: $showingRename) {
-            TextField("Name", text: $renameText)
-            Button("Save") {
-                let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { collection.name = trimmed; try? context.save() }
+            .confirmationDialog(
+                "Delete “\(collection.name)”?",
+                isPresented: $confirmDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    context.delete(collection)
+                    try? context.save()
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The collection is removed. The works themselves stay in your Library.")
             }
-            Button("Cancel", role: .cancel) {}
-        }
-        .confirmationDialog(
-            "Delete “\(collection.name)”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                context.delete(collection)
-                try? context.save()
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The collection is removed. The works themselves stay in your Library.")
-        }
     }
 
     private func remove(_ work: SavedWork) {
@@ -271,13 +271,13 @@ struct AddToCollectionView: View {
             .formStyle(.grouped)
             .navigationTitle("Add to Collection")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
                 }
-            }
         }
         .presentationDragIndicator(.visible)
     }

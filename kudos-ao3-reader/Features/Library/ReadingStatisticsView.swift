@@ -104,8 +104,8 @@ struct ReadingStatisticsView: View {
                     "Statistics stay on this device. Words Read includes finished works "
                         + "with a known AO3 word count; recent activity counts distinct works opened."
                 )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .cardRow()
         }

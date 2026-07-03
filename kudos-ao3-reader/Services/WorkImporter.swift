@@ -85,7 +85,7 @@ enum UserEPUBImportOutcome {
 
     var work: SavedWork {
         switch self {
-        case .imported(let work), .restored(let work), .duplicate(let work):
+        case let .imported(work), let .restored(work), let .duplicate(work):
             work
         }
     }
@@ -105,18 +105,41 @@ enum UserEPUBImportError: LocalizedError {
     }
 }
 
-private nonisolated struct UserEPUBInspection: Sendable {
+private nonisolated struct UserEPUBInspection {
     let package: EPUBPackageInspection
     let extracted: ExtractedAO3EPUBMetadata
 
-    var metadata: EPUBMetadata { package.metadata }
-    var title: String { firstNonEmpty(metadata.title, extracted.title) }
-    var author: String { firstNonEmpty(metadata.author, extracted.author) }
-    var summary: String { firstNonEmpty(metadata.summary, extracted.summary) }
-    var sourceURL: String { firstNonEmpty(extracted.sourceURL, metadata.sourceURL) }
-    var rating: String { firstNonEmpty(extracted.rating, metadata.rating) }
-    var publishedDate: String { firstNonEmpty(extracted.publishedDate, metadata.publishedDate) }
-    var updatedDate: String { firstNonEmpty(extracted.updatedDate, metadata.updatedDate) }
+    var metadata: EPUBMetadata {
+        package.metadata
+    }
+
+    var title: String {
+        firstNonEmpty(metadata.title, extracted.title)
+    }
+
+    var author: String {
+        firstNonEmpty(metadata.author, extracted.author)
+    }
+
+    var summary: String {
+        firstNonEmpty(metadata.summary, extracted.summary)
+    }
+
+    var sourceURL: String {
+        firstNonEmpty(extracted.sourceURL, metadata.sourceURL)
+    }
+
+    var rating: String {
+        firstNonEmpty(extracted.rating, metadata.rating)
+    }
+
+    var publishedDate: String {
+        firstNonEmpty(extracted.publishedDate, metadata.publishedDate)
+    }
+
+    var updatedDate: String {
+        firstNonEmpty(extracted.updatedDate, metadata.updatedDate)
+    }
 
     var localChapterCount: Int {
         package.readableItemCount
@@ -434,7 +457,7 @@ private func copyImportedEPUB(from source: URL, to destination: URL) throws {
     }
 }
 
-private nonisolated struct ExtractedAO3EPUBMetadata: Sendable {
+private nonisolated struct ExtractedAO3EPUBMetadata {
     var title = ""
     var author = ""
     var summary = ""
@@ -496,7 +519,7 @@ private nonisolated enum AO3EPUBMetadataScanner {
         for name in zip.names where isMetadataCandidate(name) {
             guard let entry = zip.data(named: name),
                   let text = String(data: entry, encoding: .utf8)
-                    ?? String(data: entry, encoding: .isoLatin1)
+                  ?? String(data: entry, encoding: .isoLatin1)
             else { continue }
             merge(scanText(text), into: &result)
         }
@@ -633,7 +656,7 @@ private nonisolated enum AO3EPUBMetadataScanner {
         for selector in selectors {
             if let value = try? doc.select(selector).first()?.text()
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-               !value.isEmpty {
+                !value.isEmpty {
                 return value
             }
         }
@@ -704,6 +727,6 @@ func existingWork(forSource source: URL, in context: ModelContext) -> SavedWork?
             || (canonicalTarget != nil
                 && WorkTags.canonicalAO3WorkURL(from: $0.sourceURL) == canonicalTarget)
             || (sourceID != nil && ($0.ao3WorkID == sourceID
-                || WorkTags.ao3WorkID(from: $0.sourceURL) == sourceID))
+                    || WorkTags.ao3WorkID(from: $0.sourceURL) == sourceID))
     }
 }

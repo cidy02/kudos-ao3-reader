@@ -48,6 +48,12 @@ extension View {
 
 // MARK: - Card-style lists (experimental)
 
+private struct CardShadow {
+    let color: Color
+    let radius: CGFloat
+    let y: CGFloat
+}
+
 /// Theme-aware surfaces for the modern card-based list treatment. Sepia reuses the
 /// reader's warm paper colors; Light/Dark fall back to the system grouped surfaces,
 /// so cards read the same as the grouped style did — just rounded on all four sides.
@@ -74,12 +80,17 @@ private extension ReaderTheme {
     /// cards lift off the flatter backdrops; Dark stays flat (shadows muddy the dark
     /// surfaces, and the high card↔backdrop contrast there already reads well).
     /// Kept small enough to sit within the inter-card gap so it isn't clipped.
-    var cardShadow: (color: Color, radius: CGFloat, y: CGFloat) {
+    var cardShadow: CardShadow {
         switch self {
-        case .dark: (.clear, 0, 0)
-        case .light: (Color.black.opacity(0.12), 4, 2)
+        case .dark: CardShadow(color: .clear, radius: 0, y: 0)
+        case .light: CardShadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
         // Warm brown shadow rather than neutral grey, so it reads as paper depth.
-        case .sepia: (Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.20), 4, 2)
+        case .sepia:
+            CardShadow(
+                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.20),
+                radius: 4,
+                y: 2
+            )
         }
     }
 
@@ -97,9 +108,9 @@ private extension ReaderTheme {
 /// Card-list spacing constants, kept in one place so every adopting list matches.
 private enum CardListMetrics {
     static let cornerRadius: CGFloat = 16
-    static let interCardSpacing: CGFloat = 12   // vertical gap between cards
-    static let sideMargin: CGFloat = 16         // card inset from the screen edges
-    static let innerVertical: CGFloat = 10      // padding inside the card (on top of row content)
+    static let interCardSpacing: CGFloat = 12 // vertical gap between cards
+    static let sideMargin: CGFloat = 16 // card inset from the screen edges
+    static let innerVertical: CGFloat = 10 // padding inside the card (on top of row content)
     static let innerHorizontal: CGFloat = 16
     static let editSelectionInset: CGFloat = 14 // breathing room for List(selection:) bubbles
 }
@@ -170,17 +181,21 @@ private struct CardRow: ViewModifier {
 
 extension View {
     /// Plain, card-style list over the themed backdrop. Pair with `.cardRow()` on rows.
-    func cardList() -> some View { modifier(CardList()) }
+    func cardList() -> some View {
+        modifier(CardList())
+    }
 
     /// Renders a list row (or every row in a `ForEach`/`Section`) as a rounded card
     /// with ~12pt spacing between cards. Keeps taps, swipe actions, etc. intact.
-    func cardRow() -> some View { modifier(CardRow()) }
+    func cardRow() -> some View {
+        modifier(CardRow())
+    }
 
     /// Value-based row navigation **without** the trailing disclosure chevron — the
     /// `>` clutters the rounded work cards. The List still makes the whole card
     /// tappable, and inner controls (tag / fandom / expand buttons) keep their own
     /// taps because the link sits behind the content rather than wrapping it.
-    func cardNavigation<V: Hashable>(to value: V) -> some View {
+    func cardNavigation(to value: some Hashable) -> some View {
         background {
             NavigationLink(value: value) { EmptyView() }
                 .opacity(0)

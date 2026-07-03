@@ -19,10 +19,10 @@ struct GlassFieldBar<Leading: View, Trailing: View>: View {
                 .textFieldStyle(.plain)
                 .submitLabel(submitLabel)
                 .onSubmit(onSubmit)
-                #if !os(macOS)
+            #if !os(macOS)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                #endif
+            #endif
             trailing()
         }
         // Internal breathing room so the icons aren't flush with the toolbar's

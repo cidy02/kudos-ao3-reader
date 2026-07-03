@@ -1,14 +1,15 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
 #endif
 
+// Lint: this existing form is kept together to avoid behavior refactors.
 /// The toggleable reading options, grouped into categories. Shared between the
 /// reader's inspector (quick access while reading) and the Settings page, so the
 /// two always show the same controls and stay in sync via `@AppStorage`.
-struct ReaderOptionsForm: View {
+struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// Whether the two-page spread can take effect (the reader passes its window
     /// width; Settings has no window context, so it allows the toggle freely).
     var twoPageAvailable: Bool = true
@@ -76,17 +77,20 @@ struct ReaderOptionsForm: View {
         works.filter { $0.isSaved && !$0.isQueuedForLater }
     }
 
-    // Bindings into the central ThemeManager (an @Observable in the environment).
+    /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {
         Binding(get: { themeManager.appTheme }, set: { themeManager.appTheme = $0 })
     }
+
     private var readerThemeBinding: Binding<ReaderTheme> {
         Binding(get: { themeManager.readerTheme }, set: { themeManager.readerTheme = $0 })
     }
+
     private var matchThemeBinding: Binding<Bool> {
         Binding(get: { themeManager.matchAppAndReader },
                 set: { themeManager.matchAppAndReader = $0 })
     }
+
     private var accentBinding: Binding<Color> {
         Binding(get: { themeManager.accentColor }, set: { themeManager.setAccent($0) })
     }
@@ -102,246 +106,247 @@ struct ReaderOptionsForm: View {
 
     var body: some View {
         Form {
-          // Group so .appThemedRows() (a .listRowBackground) reaches every section's
-          // rows — it does NOT propagate from the Form container, only from a Group/
-          // Section/ForEach around the rows.
-          Group {
-            // App-wide theme lives in the main Settings page. The reader's own theme
-            // picker (below, in Appearance) is shown only inside the reader, since here
-            // it's covered by this section.
-            if includeAppSettings {
-                Section {
-                    switch auth.status {
-                    case .restoring:
-                        // Restoring the AO3 session — show the shape of the signed-in row.
-                        SkeletonListRow(width: 96, trailingWidth: 120)
+            // Group so .appThemedRows() (a .listRowBackground) reaches every section's
+            // rows — it does NOT propagate from the Form container, only from a Group/
+            // Section/ForEach around the rows.
+            Group {
+                // App-wide theme lives in the main Settings page. The reader's own theme
+                // picker (below, in Appearance) is shown only inside the reader, since here
+                // it's covered by this section.
+                if includeAppSettings {
+                    Section {
+                        switch auth.status {
+                        case .restoring:
+                            // Restoring the AO3 session — show the shape of the signed-in row.
+                            SkeletonListRow(width: 96, trailingWidth: 120)
 
-                    case .signedIn(let username):
-                        LabeledContent {
-                            Text(username)
-                        } label: {
-                            Label("Signed In", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                        case let .signedIn(username):
+                            LabeledContent {
+                                Text(username)
+                            } label: {
+                                Label("Signed In", systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
+
+                            Button(role: .destructive) {
+                                Task { await auth.logout() }
+                            } label: {
+                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+
+                        case .signedOut, .signingIn, .usingFallback:
+                            Button {
+                                showAO3Login = true
+                            } label: {
+                                Label("Log In to AO3…", systemImage: "person.badge.key")
+                            }
                         }
-
-                        Button(role: .destructive) {
-                            Task { await auth.logout() }
-                        } label: {
-                            Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-
-                    case .signedOut, .signingIn, .usingFallback:
-                        Button {
-                            showAO3Login = true
-                        } label: {
-                            Label("Log In to AO3…", systemImage: "person.badge.key")
+                    } header: {
+                        Text("AO3 Account")
+                    } footer: {
+                        if let notice = auth.noticeMessage {
+                            Text(notice)
+                        } else {
+                            Text("A login enables future synced bookmarks, history, "
+                                + "subscriptions, kudos, comments, and restricted works.")
                         }
                     }
-                } header: {
-                    Text("AO3 Account")
-                } footer: {
-                    if let notice = auth.noticeMessage {
-                        Text(notice)
-                    } else {
-                        Text("A login enables future synced bookmarks, history, "
-                             + "subscriptions, kudos, comments, and restricted works.")
+
+                    Section {
+                        themePicker("App Theme", selection: appThemeBinding)
+                        Toggle("Match App & Reader Theme", isOn: matchThemeBinding)
+                        if !themeManager.matchAppAndReader {
+                            themePicker("Reader Theme", selection: readerThemeBinding)
+                        }
+                        ColorPicker("Accent Color", selection: accentBinding, supportsOpacity: false)
+                        Button("Reset to AO3 Red") { themeManager.resetAccent() }
+                            .disabled(themeManager.accentHex.caseInsensitiveCompare(ThemeManager.ao3Red)
+                                == .orderedSame)
+                    } header: {
+                        Text("Theme")
+                    } footer: {
+                        Text(themeManager.matchAppAndReader
+                            ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
+                            : "The app and reader use separate themes.")
+                            + Text(" The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
                     }
                 }
 
-                Section {
-                    themePicker("App Theme", selection: appThemeBinding)
-                    Toggle("Match App & Reader Theme", isOn: matchThemeBinding)
-                    if !themeManager.matchAppAndReader {
-                        themePicker("Reader Theme", selection: readerThemeBinding)
+                Section("Appearance") {
+                    if !includeAppSettings {
+                        // Inside the reader: this picks the reader theme (which re-themes
+                        // the app too while App & Reader are matched).
+                        themePicker("Theme", selection: readerThemeBinding)
                     }
-                    ColorPicker("Accent Color", selection: accentBinding, supportsOpacity: false)
-                    Button("Reset to AO3 Red") { themeManager.resetAccent() }
-                        .disabled(themeManager.accentHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame)
-                } header: {
-                    Text("Theme")
-                } footer: {
-                    Text(themeManager.matchAppAndReader
-                        ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
-                        : "The app and reader use separate themes.")
-                    + Text(" The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
-                }
-            }
 
-            Section("Appearance") {
-                if !includeAppSettings {
-                    // Inside the reader: this picks the reader theme (which re-themes
-                    // the app too while App & Reader are matched).
-                    themePicker("Theme", selection: readerThemeBinding)
+                    #if os(iOS)
+                    Button {
+                        showCustomize = true
+                    } label: {
+                        Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                    }
+                    #endif
                 }
 
                 #if os(iOS)
-                Button {
-                    showCustomize = true
-                } label: {
-                    Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                Section("Text Size") {
+                    TextSizeSlider()
                 }
                 #endif
-            }
 
-            #if os(iOS)
-            Section("Text Size") {
-                TextSizeSlider()
-            }
-            #endif
-
-            Section {
-                Picker("Layout", selection: $readingMode) {
-                    ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.titleOnly)
-
-                // Two-page spread is hidden on iPhone (no practical use); shown on
-                // iPad and macOS.
-                if twoPageSpreadAvailable {
-                    Toggle("Two-page spread", isOn: $twoPageEnabled)
-                        .disabled(readingMode != .paged || !twoPageAvailable)
-                }
-            } header: {
-                Text("Reading")
-            } footer: {
-                Text(twoPageSpreadAvailable
-                    ? "Two-page spread is available in Paged mode on wider windows."
-                    : "Choose how pages turn while reading.")
-            }
-
-            Section("Font") {
-                ForEach(fontOptions) { option in
-                    Button {
-                        fontID = option.id
-                    } label: {
-                        HStack {
-                            Text(option.name).foregroundStyle(.primary)
-                            if option.isCustom {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if option.id == fontID {
-                                Image(systemName: "checkmark").foregroundStyle(.tint)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .onDelete(perform: deleteCustomFonts)
-
-                Button {
-                    importing = true
-                } label: {
-                    Label("Add Font…", systemImage: "plus")
-                }
-            }
-
-            if includeAppSettings {
                 Section {
-                    Toggle("Confirm before deleting", isOn: $confirmBeforeDelete)
+                    Picker("Layout", selection: $readingMode) {
+                        ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelStyle(.titleOnly)
+
+                    // Two-page spread is hidden on iPhone (no practical use); shown on
+                    // iPad and macOS.
+                    if twoPageSpreadAvailable {
+                        Toggle("Two-page spread", isOn: $twoPageEnabled)
+                            .disabled(readingMode != .paged || !twoPageAvailable)
+                    }
                 } header: {
-                    Text("Library")
+                    Text("Reading")
                 } footer: {
-                    Text("Ask before a swipe-to-delete removes a work from your Library.")
+                    Text(twoPageSpreadAvailable
+                        ? "Two-page spread is available in Paged mode on wider windows."
+                        : "Choose how pages turn while reading.")
                 }
 
-                BackupSettingsSection(
-                    onExport: exportBackup,
-                    onImport: { importingBackup = true }
-                )
-
-                EPUBImportSettingsSection(
-                    isImporting: isImportingEPUB,
-                    progressText: epubImportProgress,
-                    onImport: { importingEPUB = true }
-                )
-
-                Section {
-                    NavigationLink {
-                        ReadingQueueStorageView()
-                    } label: {
-                        Label("Queue Storage", systemImage: "externaldrive")
-                    }
-
-                    Toggle(
-                        "Auto-preserve small series",
-                        isOn: $autoPreserveSmallSeriesOnSaveForLater
-                    )
-                    Stepper(
-                        "Series limit: \(autoPreserveSeriesWorkThreshold)",
-                        value: $autoPreserveSeriesWorkThreshold,
-                        in: 2...25
-                    )
-                    .disabled(!autoPreserveSmallSeriesOnSaveForLater)
-
-                    if !legacySavedWorksForQueueMigration.isEmpty {
+                Section("Font") {
+                    ForEach(fontOptions) { option in
                         Button {
-                            showSavedWorkMigrationConfirmation = true
+                            fontID = option.id
                         } label: {
-                            Label("Add Saved Works to Saved for Later", systemImage: "arrow.right.doc.on.clipboard")
+                            HStack {
+                                Text(option.name).foregroundStyle(.primary)
+                                if option.isCustom {
+                                    Image(systemName: "person.crop.circle")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if option.id == fontID {
+                                    Image(systemName: "checkmark").foregroundStyle(.tint)
+                                }
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .disabled(isMigratingSavedWorks)
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete(perform: deleteCustomFonts)
+
+                    Button {
+                        importing = true
+                    } label: {
+                        Label("Add Font…", systemImage: "plus")
+                    }
+                }
+
+                if includeAppSettings {
+                    Section {
+                        Toggle("Confirm before deleting", isOn: $confirmBeforeDelete)
+                    } header: {
+                        Text("Library")
+                    } footer: {
+                        Text("Ask before a swipe-to-delete removes a work from your Library.")
                     }
 
-                    if isMigratingSavedWorks {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ProgressView(
-                                value: Double(savedWorkMigrationCompleted),
-                                total: Double(max(savedWorkMigrationTotal, 1))
-                            )
-                            HStack(spacing: 12) {
-                                Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Button("Cancel") {
-                                    cancelSavedWorkMigration()
+                    BackupSettingsSection(
+                        onExport: exportBackup,
+                        onImport: { importingBackup = true }
+                    )
+
+                    EPUBImportSettingsSection(
+                        isImporting: isImportingEPUB,
+                        progressText: epubImportProgress,
+                        onImport: { importingEPUB = true }
+                    )
+
+                    Section {
+                        NavigationLink {
+                            ReadingQueueStorageView()
+                        } label: {
+                            Label("Queue Storage", systemImage: "externaldrive")
+                        }
+
+                        Toggle(
+                            "Auto-preserve small series",
+                            isOn: $autoPreserveSmallSeriesOnSaveForLater
+                        )
+                        Stepper(
+                            "Series limit: \(autoPreserveSeriesWorkThreshold)",
+                            value: $autoPreserveSeriesWorkThreshold,
+                            in: 2 ... 25
+                        )
+                        .disabled(!autoPreserveSmallSeriesOnSaveForLater)
+
+                        if !legacySavedWorksForQueueMigration.isEmpty {
+                            Button {
+                                showSavedWorkMigrationConfirmation = true
+                            } label: {
+                                Label("Add Saved Works to Saved for Later", systemImage: "arrow.right.doc.on.clipboard")
+                            }
+                            .disabled(isMigratingSavedWorks)
+                        }
+
+                        if isMigratingSavedWorks {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ProgressView(
+                                    value: Double(savedWorkMigrationCompleted),
+                                    total: Double(max(savedWorkMigrationTotal, 1))
+                                )
+                                HStack(spacing: 12) {
+                                    Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Button("Cancel") {
+                                        cancelSavedWorkMigration()
+                                    }
                                 }
                             }
                         }
+                    } header: {
+                        Text("Reading Queues")
+                    } footer: {
+                        Text("Saved for Later keeps a local EPUB. Series preservation asks first "
+                            + "unless this option is enabled and the series is within the limit.")
                     }
-                } header: {
-                    Text("Reading Queues")
-                } footer: {
-                    Text("Saved for Later keeps a local EPUB. Series preservation asks first "
-                         + "unless this option is enabled and the series is within the limit.")
-                }
 
-                Section {
-                    Toggle("Hide mature content", isOn: $hideMatureContent)
-                    if hideMatureContent {
-                        Picker("When locked", selection: $matureMode) {
-                            ForEach(MaturePrivacyMode.allCases) { Text($0.title).tag($0) }
+                    Section {
+                        Toggle("Hide mature content", isOn: $hideMatureContent)
+                        if hideMatureContent {
+                            Picker("When locked", selection: $matureMode) {
+                                ForEach(MaturePrivacyMode.allCases) { Text($0.title).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Toggle("Require Face ID to reveal", isOn: $requireBiometric)
                         }
-                        .pickerStyle(.segmented)
-
-                        Toggle("Require Face ID to reveal", isOn: $requireBiometric)
-                    }
-                } header: {
-                    Text("Privacy")
-                } footer: {
-                    Text(hideMatureContent
-                        ? (matureMode == .hide
-                            ? "Mature and Explicit works are hidden from your Library, "
+                    } header: {
+                        Text("Privacy")
+                    } footer: {
+                        Text(hideMatureContent
+                            ? (matureMode == .hide
+                                ? "Mature and Explicit works are hidden from your Library, "
                                 + "History, and Favorites until you reveal them."
-                            : "Mature and Explicit works are blurred in your Library, "
+                                : "Mature and Explicit works are blurred in your Library, "
                                 + "History, and Favorites until you tap to reveal them.")
-                        : "Mature and Explicit works are shown normally.")
-                }
+                            : "Mature and Explicit works are shown normally.")
+                    }
 
-                Section {
-                    Button {
-                        showAbout = true
-                    } label: {
-                        Label("About Kudos", systemImage: "info.circle")
+                    Section {
+                        Button {
+                            showAbout = true
+                        } label: {
+                            Label("About Kudos", systemImage: "info.circle")
+                        }
                     }
                 }
             }
-          }
-          .appThemedRows()
+            .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
@@ -350,7 +355,7 @@ struct ReaderOptionsForm: View {
             allowedContentTypes: [.font],
             allowsMultipleSelection: true
         ) { result in
-            if case .success(let urls) = result { urls.forEach(importFont) }
+            if case let .success(urls) = result { urls.forEach(importFont) }
         }
         .fileExporter(
             isPresented: $exportingBackup,
@@ -364,7 +369,7 @@ struct ReaderOptionsForm: View {
                     title: "Backup Exported",
                     message: "\(works.count.formatted()) Library records were included."
                 )
-            case .failure(let error):
+            case let .failure(error):
                 backupNotice = BackupNotice(
                     title: "Couldn't Export Backup",
                     message: error.localizedDescription
@@ -703,9 +708,9 @@ struct BackupSettingsSection: View {
             Text("Backup")
         } footer: {
             Text("Backups include Library records, Reading Queues, preserved EPUBs, "
-                 + "User Tags, saved links, custom fonts, and app settings. Import "
-                 + "merges without deleting items already on this device. AO3 sessions "
-                 + "and passwords are never included.")
+                + "User Tags, saved links, custom fonts, and app settings. Import "
+                + "merges without deleting items already on this device. AO3 sessions "
+                + "and passwords are never included.")
         }
     }
 }
@@ -734,7 +739,7 @@ struct EPUBImportSettingsSection: View {
             Text("EPUB")
         } footer: {
             Text("Import AO3 EPUB files into your local Library. Files are copied "
-                 + "into Kudos storage and remain readable offline.")
+                + "into Kudos storage and remain readable offline.")
         }
     }
 }

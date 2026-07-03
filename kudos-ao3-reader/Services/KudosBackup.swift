@@ -3,6 +3,9 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Backup archive schema/restore logic is cohesive; avoid behavior refactors for lint.
+// swiftlint:disable file_length
+
 extension UTType {
     /// A directory-backed document package containing a JSON manifest and assets.
     static let kudosBackup = UTType(
@@ -12,7 +15,9 @@ extension UTType {
 }
 
 struct KudosBackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.kudosBackup] }
+    static var readableContentTypes: [UTType] {
+        [.kudosBackup]
+    }
 
     let contents: KudosBackupContents
 
@@ -24,7 +29,7 @@ struct KudosBackupDocument: FileDocument {
         contents = try KudosBackupContents(fileWrapper: configuration.file)
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         try contents.fileWrapper()
     }
 }
@@ -555,42 +560,42 @@ struct KudosBackupSettings: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            readerFontID: try container.decodeIfPresent(String.self, forKey: .readerFontID) ?? "system",
-            readerMode: try container.decodeIfPresent(String.self, forKey: .readerMode)
+        try self.init(
+            readerFontID: container.decodeIfPresent(String.self, forKey: .readerFontID) ?? "system",
+            readerMode: container.decodeIfPresent(String.self, forKey: .readerMode)
                 ?? ReadingMode.scroll.rawValue,
-            readerTwoPage: try container.decodeIfPresent(Bool.self, forKey: .readerTwoPage) ?? false,
-            readerCustomize: try container.decodeIfPresent(Bool.self, forKey: .readerCustomize) ?? false,
-            readerBoldText: try container.decodeIfPresent(Bool.self, forKey: .readerBoldText) ?? false,
-            readerFontPt: try container.decodeIfPresent(Double.self, forKey: .readerFontPt)
+            readerTwoPage: container.decodeIfPresent(Bool.self, forKey: .readerTwoPage) ?? false,
+            readerCustomize: container.decodeIfPresent(Bool.self, forKey: .readerCustomize) ?? false,
+            readerBoldText: container.decodeIfPresent(Bool.self, forKey: .readerBoldText) ?? false,
+            readerFontPt: container.decodeIfPresent(Double.self, forKey: .readerFontPt)
                 ?? ReaderTextStyle.defaultFontSizePt,
-            readerLineHeight: try container.decodeIfPresent(Double.self, forKey: .readerLineHeight)
+            readerLineHeight: container.decodeIfPresent(Double.self, forKey: .readerLineHeight)
                 ?? ReaderTextStyle.defaultLineHeight,
-            readerLetterSpacing: try container.decodeIfPresent(Double.self, forKey: .readerLetterSpacing) ?? 0,
-            readerWordSpacing: try container.decodeIfPresent(Double.self, forKey: .readerWordSpacing) ?? 0,
-            readerMargin: try container.decodeIfPresent(Double.self, forKey: .readerMargin)
+            readerLetterSpacing: container.decodeIfPresent(Double.self, forKey: .readerLetterSpacing) ?? 0,
+            readerWordSpacing: container.decodeIfPresent(Double.self, forKey: .readerWordSpacing) ?? 0,
+            readerMargin: container.decodeIfPresent(Double.self, forKey: .readerMargin)
                 ?? ReaderTextStyle.defaultMargin,
-            readerJustify: try container.decodeIfPresent(Bool.self, forKey: .readerJustify) ?? false,
-            confirmBeforeDelete: try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeDelete) ?? true,
-            hideMatureContent: try container.decodeIfPresent(Bool.self, forKey: .hideMatureContent) ?? true,
-            matureContentMode: try container.decodeIfPresent(String.self, forKey: .matureContentMode)
+            readerJustify: container.decodeIfPresent(Bool.self, forKey: .readerJustify) ?? false,
+            confirmBeforeDelete: container.decodeIfPresent(Bool.self, forKey: .confirmBeforeDelete) ?? true,
+            hideMatureContent: container.decodeIfPresent(Bool.self, forKey: .hideMatureContent) ?? true,
+            matureContentMode: container.decodeIfPresent(String.self, forKey: .matureContentMode)
                 ?? MaturePrivacyMode.obscure.rawValue,
-            requireBiometricToReveal: try container.decodeIfPresent(
+            requireBiometricToReveal: container.decodeIfPresent(
                 Bool.self,
                 forKey: .requireBiometricToReveal
             ) ?? false,
-            appTheme: try container.decodeIfPresent(String.self, forKey: .appTheme)
+            appTheme: container.decodeIfPresent(String.self, forKey: .appTheme)
                 ?? ReaderTheme.light.rawValue,
-            readerTheme: try container.decodeIfPresent(String.self, forKey: .readerTheme)
+            readerTheme: container.decodeIfPresent(String.self, forKey: .readerTheme)
                 ?? ReaderTheme.light.rawValue,
-            matchAppReaderTheme: try container.decodeIfPresent(Bool.self, forKey: .matchAppReaderTheme) ?? true,
-            accentColorHex: try container.decodeIfPresent(String.self, forKey: .accentColorHex)
+            matchAppReaderTheme: container.decodeIfPresent(Bool.self, forKey: .matchAppReaderTheme) ?? true,
+            accentColorHex: container.decodeIfPresent(String.self, forKey: .accentColorHex)
                 ?? ThemeManager.ao3Red,
-            autoPreserveSmallSeriesOnSaveForLater: try container.decodeIfPresent(
+            autoPreserveSmallSeriesOnSaveForLater: container.decodeIfPresent(
                 Bool.self,
                 forKey: .autoPreserveSmallSeriesOnSaveForLater
             ) ?? false,
-            autoPreserveSeriesWorkThreshold: try container.decodeIfPresent(
+            autoPreserveSeriesWorkThreshold: container.decodeIfPresent(
                 Int.self,
                 forKey: .autoPreserveSeriesWorkThreshold
             ) ?? 5
@@ -703,7 +708,7 @@ enum KudosBackupError: LocalizedError {
         switch self {
         case .invalidPackage:
             "This file is not a valid Kudos backup."
-        case .unsupportedVersion(let version):
+        case let .unsupportedVersion(version):
             "This backup uses unsupported format version \(version)."
         }
     }
@@ -749,6 +754,8 @@ enum KudosBackupService {
         ))
     }
 
+    // Restore is transactional and intentionally linear for data-safety review.
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     static func restore(
         _ contents: KudosBackupContents,
         into context: ModelContext,

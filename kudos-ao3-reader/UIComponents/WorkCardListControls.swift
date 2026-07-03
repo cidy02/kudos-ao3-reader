@@ -21,8 +21,8 @@ struct WorkCardListControls: View {
             } label: {
                 Label(expandAll ? "Collapse all cards" : "Expand all cards",
                       systemImage: expandAll
-                        ? "rectangle.compress.vertical"
-                        : "rectangle.expand.vertical")
+                          ? "rectangle.compress.vertical"
+                          : "rectangle.expand.vertical")
             }
             Button { showingFilters = true } label: {
                 Label("Filter", systemImage: filtersActive

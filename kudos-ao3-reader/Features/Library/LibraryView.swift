@@ -1,7 +1,8 @@
-import SwiftUI
-import SwiftData
 import OSLog
+import SwiftData
+import SwiftUI
 
+// Lint: this existing dashboard owns many stateful sections.
 /// The Library tab: a Books-style dashboard of the user's saved works. Every section
 /// is a collapsible horizontal card carousel with a `>` chevron that opens its full
 /// vertical list. Sections, in order: Reading Now, Saved for Later, Finished,
@@ -10,7 +11,7 @@ import OSLog
 ///
 /// Filtering (the inspector panel), Reading Insights, content privacy, and — on iOS —
 /// multi-select bulk actions are kept from the previous list-based Library.
-struct LibraryView: View {
+struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -52,7 +53,10 @@ struct LibraryView: View {
         false
         #endif
     }
-    private var selectedWorks: [SavedWork] { works.filter { selection.contains($0.id) } }
+
+    private var selectedWorks: [SavedWork] {
+        works.filter { selection.contains($0.id) }
+    }
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
     private var statisticsWorks: [SavedWork] {
@@ -66,7 +70,9 @@ struct LibraryView: View {
     }
 
     /// The user's own tag names, for the filter panel's "Your Tags" facet.
-    private var userTagNames: [String] { tags.map(\.name) }
+    private var userTagNames: [String] {
+        tags.map(\.name)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -82,69 +88,69 @@ struct LibraryView: View {
                 ? (selection.isEmpty ? "Select Works" : "\(selection.count) Selected")
                 : "Library")
             #if os(iOS)
-            .toolbarTitleDisplayMode(.inlineLarge)
+                .toolbarTitleDisplayMode(.inlineLarge)
             #endif
-            .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
-            .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
-            .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
-            .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
-            .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
-            .toolbar { toolbarContent }
-            .alert("New Collection", isPresented: $showingNewCollection) {
-                TextField("Name", text: $newCollectionName)
-                Button("Create") { createCollection() }
-                Button("Cancel", role: .cancel) { newCollectionName = "" }
-            } message: {
-                Text("Name your collection.")
-            }
-            .alert("New Queue", isPresented: $showingNewQueue) {
-                TextField("Name", text: $newQueueName)
-                Button("Create") { createQueue() }
-                Button("Cancel", role: .cancel) { newQueueName = "" }
-            } message: {
-                Text("Name your reading queue.")
-            }
-            .confirmationDialog(
-                "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
-                isPresented: $confirmBulkDelete,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) { bulkDelete() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("The selected works will be removed from your Library. This can't be undone.")
-            }
-            .inspector(isPresented: router.isShowing(.libraryFilters)) {
-                LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
-                    .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+                .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
+                .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
+                .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
+                .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
+                .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .toolbar { toolbarContent }
+                .alert("New Collection", isPresented: $showingNewCollection) {
+                    TextField("Name", text: $newCollectionName)
+                    Button("Create") { createCollection() }
+                    Button("Cancel", role: .cancel) { newCollectionName = "" }
+                } message: {
+                    Text("Name your collection.")
+                }
+                .alert("New Queue", isPresented: $showingNewQueue) {
+                    TextField("Name", text: $newQueueName)
+                    Button("Create") { createQueue() }
+                    Button("Cancel", role: .cancel) { newQueueName = "" }
+                } message: {
+                    Text("Name your reading queue.")
+                }
+                .confirmationDialog(
+                    "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
+                    isPresented: $confirmBulkDelete,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) { bulkDelete() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("The selected works will be removed from your Library. This can't be undone.")
+                }
+                .inspector(isPresented: router.isShowing(.libraryFilters)) {
+                    LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
+                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                     // On iPhone the inspector collapses into a bottom sheet; show the
                     // standard grabber so it reads as swipe-to-dismiss.
                     #if os(iOS)
-                    .presentationDragIndicator(.visible)
+                        .presentationDragIndicator(.visible)
                     #endif
-            }
-            .task {
-                ReadingQueueService.ensureSavedForLaterQueue(in: context)
-                ReadingQueueService.normalizeAllQueuedWorks(in: context)
-                await backfillFilterMetadata()
-            }
-            .task(id: auth.isLoggedIn) { await loadMarkedForLater() }
-            // A tag tapped on a work's detail page filters the Library to it.
-            // `initial: true` catches a tag set just before this view appears.
-            .onChange(of: router.pendingLibraryTag, initial: true) { _, tag in
-                guard let tag else { return }
-                var applied = LibraryFilters()
-                switch tag.field {
-                case .userTag: applied.userTags = [tag.value]
-                case .fandom: applied.fandoms = [tag.value]
-                case .character: applied.characters = [tag.value]
-                case .relationship: applied.relationships = [tag.value]
-                case .additional: applied.additionalTags = [tag.value]
                 }
-                filters = applied
-                router.pendingLibraryTag = nil
-            }
+                .task {
+                    ReadingQueueService.ensureSavedForLaterQueue(in: context)
+                    ReadingQueueService.normalizeAllQueuedWorks(in: context)
+                    await backfillFilterMetadata()
+                }
+                .task(id: auth.isLoggedIn) { await loadMarkedForLater() }
+                // A tag tapped on a work's detail page filters the Library to it.
+                // `initial: true` catches a tag set just before this view appears.
+                .onChange(of: router.pendingLibraryTag, initial: true) { _, tag in
+                    guard let tag else { return }
+                    var applied = LibraryFilters()
+                    switch tag.field {
+                    case .userTag: applied.userTags = [tag.value]
+                    case .fandom: applied.fandoms = [tag.value]
+                    case .character: applied.characters = [tag.value]
+                    case .relationship: applied.relationships = [tag.value]
+                    case .additional: applied.additionalTags = [tag.value]
+                    }
+                    filters = applied
+                    router.pendingLibraryTag = nil
+                }
         }
     }
 
@@ -201,7 +207,7 @@ struct LibraryView: View {
             onSeeAll: hasItems ? { path.append(kind) } : nil
         ) {
             if showSkeleton {
-                ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
+                ForEach(0 ..< 6, id: \.self) { _ in WorkCoverCardSkeleton() }
             } else {
                 ForEach(saved.prefix(12)) { work in
                     localCarouselCard(work: work, footer: nil, progress: nil)
@@ -391,7 +397,7 @@ struct LibraryView: View {
             // large "Library" title. Icon-only so they read as a compact cluster.
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
-                    if hideMature && works.contains(where: \.isAdult) {
+                    if hideMature, works.contains(where: \.isAdult) {
                         MatureRevealToggle()
                     }
                     if !statisticsWorks.isEmpty {
@@ -623,18 +629,24 @@ struct LibraryView: View {
     }
 
     private func bulkDelete() {
-        for work in selectedWorks { WorkLifecycle.delete(work, in: context) }
+        for work in selectedWorks {
+            WorkLifecycle.delete(work, in: context)
+        }
         exitSelectMode()
     }
 
     /// Marks every selected work as saved (keeps its EPUB permanently).
     private func bulkSave() {
-        for work in selectedWorks { WorkLifecycle.setSaved(work, true, in: context) }
+        for work in selectedWorks {
+            WorkLifecycle.setSaved(work, true, in: context)
+        }
         exitSelectMode()
     }
 
     private func bulkFavorite() {
-        for work in selectedWorks { work.isFavorite = true }
+        for work in selectedWorks {
+            work.isFavorite = true
+        }
         try? context.save()
         exitSelectMode()
     }

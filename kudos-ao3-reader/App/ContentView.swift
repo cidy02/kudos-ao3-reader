@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -42,8 +42,8 @@ struct ContentView: View {
             // Segmented controls (UISegmentedControl) draw a white selected segment
             // in Sepia's light scheme; warm them via the appearance proxy. Reset for
             // Light/Dark. `initial` covers launch; new controls pick it up on change.
-            .onChange(of: theme.appTheme, initial: true) { _, t in
-                applySegmentedControlAppearance(for: t)
+            .onChange(of: theme.appTheme, initial: true) { _, appTheme in
+                applySegmentedControlAppearance(for: appTheme)
             }
             .task {
                 await auth.restoreSession()
@@ -65,21 +65,21 @@ struct ContentView: View {
                 BugReportView()
                 #endif
             }
-            // First-launch welcome, shown before normal navigation. The theme is
-            // re-injected because presented covers/sheets don't inherit it here.
-            #if os(iOS)
+        // First-launch welcome, shown before normal navigation. The theme is
+        // re-injected because presented covers/sheets don't inherit it here.
+        #if os(iOS)
             .fullScreenCover(isPresented: onboardingPresented) {
                 WelcomeView(onContinue: { hasCompletedOnboarding = true })
                     .environment(theme)
                     .tint(theme.effectiveTint)
             }
-            #else
+        #else
             .sheet(isPresented: onboardingPresented) {
                 WelcomeView(onContinue: { hasCompletedOnboarding = true })
                     .environment(theme)
                     .tint(theme.effectiveTint)
             }
-            #endif
+        #endif
     }
 
     /// Presents onboarding until the user completes it (persisted via `@AppStorage`).
@@ -189,15 +189,15 @@ struct ContentView: View {
             // Apple Books gives its Search button), distinct from the four core tabs.
             Tab(AppTab.search.title, systemImage: AppTab.search.symbol,
                 value: AppTab.search, role: .search) {
-                destination(for: .search)
-            }
+                    destination(for: .search)
+                }
             #endif
         }
         .tabViewStyle(.sidebarAdaptable)
         #if os(visionOS)
-        .tabViewBottomAccessory {
-            searchButton
-        }
+            .tabViewBottomAccessory {
+                searchButton
+            }
         #endif
     }
 }

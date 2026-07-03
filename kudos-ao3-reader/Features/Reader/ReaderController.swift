@@ -69,7 +69,9 @@ final class ReaderController: NSObject {
     #if os(iOS)
     /// Keeps the controller's notion of chrome visibility in sync with the view
     /// (e.g. after a tap toggle) so scroll-driven hiding doesn't fight it.
-    func syncChromeHidden(_ hidden: Bool) { chromeHidden = hidden }
+    func syncChromeHidden(_ hidden: Bool) {
+        chromeHidden = hidden
+    }
 
     /// A tap toggles the chrome; a downward scroll hides it. The recognizer doesn't
     /// cancel touches, so text selection, links and page swipes still work.
@@ -82,8 +84,8 @@ final class ReaderController: NSObject {
         scrollObservation = webView.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
             guard let self else { return }
             let y = scrollView.contentOffset.y
-            let dy = y - self.lastScrollY
-            self.lastScrollY = y
+            let dy = y - lastScrollY
+            lastScrollY = y
             // Only a genuine user-driven scroll hides the chrome. Showing the chrome
             // changes the safe area, which shifts the content and nudges contentOffset;
             // without this guard the observer read that shift as a downward scroll and
@@ -92,14 +94,16 @@ final class ReaderController: NSObject {
             guard scrollView.isDragging || scrollView.isDecelerating else { return }
             // Auto-hide only on a deliberate downward scroll; revealing is tap-only,
             // so a chapter load (offset resets to 0) never flashes the chrome back.
-            if dy > 6, y > 0, !self.chromeHidden {
-                self.chromeHidden = true
-                self.onChromeHiddenChange?(true)
+            if dy > 6, y > 0, !chromeHidden {
+                chromeHidden = true
+                onChromeHiddenChange?(true)
             }
         }
     }
 
-    @objc private func handleReaderTap() { onTap?() }
+    @objc private func handleReaderTap() {
+        onTap?()
+    }
     #endif
 
     /// Updates style/layout settings, re-applying immediately if a page is loaded.
@@ -161,7 +165,7 @@ final class ReaderController: NSObject {
 }
 
 extension ReaderController: WKNavigationDelegate {
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
         inject()
         if landOnLast {
             landOnLast = false
@@ -175,7 +179,7 @@ extension ReaderController: WKNavigationDelegate {
     /// web URL is a tapped content link — cancel it and hand it off. The app's own
     /// `loadFileURL` and in-chapter anchor jumps (`file://` fragments) keep their
     /// `file` scheme and proceed in place.
-    func webView(_ webView: WKWebView,
+    func webView(_: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if let url = navigationAction.request.url,
@@ -191,11 +195,13 @@ extension ReaderController: WKNavigationDelegate {
 
 #if os(iOS)
 extension ReaderController: UIGestureRecognizerDelegate {
-    // Let our tap coexist with the web view's own gestures (selection, links, swipes).
+    /// Let our tap coexist with the web view's own gestures (selection, links, swipes).
     func gestureRecognizer(
-        _ gestureRecognizer: UIGestureRecognizer,
-        shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
-    ) -> Bool { true }
+        _: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
 }
 #endif
 
@@ -204,7 +210,7 @@ private final class ReaderScriptProxy: NSObject, WKScriptMessageHandler {
     weak var controller: ReaderController?
 
     func userContentController(
-        _ userContentController: WKUserContentController,
+        _: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
         controller?.handleMessage(message.body)

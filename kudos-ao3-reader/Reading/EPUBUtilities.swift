@@ -12,12 +12,12 @@ extension String {
         guard contains("&") else { return self }
         let named: [String: String] = [
             "&amp;": "&", "&lt;": "<", "&gt;": ">",
-            "&quot;": "\"", "&apos;": "'", "&#39;": "'", "&nbsp;": "\u{00a0}",
+            "&quot;": "\"", "&apos;": "'", "&#39;": "'", "&nbsp;": "\u{00a0}"
         ]
         var result = ""
         var rest = Substring(self)
         while let amp = rest.firstIndex(of: "&") {
-            result += rest[rest.startIndex..<amp]
+            result += rest[rest.startIndex ..< amp]
             let tail = rest[amp...]
             guard let semi = tail.firstIndex(of: ";"),
                   tail.distance(from: tail.startIndex, to: semi) <= 10 else {
@@ -25,7 +25,7 @@ extension String {
                 rest = rest[tail.index(after: tail.startIndex)...]
                 continue
             }
-            let entity = String(tail[tail.startIndex...semi])
+            let entity = String(tail[tail.startIndex ... semi])
             if let replacement = named[entity] {
                 result += replacement
             } else if entity.hasPrefix("&#x") || entity.hasPrefix("&#X"),
@@ -37,7 +37,7 @@ extension String {
                       let scalar = Unicode.Scalar(code) {
                 result.unicodeScalars.append(scalar)
             } else {
-                result += entity   // unknown entity: leave as-is
+                result += entity // unknown entity: leave as-is
             }
             rest = rest[tail.index(after: semi)...]
         }

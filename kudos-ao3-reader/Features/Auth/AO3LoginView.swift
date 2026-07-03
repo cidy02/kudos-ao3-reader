@@ -72,10 +72,10 @@ struct AO3LoginView: View {
                 Section {
                     TextField("Username or email", text: $username)
                         .textContentType(.username)
-                        #if os(iOS)
+                    #if os(iOS)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        #endif
+                    #endif
                         .submitLabel(.next)
 
                     SecureField("Password", text: $password)
@@ -86,7 +86,7 @@ struct AO3LoginView: View {
                     Label("AO3 Account", systemImage: "person.crop.circle")
                 } footer: {
                     Text("Kudos submits these credentials only to AO3's official login page. "
-                         + "Your password is never saved.")
+                        + "Your password is never saved.")
                 }
 
                 if let error = auth.errorMessage {

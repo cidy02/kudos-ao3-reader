@@ -1,10 +1,12 @@
-import SwiftUI
 import Foundation
+import SwiftUI
 
 /// How the reader lays out a chapter.
 enum ReadingMode: String, CaseIterable, Identifiable {
     case scroll, paged
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -24,7 +26,9 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 /// A reading color theme applied to the EPUB content.
 enum ReaderTheme: String, CaseIterable, Identifiable {
     case light, sepia, dark
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -98,9 +102,9 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
 
     // MARK: App-wide surface colours (Sepia only)
 
-    /// Warm surfaces used to theme the whole app for Sepia. Light and Dark return
-    /// `nil` so they keep the native system surfaces (which already look right);
-    /// only Sepia substitutes its own colours, since the system has no sepia scheme.
+    // Warm surfaces used to theme the whole app for Sepia. Light and Dark return
+    // `nil` so they keep the native system surfaces (which already look right);
+    // only Sepia substitutes its own colours, since the system has no sepia scheme.
 
     /// The recessed base behind grouped content (≈ `systemGroupedBackground`).
     var appBaseBackground: Color? {
@@ -132,18 +136,40 @@ struct ReaderFontOption: Identifiable {
     /// For imported fonts, the on-disk file to embed via `@font-face`.
     let customFileURL: URL?
 
-    var isCustom: Bool { customFileURL != nil }
+    var isCustom: Bool {
+        customFileURL != nil
+    }
 
     /// Built-in families available on Apple platforms.
     static let builtIns: [ReaderFontOption] = [
-        .init(id: "system", name: "System", cssFamily: "-apple-system, system-ui, sans-serif", customFileURL: nil),
-        .init(id: "nyserif", name: "New York", cssFamily: "'New York', ui-serif, Georgia, serif", customFileURL: nil),
+        .init(
+            id: "system",
+            name: "System",
+            cssFamily: "-apple-system, system-ui, sans-serif",
+            customFileURL: nil
+        ),
+        .init(
+            id: "nyserif",
+            name: "New York",
+            cssFamily: "'New York', ui-serif, Georgia, serif",
+            customFileURL: nil
+        ),
         .init(id: "georgia", name: "Georgia", cssFamily: "Georgia, serif", customFileURL: nil),
-        .init(id: "palatino", name: "Palatino", cssFamily: "'Palatino Linotype', Palatino, 'Book Antiqua', serif", customFileURL: nil),
+        .init(
+            id: "palatino",
+            name: "Palatino",
+            cssFamily: "'Palatino Linotype', Palatino, 'Book Antiqua', serif",
+            customFileURL: nil
+        ),
         .init(id: "times", name: "Times New Roman", cssFamily: "'Times New Roman', Times, serif", customFileURL: nil),
-        .init(id: "helvetica", name: "Helvetica Neue", cssFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", customFileURL: nil),
+        .init(
+            id: "helvetica",
+            name: "Helvetica Neue",
+            cssFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+            customFileURL: nil
+        ),
         .init(id: "avenir", name: "Avenir", cssFamily: "'Avenir Next', Avenir, sans-serif", customFileURL: nil),
-        .init(id: "menlo", name: "Menlo", cssFamily: "Menlo, ui-monospace, monospace", customFileURL: nil),
+        .init(id: "menlo", name: "Menlo", cssFamily: "Menlo, ui-monospace, monospace", customFileURL: nil)
     ]
 
     /// All selectable fonts: the built-ins followed by the user's imported fonts.
@@ -188,12 +214,12 @@ struct ReaderTextStyle: Equatable {
 
     // Slider bounds, kept here so the reader CSS and the Customize sheet agree.
     static let defaultFontSizePt: Double = 18
-    static let fontSizeRange = 12.0...34.0
+    static let fontSizeRange = 12.0 ... 34.0
     static let fontSizeStep = 1.0
-    static let lineHeightRange = 1.2...2.4
-    static let letterSpacingRange = -0.03...0.12
-    static let wordSpacingRange = 0.0...0.6
-    static let marginRange = 8.0...64.0
+    static let lineHeightRange = 1.2 ... 2.4
+    static let letterSpacingRange = -0.03 ... 0.12
+    static let wordSpacingRange = 0.0 ... 0.6
+    static let marginRange = 8.0 ... 64.0
 
     /// The effective style: when Customize is off, layout options fall back to the
     /// defaults while the always-on font weight and text size are preserved.
@@ -208,7 +234,16 @@ struct ReaderTextStyle: Equatable {
 
     /// A compact identity used to detect when a re-layout is needed.
     var token: String {
-        "\(customize ? 1 : 0)|\(bold ? 1 : 0)|\(fontSizePt)|\(lineHeight)|\(letterSpacing)|\(wordSpacing)|\(margin)|\(justify ? 1 : 0)"
+        [
+            customize ? "1" : "0",
+            bold ? "1" : "0",
+            "\(fontSizePt)",
+            "\(lineHeight)",
+            "\(letterSpacing)",
+            "\(wordSpacing)",
+            "\(margin)",
+            justify ? "1" : "0"
+        ].joined(separator: "|")
     }
 }
 
@@ -229,7 +264,7 @@ enum ReaderStylesheet {
             family = "'ReaderUserFont', \(font.cssFamily)"
         }
 
-        let s = style.resolved
+        let resolvedStyle = style.resolved
 
         // Optional rules are emitted only when they actually change something, so a
         // non-customized reader produces the same CSS as before (this keeps macOS and
@@ -237,23 +272,27 @@ enum ReaderStylesheet {
         // or letter-spacing unless the user asked for it).
         let blockSelectors = "body, p, div, li, blockquote, td, th"
         var blockRules = ""
-        if s.justify {
+        if resolvedStyle.justify {
             blockRules += "text-align: justify !important; -webkit-hyphens: auto; hyphens: auto;"
         }
-        if s.letterSpacing != 0 { blockRules += "letter-spacing: \(s.letterSpacing)em !important;" }
-        if s.wordSpacing != 0 { blockRules += "word-spacing: \(s.wordSpacing)em !important;" }
+        if resolvedStyle.letterSpacing != 0 {
+            blockRules += "letter-spacing: \(resolvedStyle.letterSpacing)em !important;"
+        }
+        if resolvedStyle.wordSpacing != 0 {
+            blockRules += "word-spacing: \(resolvedStyle.wordSpacing)em !important;"
+        }
         let blockRule = blockRules.isEmpty ? "" : "\(blockSelectors) { \(blockRules) }"
 
         // Bold is applied via !important so an EPUB's own `font-weight: normal` on
         // paragraphs can't win; headings and <strong> keep their own heavier weight.
-        let boldRule = s.bold
+        let boldRule = resolvedStyle.bold
             ? "p, div, span, li, blockquote, td, th, a { font-weight: 600 !important; }"
             : ""
 
         // Absolute body text size in px (== points under the injected device-width
         // viewport), set by the Text Size control.
-        let fontSize = Int(s.fontSizePt.rounded())
-        let marginPx = Int(s.margin)
+        let fontSize = Int(resolvedStyle.fontSizePt.rounded())
+        let marginPx = Int(resolvedStyle.margin)
 
         return """
         \(fontFace)
@@ -263,7 +302,7 @@ enum ReaderStylesheet {
         }
         body {
             font-family: \(family) !important;
-            line-height: \(s.lineHeight);
+            line-height: \(resolvedStyle.lineHeight);
             /* !important so the Text Size scale beats calibre EPUBs' `.calibre`
                class rule on <body> (a class selector outranks `body` on specificity,
                which otherwise pins the size to 1em and ignores the setting). The
@@ -304,12 +343,19 @@ enum ReaderStylesheet {
         """
     }
 
+    // Lint: existing JS bridge stays cohesive for behavior stability.
     /// JavaScript that installs the theme `<style>` and lays the chapter out for the
     /// given mode. In paged mode it builds CSS columns (`columns` per screen) and
     /// exposes `readerStep`/`readerLast` so the host can turn pages and detect
     /// chapter boundaries.
-    static func layoutScript(css: String, mode: ReadingMode, columns: Int, margin: Int = 28,
-                             safeTop: Int = 0, safeBottom: Int = 0) -> String {
+    static func layoutScript( // swiftlint:disable:this function_body_length
+        css: String,
+        mode: ReadingMode,
+        columns: Int,
+        margin: Int = 28,
+        safeTop: Int = 0,
+        safeBottom: Int = 0
+    ) -> String {
         let base64 = Data(css.utf8).base64EncodedString()
         let modeJS = mode == .paged ? "paged" : "scroll"
         return """
@@ -320,7 +366,11 @@ enum ReaderStylesheet {
             // size (and `px` == points), which is what the Text Size control assumes.
             (function() {
                 var vp = document.querySelector('meta[name=viewport]');
-                if (!vp) { vp = document.createElement('meta'); vp.setAttribute('name', 'viewport'); document.head.appendChild(vp); }
+                if (!vp) {
+                    vp = document.createElement('meta');
+                    vp.setAttribute('name', 'viewport');
+                    document.head.appendChild(vp);
+                }
                 // viewport-fit=cover exposes env(safe-area-inset-*) so the content can
                 // pad itself away from the notch / home indicator. The web view fills
                 // the whole screen (so toggling the chrome never resizes it and the

@@ -40,8 +40,11 @@ final class AO3WorkActionsModel {
         guard !isWorking else { return }
         isWorking = true
         Task {
-            do { banner = try await action() }
-            catch { banner = Self.message(for: error) }
+            do {
+                banner = try await action()
+            } catch {
+                banner = Self.message(for: error)
+            }
             isWorking = false
         }
     }
@@ -171,30 +174,30 @@ private struct AO3CommentComposer: View {
             .appThemedScroll()
             .navigationTitle("Leave a Comment")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.disabled(actions.isWorking)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if actions.isWorking {
-                        ProgressView()
-                    } else {
-                        Button("Post") { confirming = true }
-                            .disabled(trimmed.isEmpty)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }.disabled(actions.isWorking)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        if actions.isWorking {
+                            ProgressView()
+                        } else {
+                            Button("Post") { confirming = true }
+                                .disabled(trimmed.isEmpty)
+                        }
                     }
                 }
-            }
-            .confirmationDialog("Post this comment to AO3?", isPresented: $confirming,
-                                titleVisibility: .visible) {
-                Button("Post Comment") { actions.submitComment(workID: workID, auth: auth) }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This publishes your comment on AO3.")
-            }
-            .presentationDragIndicator(.visible)
-            .interactiveDismissDisabled(actions.isWorking)
+                .confirmationDialog("Post this comment to AO3?", isPresented: $confirming,
+                                    titleVisibility: .visible) {
+                    Button("Post Comment") { actions.submitComment(workID: workID, auth: auth) }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This publishes your comment on AO3.")
+                }
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(actions.isWorking)
         }
     }
 }
@@ -242,22 +245,22 @@ private struct AO3BookmarkComposer: View {
             .appThemedScroll()
             .navigationTitle("Bookmark on AO3")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.disabled(actions.isWorking)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if actions.isWorking {
-                        ProgressView()
-                    } else {
-                        Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }.disabled(actions.isWorking)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        if actions.isWorking {
+                            ProgressView()
+                        } else {
+                            Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
+                        }
                     }
                 }
-            }
-            .presentationDragIndicator(.visible)
-            .interactiveDismissDisabled(actions.isWorking)
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(actions.isWorking)
         }
     }
 }

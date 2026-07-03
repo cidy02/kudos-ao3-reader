@@ -154,7 +154,7 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     /// True once the type-split Work Tags are available (after an AO3 refresh).
     var hasCategorizedWorkTags: Bool {
         !(workFandoms.isEmpty && workCharacters.isEmpty
-          && workRelationships.isEmpty && workFreeforms.isEmpty)
+            && workRelationships.isEmpty && workFreeforms.isEmpty)
     }
 
     /// Whether an AO3 refresh would still add data the Library filters rely on:
@@ -196,17 +196,23 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
 
     /// Queue-only works are preserved/readable but intentionally hidden from normal
     /// Library shelves until the user explicitly saves or favorites them.
-    var isQueueOnlyWork: Bool { isQueuedForLater && !isSaved && !isFavorite }
+    var isQueueOnlyWork: Bool {
+        isQueuedForLater && !isSaved && !isFavorite
+    }
 
     /// Kept works (saved, favorited, or queued) never have their EPUB freed.
-    var isProtected: Bool { isSaved || isFavorite || isQueuedForLater }
+    var isProtected: Bool {
+        isSaved || isFavorite || isQueuedForLater
+    }
 
     var isInSavedForLaterQueue: Bool {
         queueMemberships.contains { $0.queue?.kind == .savedForLater }
     }
 
     /// The posted-chapter count parsed from the `chapters` stats string ("5/10" → 5).
-    var postedChapterCount: Int { Self.postedChapterCount(from: chapters) }
+    var postedChapterCount: Int {
+        Self.postedChapterCount(from: chapters)
+    }
 
     /// AO3 has new chapters the user hasn't seen (live posted count exceeds the
     /// baseline). Drives Home → Recently Updated.
@@ -274,7 +280,7 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
         self.author = author
         self.summary = summary
         self.sourceURL = sourceURL
-        self.dateAdded = Date()
+        dateAdded = Date()
     }
 
     /// Location of the stored EPUB on disk.
@@ -302,10 +308,12 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     init(title: String, urlString: String) {
         self.title = title
         self.urlString = urlString
-        self.dateAdded = Date()
+        dateAdded = Date()
     }
 
-    var url: URL? { URL(string: urlString) }
+    var url: URL? {
+        URL(string: urlString)
+    }
 }
 
 /// A font file the user imported for use in the reader.
@@ -319,13 +327,17 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     init(name: String, fileName: String) {
         self.name = name
         self.fileName = fileName
-        self.dateAdded = Date()
+        dateAdded = Date()
     }
 
-    var fileURL: URL { Storage.fontsDirectory.appendingPathComponent(fileName) }
+    var fileURL: URL {
+        Storage.fontsDirectory.appendingPathComponent(fileName)
+    }
 
     /// Stable identifier used to persist the reader's font selection.
-    var selectionID: String { "custom:\(fileName)" }
+    var selectionID: String {
+        "custom:\(fileName)"
+    }
 }
 
 /// A user-named Collection (shelf) grouping works in the Library. Many-to-many with
@@ -341,7 +353,7 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
 
     init(name: String) {
         self.name = name
-        self.dateAdded = Date()
+        dateAdded = Date()
     }
 }
 
@@ -368,7 +380,7 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     ) {
         self.id = id
         self.name = name
-        self.kindRaw = kind.rawValue
+        kindRaw = kind.rawValue
         self.sortOrder = sortOrder
         self.dateCreated = dateCreated
         self.dateUpdated = dateUpdated

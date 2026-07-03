@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 /// The Account tab: AO3 session state, AO3 account lists (My AO3), the local
 /// reading surfaces moved off the old Bookmarks tab, app settings, and help/about.
@@ -39,15 +39,15 @@ struct AccountView: View {
             .appThemedScroll()
             .navigationTitle("Account")
             #if os(iOS)
-            .toolbarTitleDisplayMode(.inlineLarge)
+                .toolbarTitleDisplayMode(.inlineLarge)
             #endif
-            .navigationDestination(for: Route.self, destination: destination)
-            .navigationDestination(for: AO3AccountWorksList.Kind.self) { AO3AccountWorksList(kind: $0) }
-            .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
-            .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
-            .sheet(isPresented: $showingLogin) { AO3LoginView() }
-            .sheet(isPresented: $showingAbout) { NavigationStack { AboutView() } }
-            .sheet(isPresented: $showingBugReport) { BugReportView() }
+                .navigationDestination(for: Route.self, destination: destination)
+                .navigationDestination(for: AO3AccountWorksList.Kind.self) { AO3AccountWorksList(kind: $0) }
+                .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+                .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .sheet(isPresented: $showingLogin) { AO3LoginView() }
+                .sheet(isPresented: $showingAbout) { NavigationStack { AboutView() } }
+                .sheet(isPresented: $showingBugReport) { BugReportView() }
         }
     }
 
@@ -70,14 +70,13 @@ struct AccountView: View {
 
     // MARK: Sections
 
-    @ViewBuilder
     private var accountStatusSection: some View {
         Section {
             switch auth.status {
             case .restoring:
                 // Restoring the AO3 session — show the shape of the signed-in row.
                 SkeletonListRow(width: 96, trailingWidth: 120)
-            case .signedIn(let username):
+            case let .signedIn(username):
                 LabeledContent {
                     Text(username)
                 } label: {
@@ -103,7 +102,7 @@ struct AccountView: View {
                 Text(notice)
             } else {
                 Text("Log in to use your AO3 subscriptions, bookmarks, history, and "
-                     + "reading list. Your session stays on this device.")
+                    + "reading list. Your session stays on this device.")
             }
         }
     }
@@ -239,7 +238,9 @@ private struct LocalReadingHistoryView: View {
     }
 
     /// Privacy-visible history (the base the filter panel narrows further).
-    private var visibleHistory: [SavedWork] { history.filter(passesPrivacy) }
+    private var visibleHistory: [SavedWork] {
+        history.filter(passesPrivacy)
+    }
 
     /// History after the active filters. With no filter set, the newest-first order is
     /// kept rather than re-sorted by the filter's default sort.
@@ -253,7 +254,8 @@ private struct LocalReadingHistoryView: View {
                 ContentUnavailableView {
                     Label("No history", systemImage: "clock.arrow.circlepath")
                 } description: {
-                    Text("Works you finish without saving land here. Their files are freed, but you can re-download and revisit them anytime.")
+                    Text("Works you finish without saving land here. Their files are freed, "
+                        + "but you can re-download and revisit them anytime.")
                 }
             } else if visibleHistory.isEmpty {
                 MatureContentHiddenView()
@@ -288,32 +290,32 @@ private struct LocalReadingHistoryView: View {
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .navigationTitle("Local Reading History")
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            if !visibleHistory.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter the works in your history")
+            .toolbar {
+                if !visibleHistory.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        WorkCardListControls(expandAll: $expandAll,
+                                             filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter the works in your history")
+                    }
                 }
             }
-        }
-        .inspector(isPresented: $showingFilters) {
-            LibraryFilterPanel(filters: $filters, works: visibleHistory, userTagNames: allTags.map(\.name))
-                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .inspector(isPresented: $showingFilters) {
+                LibraryFilterPanel(filters: $filters, works: visibleHistory, userTagNames: allTags.map(\.name))
+                    .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 #if os(iOS)
-                .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.visible)
                 #endif
-        }
-        .deleteConfirmation(
-            for: $pendingDelete,
-            title: "Remove from History?",
-            confirmLabel: "Remove",
-            message: { "“\($0.title)” will be removed from your History." },
-            perform: remove
-        )
+            }
+            .deleteConfirmation(
+                for: $pendingDelete,
+                title: "Remove from History?",
+                confirmLabel: "Remove",
+                message: { "“\($0.title)” will be removed from your History." },
+                perform: remove
+            )
     }
 
     private func remove(_ work: SavedWork) {
@@ -343,7 +345,9 @@ private struct LocalFavoritesView: View {
     }
 
     /// Privacy-visible favorites (the base the filter panel narrows further).
-    private var visibleFavorites: [SavedWork] { favorites.filter(passesPrivacy) }
+    private var visibleFavorites: [SavedWork] {
+        favorites.filter(passesPrivacy)
+    }
 
     /// Favorites after the active filters. With no filter set, the newest-first order is
     /// kept rather than re-sorted by the filter's default sort.
@@ -394,24 +398,24 @@ private struct LocalFavoritesView: View {
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .navigationTitle("Favorites")
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            if !visibleFavorites.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter your favorites")
+            .toolbar {
+                if !visibleFavorites.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        WorkCardListControls(expandAll: $expandAll,
+                                             filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter your favorites")
+                    }
                 }
             }
-        }
-        .inspector(isPresented: $showingFilters) {
-            LibraryFilterPanel(filters: $filters, works: visibleFavorites, userTagNames: allTags.map(\.name))
-                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .inspector(isPresented: $showingFilters) {
+                LibraryFilterPanel(filters: $filters, works: visibleFavorites, userTagNames: allTags.map(\.name))
+                    .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 #if os(iOS)
-                .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.visible)
                 #endif
-        }
+            }
     }
 }

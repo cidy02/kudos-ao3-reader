@@ -5,8 +5,8 @@ import Foundation
 /// re-scraped every time the user opens Browse. Stored as a single JSON file in the
 /// evictable metadata cache directory; each entry carries its fetch date so stale
 /// ones can be refreshed in the background while the cached copy shows immediately.
-struct FandomCatalogCache: Sendable {
-    struct Entry: Codable, Sendable {
+struct FandomCatalogCache {
+    struct Entry: Codable {
         var fandoms: [AO3Fandom]
         var fetchedAt: Date
     }

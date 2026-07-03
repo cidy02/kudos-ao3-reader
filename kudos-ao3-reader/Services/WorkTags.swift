@@ -19,7 +19,7 @@ enum WorkTags {
         guard work.needsAO3Refresh else { return }
         do {
             let groups = try await AO3Client.shared.workTags(workID: id)
-            guard !groups.isEmpty else { return }   // locked/empty page — keep EPUB tags, retry later
+            guard !groups.isEmpty else { return } // locked/empty page — keep EPUB tags, retry later
             work.workFandoms = TagMerge.merged(work.workFandoms, groups.fandoms)
             work.workRelationships = TagMerge.merged(work.workRelationships, groups.relationships)
             work.workCharacters = TagMerge.merged(work.workCharacters, groups.characters)

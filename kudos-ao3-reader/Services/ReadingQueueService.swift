@@ -3,6 +3,8 @@ import OSLog
 import SwiftData
 
 @MainActor
+// Queue lifecycle rules are centralized here; avoid behavior refactors for lint.
+// swiftlint:disable:next type_body_length
 enum ReadingQueueService {
     static let savedForLaterName = "Saved for Later"
     nonisolated static let preservationRequestPauseNanos: UInt64 = 2_000_000_000
@@ -98,7 +100,7 @@ enum ReadingQueueService {
         if let primary = savedQueues.first {
             primary.name = savedForLaterName
             primary.kind = .savedForLater
-            primary.sortOrder = min(primary.sortOrder, -1_000)
+            primary.sortOrder = min(primary.sortOrder, -1000)
 
             for duplicate in savedQueues.dropFirst() {
                 for membership in duplicate.memberships {
@@ -117,7 +119,7 @@ enum ReadingQueueService {
         let queue = ReadingQueue(
             name: savedForLaterName,
             kind: .savedForLater,
-            sortOrder: -1_000
+            sortOrder: -1000
         )
         context.insert(queue)
         saveBestEffort(context, reason: "Saving Saved for Later queue failed")
@@ -171,7 +173,7 @@ enum ReadingQueueService {
         }
 
         if hasMembership {
-            if work.hasEPUB && hasFile {
+            if work.hasEPUB, hasFile {
                 if work.epubPreservationStatus != .preserving {
                     work.epubPreservationStatus = .preserved
                 }
@@ -179,7 +181,7 @@ enum ReadingQueueService {
             } else if work.epubPreservationStatus == .notPreserved {
                 work.epubPreservationStatus = .queued
             }
-            if work.metadataSyncStatus == .unknown && work.needsAO3Refresh {
+            if work.metadataSyncStatus == .unknown, work.needsAO3Refresh {
                 work.metadataSyncStatus = .pending
             }
         } else if work.epubPreservationStatus != .notPreserved {
@@ -279,7 +281,7 @@ enum ReadingQueueService {
 
         work.lastPreservationAttemptAt = Date()
         let existingFile = FileManager.default.fileExists(atPath: work.fileURL.path)
-        if work.hasEPUB && existingFile {
+        if work.hasEPUB, existingFile {
             work.epubPreservationStatus = .preserved
             work.preservedAt = Date()
             try context.save()
@@ -299,11 +301,10 @@ enum ReadingQueueService {
         try context.save()
 
         do {
-            let temp: URL
-            if let downloadEPUB {
-                temp = try await downloadEPUB(id)
+            let temp: URL = if let downloadEPUB {
+                try await downloadEPUB(id)
             } else {
-                temp = try await AO3Client.shared.downloadEPUB(workID: id)
+                try await AO3Client.shared.downloadEPUB(workID: id)
             }
             try replaceEPUB(for: work, with: temp)
             work.hasEPUB = true
@@ -387,6 +388,8 @@ enum ReadingQueueService {
         }
     }
 
+    // Series preservation keeps its accounting in one place for safety.
+    // swiftlint:disable:next cyclomatic_complexity
     static func preserveSeries(
         _ summaries: [AO3WorkSummary],
         to queues: [ReadingQueue]? = nil,
@@ -557,6 +560,8 @@ enum ReadingQueueService {
         }
     }
 
+    // Metadata merge is a field-by-field guard sequence by design.
+    // swiftlint:disable:next cyclomatic_complexity
     static func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
         work.ao3WorkID = summary.id
         if work.author.isEmpty { work.author = summary.authorText }

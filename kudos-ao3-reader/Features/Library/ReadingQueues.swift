@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // MARK: - Cards
 
@@ -161,68 +161,68 @@ struct ReadingQueueDetailView: View {
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .navigationTitle(queue.displayName)
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .inspector(isPresented: $showingFilters) {
-            LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
-                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            .inspector(isPresented: $showingFilters) {
+                LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
+                    .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 #if os(iOS)
-                .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.visible)
                 #endif
-        }
-        .toolbar {
-            if !works.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter the works in this queue")
-                }
             }
-            if queue.kind == .custom {
-                ToolbarItem {
-                    Menu {
-                        Button {
-                            renameText = queue.name
-                            showingRename = true
+            .toolbar {
+                if !works.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        WorkCardListControls(expandAll: $expandAll,
+                                             filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter the works in this queue")
+                    }
+                }
+                if queue.kind == .custom {
+                    ToolbarItem {
+                        Menu {
+                            Button {
+                                renameText = queue.name
+                                showingRename = true
+                            } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                confirmDelete = true
+                            } label: {
+                                Label("Delete Queue", systemImage: "trash")
+                            }
                         } label: {
-                            Label("Rename", systemImage: "pencil")
+                            Label("Queue options", systemImage: "ellipsis.circle")
                         }
-                        Button(role: .destructive) {
-                            confirmDelete = true
-                        } label: {
-                            Label("Delete Queue", systemImage: "trash")
-                        }
-                    } label: {
-                        Label("Queue options", systemImage: "ellipsis.circle")
                     }
                 }
             }
-        }
-        .alert("Rename Queue", isPresented: $showingRename) {
-            TextField("Name", text: $renameText)
-            Button("Save") {
-                let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    queue.name = trimmed
-                    queue.dateUpdated = Date()
-                    saveBestEffort("Saving queue rename failed")
+            .alert("Rename Queue", isPresented: $showingRename) {
+                TextField("Name", text: $renameText)
+                Button("Save") {
+                    let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        queue.name = trimmed
+                        queue.dateUpdated = Date()
+                        saveBestEffort("Saving queue rename failed")
+                    }
                 }
+                Button("Cancel", role: .cancel) {}
             }
-            Button("Cancel", role: .cancel) {}
-        }
-        .confirmationDialog(
-            "Delete “\(queue.displayName)”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                deleteQueue()
+            .confirmationDialog(
+                "Delete “\(queue.displayName)”?",
+                isPresented: $confirmDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    deleteQueue()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The queue is removed. Works stay in Kudos; only this queue membership is cleared.")
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The queue is removed. Works stay in Kudos; only this queue membership is cleared.")
-        }
     }
 
     private func deleteQueue() {
@@ -320,7 +320,7 @@ struct ReadingQueueStorageView: View {
                     Text("Preserved EPUBs")
                 } footer: {
                     Text("Removing a work here only removes queue membership. Saved or favorited works stay "
-                         + "in Kudos; queue-only works are removed when no queues remain.")
+                        + "in Kudos; queue-only works are removed when no queues remain.")
                 }
             }
             .appThemedRows()
@@ -328,28 +328,28 @@ struct ReadingQueueStorageView: View {
         .appThemedScroll()
         .navigationTitle("Queue Storage")
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(
-            "Remove from reading queues?",
-            isPresented: Binding(
-                get: { pendingQueueRemoval != nil },
-                set: { if !$0 { pendingQueueRemoval = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(queueRemovalButtonTitle, role: .destructive) {
-                if let work = pendingQueueRemoval {
-                    removeFromQueues(work)
+            .confirmationDialog(
+                "Remove from reading queues?",
+                isPresented: Binding(
+                    get: { pendingQueueRemoval != nil },
+                    set: { if !$0 { pendingQueueRemoval = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button(queueRemovalButtonTitle, role: .destructive) {
+                    if let work = pendingQueueRemoval {
+                        removeFromQueues(work)
+                    }
+                    pendingQueueRemoval = nil
                 }
-                pendingQueueRemoval = nil
+                Button("Cancel", role: .cancel) {
+                    pendingQueueRemoval = nil
+                }
+            } message: {
+                Text(queueRemovalMessage)
             }
-            Button("Cancel", role: .cancel) {
-                pendingQueueRemoval = nil
-            }
-        } message: {
-            Text(queueRemovalMessage)
-        }
     }
 
     private func preservedWorkRow(_ work: SavedWork) -> some View {
@@ -462,7 +462,7 @@ struct AddToQueueView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                            .buttonStyle(.plain)
+                        .buttonStyle(.plain)
                     }
                 } header: {
                     Text("Queues")
@@ -522,24 +522,24 @@ struct AddToQueueView: View {
             .formStyle(.grouped)
             .navigationTitle("Add to Queue")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
                 }
-            }
-            .task {
-                ReadingQueueService.ensureSavedForLaterQueue(in: context)
-            }
-            .onChange(of: includeSeries) { _, isEnabled in
-                if isEnabled {
-                    Task { await loadSeriesPreview() }
-                } else {
-                    seriesPrompt = nil
-                    seriesResult = nil
+                .task {
+                    ReadingQueueService.ensureSavedForLaterQueue(in: context)
                 }
-            }
+                .onChange(of: includeSeries) { _, isEnabled in
+                    if isEnabled {
+                        Task { await loadSeriesPreview() }
+                    } else {
+                        seriesPrompt = nil
+                        seriesResult = nil
+                    }
+                }
         }
         .presentationDragIndicator(.visible)
     }
@@ -587,18 +587,17 @@ struct AddToQueueView: View {
         preservingSeries = true
         seriesResult = nil
         seriesTask = Task { @MainActor in
-            let result: ReadingQueueService.SeriesPreservationResult
-            if let seriesPrompt,
-               seriesPrompt.canUsePreviewForPreservation,
-               let summaries = seriesPrompt.preview?.works {
-                result = await ReadingQueueService.preserveSeries(
+            let result: ReadingQueueService.SeriesPreservationResult = if let seriesPrompt,
+                                                                          seriesPrompt.canUsePreviewForPreservation,
+                                                                          let summaries = seriesPrompt.preview?.works {
+                await ReadingQueueService.preserveSeries(
                     summaries,
                     to: queues,
                     in: context,
                     progress: { seriesResult = $0 }
                 )
             } else {
-                result = await ReadingQueueService.preserveSeries(
+                await ReadingQueueService.preserveSeries(
                     anchoredAt: work,
                     to: queues,
                     in: context,

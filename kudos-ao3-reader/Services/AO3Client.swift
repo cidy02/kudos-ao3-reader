@@ -9,8 +9,9 @@ import SwiftSoup
 // against live AO3 HTML. AO3 has no official API, so this is HTML scraping — kept
 // polite and personal.
 
+// Lint: the existing client keeps scraping/parsing behavior centralized.
 /// Serialized network access to AO3 (one request at a time keeps us polite).
-actor AO3Client {
+actor AO3Client { // swiftlint:disable:this type_body_length
     static let shared = AO3Client()
 
     private let base = "https://archiveofourown.org"
@@ -31,7 +32,13 @@ actor AO3Client {
 
     private func getHTML(_ url: URL) async throws -> String {
         let data = try await fetchData(from: url)
-        return String(decoding: data, as: UTF8.self)
+        return Self.htmlString(from: data)
+    }
+
+    private static func htmlString(from data: Data) -> String {
+        // Preserve the existing lossy UTF-8 behavior for AO3 HTML with bad bytes.
+        // swiftlint:disable:next optional_data_string_conversion
+        String(decoding: data, as: UTF8.self)
     }
 
     /// Coalesces concurrent identical GETs so two callers requesting the same page
@@ -61,10 +68,10 @@ actor AO3Client {
             throw AO3Error.network("No response from AO3.")
         }
         switch http.statusCode {
-        case 200...299: return
+        case 200 ... 299: return
         case 429: throw AO3Error.rateLimited(retryAfter: retryAfter(from: http))
         case 404: throw AO3Error.notFound
-        case 500...599: throw AO3Error.server(status: http.statusCode)
+        case 500 ... 599: throw AO3Error.server(status: http.statusCode)
         default: throw AO3Error.http(status: http.statusCode)
         }
     }
@@ -111,9 +118,9 @@ actor AO3Client {
     /// Backoff (seconds) before retrying a transient error, or nil if it should
     /// not be retried. Base 0.5s, doubled per attempt; 429 respects Retry-After.
     private static func retryDelay(for error: Error, attempt: Int) -> TimeInterval? {
-        let backoff = 0.5 * pow(2, Double(attempt - 1))   // 0.5, 1.0, 2.0…
+        let backoff = 0.5 * pow(2, Double(attempt - 1)) // 0.5, 1.0, 2.0…
         switch error {
-        case AO3Error.rateLimited(let retryAfter):
+        case let AO3Error.rateLimited(retryAfter):
             return max(retryAfter ?? 0, backoff)
         case AO3Error.server:
             return backoff
@@ -256,7 +263,7 @@ actor AO3Client {
 
     /// An authenticated collections-index page parsed into `AO3Collection`s.
     func collectionsPage(for request: URLRequest) async throws -> [AO3Collection] {
-        try Self.parseCollections(from: try await authenticatedHTML(for: request))
+        try await Self.parseCollections(from: authenticatedHTML(for: request))
     }
 
     /// Parses a collections index (`li.collection.blurb`) into name/title/byline.
@@ -296,7 +303,7 @@ actor AO3Client {
         if let url = response.url, url.path.contains("/users/login") {
             throw AO3Error.authenticationRequired
         }
-        return String(decoding: data, as: UTF8.self)
+        return Self.htmlString(from: data)
     }
 
     // MARK: - Write actions (authenticated, single-shot POSTs)
@@ -324,7 +331,7 @@ actor AO3Client {
         if http.statusCode == 429 {
             throw AO3Error.rateLimited(retryAfter: Self.retryAfter(from: http))
         }
-        return (http.statusCode, String(decoding: data, as: UTF8.self))
+        return (http.statusCode, Self.htmlString(from: data))
     }
 
     /// The Rails CSRF authenticity token from a page's `<meta name="csrf-token">`.
@@ -379,7 +386,7 @@ actor AO3Client {
     /// An authenticated reading-list / search-style page (work blurbs + pagination),
     /// e.g. the Marked-for-Later list.
     func worksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try Self.parseSearchPage(try await authenticatedHTML(for: request), page: page)
+        try await Self.parseSearchPage(authenticatedHTML(for: request), page: page)
     }
 
     /// Loads an arbitrary AO3 works listing URL (e.g. a tag's `/tags/<name>/works`
@@ -392,17 +399,17 @@ actor AO3Client {
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
         components?.queryItems = items
         let resolved = components?.url ?? url
-        return try Self.parseSearchPage(try await getHTML(resolved), page: page)
+        return try await Self.parseSearchPage(getHTML(resolved), page: page)
     }
 
     /// An authenticated AO3 bookmarks page (the user's bookmarked works).
     func bookmarksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try Self.parseBookmarksPage(try await authenticatedHTML(for: request), page: page)
+        try await Self.parseBookmarksPage(authenticatedHTML(for: request), page: page)
     }
 
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
     func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try Self.parseSubscriptionsPage(try await authenticatedHTML(for: request), page: page)
+        try await Self.parseSubscriptionsPage(authenticatedHTML(for: request), page: page)
     }
 
     /// Builds AO3's `word_count` expression from the from/to fields.
@@ -436,7 +443,7 @@ actor AO3Client {
         var all: [AO3WorkSummary] = []
         var page = 1
         while let pageURL = Self.seriesPageURL(seriesURL, page: page) {
-            let result = try Self.parseSearchPage(try await getHTML(pageURL), page: page)
+            let result = try await Self.parseSearchPage(getHTML(pageURL), page: page)
             all.append(contentsOf: result.works)
             if result.works.isEmpty || page >= result.totalPages { break }
             page += 1
@@ -451,7 +458,7 @@ actor AO3Client {
         guard let pageURL = Self.seriesPageURL(seriesURL, page: 1) else {
             throw AO3Error.network("Bad series URL.")
         }
-        let result = try Self.parseSearchPage(try await getHTML(pageURL), page: 1)
+        let result = try await Self.parseSearchPage(getHTML(pageURL), page: 1)
         return AO3SeriesPreview(
             works: result.works,
             currentPage: result.currentPage,
@@ -505,9 +512,13 @@ actor AO3Client {
         try parseWorkMetadata(from: html).tagGroups
     }
 
+    // Lint: parser stays cohesive to avoid changing scraping behavior.
     /// Parses a work page's refreshable metadata from its HTML. This intentionally
     /// returns a value type, leaving merge/safety decisions to the refresh service.
-    static func parseWorkMetadata(from html: String, workID: Int = 0) throws -> AO3WorkMetadata {
+    static func parseWorkMetadata( // swiftlint:disable:this function_body_length
+        from html: String,
+        workID: Int = 0
+    ) throws -> AO3WorkMetadata {
         let doc = try SwiftSoup.parse(html)
 
         func clean(_ text: String?) -> String {
@@ -537,7 +548,7 @@ actor AO3Client {
             var seen = Set<String>()
             var result: [String] = []
             for element in try doc.select("dd.\(kind).tags a.tag").array() {
-                let tag = clean(try element.text())
+                let tag = try clean(element.text())
                 if !tag.isEmpty, seen.insert(tag.lowercased()).inserted { result.append(tag) }
             }
             return result
@@ -559,7 +570,7 @@ actor AO3Client {
                 "h3.byline a"
             ]
             for selector in selectors {
-                let names = unique(try doc.select(selector).array().map { try $0.text() })
+                let names = try unique(doc.select(selector).array().map { try $0.text() })
                 if !names.isEmpty { return names }
             }
             return []
@@ -590,9 +601,9 @@ actor AO3Client {
             return nil
         }
 
-        // AO3 doesn't class the "Completed:"/"Updated:" <dt> label itself — only its
-        // sibling <dd class="status"> carries a class. Read the label from that dt's
-        // text instead of a (nonexistent) `dt.status` selector.
+        /// AO3 doesn't class the "Completed:"/"Updated:" <dt> label itself — only its
+        /// sibling <dd class="status"> carries a class. Read the label from that dt's
+        /// text instead of a (nonexistent) `dt.status` selector.
         func statusDTLabel() -> String {
             guard let statusDD = try? doc.select("dd.status").first() else { return "" }
             return clean(try? statusDD.previousElementSibling()?.text())
@@ -610,7 +621,7 @@ actor AO3Client {
         let language = firstText(["dd.language"])
         let chapters = stat("chapters")
         let seriesLink = try doc.select("dd.series a[href*=\"/series/\"]").first()
-        let seriesTitle = clean(try seriesLink?.text())
+        let seriesTitle = try clean(seriesLink?.text())
         let rawSeriesURL = try seriesLink?.attr("href")
         let seriesPositionText = firstText(["dd.series span.position", "dd.series"])
 
@@ -641,9 +652,9 @@ actor AO3Client {
         )
 
         guard !metadata.title.isEmpty
-                || !metadata.tagGroups.isEmpty
-                || metadata.words != nil
-                || !metadata.chapters.isEmpty
+            || !metadata.tagGroups.isEmpty
+            || metadata.words != nil
+            || !metadata.chapters.isEmpty
         else { throw AO3Error.parse }
         return metadata
     }
@@ -657,7 +668,7 @@ actor AO3Client {
         components.queryItems = [URLQueryItem(name: "term", value: trimmed)]
         guard let url = components.url else { return [] }
         let data = try await fetchData(from: url)
-        return (try JSONDecoder().decode([AutocompleteItem].self, from: data)).map(\.name)
+        return try (JSONDecoder().decode([AutocompleteItem].self, from: data)).map(\.name)
     }
 
     private struct AutocompleteItem: Decodable { let id: String; let name: String }
@@ -672,7 +683,7 @@ actor AO3Client {
         case .character: field = "character_ids"
         case .relationship: field = "relationship_ids"
         case .freeform, .tag: field = "freeform_ids"
-        case .fandom: return []   // no parent-fandom context for the fandom field
+        case .fandom: return [] // no parent-fandom context for the fandom field
         }
         guard let url = fandomWorksURL(fandom) else { return [] }
         let html = try await getHTML(url)
@@ -685,7 +696,7 @@ actor AO3Client {
             guard (try? input.attr("name")) == target, let label = input.parent() else { continue }
             // The label reads "Tag Name (12345)" — strip only a trailing numeric count
             // (tag names can themselves contain parentheses, e.g. "Naruto (Anime...)").
-            let name = Self.strippingTrailingCount(try label.text().trimmingCharacters(in: .whitespacesAndNewlines))
+            let name = try Self.strippingTrailingCount(label.text().trimmingCharacters(in: .whitespacesAndNewlines))
             if !name.isEmpty, seen.insert(name).inserted { result.append(name) }
         }
         return result
@@ -720,7 +731,7 @@ actor AO3Client {
             let heading = try li.select("h3.heading a").first()
             let name = try heading?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             // The heading link points at the category's full fandom index page.
-            let fandomsURL = (try heading?.attr("href")) ?? ""
+            let fandomsURL = try (heading?.attr("href")) ?? ""
             // The category-name link in the heading isn't an `a.tag`, so this picks
             // up only the featured fandom links.
             let fandoms = try li.select("a.tag").array().compactMap { element -> AO3Fandom? in
@@ -750,7 +761,7 @@ actor AO3Client {
             let name = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty, seen.insert(name).inserted else { continue }
             // The li's own text after the link is the work count, e.g. "(1,234)".
-            let count = Int((try li.ownText()).filter(\.isNumber))
+            let count = try Int((li.ownText()).filter(\.isNumber))
             result.append(AO3Fandom(name: name, workCount: count))
         }
         guard !result.isEmpty else { throw AO3Error.parse }
@@ -785,7 +796,7 @@ actor AO3Client {
             // The work link points at /works/<id>; series/user subscriptions have no
             // such link and are skipped.
             guard let workLink = try dt.select("a[href*=\"/works/\"]").first(),
-                  let id = Self.workID(fromPath: try workLink.attr("href")) else { continue }
+                  let id = try Self.workID(fromPath: workLink.attr("href")) else { continue }
             let title = try workLink.text()
             // The remaining links are the byline pseuds (/users/...) — the author(s).
             let authors = try dt.select("a[href*=\"/users/\"]").array().map { try $0.text() }
@@ -793,7 +804,7 @@ actor AO3Client {
         }
         var totalPages = page
         for li in try doc.select("ol.pagination li").array() {
-            if let value = Int((try li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
+            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
                 totalPages = value
             }
         }
@@ -811,7 +822,7 @@ actor AO3Client {
         // total. Falls back to the current page when there's no pagination.
         var totalPages = page
         for li in try doc.select("ol.pagination li").array() {
-            if let value = Int((try li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
+            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
                 totalPages = value
             }
         }
@@ -862,12 +873,14 @@ actor AO3Client {
         func stat(_ cls: String) -> String {
             (try? el.select("dl.stats dd.\(cls)").first()?.text() ?? "") ?? ""
         }
-        func statInt(_ cls: String) -> Int? { Int(stat(cls).replacingOccurrences(of: ",", with: "")) }
+        func statInt(_ cls: String) -> Int? {
+            Int(stat(cls).replacingOccurrences(of: ",", with: ""))
+        }
 
         // Series block: "Part <strong>N</strong> of <a href="/series/ID">Title</a>".
         let seriesLink = try el.select("ul.series li a").first()
         let seriesTitle = try seriesLink?.text()
-        let seriesURL = (try seriesLink?.attr("href")).map { "https://archiveofourown.org\($0)" }
+        let seriesURL = try (seriesLink?.attr("href")).map { "https://archiveofourown.org\($0)" }
         let seriesPosition = Int((try? el.select("ul.series li strong").first()?.text() ?? "") ?? "")
 
         return AO3WorkSummary(

@@ -13,8 +13,13 @@ enum WorkMetadataRefresh {
         var failed = 0
         var skipped = 0
 
-        var attempted: Int { refreshed + failed + skipped }
-        var hasFailures: Bool { failed > 0 }
+        var attempted: Int {
+            refreshed + failed + skipped
+        }
+
+        var hasFailures: Bool {
+            failed > 0
+        }
     }
 
     enum RefreshError: LocalizedError {
@@ -95,6 +100,8 @@ enum WorkMetadataRefresh {
         return error.localizedDescription
     }
 
+    // Field-level merge guards are deliberately explicit for refresh safety.
+    // swiftlint:disable:next cyclomatic_complexity
     private static func apply(_ metadata: AO3WorkMetadata, to work: SavedWork) {
         work.ao3WorkID = metadata.id
         work.ao3Unavailable = false

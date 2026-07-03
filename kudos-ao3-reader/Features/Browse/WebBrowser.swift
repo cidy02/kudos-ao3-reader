@@ -3,10 +3,12 @@ import WebKit
 
 #if os(macOS)
 import AppKit
+
 typealias PlatformViewRepresentable = NSViewRepresentable
 private typealias BrowserPlatformColor = NSColor
 #else
 import UIKit
+
 typealias PlatformViewRepresentable = UIViewRepresentable
 private typealias BrowserPlatformColor = UIColor
 #endif
@@ -149,9 +151,9 @@ enum BrowserThemeStyle {
     private static func palette(for theme: ReaderTheme) -> Palette? {
         switch theme {
         case .light:
-            return nil
+            nil
         case .sepia:
-            return Palette(
+            Palette(
                 scheme: "light",
                 background: "#FBF0D9",
                 raised: "#F6E8CB",
@@ -165,7 +167,7 @@ enum BrowserThemeStyle {
                 activeControl: "#D8BE8C"
             )
         case .dark:
-            return Palette(
+            Palette(
                 scheme: "dark",
                 background: "#16161A",
                 raised: "#222228",
@@ -231,18 +233,18 @@ final class BrowserModel: NSObject {
         scrollObservation = webView.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
             guard let self else { return }
             let y = scrollView.contentOffset.y
-            let dy = y - self.lastScrollY
-            self.lastScrollY = y
+            let dy = y - lastScrollY
+            lastScrollY = y
 
-            var hide = self.tabBarHidden
+            var hide = tabBarHidden
             if y <= 0 {
-                hide = false                 // at the top, always show
+                hide = false // at the top, always show
             } else if dy > 4 {
-                hide = true                  // scrolling down
+                hide = true // scrolling down
             } else if dy < -4 {
-                hide = false                 // scrolling up
+                hide = false // scrolling up
             }
-            if hide != self.tabBarHidden { self.tabBarHidden = hide }
+            if hide != tabBarHidden { tabBarHidden = hide }
         }
     }
     #endif
@@ -262,10 +264,21 @@ final class BrowserModel: NSObject {
         }
     }
 
-    func goHome() { load(BrowserModel.home) }
-    func goBack() { webView.goBack() }
-    func goForward() { webView.goForward() }
-    func reload() { webView.reload() }
+    func goHome() {
+        load(BrowserModel.home)
+    }
+
+    func goBack() {
+        webView.goBack()
+    }
+
+    func goForward() {
+        webView.goForward()
+    }
+
+    func reload() {
+        webView.reload()
+    }
 
     func applyTheme(_ theme: ReaderTheme) {
         currentTheme = theme
@@ -295,13 +308,13 @@ final class BrowserModel: NSObject {
     private func underPageColor(for theme: ReaderTheme) -> BrowserPlatformColor {
         switch theme {
         case .light:
-            return BrowserPlatformColor(red: 1, green: 1, blue: 1, alpha: 1)
+            BrowserPlatformColor(red: 1, green: 1, blue: 1, alpha: 1)
         case .sepia:
-            return BrowserPlatformColor(
+            BrowserPlatformColor(
                 red: 251 / 255, green: 240 / 255, blue: 217 / 255, alpha: 1
             )
         case .dark:
-            return BrowserPlatformColor(
+            BrowserPlatformColor(
                 red: 22 / 255, green: 22 / 255, blue: 26 / 255, alpha: 1
             )
         }
@@ -312,7 +325,7 @@ final class BrowserModel: NSObject {
 
 extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
     func webView(
-        _ webView: WKWebView,
+        _: WKWebView,
         decidePolicyFor navigationResponse: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
@@ -323,35 +336,35 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
     }
 
     func webView(
-        _ webView: WKWebView,
-        navigationResponse: WKNavigationResponse,
+        _: WKWebView,
+        navigationResponse _: WKNavigationResponse,
         didBecome download: WKDownload
     ) {
         download.delegate = self
     }
 
     func webView(
-        _ webView: WKWebView,
-        didStartProvisionalNavigation navigation: WKNavigation!
+        _: WKWebView,
+        didStartProvisionalNavigation _: WKNavigation!
     ) {
         isLoading = true
         syncState()
     }
 
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    func webView(_: WKWebView, didCommit _: WKNavigation!) {
         injectCurrentTheme()
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func webView(_: WKWebView, didFinish _: WKNavigation!) {
         isLoading = false
         syncState()
         injectCurrentTheme()
     }
 
     func webView(
-        _ webView: WKWebView,
-        didFail navigation: WKNavigation!,
-        withError error: Error
+        _: WKWebView,
+        didFail _: WKNavigation!,
+        withError _: Error
     ) {
         isLoading = false
         syncState()
@@ -361,7 +374,7 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
 
     func download(
         _ download: WKDownload,
-        decideDestinationUsing response: URLResponse,
+        decideDestinationUsing _: URLResponse,
         suggestedFilename: String,
         completionHandler: @escaping (URL?) -> Void
     ) {
@@ -376,7 +389,7 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
         onImport?(destination, webView.url)
     }
 
-    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+    func download(_ download: WKDownload, didFailWithError _: Error, resumeData _: Data?) {
         pendingDestinations.removeValue(forKey: download)
     }
 }
@@ -386,10 +399,16 @@ struct WebView: PlatformViewRepresentable {
     let webView: WKWebView
 
     #if os(macOS)
-    func makeNSView(context: Context) -> WKWebView { webView }
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func makeNSView(context _: Context) -> WKWebView {
+        webView
+    }
+
+    func updateNSView(_: WKWebView, context _: Context) {}
     #else
-    func makeUIView(context: Context) -> WKWebView { webView }
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func makeUIView(context _: Context) -> WKWebView {
+        webView
+    }
+
+    func updateUIView(_: WKWebView, context _: Context) {}
     #endif
 }

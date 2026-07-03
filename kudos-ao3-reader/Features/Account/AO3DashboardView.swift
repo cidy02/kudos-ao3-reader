@@ -32,7 +32,7 @@ struct AO3DashboardView: View {
                     Text(auth.username.map { "Signed in as \($0)" } ?? "My AO3")
                 } footer: {
                     Text("Your AO3 works, bookmarks, collections, subscriptions, reading "
-                         + "list, and history — all in the app.")
+                        + "list, and history — all in the app.")
                 }
             }
             .appThemedRows()
@@ -41,8 +41,8 @@ struct AO3DashboardView: View {
         .appThemedScroll()
         .navigationTitle("My Dashboard")
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
+            .hidesFloatingTabBar()
     }
 }

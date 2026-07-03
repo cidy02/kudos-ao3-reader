@@ -6,7 +6,7 @@ import Foundation
 // form; see `AO3Client` for the porting/verification notes.
 
 /// A work as summarized on an AO3 search/listing page ("blurb").
-struct AO3WorkSummary: Identifiable, Hashable, Sendable {
+struct AO3WorkSummary: Identifiable, Hashable {
     let id: Int
     var title: String
     var authors: [String]
@@ -34,8 +34,13 @@ struct AO3WorkSummary: Identifiable, Hashable, Sendable {
     var seriesURL: String?
     var seriesPosition: Int?
 
-    var workURL: URL { URL(string: "https://archiveofourown.org/works/\(id)")! }
-    var authorText: String { authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ") }
+    var workURL: URL {
+        URL(string: "https://archiveofourown.org/works/\(id)")!
+    }
+
+    var authorText: String {
+        authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ")
+    }
 
     /// A sparse summary for a *work subscription*. AO3's subscriptions page lists only
     /// each work's title, id, and author — no stats, fandoms, or rating — so those
@@ -53,7 +58,7 @@ struct AO3WorkSummary: Identifiable, Hashable, Sendable {
 
 /// One page of search results, with the current page and total page count
 /// (parsed from AO3's pagination control) so the UI can show page navigation.
-struct AO3SearchPage: Sendable {
+struct AO3SearchPage {
     var works: [AO3WorkSummary]
     var currentPage: Int
     var totalPages: Int
@@ -61,7 +66,7 @@ struct AO3SearchPage: Sendable {
 
 /// A bounded look at a series page. Used before automatic series preservation so
 /// Kudos can avoid crawling an unknown large series merely to decide whether to ask.
-struct AO3SeriesPreview: Equatable, Sendable {
+struct AO3SeriesPreview: Equatable {
     var works: [AO3WorkSummary]
     var currentPage: Int
     var totalPages: Int
@@ -75,7 +80,7 @@ struct AO3SeriesPreview: Equatable, Sendable {
 /// query parameters; the ids/values are taken from AO3's own search form. Covers
 /// the same filters as AO3's faceted sidebar, minus the live per-fandom counts
 /// (those come from a different browse endpoint — here you type tag names).
-struct AO3SearchFilters: Equatable, Sendable, Codable {
+struct AO3SearchFilters: Equatable, Codable {
     var query: String = ""
     // Tag fields (comma-separated names).
     var fandom: String = ""
@@ -118,7 +123,9 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
     }
 
     /// True when there's enough to run a search (free text or any filter).
-    var isSearchable: Bool { !query.isBlank || hasActiveFilters }
+    var isSearchable: Bool {
+        !query.isBlank || hasActiveFilters
+    }
 
     /// The free-text query AO3 receives, augmented with exclusions and any
     /// multi-rating expression that the single-value rating field can't express.
@@ -144,7 +151,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
         return ratings.count == 1 ? ratings[0].ao3ID : nil
     }
 
-    nonisolated private var excludedTags: [String] {
+    private nonisolated var excludedTags: [String] {
         [excludedFandoms, excludedCharacters, excludedRelationships, excludedAdditionalTags]
             .flatMap(Self.commaSeparatedValues)
             .reduce(into: [String]()) { result, tag in
@@ -152,7 +159,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             }
     }
 
-    nonisolated private var ratingSearchClause: String? {
+    private nonisolated var ratingSearchClause: String? {
         if rating == .any {
             return includeNotRated ? nil : "-rating_ids:9"
         }
@@ -161,31 +168,33 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
         return "(\(ratings.map(\.ratingQueryToken).joined(separator: " OR ")))"
     }
 
-    nonisolated private var selectedRatings: [Rating] {
+    private nonisolated var selectedRatings: [Rating] {
         guard rating != .any else { return [] }
         if rating == .notRated { return [.notRated] }
 
         let ranked: [Rating] = [.general, .teen, .mature, .explicit]
         guard let index = ranked.firstIndex(of: rating) else { return [] }
-        var result: [Rating]
-        switch ratingMatch {
-        case .exact: result = [rating]
-        case .orHigher: result = Array(ranked[index...])
-        case .orLower: result = Array(ranked[...index])
+        var result: [Rating] = switch ratingMatch {
+        case .exact: [rating]
+        case .orHigher: Array(ranked[index...])
+        case .orLower: Array(ranked[...index])
         }
         if includeNotRated { result.append(.notRated) }
         return result
     }
 
-    nonisolated private static func commaSeparatedValues(_ field: String) -> [String] {
+    private nonisolated static func commaSeparatedValues(_ field: String) -> [String] {
         field.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
 
-    nonisolated enum Rating: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Rating: String, CaseIterable, Identifiable, Codable {
         case any, general, teen, mature, explicit, notRated
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         static let searchCases: [Self] = [.any, .general, .teen, .mature, .explicit]
         var title: String {
             switch self {
@@ -197,6 +206,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             case .notRated: "Not Rated"
             }
         }
+
         /// AO3's `rating_ids` value, or nil to leave rating unfiltered.
         var ao3ID: String? {
             switch self {
@@ -208,15 +218,19 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             case .explicit: "13"
             }
         }
+
         var ratingQueryToken: String {
             guard let ao3ID else { return "" }
             return "rating_ids:\(ao3ID)"
         }
     }
 
-    nonisolated enum RatingMatch: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum RatingMatch: String, CaseIterable, Identifiable, Codable {
         case exact, orHigher, orLower
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .exact: "Exact"
@@ -227,15 +241,21 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
     }
 
     /// Archive warnings (AO3 `archive_warning_ids`). Raw value is the AO3 id.
-    nonisolated enum Warning: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Warning: String, CaseIterable, Identifiable, Codable {
         case noWarnings = "16"
         case chooseNotTo = "14"
         case violence = "17"
         case death = "18"
         case nonCon = "19"
         case underage = "20"
-        var id: String { rawValue }
-        var ao3ID: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
+        var ao3ID: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .noWarnings: "No Archive Warnings Apply"
@@ -249,10 +269,16 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
     }
 
     /// Categories (AO3 `category_ids`). Raw value is the AO3 id.
-    nonisolated enum Category: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Category: String, CaseIterable, Identifiable, Codable {
         case ff = "116", fm = "22", gen = "21", mm = "23", multi = "2246", other = "24"
-        var id: String { rawValue }
-        var ao3ID: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
+        var ao3ID: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .ff: "F/F"
@@ -265,9 +291,12 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
         }
     }
 
-    nonisolated enum Crossover: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Crossover: String, CaseIterable, Identifiable, Codable {
         case any, exclude, only
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .any: "Include"
@@ -275,6 +304,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             case .only: "Only crossovers"
             }
         }
+
         /// AO3's `crossover` value (blank = include all).
         var value: String? {
             switch self {
@@ -285,9 +315,12 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
         }
     }
 
-    nonisolated enum Completion: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Completion: String, CaseIterable, Identifiable, Codable {
         case any, complete, inProgress
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .any: "All"
@@ -295,6 +328,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             case .inProgress: "In Progress"
             }
         }
+
         /// AO3's `complete` value, or nil for all works.
         var value: String? {
             switch self {
@@ -307,9 +341,12 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
 
     /// "Updated within" — maps to AO3's `revised_at` (age-based: "< 1 week ago"
     /// means updated in the last week, verified against live AO3).
-    nonisolated enum Updated: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Updated: String, CaseIterable, Identifiable, Codable {
         case any, week, month, sixMonths, year
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .any: "Any time"
@@ -319,6 +356,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             case .year: "Past year"
             }
         }
+
         var value: String? {
             switch self {
             case .any: nil
@@ -331,7 +369,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
     }
 
     /// A curated set of common AO3 languages (codes are AO3 `language_id` values).
-    nonisolated enum Language: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Language: String, CaseIterable, Identifiable, Codable {
         case any = ""
         case english = "en"
         case spanish = "es"
@@ -352,8 +390,14 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
         case thai = "th"
         case vietnamese = "vi"
         case turkish = "tr"
-        var id: String { rawValue }
-        var code: String? { self == .any ? nil : rawValue }
+        var id: String {
+            rawValue
+        }
+
+        var code: String? {
+            self == .any ? nil : rawValue
+        }
+
         var title: String {
             switch self {
             case .any: "Any language"
@@ -380,9 +424,12 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
         }
     }
 
-    nonisolated enum Sort: String, CaseIterable, Identifiable, Sendable, Codable {
+    nonisolated enum Sort: String, CaseIterable, Identifiable, Codable {
         case relevance, dateUpdated, datePosted, words, kudos, hits, comments, bookmarks
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         var title: String {
             switch self {
             case .relevance: "Best Match"
@@ -395,6 +442,7 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
             case .bookmarks: "Bookmarks"
             }
         }
+
         /// AO3's `sort_column` value, or nil for AO3's default (relevance).
         var column: String? {
             switch self {
@@ -412,7 +460,9 @@ struct AO3SearchFilters: Equatable, Sendable, Codable {
 }
 
 private extension String {
-    var isBlank: Bool { trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var isBlank: Bool {
+        trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 /// An error surfaced from the AO3 client, with a user-facing description.
@@ -434,9 +484,9 @@ enum AO3Error: LocalizedError {
         switch self {
         case .rateLimited: "AO3 is rate-limiting requests. Wait a moment and try again."
         case .notFound: "That work or page couldn't be found (it may be restricted)."
-        case .server(let status): "AO3 had a server problem (HTTP \(status)). Try again shortly."
-        case .http(let status): "AO3 returned an unexpected response (HTTP \(status))."
-        case .network(let detail): detail
+        case let .server(status): "AO3 had a server problem (HTTP \(status)). Try again shortly."
+        case let .http(status): "AO3 returned an unexpected response (HTTP \(status))."
+        case let .network(detail): detail
         case .parse: "AO3's page format wasn't what the app expected."
         case .authenticationRequired: "Your AO3 session expired. Please log in again."
         }
@@ -447,12 +497,12 @@ enum AO3Error: LocalizedError {
 
 /// The AO3 tag-autocomplete categories used by the filter tag pickers. `tag` is the
 /// "any tag" endpoint, used for the Exclude field.
-enum AO3TagKind: String, Sendable {
+enum AO3TagKind: String {
     case fandom, character, relationship, freeform, tag
 }
 
 /// The three-state selection used by Search's cycling multi-select filters.
-nonisolated enum FilterSelectionState: Equatable, Sendable {
+nonisolated enum FilterSelectionState: Equatable {
     case clear, included, excluded
 
     var next: Self {
@@ -470,7 +520,7 @@ nonisolated enum FilterSelectionState: Equatable, Sendable {
 /// saved-work tags under per-category headers. Also carries the work's archive
 /// warnings, categories, language, and word count so the Library can filter on
 /// the same facets Search offers.
-nonisolated struct AO3WorkTagGroups: Sendable {
+nonisolated struct AO3WorkTagGroups {
     var fandoms: [String] = []
     var relationships: [String] = []
     var characters: [String] = []
@@ -494,14 +544,16 @@ nonisolated struct AO3WorkTagGroups: Sendable {
 
     /// Flat union in AO3's canonical order, for the Library filter and the
     /// pre-refresh fallback list.
-    var flattened: [String] { fandoms + relationships + characters + freeforms }
+    var flattened: [String] {
+        fandoms + relationships + characters + freeforms
+    }
 }
 
 /// A single AO3 work page's refreshable metadata. Unlike `AO3WorkSummary`, which
 /// mirrors result blurbs, this can include fields only present on the work page
 /// (for example the published date). Callers merge it into local records only after
 /// a full successful parse, so refresh never becomes a destructive sync operation.
-nonisolated struct AO3WorkMetadata: Sendable {
+nonisolated struct AO3WorkMetadata {
     var id: Int
     var title: String = ""
     var authors: [String] = []
@@ -526,7 +578,9 @@ nonisolated struct AO3WorkMetadata: Sendable {
     var seriesURL: String?
     var seriesPosition: Int?
 
-    var authorText: String { authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ") }
+    var authorText: String {
+        authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ")
+    }
 
     var tagGroups: AO3WorkTagGroups {
         AO3WorkTagGroups(
@@ -578,31 +632,40 @@ nonisolated struct AO3WorkMetadata: Sendable {
 /// A fandom as listed on AO3's media page; its `name` is the canonical AO3 tag,
 /// which drops straight into a fandom search. `workCount` is the number of works
 /// tagged with the fandom, shown on the fandom list when available.
-struct AO3Fandom: Identifiable, Hashable, Sendable, Codable {
+struct AO3Fandom: Identifiable, Hashable, Codable {
     var name: String
-    var workCount: Int? = nil
-    var id: String { name }
+    var workCount: Int?
+    var id: String {
+        name
+    }
 }
 
 /// An AO3 collection (a named shelf), as listed on a user's collections page. `name`
 /// is the URL slug (`/collections/<name>`); `title` is the display name; `byline` is
 /// the maintainers line when shown.
-struct AO3Collection: Identifiable, Hashable, Sendable {
+struct AO3Collection: Identifiable, Hashable {
     var name: String
     var title: String
     var byline: String = ""
-    var id: String { name }
-    var url: URL { URL(string: "https://archiveofourown.org/collections/\(name)")! }
+    var id: String {
+        name
+    }
+
+    var url: URL {
+        URL(string: "https://archiveofourown.org/collections/\(name)")!
+    }
 }
 
 /// One of AO3's media categories (e.g. "TV Shows") with its featured fandoms,
 /// scraped from `/media`. `fandomsURL` points at the category's full fandom index
 /// (`/media/<name>/fandoms`), loaded on demand by the fandom detail page.
-struct AO3MediaCategory: Identifiable, Hashable, Sendable {
+struct AO3MediaCategory: Identifiable, Hashable {
     var name: String
     var fandoms: [AO3Fandom]
     var fandomsURL: String = ""
-    var id: String { name }
+    var id: String {
+        name
+    }
 
     /// A representative SF Symbol, matched by AO3's category names with a fallback.
     var symbol: String {

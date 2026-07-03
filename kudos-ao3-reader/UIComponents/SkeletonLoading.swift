@@ -11,7 +11,7 @@ import SwiftUI
 /// A rounded wireframe block. `width: nil` fills the available width.
 struct SkeletonBlock: View {
     var height: CGFloat = 12
-    var width: CGFloat? = nil
+    var width: CGFloat?
     var cornerRadius: CGFloat = 6
 
     var body: some View {
@@ -25,7 +25,7 @@ struct SkeletonBlock: View {
 /// A placeholder text line — a block rounded and sized like a line of text.
 struct SkeletonTextLine: View {
     var height: CGFloat = 13
-    var width: CGFloat? = nil
+    var width: CGFloat?
 
     var body: some View {
         SkeletonBlock(height: height, width: width, cornerRadius: height / 2.5)
@@ -54,7 +54,9 @@ private struct SkeletonShimmer: ViewModifier {
 extension View {
     /// A calm, subtle pulse for skeleton placeholders. Disabled under Reduce Motion;
     /// also hides the content from VoiceOver and makes it non-interactive.
-    func skeletonShimmer() -> some View { modifier(SkeletonShimmer()) }
+    func skeletonShimmer() -> some View {
+        modifier(SkeletonShimmer())
+    }
 }
 
 // MARK: - Work skeletons
@@ -64,9 +66,9 @@ extension View {
 struct AO3WorkRowSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SkeletonTextLine(height: 16, width: 230)   // title
-            SkeletonTextLine(height: 13, width: 130)   // author
-            SkeletonTextLine(height: 12, width: 190)   // fandom
+            SkeletonTextLine(height: 16, width: 230) // title
+            SkeletonTextLine(height: 13, width: 130) // author
+            SkeletonTextLine(height: 12, width: 190) // fandom
             VStack(alignment: .leading, spacing: 5) {
                 SkeletonTextLine(height: 12)
                 SkeletonTextLine(height: 12)
@@ -90,9 +92,9 @@ struct AO3WorkRowSkeleton: View {
 struct WorkCoverCardSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SkeletonTextLine(height: 15, width: 132)       // title
-            SkeletonTextLine(height: 12, width: 92)        // author
-            SkeletonTextLine(height: 10, width: 118)       // fandom
+            SkeletonTextLine(height: 15, width: 132) // title
+            SkeletonTextLine(height: 12, width: 92) // author
+            SkeletonTextLine(height: 10, width: 118) // fandom
             HStack(spacing: 8) {
                 SkeletonBlock(height: 10, width: 32, cornerRadius: 4)
                 SkeletonBlock(height: 10, width: 44, cornerRadius: 4)
@@ -163,12 +165,12 @@ struct ReaderPageSkeleton: View {
         [nil, nil, nil, 180],
         [nil, nil, nil, nil, 120],
         [nil, nil, 210],
-        [nil, nil, nil, 160],
+        [nil, nil, nil, 160]
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            SkeletonTextLine(height: 22, width: 220)   // chapter heading
+            SkeletonTextLine(height: 22, width: 220) // chapter heading
                 .padding(.bottom, 4)
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, widths in
                 VStack(alignment: .leading, spacing: 9) {
@@ -190,8 +192,8 @@ struct ReaderPageSkeleton: View {
 /// A single placeholder list row (one text line) for inline loading states inside
 /// Forms/Lists — account session restore, tag suggestion fetches, etc.
 struct SkeletonListRow: View {
-    var width: CGFloat? = nil
-    var trailingWidth: CGFloat? = nil
+    var width: CGFloat?
+    var trailingWidth: CGFloat?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -216,7 +218,7 @@ struct AO3WorkRowSkeletonList: View {
     var body: some View {
         List {
             Section {
-                ForEach(0..<count, id: \.self) { _ in AO3WorkRowSkeleton() }
+                ForEach(0 ..< count, id: \.self) { _ in AO3WorkRowSkeleton() }
                     .cardRow()
             }
         }
@@ -231,7 +233,7 @@ struct CategoryCardSkeletonList: View {
     var body: some View {
         List {
             Section {
-                ForEach(0..<count, id: \.self) { _ in CategoryCardSkeleton() }
+                ForEach(0 ..< count, id: \.self) { _ in CategoryCardSkeleton() }
                     .cardRow()
             } header: {
                 Text("Browse by fandom")
@@ -247,7 +249,7 @@ struct FandomRowSkeletonList: View {
 
     var body: some View {
         List {
-            ForEach(0..<count, id: \.self) { _ in FandomRowSkeleton() }
+            ForEach(0 ..< count, id: \.self) { _ in FandomRowSkeleton() }
                 .cardRow()
         }
         .cardList()

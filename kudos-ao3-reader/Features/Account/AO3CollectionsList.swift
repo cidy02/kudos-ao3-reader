@@ -18,13 +18,13 @@ struct AO3CollectionsList: View {
         }
         .navigationTitle("My Collections")
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
-        .task(id: auth.isLoggedIn) {
-            if auth.isLoggedIn, phase == .idle { await load() }
-        }
-        .sheet(isPresented: $showLogin) { AO3LoginView() }
+            .hidesFloatingTabBar()
+            .task(id: auth.isLoggedIn) {
+                if auth.isLoggedIn, phase == .idle { await load() }
+            }
+            .sheet(isPresented: $showLogin) { AO3LoginView() }
     }
 
     @ViewBuilder
@@ -36,7 +36,7 @@ struct AO3CollectionsList: View {
             } description: {
                 Text("Collections you create or maintain on AO3 show up here.")
             }
-        case .failed(let message):
+        case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't load collections", systemImage: "exclamationmark.triangle")
             } description: {
@@ -52,16 +52,16 @@ struct AO3CollectionsList: View {
                     ForEach(collections) { collection in
                         NavigationLink(value: AO3AccountWorksList.Kind.collection(
                             name: collection.name, title: collection.title)) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(collection.title).foregroundStyle(.primary)
-                                if !collection.byline.isEmpty {
-                                    Text(collection.byline)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(collection.title).foregroundStyle(.primary)
+                                    if !collection.byline.isEmpty {
+                                        Text(collection.byline)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
                                 }
                             }
-                        }
                     }
                     .cardRow()
                 }
@@ -71,7 +71,6 @@ struct AO3CollectionsList: View {
         }
     }
 
-    @ViewBuilder
     private var signedOutPrompt: some View {
         ContentUnavailableView {
             Label("My Collections", systemImage: "square.stack")

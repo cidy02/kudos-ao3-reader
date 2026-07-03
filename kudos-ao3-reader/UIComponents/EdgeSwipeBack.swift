@@ -36,7 +36,9 @@ private struct EdgeSwipeBackModifier: ViewModifier {
 private struct ScreenEdgePanView: UIViewRepresentable {
     let action: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
@@ -48,13 +50,15 @@ private struct ScreenEdgePanView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_: UIView, context: Context) {
         context.coordinator.action = action
     }
 
     final class Coordinator: NSObject {
         var action: () -> Void
-        init(action: @escaping () -> Void) { self.action = action }
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
 
         @objc func handle(_ gesture: UIScreenEdgePanGestureRecognizer) {
             // The recognizer already guarantees an edge origin; require a clear inward

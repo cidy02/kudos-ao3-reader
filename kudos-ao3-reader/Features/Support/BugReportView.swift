@@ -14,7 +14,7 @@ struct BugReportView: View {
 
     #if os(iOS)
     /// The screen snapshot captured at shake time (nil when opened from Settings).
-    var screenshot: UIImage? = nil
+    var screenshot: UIImage?
     @State private var includeScreenshot = true
     #endif
 
@@ -23,8 +23,8 @@ struct BugReportView: View {
             Form {
                 Section {
                     Text("Found a bug? Describe what happened and Kudos will open a "
-                         + "prefilled GitHub issue you can review and post. Nothing is "
-                         + "sent automatically.")
+                        + "prefilled GitHub issue you can review and post. Nothing is "
+                        + "sent automatically.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -35,7 +35,7 @@ struct BugReportView: View {
                         text: $summary,
                         axis: .vertical
                     )
-                    .lineLimit(4...10)
+                    .lineLimit(4 ... 10)
                 }
 
                 screenshotSection
@@ -44,7 +44,7 @@ struct BugReportView: View {
                     LabeledContent("App version", value: AboutView.versionString)
                     LabeledContent("System", value: Self.systemInfo)
                     Text("Only these app and system details are attached — no personal "
-                         + "data, and never your AO3 account.")
+                        + "data, and never your AO3 account.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -64,19 +64,19 @@ struct BugReportView: View {
                     }
                 } footer: {
                     Text("Please don't contact the AO3 team about Kudos — they can't "
-                         + "provide support for this app.")
+                        + "provide support for this app.")
                 }
             }
             .formStyle(.grouped)
             .navigationTitle("Report a Bug")
             #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
                 }
-            }
         }
         .presentationDragIndicator(.visible)
     }
@@ -113,7 +113,7 @@ struct BugReportView: View {
                 Text("Screenshot")
             } footer: {
                 Text("GitHub can't attach images automatically — save the screenshot, "
-                     + "then drag or paste it into the issue.")
+                    + "then drag or paste it into the issue.")
             }
         }
         #endif

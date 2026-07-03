@@ -4,7 +4,9 @@ import SwiftUI
 enum AppTab: String, Hashable, CaseIterable, Identifiable {
     case home, library, browse, account, search
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     /// The four core tabs in the main tab bar / sidebar. `search` is a global action
     /// presented separately (the iOS search-role slot / a macOS sidebar button);
@@ -67,6 +69,7 @@ final class AppRouter {
             if oldValue != .search { lastNonSearchTab = oldValue }
         }
     }
+
     /// The tab the focused Search mode returns to when its Back button is tapped.
     var lastNonSearchTab: AppTab = .library
     /// A URL the Browse tab should load on its next appearance.
@@ -140,12 +143,15 @@ final class AppRouter {
     }
 
     /// Toggles a panel open/closed (opening it closes any other).
-    func toggle(_ p: Panel) {
-        panel = (panel == p) ? .none : p
+    func toggle(_ targetPanel: Panel) {
+        panel = (panel == targetPanel) ? .none : targetPanel
     }
 
-    /// A Bool binding for `.inspector(isPresented:)` that's true while `p` is open.
-    func isShowing(_ p: Panel) -> Binding<Bool> {
-        Binding(get: { self.panel == p }, set: { self.panel = $0 ? p : .none })
+    /// A Bool binding for `.inspector(isPresented:)` that's true while `targetPanel` is open.
+    func isShowing(_ targetPanel: Panel) -> Binding<Bool> {
+        Binding(
+            get: { self.panel == targetPanel },
+            set: { self.panel = $0 ? targetPanel : .none }
+        )
     }
 }

@@ -1,5 +1,5 @@
-import Foundation
 import Compression
+import Foundation
 
 // MARK: - Minimal ZIP reader
 
@@ -24,8 +24,8 @@ nonisolated struct MiniZip {
         let count = Int(data.u16(eocd + 10))
         var offset = Int(data.u32(eocd + 16))
         var parsed: [ZipEntry] = []
-        for _ in 0..<count {
-            guard offset + 46 <= data.count, data.u32(offset) == 0x0201_4b50 else { break }
+        for _ in 0 ..< count {
+            guard offset + 46 <= data.count, data.u32(offset) == 0x0201_4B50 else { break }
             let method = data.u16(offset + 10)
             let compressedSize = Int(data.u32(offset + 20))
             let uncompressedSize = Int(data.u32(offset + 24))
@@ -35,7 +35,7 @@ nonisolated struct MiniZip {
             let localOffset = Int(data.u32(offset + 42))
             let nameStart = offset + 46
             let name = String(
-                data: data.subdata(in: nameStart..<(nameStart + nameLen)),
+                data: data.subdata(in: nameStart ..< (nameStart + nameLen)),
                 encoding: .utf8
             ) ?? ""
             parsed.append(ZipEntry(
@@ -47,12 +47,14 @@ nonisolated struct MiniZip {
             ))
             offset = nameStart + nameLen + extraLen + commentLen
         }
-        self.entries = parsed
+        entries = parsed
         if parsed.isEmpty { return nil }
     }
 
     /// All entry names in the archive.
-    var names: [String] { entries.map(\.name) }
+    var names: [String] {
+        entries.map(\.name)
+    }
 
     /// Extracts a single entry's bytes by exact name.
     func data(named name: String) -> Data? {
@@ -76,14 +78,14 @@ nonisolated struct MiniZip {
 
     private func extract(_ entry: ZipEntry) -> Data? {
         let base = entry.localHeaderOffset
-        guard base + 30 <= data.count, data.u32(base) == 0x0403_4b50 else { return nil }
+        guard base + 30 <= data.count, data.u32(base) == 0x0403_4B50 else { return nil }
         let nameLen = Int(data.u16(base + 26))
         let extraLen = Int(data.u16(base + 28))
         let start = base + 30 + nameLen + extraLen
         let end = start + entry.compressedSize
         guard end <= data.count else { return nil }
-        let payload = data.subdata(in: start..<end)
-        if entry.method == 0 { return payload }            // stored
+        let payload = data.subdata(in: start ..< end)
+        if entry.method == 0 { return payload } // stored
         return MiniZip.inflate(payload, expectedSize: entry.uncompressedSize)
     }
 
@@ -101,16 +103,16 @@ nonisolated struct MiniZip {
             }
         }
         guard written > 0 else { return nil }
-        if written != expectedSize { output.removeSubrange(written..<output.count) }
+        if written != expectedSize { output.removeSubrange(written ..< output.count) }
         return output
     }
 
     /// Locates the End Of Central Directory record by scanning backwards.
     private static func findEOCD(in data: Data) -> Int? {
-        let sig: UInt32 = 0x0605_4b50
+        let sig: UInt32 = 0x0605_4B50
         guard data.count >= 22 else { return nil }
         var i = data.count - 22
-        let lowerBound = max(0, data.count - 22 - 65_536)
+        let lowerBound = max(0, data.count - 22 - 65536)
         while i >= lowerBound {
             if data.u32(i) == sig { return i }
             i -= 1

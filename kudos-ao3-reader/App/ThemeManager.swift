@@ -61,10 +61,14 @@ final class ThemeManager {
     }
 
     /// Sets the accent from a picked colour (stored as hex).
-    func setAccent(_ color: Color) { accentHex = color.hexString }
+    func setAccent(_ color: Color) {
+        accentHex = color.hexString
+    }
 
     /// Restores the default AO3-red accent.
-    func resetAccent() { accentHex = Self.ao3Red }
+    func resetAccent() {
+        accentHex = Self.ao3Red
+    }
 
     /// The theme the reader renders with — mirrors the app theme while linked, so
     /// changing one changes the other.

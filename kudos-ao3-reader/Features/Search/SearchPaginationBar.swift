@@ -29,12 +29,11 @@ struct SearchPaginationBar: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
     private func pageItems(_ items: [Item]) -> some View {
         HStack(spacing: 6) {
             ForEach(items) { item in
                 switch item.kind {
-                case .page(let page):
+                case let .page(page):
                     pageButton(page)
                 case .ellipsis:
                     Image(systemName: "ellipsis")
@@ -103,13 +102,13 @@ struct SearchPaginationBar: View {
                                currentPage: Int, totalPages: Int) -> Int {
         switch (direction, longPress) {
         case (.backward, true):
-            return 1
+            1
         case (.backward, false):
-            return max(1, currentPage - 1)
+            max(1, currentPage - 1)
         case (.forward, true):
-            return totalPages
+            totalPages
         case (.forward, false):
-            return min(totalPages, currentPage + 1)
+            min(totalPages, currentPage + 1)
         }
     }
 
@@ -155,9 +154,9 @@ struct SearchPaginationBar: View {
 
     static func abbreviate(_ page: Int) -> String {
         switch page {
-        case ..<1_000: return "\(page)"
-        case ..<1_000_000: return trimmed(Double(page) / 1_000) + "k"
-        default: return trimmed(Double(page) / 1_000_000) + "m"
+        case ..<1000: "\(page)"
+        case ..<1_000_000: trimmed(Double(page) / 1000) + "k"
+        default: trimmed(Double(page) / 1_000_000) + "m"
         }
     }
 
@@ -179,7 +178,7 @@ struct SearchPaginationBar: View {
     private var items: [Item] {
         guard totalPages > 1 else { return [] }
         var numbers = Set<Int>([1, totalPages])
-        for page in (currentPage - 1)...(currentPage + 1)
+        for page in (currentPage - 1) ... (currentPage + 1)
             where page >= 1 && page <= totalPages {
             numbers.insert(page)
         }
@@ -187,7 +186,7 @@ struct SearchPaginationBar: View {
         var previous = 0
         for page in numbers.sorted() {
             if page - previous > 1 {
-                result.append(Item(id: -page, kind: .ellipsis))   // negative id stays unique
+                result.append(Item(id: -page, kind: .ellipsis)) // negative id stays unique
             }
             result.append(Item(id: page, kind: .page(page)))
             previous = page
@@ -197,7 +196,7 @@ struct SearchPaginationBar: View {
 
     /// A narrow-width fallback that keeps the current page and its neighbors.
     private var compactItems: [Item] {
-        let pages = max(1, currentPage - 1)...min(totalPages, currentPage + 1)
+        let pages = max(1, currentPage - 1) ... min(totalPages, currentPage + 1)
         return pages.map { Item(id: $0, kind: .page($0)) }
     }
 }

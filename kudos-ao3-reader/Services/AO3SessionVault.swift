@@ -13,7 +13,7 @@ enum AO3SessionVaultError: LocalizedError {
     case invalidData
 
     var isMissingEntitlement: Bool {
-        if case .keychain(let status) = self {
+        if case let .keychain(status) = self {
             return status == errSecMissingEntitlement
         }
         return false
@@ -21,7 +21,7 @@ enum AO3SessionVaultError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .keychain(let status):
+        case let .keychain(status):
             let detail = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
             return "Keychain error: \(detail)"
         case .invalidData:
@@ -146,7 +146,7 @@ enum AO3CookieBridge {
         }
 
         for cookie in HTTPCookieStorage.shared.cookies ?? []
-        where AO3StoredCookie.isAO3Domain(cookie.domain) {
+            where AO3StoredCookie.isAO3Domain(cookie.domain) {
             HTTPCookieStorage.shared.deleteCookie(cookie)
         }
     }

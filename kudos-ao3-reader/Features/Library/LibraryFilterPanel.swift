@@ -13,93 +13,93 @@ struct LibraryFilterPanel: View {
 
     var body: some View {
         Form {
-          // Group so .appThemedRows() reaches every section's rows (it doesn't
-          // propagate from the Form container, only from a Group/Section/ForEach).
-          Group {
-            Section {
-                Picker("Sort by", selection: $filters.sort) {
-                    ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Rating", selection: $filters.rating) {
-                    ForEach(AO3SearchFilters.Rating.allCases) { Text($0.title).tag($0) }
-                }
-            }
-
-            Section("Warnings") {
-                ForEach(AO3SearchFilters.Warning.allCases) { warning in
-                    selectableRow(warning.title, isSelected: filters.warnings.contains(warning)) {
-                        toggle(warning, in: \.warnings)
-                    }
-                }
-            }
-
-            Section("Categories") {
-                ForEach(AO3SearchFilters.Category.allCases) { category in
-                    selectableRow(category.title, isSelected: filters.categories.contains(category)) {
-                        toggle(category, in: \.categories)
-                    }
-                }
-            }
-
-            Section {
-                Picker("Completion", selection: $filters.completion) {
-                    ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
-                }
-                if !languageOptions.isEmpty {
-                    Picker("Language", selection: $filters.language) {
-                        Text("Any language").tag("")
-                        ForEach(languageOptions, id: \.self) { Text($0).tag($0) }
-                    }
-                }
-            }
-
-            Section {
-                TextField("From", text: $filters.wordsFrom)
-                    #if !os(macOS)
-                    .keyboardType(.numberPad)
-                    #endif
-                TextField("To", text: $filters.wordsTo)
-                    #if !os(macOS)
-                    .keyboardType(.numberPad)
-                    #endif
-            } header: {
-                Text("Word count")
-            } footer: {
-                Text("Word counts come from AO3 and fill in once a work has been opened.")
-            }
-
-            Section {
-                if !userTagNames.isEmpty {
-                    LibraryMultiSelectField(title: "Your Tags", options: userTagNames,
-                                            selection: $filters.userTags)
-                }
-                LibraryMultiSelectField(title: "Fandoms", options: distinct(\.workFandoms),
-                                        selection: $filters.fandoms)
-                LibraryMultiSelectField(title: "Characters", options: distinct(\.workCharacters),
-                                        selection: $filters.characters)
-                LibraryMultiSelectField(title: "Relationships", options: distinct(\.workRelationships),
-                                        selection: $filters.relationships)
-                LibraryMultiSelectField(title: "Additional Tags", options: distinct(\.workFreeforms),
-                                        selection: $filters.additionalTags)
-                LibraryMultiSelectField(title: "Exclude Tags", options: distinct(\.workTags),
-                                        selection: $filters.excludeTags)
-            } header: {
-                Text("Tags")
-            } footer: {
-                Text("Filter by the work's own AO3 tags. Exclude Tags hides matching works.")
-            }
-
-            if filters.hasActiveFilters {
+            // Group so .appThemedRows() reaches every section's rows (it doesn't
+            // propagate from the Form container, only from a Group/Section/ForEach).
+            Group {
                 Section {
-                    Button(role: .destructive) {
-                        filters = LibraryFilters()
-                    } label: {
-                        Label("Reset Filters", systemImage: "arrow.counterclockwise")
+                    Picker("Sort by", selection: $filters.sort) {
+                        ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Rating", selection: $filters.rating) {
+                        ForEach(AO3SearchFilters.Rating.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+
+                Section("Warnings") {
+                    ForEach(AO3SearchFilters.Warning.allCases) { warning in
+                        selectableRow(warning.title, isSelected: filters.warnings.contains(warning)) {
+                            toggle(warning, in: \.warnings)
+                        }
+                    }
+                }
+
+                Section("Categories") {
+                    ForEach(AO3SearchFilters.Category.allCases) { category in
+                        selectableRow(category.title, isSelected: filters.categories.contains(category)) {
+                            toggle(category, in: \.categories)
+                        }
+                    }
+                }
+
+                Section {
+                    Picker("Completion", selection: $filters.completion) {
+                        ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
+                    }
+                    if !languageOptions.isEmpty {
+                        Picker("Language", selection: $filters.language) {
+                            Text("Any language").tag("")
+                            ForEach(languageOptions, id: \.self) { Text($0).tag($0) }
+                        }
+                    }
+                }
+
+                Section {
+                    TextField("From", text: $filters.wordsFrom)
+                    #if !os(macOS)
+                        .keyboardType(.numberPad)
+                    #endif
+                    TextField("To", text: $filters.wordsTo)
+                    #if !os(macOS)
+                        .keyboardType(.numberPad)
+                    #endif
+                } header: {
+                    Text("Word count")
+                } footer: {
+                    Text("Word counts come from AO3 and fill in once a work has been opened.")
+                }
+
+                Section {
+                    if !userTagNames.isEmpty {
+                        LibraryMultiSelectField(title: "Your Tags", options: userTagNames,
+                                                selection: $filters.userTags)
+                    }
+                    LibraryMultiSelectField(title: "Fandoms", options: distinct(\.workFandoms),
+                                            selection: $filters.fandoms)
+                    LibraryMultiSelectField(title: "Characters", options: distinct(\.workCharacters),
+                                            selection: $filters.characters)
+                    LibraryMultiSelectField(title: "Relationships", options: distinct(\.workRelationships),
+                                            selection: $filters.relationships)
+                    LibraryMultiSelectField(title: "Additional Tags", options: distinct(\.workFreeforms),
+                                            selection: $filters.additionalTags)
+                    LibraryMultiSelectField(title: "Exclude Tags", options: distinct(\.workTags),
+                                            selection: $filters.excludeTags)
+                } header: {
+                    Text("Tags")
+                } footer: {
+                    Text("Filter by the work's own AO3 tags. Exclude Tags hides matching works.")
+                }
+
+                if filters.hasActiveFilters {
+                    Section {
+                        Button(role: .destructive) {
+                            filters = LibraryFilters()
+                        } label: {
+                            Label("Reset Filters", systemImage: "arrow.counterclockwise")
+                        }
                     }
                 }
             }
-          }
-          .appThemedRows()
+            .appThemedRows()
         }
         .formStyle(.grouped)
         .appThemedScroll()
@@ -216,8 +216,11 @@ private struct LibraryOptionPicker: View {
                 } else {
                     ForEach(filtered, id: \.self) { value in
                         Button {
-                            if selection.contains(value) { selection.remove(value) }
-                            else { selection.insert(value) }
+                            if selection.contains(value) {
+                                selection.remove(value)
+                            } else {
+                                selection.insert(value)
+                            }
                         } label: {
                             HStack {
                                 Text(value).foregroundStyle(.primary)
@@ -238,14 +241,14 @@ private struct LibraryOptionPicker: View {
             .appThemedScroll()
             .navigationTitle(title)
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
-            .searchable(text: $query, prompt: "Filter \(title)")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                .searchable(text: $query, prompt: "Filter \(title)")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
                 }
-            }
         }
         #if os(iOS)
         .presentationDetents([.large])

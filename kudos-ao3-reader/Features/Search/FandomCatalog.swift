@@ -26,7 +26,7 @@ final class FandomCatalog {
     private var didLoadCache = false
 
     private init() {
-        self.cache = FandomCatalogCache()
+        cache = FandomCatalogCache()
     }
 
     /// The cached fandom list for a category, or nil while it's still loading.
@@ -55,23 +55,23 @@ final class FandomCatalog {
     /// matched on-device, so typing feels live without scraping AO3 per keystroke.
     /// Prefix matches first, then by work count. Deduped by name.
     func cachedFandoms(matching query: String, limit: Int = 12) -> [AO3Fandom] {
-        let q = query.lowercased()
-        guard !q.isEmpty else { return [] }
+        let normalizedQuery = query.lowercased()
+        guard !normalizedQuery.isEmpty else { return [] }
         var seen = Set<String>()
         var matches: [AO3Fandom] = []
         for list in fandomsByCategory.values {
-            for fandom in list where fandom.name.lowercased().contains(q) {
+            for fandom in list where fandom.name.lowercased().contains(normalizedQuery) {
                 if seen.insert(fandom.name.lowercased()).inserted { matches.append(fandom) }
             }
         }
         return matches.sorted { lhs, rhs in
-            let lp = lhs.name.lowercased().hasPrefix(q)
-            let rp = rhs.name.lowercased().hasPrefix(q)
-            if lp != rp { return lp }
+            let leftHasPrefix = lhs.name.lowercased().hasPrefix(normalizedQuery)
+            let rightHasPrefix = rhs.name.lowercased().hasPrefix(normalizedQuery)
+            if leftHasPrefix != rightHasPrefix { return leftHasPrefix }
             return (lhs.workCount ?? 0) > (rhs.workCount ?? 0)
         }
         .prefix(limit)
-        .map { $0 }
+        .map(\.self)
     }
 
     /// Shows any disk-cached lists immediately, then fetches the categories that are
@@ -89,7 +89,9 @@ final class FandomCatalog {
                 && !$0.fandomsURL.isEmpty
         }
         guard !pending.isEmpty else { return }
-        for category in pending { inFlight.insert(category.id) }
+        for category in pending {
+            inFlight.insert(category.id)
+        }
 
         await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
             for category in pending {
@@ -126,7 +128,9 @@ final class FandomCatalog {
             !inFlight.contains($0.id) && !$0.fandomsURL.isEmpty
         }
         guard !pending.isEmpty else { return }
-        for category in pending { inFlight.insert(category.id) }
+        for category in pending {
+            inFlight.insert(category.id)
+        }
 
         await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
             for category in pending {
@@ -158,7 +162,7 @@ final class FandomCatalog {
     private func loadCacheIfNeeded() async {
         guard !didLoadCache else { return }
         didLoadCache = true
-        let cache = self.cache
+        let cache = cache
         let loaded = await Task.detached(priority: .utility) { cache.load() }.value
         for (key, entry) in loaded {
             entries[key] = entry
@@ -169,7 +173,7 @@ final class FandomCatalog {
     /// Writes the cache off the main actor (the payload can be a few MB).
     private func persist() {
         let snapshot = entries
-        let cache = self.cache
+        let cache = cache
         Task.detached(priority: .utility) { cache.save(snapshot) }
     }
 }

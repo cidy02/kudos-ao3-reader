@@ -29,7 +29,7 @@ extension ImportedWorkMetadata {
     /// Kept here (rather than reused from `EPUBMetadata`) so the Readium path is
     /// self-contained and survives the removal of the old parser.
     private static let ao3Ratings: Set<String> = [
-        "General Audiences", "Teen And Up Audiences", "Mature", "Explicit", "Not Rated",
+        "General Audiences", "Teen And Up Audiences", "Mature", "Explicit", "Not Rated"
     ]
 
     /// Picks the AO3 rating out of a subject list, if present.

@@ -10,7 +10,7 @@ import SwiftUI
 @Observable
 final class DownloadQueue {
     struct Item: Identifiable, Equatable {
-        let id: Int            // AO3 work id
+        let id: Int // AO3 work id
         let title: String
         let sourceURL: URL?
         let isComplete: Bool
@@ -26,12 +26,29 @@ final class DownloadQueue {
     private var context: ModelContext?
 
     /// Works still to process (queued or in flight).
-    var pendingCount: Int { items.filter { $0.status == .queued || $0.status == .downloading }.count }
-    var finishedCount: Int { items.count - pendingCount }
-    var total: Int { items.count }
-    var failedCount: Int { items.filter { $0.status == .failed }.count }
-    var currentTitle: String? { items.first { $0.status == .downloading }?.title }
-    var isActive: Bool { pendingCount > 0 }
+    var pendingCount: Int {
+        items.count(where: { $0.status == .queued || $0.status == .downloading })
+    }
+
+    var finishedCount: Int {
+        items.count - pendingCount
+    }
+
+    var total: Int {
+        items.count
+    }
+
+    var failedCount: Int {
+        items.count(where: { $0.status == .failed })
+    }
+
+    var currentTitle: String? {
+        items.first { $0.status == .downloading }?.title
+    }
+
+    var isActive: Bool {
+        pendingCount > 0
+    }
 
     /// Enqueues works that aren't already queued and starts processing. A fresh run
     /// (nothing in flight) first clears the previous run's finished rows.
@@ -43,7 +60,7 @@ final class DownloadQueue {
             items.append(item)
         }
         if !isRunning, !items.isEmpty {
-            isRunning = true   // set synchronously so a rapid second enqueue appends
+            isRunning = true // set synchronously so a rapid second enqueue appends
             Task { await run() }
         }
     }

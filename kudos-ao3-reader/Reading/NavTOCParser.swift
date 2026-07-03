@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses an EPUB3 navigation document's `toc` nav into (title, src) pairs.
-nonisolated final class NavTOCParser: NSObject, XMLParserDelegate {
+final nonisolated class NavTOCParser: NSObject, XMLParserDelegate {
     var entries: [(title: String, src: String)] = []
 
     private var inToc = false
@@ -16,10 +16,10 @@ nonisolated final class NavTOCParser: NSObject, XMLParserDelegate {
     }
 
     func parser(
-        _ parser: XMLParser,
+        _: XMLParser,
         didStartElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?,
+        namespaceURI _: String?,
+        qualifiedName _: String?,
         attributes: [String: String]
     ) {
         switch localName(elementName) {
@@ -36,15 +36,15 @@ nonisolated final class NavTOCParser: NSObject, XMLParserDelegate {
         }
     }
 
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
+    func parser(_: XMLParser, foundCharacters string: String) {
         if inAnchor { buffer += string }
     }
 
     func parser(
-        _ parser: XMLParser,
+        _: XMLParser,
         didEndElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?
+        namespaceURI _: String?,
+        qualifiedName _: String?
     ) {
         switch localName(elementName) {
         case "a" where inAnchor:
