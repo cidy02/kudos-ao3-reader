@@ -58,6 +58,17 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         works.filter { selection.contains($0.id) }
     }
 
+    /// Whether the bulk Save/Favorite buttons show as "on" — every selected work is
+    /// already in that state. Tapping toggles: makes the selection consistently on
+    /// if it isn't already, otherwise undoes it for all of them.
+    private var allSelectedAreSaved: Bool {
+        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
+    }
+
+    private var allSelectedAreFavorited: Bool {
+        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
+    }
+
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
     private var statisticsWorks: [SavedWork] {
         works.filter { !$0.isQueueOnlyWork && (!hideMature || !$0.isAdult || gate.isRevealed($0)) }
@@ -97,6 +108,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .toolbar { toolbarContent }
+            #if os(iOS)
+                // Select mode owns the bottom edge with its bulk-action bar; the
+                // floating tab/search glass hides meanwhile. Besides decluttering,
+                // this keeps the selection UI's red accents from refracting through
+                // the tab pill — Liquid Glass samples ambient color from surrounding
+                // content, and solid accent-red on screen bled visible red rings onto
+                // the (unrelated) tab icons whenever a selection was active.
+                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+            #endif
                 .alert("New Collection", isPresented: $showingNewCollection) {
                     TextField("Name", text: $newCollectionName)
                     Button("Create") { createCollection() }
@@ -548,8 +568,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         Button {
             bulkSave()
         } label: {
-            Label("Save", systemImage: "bookmark")
+            Label(allSelectedAreSaved ? "Saved" : "Save",
+                  systemImage: allSelectedAreSaved ? "bookmark.fill" : "bookmark")
         }
+        .tint(allSelectedAreSaved ? themeManager.accentColor : nil)
         .disabled(selection.isEmpty)
 
         Spacer()
@@ -557,8 +579,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         Button {
             bulkFavorite()
         } label: {
-            Label("Favorite", systemImage: "star")
+            Label(allSelectedAreFavorited ? "Favorited" : "Favorite",
+                  systemImage: allSelectedAreFavorited ? "star.fill" : "star")
         }
+        .tint(allSelectedAreFavorited ? themeManager.accentColor : nil)
         .disabled(selection.isEmpty)
     }
 
@@ -639,20 +663,24 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         exitSelectMode()
     }
 
-    /// Marks every selected work as saved (keeps its EPUB permanently).
+    /// Toggles saved (keeps its EPUB permanently): if the selection isn't already
+    /// all saved, saves everything; if it is, un-saves everything (tap again to
+    /// undo). Select mode stays active — unlike Delete, the works are still there,
+    /// so the user can keep stacking actions or adjusting the selection.
     private func bulkSave() {
+        let shouldSave = !allSelectedAreSaved
         for work in selectedWorks {
-            WorkLifecycle.setSaved(work, true, in: context)
+            WorkLifecycle.setSaved(work, shouldSave, in: context)
         }
-        exitSelectMode()
     }
 
+    /// Same toggle behavior as `bulkSave`.
     private func bulkFavorite() {
+        let shouldFavorite = !allSelectedAreFavorited
         for work in selectedWorks {
-            work.isFavorite = true
+            work.isFavorite = shouldFavorite
         }
         try? context.save()
-        exitSelectMode()
     }
 
     private func refreshLibraryDashboard() async {
