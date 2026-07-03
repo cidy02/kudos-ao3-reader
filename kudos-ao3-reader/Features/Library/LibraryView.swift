@@ -40,6 +40,7 @@ struct LibraryView: View {
     #endif
     @State private var selection = Set<UUID>()
     @State private var confirmBulkDelete = false
+    @State private var showingSelectionList = false
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
@@ -70,7 +71,7 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                if isSelecting {
+                if isSelecting && showingSelectionList {
                     selectList
                 } else {
                     dashboard
@@ -176,11 +177,7 @@ struct LibraryView: View {
             onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
-                NavigationLink(value: LocalWorkDestination.reader(work)) {
-                    WorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
-                }
-                .buttonStyle(.plain)
-                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                localCarouselCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
@@ -207,11 +204,7 @@ struct LibraryView: View {
                 ForEach(0..<6, id: \.self) { _ in WorkCoverCardSkeleton() }
             } else {
                 ForEach(saved.prefix(12)) { work in
-                    NavigationLink(value: LocalWorkDestination.reader(work)) {
-                        WorkCoverCard(work: work, footer: nil, progress: nil)
-                    }
-                    .buttonStyle(.plain)
-                    .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                    localCarouselCard(work: work, footer: nil, progress: nil)
                 }
                 ForEach(mfl.prefix(12)) { work in
                     NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
@@ -376,6 +369,17 @@ struct LibraryView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { exitSelectMode() }
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingSelectionList.toggle()
+                } label: {
+                    Label(
+                        showingSelectionList ? "Show Carousels" : "Show Detailed List",
+                        systemImage: showingSelectionList ? "rectangle.grid.1x2" : "list.bullet.rectangle"
+                    )
+                }
+                .help(showingSelectionList ? "Show carousels" : "Show detailed list")
+            }
             #if os(iOS)
             ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
             #else
@@ -498,7 +502,10 @@ struct LibraryView: View {
         #if os(iOS)
         List(selection: $selection) {
             Section {
-                ForEach(selectableWorks) { SensitiveWorkRow(work: $0, openMode: .reader) }
+                ForEach(selectableWorks) { work in
+                    SensitiveWorkRow(work: work, openMode: .reader)
+                        .tag(work.id)
+                }
                     .cardRow()
             }
         }
@@ -547,7 +554,10 @@ struct LibraryView: View {
 
     #if os(iOS)
     private func enterSelectMode(selecting work: SavedWork? = nil) {
-        selection = work.map { Set([$0.id]) } ?? []
+        if let work {
+            selection.insert(work.id)
+        }
+        showingSelectionList = false
         editMode = .active
     }
     #endif
@@ -564,7 +574,52 @@ struct LibraryView: View {
         #if os(iOS)
         editMode = .inactive
         #endif
+        showingSelectionList = false
         selection = []
+    }
+
+    @ViewBuilder
+    private func localCarouselCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
+        #if os(iOS)
+        if isSelecting {
+            Button {
+                toggleSelection(work)
+            } label: {
+                SelectableWorkCoverCard(
+                    work: work,
+                    footer: footer,
+                    progress: progress,
+                    isSelected: selection.contains(work.id)
+                )
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            .accessibilityLabel(work.title)
+            .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
+            .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
+        } else {
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                WorkCoverCard(work: work, footer: footer, progress: progress)
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+        }
+        #else
+        NavigationLink(value: LocalWorkDestination.reader(work)) {
+            WorkCoverCard(work: work, footer: footer, progress: progress)
+        }
+        .buttonStyle(.plain)
+        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+        #endif
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
     }
 
     private func bulkDelete() {

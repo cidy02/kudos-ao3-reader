@@ -101,6 +101,7 @@ private enum CardListMetrics {
     static let sideMargin: CGFloat = 16         // card inset from the screen edges
     static let innerVertical: CGFloat = 10      // padding inside the card (on top of row content)
     static let innerHorizontal: CGFloat = 16
+    static let editSelectionInset: CGFloat = 14 // breathing room for List(selection:) bubbles
 }
 
 /// Makes a List render as plain (ungrouped) over the themed backdrop, so each row's
@@ -121,14 +122,18 @@ private struct CardList: ViewModifier {
 /// inner padding. Applies to a row, a `ForEach`, or a `Section`.
 private struct CardRow: ViewModifier {
     @Environment(ThemeManager.self) private var theme
+    #if os(iOS)
+    @Environment(\.editMode) private var editMode
+    #endif
 
     func body(content: Content) -> some View {
         let half = CardListMetrics.interCardSpacing / 2
+        let leadingMargin = CardListMetrics.sideMargin + editSelectionInset
         content
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(
                 top: half + CardListMetrics.innerVertical,
-                leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
+                leading: leadingMargin + CardListMetrics.innerHorizontal,
                 bottom: half + CardListMetrics.innerVertical,
                 trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
             ))
@@ -148,10 +153,18 @@ private struct CardRow: ViewModifier {
                     // them and `sideMargin` from the screen edges (and leave room for
                     // the shadow within the gap).
                     .padding(EdgeInsets(
-                        top: half, leading: CardListMetrics.sideMargin,
+                        top: half, leading: leadingMargin,
                         bottom: half, trailing: CardListMetrics.sideMargin
                     ))
             )
+    }
+
+    private var editSelectionInset: CGFloat {
+        #if os(iOS)
+        return (editMode?.wrappedValue.isEditing ?? false) ? CardListMetrics.editSelectionInset : 0
+        #else
+        return 0
+        #endif
     }
 }
 

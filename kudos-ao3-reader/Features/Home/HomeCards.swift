@@ -205,6 +205,52 @@ struct AO3WorkCoverCard: View {
     }
 }
 
+/// Selection-mode wrapper for local carousel cards. The full card remains the hit
+/// target while the bubble mirrors iOS multi-select affordances without disturbing
+/// the compact summary layout.
+struct SelectableWorkCoverCard: View {
+    let work: SavedWork
+    var footer: String?
+    var progress: Double?
+    var isSelected: Bool
+
+    var body: some View {
+        WorkCoverCard(work: work, footer: footer, progress: progress)
+            .overlay(alignment: .topTrailing) {
+                WorkSelectionBubble(isSelected: isSelected)
+                    .padding(8)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: WorkSummaryCardMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            }
+    }
+}
+
+struct WorkSelectionBubble: View {
+    var isSelected: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.regularMaterial)
+            if isSelected {
+                Circle().fill(Color.accentColor)
+            }
+            Circle()
+                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.55), lineWidth: 1.25)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 28, height: 28)
+        .shadow(color: .black.opacity(0.18), radius: 2, x: 0, y: 1)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct WorkSummaryCardSurface<Content: View>: View {
     @Environment(ThemeManager.self) private var themeManager
     /// Stable per-title hue (0...1) used to tint the card so adjacent cards stay
