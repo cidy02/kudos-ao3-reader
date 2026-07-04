@@ -662,8 +662,9 @@ struct ReadiumReaderView: View {
 
     private func persistCurrentProgress() {
         if let saved = book.currentLocator?.persistenceString {
+            let now = Date()
             work.readiumLocator = saved
-            work.lastReadDate = Date()
+            work.markProgressModified(now)
             try? modelContext.save()
         }
     }
@@ -761,12 +762,14 @@ struct ReadiumReaderView: View {
         let context = modelContext
         let router = router
         book.onLocatorChange = { locator in
+            let now = Date()
             work.readiumLocator = locator.persistenceString ?? work.readiumLocator
-            work.lastReadDate = Date() // drives the Library's Continue Reading shelf
+            work.markProgressModified(now) // drives the Library's Continue Reading shelf
             // Finish a completed work once the user reaches the end (WIPs are manual).
             if let progress = locator.locations.totalProgression, progress >= 0.99,
                work.isComplete, !work.isFinished {
                 work.isFinished = true
+                work.markModified(now)
             }
             try? context.save()
         }

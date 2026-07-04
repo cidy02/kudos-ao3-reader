@@ -95,6 +95,7 @@ struct PrivacyDataView: View {
             ) {
                 Button("Clear \(history.count) Work\(history.count == 1 ? "" : "s")", role: .destructive) {
                     for work in history {
+                        SyncTombstones.recordDeletion(of: work, in: context)
                         context.delete(work)
                     }
                     try? context.save()

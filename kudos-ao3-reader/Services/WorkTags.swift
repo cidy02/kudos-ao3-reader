@@ -43,11 +43,13 @@ enum WorkTags {
             if let comments = groups.comments { work.comments = comments }
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
+            work.markModified()
             try? context.save()
         } catch AO3Error.notFound {
             // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
             // whatever tags it already has (EPUB-derived or a prior AO3 fetch).
             work.ao3Unavailable = true
+            work.markModified()
             try? context.save()
         } catch {
             // Other network or parse failure: keep the EPUB-derived tags and retry next time.
@@ -73,6 +75,7 @@ enum WorkTags {
         guard !tags.isEmpty else { return }
         work.workTags = tags
         if work.rating.isEmpty { work.rating = meta.rating }
+        work.markModified()
         try? context.save()
     }
 

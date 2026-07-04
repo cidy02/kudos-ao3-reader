@@ -187,7 +187,11 @@ struct CollectionDetailView: View {
                 TextField("Name", text: $renameText)
                 Button("Save") {
                     let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty { collection.name = trimmed; try? context.save() }
+                    if !trimmed.isEmpty {
+                        collection.name = trimmed
+                        collection.markModified()
+                        try? context.save()
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             }
@@ -197,6 +201,7 @@ struct CollectionDetailView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
+                    SyncTombstones.recordDeletion(of: collection, in: context)
                     context.delete(collection)
                     try? context.save()
                     dismiss()
@@ -209,6 +214,8 @@ struct CollectionDetailView: View {
 
     private func remove(_ work: SavedWork) {
         work.collections.removeAll { $0.id == collection.id }
+        work.markModified()
+        collection.markModified()
         try? context.save()
     }
 }
@@ -291,6 +298,9 @@ struct AddToCollectionView: View {
         } else {
             work.collections.append(collection)
         }
+        let now = Date()
+        work.markModified(now)
+        collection.markModified(now)
         try? context.save()
     }
 
@@ -300,6 +310,7 @@ struct AddToCollectionView: View {
         let collection = WorkCollection(name: trimmed)
         context.insert(collection)
         work.collections.append(collection)
+        work.markModified()
         try? context.save()
         newName = ""
     }

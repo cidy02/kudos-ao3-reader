@@ -230,6 +230,7 @@ struct ReadingQueueDetailView: View {
         for work in works {
             ReadingQueueService.removeFromQueue(work, from: queue, in: context)
         }
+        SyncTombstones.recordDeletion(of: queue, in: context)
         context.delete(queue)
         saveBestEffort("Saving queue deletion failed")
         dismiss()

@@ -11,6 +11,7 @@ enum WorkLifecycle {
     @MainActor
     static func markFinished(_ work: SavedWork, in context: ModelContext) {
         work.isFinished = true
+        work.markModified()
         if !work.isProtected { freeEPUB(work) }
         saveBestEffort(context, reason: "Saving finished state failed")
     }
@@ -20,6 +21,7 @@ enum WorkLifecycle {
     @MainActor
     static func markStillReading(_ work: SavedWork, in context: ModelContext) {
         work.isFinished = false
+        work.markModified()
         saveBestEffort(context, reason: "Saving still-reading state failed")
     }
 
@@ -36,6 +38,7 @@ enum WorkLifecycle {
     @MainActor
     static func setSaved(_ work: SavedWork, _ saved: Bool, in context: ModelContext) {
         work.isSaved = saved
+        work.markModified()
         saveBestEffort(context, reason: "Saving saved state failed")
     }
 
@@ -49,12 +52,14 @@ enum WorkLifecycle {
         if work.isQueuedForLater {
             work.epubPreservationStatus = .missingFile
         }
+        work.markModified()
     }
 
     /// Removes a work from the Library entirely: its EPUB, reader cache, and record.
     /// Saves the context.
     @MainActor
     static func delete(_ work: SavedWork, in context: ModelContext) {
+        SyncTombstones.recordDeletion(of: work, in: context)
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         context.delete(work)

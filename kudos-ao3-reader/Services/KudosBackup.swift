@@ -129,8 +129,8 @@ struct KudosBackupContents {
 }
 
 struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 2
-    static let supportedVersions: Set<Int> = [1, currentVersion]
+    static let currentVersion = 3
+    static let supportedVersions: Set<Int> = [1, 2, currentVersion]
 
     let version: Int
     let exportedAt: Date
@@ -198,6 +198,11 @@ struct KudosBackupWork: Codable, Equatable {
     let summary: String
     let sourceURL: String
     let dateAdded: Date
+    let createdAt: Date?
+    let lastModifiedAt: Date?
+    let deletedAt: Date?
+    let isDeleted: Bool?
+    let assetIdentifier: String?
     let isFavorite: Bool
     let isSaved: Bool
     let isFinished: Bool
@@ -221,6 +226,7 @@ struct KudosBackupWork: Codable, Equatable {
     let lastSpineIndex: Int
     let lastScrollFraction: Double
     let lastReadDate: Date?
+    let progressModifiedAt: Date?
     let workTags: [String]
     let workFandoms: [String]
     let workCharacters: [String]
@@ -246,6 +252,11 @@ struct KudosBackupWork: Codable, Equatable {
         summary = work.summary
         sourceURL = work.sourceURL
         dateAdded = work.dateAdded
+        createdAt = work.createdAt
+        lastModifiedAt = work.lastModifiedAt
+        deletedAt = work.deletedAt
+        isDeleted = work.isDeleted
+        assetIdentifier = work.effectiveAssetIdentifier
         isFavorite = work.isFavorite
         isSaved = work.isSaved
         isFinished = work.isFinished
@@ -269,6 +280,7 @@ struct KudosBackupWork: Codable, Equatable {
         lastSpineIndex = work.lastSpineIndex
         lastScrollFraction = work.lastScrollFraction
         lastReadDate = work.lastReadDate
+        progressModifiedAt = work.progressModifiedAt
         workTags = work.workTags
         workFandoms = work.workFandoms
         workCharacters = work.workCharacters
@@ -298,6 +310,11 @@ struct KudosBackupWork: Codable, Equatable {
         case summary
         case sourceURL
         case dateAdded
+        case createdAt
+        case lastModifiedAt
+        case deletedAt
+        case isDeleted
+        case assetIdentifier
         case isFavorite
         case isSaved
         case isFinished
@@ -321,6 +338,7 @@ struct KudosBackupWork: Codable, Equatable {
         case lastSpineIndex
         case lastScrollFraction
         case lastReadDate
+        case progressModifiedAt
         case workTags
         case workFandoms
         case workCharacters
@@ -347,6 +365,11 @@ struct KudosBackupWork: Codable, Equatable {
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
         dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted)
+        assetIdentifier = try container.decodeIfPresent(String.self, forKey: .assetIdentifier)
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFinished = try container.decodeIfPresent(Bool.self, forKey: .isFinished) ?? false
@@ -370,6 +393,7 @@ struct KudosBackupWork: Codable, Equatable {
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         lastScrollFraction = try container.decodeIfPresent(Double.self, forKey: .lastScrollFraction) ?? 0
         lastReadDate = try container.decodeIfPresent(Date.self, forKey: .lastReadDate)
+        progressModifiedAt = try container.decodeIfPresent(Date.self, forKey: .progressModifiedAt)
         workTags = try container.decodeIfPresent([String].self, forKey: .workTags) ?? []
         workFandoms = try container.decodeIfPresent([String].self, forKey: .workFandoms) ?? []
         workCharacters = try container.decodeIfPresent([String].self, forKey: .workCharacters) ?? []
@@ -958,49 +982,117 @@ enum KudosBackupService {
     }
 
     private static func apply(_ archived: KudosBackupWork, to work: SavedWork) {
-        work.title = archived.title
-        work.author = archived.author
-        work.summary = archived.summary
-        work.sourceURL = archived.sourceURL
-        work.dateAdded = archived.dateAdded
-        work.isFavorite = archived.isFavorite
-        work.isSaved = archived.isSaved
-        work.isFinished = archived.isFinished
-        work.isComplete = archived.isComplete
-        work.rating = archived.rating
-        work.language = archived.language
-        work.wordCount = archived.wordCount
-        work.datePublished = archived.datePublished ?? ""
-        work.dateUpdated = archived.dateUpdated ?? ""
-        work.chapters = archived.chapters
-        work.kudos = archived.kudos
-        work.comments = archived.comments
-        work.hits = archived.hits
-        work.workWarnings = archived.workWarnings
-        work.workCategories = archived.workCategories
-        work.seriesTitle = archived.seriesTitle
-        work.seriesPosition = archived.seriesPosition
-        work.seriesURL = archived.seriesURL
-        work.ao3SeriesID = archived.ao3SeriesID
-        work.lastSpineIndex = archived.lastSpineIndex
-        work.lastScrollFraction = archived.lastScrollFraction
-        work.lastReadDate = archived.lastReadDate
-        work.workTags = archived.workTags
-        work.workFandoms = archived.workFandoms
-        work.workCharacters = archived.workCharacters
-        work.workRelationships = archived.workRelationships
-        work.workFreeforms = archived.workFreeforms
-        work.workTagsFetched = archived.workTagsFetched
-        work.ao3Unavailable = archived.ao3Unavailable
-        work.isQueuedForLater = archived.isQueuedForLater
-        work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw
-        work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
-        work.preservedAt = archived.preservedAt
-        work.lastPreservationAttemptAt = archived.lastPreservationAttemptAt
-        work.lastAvailabilityCheck = archived.lastAvailabilityCheck
-        work.ao3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL)
-        #if canImport(ReadiumShared)
-        work.readiumLocator = archived.readiumLocator ?? ""
-        #endif
+        let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
+        let incomingWins = SyncMerge.shouldApplyIncoming(
+            localModifiedAt: work.lastModifiedAt,
+            incomingModifiedAt: incomingModifiedAt
+        )
+
+        work.createdAt = min(work.createdAt, archived.createdAt ?? archived.dateAdded)
+        work.dateAdded = min(work.dateAdded, archived.dateAdded)
+        if let assetIdentifier = archived.assetIdentifier, !assetIdentifier.isEmpty {
+            work.assetIdentifier = work.assetIdentifier.isEmpty ? assetIdentifier : work.assetIdentifier
+        }
+
+        work.title = mergedText(current: work.title, incoming: archived.title, incomingWins: incomingWins)
+        work.author = mergedText(current: work.author, incoming: archived.author, incomingWins: incomingWins)
+        work.summary = mergedText(current: work.summary, incoming: archived.summary, incomingWins: incomingWins)
+        work.sourceURL = mergedText(current: work.sourceURL, incoming: archived.sourceURL, incomingWins: incomingWins)
+        work.rating = mergedText(current: work.rating, incoming: archived.rating, incomingWins: incomingWins)
+        work.language = mergedText(current: work.language, incoming: archived.language, incomingWins: incomingWins)
+        work.datePublished = mergedText(
+            current: work.datePublished,
+            incoming: archived.datePublished ?? "",
+            incomingWins: incomingWins
+        )
+        work.dateUpdated = mergedText(
+            current: work.dateUpdated,
+            incoming: archived.dateUpdated ?? "",
+            incomingWins: incomingWins
+        )
+        work.chapters = mergedText(current: work.chapters, incoming: archived.chapters, incomingWins: incomingWins)
+        work.seriesTitle = mergedText(
+            current: work.seriesTitle,
+            incoming: archived.seriesTitle,
+            incomingWins: incomingWins
+        )
+        work.seriesURL = mergedText(current: work.seriesURL, incoming: archived.seriesURL, incomingWins: incomingWins)
+
+        work.isFavorite = incomingWins ? archived.isFavorite : (work.isFavorite || archived.isFavorite)
+        work.isSaved = incomingWins ? archived.isSaved : (work.isSaved || archived.isSaved)
+        work.isFinished = incomingWins ? archived.isFinished : (work.isFinished || archived.isFinished)
+        work.isComplete = incomingWins ? archived.isComplete : (work.isComplete || archived.isComplete)
+        work.isDeleted = incomingWins ? (archived.isDeleted ?? false) : work.isDeleted
+        work.deletedAt = newest(work.deletedAt, archived.deletedAt)
+
+        work.wordCount = mergedPositive(
+            current: work.wordCount,
+            incoming: archived.wordCount,
+            incomingWins: incomingWins
+        )
+        work.kudos = mergedPositive(current: work.kudos, incoming: archived.kudos, incomingWins: incomingWins)
+        work.comments = mergedPositive(current: work.comments, incoming: archived.comments, incomingWins: incomingWins)
+        work.hits = mergedPositive(current: work.hits, incoming: archived.hits, incomingWins: incomingWins)
+        if incomingWins || work.seriesPosition == 0 {
+            work.seriesPosition = max(work.seriesPosition, archived.seriesPosition)
+        }
+        work.ao3SeriesID = work.ao3SeriesID ?? archived.ao3SeriesID
+        work.ao3WorkID = work.ao3WorkID ?? archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL)
+
+        work.workWarnings = TagMerge.merged(work.workWarnings, archived.workWarnings)
+        work.workCategories = TagMerge.merged(work.workCategories, archived.workCategories)
+        work.workTags = TagMerge.merged(work.workTags, archived.workTags)
+        work.workFandoms = TagMerge.merged(work.workFandoms, archived.workFandoms)
+        work.workCharacters = TagMerge.merged(work.workCharacters, archived.workCharacters)
+        work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
+        work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
+        work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
+        work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
+        work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater
+
+        if incomingWins || work.epubPreservationStatus == .notPreserved {
+            work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw
+        }
+        if incomingWins || work.metadataSyncStatus == .unknown {
+            work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
+        }
+        work.preservedAt = newest(work.preservedAt, archived.preservedAt)
+        work.lastPreservationAttemptAt = newest(
+            work.lastPreservationAttemptAt,
+            archived.lastPreservationAttemptAt
+        )
+        work.lastAvailabilityCheck = newest(work.lastAvailabilityCheck, archived.lastAvailabilityCheck)
+
+        SyncMerge.applyProgress(
+            SyncMerge.ProgressSnapshot(
+                lastSpineIndex: archived.lastSpineIndex,
+                lastScrollFraction: archived.lastScrollFraction,
+                readiumLocator: archived.readiumLocator ?? "",
+                lastReadDate: archived.lastReadDate,
+                modifiedAt: archived.progressModifiedAt
+            ),
+            to: work
+        )
+        work.lastModifiedAt = max(work.lastModifiedAt, incomingModifiedAt)
+    }
+
+    private static func mergedText(current: String, incoming: String, incomingWins: Bool) -> String {
+        let trimmed = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return current }
+        return current.isEmpty || incomingWins ? incoming : current
+    }
+
+    private static func mergedPositive(current: Int, incoming: Int, incomingWins: Bool) -> Int {
+        guard incoming > 0 else { return current }
+        return current == 0 || incomingWins ? incoming : current
+    }
+
+    private static func newest(_ first: Date?, _ second: Date?) -> Date? {
+        switch (first, second) {
+        case let (first?, second?): max(first, second)
+        case let (first?, nil): first
+        case let (nil, second?): second
+        case (nil, nil): nil
+        }
     }
 }

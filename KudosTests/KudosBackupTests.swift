@@ -66,6 +66,8 @@ struct KudosBackupTests {
         let sourceDefaults = try testDefaults()
         sourceDefaults.set(false, forKey: "hideMatureContent")
         sourceDefaults.set("dark", forKey: "appTheme")
+        let olderLocalDate = Date(timeIntervalSince1970: 100)
+        let newerArchiveDate = Date(timeIntervalSince1970: 200)
 
         let archivedWork = SavedWork(title: "Restored Work", author: "Writer")
         archivedWork.isFavorite = true
@@ -73,6 +75,7 @@ struct KudosBackupTests {
         archivedWork.wordCount = 99_001
         archivedWork.lastSpineIndex = 4
         archivedWork.tags = [Tag(name: "Re-read")]
+        archivedWork.markProgressModified(newerArchiveDate)
         let epub = Data("restored-epub".utf8)
         try epub.write(to: archivedWork.fileURL)
 
@@ -92,7 +95,7 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            ReadingQueue.self, ReadingQueueMembership.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -103,6 +106,7 @@ struct KudosBackupTests {
             title: "Old Title",
             author: "Old Author"
         )
+        existing.markModified(olderLocalDate)
         context.insert(existing)
         let targetDefaults = try testDefaults()
 
@@ -139,7 +143,7 @@ struct KudosBackupTests {
     @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let sourceContainer = try ModelContainer(for: schema, configurations: [configuration])
@@ -193,9 +197,11 @@ struct KudosBackupTests {
     @Test func restoreMergesByAO3WorkIDBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let olderLocalDate = Date(timeIntervalSince1970: 100)
+        let newerArchiveDate = Date(timeIntervalSince1970: 200)
 
         let archivedWork = SavedWork(
             title: "Archived AO3 Work",
@@ -203,6 +209,7 @@ struct KudosBackupTests {
             sourceURL: "https://archiveofourown.org/works/13579"
         )
         archivedWork.ao3WorkID = 13_579
+        archivedWork.markModified(newerArchiveDate)
         let document = try KudosBackupService.makeDocument(
             works: [archivedWork],
             bookmarks: [],
@@ -219,6 +226,7 @@ struct KudosBackupTests {
             sourceURL: "https://archiveofourown.org/works/13579?view_full_work=true"
         )
         existing.ao3WorkID = 13_579
+        existing.markModified(olderLocalDate)
         context.insert(existing)
 
         _ = try KudosBackupService.restore(
@@ -237,15 +245,18 @@ struct KudosBackupTests {
     @Test func restoreMergesByCanonicalAO3URLBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let olderLocalDate = Date(timeIntervalSince1970: 100)
+        let newerArchiveDate = Date(timeIntervalSince1970: 200)
 
         let archivedWork = SavedWork(
             title: "Archived URL Work",
             author: "Writer",
             sourceURL: "https://archiveofourown.org/downloads/24680/work.epub"
         )
+        archivedWork.markModified(newerArchiveDate)
         let document = try KudosBackupService.makeDocument(
             works: [archivedWork],
             bookmarks: [],
@@ -261,6 +272,7 @@ struct KudosBackupTests {
             author: "Writer",
             sourceURL: "https://archiveofourown.org/works/24680?view_full_work=true#main"
         )
+        existing.markModified(olderLocalDate)
         context.insert(existing)
 
         _ = try KudosBackupService.restore(
@@ -279,7 +291,7 @@ struct KudosBackupTests {
     @Test func restorePreservedStatusWithMissingEPUBBecomesMissingFile() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let sourceContainer = try ModelContainer(for: schema, configurations: [configuration])
@@ -361,7 +373,7 @@ struct KudosBackupTests {
         let contents = try KudosBackupContents(fileWrapper: wrapper)
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])

@@ -127,6 +127,9 @@ Planning and tracking notes live in [`TASKS.md`](TASKS.md) and [`docs/`](docs/):
   security, and authenticated-request architecture.
 - [`docs/EPUBParsing.md`](docs/EPUBParsing.md) — supported EPUB structures,
   parser/import assumptions, failure behavior, and branch differences.
+- [`docs/iCloudPersistence.md`](docs/iCloudPersistence.md) — metadata-first iCloud
+  persistence architecture, migration, merge rules, EPUB asset strategy, and
+  real-device test checklist.
 
 ## License
 

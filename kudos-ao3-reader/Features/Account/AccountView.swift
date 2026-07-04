@@ -319,6 +319,7 @@ private struct LocalReadingHistoryView: View {
     }
 
     private func remove(_ work: SavedWork) {
+        SyncTombstones.recordDeletion(of: work, in: context)
         context.delete(work)
         try? context.save()
     }
@@ -372,6 +373,7 @@ private struct LocalFavoritesView: View {
                             .swipeActions(edge: .trailing) {
                                 Button {
                                     work.isFavorite = false
+                                    work.markModified()
                                     try? context.save()
                                 } label: {
                                     Label("Unfavorite", systemImage: "star.slash")

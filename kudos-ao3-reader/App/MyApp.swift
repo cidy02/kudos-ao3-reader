@@ -9,7 +9,7 @@ import SwiftUI
         .modelContainer(for: [
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self
+            SavedSearch.self, SyncTombstone.self
         ])
     }
 }

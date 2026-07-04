@@ -3,6 +3,27 @@ import Foundation
 /// Filesystem locations used by the app. `nonisolated` so the off-main
 /// `AO3Client` actor can build download paths without crossing actors.
 nonisolated enum Storage {
+    static func defaultEPUBAssetIdentifier(for id: UUID) -> String {
+        "\(id.uuidString).epub"
+    }
+
+    static func workAssetURL(identifier: String, fallbackID: UUID) -> URL {
+        worksDirectory.appendingPathComponent(safeEPUBAssetIdentifier(identifier, fallbackID: fallbackID))
+    }
+
+    static func safeEPUBAssetIdentifier(_ identifier: String, fallbackID: UUID) -> String {
+        let fallback = defaultEPUBAssetIdentifier(for: fallbackID)
+        let candidate = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty,
+              URL(fileURLWithPath: candidate).lastPathComponent == candidate,
+              !candidate.contains("/"),
+              !candidate.contains("\\"),
+              URL(fileURLWithPath: candidate).pathExtension.localizedCaseInsensitiveCompare("epub")
+                  == .orderedSame
+        else { return fallback }
+        return candidate
+    }
+
     /// Permanent home for user-imported fonts.
     static var fontsDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

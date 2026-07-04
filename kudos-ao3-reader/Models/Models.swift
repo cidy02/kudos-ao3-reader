@@ -19,9 +19,60 @@ nonisolated enum MetadataSyncStatus: String, Codable, CaseIterable {
     case failed
 }
 
+nonisolated enum SyncRecordStatus: String, Codable, CaseIterable {
+    case localOnly
+    case pending
+    case syncing
+    case synced
+    case conflict
+    case failed
+    case assetsMissing
+}
+
 nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     case savedForLater
     case custom
+}
+
+nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
+    case savedWork
+    case workCollection
+    case readingQueue
+    case readingQueueMembership
+}
+
+/// Durable marker for an explicit local deletion. Future cloud merge code must treat
+/// tombstones as user intent and not resurrect records just because another device
+/// still has an older copy.
+@Model final class SyncTombstone {
+    var id: UUID = UUID()
+    var recordID: UUID = UUID()
+    var recordTypeRaw: String = SyncTombstoneRecordType.savedWork.rawValue
+    var createdAt: Date = Date()
+    var lastModifiedAt: Date = Date()
+    var sourceURL: String = ""
+    var ao3WorkID: Int?
+
+    init(
+        recordID: UUID,
+        recordType: SyncTombstoneRecordType,
+        sourceURL: String = "",
+        ao3WorkID: Int? = nil,
+        createdAt: Date = Date()
+    ) {
+        id = UUID()
+        self.recordID = recordID
+        recordTypeRaw = recordType.rawValue
+        self.sourceURL = sourceURL
+        self.ao3WorkID = ao3WorkID
+        self.createdAt = createdAt
+        lastModifiedAt = createdAt
+    }
+
+    var recordType: SyncTombstoneRecordType {
+        get { SyncTombstoneRecordType(rawValue: recordTypeRaw) ?? .savedWork }
+        set { recordTypeRaw = newValue.rawValue }
+    }
 }
 
 /// A work the user has saved from AO3, backed by an EPUB file on disk.
@@ -33,6 +84,18 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     var summary: String = ""
     var sourceURL: String = ""
     var dateAdded: Date = Date()
+    var createdAt: Date = Date()
+    var lastModifiedAt: Date = Date()
+    var deletedAt: Date?
+    var isDeleted: Bool = false
+
+    /// Stable name for the EPUB asset associated with this metadata record. This is
+    /// intentionally separate from title/author/source URL so future iCloud Documents
+    /// asset lookup can survive AO3 metadata edits and local title changes.
+    var assetIdentifier: String = ""
+    var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
+    var lastSyncAttemptAt: Date?
+    var lastSyncError: String = ""
 
     /// Whether the user has marked this work as a favorite.
     var isFavorite: Bool = false
@@ -112,6 +175,7 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     var lastSpineIndex: Int = 0
     var lastScrollFraction: Double = 0
     var readiumLocator: String = ""
+    var progressModifiedAt: Date?
 
     /// When the work was last opened in the reader. Drives the Library's
     /// "Continue Reading" ordering; nil for works never opened (or pre-migration).
@@ -192,6 +256,15 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     var metadataSyncStatus: MetadataSyncStatus {
         get { MetadataSyncStatus(rawValue: metadataSyncStatusRaw) ?? .unknown }
         set { metadataSyncStatusRaw = newValue.rawValue }
+    }
+
+    var syncStatus: SyncRecordStatus {
+        get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    var effectiveAssetIdentifier: String {
+        assetIdentifier.isEmpty ? Storage.defaultEPUBAssetIdentifier(for: id) : assetIdentifier
     }
 
     /// Queue-only works are preserved/readable but intentionally hidden from normal
@@ -281,11 +354,25 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
         self.summary = summary
         self.sourceURL = sourceURL
         dateAdded = Date()
+        createdAt = dateAdded
+        lastModifiedAt = dateAdded
+        assetIdentifier = Storage.defaultEPUBAssetIdentifier(for: id)
     }
 
     /// Location of the stored EPUB on disk.
     var fileURL: URL {
-        Storage.worksDirectory.appendingPathComponent("\(id.uuidString).epub")
+        Storage.workAssetURL(identifier: effectiveAssetIdentifier, fallbackID: id)
+    }
+
+    func markModified(_ date: Date = Date()) {
+        lastModifiedAt = date
+        if syncStatus == .synced { syncStatus = .pending }
+    }
+
+    func markProgressModified(_ date: Date = Date()) {
+        lastReadDate = date
+        progressModifiedAt = date
+        markModified(date)
     }
 }
 
@@ -347,6 +434,13 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     var id: UUID = UUID()
     var name: String = ""
     var dateAdded: Date = Date()
+    var createdAt: Date = Date()
+    var lastModifiedAt: Date = Date()
+    var deletedAt: Date?
+    var isDeleted: Bool = false
+    var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
+    var lastSyncAttemptAt: Date?
+    var lastSyncError: String = ""
 
     /// The works in this collection (inverse of `SavedWork.collections`).
     var works: [SavedWork] = []
@@ -354,6 +448,18 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     init(name: String) {
         self.name = name
         dateAdded = Date()
+        createdAt = dateAdded
+        lastModifiedAt = dateAdded
+    }
+
+    var syncStatus: SyncRecordStatus {
+        get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    func markModified(_ date: Date = Date()) {
+        lastModifiedAt = date
+        if syncStatus == .synced { syncStatus = .pending }
     }
 }
 
@@ -366,6 +472,11 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
     var sortOrder: Int = 0
     var dateCreated: Date = Date()
     var dateUpdated: Date = Date()
+    var deletedAt: Date?
+    var isDeleted: Bool = false
+    var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
+    var lastSyncAttemptAt: Date?
+    var lastSyncError: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
@@ -391,8 +502,18 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
         set { kindRaw = newValue.rawValue }
     }
 
+    var syncStatus: SyncRecordStatus {
+        get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
     var displayName: String {
         kind == .savedForLater ? "Saved for Later" : name
+    }
+
+    func markModified(_ date: Date = Date()) {
+        dateUpdated = date
+        if syncStatus == .synced { syncStatus = .pending }
     }
 }
 
@@ -401,8 +522,14 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
 @Model final class ReadingQueueMembership {
     var id: UUID = UUID()
     var queuedAt: Date = Date()
+    var lastModifiedAt: Date = Date()
+    var deletedAt: Date?
+    var isDeleted: Bool = false
     var sortOrderInQueue: Int = 0
     var note: String = ""
+    var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
+    var lastSyncAttemptAt: Date?
+    var lastSyncError: String = ""
 
     var queue: ReadingQueue?
     var work: SavedWork?
@@ -419,8 +546,19 @@ nonisolated enum ReadingQueueKind: String, Codable, CaseIterable {
         self.queue = queue
         self.work = work
         self.queuedAt = queuedAt
+        lastModifiedAt = queuedAt
         self.sortOrderInQueue = sortOrderInQueue
         self.note = note
+    }
+
+    var syncStatus: SyncRecordStatus {
+        get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    func markModified(_ date: Date = Date()) {
+        lastModifiedAt = date
+        if syncStatus == .synced { syncStatus = .pending }
     }
 }
 

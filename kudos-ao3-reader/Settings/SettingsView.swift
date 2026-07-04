@@ -6,6 +6,7 @@ import UIKit
 #endif
 
 // Lint: this existing form is kept together to avoid behavior refactors.
+// swiftlint:disable file_length
 /// The toggleable reading options, grouped into categories. Shared between the
 /// reader's inspector (quick access while reading) and the Settings page, so the
 /// two always show the same controls and stay in sync via `@AppStorage`.
@@ -57,6 +58,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
+    @State private var persistenceStatus = PersistenceStatusStore.snapshot()
+    @State private var isPreparingPersistence = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -258,6 +261,12 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         onImport: { importingBackup = true }
                     )
 
+                    PersistenceSettingsSection(
+                        status: persistenceStatus,
+                        isPreparing: isPreparingPersistence,
+                        onRetry: preparePersistenceForSync
+                    )
+
                     EPUBImportSettingsSection(
                         isImporting: isImportingEPUB,
                         progressText: epubImportProgress,
@@ -350,6 +359,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         .formStyle(.grouped)
         .appThemedScroll()
+        .onAppear { persistenceStatus = PersistenceStatusStore.snapshot() }
         .fileImporter(
             isPresented: $importing,
             allowedContentTypes: [.font],
@@ -590,6 +600,20 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         themeManager.matchAppAndReader = settings.matchAppReaderTheme
     }
 
+    private func preparePersistenceForSync() {
+        guard !isPreparingPersistence else { return }
+        isPreparingPersistence = true
+        let state = PersistenceMigrationService.run(in: context)
+        persistenceStatus = PersistenceStatusStore.snapshot()
+        isPreparingPersistence = false
+        if state == .failedRecoverable {
+            backupNotice = BackupNotice(
+                title: "Sync Prep Needs Retry",
+                message: persistenceStatus.detail
+            )
+        }
+    }
+
     private var savedWorkMigrationButtonTitle: String {
         let count = legacySavedWorksForQueueMigration.count
         return "Add \(count) Work\(count == 1 ? "" : "s")"
@@ -711,6 +735,49 @@ struct BackupSettingsSection: View {
                 + "User Tags, saved links, custom fonts, and app settings. Import "
                 + "merges without deleting items already on this device. AO3 sessions "
                 + "and passwords are never included.")
+        }
+    }
+}
+
+struct PersistenceSettingsSection: View {
+    let status: PersistenceStatusSnapshot
+    let isPreparing: Bool
+    let onRetry: () -> Void
+
+    var body: some View {
+        Section {
+            LabeledContent {
+                Text(status.migrationState.title)
+            } label: {
+                Label("Metadata", systemImage: "externaldrive.badge.icloud")
+            }
+
+            LabeledContent("iCloud", value: status.iCloudAccountStatus.title)
+
+            if let date = status.lastMigrationAttempt {
+                LabeledContent("Last Checked", value: date.formatted(date: .abbreviated, time: .shortened))
+            }
+
+            Button(action: onRetry) {
+                Label(
+                    status.migrationState == .completed ? "Check Sync Prep" : "Retry Sync Prep",
+                    systemImage: "arrow.clockwise"
+                )
+            }
+            .disabled(isPreparing)
+
+            if isPreparing {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text("Preparing metadata…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("iCloud Sync")
+        } footer: {
+            Text(status.detail + " Kudos still works offline; EPUB files stay local in this build. "
+                + "Private iCloud metadata sync needs an iCloud-enabled signed build and real-device testing.")
         }
     }
 }

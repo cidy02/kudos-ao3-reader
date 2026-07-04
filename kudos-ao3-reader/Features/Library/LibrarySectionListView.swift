@@ -173,6 +173,7 @@ struct LibrarySectionListView: View {
 
                 Button {
                     work.isFavorite.toggle()
+                    work.markModified()
                     try? context.save()
                 } label: {
                     Label(work.isFavorite ? "Unfavorite" : "Favorite",

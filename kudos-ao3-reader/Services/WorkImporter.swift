@@ -173,10 +173,12 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
             try copyImportedEPUB(from: url, to: duplicate.fileURL)
             duplicate.hasEPUB = true
             duplicate.isSaved = true
+            duplicate.markModified()
             try? context.save()
             Task { await WorkTags.refreshFromAO3(for: duplicate, in: context) }
             return .restored(duplicate)
         }
+        duplicate.markModified()
         try? context.save()
         return .duplicate(duplicate)
     }
@@ -192,6 +194,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     applyUserImportMetadata(inspection, to: work, fillOnly: false)
     work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
     work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
+    work.markModified()
 
     try copyImportedEPUB(from: url, to: work.fileURL)
 

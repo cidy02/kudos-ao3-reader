@@ -677,8 +677,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// Same toggle behavior as `bulkSave`.
     private func bulkFavorite() {
         let shouldFavorite = !allSelectedAreFavorited
+        let now = Date()
         for work in selectedWorks {
             work.isFavorite = shouldFavorite
+            work.markModified(now)
         }
         try? context.save()
     }

@@ -108,6 +108,7 @@ enum WorkReaderPreparation {
             work.preservedAt = Date()
         }
         work.lastSpineIndex = 0
+        work.markModified()
         try context.save()
     }
 }

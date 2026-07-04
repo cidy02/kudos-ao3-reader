@@ -209,7 +209,10 @@ enum ReadingQueueService {
         context.insert(membership)
         queue.memberships.append(membership)
         work.queueMemberships.append(membership)
-        queue.dateUpdated = Date()
+        let now = Date()
+        queue.markModified(now)
+        membership.markModified(now)
+        work.markModified(now)
         work.isQueuedForLater = true
         normalize(work)
         saveBestEffort(context, reason: "Saving queue membership failed")
@@ -513,11 +516,14 @@ enum ReadingQueueService {
     static func removeFromQueue(_ work: SavedWork, from queue: ReadingQueue, in context: ModelContext) {
         let matches = work.queueMemberships.filter { $0.queue?.id == queue.id }
         for membership in matches {
+            SyncTombstones.recordDeletion(of: membership, in: context)
             work.queueMemberships.removeAll { $0.id == membership.id }
             queue.memberships.removeAll { $0.id == membership.id }
             context.delete(membership)
         }
-        queue.dateUpdated = Date()
+        let now = Date()
+        queue.markModified(now)
+        work.markModified(now)
         work.isQueuedForLater = !work.queueMemberships.isEmpty
         normalize(work)
         saveBestEffort(context, reason: "Saving queue removal failed")
@@ -588,6 +594,7 @@ enum ReadingQueueService {
         if work.seriesURL.isEmpty { work.seriesURL = summary.seriesURL ?? "" }
         if work.seriesPosition == 0 { work.seriesPosition = summary.seriesPosition ?? 0 }
         if work.ao3SeriesID == nil { work.ao3SeriesID = ao3SeriesID(from: work.seriesURL) }
+        work.markModified()
     }
 
     static func ao3SeriesID(from urlString: String) -> Int? {

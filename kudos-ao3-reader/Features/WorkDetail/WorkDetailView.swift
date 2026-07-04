@@ -382,6 +382,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             Button {
                 withLocalWork { work in
                     work.isFavorite.toggle()
+                    work.markModified()
                     saveBestEffort("Saving favorite state failed")
                 }
             } label: {
