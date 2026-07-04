@@ -121,18 +121,25 @@ real-device quota/cellular testing.
 Backups remain manual and merge-only:
 
 - Export is local and network-independent.
-- Manifest version 4 includes sync-prep timestamps, progress timestamps, delete
-  state, queue membership freshness, and `assetIdentifier` while still decoding
-  versions 1, 2, and 3.
+- Manifest version 5 includes sync-prep timestamps, progress timestamps, delete
+  state, queue membership freshness, `assetIdentifier`, and `SyncTombstone`
+  records, while still decoding versions 1 through 4.
 - Import merges by AO3 work ID, canonical AO3 URL, then UUID.
 - Import does not delete unrelated local records.
-- Import honors `SyncTombstone` records: a work the user explicitly deleted here
-  is not resurrected unless the archived snapshot is newer than the newest
-  matching deletion. Deleted queues and memberships are matched by exact UUID
-  and resolved by timestamp: newer queue metadata, newer membership activity, or
-  a newer restore can revive an older queue tombstone; stale snapshots remain
-  suppressed; ambiguous conflicts preserve data and are reported. Members of a
-  suppressed queue are dropped with it, never re-homed into Saved for Later.
+- Tombstones travel with the backup: exporting a device's current state includes
+  its `SyncTombstone` rows, and restoring merges any tombstones the local device
+  doesn't already have. This is what makes suppression work on a fresh
+  install/reinstall — without it, a device with zero local deletion history would
+  have nothing to check an older backup's stale data against. A work the user
+  explicitly deleted is not resurrected unless the archived snapshot is newer
+  than the newest matching deletion (by AO3 work ID/canonical URL, falling back
+  to UUID). Deleted queues and memberships are matched by exact UUID and
+  resolved by timestamp: newer queue metadata or newer membership activity can
+  revive an older queue tombstone (based on the queue/membership's own recorded
+  timestamps only — the backup file's export time itself never counts as
+  evidence of freshness); stale snapshots remain suppressed; ambiguous conflicts
+  preserve data and are reported. Members of a suppressed queue are dropped with
+  it, never re-homed into Saved for Later.
 - Older backup progress cannot overwrite newer local progress. The same
   timestamp rule guards isFavorite/isSaved/isFinished/isComplete: an older
   archive cannot resurrect a flag the user changed more recently, while a work

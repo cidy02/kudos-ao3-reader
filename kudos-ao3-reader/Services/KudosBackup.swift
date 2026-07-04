@@ -130,8 +130,8 @@ struct KudosBackupContents {
 }
 
 struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 4
-    static let supportedVersions: Set<Int> = [1, 2, 3, currentVersion]
+    static let currentVersion = 5
+    static let supportedVersions: Set<Int> = [1, 2, 3, 4, currentVersion]
 
     let version: Int
     let exportedAt: Date
@@ -141,6 +141,10 @@ struct KudosBackupManifest: Codable, Equatable {
     let readingQueues: [KudosBackupReadingQueue]
     let readingQueueMemberships: [KudosBackupReadingQueueMembership]
     let settings: KudosBackupSettings
+    // Carrying tombstones with the backup means a fresh install/reinstall restoring
+    // this file inherits the source device's deletion history, instead of having zero
+    // tombstone knowledge and silently resurrecting anything deleted after export.
+    let tombstones: [KudosBackupTombstone]
 
     init(
         version: Int = currentVersion,
@@ -150,7 +154,8 @@ struct KudosBackupManifest: Codable, Equatable {
         fonts: [KudosBackupFont],
         readingQueues: [KudosBackupReadingQueue] = [],
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
-        settings: KudosBackupSettings
+        settings: KudosBackupSettings,
+        tombstones: [KudosBackupTombstone] = []
     ) {
         self.version = version
         self.exportedAt = exportedAt
@@ -160,6 +165,7 @@ struct KudosBackupManifest: Codable, Equatable {
         self.readingQueues = readingQueues
         self.readingQueueMemberships = readingQueueMemberships
         self.settings = settings
+        self.tombstones = tombstones
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -171,6 +177,7 @@ struct KudosBackupManifest: Codable, Equatable {
         case readingQueues
         case readingQueueMemberships
         case settings
+        case tombstones
     }
 
     init(from decoder: Decoder) throws {
@@ -189,6 +196,34 @@ struct KudosBackupManifest: Codable, Equatable {
             forKey: .readingQueueMemberships
         ) ?? []
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
+        tombstones = try container.decodeIfPresent(
+            [KudosBackupTombstone].self,
+            forKey: .tombstones
+        ) ?? []
+    }
+}
+
+struct KudosBackupTombstone: Codable, Equatable {
+    let id: UUID
+    let recordID: UUID
+    let recordTypeRaw: String
+    let createdAt: Date
+    let lastModifiedAt: Date
+    let sourceURL: String
+    let ao3WorkID: Int?
+    let deletedOnDeviceID: String
+    let deletionReason: String
+
+    init(tombstone: SyncTombstone) {
+        id = tombstone.id
+        recordID = tombstone.recordID
+        recordTypeRaw = tombstone.recordTypeRaw
+        createdAt = tombstone.createdAt
+        lastModifiedAt = tombstone.lastModifiedAt
+        sourceURL = tombstone.sourceURL
+        ao3WorkID = tombstone.ao3WorkID
+        deletedOnDeviceID = tombstone.deletedOnDeviceID
+        deletionReason = tombstone.deletionReason
     }
 }
 
@@ -469,15 +504,11 @@ struct KudosBackupReadingQueue: Codable, Equatable {
         lastMembershipChangedAt = queue.lastMembershipChangedAt
     }
 
-    func effectiveModifiedAt(
-        memberships: [KudosBackupReadingQueueMembership],
-        exportedAt: Date? = nil
-    ) -> Date? {
+    func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
         SyncMerge.effectiveQueueModifiedAt(
             queueUpdatedAt: dateUpdated,
             lastMembershipChangedAt: lastMembershipChangedAt,
-            membershipModifiedAts: memberships.map { $0.lastModifiedAt ?? $0.queuedAt },
-            restoreOrImportDate: exportedAt
+            membershipModifiedAts: memberships.map { $0.lastModifiedAt ?? $0.queuedAt }
         )
     }
 }
@@ -788,6 +819,7 @@ enum KudosBackupService {
         bookmarks: [Bookmark],
         fonts: [CustomFont],
         readingQueues: [ReadingQueue],
+        tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupDocument {
         var epubFiles: [UUID: Data] = [:]
@@ -812,7 +844,8 @@ enum KudosBackupService {
             fonts: fonts.map(KudosBackupFont.init),
             readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
             readingQueueMemberships: queueMemberships,
-            settings: .capture(defaults: defaults)
+            settings: .capture(defaults: defaults),
+            tombstones: tombstones.map(KudosBackupTombstone.init)
         )
         return KudosBackupDocument(contents: KudosBackupContents(
             manifest: manifest,
@@ -831,7 +864,31 @@ enum KudosBackupService {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
         var workIndex = WorkRestoreIndex(existingWorks)
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
-        let tombstones = TombstoneIndex(try context.fetch(FetchDescriptor<SyncTombstone>()))
+
+        // Adopt the source device's deletion history so a fresh install/reinstall
+        // restoring this backup inherits the same tombstone protection the source
+        // device had, instead of having zero local tombstones to consult.
+        var localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+        var knownTombstoneKeys = Set(localTombstones.map { "\($0.recordTypeRaw)|\($0.recordID)" })
+        for archived in contents.manifest.tombstones {
+            let key = "\(archived.recordTypeRaw)|\(archived.recordID)"
+            guard !knownTombstoneKeys.contains(key) else { continue }
+            let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) ?? .savedWork
+            let tombstone = SyncTombstone(
+                recordID: archived.recordID,
+                recordType: recordType,
+                sourceURL: archived.sourceURL,
+                ao3WorkID: archived.ao3WorkID,
+                createdAt: archived.createdAt,
+                deletedOnDeviceID: archived.deletedOnDeviceID,
+                deletionReason: archived.deletionReason
+            )
+            tombstone.lastModifiedAt = archived.lastModifiedAt
+            context.insert(tombstone)
+            localTombstones.append(tombstone)
+            knownTombstoneKeys.insert(key)
+        }
+        let tombstones = TombstoneIndex(localTombstones)
 
         let existingTags = try context.fetch(FetchDescriptor<Tag>())
         var tagsByName = Dictionary(
@@ -906,10 +963,7 @@ enum KudosBackupService {
             let queue: ReadingQueue
             let kind = ReadingQueueKind(rawValue: archived.kindRaw) ?? .custom
             let archivedMemberships = archivedMembershipsByQueueID[archived.id] ?? []
-            let incomingModifiedAt = archived.effectiveModifiedAt(
-                memberships: archivedMemberships,
-                exportedAt: contents.manifest.exportedAt
-            )
+            let incomingModifiedAt = archived.effectiveModifiedAt(memberships: archivedMemberships)
             let hadExistingQueue = queuesByID[archived.id] != nil
             let resolution = kind == .savedForLater ? .noTombstone : tombstones.queueResolution(
                 id: archived.id,

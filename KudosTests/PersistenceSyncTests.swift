@@ -506,6 +506,87 @@ struct PersistenceSyncTests {
         #expect(restored.isComplete == true)
     }
 
+    /// A backup file's own export wall-clock time has no bearing on whether the queue's
+    /// content actually changed. A queue whose real content (dateUpdated/membership
+    /// activity) predates the tombstone must stay suppressed even if the file it's
+    /// bundled in was written long after the deletion.
+    @Test func exportedAtAloneDoesNotReviveContentStaleQueue() throws {
+        let queueID = UUID(uuidString: "00000000-0000-0000-0000-00000000FFFF")!
+        let contents = try backupWithQueuedWork(
+            queueID: queueID,
+            queueName: "Stale Content",
+            queueDateUpdated: Date(timeIntervalSince1970: 50),
+            lastMembershipChangedAt: Date(timeIntervalSince1970: 50),
+            membershipModifiedAt: Date(timeIntervalSince1970: 50),
+            exportedAt: Date(timeIntervalSince1970: 100_000)
+        )
+
+        let targetContainer = try container()
+        let context = targetContainer.mainContext
+        context.insert(SyncTombstone(
+            recordID: queueID,
+            recordType: .readingQueue,
+            createdAt: Date(timeIntervalSince1970: 500)
+        ))
+
+        let summary = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let queues = try context.fetch(FetchDescriptor<ReadingQueue>())
+        #expect(queues.allSatisfy { $0.kind == .savedForLater })
+        #expect(summary.suppressedQueues == 1)
+        #expect(summary.revivedQueues == 0)
+    }
+
+    /// Tombstones must travel with a backup so a fresh install/reinstall inherits the
+    /// source device's deletion history — otherwise a later import of an older backup
+    /// (made before the deletion) would resurrect the deleted work with zero local
+    /// tombstone history to stop it.
+    @Test func tombstoneSurvivesBackupRoundTripIntoFreshInstall() throws {
+        let defaults = try testDefaults()
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+
+        let work = SavedWork(title: "Deleted Before Reinstall", author: "Writer",
+                             sourceURL: "https://archiveofourown.org/works/909")
+        sourceContext.insert(work)
+        WorkLifecycle.delete(work, in: sourceContext)
+        let sourceTombstones = try sourceContext.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(sourceTombstones.count == 1)
+
+        // The source device's current backup: the work is already gone, but the
+        // tombstone recording its deletion is included.
+        let carrierDocument = try KudosBackupService.makeDocument(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: sourceTombstones,
+            defaults: defaults
+        )
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        _ = try KudosBackupService.restore(carrierDocument.contents, into: targetContext, defaults: defaults)
+        // The fresh install now has the tombstone, though it never deleted anything itself.
+        #expect(try targetContext.fetch(FetchDescriptor<SyncTombstone>()).count == 1)
+
+        // A separate, older backup still contains the work as it was before deletion.
+        let staleArchive = SavedWork(title: "Deleted Before Reinstall", author: "Writer",
+                                     sourceURL: "https://archiveofourown.org/works/909")
+        staleArchive.markModified(Date(timeIntervalSince1970: 100))
+        let staleDocument = try KudosBackupService.makeDocument(
+            works: [staleArchive],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        _ = try KudosBackupService.restore(staleDocument.contents, into: targetContext, defaults: defaults)
+
+        #expect(try targetContext.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+    }
+
     private func testDefaults() throws -> UserDefaults {
         let name = "PersistenceSyncTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))

@@ -329,13 +329,17 @@ enum SyncMerge {
         return incomingModifiedAt >= localModifiedAt
     }
 
+    // Deliberately does NOT take a "restore/import/export wall-clock time" parameter:
+    // when a backup file was written or imported has no bearing on whether the
+    // queue's own content changed, and folding it in here previously let a
+    // content-stale backup revive an explicitly-deleted queue just because the file
+    // itself happened to be newer than the tombstone.
     static func effectiveQueueModifiedAt(
         queueUpdatedAt: Date?,
         lastMembershipChangedAt: Date?,
-        membershipModifiedAts: [Date],
-        restoreOrImportDate: Date? = nil
+        membershipModifiedAts: [Date]
     ) -> Date? {
-        ([queueUpdatedAt, lastMembershipChangedAt, restoreOrImportDate].compactMap { $0 }
+        ([queueUpdatedAt, lastMembershipChangedAt].compactMap { $0 }
             + membershipModifiedAts).max()
     }
 

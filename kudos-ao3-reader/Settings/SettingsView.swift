@@ -25,6 +25,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @Query(sort: \SavedWork.dateAdded) private var works: [SavedWork]
     @Query(sort: \Bookmark.dateAdded) private var bookmarks: [Bookmark]
     @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
+    @Query private var syncTombstones: [SyncTombstone]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -547,7 +548,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 works: works,
                 bookmarks: bookmarks,
                 fonts: customFonts,
-                readingQueues: readingQueues
+                readingQueues: readingQueues,
+                tombstones: syncTombstones
             )
             exportingBackup = true
         } catch {
