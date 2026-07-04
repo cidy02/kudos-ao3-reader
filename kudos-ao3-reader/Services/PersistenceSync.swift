@@ -22,35 +22,20 @@ nonisolated enum PersistenceMigrationState: String, Codable, CaseIterable {
     }
 }
 
-nonisolated enum ICloudAccountStatus: Equatable {
-    case available
-    case unavailable
-
-    var title: String {
-        switch self {
-        case .available: "iCloud Available"
-        case .unavailable: "iCloud Unavailable"
-        }
-    }
-}
-
 struct PersistenceStatusSnapshot: Equatable {
     var migrationState: PersistenceMigrationState
-    var iCloudAccountStatus: ICloudAccountStatus
     var lastMigrationAttempt: Date?
     var lastError: String
 
     var detail: String {
         if !lastError.isEmpty { return lastError }
-        switch (migrationState, iCloudAccountStatus) {
-        case (.completed, .available):
-            return "Local metadata is ready for future private iCloud sync."
-        case (.completed, .unavailable):
-            return "Local metadata is ready. Sign in to iCloud on this device to sync later."
-        case (.failedRecoverable, _):
+        switch migrationState {
+        case .completed:
+            return "Local metadata is ready for folder sync."
+        case .failedRecoverable:
             return "The local sync-prep migration can be retried safely."
         default:
-            return "Preparing local metadata for future iCloud sync."
+            return "Preparing local metadata for folder sync."
         }
     }
 }
@@ -64,7 +49,6 @@ enum PersistenceStatusStore {
         let raw = defaults.string(forKey: migrationStateKey) ?? PersistenceMigrationState.notStarted.rawValue
         return PersistenceStatusSnapshot(
             migrationState: PersistenceMigrationState(rawValue: raw) ?? .notStarted,
-            iCloudAccountStatus: FileManager.default.ubiquityIdentityToken == nil ? .unavailable : .available,
             lastMigrationAttempt: defaults.object(forKey: lastMigrationAttemptKey) as? Date,
             lastError: defaults.string(forKey: lastMigrationErrorKey) ?? ""
         )
@@ -78,6 +62,41 @@ enum PersistenceStatusStore {
         defaults.set(state.rawValue, forKey: migrationStateKey)
         defaults.set(Date(), forKey: lastMigrationAttemptKey)
         defaults.set(error, forKey: lastMigrationErrorKey)
+    }
+}
+
+nonisolated enum PersistenceOperationKind: String, Equatable {
+    case migration
+    case backupImport
+    case folderSync
+
+    var title: String {
+        switch self {
+        case .migration: "metadata preparation"
+        case .backupImport: "backup import"
+        case .folderSync: "folder sync"
+        }
+    }
+}
+
+@MainActor
+enum PersistenceOperationGate {
+    private static var activeOperation: PersistenceOperationKind?
+
+    static var active: PersistenceOperationKind? {
+        activeOperation
+    }
+
+    static func begin(_ operation: PersistenceOperationKind) -> Bool {
+        guard activeOperation == nil else { return false }
+        activeOperation = operation
+        return true
+    }
+
+    static func end(_ operation: PersistenceOperationKind) {
+        if activeOperation == operation {
+            activeOperation = nil
+        }
     }
 }
 
@@ -100,10 +119,6 @@ enum PersistenceMigrationService {
     /// for the whole migration and a caller's loading indicator gets a chance to render.
     private static let yieldInterval = 50
 
-    /// The yield points mean two runs (launch task + Settings retry) could otherwise
-    /// interleave on the main actor, corrupting the persisted state machine mid-flight.
-    private static var isRunning = false
-
     @discardableResult
     static func runIfNeeded(
         in context: ModelContext,
@@ -119,11 +134,10 @@ enum PersistenceMigrationService {
         in context: ModelContext,
         defaults: UserDefaults = .standard
     ) async -> PersistenceMigrationState {
-        guard !isRunning else {
+        guard PersistenceOperationGate.begin(.migration) else {
             return PersistenceStatusStore.snapshot(defaults: defaults).migrationState
         }
-        isRunning = true
-        defer { isRunning = false }
+        defer { PersistenceOperationGate.end(.migration) }
         do {
             PersistenceStatusStore.setState(.inProgress, defaults: defaults)
             try await migrateMetadata(in: context, stage: "metadata migration")
@@ -307,7 +321,7 @@ enum SyncTombstones {
     }
 }
 
-enum SyncMerge {
+nonisolated enum SyncMerge {
     enum TombstoneResolution: Equatable {
         case noTombstone
         case suppressStaleData

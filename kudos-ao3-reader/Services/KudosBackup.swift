@@ -35,12 +35,12 @@ struct KudosBackupDocument: FileDocument {
     }
 }
 
-struct KudosBackupContents {
+nonisolated struct KudosBackupContents {
     let manifest: KudosBackupManifest
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]
 
-    init(
+    nonisolated init(
         manifest: KudosBackupManifest,
         epubFiles: [UUID: Data] = [:],
         fontFiles: [String: Data] = [:]
@@ -50,14 +50,14 @@ struct KudosBackupContents {
         self.fontFiles = fontFiles
     }
 
-    init(fileWrapper root: FileWrapper) throws {
+    nonisolated init(fileWrapper root: FileWrapper) throws {
         guard root.isDirectory, let rootFiles = root.fileWrappers,
               let manifestData = rootFiles["manifest.json"]?.regularFileContents
         else {
             throw KudosBackupError.invalidPackage
         }
 
-        manifest = try Self.decoder.decode(KudosBackupManifest.self, from: manifestData)
+        manifest = try Self.makeDecoder().decode(KudosBackupManifest.self, from: manifestData)
         guard KudosBackupManifest.supportedVersions.contains(manifest.version) else {
             throw KudosBackupError.unsupportedVersion(manifest.version)
         }
@@ -83,13 +83,13 @@ struct KudosBackupContents {
         fontFiles = fonts
     }
 
-    static func read(from url: URL) throws -> Self {
+    nonisolated static func read(from url: URL) throws -> Self {
         let wrapper = try FileWrapper(url: url, options: .immediate)
         return try Self(fileWrapper: wrapper)
     }
 
-    func fileWrapper() throws -> FileWrapper {
-        let manifestData = try Self.encoder.encode(manifest)
+    nonisolated func fileWrapper() throws -> FileWrapper {
+        let manifestData = try Self.makeEncoder().encode(manifest)
         var rootFiles = [
             "manifest.json": FileWrapper(regularFileWithContents: manifestData)
         ]
@@ -108,20 +108,20 @@ struct KudosBackupContents {
         return FileWrapper(directoryWithFileWrappers: rootFiles)
     }
 
-    private static let encoder: JSONEncoder = {
+    nonisolated private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
-    }()
+    }
 
-    private static let decoder: JSONDecoder = {
+    nonisolated private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }()
+    }
 
-    private static func isSafeFileName(_ fileName: String) -> Bool {
+    nonisolated private static func isSafeFileName(_ fileName: String) -> Bool {
         !fileName.isEmpty
             && URL(fileURLWithPath: fileName).lastPathComponent == fileName
             && !fileName.contains("/")
@@ -129,15 +129,16 @@ struct KudosBackupContents {
     }
 }
 
-struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 5
-    static let supportedVersions: Set<Int> = [1, 2, 3, 4, currentVersion]
+nonisolated struct KudosBackupManifest: Codable, Equatable {
+    static let currentVersion = 6
+    static let supportedVersions: Set<Int> = [1, 2, 3, 4, 5, currentVersion]
 
     let version: Int
     let exportedAt: Date
     let works: [KudosBackupWork]
     let bookmarks: [KudosBackupBookmark]
     let fonts: [KudosBackupFont]
+    let collections: [KudosBackupCollection]
     let readingQueues: [KudosBackupReadingQueue]
     let readingQueueMemberships: [KudosBackupReadingQueueMembership]
     let settings: KudosBackupSettings
@@ -152,6 +153,7 @@ struct KudosBackupManifest: Codable, Equatable {
         works: [KudosBackupWork],
         bookmarks: [KudosBackupBookmark],
         fonts: [KudosBackupFont],
+        collections: [KudosBackupCollection] = [],
         readingQueues: [KudosBackupReadingQueue] = [],
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
         settings: KudosBackupSettings,
@@ -162,6 +164,7 @@ struct KudosBackupManifest: Codable, Equatable {
         self.works = works
         self.bookmarks = bookmarks
         self.fonts = fonts
+        self.collections = collections
         self.readingQueues = readingQueues
         self.readingQueueMemberships = readingQueueMemberships
         self.settings = settings
@@ -174,6 +177,7 @@ struct KudosBackupManifest: Codable, Equatable {
         case works
         case bookmarks
         case fonts
+        case collections
         case readingQueues
         case readingQueueMemberships
         case settings
@@ -187,6 +191,10 @@ struct KudosBackupManifest: Codable, Equatable {
         works = try container.decode([KudosBackupWork].self, forKey: .works)
         bookmarks = try container.decode([KudosBackupBookmark].self, forKey: .bookmarks)
         fonts = try container.decode([KudosBackupFont].self, forKey: .fonts)
+        collections = try container.decodeIfPresent(
+            [KudosBackupCollection].self,
+            forKey: .collections
+        ) ?? []
         readingQueues = try container.decodeIfPresent(
             [KudosBackupReadingQueue].self,
             forKey: .readingQueues
@@ -203,7 +211,7 @@ struct KudosBackupManifest: Codable, Equatable {
     }
 }
 
-struct KudosBackupTombstone: Codable, Equatable {
+nonisolated struct KudosBackupTombstone: Codable, Equatable {
     let id: UUID
     let recordID: UUID
     let recordTypeRaw: String
@@ -227,7 +235,7 @@ struct KudosBackupTombstone: Codable, Equatable {
     }
 }
 
-struct KudosBackupWork: Codable, Equatable {
+nonisolated struct KudosBackupWork: Codable, Equatable {
     let id: UUID
     let title: String
     let author: String
@@ -458,7 +466,7 @@ struct KudosBackupWork: Codable, Equatable {
     }
 }
 
-struct KudosBackupBookmark: Codable, Equatable {
+nonisolated struct KudosBackupBookmark: Codable, Equatable {
     let title: String
     let urlString: String
     let dateAdded: Date
@@ -471,7 +479,7 @@ struct KudosBackupBookmark: Codable, Equatable {
     }
 }
 
-struct KudosBackupFont: Codable, Equatable {
+nonisolated struct KudosBackupFont: Codable, Equatable {
     let name: String
     let fileName: String
     let dateAdded: Date
@@ -484,7 +492,32 @@ struct KudosBackupFont: Codable, Equatable {
     }
 }
 
-struct KudosBackupReadingQueue: Codable, Equatable {
+nonisolated struct KudosBackupCollection: Codable, Equatable {
+    let id: UUID
+    let name: String
+    let dateAdded: Date
+    let createdAt: Date?
+    let lastModifiedAt: Date?
+    let deletedAt: Date?
+    let isDeleted: Bool?
+    let syncStatusRaw: String?
+    let workIDs: [UUID]
+
+    @MainActor
+    init(collection: WorkCollection) {
+        id = collection.id
+        name = collection.name
+        dateAdded = collection.dateAdded
+        createdAt = collection.createdAt
+        lastModifiedAt = collection.lastModifiedAt
+        deletedAt = collection.deletedAt
+        isDeleted = collection.isDeleted
+        syncStatusRaw = collection.syncStatusRaw
+        workIDs = collection.works.map(\.id).sorted { $0.uuidString < $1.uuidString }
+    }
+}
+
+nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     let id: UUID
     let name: String
     let kindRaw: String
@@ -513,7 +546,7 @@ struct KudosBackupReadingQueue: Codable, Equatable {
     }
 }
 
-struct KudosBackupReadingQueueMembership: Codable, Equatable {
+nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
     let id: UUID
     let queueID: UUID
     let workID: UUID
@@ -537,7 +570,12 @@ struct KudosBackupReadingQueueMembership: Codable, Equatable {
     }
 }
 
-struct KudosBackupSettings: Codable, Equatable {
+nonisolated struct KudosBackupSettings: Codable, Equatable {
+    private static let defaultReaderFontSizePt: Double = 18
+    private static let defaultReaderLineHeight: Double = 1.65
+    private static let defaultReaderMargin: Double = 28
+    private static let defaultAccentColorHex = "#990000"
+
     var readerFontID: String
     var readerMode: String
     var readerTwoPage: Bool
@@ -640,13 +678,13 @@ struct KudosBackupSettings: Codable, Equatable {
             readerCustomize: container.decodeIfPresent(Bool.self, forKey: .readerCustomize) ?? false,
             readerBoldText: container.decodeIfPresent(Bool.self, forKey: .readerBoldText) ?? false,
             readerFontPt: container.decodeIfPresent(Double.self, forKey: .readerFontPt)
-                ?? ReaderTextStyle.defaultFontSizePt,
+                ?? Self.defaultReaderFontSizePt,
             readerLineHeight: container.decodeIfPresent(Double.self, forKey: .readerLineHeight)
-                ?? ReaderTextStyle.defaultLineHeight,
+                ?? Self.defaultReaderLineHeight,
             readerLetterSpacing: container.decodeIfPresent(Double.self, forKey: .readerLetterSpacing) ?? 0,
             readerWordSpacing: container.decodeIfPresent(Double.self, forKey: .readerWordSpacing) ?? 0,
             readerMargin: container.decodeIfPresent(Double.self, forKey: .readerMargin)
-                ?? ReaderTextStyle.defaultMargin,
+                ?? Self.defaultReaderMargin,
             readerJustify: container.decodeIfPresent(Bool.self, forKey: .readerJustify) ?? false,
             confirmBeforeDelete: container.decodeIfPresent(Bool.self, forKey: .confirmBeforeDelete) ?? true,
             hideMatureContent: container.decodeIfPresent(Bool.self, forKey: .hideMatureContent) ?? true,
@@ -662,7 +700,7 @@ struct KudosBackupSettings: Codable, Equatable {
                 ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: container.decodeIfPresent(Bool.self, forKey: .matchAppReaderTheme) ?? true,
             accentColorHex: container.decodeIfPresent(String.self, forKey: .accentColorHex)
-                ?? ThemeManager.ao3Red,
+                ?? Self.defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: container.decodeIfPresent(
                 Bool.self,
                 forKey: .autoPreserveSmallSeriesOnSaveForLater
@@ -684,19 +722,19 @@ struct KudosBackupSettings: Codable, Equatable {
             readerFontPt: number(
                 defaults,
                 "readerFontPt",
-                fallback: ReaderTextStyle.defaultFontSizePt
+                fallback: Self.defaultReaderFontSizePt
             ),
             readerLineHeight: number(
                 defaults,
                 "readerLineHeight",
-                fallback: ReaderTextStyle.defaultLineHeight
+                fallback: Self.defaultReaderLineHeight
             ),
             readerLetterSpacing: number(defaults, "readerLetterSpacing", fallback: 0),
             readerWordSpacing: number(defaults, "readerWordSpacing", fallback: 0),
             readerMargin: number(
                 defaults,
                 "readerMargin",
-                fallback: ReaderTextStyle.defaultMargin
+                fallback: Self.defaultReaderMargin
             ),
             readerJustify: bool(defaults, "readerJustify", fallback: false),
             confirmBeforeDelete: bool(defaults, "confirmBeforeDelete", fallback: true),
@@ -711,7 +749,7 @@ struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            accentColorHex: defaults.string(forKey: "accentColorHex") ?? ThemeManager.ao3Red,
+            accentColorHex: defaults.string(forKey: "accentColorHex") ?? Self.defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
                 "autoPreserveSmallSeriesOnSaveForLater",
@@ -766,7 +804,7 @@ struct KudosBackupSettings: Codable, Equatable {
     }
 }
 
-struct KudosBackupRestoreSummary: Equatable {
+nonisolated struct KudosBackupRestoreSummary: Equatable {
     let works: Int
     let bookmarks: Int
     let fonts: Int
@@ -796,7 +834,7 @@ struct KudosBackupRestoreSummary: Equatable {
     }
 }
 
-enum KudosBackupError: LocalizedError {
+nonisolated enum KudosBackupError: LocalizedError {
     case invalidPackage
     case unsupportedVersion(Int)
 
@@ -818,6 +856,7 @@ enum KudosBackupService {
         works: [SavedWork],
         bookmarks: [Bookmark],
         fonts: [CustomFont],
+        collections: [WorkCollection] = [],
         readingQueues: [ReadingQueue],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
@@ -842,6 +881,7 @@ enum KudosBackupService {
             works: works.map(KudosBackupWork.init),
             bookmarks: bookmarks.map(KudosBackupBookmark.init),
             fonts: fonts.map(KudosBackupFont.init),
+            collections: collections.map(KudosBackupCollection.init),
             readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
             readingQueueMemberships: queueMemberships,
             settings: .capture(defaults: defaults),
@@ -937,6 +977,65 @@ enum KudosBackupService {
                 work.hasEPUB = false
                 if work.epubPreservationStatus == .preserved {
                     work.epubPreservationStatus = .missingFile
+                }
+            }
+        }
+
+        let existingCollections = try context.fetch(FetchDescriptor<WorkCollection>())
+        var collectionsByID = Dictionary(
+            existingCollections.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for archived in contents.manifest.collections {
+            let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
+            let collection: WorkCollection
+            let isNewCollection: Bool
+            if let existing = collectionsByID[archived.id] {
+                collection = existing
+                isNewCollection = false
+            } else {
+                switch tombstones.collectionResolution(
+                    id: archived.id,
+                    incomingModifiedAt: incomingModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .preserveAmbiguous:
+                    Log.library.notice(
+                        "Preserving ambiguous collection \(archived.id.uuidString, privacy: .public)"
+                    )
+                case .reviveNewerData, .noTombstone:
+                    break
+                }
+                collection = WorkCollection(name: archived.name)
+                collection.id = archived.id
+                context.insert(collection)
+                collectionsByID[archived.id] = collection
+                isNewCollection = true
+            }
+
+            if isNewCollection || SyncMerge.shouldApplyIncoming(
+                localModifiedAt: collection.lastModifiedAt,
+                incomingModifiedAt: incomingModifiedAt
+            ) || collection.name.isEmpty {
+                collection.name = archived.name
+                collection.syncStatusRaw = archived.syncStatusRaw ?? collection.syncStatusRaw
+            }
+            collection.dateAdded = min(collection.dateAdded, archived.dateAdded)
+            if let archivedCreatedAt = archived.createdAt {
+                collection.createdAt = min(collection.createdAt, archivedCreatedAt)
+            }
+            collection.lastModifiedAt = max(collection.lastModifiedAt, incomingModifiedAt)
+            collection.deletedAt = collection.deletedAt ?? archived.deletedAt
+            collection.isDeleted = collection.isDeleted && (archived.isDeleted ?? false)
+
+            for workID in archived.workIDs {
+                guard let work = restoredWorksByArchivedID[workID] else { continue }
+                if !collection.works.contains(where: { $0.id == work.id }) {
+                    collection.works.append(work)
+                }
+                if !work.collections.contains(where: { $0.id == collection.id }) {
+                    work.collections.append(collection)
                 }
             }
         }
@@ -1192,6 +1291,7 @@ enum KudosBackupService {
         private var savedWorkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var savedWorkTombstonesByAO3WorkID: [Int: SyncTombstone] = [:]
         private var savedWorkTombstonesByCanonicalURL: [String: SyncTombstone] = [:]
+        private var collectionTombstonesByID: [UUID: SyncTombstone] = [:]
         private var queueTombstonesByID: [UUID: SyncTombstone] = [:]
         private var membershipTombstonesByID: [UUID: SyncTombstone] = [:]
 
@@ -1210,7 +1310,7 @@ enum KudosBackupService {
                         indexNewest(tombstone, byCanonicalURL: canonicalURL)
                     }
                 case .workCollection:
-                    break // Collections aren't part of the .kudosbackup manifest today.
+                    indexNewest(tombstone, byCollectionID: tombstone.recordID)
                 case .readingQueue:
                     indexNewest(tombstone, byQueueID: tombstone.recordID)
                 case .readingQueueMembership:
@@ -1240,6 +1340,13 @@ enum KudosBackupService {
                 return
             }
             savedWorkTombstonesByCanonicalURL[url] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionID id: UUID) {
+            if let existing = collectionTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            collectionTombstonesByID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byQueueID id: UUID) {
@@ -1272,6 +1379,13 @@ enum KudosBackupService {
             guard let tombstone else { return false }
             let archivedModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
             return tombstone.lastModifiedAt >= archivedModifiedAt
+        }
+
+        func collectionResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: collectionTombstonesByID[id]?.lastModifiedAt
+            )
         }
 
         func queueResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {

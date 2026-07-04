@@ -24,6 +24,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @Query(sort: \SavedWork.dateAdded) private var works: [SavedWork]
     @Query(sort: \Bookmark.dateAdded) private var bookmarks: [Bookmark]
+    @Query(sort: \WorkCollection.dateAdded) private var collections: [WorkCollection]
     @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
     @Query private var syncTombstones: [SyncTombstone]
 
@@ -46,6 +47,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var exportingBackup = false
     @State private var importingBackup = false
     @State private var importingEPUB = false
+    @State private var choosingSyncFolder = false
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
     @State private var showImportConfirmation = false
@@ -61,6 +63,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var epubNotice: BackupNotice?
     @State private var persistenceStatus = PersistenceStatusStore.snapshot()
     @State private var isPreparingPersistence = false
+    @State private var folderSyncStatus = FolderSyncService.snapshot()
+    @State private var isFolderSyncing = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -169,10 +173,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     } header: {
                         Text("Theme")
                     } footer: {
-                        Text(themeManager.matchAppAndReader
-                            ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
-                            : "The app and reader use separate themes.")
-                            + Text(" The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
+                        Text((themeManager.matchAppAndReader
+                              ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
+                              : "The app and reader use separate themes.")
+                            + " The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
                     }
                 }
 
@@ -262,10 +266,15 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         onImport: { importingBackup = true }
                     )
 
-                    PersistenceSettingsSection(
-                        status: persistenceStatus,
+                    FolderSyncSettingsSection(
+                        persistenceStatus: persistenceStatus,
+                        folderStatus: folderSyncStatus,
                         isPreparing: isPreparingPersistence,
-                        onRetry: preparePersistenceForSync
+                        isSyncing: isFolderSyncing,
+                        onChooseFolder: { choosingSyncFolder = true },
+                        onSyncNow: startFolderSyncNow,
+                        onDisconnect: disconnectSyncFolder,
+                        onRetryPreparation: preparePersistenceForSync
                     )
 
                     EPUBImportSettingsSection(
@@ -360,7 +369,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .onAppear { persistenceStatus = PersistenceStatusStore.snapshot() }
+        .onAppear {
+            persistenceStatus = PersistenceStatusStore.snapshot()
+            folderSyncStatus = FolderSyncService.snapshot()
+        }
         .fileImporter(
             isPresented: $importing,
             allowedContentTypes: [.font],
@@ -401,6 +413,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             allowsMultipleSelection: true
         ) { result in
             importEPUBSelection(result)
+        }
+        .fileImporter(
+            isPresented: $choosingSyncFolder,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            connectSyncFolder(result)
         }
         .confirmationDialog(
             "Import this backup?",
@@ -548,6 +567,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 works: works,
                 bookmarks: bookmarks,
                 fonts: customFonts,
+                collections: collections,
                 readingQueues: readingQueues,
                 tombstones: syncTombstones
             )
@@ -578,6 +598,15 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func restorePendingBackup() {
         guard let backup = pendingBackup else { return }
         pendingBackup = nil
+        guard PersistenceOperationGate.begin(.backupImport) else {
+            backupNotice = BackupNotice(
+                title: "Import Already Busy",
+                message: "Kudos is already running "
+                    + "\(PersistenceOperationGate.active?.title ?? "another persistence operation")."
+            )
+            return
+        }
+        defer { PersistenceOperationGate.end(.backupImport) }
         do {
             let summary = try KudosBackupService.restore(backup, into: context)
             applyRestoredTheme(backup.manifest.settings)
@@ -613,11 +642,51 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             isPreparingPersistence = false
             if state == .failedRecoverable {
                 backupNotice = BackupNotice(
-                    title: "Sync Prep Needs Retry",
+                    title: "Folder Sync Prep Needs Retry",
                     message: persistenceStatus.detail
                 )
             }
         }
+    }
+
+    private func connectSyncFolder(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            try FolderSyncService.connect(to: url)
+            folderSyncStatus = FolderSyncService.snapshot()
+            startFolderSyncNow()
+        } catch {
+            folderSyncStatus = FolderSyncService.snapshot()
+            backupNotice = BackupNotice(
+                title: "Couldn't Connect Sync Folder",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func startFolderSyncNow() {
+        guard !isFolderSyncing else { return }
+        isFolderSyncing = true
+        Task { @MainActor in
+            defer {
+                folderSyncStatus = FolderSyncService.snapshot()
+                persistenceStatus = PersistenceStatusStore.snapshot()
+                isFolderSyncing = false
+            }
+            do {
+                _ = try await FolderSyncService.syncNow(in: context)
+            } catch {
+                backupNotice = BackupNotice(
+                    title: "Folder Sync Couldn't Finish",
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func disconnectSyncFolder() {
+        FolderSyncService.disconnect()
+        folderSyncStatus = FolderSyncService.snapshot()
     }
 
     private var savedWorkMigrationButtonTitle: String {
@@ -745,46 +814,91 @@ struct BackupSettingsSection: View {
     }
 }
 
-struct PersistenceSettingsSection: View {
-    let status: PersistenceStatusSnapshot
+struct FolderSyncSettingsSection: View {
+    let persistenceStatus: PersistenceStatusSnapshot
+    let folderStatus: FolderSyncSnapshot
     let isPreparing: Bool
-    let onRetry: () -> Void
+    let isSyncing: Bool
+    let onChooseFolder: () -> Void
+    let onSyncNow: () -> Void
+    let onDisconnect: () -> Void
+    let onRetryPreparation: () -> Void
 
     var body: some View {
         Section {
             LabeledContent {
-                Text(status.migrationState.title)
+                Text(persistenceStatus.migrationState.title)
             } label: {
-                Label("Metadata", systemImage: "externaldrive.badge.icloud")
+                Label("Metadata", systemImage: "externaldrive")
             }
 
-            LabeledContent("iCloud", value: status.iCloudAccountStatus.title)
+            if folderStatus.isConnected {
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(folderStatus.folderDisplayName)
+                        if !folderStatus.folderPath.isEmpty {
+                            Text(folderStatus.folderPath)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                } label: {
+                    Label("Folder", systemImage: "folder")
+                }
 
-            if let date = status.lastMigrationAttempt {
+                Button(action: onSyncNow) {
+                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(isSyncing || isPreparing)
+
+                Button(role: .destructive, action: onDisconnect) {
+                    Label("Disconnect", systemImage: "xmark.circle")
+                }
+                .disabled(isSyncing)
+            } else {
+                Button(action: onChooseFolder) {
+                    Label("Choose Sync Folder", systemImage: "folder.badge.plus")
+                }
+                .disabled(isSyncing || isPreparing)
+            }
+
+            if let date = persistenceStatus.lastMigrationAttempt {
                 LabeledContent("Last Checked", value: date.formatted(date: .abbreviated, time: .shortened))
             }
 
-            Button(action: onRetry) {
+            if let date = folderStatus.lastSyncAt {
+                LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .shortened))
+            }
+
+            Button(action: onRetryPreparation) {
                 Label(
-                    status.migrationState == .completed ? "Check Sync Prep" : "Retry Sync Prep",
+                    persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep",
                     systemImage: "arrow.clockwise"
                 )
             }
-            .disabled(isPreparing)
+            .disabled(isPreparing || isSyncing)
 
-            if isPreparing {
+            if isPreparing || isSyncing {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text("Preparing metadata…")
+                    Text(isSyncing ? "Syncing library…" : "Preparing metadata…")
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if !folderStatus.lastError.isEmpty {
+                Text(folderStatus.lastError)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
-            Text("iCloud Sync")
+            Text("Library Sync Folder")
         } footer: {
-            Text(status.detail + " No data is sent to iCloud in this build — Kudos still works fully offline "
-                + "and EPUB files stay local. This screen only prepares local metadata for a future private "
-                + "iCloud sync, which needs an iCloud-enabled signed build and real-device testing.")
+            Text(persistenceStatus.detail + " Your library data — including reading history — is written "
+                + "to the folder you choose. If that folder is in iCloud Drive, Apple syncs it to your "
+                + "other devices through your personal iCloud account. Kudos still works fully offline. "
+                + "This is folder-based sync using the existing backup format, not real-time CloudKit sync.")
         }
     }
 }

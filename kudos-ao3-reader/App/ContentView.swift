@@ -8,11 +8,20 @@ import UIKit
 /// at the bottom of the sidebar; on iOS it's an adaptive tab bar / sidebar.
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Query private var folderSyncWorks: [SavedWork]
+    @Query private var folderSyncBookmarks: [Bookmark]
+    @Query private var folderSyncFonts: [CustomFont]
+    @Query private var folderSyncCollections: [WorkCollection]
+    @Query private var folderSyncQueues: [ReadingQueue]
+    @Query private var folderSyncMemberships: [ReadingQueueMembership]
+    @Query private var folderSyncTombstones: [SyncTombstone]
     @State private var router = AppRouter()
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
+    @State private var folderSyncUpTask: Task<Void, Never>?
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -50,6 +59,25 @@ struct ContentView: View {
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
                 await PersistenceMigrationService.runIfNeeded(in: modelContext)
+                _ = try? await FolderSyncService.syncDown(in: modelContext)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    Task { @MainActor in
+                        _ = try? await FolderSyncService.syncDown(in: modelContext)
+                    }
+                case .inactive, .background:
+                    folderSyncUpTask?.cancel()
+                    Task { @MainActor in
+                        _ = try? await FolderSyncService.syncUp(in: modelContext)
+                    }
+                @unknown default:
+                    break
+                }
+            }
+            .onChange(of: folderSyncChangeToken) { _, _ in
+                scheduleFolderSyncUp()
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
             .onShake {
@@ -89,6 +117,32 @@ struct ContentView: View {
             get: { !hasCompletedOnboarding },
             set: { if !$0 { hasCompletedOnboarding = true } }
         )
+    }
+
+    private var folderSyncChangeToken: String {
+        [
+            "\(folderSyncWorks.count):\(newestDate(folderSyncWorks.map(\.lastModifiedAt)))",
+            "\(folderSyncBookmarks.count):\(newestDate(folderSyncBookmarks.map(\.dateAdded)))",
+            "\(folderSyncFonts.count):\(newestDate(folderSyncFonts.map(\.dateAdded)))",
+            "\(folderSyncCollections.count):\(newestDate(folderSyncCollections.map(\.lastModifiedAt)))",
+            "\(folderSyncQueues.count):\(newestDate(folderSyncQueues.map(\.dateUpdated)))",
+            "\(folderSyncMemberships.count):\(newestDate(folderSyncMemberships.map(\.lastModifiedAt)))",
+            "\(folderSyncTombstones.count):\(newestDate(folderSyncTombstones.map(\.lastModifiedAt)))"
+        ].joined(separator: "|")
+    }
+
+    private func newestDate(_ dates: [Date]) -> TimeInterval {
+        dates.max()?.timeIntervalSince1970 ?? 0
+    }
+
+    private func scheduleFolderSyncUp() {
+        guard FolderSyncService.snapshot().isConnected else { return }
+        folderSyncUpTask?.cancel()
+        folderSyncUpTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 7_000_000_000)
+            guard !Task.isCancelled else { return }
+            _ = try? await FolderSyncService.syncUp(in: modelContext)
+        }
     }
 
     /// Warms `UISegmentedControl` for Sepia (resets to default for Light/Dark).
