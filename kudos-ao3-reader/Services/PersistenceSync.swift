@@ -83,91 +83,119 @@ enum PersistenceStatusStore {
 
 @MainActor
 enum PersistenceMigrationService {
+    /// Yield to the run loop every N records so a large library doesn't freeze the UI
+    /// for the whole migration and a caller's loading indicator gets a chance to render.
+    private static let yieldInterval = 50
+
     @discardableResult
     static func runIfNeeded(
         in context: ModelContext,
         defaults: UserDefaults = .standard
-    ) -> PersistenceMigrationState {
+    ) async -> PersistenceMigrationState {
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
         guard current != .completed else { return current }
-        return run(in: context, defaults: defaults)
+        return await run(in: context, defaults: defaults)
     }
 
     @discardableResult
     static func run(
         in context: ModelContext,
         defaults: UserDefaults = .standard
-    ) -> PersistenceMigrationState {
+    ) async -> PersistenceMigrationState {
         do {
             PersistenceStatusStore.setState(.inProgress, defaults: defaults)
-            try migrateMetadata(in: context)
+            try await migrateMetadata(in: context, stage: "metadata migration")
             PersistenceStatusStore.setState(.metadataMigrated, defaults: defaults)
-            try reconcileAssets(in: context)
+            try await reconcileAssets(in: context, stage: "asset reconciliation")
             PersistenceStatusStore.setState(.assetsQueuedOrMigrated, defaults: defaults)
             try context.save()
             PersistenceStatusStore.setState(.completed, defaults: defaults)
             return .completed
+        } catch let error as MigrationStageError {
+            PersistenceStatusStore.setState(.failedRecoverable, defaults: defaults, error: error.message)
+            let stage = error.stage
+            let message = error.message
+            Log.library.error("Persistence migration failed (\(stage, privacy: .public)): \(message, privacy: .public)")
+            return .failedRecoverable
         } catch {
             let message = error.localizedDescription
             PersistenceStatusStore.setState(.failedRecoverable, defaults: defaults, error: message)
-            Log.library.error("Persistence migration failed: \(message, privacy: .public)")
+            Log.library.error("Persistence migration failed while saving: \(message, privacy: .public)")
             return .failedRecoverable
         }
     }
 
+    private struct MigrationStageError: Error {
+        let stage: String
+        let message: String
+    }
+
     // Migration touches every sync-ready model type in one idempotent pass.
     // swiftlint:disable:next cyclomatic_complexity
-    private static func migrateMetadata(in context: ModelContext) throws {
+    private static func migrateMetadata(in context: ModelContext, stage: String) async throws {
         let now = Date()
-        for work in try context.fetch(FetchDescriptor<SavedWork>()) {
-            if work.assetIdentifier.isEmpty {
-                work.assetIdentifier = Storage.defaultEPUBAssetIdentifier(for: work.id)
+        do {
+            var processed = 0
+            for work in try context.fetch(FetchDescriptor<SavedWork>()) {
+                if work.assetIdentifier.isEmpty {
+                    work.assetIdentifier = Storage.defaultEPUBAssetIdentifier(for: work.id)
+                }
+                if work.ao3WorkID == nil {
+                    work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
+                }
+                if work.createdAt > work.dateAdded {
+                    work.createdAt = work.dateAdded
+                }
+                if work.lastModifiedAt < work.createdAt {
+                    work.lastModifiedAt = max(work.lastReadDate ?? work.createdAt, work.createdAt)
+                }
+                if work.hasStartedReading, work.progressModifiedAt == nil {
+                    work.progressModifiedAt = work.lastReadDate ?? work.lastModifiedAt
+                }
+                if work.syncStatus == .localOnly {
+                    work.syncStatus = .pending
+                }
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
-            if work.ao3WorkID == nil {
-                work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
-            }
-            if work.createdAt > work.dateAdded {
-                work.createdAt = work.dateAdded
-            }
-            if work.lastModifiedAt < work.createdAt {
-                work.lastModifiedAt = max(work.lastReadDate ?? work.createdAt, work.createdAt)
-            }
-            if work.hasStartedReading, work.progressModifiedAt == nil {
-                work.progressModifiedAt = work.lastReadDate ?? work.lastModifiedAt
-            }
-            if work.syncStatus == .localOnly {
-                work.syncStatus = .pending
-            }
-        }
 
-        for collection in try context.fetch(FetchDescriptor<WorkCollection>()) {
-            if collection.createdAt > collection.dateAdded {
-                collection.createdAt = collection.dateAdded
+            for collection in try context.fetch(FetchDescriptor<WorkCollection>()) {
+                if collection.createdAt > collection.dateAdded {
+                    collection.createdAt = collection.dateAdded
+                }
+                if collection.lastModifiedAt < collection.createdAt {
+                    collection.lastModifiedAt = collection.createdAt
+                }
+                if collection.syncStatus == .localOnly {
+                    collection.syncStatus = .pending
+                }
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
-            if collection.lastModifiedAt < collection.createdAt {
-                collection.lastModifiedAt = collection.createdAt
-            }
-            if collection.syncStatus == .localOnly {
-                collection.syncStatus = .pending
-            }
-        }
 
-        for queue in try context.fetch(FetchDescriptor<ReadingQueue>()) {
-            if queue.dateUpdated < queue.dateCreated {
-                queue.dateUpdated = queue.dateCreated
+            for queue in try context.fetch(FetchDescriptor<ReadingQueue>()) {
+                if queue.dateUpdated < queue.dateCreated {
+                    queue.dateUpdated = queue.dateCreated
+                }
+                if queue.syncStatus == .localOnly {
+                    queue.syncStatus = .pending
+                }
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
-            if queue.syncStatus == .localOnly {
-                queue.syncStatus = .pending
-            }
-        }
 
-        for membership in try context.fetch(FetchDescriptor<ReadingQueueMembership>()) {
-            if membership.lastModifiedAt < membership.queuedAt {
-                membership.lastModifiedAt = membership.queuedAt
+            for membership in try context.fetch(FetchDescriptor<ReadingQueueMembership>()) {
+                if membership.lastModifiedAt < membership.queuedAt {
+                    membership.lastModifiedAt = membership.queuedAt
+                }
+                if membership.syncStatus == .localOnly {
+                    membership.syncStatus = .pending
+                }
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
-            if membership.syncStatus == .localOnly {
-                membership.syncStatus = .pending
-            }
+        } catch {
+            throw MigrationStageError(stage: stage, message: error.localizedDescription)
         }
 
         Log.library.info(
@@ -175,20 +203,27 @@ enum PersistenceMigrationService {
         )
     }
 
-    private static func reconcileAssets(in context: ModelContext) throws {
-        for work in try context.fetch(FetchDescriptor<SavedWork>()) {
-            guard work.hasEPUB else { continue }
-            if FileManager.default.fileExists(atPath: work.fileURL.path) {
-                continue
+    private static func reconcileAssets(in context: ModelContext, stage: String) async throws {
+        do {
+            var processed = 0
+            for work in try context.fetch(FetchDescriptor<SavedWork>()) {
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
+                guard work.hasEPUB else { continue }
+                if FileManager.default.fileExists(atPath: work.fileURL.path) {
+                    continue
+                }
+                work.hasEPUB = false
+                work.syncStatus = .assetsMissing
+                if work.epubPreservationStatus == .preserved {
+                    work.epubPreservationStatus = .missingFile
+                }
+                Log.library.notice(
+                    "EPUB asset missing for work \(work.id.uuidString, privacy: .public)"
+                )
             }
-            work.hasEPUB = false
-            work.syncStatus = .assetsMissing
-            if work.epubPreservationStatus == .preserved {
-                work.epubPreservationStatus = .missingFile
-            }
-            Log.library.notice(
-                "EPUB asset missing for work \(work.id.uuidString, privacy: .public)"
-            )
+        } catch {
+            throw MigrationStageError(stage: stage, message: error.localizedDescription)
         }
     }
 }

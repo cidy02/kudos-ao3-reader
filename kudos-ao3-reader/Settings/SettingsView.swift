@@ -603,14 +603,16 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func preparePersistenceForSync() {
         guard !isPreparingPersistence else { return }
         isPreparingPersistence = true
-        let state = PersistenceMigrationService.run(in: context)
-        persistenceStatus = PersistenceStatusStore.snapshot()
-        isPreparingPersistence = false
-        if state == .failedRecoverable {
-            backupNotice = BackupNotice(
-                title: "Sync Prep Needs Retry",
-                message: persistenceStatus.detail
-            )
+        Task { @MainActor in
+            let state = await PersistenceMigrationService.run(in: context)
+            persistenceStatus = PersistenceStatusStore.snapshot()
+            isPreparingPersistence = false
+            if state == .failedRecoverable {
+                backupNotice = BackupNotice(
+                    title: "Sync Prep Needs Retry",
+                    message: persistenceStatus.detail
+                )
+            }
         }
     }
 
@@ -776,8 +778,9 @@ struct PersistenceSettingsSection: View {
         } header: {
             Text("iCloud Sync")
         } footer: {
-            Text(status.detail + " Kudos still works offline; EPUB files stay local in this build. "
-                + "Private iCloud metadata sync needs an iCloud-enabled signed build and real-device testing.")
+            Text(status.detail + " No data is sent to iCloud in this build — Kudos still works fully offline "
+                + "and EPUB files stay local. This screen only prepares local metadata for a future private "
+                + "iCloud sync, which needs an iCloud-enabled signed build and real-device testing.")
         }
     }
 }

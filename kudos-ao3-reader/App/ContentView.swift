@@ -49,7 +49,7 @@ struct ContentView: View {
                 await auth.restoreSession()
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
-                PersistenceMigrationService.runIfNeeded(in: modelContext)
+                await PersistenceMigrationService.runIfNeeded(in: modelContext)
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
             .onShake {

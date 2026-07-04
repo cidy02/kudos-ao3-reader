@@ -15,7 +15,7 @@ struct PersistenceSyncTests {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
-    @Test func migrationIsIdempotentAndMarksMissingEPUBRecoverable() throws {
+    @Test func migrationIsIdempotentAndMarksMissingEPUBRecoverable() async throws {
         let container = try container()
         let context = container.mainContext
         let defaults = try testDefaults()
@@ -28,7 +28,8 @@ struct PersistenceSyncTests {
         work.epubPreservationStatus = .preserved
         context.insert(work)
 
-        #expect(PersistenceMigrationService.run(in: context, defaults: defaults) == .completed)
+        let firstRun = await PersistenceMigrationService.run(in: context, defaults: defaults)
+        #expect(firstRun == .completed)
         let firstAssetIdentifier = work.assetIdentifier
         #expect(firstAssetIdentifier == "00000000-0000-0000-0000-000000000111.epub")
         #expect(work.ao3WorkID == 111)
@@ -36,7 +37,8 @@ struct PersistenceSyncTests {
         #expect(work.epubPreservationStatus == .missingFile)
         #expect(work.syncStatus == .assetsMissing)
 
-        #expect(PersistenceMigrationService.runIfNeeded(in: context, defaults: defaults) == .completed)
+        let secondRun = await PersistenceMigrationService.runIfNeeded(in: context, defaults: defaults)
+        #expect(secondRun == .completed)
         #expect(work.assetIdentifier == firstAssetIdentifier)
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
     }
@@ -152,6 +154,109 @@ struct PersistenceSyncTests {
         #expect(tombstones.count == 1)
         #expect(tombstones.first?.recordType == .savedWork)
         #expect(tombstones.first?.ao3WorkID == 333)
+    }
+
+    @Test func deletingWorkThenImportingOlderBackupDoesNotResurrectIt() throws {
+        let defaults = try testDefaults()
+        let container = try container()
+        let context = container.mainContext
+
+        let work = SavedWork(title: "Deleted Work", author: "Writer",
+                             sourceURL: "https://archiveofourown.org/works/444")
+        context.insert(work)
+        WorkLifecycle.delete(work, in: context)
+        #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).count == 1)
+
+        // An older snapshot of the same work, from before it was deleted.
+        let archived = SavedWork(title: "Deleted Work", author: "Writer",
+                                 sourceURL: "https://archiveofourown.org/works/444")
+        archived.ao3WorkID = 444
+        archived.markModified(Date(timeIntervalSince1970: 100))
+        let document = try KudosBackupService.makeDocument(
+            works: [archived],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+    }
+
+    @Test func backupImportDoesNotResurrectExplicitlyUnfavoritedWork() throws {
+        let defaults = try testDefaults()
+        let container = try container()
+        let context = container.mainContext
+
+        let local = SavedWork(title: "Shared Work", author: "Writer",
+                              sourceURL: "https://archiveofourown.org/works/555")
+        local.ao3WorkID = 555
+        local.isFavorite = true
+        local.markModified(Date(timeIntervalSince1970: 100))
+        context.insert(local)
+
+        // Backup captured while the work was still favorited...
+        let archived = SavedWork(title: "Shared Work", author: "Writer",
+                                 sourceURL: "https://archiveofourown.org/works/555")
+        archived.ao3WorkID = 555
+        archived.isFavorite = true
+        archived.markModified(Date(timeIntervalSince1970: 100))
+        let document = try KudosBackupService.makeDocument(
+            works: [archived],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        // ...but the user unfavorited it locally afterward, making local strictly newer.
+        local.isFavorite = false
+        local.markModified(Date(timeIntervalSince1970: 200))
+
+        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.isFavorite == false)
+    }
+
+    /// A fresh install (or any restore into a database with no matching local record) has
+    /// no prior state to protect — the archived flags must come through untouched, even
+    /// though a freshly-created placeholder's own lastModifiedAt is "now" and so would
+    /// otherwise always look newer than the archive.
+    @Test func freshInstallRestoreAdoptsArchivedFlagsWithNoExistingLocalRecord() throws {
+        let defaults = try testDefaults()
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+
+        let archived = SavedWork(title: "Brand New To This Device", author: "Writer",
+                                 sourceURL: "https://archiveofourown.org/works/666")
+        archived.ao3WorkID = 666
+        archived.isFavorite = true
+        archived.isSaved = true
+        archived.isFinished = true
+        archived.isComplete = true
+        archived.markModified(Date(timeIntervalSince1970: 100))
+        sourceContext.insert(archived)
+        let document = try KudosBackupService.makeDocument(
+            works: [archived],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+
+        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: defaults)
+
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.isFavorite == true)
+        #expect(restored.isSaved == true)
+        #expect(restored.isFinished == true)
+        #expect(restored.isComplete == true)
     }
 
     private func testDefaults() throws -> UserDefaults {

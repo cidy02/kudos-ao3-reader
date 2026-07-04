@@ -60,6 +60,12 @@ enum WorkLifecycle {
     @MainActor
     static func delete(_ work: SavedWork, in context: ModelContext) {
         SyncTombstones.recordDeletion(of: work, in: context)
+        // The cascade delete rule on SavedWork.queueMemberships removes these rows as a
+        // side effect of context.delete(work) below — tombstone them explicitly first so
+        // a future cloud merge doesn't resurrect a queue membership for a deleted work.
+        for membership in work.queueMemberships {
+            SyncTombstones.recordDeletion(of: membership, in: context)
+        }
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         context.delete(work)
