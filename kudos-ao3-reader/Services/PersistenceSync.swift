@@ -87,6 +87,10 @@ enum PersistenceMigrationService {
     /// for the whole migration and a caller's loading indicator gets a chance to render.
     private static let yieldInterval = 50
 
+    /// The yield points mean two runs (launch task + Settings retry) could otherwise
+    /// interleave on the main actor, corrupting the persisted state machine mid-flight.
+    private static var isRunning = false
+
     @discardableResult
     static func runIfNeeded(
         in context: ModelContext,
@@ -102,6 +106,11 @@ enum PersistenceMigrationService {
         in context: ModelContext,
         defaults: UserDefaults = .standard
     ) async -> PersistenceMigrationState {
+        guard !isRunning else {
+            return PersistenceStatusStore.snapshot(defaults: defaults).migrationState
+        }
+        isRunning = true
+        defer { isRunning = false }
         do {
             PersistenceStatusStore.setState(.inProgress, defaults: defaults)
             try await migrateMetadata(in: context, stage: "metadata migration")
@@ -137,6 +146,9 @@ enum PersistenceMigrationService {
         do {
             var processed = 0
             for work in try context.fetch(FetchDescriptor<SavedWork>()) {
+                // The fetched array is a snapshot; a record deleted during a yield has
+                // no context anymore and must not be touched.
+                guard work.modelContext != nil else { continue }
                 if work.assetIdentifier.isEmpty {
                     work.assetIdentifier = Storage.defaultEPUBAssetIdentifier(for: work.id)
                 }
@@ -160,6 +172,7 @@ enum PersistenceMigrationService {
             }
 
             for collection in try context.fetch(FetchDescriptor<WorkCollection>()) {
+                guard collection.modelContext != nil else { continue }
                 if collection.createdAt > collection.dateAdded {
                     collection.createdAt = collection.dateAdded
                 }
@@ -174,6 +187,7 @@ enum PersistenceMigrationService {
             }
 
             for queue in try context.fetch(FetchDescriptor<ReadingQueue>()) {
+                guard queue.modelContext != nil else { continue }
                 if queue.dateUpdated < queue.dateCreated {
                     queue.dateUpdated = queue.dateCreated
                 }
@@ -185,6 +199,7 @@ enum PersistenceMigrationService {
             }
 
             for membership in try context.fetch(FetchDescriptor<ReadingQueueMembership>()) {
+                guard membership.modelContext != nil else { continue }
                 if membership.lastModifiedAt < membership.queuedAt {
                     membership.lastModifiedAt = membership.queuedAt
                 }
@@ -209,7 +224,7 @@ enum PersistenceMigrationService {
             for work in try context.fetch(FetchDescriptor<SavedWork>()) {
                 processed += 1
                 if processed.isMultiple(of: yieldInterval) { await Task.yield() }
-                guard work.hasEPUB else { continue }
+                guard work.modelContext != nil, work.hasEPUB else { continue }
                 if FileManager.default.fileExists(atPath: work.fileURL.path) {
                     continue
                 }

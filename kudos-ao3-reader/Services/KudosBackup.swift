@@ -848,6 +848,7 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
         var queueIDMap: [UUID: ReadingQueue] = [:]
+        var suppressedQueueIDs: Set<UUID> = []
         for archived in contents.manifest.readingQueues {
             let queue: ReadingQueue
             let kind = ReadingQueueKind(rawValue: archived.kindRaw) ?? .custom
@@ -857,7 +858,10 @@ enum KudosBackupService {
                 queue = existing
             } else if tombstones.suppressesResurrection(ofQueueID: archived.id) {
                 // The user explicitly deleted this queue on this device — don't
-                // resurrect it from an older backup.
+                // resurrect it from an older backup. Remember the ID so the membership
+                // loop below skips its members instead of falling back to Saved for
+                // Later (which would silently re-queue works into the wrong queue).
+                suppressedQueueIDs.insert(archived.id)
                 continue
             } else {
                 queue = ReadingQueue(
@@ -884,6 +888,11 @@ enum KudosBackupService {
             if tombstones.suppressesResurrection(ofMembershipID: archived.id) {
                 // The user explicitly removed this queue membership on this device —
                 // don't resurrect it from an older backup.
+                continue
+            }
+            if suppressedQueueIDs.contains(archived.queueID) {
+                // Its whole queue was deleted here; dropping the membership with it is
+                // the user's intent — never re-home it into Saved for Later.
                 continue
             }
             let queue = queueIDMap[archived.queueID] ?? savedForLaterQueue
@@ -958,17 +967,22 @@ enum KudosBackupService {
         }
         settings.apply(to: defaults)
         return KudosBackupRestoreSummary(
-            works: contents.manifest.works.count,
+            // Count what was actually applied — tombstone-suppressed works are skipped
+            // and must not inflate the user-facing "N works restored" confirmation.
+            works: restoredWorksByArchivedID.count,
             bookmarks: contents.manifest.bookmarks.count,
             fonts: restoredFonts
         )
     }
 
     /// Prevents backup import from resurrecting a record the user explicitly deleted on
-    /// this device. A tombstone only suppresses recreation when it is at least as new as
-    /// the archived snapshot — an archived work with a strictly newer modification time
-    /// (the user re-saved it after deleting it, then took a fresh backup) is let through
-    /// normally rather than blocked forever by a stale tombstone.
+    /// this device. A work tombstone only suppresses recreation when it is at least as
+    /// new as the archived snapshot — an archived work with a strictly newer modification
+    /// time (the user re-saved it after deleting it, then took a fresh backup) is let
+    /// through normally rather than blocked forever by a stale tombstone. Queue and
+    /// membership tombstones suppress unconditionally: they are matched by exact UUID,
+    /// and a queue re-created or a work re-queued after the deletion gets a fresh UUID,
+    /// so only rows that genuinely predate the deletion can ever match.
     private struct TombstoneIndex {
         private var savedWorkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var savedWorkTombstonesByAO3WorkID: [Int: SyncTombstone] = [:]
@@ -980,12 +994,15 @@ enum KudosBackupService {
             for tombstone in tombstones {
                 switch tombstone.recordType {
                 case .savedWork:
-                    savedWorkTombstonesByID[tombstone.recordID] = tombstone
+                    // Delete → re-download → delete leaves several tombstones sharing an
+                    // AO3 identity, and the fetch order is unspecified — always keep the
+                    // newest so a stale tombstone can't wrongly re-admit an old snapshot.
+                    indexNewest(tombstone, byID: tombstone.recordID)
                     if let ao3WorkID = tombstone.ao3WorkID {
-                        savedWorkTombstonesByAO3WorkID[ao3WorkID] = tombstone
+                        indexNewest(tombstone, byAO3WorkID: ao3WorkID)
                     }
                     if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: tombstone.sourceURL) {
-                        savedWorkTombstonesByCanonicalURL[canonicalURL] = tombstone
+                        indexNewest(tombstone, byCanonicalURL: canonicalURL)
                     }
                 case .workCollection:
                     break // Collections aren't part of the .kudosbackup manifest today.
@@ -995,6 +1012,29 @@ enum KudosBackupService {
                     membershipTombstoneIDs.insert(tombstone.recordID)
                 }
             }
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byID id: UUID) {
+            if let existing = savedWorkTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            savedWorkTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byAO3WorkID id: Int) {
+            if let existing = savedWorkTombstonesByAO3WorkID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            savedWorkTombstonesByAO3WorkID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byCanonicalURL url: String) {
+            if let existing = savedWorkTombstonesByCanonicalURL[url],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            savedWorkTombstonesByCanonicalURL[url] = tombstone
         }
 
         /// Whether importing this archived work would resurrect an explicit local delete.

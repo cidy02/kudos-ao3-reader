@@ -217,8 +217,104 @@ struct PersistenceSyncTests {
 
         _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
 
-        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        let works = try context.fetch(FetchDescriptor<SavedWork>())
+        #expect(works.count == 1)
+        let restored = try #require(works.first)
         #expect(restored.isFavorite == false)
+    }
+
+    /// Delete → re-download → delete leaves several tombstones sharing one AO3 identity.
+    /// The newest deletion must decide suppression regardless of tombstone fetch order —
+    /// here the archived snapshot (t=200) falls between a stale tombstone (t=50) and the
+    /// latest deletion (t=300), so it must stay suppressed.
+    @Test func newestTombstoneDecidesSuppressionWhenSeveralShareAO3Identity() throws {
+        let defaults = try testDefaults()
+        let container = try container()
+        let context = container.mainContext
+
+        context.insert(SyncTombstone(
+            recordID: UUID(),
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/777",
+            ao3WorkID: 777,
+            createdAt: Date(timeIntervalSince1970: 300)
+        ))
+        context.insert(SyncTombstone(
+            recordID: UUID(),
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/777",
+            ao3WorkID: 777,
+            createdAt: Date(timeIntervalSince1970: 50)
+        ))
+        try context.save()
+
+        let archived = SavedWork(title: "Twice Deleted", author: "Writer",
+                                 sourceURL: "https://archiveofourown.org/works/777")
+        archived.ao3WorkID = 777
+        archived.markModified(Date(timeIntervalSince1970: 200))
+        let document = try KudosBackupService.makeDocument(
+            works: [archived],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+    }
+
+    /// A membership whose queue was tombstoned locally must be dropped with the queue —
+    /// never silently re-homed into Saved for Later — even when the membership's own
+    /// UUID was never seen on this device (second device / shared backup file).
+    @Test func suppressedQueueMembershipsAreNotRehomedIntoSavedForLater() throws {
+        let defaults = try testDefaults()
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+
+        let queueID = UUID(uuidString: "00000000-0000-0000-0000-00000000AAAA")!
+        let work = SavedWork(title: "Queued Elsewhere", author: "Writer",
+                             sourceURL: "https://archiveofourown.org/works/888")
+        work.ao3WorkID = 888
+        let queue = ReadingQueue(id: queueID, name: "Deleted Queue", kind: .custom,
+                                 sortOrder: 0, dateCreated: Date(timeIntervalSince1970: 100),
+                                 dateUpdated: Date(timeIntervalSince1970: 100))
+        sourceContext.insert(work)
+        sourceContext.insert(queue)
+        let membership = ReadingQueueMembership(
+            queue: queue,
+            work: work,
+            queuedAt: Date(timeIntervalSince1970: 100),
+            sortOrderInQueue: 0
+        )
+        sourceContext.insert(membership)
+        queue.memberships.append(membership)
+        work.queueMemberships.append(membership)
+        try sourceContext.save()
+
+        let document = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [queue],
+            defaults: defaults
+        )
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        // The user deleted this queue on the target device; the membership's UUID is
+        // foreign here (created on the source device), so only the queue is tombstoned.
+        targetContext.insert(SyncTombstone(recordID: queueID, recordType: .readingQueue))
+        try targetContext.save()
+
+        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: defaults)
+
+        let queues = try targetContext.fetch(FetchDescriptor<ReadingQueue>())
+        #expect(queues.allSatisfy { $0.kind == .savedForLater })
+        #expect(queues.flatMap(\.memberships).isEmpty)
+        let restoredWork = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restoredWork.isQueuedForLater == false)
     }
 
     /// A fresh install (or any restore into a database with no matching local record) has

@@ -89,7 +89,9 @@ Core rules implemented or documented for future cloud merge:
 - Remote absence is never a delete.
 - AO3 refresh failure is never a delete.
 - Explicit local deletes create `SyncTombstone` records before local records are
-  removed, so older cloud/device copies can be suppressed later.
+  removed. `.kudosbackup` import already honors them (see below); future cloud
+  merge code must honor them the same way. Deleting a work also tombstones the
+  queue memberships its cascade delete removes.
 - Non-empty local metadata is preserved over empty imported metadata.
 - Backup import uses `lastModifiedAt` and `progressModifiedAt` where available.
 - Reading progress only advances to an incoming snapshot when its modified time
@@ -123,7 +125,16 @@ Backups remain manual and merge-only:
   state, and `assetIdentifier` while still decoding versions 1 and 2.
 - Import merges by AO3 work ID, canonical AO3 URL, then UUID.
 - Import does not delete unrelated local records.
-- Older backup progress cannot overwrite newer local progress.
+- Import honors `SyncTombstone` records: a work the user explicitly deleted here
+  is not resurrected unless the archived snapshot is newer than the newest
+  matching deletion. Deleted queues and memberships are matched by exact UUID
+  and suppressed unconditionally (re-created rows get fresh UUIDs, so only rows
+  predating the deletion can match); members of a suppressed queue are dropped
+  with it, never re-homed into Saved for Later.
+- Older backup progress cannot overwrite newer local progress. The same
+  timestamp rule guards isFavorite/isSaved/isFinished/isComplete: an older
+  archive cannot resurrect a flag the user changed more recently, while a work
+  new to this device adopts the archive's flags as-is.
 - EPUB files in the package restore the local asset when present; missing EPUBs
   leave metadata intact and mark preserved items as `missingFile`.
 
