@@ -101,6 +101,10 @@ enum ReadingQueueService {
             primary.name = savedForLaterName
             primary.kind = .savedForLater
             primary.sortOrder = min(primary.sortOrder, -1000)
+            primary.lastMembershipChangedAt = max(
+                primary.lastMembershipChangedAt,
+                primary.memberships.map(\.lastModifiedAt).max() ?? primary.dateCreated
+            )
 
             for duplicate in savedQueues.dropFirst() {
                 for membership in duplicate.memberships {
@@ -108,6 +112,7 @@ enum ReadingQueueService {
                        !primary.memberships.contains(where: { $0.work?.id == work.id }) {
                         membership.queue = primary
                         primary.memberships.append(membership)
+                        primary.markMembershipChanged(max(membership.lastModifiedAt, Date()))
                     }
                 }
                 context.delete(duplicate)
@@ -210,7 +215,7 @@ enum ReadingQueueService {
         queue.memberships.append(membership)
         work.queueMemberships.append(membership)
         let now = Date()
-        queue.markModified(now)
+        queue.markMembershipChanged(now)
         membership.markModified(now)
         work.markModified(now)
         work.isQueuedForLater = true
@@ -522,7 +527,7 @@ enum ReadingQueueService {
             context.delete(membership)
         }
         let now = Date()
-        queue.markModified(now)
+        queue.markMembershipChanged(now)
         work.markModified(now)
         work.isQueuedForLater = !work.queueMemberships.isEmpty
         normalize(work)

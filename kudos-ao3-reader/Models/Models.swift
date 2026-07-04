@@ -52,13 +52,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var lastModifiedAt: Date = Date()
     var sourceURL: String = ""
     var ao3WorkID: Int?
+    var deletedOnDeviceID: String = ""
+    var deletionReason: String = ""
 
     init(
         recordID: UUID,
         recordType: SyncTombstoneRecordType,
         sourceURL: String = "",
         ao3WorkID: Int? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        deletedOnDeviceID: String = "",
+        deletionReason: String = ""
     ) {
         id = UUID()
         self.recordID = recordID
@@ -67,6 +71,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         self.ao3WorkID = ao3WorkID
         self.createdAt = createdAt
         lastModifiedAt = createdAt
+        self.deletedOnDeviceID = deletedOnDeviceID
+        self.deletionReason = deletionReason
     }
 
     var recordType: SyncTombstoneRecordType {
@@ -472,6 +478,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var sortOrder: Int = 0
     var dateCreated: Date = Date()
     var dateUpdated: Date = Date()
+    var lastMembershipChangedAt: Date = Date()
     var deletedAt: Date?
     var isDeleted: Bool = false
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
@@ -495,6 +502,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         self.sortOrder = sortOrder
         self.dateCreated = dateCreated
         self.dateUpdated = dateUpdated
+        lastMembershipChangedAt = dateUpdated
     }
 
     var kind: ReadingQueueKind {
@@ -514,6 +522,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     func markModified(_ date: Date = Date()) {
         dateUpdated = date
         if syncStatus == .synced { syncStatus = .pending }
+    }
+
+    func markMembershipChanged(_ date: Date = Date()) {
+        lastMembershipChangedAt = date
+        markModified(date)
     }
 }
 

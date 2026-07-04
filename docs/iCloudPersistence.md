@@ -121,16 +121,18 @@ real-device quota/cellular testing.
 Backups remain manual and merge-only:
 
 - Export is local and network-independent.
-- Manifest version 3 includes sync-prep timestamps, progress timestamps, delete
-  state, and `assetIdentifier` while still decoding versions 1 and 2.
+- Manifest version 4 includes sync-prep timestamps, progress timestamps, delete
+  state, queue membership freshness, and `assetIdentifier` while still decoding
+  versions 1, 2, and 3.
 - Import merges by AO3 work ID, canonical AO3 URL, then UUID.
 - Import does not delete unrelated local records.
 - Import honors `SyncTombstone` records: a work the user explicitly deleted here
   is not resurrected unless the archived snapshot is newer than the newest
   matching deletion. Deleted queues and memberships are matched by exact UUID
-  and suppressed unconditionally (re-created rows get fresh UUIDs, so only rows
-  predating the deletion can match); members of a suppressed queue are dropped
-  with it, never re-homed into Saved for Later.
+  and resolved by timestamp: newer queue metadata, newer membership activity, or
+  a newer restore can revive an older queue tombstone; stale snapshots remain
+  suppressed; ambiguous conflicts preserve data and are reported. Members of a
+  suppressed queue are dropped with it, never re-homed into Saved for Later.
 - Older backup progress cannot overwrite newer local progress. The same
   timestamp rule guards isFavorite/isSaved/isFinished/isComplete: an older
   archive cannot resurrect a flag the user changed more recently, while a work
@@ -175,4 +177,3 @@ Requires real hardware and a signed iCloud-enabled build:
 - test iCloud disabled, not signed in, restricted, full quota, poor network, and
   large-library/large-EPUB conditions;
 - verify no large EPUB upload/download happens without user intent.
-

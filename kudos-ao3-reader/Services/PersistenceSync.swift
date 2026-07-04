@@ -44,7 +44,7 @@ struct PersistenceStatusSnapshot: Equatable {
         if !lastError.isEmpty { return lastError }
         switch (migrationState, iCloudAccountStatus) {
         case (.completed, .available):
-            return "Local metadata is ready for private iCloud sync."
+            return "Local metadata is ready for future private iCloud sync."
         case (.completed, .unavailable):
             return "Local metadata is ready. Sign in to iCloud on this device to sync later."
         case (.failedRecoverable, _):
@@ -78,6 +78,19 @@ enum PersistenceStatusStore {
         defaults.set(state.rawValue, forKey: migrationStateKey)
         defaults.set(Date(), forKey: lastMigrationAttemptKey)
         defaults.set(error, forKey: lastMigrationErrorKey)
+    }
+}
+
+enum PersistenceDevice {
+    private static let deviceIDKey = "persistenceSyncDeviceID"
+
+    static func currentID(defaults: UserDefaults = .standard) -> String {
+        if let id = defaults.string(forKey: deviceIDKey), !id.isEmpty {
+            return id
+        }
+        let id = UUID().uuidString
+        defaults.set(id, forKey: deviceIDKey)
+        return id
     }
 }
 
@@ -191,6 +204,16 @@ enum PersistenceMigrationService {
                 if queue.dateUpdated < queue.dateCreated {
                     queue.dateUpdated = queue.dateCreated
                 }
+                let newestMembershipChange = queue.memberships
+                    .map(\.lastModifiedAt)
+                    .max()
+                let membershipChangedAt = max(
+                    queue.lastMembershipChangedAt,
+                    newestMembershipChange ?? queue.dateCreated
+                )
+                if membershipChangedAt > queue.lastMembershipChangedAt {
+                    queue.lastMembershipChangedAt = membershipChangedAt
+                }
                 if queue.syncStatus == .localOnly {
                     queue.syncStatus = .pending
                 }
@@ -250,24 +273,48 @@ enum SyncTombstones {
             recordID: work.id,
             recordType: .savedWork,
             sourceURL: work.sourceURL,
-            ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+            ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
+            deletedOnDeviceID: PersistenceDevice.currentID(),
+            deletionReason: "workDeleted"
         ))
     }
 
     static func recordDeletion(of collection: WorkCollection, in context: ModelContext) {
-        context.insert(SyncTombstone(recordID: collection.id, recordType: .workCollection))
+        context.insert(SyncTombstone(
+            recordID: collection.id,
+            recordType: .workCollection,
+            deletedOnDeviceID: PersistenceDevice.currentID(),
+            deletionReason: "collectionDeleted"
+        ))
     }
 
     static func recordDeletion(of queue: ReadingQueue, in context: ModelContext) {
-        context.insert(SyncTombstone(recordID: queue.id, recordType: .readingQueue))
+        context.insert(SyncTombstone(
+            recordID: queue.id,
+            recordType: .readingQueue,
+            deletedOnDeviceID: PersistenceDevice.currentID(),
+            deletionReason: "queueDeleted"
+        ))
     }
 
     static func recordDeletion(of membership: ReadingQueueMembership, in context: ModelContext) {
-        context.insert(SyncTombstone(recordID: membership.id, recordType: .readingQueueMembership))
+        context.insert(SyncTombstone(
+            recordID: membership.id,
+            recordType: .readingQueueMembership,
+            deletedOnDeviceID: PersistenceDevice.currentID(),
+            deletionReason: "queueMembershipRemoved"
+        ))
     }
 }
 
 enum SyncMerge {
+    enum TombstoneResolution: Equatable {
+        case noTombstone
+        case suppressStaleData
+        case reviveNewerData
+        case preserveAmbiguous
+    }
+
     struct ProgressSnapshot: Equatable {
         var lastSpineIndex: Int
         var lastScrollFraction: Double
@@ -280,6 +327,34 @@ enum SyncMerge {
         guard let incomingModifiedAt else { return false }
         guard let localModifiedAt else { return true }
         return incomingModifiedAt >= localModifiedAt
+    }
+
+    static func effectiveQueueModifiedAt(
+        queueUpdatedAt: Date?,
+        lastMembershipChangedAt: Date?,
+        membershipModifiedAts: [Date],
+        restoreOrImportDate: Date? = nil
+    ) -> Date? {
+        ([queueUpdatedAt, lastMembershipChangedAt, restoreOrImportDate].compactMap { $0 }
+            + membershipModifiedAts).max()
+    }
+
+    @MainActor
+    static func effectiveQueueModifiedAt(_ queue: ReadingQueue) -> Date {
+        effectiveQueueModifiedAt(
+            queueUpdatedAt: queue.dateUpdated,
+            lastMembershipChangedAt: queue.lastMembershipChangedAt,
+            membershipModifiedAts: queue.memberships.map(\.lastModifiedAt)
+        ) ?? queue.dateUpdated
+    }
+
+    static func tombstoneResolution(
+        incomingModifiedAt: Date?,
+        tombstoneDeletedAt: Date?
+    ) -> TombstoneResolution {
+        guard let tombstoneDeletedAt else { return .noTombstone }
+        guard let incomingModifiedAt else { return .preserveAmbiguous }
+        return incomingModifiedAt > tombstoneDeletedAt ? .reviveNewerData : .suppressStaleData
     }
 
     @MainActor

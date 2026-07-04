@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
@@ -129,8 +130,8 @@ struct KudosBackupContents {
 }
 
 struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 3
-    static let supportedVersions: Set<Int> = [1, 2, currentVersion]
+    static let currentVersion = 4
+    static let supportedVersions: Set<Int> = [1, 2, 3, currentVersion]
 
     let version: Int
     let exportedAt: Date
@@ -455,6 +456,7 @@ struct KudosBackupReadingQueue: Codable, Equatable {
     let sortOrder: Int
     let dateCreated: Date
     let dateUpdated: Date
+    let lastMembershipChangedAt: Date?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -464,6 +466,19 @@ struct KudosBackupReadingQueue: Codable, Equatable {
         sortOrder = queue.sortOrder
         dateCreated = queue.dateCreated
         dateUpdated = queue.dateUpdated
+        lastMembershipChangedAt = queue.lastMembershipChangedAt
+    }
+
+    func effectiveModifiedAt(
+        memberships: [KudosBackupReadingQueueMembership],
+        exportedAt: Date? = nil
+    ) -> Date? {
+        SyncMerge.effectiveQueueModifiedAt(
+            queueUpdatedAt: dateUpdated,
+            lastMembershipChangedAt: lastMembershipChangedAt,
+            membershipModifiedAts: memberships.map { $0.lastModifiedAt ?? $0.queuedAt },
+            restoreOrImportDate: exportedAt
+        )
     }
 }
 
@@ -472,6 +487,7 @@ struct KudosBackupReadingQueueMembership: Codable, Equatable {
     let queueID: UUID
     let workID: UUID
     let queuedAt: Date
+    let lastModifiedAt: Date?
     let sortOrderInQueue: Int
     let note: String
 
@@ -484,6 +500,7 @@ struct KudosBackupReadingQueueMembership: Codable, Equatable {
         self.queueID = queueID
         self.workID = workID
         queuedAt = membership.queuedAt
+        lastModifiedAt = membership.lastModifiedAt
         sortOrderInQueue = membership.sortOrderInQueue
         note = membership.note
     }
@@ -722,6 +739,30 @@ struct KudosBackupRestoreSummary: Equatable {
     let works: Int
     let bookmarks: Int
     let fonts: Int
+    var suppressedQueues: Int = 0
+    var suppressedQueueMemberships: Int = 0
+    var revivedQueues: Int = 0
+    var restoredRevivedQueueMemberships: Int = 0
+    var ambiguousQueueConflicts: Int = 0
+
+    var conflictMessage: String {
+        var parts: [String] = []
+        if revivedQueues > 0 {
+            parts.append("Restored \(revivedQueues) queue\(revivedQueues == 1 ? "" : "s") "
+                + "with newer changes than a previous deletion.")
+        }
+        if suppressedQueues > 0 {
+            parts.append("Skipped \(suppressedQueues) previously deleted queue"
+                + "\(suppressedQueues == 1 ? "" : "s") and "
+                + "\(suppressedQueueMemberships) membership"
+                + "\(suppressedQueueMemberships == 1 ? "" : "s").")
+        }
+        if ambiguousQueueConflicts > 0 {
+            parts.append("Preserved \(ambiguousQueueConflicts) queue conflict"
+                + "\(ambiguousQueueConflicts == 1 ? "" : "s") because the state was ambiguous.")
+        }
+        return parts.joined(separator: " ")
+    }
 }
 
 enum KudosBackupError: LocalizedError {
@@ -738,7 +779,9 @@ enum KudosBackupError: LocalizedError {
     }
 }
 
+// Backup restore stays intentionally linear so conflict and asset safety rules remain auditable.
 @MainActor
+// swiftlint:disable:next type_body_length
 enum KudosBackupService {
     static func makeDocument(
         works: [SavedWork],
@@ -847,23 +890,59 @@ enum KudosBackupService {
             existingQueues.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let archivedMembershipsByQueueID = Dictionary(
+            grouping: contents.manifest.readingQueueMemberships,
+            by: \.queueID
+        )
         var queueIDMap: [UUID: ReadingQueue] = [:]
         var suppressedQueueIDs: Set<UUID> = []
+        var revivedQueueIDs: Set<UUID> = []
+        var suppressedQueues = 0
+        var suppressedQueueMemberships = 0
+        var revivedQueues = 0
+        var restoredRevivedQueueMemberships = 0
+        var ambiguousQueueConflicts = 0
         for archived in contents.manifest.readingQueues {
             let queue: ReadingQueue
             let kind = ReadingQueueKind(rawValue: archived.kindRaw) ?? .custom
+            let archivedMemberships = archivedMembershipsByQueueID[archived.id] ?? []
+            let incomingModifiedAt = archived.effectiveModifiedAt(
+                memberships: archivedMemberships,
+                exportedAt: contents.manifest.exportedAt
+            )
+            let hadExistingQueue = queuesByID[archived.id] != nil
+            let resolution = kind == .savedForLater ? .noTombstone : tombstones.queueResolution(
+                id: archived.id,
+                incomingModifiedAt: incomingModifiedAt
+            )
             if kind == .savedForLater {
                 queue = savedForLaterQueue
             } else if let existing = queuesByID[archived.id] {
                 queue = existing
-            } else if tombstones.suppressesResurrection(ofQueueID: archived.id) {
-                // The user explicitly deleted this queue on this device — don't
-                // resurrect it from an older backup. Remember the ID so the membership
-                // loop below skips its members instead of falling back to Saved for
-                // Later (which would silently re-queue works into the wrong queue).
-                suppressedQueueIDs.insert(archived.id)
-                continue
             } else {
+                let archivedQueueID = archived.id.uuidString
+                switch resolution {
+                case .suppressStaleData:
+                    // This queue snapshot is older than a local explicit delete.
+                    // Drop its memberships with it; never re-home them elsewhere.
+                    suppressedQueueIDs.insert(archived.id)
+                    suppressedQueues += 1
+                    suppressedQueueMemberships += archivedMemberships.count
+                    continue
+                case .reviveNewerData:
+                    revivedQueueIDs.insert(archived.id)
+                    revivedQueues += 1
+                    Log.library.notice(
+                        "Reviving queue \(archivedQueueID, privacy: .public) because backup is newer than tombstone"
+                    )
+                case .preserveAmbiguous:
+                    ambiguousQueueConflicts += 1
+                    Log.library.notice(
+                        "Preserving queue \(archivedQueueID, privacy: .public) because tombstone conflict is ambiguous"
+                    )
+                case .noTombstone:
+                    break
+                }
                 queue = ReadingQueue(
                     id: archived.id,
                     name: archived.name,
@@ -875,28 +954,90 @@ enum KudosBackupService {
                 context.insert(queue)
                 queuesByID[archived.id] = queue
             }
-            queue.name = kind == .savedForLater ? ReadingQueueService.savedForLaterName : archived.name
-            queue.kind = kind
-            queue.sortOrder = archived.sortOrder
-            queue.dateCreated = archived.dateCreated
-            queue.dateUpdated = archived.dateUpdated
+
+            if hadExistingQueue, resolution != .noTombstone,
+               !revivedQueueIDs.contains(archived.id) {
+                ambiguousQueueConflicts += 1
+                Log.library.notice(
+                    "Preserving existing queue \(archived.id.uuidString, privacy: .public) despite tombstone conflict"
+                )
+            }
+            let localModifiedAt = SyncMerge.effectiveQueueModifiedAt(queue)
+            let incomingWins = SyncMerge.shouldApplyIncoming(
+                localModifiedAt: localModifiedAt,
+                incomingModifiedAt: incomingModifiedAt
+            )
+            if kind == .savedForLater {
+                queue.name = ReadingQueueService.savedForLaterName
+                queue.kind = .savedForLater
+            } else if incomingWins || queue.name.isEmpty {
+                queue.name = archived.name
+                queue.kind = kind
+                queue.sortOrder = archived.sortOrder
+            }
+            queue.dateCreated = min(queue.dateCreated, archived.dateCreated)
+            queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
+            if let archivedChangedAt = archived.lastMembershipChangedAt {
+                queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, archivedChangedAt)
+            }
             queueIDMap[archived.id] = queue
         }
 
         for archived in contents.manifest.readingQueueMemberships {
             guard let work = restoredWorksByArchivedID[archived.workID] else { continue }
-            if tombstones.suppressesResurrection(ofMembershipID: archived.id) {
+            switch tombstones.membershipResolution(
+                id: archived.id,
+                incomingModifiedAt: archived.lastModifiedAt ?? archived.queuedAt
+            ) {
+            case .suppressStaleData:
                 // The user explicitly removed this queue membership on this device —
                 // don't resurrect it from an older backup.
+                suppressedQueueMemberships += 1
                 continue
+            case .preserveAmbiguous:
+                ambiguousQueueConflicts += 1
+            case .reviveNewerData, .noTombstone:
+                break
             }
             if suppressedQueueIDs.contains(archived.queueID) {
                 // Its whole queue was deleted here; dropping the membership with it is
                 // the user's intent — never re-home it into Saved for Later.
                 continue
             }
-            let queue = queueIDMap[archived.queueID] ?? savedForLaterQueue
-            if work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) {
+            let queue: ReadingQueue
+            if let mapped = queueIDMap[archived.queueID] {
+                queue = mapped
+            } else {
+                // A malformed/older backup can contain a membership without the queue
+                // metadata. Preserve it in a clearly-restored custom queue instead of
+                // silently dumping it into Saved for Later.
+                let date = archived.lastModifiedAt ?? archived.queuedAt
+                let restoredQueue = ReadingQueue(
+                    id: archived.queueID,
+                    name: "Restored Queue",
+                    kind: .custom,
+                    sortOrder: queuesByID.count,
+                    dateCreated: archived.queuedAt,
+                    dateUpdated: date
+                )
+                restoredQueue.lastMembershipChangedAt = date
+                context.insert(restoredQueue)
+                queuesByID[archived.queueID] = restoredQueue
+                queueIDMap[archived.queueID] = restoredQueue
+                ambiguousQueueConflicts += 1
+                queue = restoredQueue
+            }
+            if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
+                let incomingModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
+                if SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: existing.lastModifiedAt,
+                    incomingModifiedAt: incomingModifiedAt
+                ) {
+                    existing.sortOrderInQueue = archived.sortOrderInQueue
+                    existing.note = archived.note
+                    existing.lastModifiedAt = incomingModifiedAt
+                    queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, incomingModifiedAt)
+                }
                 work.isQueuedForLater = true
                 continue
             }
@@ -908,10 +1049,15 @@ enum KudosBackupService {
                 sortOrderInQueue: archived.sortOrderInQueue,
                 note: archived.note
             )
+            membership.lastModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
             context.insert(membership)
             queue.memberships.append(membership)
             work.queueMemberships.append(membership)
+            queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, membership.lastModifiedAt)
             work.isQueuedForLater = true
+            if revivedQueueIDs.contains(queue.id) {
+                restoredRevivedQueueMemberships += 1
+            }
         }
         ReadingQueueService.normalizeAllQueuedWorks(in: context)
 
@@ -971,7 +1117,12 @@ enum KudosBackupService {
             // and must not inflate the user-facing "N works restored" confirmation.
             works: restoredWorksByArchivedID.count,
             bookmarks: contents.manifest.bookmarks.count,
-            fonts: restoredFonts
+            fonts: restoredFonts,
+            suppressedQueues: suppressedQueues,
+            suppressedQueueMemberships: suppressedQueueMemberships,
+            revivedQueues: revivedQueues,
+            restoredRevivedQueueMemberships: restoredRevivedQueueMemberships,
+            ambiguousQueueConflicts: ambiguousQueueConflicts
         )
     }
 
@@ -980,15 +1131,15 @@ enum KudosBackupService {
     /// new as the archived snapshot — an archived work with a strictly newer modification
     /// time (the user re-saved it after deleting it, then took a fresh backup) is let
     /// through normally rather than blocked forever by a stale tombstone. Queue and
-    /// membership tombstones suppress unconditionally: they are matched by exact UUID,
-    /// and a queue re-created or a work re-queued after the deletion gets a fresh UUID,
-    /// so only rows that genuinely predate the deletion can ever match.
+    /// membership tombstones use the same timestamp-aware policy: newer queue or
+    /// membership activity revives older tombstones, while older stale snapshots stay
+    /// suppressed.
     private struct TombstoneIndex {
         private var savedWorkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var savedWorkTombstonesByAO3WorkID: [Int: SyncTombstone] = [:]
         private var savedWorkTombstonesByCanonicalURL: [String: SyncTombstone] = [:]
-        private var queueTombstoneIDs: Set<UUID> = []
-        private var membershipTombstoneIDs: Set<UUID> = []
+        private var queueTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var membershipTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -1007,9 +1158,9 @@ enum KudosBackupService {
                 case .workCollection:
                     break // Collections aren't part of the .kudosbackup manifest today.
                 case .readingQueue:
-                    queueTombstoneIDs.insert(tombstone.recordID)
+                    indexNewest(tombstone, byQueueID: tombstone.recordID)
                 case .readingQueueMembership:
-                    membershipTombstoneIDs.insert(tombstone.recordID)
+                    indexNewest(tombstone, byMembershipID: tombstone.recordID)
                 }
             }
         }
@@ -1037,6 +1188,21 @@ enum KudosBackupService {
             savedWorkTombstonesByCanonicalURL[url] = tombstone
         }
 
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byQueueID id: UUID) {
+            if let existing = queueTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            queueTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byMembershipID id: UUID) {
+            if let existing = membershipTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            membershipTombstonesByID[id] = tombstone
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone?
@@ -1054,12 +1220,18 @@ enum KudosBackupService {
             return tombstone.lastModifiedAt >= archivedModifiedAt
         }
 
-        func suppressesResurrection(ofQueueID id: UUID) -> Bool {
-            queueTombstoneIDs.contains(id)
+        func queueResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: queueTombstonesByID[id]?.lastModifiedAt
+            )
         }
 
-        func suppressesResurrection(ofMembershipID id: UUID) -> Bool {
-            membershipTombstoneIDs.contains(id)
+        func membershipResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: membershipTombstonesByID[id]?.lastModifiedAt
+            )
         }
     }
 

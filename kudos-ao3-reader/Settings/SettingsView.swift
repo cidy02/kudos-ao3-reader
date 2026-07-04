@@ -579,10 +579,12 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         do {
             let summary = try KudosBackupService.restore(backup, into: context)
             applyRestoredTheme(backup.manifest.settings)
+            let conflictMessage = summary.conflictMessage
             backupNotice = BackupNotice(
                 title: "Backup Imported",
                 message: "Merged \(summary.works) Library records, "
                     + "\(summary.bookmarks) saved links, and \(summary.fonts) custom fonts."
+                    + (conflictMessage.isEmpty ? "" : " \(conflictMessage)")
             )
         } catch {
             backupNotice = BackupNotice(

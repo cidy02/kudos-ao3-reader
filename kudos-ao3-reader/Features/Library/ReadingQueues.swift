@@ -206,7 +206,7 @@ struct ReadingQueueDetailView: View {
                     let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         queue.name = trimmed
-                        queue.dateUpdated = Date()
+                        queue.markModified()
                         saveBestEffort("Saving queue rename failed")
                     }
                 }

@@ -308,13 +308,164 @@ struct PersistenceSyncTests {
         targetContext.insert(SyncTombstone(recordID: queueID, recordType: .readingQueue))
         try targetContext.save()
 
-        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: defaults)
+        let summary = try KudosBackupService.restore(document.contents, into: targetContext, defaults: defaults)
 
         let queues = try targetContext.fetch(FetchDescriptor<ReadingQueue>())
         #expect(queues.allSatisfy { $0.kind == .savedForLater })
         #expect(queues.flatMap(\.memberships).isEmpty)
         let restoredWork = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restoredWork.isQueuedForLater == false)
+        #expect(summary.suppressedQueues == 1)
+        #expect(summary.suppressedQueueMemberships == 1)
+        #expect(summary.revivedQueues == 0)
+    }
+
+    @Test func newerMembershipChangeRevivesOlderQueueTombstone() throws {
+        let tombstoneDate = Date(timeIntervalSince1970: 100)
+        let membershipDate = Date(timeIntervalSince1970: 200)
+        let queueID = UUID(uuidString: "00000000-0000-0000-0000-00000000BBBB")!
+        let contents = try backupWithQueuedWork(
+            queueID: queueID,
+            queueName: "Edited Elsewhere",
+            queueDateUpdated: Date(timeIntervalSince1970: 50),
+            lastMembershipChangedAt: membershipDate,
+            membershipModifiedAt: membershipDate,
+            exportedAt: Date(timeIntervalSince1970: 50)
+        )
+
+        let targetContainer = try container()
+        let context = targetContainer.mainContext
+        context.insert(SyncTombstone(
+            recordID: queueID,
+            recordType: .readingQueue,
+            createdAt: tombstoneDate
+        ))
+
+        let summary = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let queues = try context.fetch(FetchDescriptor<ReadingQueue>())
+        let revived = try #require(queues.first { $0.id == queueID })
+        #expect(revived.displayName == "Edited Elsewhere")
+        #expect(revived.memberships.count == 1)
+        #expect(summary.revivedQueues == 1)
+        #expect(summary.restoredRevivedQueueMemberships == 1)
+        #expect(summary.suppressedQueues == 0)
+    }
+
+    @Test func newerQueueMetadataRevivesOlderQueueTombstone() throws {
+        let tombstoneDate = Date(timeIntervalSince1970: 100)
+        let queueDate = Date(timeIntervalSince1970: 250)
+        let queueID = UUID(uuidString: "00000000-0000-0000-0000-00000000CCCC")!
+        let contents = try backupWithQueuedWork(
+            queueID: queueID,
+            queueName: "Renamed Elsewhere",
+            queueDateUpdated: queueDate,
+            lastMembershipChangedAt: Date(timeIntervalSince1970: 50),
+            membershipModifiedAt: Date(timeIntervalSince1970: 50),
+            exportedAt: Date(timeIntervalSince1970: 50)
+        )
+
+        let targetContainer = try container()
+        let context = targetContainer.mainContext
+        context.insert(SyncTombstone(
+            recordID: queueID,
+            recordType: .readingQueue,
+            createdAt: tombstoneDate
+        ))
+
+        let summary = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let revived = try #require(try context.fetch(FetchDescriptor<ReadingQueue>())
+            .first { $0.id == queueID })
+        #expect(revived.name == "Renamed Elsewhere")
+        #expect(summary.revivedQueues == 1)
+        #expect(summary.restoredRevivedQueueMemberships == 1)
+    }
+
+    @Test func ambiguousQueueTimestampsPreserveDataForSafety() throws {
+        let resolution = SyncMerge.tombstoneResolution(
+            incomingModifiedAt: nil,
+            tombstoneDeletedAt: Date(timeIntervalSince1970: 100)
+        )
+        #expect(resolution == .preserveAmbiguous)
+    }
+
+    @Test func newestQueueTombstoneSuppressesDeterministically() throws {
+        let queueID = UUID(uuidString: "00000000-0000-0000-0000-00000000DDDD")!
+        let contents = try backupWithQueuedWork(
+            queueID: queueID,
+            queueName: "Between Deletes",
+            queueDateUpdated: Date(timeIntervalSince1970: 200),
+            lastMembershipChangedAt: Date(timeIntervalSince1970: 200),
+            membershipModifiedAt: Date(timeIntervalSince1970: 200),
+            exportedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let targetContainer = try container()
+        let context = targetContainer.mainContext
+        context.insert(SyncTombstone(
+            recordID: queueID,
+            recordType: .readingQueue,
+            createdAt: Date(timeIntervalSince1970: 50)
+        ))
+        context.insert(SyncTombstone(
+            recordID: queueID,
+            recordType: .readingQueue,
+            createdAt: Date(timeIntervalSince1970: 300)
+        ))
+
+        let summary = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let queues = try context.fetch(FetchDescriptor<ReadingQueue>())
+        #expect(queues.allSatisfy { $0.kind == .savedForLater })
+        #expect(summary.suppressedQueues == 1)
+        #expect(summary.suppressedQueueMemberships == 1)
+    }
+
+    @Test func oldQueueTombstoneDoesNotSuppressFreshQueueID() throws {
+        let oldQueueID = UUID(uuidString: "00000000-0000-0000-0000-00000000EEEE")!
+        let newQueueID = UUID(uuidString: "00000000-0000-0000-0000-00000000EEEF")!
+        let contents = try backupWithQueuedWork(
+            queueID: newQueueID,
+            queueName: "Fresh Queue",
+            queueDateUpdated: Date(timeIntervalSince1970: 200),
+            lastMembershipChangedAt: Date(timeIntervalSince1970: 200),
+            membershipModifiedAt: Date(timeIntervalSince1970: 200),
+            exportedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let targetContainer = try container()
+        let context = targetContainer.mainContext
+        context.insert(SyncTombstone(
+            recordID: oldQueueID,
+            recordType: .readingQueue,
+            createdAt: Date(timeIntervalSince1970: 300)
+        ))
+
+        let summary = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let restored = try #require(try context.fetch(FetchDescriptor<ReadingQueue>())
+            .first { $0.id == newQueueID })
+        #expect(restored.name == "Fresh Queue")
+        #expect(summary.suppressedQueues == 0)
+    }
+
+    @Test func membershipChangesUpdateQueueFreshnessSignal() throws {
+        let container = try container()
+        let context = container.mainContext
+        let queue = ReadingQueue(name: "Freshness")
+        let work = SavedWork(title: "Queued", author: "Writer")
+        context.insert(queue)
+        context.insert(work)
+
+        let originalFreshness = queue.lastMembershipChangedAt
+        let membership = ReadingQueueService.add(work, to: queue, in: context)
+        #expect(queue.lastMembershipChangedAt >= membership.lastModifiedAt)
+        #expect(queue.lastMembershipChangedAt >= originalFreshness)
+        let afterAdd = queue.lastMembershipChangedAt
+
+        ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+        #expect(queue.lastMembershipChangedAt >= afterAdd)
     }
 
     /// A fresh install (or any restore into a database with no matching local record) has
@@ -360,5 +511,59 @@ struct PersistenceSyncTests {
         let defaults = try #require(UserDefaults(suiteName: name))
         defaults.removePersistentDomain(forName: name)
         return defaults
+    }
+
+    private func backupWithQueuedWork(
+        queueID: UUID,
+        queueName: String,
+        queueDateUpdated: Date,
+        lastMembershipChangedAt: Date,
+        membershipModifiedAt: Date,
+        exportedAt: Date
+    ) throws -> KudosBackupContents {
+        let sourceContainer = try container()
+        let context = sourceContainer.mainContext
+        let workID = 424_242
+        let work = SavedWork(
+            title: "Queued Conflict Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/\(workID)"
+        )
+        work.ao3WorkID = workID
+        work.markModified(queueDateUpdated)
+        let queue = ReadingQueue(
+            id: queueID,
+            name: queueName,
+            kind: .custom,
+            sortOrder: 0,
+            dateCreated: Date(timeIntervalSince1970: 10),
+            dateUpdated: queueDateUpdated
+        )
+        queue.lastMembershipChangedAt = lastMembershipChangedAt
+        let membership = ReadingQueueMembership(
+            queue: queue,
+            work: work,
+            queuedAt: Date(timeIntervalSince1970: 20),
+            sortOrderInQueue: 0
+        )
+        membership.lastModifiedAt = membershipModifiedAt
+        context.insert(work)
+        context.insert(queue)
+        context.insert(membership)
+        queue.memberships.append(membership)
+        work.queueMemberships.append(membership)
+        try context.save()
+
+        let queueArchive = KudosBackupReadingQueue(queue: queue)
+        let membershipArchive = try #require(KudosBackupReadingQueueMembership(membership: membership))
+        return KudosBackupContents(manifest: KudosBackupManifest(
+            exportedAt: exportedAt,
+            works: [KudosBackupWork(work: work)],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [queueArchive],
+            readingQueueMemberships: [membershipArchive],
+            settings: .capture(defaults: try testDefaults())
+        ))
     }
 }
