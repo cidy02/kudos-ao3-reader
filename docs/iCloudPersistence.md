@@ -79,12 +79,21 @@ writes — so a change survives a force-quit that happens before the debounce
 fires or the app backgrounds. If no folder is connected, these triggers are
 no-ops.
 
-Background refresh via `BGTaskScheduler` was considered but deferred rather
-than implemented: the triggers above already cover the primary reliable path,
-and a scheduled background task would only improve freshness at the margin
-while iOS is not running the app. Worth adding later — unlike CloudKit, it
-needs no paid Apple Developer account, just a standard `UIBackgroundModes`
-capability.
+Background refresh via `BGTaskScheduler` (`FolderSyncBackgroundTask`, iOS
+only) is a best-effort freshness improvement layered on top of the triggers
+above, never a replacement for them — iOS decides if/when it actually runs.
+It registers a `BGAppRefreshTask` at app init and only submits a request when
+the folder is connected and Auto Sync is enabled; a run just calls the same
+gated `FolderSyncService.syncNow(in:)`, so a rejection from an in-progress
+foreground sync completes quietly. Unlike CloudKit, this needs no paid Apple
+Developer account, just the standard `UIBackgroundModes`/
+`BGTaskSchedulerPermittedIdentifiers` Info.plist capability — injected via a
+`PBXShellScriptBuildPhase` post-`GENERATE_INFOPLIST_FILE`, since Xcode's
+`INFOPLIST_KEY_*` mechanism doesn't support array-valued keys and
+`INFOPLIST_FILE` can't be combined with `GENERATE_INFOPLIST_FILE=YES`.
+Real background-firing timing is manual-verify-only (Xcode's "Simulate
+Background App Refresh" debug menu, eventually real-device); the gating logic
+itself (`FolderSyncBackgroundTask.shouldSchedule(snapshot:)`) is unit tested.
 
 ## Migration Behavior
 

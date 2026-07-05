@@ -83,6 +83,9 @@ struct ContentView: View {
                 if FolderSyncService.snapshot().isDirty {
                     _ = try? await FolderSyncService.syncUp(in: modelContext)
                 }
+                #if os(iOS)
+                FolderSyncBackgroundTask.scheduleNext()
+                #endif
             }
             .onChange(of: scenePhase) { _, phase in
                 guard FolderSyncService.snapshot().autoSyncEnabled else { return }
@@ -100,6 +103,11 @@ struct ContentView: View {
                     }
                 case .inactive, .background:
                     folderSyncUpTask?.cancel()
+                    #if os(iOS)
+                    // Submitting right before backgrounding is the pattern most
+                    // likely to actually get honored by the OS soon.
+                    FolderSyncBackgroundTask.scheduleNext()
+                    #endif
                     guard FolderSyncService.snapshot().isDirty else { return }
                     Task { @MainActor in
                         _ = try? await FolderSyncService.syncUp(in: modelContext)
