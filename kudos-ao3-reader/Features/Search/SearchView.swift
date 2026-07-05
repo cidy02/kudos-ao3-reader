@@ -10,9 +10,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(AppRouter.self) private var router
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var savedWorks: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var savedWorks: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
-    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @Query(
+        filter: #Predicate<WorkCollection> { !$0.isPendingDeletion },
+        sort: \WorkCollection.dateAdded, order: .reverse
+    )
+    private var collections: [WorkCollection]
     @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
 
     @State private var filters = AO3SearchFilters()

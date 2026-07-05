@@ -18,7 +18,8 @@ struct LibrarySectionListView: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
 
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?
     @State private var markedForLater: [AO3WorkSummary] = []
@@ -95,8 +96,8 @@ struct LibrarySectionListView: View {
                 for: $pendingDelete,
                 title: "Delete this work?",
                 confirmLabel: "Delete",
-                message: { "“\($0.title)” will be removed from your Library. This can't be undone." },
-                perform: { WorkLifecycle.delete($0, in: context) }
+                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
+                perform: { PreservedWorkService.softDelete($0, in: context) }
             )
             .task(id: auth.isLoggedIn) {
                 if kind == .savedForLater { await loadMarkedForLater() }
@@ -194,7 +195,11 @@ struct LibrarySectionListView: View {
                     }
                 } else {
                     Button(role: .destructive) {
-                        if confirmBeforeDelete { pendingDelete = work } else { WorkLifecycle.delete(work, in: context) }
+                        if confirmBeforeDelete {
+                            pendingDelete = work
+                        } else {
+                            PreservedWorkService.softDelete(work, in: context)
+                        }
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }

@@ -542,7 +542,7 @@ enum ReadingQueueService {
         let wasQueueOnly = work.isQueueOnlyWork
         removeFromQueue(work, from: queue, in: context)
         if wasQueueOnly, !work.isQueuedForLater, !work.isSaved, !work.isFavorite {
-            WorkLifecycle.delete(work, in: context)
+            PreservedWorkService.softDelete(work, in: context)
         }
     }
 
@@ -557,7 +557,7 @@ enum ReadingQueueService {
         let wasQueueOnly = work.isQueueOnlyWork
         removeFromAllQueues(work, in: context)
         if wasQueueOnly, !work.isQueuedForLater, !work.isSaved, !work.isFavorite {
-            WorkLifecycle.delete(work, in: context)
+            PreservedWorkService.softDelete(work, in: context)
         }
     }
 

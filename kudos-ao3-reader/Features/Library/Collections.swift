@@ -201,14 +201,15 @@ struct CollectionDetailView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
-                    SyncTombstones.recordDeletion(of: collection, in: context)
-                    context.delete(collection)
-                    try? context.save()
+                    PreservedWorkService.softDelete(collection, in: context)
                     dismiss()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("The collection is removed. The works themselves stay in your Library.")
+                Text(
+                    "The collection moves to Recently Deleted for 90 days. The works "
+                        + "themselves stay in your Library either way."
+                )
             }
     }
 
@@ -230,7 +231,11 @@ struct AddToCollectionView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @Query(
+        filter: #Predicate<WorkCollection> { !$0.isPendingDeletion },
+        sort: \WorkCollection.dateAdded, order: .reverse
+    )
+    private var collections: [WorkCollection]
     @State private var newName = ""
 
     var body: some View {

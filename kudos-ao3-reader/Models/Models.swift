@@ -114,7 +114,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()
     var deletedAt: Date?
-    var isDeleted: Bool = false
+    var isPendingDeletion: Bool = false
+    /// When a soft-deleted work's 90-day Recently Deleted window ends and it becomes
+    /// eligible for permanent removal (`PreservedWorkService.sweepExpired`). Only
+    /// meaningful while `isPendingDeletion == true`.
+    var permanentDeletionScheduledAt: Date?
 
     /// Stable name for the EPUB asset associated with this metadata record. This is
     /// intentionally separate from title/author/source URL so future iCloud Documents
@@ -464,7 +468,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()
     var deletedAt: Date?
-    var isDeleted: Bool = false
+    var isPendingDeletion: Bool = false
+    /// See `SavedWork.permanentDeletionScheduledAt`.
+    var permanentDeletionScheduledAt: Date?
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
@@ -501,7 +507,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var dateUpdated: Date = Date()
     var lastMembershipChangedAt: Date = Date()
     var deletedAt: Date?
-    var isDeleted: Bool = false
+    var isPendingDeletion: Bool = false
+    /// See `SavedWork.permanentDeletionScheduledAt`.
+    var permanentDeletionScheduledAt: Date?
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
@@ -558,7 +566,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var queuedAt: Date = Date()
     var lastModifiedAt: Date = Date()
     var deletedAt: Date?
-    var isDeleted: Bool = false
+    var isPendingDeletion: Bool = false
     var sortOrderInQueue: Int = 0
     var note: String = ""
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue

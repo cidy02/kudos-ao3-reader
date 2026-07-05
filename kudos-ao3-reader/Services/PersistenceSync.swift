@@ -194,6 +194,7 @@ enum PersistenceMigrationService {
                 if work.syncStatus == .localOnly {
                     work.syncStatus = .pending
                 }
+                backfillPermanentDeletionScheduledAt(work)
                 processed += 1
                 if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
@@ -209,6 +210,7 @@ enum PersistenceMigrationService {
                 if collection.syncStatus == .localOnly {
                     collection.syncStatus = .pending
                 }
+                backfillPermanentDeletionScheduledAt(collection)
                 processed += 1
                 if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
@@ -231,6 +233,7 @@ enum PersistenceMigrationService {
                 if queue.syncStatus == .localOnly {
                     queue.syncStatus = .pending
                 }
+                backfillPermanentDeletionScheduledAt(queue)
                 processed += 1
                 if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
@@ -253,6 +256,30 @@ enum PersistenceMigrationService {
         Log.library.info(
             "Persistence metadata migration checked at \(now.formatted(.iso8601), privacy: .public)"
         )
+    }
+
+    /// Backfills `permanentDeletionScheduledAt` for a record only a pre-v7 backup
+    /// restore could have left in this state: soft-deleted but with no recovery
+    /// deadline set. Never runs for records deleted by the current app, which always
+    /// sets both fields together in `PreservedWorkService.softDelete`. Three concrete
+    /// overloads rather than one generic function, matching the plain per-type
+    /// functions `PreservedWorkService` uses for the same reason.
+    private static func backfillPermanentDeletionScheduledAt(_ work: SavedWork) {
+        guard work.isPendingDeletion, work.permanentDeletionScheduledAt == nil else { return }
+        let deletedAt = work.deletedAt ?? Date()
+        work.permanentDeletionScheduledAt = deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
+    }
+
+    private static func backfillPermanentDeletionScheduledAt(_ collection: WorkCollection) {
+        guard collection.isPendingDeletion, collection.permanentDeletionScheduledAt == nil else { return }
+        let deletedAt = collection.deletedAt ?? Date()
+        collection.permanentDeletionScheduledAt = deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
+    }
+
+    private static func backfillPermanentDeletionScheduledAt(_ queue: ReadingQueue) {
+        guard queue.isPendingDeletion, queue.permanentDeletionScheduledAt == nil else { return }
+        let deletedAt = queue.deletedAt ?? Date()
+        queue.permanentDeletionScheduledAt = deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
     }
 
     private static func reconcileAssets(in context: ModelContext, stage: String) async throws {

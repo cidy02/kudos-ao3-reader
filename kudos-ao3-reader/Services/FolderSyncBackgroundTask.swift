@@ -71,6 +71,9 @@ enum FolderSyncBackgroundTask {
             // any other gate-contention rejection, and the next foreground trigger
             // or background window will catch up naturally.
             _ = try? await FolderSyncService.syncNow(in: context)
+            // A natural piggyback point for the other local-only housekeeping pass —
+            // no reason to wait for the next launch if the app is already awake.
+            PreservedWorkService.sweepExpired(in: context)
         }
         task.expirationHandler = {
             work.cancel()

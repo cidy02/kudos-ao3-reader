@@ -147,6 +147,12 @@ Core rules:
   no first-class join model of its own) so a stale sync file can't silently
   re-add it — the same protection collections themselves and queues already
   had.
+- Manifest version 7 adds `permanentDeletionScheduledAt` to works, collections,
+  and reading queues (Recently Deleted / 90-day recovery — see
+  `PreservedWorkService`), plus carries `isDeleted`/`deletedAt` for reading
+  queues for the first time. Merged the same `incomingWins`-gated way as
+  `isDeleted` — a device that already restored a soft-deleted record wins over
+  a stale device that hasn't synced the restore yet.
 - Imported EPUBs remain valid local records even if AO3 enrichment fails.
 
 ## EPUB Asset Strategy

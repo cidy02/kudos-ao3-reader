@@ -37,7 +37,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3AuthService.self) private var auth
     @Environment(DownloadQueue.self) private var downloadQueue
     @Query(sort: \Tag.name) private var allTags: [Tag]
-    @Query private var allWorks: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
 
     /// The resolved local record: the saved work itself, an existing library match for
     /// a remote summary, or the record created when a remote work is imported on tap.

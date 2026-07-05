@@ -153,7 +153,7 @@ struct PersistenceSyncTests {
         let work = SavedWork(title: "Deleted", author: "Writer", sourceURL: "https://archiveofourown.org/works/333")
         context.insert(work)
 
-        WorkLifecycle.delete(work, in: context)
+        WorkLifecycle.hardDelete(work, in: context)
 
         let tombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
         #expect(tombstones.count == 1)
@@ -169,7 +169,7 @@ struct PersistenceSyncTests {
         let work = SavedWork(title: "Deleted Work", author: "Writer",
                              sourceURL: "https://archiveofourown.org/works/444")
         context.insert(work)
-        WorkLifecycle.delete(work, in: context)
+        WorkLifecycle.hardDelete(work, in: context)
         #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).count == 1)
 
         // An older snapshot of the same work, from before it was deleted.
@@ -554,7 +554,7 @@ struct PersistenceSyncTests {
         let work = SavedWork(title: "Deleted Before Reinstall", author: "Writer",
                              sourceURL: "https://archiveofourown.org/works/909")
         sourceContext.insert(work)
-        WorkLifecycle.delete(work, in: sourceContext)
+        WorkLifecycle.hardDelete(work, in: sourceContext)
         let sourceTombstones = try sourceContext.fetch(FetchDescriptor<SyncTombstone>())
         #expect(sourceTombstones.count == 1)
 

@@ -108,16 +108,51 @@ nonisolated struct KudosBackupContents {
         return FileWrapper(directoryWithFileWrappers: rootFiles)
     }
 
+    // Plain `.iso8601` has no fractional-second support (whole-seconds only), which
+    // silently truncates every timestamp on export. Two edits from different devices
+    // landing in the same wall-clock second — a real possibility with auto-sync —
+    // would then be unorderable by every lastModifiedAt-based merge decision in this
+    // file. A custom formatter with fractional seconds fixes that; the decoder falls
+    // back to the plain formatter so older `.kudosbackup` files (encoded without
+    // fractional seconds) still decode correctly.
+    nonisolated private static let fractionalSecondsISO8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    nonisolated private static let wholeSecondISO8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     nonisolated private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(fractionalSecondsISO8601Formatter.string(from: date))
+        }
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
     }
 
     nonisolated private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            if let date = fractionalSecondsISO8601Formatter.date(from: string) {
+                return date
+            }
+            if let date = wholeSecondISO8601Formatter.date(from: string) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(string)"
+            )
+        }
         return decoder
     }
 
@@ -130,8 +165,11 @@ nonisolated struct KudosBackupContents {
 }
 
 nonisolated struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 6
-    static let supportedVersions: Set<Int> = [1, 2, 3, 4, 5, currentVersion]
+    // v7 adds permanentDeletionScheduledAt (Recently Deleted / 90-day recovery) to
+    // works, collections, and reading queues, plus isDeleted/deletedAt for reading
+    // queues (previously never carried in the manifest at all).
+    static let currentVersion = 7
+    static let supportedVersions: Set<Int> = [1, 2, 3, 4, 5, 6, currentVersion]
 
     let version: Int
     let exportedAt: Date
@@ -246,6 +284,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let lastModifiedAt: Date?
     let deletedAt: Date?
     let isDeleted: Bool?
+    let permanentDeletionScheduledAt: Date?
     let assetIdentifier: String?
     let isFavorite: Bool
     let isSaved: Bool
@@ -299,7 +338,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         createdAt = work.createdAt
         lastModifiedAt = work.lastModifiedAt
         deletedAt = work.deletedAt
-        isDeleted = work.isDeleted
+        isDeleted = work.isPendingDeletion
+        permanentDeletionScheduledAt = work.permanentDeletionScheduledAt
         assetIdentifier = work.effectiveAssetIdentifier
         isFavorite = work.isFavorite
         isSaved = work.isSaved
@@ -358,6 +398,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case lastModifiedAt
         case deletedAt
         case isDeleted
+        case permanentDeletionScheduledAt
         case assetIdentifier
         case isFavorite
         case isSaved
@@ -413,6 +454,10 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
         deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
         isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted)
+        permanentDeletionScheduledAt = try container.decodeIfPresent(
+            Date.self,
+            forKey: .permanentDeletionScheduledAt
+        )
         assetIdentifier = try container.decodeIfPresent(String.self, forKey: .assetIdentifier)
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
@@ -500,6 +545,7 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     let lastModifiedAt: Date?
     let deletedAt: Date?
     let isDeleted: Bool?
+    let permanentDeletionScheduledAt: Date?
     let syncStatusRaw: String?
     let workIDs: [UUID]
 
@@ -511,7 +557,8 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         createdAt = collection.createdAt
         lastModifiedAt = collection.lastModifiedAt
         deletedAt = collection.deletedAt
-        isDeleted = collection.isDeleted
+        isDeleted = collection.isPendingDeletion
+        permanentDeletionScheduledAt = collection.permanentDeletionScheduledAt
         syncStatusRaw = collection.syncStatusRaw
         workIDs = collection.works.map(\.id).sorted { $0.uuidString < $1.uuidString }
     }
@@ -525,6 +572,9 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     let dateCreated: Date
     let dateUpdated: Date
     let lastMembershipChangedAt: Date?
+    let deletedAt: Date?
+    let isDeleted: Bool?
+    let permanentDeletionScheduledAt: Date?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -535,6 +585,9 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         dateCreated = queue.dateCreated
         dateUpdated = queue.dateUpdated
         lastMembershipChangedAt = queue.lastMembershipChangedAt
+        deletedAt = queue.deletedAt
+        isDeleted = queue.isPendingDeletion
+        permanentDeletionScheduledAt = queue.permanentDeletionScheduledAt
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -1054,7 +1107,10 @@ enum KudosBackupService {
             // fix: an unconditional merge here would let an older, non-deleted snapshot
             // permanently flip a soft-deleted collection back to not-deleted the moment
             // it syncs in, the same bug class fixed for those boolean flags.
-            collection.isDeleted = incomingWins ? (archived.isDeleted ?? false) : collection.isDeleted
+            collection.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : collection.isPendingDeletion
+            collection.permanentDeletionScheduledAt = incomingWins
+                ? archived.permanentDeletionScheduledAt
+                : collection.permanentDeletionScheduledAt
 
             for workID in archived.workIDs {
                 guard let work = restoredWorksByArchivedID[workID] else { continue }
@@ -1170,6 +1226,14 @@ enum KudosBackupService {
             if let archivedChangedAt = archived.lastMembershipChangedAt {
                 queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, archivedChangedAt)
             }
+            queue.deletedAt = newest(queue.deletedAt, archived.deletedAt)
+            // Same incomingWins gating as SavedWork/WorkCollection's isDeleted merge —
+            // a device that already restored a queue must win over a stale device that
+            // hasn't synced the restore yet.
+            queue.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : queue.isPendingDeletion
+            queue.permanentDeletionScheduledAt = incomingWins
+                ? archived.permanentDeletionScheduledAt
+                : queue.permanentDeletionScheduledAt
             queueIDMap[archived.id] = queue
         }
 
@@ -1547,8 +1611,14 @@ enum KudosBackupService {
         work.isSaved = incomingWins ? archived.isSaved : work.isSaved
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
-        work.isDeleted = incomingWins ? (archived.isDeleted ?? false) : work.isDeleted
+        work.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : work.isPendingDeletion
         work.deletedAt = newest(work.deletedAt, archived.deletedAt)
+        // incomingWins-gated like isDeleted, not a blind "newest wins" — a device that
+        // already called restore() (clearing this field) must win over a stale device
+        // that hasn't synced the restore yet, the same way an un-set isDeleted does.
+        work.permanentDeletionScheduledAt = incomingWins
+            ? archived.permanentDeletionScheduledAt
+            : work.permanentDeletionScheduledAt
 
         work.wordCount = mergedPositive(
             current: work.wordCount,

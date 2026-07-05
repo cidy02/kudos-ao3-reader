@@ -17,7 +17,8 @@ struct HomeView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var works: [SavedWork]
     @State private var path = NavigationPath()
     @State private var subscriptions: [AO3WorkSummary] = []
     /// True only while the remote subscriptions request is actually in flight, so the

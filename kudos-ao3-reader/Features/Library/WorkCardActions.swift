@@ -164,7 +164,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                         if confirmBeforeDelete {
                             pendingDelete = work
                         } else {
-                            WorkLifecycle.delete(work, in: context)
+                            PreservedWorkService.softDelete(work, in: context)
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -212,8 +212,8 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 for: $pendingDelete,
                 title: "Delete this work?",
                 confirmLabel: "Delete",
-                message: { "“\($0.title)” will be removed from your Library. This can't be undone." },
-                perform: { WorkLifecycle.delete($0, in: context) }
+                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
+                perform: { PreservedWorkService.softDelete($0, in: context) }
             )
     }
 
@@ -232,7 +232,11 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
     @Environment(\.modelContext) private var context
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var savedWorks: [SavedWork]
+    // A soft-deleted (pending Recently Deleted) work must not match here — the
+    // remote card should offer a fresh "Save" rather than "Delete" for a work
+    // that's scheduled to disappear.
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var savedWorks: [SavedWork]
 
     @State private var working = false
     @State private var actionError: String?
@@ -265,7 +269,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                         if confirmBeforeDelete {
                             pendingDelete = existingLocalWork
                         } else {
-                            WorkLifecycle.delete(existingLocalWork, in: context)
+                            PreservedWorkService.softDelete(existingLocalWork, in: context)
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -317,8 +321,8 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 for: $pendingDelete,
                 title: "Delete this work?",
                 confirmLabel: "Delete",
-                message: { "“\($0.title)” will be removed from your Library. This can't be undone." },
-                perform: { WorkLifecycle.delete($0, in: context) }
+                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
+                perform: { PreservedWorkService.softDelete($0, in: context) }
             )
             .alert(
                 "Action Failed",

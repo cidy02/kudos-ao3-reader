@@ -185,9 +185,14 @@ struct ReadingQueueTests {
 
         ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: queue, in: context)
 
-        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+        // Deletion now moves the work to Recently Deleted (PreservedWorkService.softDelete)
+        // rather than an instant, unrecoverable removal — the record and its EPUB both
+        // survive the 90-day recovery window.
+        let remaining = try context.fetch(FetchDescriptor<SavedWork>())
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.isPendingDeletion == true)
         #expect(queue.memberships.isEmpty)
-        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        #expect(FileManager.default.fileExists(atPath: fileURL.path))
     }
 
     @Test func removeOneQueueMembershipKeepsWorkIfOtherMembershipExists() throws {

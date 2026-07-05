@@ -75,6 +75,9 @@ struct ContentView: View {
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
                 await PersistenceMigrationService.runIfNeeded(in: modelContext)
+                // Independent of folder sync — a local Recently Deleted item past its
+                // 90-day window is swept whether or not Auto Sync is even on.
+                PreservedWorkService.sweepExpired(in: modelContext)
                 guard FolderSyncService.snapshot().autoSyncEnabled else { return }
                 lastForegroundFolderSyncAt = Date()
                 _ = try? await FolderSyncService.syncDown(in: modelContext)
