@@ -39,6 +39,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     case workCollection
     case readingQueue
     case readingQueueMembership
+    /// A work explicitly removed from a collection. Collection membership has no
+    /// first-class join model (unlike ReadingQueueMembership), so `recordID` here is a
+    /// deterministic composite of the collection and work IDs — see
+    /// `SyncTombstone.collectionMembershipID(collectionID:workID:)`.
+    case workCollectionMembership
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat
@@ -78,6 +83,22 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var recordType: SyncTombstoneRecordType {
         get { SyncTombstoneRecordType(rawValue: recordTypeRaw) ?? .savedWork }
         set { recordTypeRaw = newValue.rawValue }
+    }
+
+    /// Deterministic, order-independent composite ID for a (collection, work) pair,
+    /// used as `recordID` for `.workCollectionMembership` tombstones since that
+    /// membership has no first-class join model of its own to carry a stable ID.
+    static func collectionMembershipID(collectionID: UUID, workID: UUID) -> UUID {
+        let collectionBytes = withUnsafeBytes(of: collectionID.uuid) { Array($0) }
+        let workBytes = withUnsafeBytes(of: workID.uuid) { Array($0) }
+        var combined = [UInt8](repeating: 0, count: 16)
+        for i in 0..<16 { combined[i] = collectionBytes[i] ^ workBytes[i] }
+        return UUID(uuid: (
+            combined[0], combined[1], combined[2], combined[3],
+            combined[4], combined[5], combined[6], combined[7],
+            combined[8], combined[9], combined[10], combined[11],
+            combined[12], combined[13], combined[14], combined[15]
+        ))
     }
 }
 

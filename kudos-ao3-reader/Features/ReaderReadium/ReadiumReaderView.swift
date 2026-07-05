@@ -590,6 +590,7 @@ struct ReadiumReaderView: View {
                 persistCurrentProgress()
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 try? modelContext.save()
+                scheduleFolderSyncOnReaderClose()
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
                     router.panel = .none
                 }
@@ -666,6 +667,19 @@ struct ReadiumReaderView: View {
             work.readiumLocator = saved
             work.markProgressModified(now)
             try? modelContext.save()
+        }
+    }
+
+    /// Reader close is a natural batch point for reading progress, so it gets a
+    /// near-immediate sync-up rather than waiting out the normal debounce window —
+    /// but it must never block dismissal, so this fires a detached, best-effort Task.
+    private func scheduleFolderSyncOnReaderClose() {
+        FolderSyncService.markDirty()
+        guard FolderSyncService.snapshot().isConnected, FolderSyncService.snapshot().autoSyncEnabled else { return }
+        let context = modelContext
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            _ = try? await FolderSyncService.syncUp(in: context)
         }
     }
 

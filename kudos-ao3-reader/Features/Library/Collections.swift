@@ -213,6 +213,7 @@ struct CollectionDetailView: View {
     }
 
     private func remove(_ work: SavedWork) {
+        SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
         work.collections.removeAll { $0.id == collection.id }
         work.markModified()
         collection.markModified()
@@ -294,6 +295,7 @@ struct AddToCollectionView: View {
 
     private func toggle(_ collection: WorkCollection) {
         if let index = work.collections.firstIndex(where: { $0.id == collection.id }) {
+            SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
             work.collections.remove(at: index)
         } else {
             work.collections.append(collection)

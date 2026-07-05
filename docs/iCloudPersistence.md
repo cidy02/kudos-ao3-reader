@@ -54,17 +54,37 @@ sync.
 
 ## Automatic Sync Triggers
 
-Kudos syncs conservatively:
+Kudos syncs conservatively, and only while the Settings "Auto Sync" toggle is
+on (default on once a folder is connected; manual Sync Now always works
+regardless of the toggle):
 
 - app launch: run the local metadata migration, then sync down if a folder is
-  connected;
-- scene becomes active: sync down;
-- scene becomes inactive/background: sync up;
-- local library data changes: debounce briefly, then sync up.
+  connected; if local changes are still marked pending from a prior session
+  (see below), also sync up to catch anything a force-quit interrupted;
+- scene becomes active: sync down, throttled to once every 60 seconds unless
+  local state is pending or this is the very first activation after launch;
+- scene becomes inactive/background: sync up, but only if changes are
+  actually pending — a no-op backgrounding no longer forces a full rewrite of
+  the sync file;
+- local library data changes: debounce ~7 seconds, then sync up;
+- reader close: a near-immediate (1.5s) best-effort sync up, since closing the
+  reader is a natural batch point for reading progress.
 
 The debounce watches works, bookmarks, custom fonts, collections, reading
-queues, queue memberships, and tombstones. If no folder is connected, these
-triggers are no-ops.
+queues, queue memberships, and tombstones via SwiftData `@Query`, plus a
+smaller set of `@AppStorage`-backed reader/privacy settings that ship in the
+manifest. All of the above mark a durable `hasPendingFolderSyncChanges` flag
+(`FolderSyncService.markDirty()`), cleared only once a sync-up actually
+writes — so a change survives a force-quit that happens before the debounce
+fires or the app backgrounds. If no folder is connected, these triggers are
+no-ops.
+
+Background refresh via `BGTaskScheduler` was considered but deferred rather
+than implemented: the triggers above already cover the primary reliable path,
+and a scheduled background task would only improve freshness at the margin
+while iOS is not running the app. Worth adding later — unlike CloudKit, it
+needs no paid Apple Developer account, just a standard `UIBackgroundModes`
+capability.
 
 ## Migration Behavior
 
@@ -112,7 +132,12 @@ Core rules:
 - Members of a suppressed queue are dropped with it, never re-homed into Saved
   for Later.
 - Collections are exported in manifest version 6 and restore by UUID with
-  timestamp/tombstone handling.
+  timestamp/tombstone handling. A work explicitly removed from a collection is
+  tombstoned too (`.workCollectionMembership`, keyed by a deterministic
+  composite of the collection and work IDs, since collection membership has
+  no first-class join model of its own) so a stale sync file can't silently
+  re-add it — the same protection collections themselves and queues already
+  had.
 - Imported EPUBs remain valid local records even if AO3 enrichment fails.
 
 ## EPUB Asset Strategy
@@ -153,11 +178,27 @@ Settings shows a Library Sync Folder section with:
 
 - local metadata readiness;
 - connected folder name/path;
-- Choose Sync Folder, Sync Now, and Disconnect actions;
+- Choose/Change Sync Folder, an Auto Sync toggle, Sync Now, Sync Details, and
+  Disconnect actions;
 - last metadata check and last folder sync timestamps;
-- the latest folder sync error, if any;
+- the latest folder sync error, if any — including a sync rejected because
+  another persistence operation was already running, not just "real" failures
+  like a bad bookmark;
 - disclosure that this is folder-based sync using the existing backup format, not
-  real-time CloudKit sync.
+  real-time CloudKit sync, and that turning off Auto Sync only stops the
+  automatic triggers (Sync Now still works).
+
+The Sync Details sheet (tucked behind its own screen, not cluttering the main
+Settings list) shows last sync started/completed, direction, and the most
+recent restore counts (works restored, queues suppressed/revived, ambiguous
+conflicts) — mainly useful for development/testing.
+
+On first install, after the existing welcome screen, a one-time Library Sync
+Folder onboarding screen offers to connect a folder (Choose Sync Folder / Not
+Now / Don't Remind Me Again). Declining without checking "don't remind me"
+shows it again next launch; checking it, or connecting a folder, or
+configuring one later from Settings, all stop it permanently. Settings remains
+the fallback management surface regardless of what's chosen here.
 
 Core reading, queue management, import, and library browsing do not depend on
 the selected folder or on iCloud availability.

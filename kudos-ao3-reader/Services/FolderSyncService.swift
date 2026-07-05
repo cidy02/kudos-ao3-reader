@@ -2,12 +2,22 @@ import Foundation
 import OSLog
 import SwiftData
 
+extension Notification.Name {
+    /// Posted by SettingsView when a UserDefaults value included in the `.kudosbackup`
+    /// manifest (reader/privacy preferences) changes, so ContentView's folder-sync
+    /// lifecycle — which only observes SwiftData @Query state directly — knows to mark
+    /// the sync folder dirty too.
+    static let kudosSyncRelevantSettingChanged = Notification.Name("kudosSyncRelevantSettingChanged")
+}
+
 struct FolderSyncSnapshot: Equatable {
     var isConnected: Bool
     var folderDisplayName: String
     var folderPath: String
     var lastSyncAt: Date?
     var lastError: String
+    var isDirty: Bool
+    var autoSyncEnabled: Bool
 }
 
 struct FolderSyncResult: Equatable {
@@ -57,6 +67,8 @@ enum FolderSyncService {
     private static let folderPathKey = "folderSyncFolderPath"
     private static let lastSyncAtKey = "folderSyncLastSyncAt"
     private static let lastErrorKey = "folderSyncLastError"
+    private static let dirtyFlagKey = "hasPendingFolderSyncChanges"
+    private static let autoSyncEnabledKey = "folderSyncAutoSyncEnabled"
 
     static func snapshot(defaults: UserDefaults = .standard) -> FolderSyncSnapshot {
         let bookmarkData = defaults.data(forKey: bookmarkDataKey)
@@ -65,8 +77,26 @@ enum FolderSyncService {
             folderDisplayName: defaults.string(forKey: folderDisplayNameKey) ?? "",
             folderPath: defaults.string(forKey: folderPathKey) ?? "",
             lastSyncAt: defaults.object(forKey: lastSyncAtKey) as? Date,
-            lastError: defaults.string(forKey: lastErrorKey) ?? ""
+            lastError: defaults.string(forKey: lastErrorKey) ?? "",
+            isDirty: defaults.bool(forKey: dirtyFlagKey),
+            // Defaults to on: once a folder is connected, automatic sync is the
+            // expected experience unless the user explicitly turns it off.
+            autoSyncEnabled: defaults.object(forKey: autoSyncEnabledKey) == nil
+                ? true
+                : defaults.bool(forKey: autoSyncEnabledKey)
         )
+    }
+
+    /// Marks local state as having changes not yet written to the sync folder.
+    /// Durable (UserDefaults-backed) so a change survives a force-quit before the
+    /// debounced sync-up fires — the next launch/foreground/background trigger will
+    /// still attempt to catch it up instead of silently losing it.
+    static func markDirty(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: dirtyFlagKey)
+    }
+
+    static func setAutoSyncEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: autoSyncEnabledKey)
     }
 
     static func connect(to folderURL: URL, defaults: UserDefaults = .standard) throws {
@@ -85,6 +115,7 @@ enum FolderSyncService {
         defaults.removeObject(forKey: folderPathKey)
         defaults.removeObject(forKey: lastSyncAtKey)
         defaults.removeObject(forKey: lastErrorKey)
+        defaults.removeObject(forKey: dirtyFlagKey)
     }
 
     @discardableResult
@@ -97,6 +128,7 @@ enum FolderSyncService {
             let upResult = try await performSyncUp(in: context, defaults: defaults)
             result.didWriteRemoteFile = upResult.didWriteRemoteFile
             recordSuccess(defaults: defaults)
+            defaults.set(false, forKey: dirtyFlagKey)
             return result
         }
     }
@@ -123,6 +155,7 @@ enum FolderSyncService {
         return try await runGuarded(defaults: defaults) {
             let result = try await performSyncUp(in: context, defaults: defaults)
             recordSuccess(defaults: defaults)
+            defaults.set(false, forKey: dirtyFlagKey)
             return result
         }
     }
@@ -146,15 +179,18 @@ enum FolderSyncService {
         defaults: UserDefaults,
         operation: @MainActor () async throws -> FolderSyncResult
     ) async throws -> FolderSyncResult {
-        guard PersistenceOperationGate.begin(.folderSync) else {
-            throw FolderSyncError.operationInProgress(
-                PersistenceOperationGate.active?.title ?? "another persistence operation"
-            )
-        }
-        defer { PersistenceOperationGate.end(.folderSync) }
         do {
+            guard PersistenceOperationGate.begin(.folderSync) else {
+                throw FolderSyncError.operationInProgress(
+                    PersistenceOperationGate.active?.title ?? "another persistence operation"
+                )
+            }
+            defer { PersistenceOperationGate.end(.folderSync) }
             return try await operation()
         } catch {
+            // Record even a gate-rejection, not just "real" failures — otherwise a sync
+            // that silently loses a contention race leaves no trace anywhere the user
+            // or a developer could see, unlike every other failure mode.
             recordError(error, defaults: defaults)
             throw error
         }

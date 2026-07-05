@@ -22,9 +22,25 @@ struct ContentView: View {
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
     @State private var folderSyncUpTask: Task<Void, Never>?
+    @State private var lastForegroundFolderSyncAt: Date?
+
+    /// Automatic sync triggers only run more than once a minute when the scene keeps
+    /// flipping active (Control Center, quick app-switches); an explicit dirty change
+    /// or a manual Sync Now still goes through immediately regardless of this gate.
+    private static let foregroundSyncThrottle: TimeInterval = 60
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    /// Library Sync Folder onboarding gates — separate from the welcome gate above so
+    /// completing one never implies the other. Mirrors FolderSyncOnboardingState's keys
+    /// so this view re-renders when either changes (a plain UserDefaults read wouldn't).
+    @AppStorage(FolderSyncOnboardingState.configuredKey) private var hasConfiguredSyncFolder = false
+    @AppStorage(FolderSyncOnboardingState.permanentlyDismissedKey)
+    private var syncOnboardingDismissedPermanently = false
+    /// In-memory only — dismissing without "Don't remind me again" should still let the
+    /// user into the app for the rest of THIS launch, without touching either persisted
+    /// flag above (so it reappears next launch, per the required behavior).
+    @State private var dismissedSyncFolderOnboardingThisSession = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
     #if os(iOS)
@@ -59,16 +75,32 @@ struct ContentView: View {
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
                 await PersistenceMigrationService.runIfNeeded(in: modelContext)
+                guard FolderSyncService.snapshot().autoSyncEnabled else { return }
+                lastForegroundFolderSyncAt = Date()
                 _ = try? await FolderSyncService.syncDown(in: modelContext)
+                // Catches up anything a prior session's debounce lost to a force-quit —
+                // the dirty flag is durable across launches, unlike the debounce Task.
+                if FolderSyncService.snapshot().isDirty {
+                    _ = try? await FolderSyncService.syncUp(in: modelContext)
+                }
             }
             .onChange(of: scenePhase) { _, phase in
+                guard FolderSyncService.snapshot().autoSyncEnabled else { return }
                 switch phase {
                 case .active:
+                    let now = Date()
+                    if let last = lastForegroundFolderSyncAt,
+                       now.timeIntervalSince(last) < Self.foregroundSyncThrottle,
+                       !FolderSyncService.snapshot().isDirty {
+                        return
+                    }
+                    lastForegroundFolderSyncAt = now
                     Task { @MainActor in
                         _ = try? await FolderSyncService.syncDown(in: modelContext)
                     }
                 case .inactive, .background:
                     folderSyncUpTask?.cancel()
+                    guard FolderSyncService.snapshot().isDirty else { return }
                     Task { @MainActor in
                         _ = try? await FolderSyncService.syncUp(in: modelContext)
                     }
@@ -77,6 +109,14 @@ struct ContentView: View {
                 }
             }
             .onChange(of: folderSyncChangeToken) { _, _ in
+                FolderSyncService.markDirty()
+                scheduleFolderSyncUp()
+            }
+            // Settings that ship in the backup manifest (reader/privacy prefs) live in
+            // SettingsView's own @AppStorage bindings — it marks sync dirty itself via
+            // NotificationCenter since it isn't always mounted while ContentView is.
+            .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
+                FolderSyncService.markDirty()
                 scheduleFolderSyncUp()
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
@@ -94,7 +134,8 @@ struct ContentView: View {
                 BugReportView()
                 #endif
             }
-        // First-launch welcome, shown before normal navigation. The theme is
+        // First-launch welcome, then (once that's done) sync-folder onboarding — never
+        // both at once, never sync-onboarding in place of welcome. The theme is
         // re-injected because presented covers/sheets don't inherit it here.
         #if os(iOS)
             .fullScreenCover(isPresented: onboardingPresented) {
@@ -102,9 +143,19 @@ struct ContentView: View {
                     .environment(theme)
                     .tint(theme.effectiveTint)
             }
+            .fullScreenCover(isPresented: syncFolderOnboardingPresented) {
+                SyncFolderOnboardingView(onFinished: { dismissedSyncFolderOnboardingThisSession = true })
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
+            }
         #else
             .sheet(isPresented: onboardingPresented) {
                 WelcomeView(onContinue: { hasCompletedOnboarding = true })
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
+            }
+            .sheet(isPresented: syncFolderOnboardingPresented) {
+                SyncFolderOnboardingView(onFinished: { dismissedSyncFolderOnboardingThisSession = true })
                     .environment(theme)
                     .tint(theme.effectiveTint)
             }
@@ -116,6 +167,24 @@ struct ContentView: View {
         Binding(
             get: { !hasCompletedOnboarding },
             set: { if !$0 { hasCompletedOnboarding = true } }
+        )
+    }
+
+    /// Presents once welcome is done and sync-folder onboarding hasn't been configured
+    /// or permanently dismissed. Dismissing without "Don't remind me again" doesn't touch
+    /// either persisted flag — `dismissedSyncFolderOnboardingThisSession` is what actually
+    /// closes the cover for the rest of this launch, so it correctly reappears next time.
+    private var syncFolderOnboardingPresented: Binding<Bool> {
+        Binding(
+            get: {
+                hasCompletedOnboarding
+                    && !hasConfiguredSyncFolder
+                    && !syncOnboardingDismissedPermanently
+                    && !dismissedSyncFolderOnboardingThisSession
+            },
+            set: { isPresented in
+                if !isPresented { dismissedSyncFolderOnboardingThisSession = true }
+            }
         )
     }
 
@@ -136,7 +205,8 @@ struct ContentView: View {
     }
 
     private func scheduleFolderSyncUp() {
-        guard FolderSyncService.snapshot().isConnected else { return }
+        let snapshot = FolderSyncService.snapshot()
+        guard snapshot.isConnected, snapshot.autoSyncEnabled else { return }
         folderSyncUpTask?.cancel()
         folderSyncUpTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 7_000_000_000)

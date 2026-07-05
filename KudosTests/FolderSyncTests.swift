@@ -136,6 +136,30 @@ struct FolderSyncTests {
         } catch let error as FolderSyncError {
             #expect(error == .operationInProgress(PersistenceOperationKind.backupImport.title))
         }
+        // A gate-rejected attempt must still be visible, not silently dropped, since it
+        // isn't a "real" failure like a bad bookmark or a read error.
+        #expect(!FolderSyncService.snapshot(defaults: defaults).lastError.isEmpty)
+    }
+
+    @Test func dirtyFlagOnlyClearsAfterAnActualWrite() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        FolderSyncService.markDirty(defaults: defaults)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty)
+
+        // A pure sync-down (nothing to read yet) must not clear it — dirty means "local
+        // changes not yet written out", and no write happened.
+        _ = try await FolderSyncService.syncDown(in: context, defaults: defaults)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty)
+
+        _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+        #expect(FolderSyncService.snapshot(defaults: defaults).isDirty == false)
     }
 
     @Test func foldConflictContentsMergesAllInputs() throws {
@@ -151,6 +175,138 @@ struct FolderSyncTests {
         #expect(result.foldedConflicts == 2)
         #expect(result.restoredWorks == 2)
         #expect(Set(works.compactMap(\.ao3WorkID)) == [3001, 3002])
+    }
+
+    /// A work explicitly removed from a collection must not be silently re-added by a
+    /// stale sync file that still lists it — the same resurrection bug class fixed for
+    /// deleted works/queues, now closed for collection membership too.
+    @Test func removedCollectionMembershipIsNotResurrectedByStaleSync() async throws {
+        let defaults = try testDefaults()
+        let container = try container()
+        let context = container.mainContext
+
+        let work = try insertWork(into: context, title: "Shelved Work", ao3WorkID: 5001)
+        let collection = WorkCollection(name: "Comfort Shelf")
+        collection.id = UUID(uuidString: "00000000-0000-0000-0000-0000000C0111")!
+        collection.markModified(Date(timeIntervalSince1970: 100))
+        collection.works.append(work)
+        work.collections.append(collection)
+        context.insert(collection)
+        try context.save()
+
+        // The stale manifest: a snapshot from before the removal, still listing the work.
+        let staleDocument = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            collections: [collection],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        // The user removes the work from the collection at t=150 — after the stale
+        // manifest's t=100, so that snapshot must not resurrect it. Constructed directly
+        // (rather than via the real-"now"-stamping helper) for a meaningful boundary
+        // comparison rather than "any real date dwarfs a synthetic epoch timestamp".
+        context.insert(SyncTombstone(
+            recordID: SyncTombstone.collectionMembershipID(collectionID: collection.id, workID: work.id),
+            recordType: .workCollectionMembership,
+            createdAt: Date(timeIntervalSince1970: 150)
+        ))
+        collection.works.removeAll { $0.id == work.id }
+        work.collections.removeAll { $0.id == collection.id }
+        collection.markModified(Date(timeIntervalSince1970: 200))
+        try context.save()
+
+        _ = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+
+        let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
+        #expect(restored.works.isEmpty)
+    }
+
+    /// A collection snapshot demonstrably newer than the removal (e.g. the work was
+    /// re-added on another device afterward) must still be allowed through.
+    @Test func newerCollectionSnapshotRevivesRemovedMembership() async throws {
+        let defaults = try testDefaults()
+        let container = try container()
+        let context = container.mainContext
+
+        let work = try insertWork(into: context, title: "Re-shelved Work", ao3WorkID: 5002)
+        let collection = WorkCollection(name: "Comfort Shelf")
+        collection.id = UUID(uuidString: "00000000-0000-0000-0000-0000000C0222")!
+        collection.markModified(Date(timeIntervalSince1970: 100))
+        context.insert(collection)
+        try context.save()
+
+        // The user removes the work at t=150 — constructed directly (rather than via
+        // SyncTombstones.recordCollectionMembershipRemoval, which stamps real "now") so
+        // the timestamp is comparable against the synthetic t=300 archive below.
+        context.insert(SyncTombstone(
+            recordID: SyncTombstone.collectionMembershipID(collectionID: collection.id, workID: work.id),
+            recordType: .workCollectionMembership,
+            createdAt: Date(timeIntervalSince1970: 150)
+        ))
+        try context.save()
+
+        // A newer snapshot (t=300) re-adds the work — newer than the removal, so it wins.
+        collection.works.append(work)
+        collection.markModified(Date(timeIntervalSince1970: 300))
+        let newerDocument = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            collections: [collection],
+            readingQueues: [],
+            defaults: defaults
+        )
+        collection.works.removeAll { $0.id == work.id }
+        collection.markModified(Date(timeIntervalSince1970: 100))
+        try context.save()
+
+        _ = try KudosBackupService.restore(newerDocument.contents, into: context, defaults: defaults)
+
+        let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
+        #expect(restored.works.map(\.id) == [work.id])
+    }
+
+    /// The queue-conflict path reports suppressed/revived/ambiguous counts to the user;
+    /// collections now must too, rather than resolving conflicts invisibly.
+    @Test func collectionTombstoneConflictsAreReportedInRestoreSummary() throws {
+        let defaults = try testDefaults()
+
+        // Build the stale archived collection in a throwaway source container, mirroring
+        // how every other test in this file builds KudosBackup* structs from real models.
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let staleCollection = WorkCollection(name: "Long Gone")
+        let suppressedID = UUID(uuidString: "00000000-0000-0000-0000-0000000C0333")!
+        staleCollection.id = suppressedID
+        staleCollection.markModified(Date(timeIntervalSince1970: 100))
+        sourceContext.insert(staleCollection)
+        try sourceContext.save()
+        let staleDocument = try KudosBackupService.makeDocument(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            collections: [staleCollection],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        let container = try container()
+        let context = container.mainContext
+        context.insert(SyncTombstone(
+            recordID: suppressedID,
+            recordType: .workCollection,
+            createdAt: Date(timeIntervalSince1970: 500)
+        ))
+        try context.save()
+
+        let summary = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+
+        #expect(summary.suppressedCollections == 1)
+        #expect(try context.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
+        #expect(summary.conflictMessage.contains("previously deleted collection"))
     }
 
     @Test func syncUpDoesNotChangeLocalModificationDates() async throws {

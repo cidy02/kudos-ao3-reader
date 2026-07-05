@@ -3,7 +3,12 @@ import SwiftData
 import Testing
 @testable import Kudos
 
+// Serialized: several tests here and in FolderSyncTests/KudosBackupTests exercise
+// PersistenceOperationGate, a process-wide static gate that's meaningfully global in
+// the real app (only one instance ever runs) but can spuriously contend across
+// concurrently-running test suites otherwise.
 @MainActor
+@Suite(.serialized)
 struct PersistenceSyncTests {
     private func container() throws -> ModelContainer {
         let schema = Schema([

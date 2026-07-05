@@ -65,6 +65,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var isPreparingPersistence = false
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var isFolderSyncing = false
+    @State private var showingSyncDetails = false
+    @State private var lastFolderSyncResult: FolderSyncResult?
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -274,7 +276,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         onChooseFolder: { choosingSyncFolder = true },
                         onSyncNow: startFolderSyncNow,
                         onDisconnect: disconnectSyncFolder,
-                        onRetryPreparation: preparePersistenceForSync
+                        onRetryPreparation: preparePersistenceForSync,
+                        onToggleAutoSync: setAutoSyncEnabled,
+                        onShowSyncDetails: { showingSyncDetails = true }
                     )
 
                     EPUBImportSettingsSection(
@@ -483,6 +487,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         .sheet(isPresented: $showAbout) {
             NavigationStack { AboutView() }
         }
+        .sheet(isPresented: $showingSyncDetails) {
+            NavigationStack {
+                FolderSyncDetailsView(folderStatus: folderSyncStatus, lastResult: lastFolderSyncResult)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: Font import / delete
@@ -674,7 +685,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 isFolderSyncing = false
             }
             do {
-                _ = try await FolderSyncService.syncNow(in: context)
+                lastFolderSyncResult = try await FolderSyncService.syncNow(in: context)
             } catch {
                 backupNotice = BackupNotice(
                     title: "Folder Sync Couldn't Finish",
@@ -686,6 +697,11 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
     private func disconnectSyncFolder() {
         FolderSyncService.disconnect()
+        folderSyncStatus = FolderSyncService.snapshot()
+    }
+
+    private func setAutoSyncEnabled(_ enabled: Bool) {
+        FolderSyncService.setAutoSyncEnabled(enabled)
         folderSyncStatus = FolderSyncService.snapshot()
     }
 
@@ -823,6 +839,8 @@ struct FolderSyncSettingsSection: View {
     let onSyncNow: () -> Void
     let onDisconnect: () -> Void
     let onRetryPreparation: () -> Void
+    let onToggleAutoSync: (Bool) -> Void
+    let onShowSyncDetails: () -> Void
 
     var body: some View {
         Section {
@@ -847,10 +865,26 @@ struct FolderSyncSettingsSection: View {
                     Label("Folder", systemImage: "folder")
                 }
 
+                Toggle(isOn: Binding(
+                    get: { folderStatus.autoSyncEnabled },
+                    set: onToggleAutoSync
+                )) {
+                    Label("Auto Sync", systemImage: "arrow.triangle.2.circlepath.circle")
+                }
+
                 Button(action: onSyncNow) {
                     Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .disabled(isSyncing || isPreparing)
+
+                Button(action: onChooseFolder) {
+                    Label("Change Folder", systemImage: "folder.badge.gearshape")
+                }
+                .disabled(isSyncing || isPreparing)
+
+                Button(action: onShowSyncDetails) {
+                    Label("Sync Details", systemImage: "list.bullet.rectangle")
+                }
 
                 Button(role: .destructive, action: onDisconnect) {
                     Label("Disconnect", systemImage: "xmark.circle")
@@ -898,8 +932,53 @@ struct FolderSyncSettingsSection: View {
             Text(persistenceStatus.detail + " Your library data — including reading history — is written "
                 + "to the folder you choose. If that folder is in iCloud Drive, Apple syncs it to your "
                 + "other devices through your personal iCloud account. Kudos still works fully offline. "
-                + "This is folder-based sync using the existing backup format, not real-time CloudKit sync.")
+                + "This is folder-based sync using the existing backup format, not real-time CloudKit sync. "
+                + "Turning off Auto Sync stops automatic background/launch syncing — Sync Now still works.")
         }
+    }
+}
+
+/// Lightweight diagnostics, mainly useful during development/testing — deliberately
+/// tucked behind its own screen rather than cluttering the main Settings list.
+struct FolderSyncDetailsView: View {
+    let folderStatus: FolderSyncSnapshot
+    let lastResult: FolderSyncResult?
+
+    var body: some View {
+        Form {
+            Section("Status") {
+                LabeledContent("Connected", value: folderStatus.isConnected ? "Yes" : "No")
+                LabeledContent("Auto Sync", value: folderStatus.autoSyncEnabled ? "On" : "Off")
+                LabeledContent("Pending Changes", value: folderStatus.isDirty ? "Yes" : "No")
+                if let date = folderStatus.lastSyncAt {
+                    LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .standard))
+                }
+                if !folderStatus.lastError.isEmpty {
+                    LabeledContent("Last Error", value: folderStatus.lastError)
+                }
+            }
+            if let lastResult {
+                Section("Last Sync Result") {
+                    LabeledContent("Read Remote File", value: lastResult.didReadRemoteFile ? "Yes" : "No")
+                    LabeledContent("Wrote Remote File", value: lastResult.didWriteRemoteFile ? "Yes" : "No")
+                    LabeledContent("Missing Remote File", value: lastResult.missingRemoteFile ? "Yes" : "No")
+                    LabeledContent("Conflicts Folded", value: "\(lastResult.foldedConflicts)")
+                    LabeledContent("Works Restored", value: "\(lastResult.restoredWorks)")
+                    LabeledContent("Queues Suppressed", value: "\(lastResult.suppressedQueues)")
+                    LabeledContent("Queues Revived", value: "\(lastResult.revivedQueues)")
+                    LabeledContent("Ambiguous Queue Conflicts", value: "\(lastResult.ambiguousQueueConflicts)")
+                }
+            } else {
+                Section {
+                    Text("No sync has run yet this session.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Sync Details")
+        #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 

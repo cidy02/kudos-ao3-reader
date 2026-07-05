@@ -813,6 +813,9 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var revivedQueues: Int = 0
     var restoredRevivedQueueMemberships: Int = 0
     var ambiguousQueueConflicts: Int = 0
+    var suppressedCollections: Int = 0
+    var revivedCollections: Int = 0
+    var ambiguousCollectionConflicts: Int = 0
 
     var conflictMessage: String {
         var parts: [String] = []
@@ -829,6 +832,18 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         if ambiguousQueueConflicts > 0 {
             parts.append("Preserved \(ambiguousQueueConflicts) queue conflict"
                 + "\(ambiguousQueueConflicts == 1 ? "" : "s") because the state was ambiguous.")
+        }
+        if revivedCollections > 0 {
+            parts.append("Restored \(revivedCollections) collection\(revivedCollections == 1 ? "" : "s") "
+                + "with newer changes than a previous deletion.")
+        }
+        if suppressedCollections > 0 {
+            parts.append("Skipped \(suppressedCollections) previously deleted collection"
+                + "\(suppressedCollections == 1 ? "" : "s").")
+        }
+        if ambiguousCollectionConflicts > 0 {
+            parts.append("Preserved \(ambiguousCollectionConflicts) collection conflict"
+                + "\(ambiguousCollectionConflicts == 1 ? "" : "s") because the state was ambiguous.")
         }
         return parts.joined(separator: " ")
     }
@@ -986,6 +1001,9 @@ enum KudosBackupService {
             existingCollections.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        var suppressedCollections = 0
+        var revivedCollections = 0
+        var ambiguousCollectionConflicts = 0
         for archived in contents.manifest.collections {
             let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
             let collection: WorkCollection
@@ -999,12 +1017,16 @@ enum KudosBackupService {
                     incomingModifiedAt: incomingModifiedAt
                 ) {
                 case .suppressStaleData:
+                    suppressedCollections += 1
                     continue
                 case .preserveAmbiguous:
+                    ambiguousCollectionConflicts += 1
                     Log.library.notice(
                         "Preserving ambiguous collection \(archived.id.uuidString, privacy: .public)"
                     )
-                case .reviveNewerData, .noTombstone:
+                case .reviveNewerData:
+                    revivedCollections += 1
+                case .noTombstone:
                     break
                 }
                 collection = WorkCollection(name: archived.name)
@@ -1014,10 +1036,11 @@ enum KudosBackupService {
                 isNewCollection = true
             }
 
-            if isNewCollection || SyncMerge.shouldApplyIncoming(
+            let incomingWins = isNewCollection || SyncMerge.shouldApplyIncoming(
                 localModifiedAt: collection.lastModifiedAt,
                 incomingModifiedAt: incomingModifiedAt
-            ) || collection.name.isEmpty {
+            )
+            if incomingWins || collection.name.isEmpty {
                 collection.name = archived.name
                 collection.syncStatusRaw = archived.syncStatusRaw ?? collection.syncStatusRaw
             }
@@ -1027,10 +1050,24 @@ enum KudosBackupService {
             }
             collection.lastModifiedAt = max(collection.lastModifiedAt, incomingModifiedAt)
             collection.deletedAt = collection.deletedAt ?? archived.deletedAt
-            collection.isDeleted = collection.isDeleted && (archived.isDeleted ?? false)
+            // Gated the same way as SavedWork's isFavorite/isSaved/isFinished/isComplete
+            // fix: an unconditional merge here would let an older, non-deleted snapshot
+            // permanently flip a soft-deleted collection back to not-deleted the moment
+            // it syncs in, the same bug class fixed for those boolean flags.
+            collection.isDeleted = incomingWins ? (archived.isDeleted ?? false) : collection.isDeleted
 
             for workID in archived.workIDs {
                 guard let work = restoredWorksByArchivedID[workID] else { continue }
+                // A stale manifest can still list a work the user explicitly removed
+                // from this collection since — don't let the union-merge below silently
+                // re-add it unless the archive is demonstrably newer than that removal.
+                if tombstones.suppressesCollectionMembership(
+                    collectionID: collection.id,
+                    workID: work.id,
+                    incomingModifiedAt: incomingModifiedAt
+                ) {
+                    continue
+                }
                 if !collection.works.contains(where: { $0.id == work.id }) {
                     collection.works.append(work)
                 }
@@ -1275,7 +1312,10 @@ enum KudosBackupService {
             suppressedQueueMemberships: suppressedQueueMemberships,
             revivedQueues: revivedQueues,
             restoredRevivedQueueMemberships: restoredRevivedQueueMemberships,
-            ambiguousQueueConflicts: ambiguousQueueConflicts
+            ambiguousQueueConflicts: ambiguousQueueConflicts,
+            suppressedCollections: suppressedCollections,
+            revivedCollections: revivedCollections,
+            ambiguousCollectionConflicts: ambiguousCollectionConflicts
         )
     }
 
@@ -1294,6 +1334,7 @@ enum KudosBackupService {
         private var collectionTombstonesByID: [UUID: SyncTombstone] = [:]
         private var queueTombstonesByID: [UUID: SyncTombstone] = [:]
         private var membershipTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var collectionMembershipTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -1315,6 +1356,8 @@ enum KudosBackupService {
                     indexNewest(tombstone, byQueueID: tombstone.recordID)
                 case .readingQueueMembership:
                     indexNewest(tombstone, byMembershipID: tombstone.recordID)
+                case .workCollectionMembership:
+                    indexNewest(tombstone, byCollectionMembershipID: tombstone.recordID)
                 }
             }
         }
@@ -1364,6 +1407,14 @@ enum KudosBackupService {
             membershipTombstonesByID[id] = tombstone
         }
 
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionMembershipID id: UUID) {
+            if let existing = collectionMembershipTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            collectionMembershipTombstonesByID[id] = tombstone
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone?
@@ -1400,6 +1451,19 @@ enum KudosBackupService {
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: membershipTombstonesByID[id]?.lastModifiedAt
             )
+        }
+
+        /// Whether a work explicitly removed from this collection should stay removed
+        /// rather than being re-added by an archived manifest that still lists it.
+        func suppressesCollectionMembership(
+            collectionID: UUID,
+            workID: UUID,
+            incomingModifiedAt: Date?
+        ) -> Bool {
+            let id = SyncTombstone.collectionMembershipID(collectionID: collectionID, workID: workID)
+            guard let tombstone = collectionMembershipTombstonesByID[id] else { return false }
+            guard let incomingModifiedAt else { return true }
+            return tombstone.lastModifiedAt >= incomingModifiedAt
         }
     }
 

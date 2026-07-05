@@ -319,6 +319,23 @@ enum SyncTombstones {
             deletionReason: "queueMembershipRemoved"
         ))
     }
+
+    /// Records that `work` was explicitly removed from `collection`, so a stale sync
+    /// file (an older manifest that still lists this work in the collection) can't
+    /// silently re-add it on the next merge — the same class of bug tombstones already
+    /// prevent for deleted works/queues/queue memberships.
+    static func recordCollectionMembershipRemoval(
+        work: SavedWork,
+        collection: WorkCollection,
+        in context: ModelContext
+    ) {
+        context.insert(SyncTombstone(
+            recordID: SyncTombstone.collectionMembershipID(collectionID: collection.id, workID: work.id),
+            recordType: .workCollectionMembership,
+            deletedOnDeviceID: PersistenceDevice.currentID(),
+            deletionReason: "collectionMembershipRemoved"
+        ))
+    }
 }
 
 nonisolated enum SyncMerge {
