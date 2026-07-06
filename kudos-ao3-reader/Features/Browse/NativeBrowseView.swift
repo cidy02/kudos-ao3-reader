@@ -365,6 +365,10 @@ struct FandomWorksView: View {
         for summary in selectedSummaries {
             do {
                 resolved.append(try await ReadingQueueService.resolveLocalWork(for: summary, in: context))
+            } catch is CancellationError {
+                // User-abandoned (view dismissed / task cancelled): stop the batch
+                // instead of burning through the rest as instant "failures".
+                return
             } catch {
                 failureCount += 1
             }
@@ -398,6 +402,8 @@ struct FandomWorksView: View {
         for summary in selectedSummaries {
             do {
                 _ = try await ReadingQueueService.addToSavedForLater(summary, in: context)
+            } catch is CancellationError {
+                return
             } catch {
                 failureCount += 1
             }

@@ -54,6 +54,7 @@ func importEPUB(
             throw error
         }
         pending.markModified()
+        WorkSearchIndex.reindex(pending)
         try? context.save()
         Log.library.info("Import revived “\(pending.title)” from Recently Deleted")
         Task { await WorkTags.refreshFromAO3(for: pending, in: context) }
@@ -96,6 +97,7 @@ func importEPUB(
     }
 
     context.insert(work)
+    WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported work “\(title)”")
 
@@ -211,11 +213,13 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
             duplicate.hasEPUB = true
             duplicate.isSaved = true
             duplicate.markModified()
+            WorkSearchIndex.reindex(duplicate)
             try? context.save()
             Task { await WorkTags.refreshFromAO3(for: duplicate, in: context) }
             return .restored(duplicate)
         }
         duplicate.markModified()
+        WorkSearchIndex.reindex(duplicate)
         try? context.save()
         return revivedFromRecentlyDeleted ? .restored(duplicate) : .duplicate(duplicate)
     }
@@ -236,6 +240,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     try copyImportedEPUB(from: url, to: work.fileURL)
 
     context.insert(work)
+    WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported user EPUB “\(work.title)”")
 

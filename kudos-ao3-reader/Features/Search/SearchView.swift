@@ -229,11 +229,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         filters.query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Matches against the precomputed `WorkSearchIndex` text — case- and
+    /// diacritic-insensitive over title, author, tags, rating, language, and summary
+    /// (previously title/author only, re-lowercased per keystroke). The query's
+    /// terms must all match, so multi-word queries can span fields; results keep the
+    /// query's own newest-first order.
     private var matchingWorks: [SavedWork] {
-        let query = localQuery.lowercased()
-        return savedWorks.filter {
-            $0.title.lowercased().contains(query) || $0.author.lowercased().contains(query)
-        }
+        let terms = WorkSearchIndex.terms(from: localQuery)
+        return savedWorks.filter { WorkSearchIndex.matches($0, terms: terms) }
     }
 
     private var matchingFandoms: [String] {

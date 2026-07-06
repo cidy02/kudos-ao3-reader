@@ -637,6 +637,7 @@ enum ReadingQueueService {
         if work.seriesPosition == 0 { work.seriesPosition = summary.seriesPosition ?? 0 }
         if work.ao3SeriesID == nil { work.ao3SeriesID = ao3SeriesID(from: work.seriesURL) }
         work.markModified()
+        WorkSearchIndex.reindex(work)
     }
 
     static func ao3SeriesID(from urlString: String) -> Int? {

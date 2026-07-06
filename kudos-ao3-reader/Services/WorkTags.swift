@@ -51,6 +51,7 @@ enum WorkTags {
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
             work.markModified()
+            WorkSearchIndex.reindex(work)
             try? context.save()
         } catch AO3Error.notFound {
             // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
@@ -84,6 +85,7 @@ enum WorkTags {
         work.workTags = tags
         if work.rating.isEmpty { work.rating = meta.rating }
         work.markModified()
+        WorkSearchIndex.reindex(work)
         try? context.save()
     }
 

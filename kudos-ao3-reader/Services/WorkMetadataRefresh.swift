@@ -80,6 +80,7 @@ enum WorkMetadataRefresh {
         // Safety rule: all network/parse failures throw before this point. From here
         // onward we merge a fully parsed value and never delete/unlink local records.
         apply(metadata, to: work)
+        WorkSearchIndex.reindex(work)
         try context.save()
     }
 

@@ -10,7 +10,9 @@ import SwiftSoup
 // polite and personal.
 
 // Lint: the existing client keeps scraping/parsing behavior centralized.
-/// Serialized network access to AO3 (one request at a time keeps us polite).
+/// Central AO3 network access: every request is paced (see `pace()`), retried with
+/// backoff only when transient, coalesced when identical, and status-checked into
+/// typed errors — one place owns the politeness rules.
 actor AO3Client { // swiftlint:disable:this type_body_length
     static let shared = AO3Client()
 
@@ -19,13 +21,39 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     init() {
         let config = URLSessionConfiguration.default
-        // A browser-like User-Agent; AO3 throttles unfamiliar clients harder.
+        // Browser-like base (AO3 throttles unfamiliar clients harder) + an honest,
+        // unique product token with a contact URL, per polite-scraper convention —
+        // AO3 admins can identify the app and reach its repository if they ever
+        // need it to change behavior.
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         config.httpAdditionalHeaders = [
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+                + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 "
+                + "KudosReader/\(version) (+https://github.com/cidy02/kudos-ao3-reader)"
         ]
         config.timeoutIntervalForRequest = 30
         session = URLSession(configuration: config)
+    }
+
+    // MARK: Pacing
+
+    /// Next instant a request may start. Actors are reentrant — several fetches can
+    /// interleave across `await`s despite the actor — so the old "one request at a
+    /// time" assumption didn't actually hold. This slot-claiming pacer makes the
+    /// politeness real: every network call (GETs, POSTs, EPUB downloads, retries)
+    /// claims the next slot synchronously, then sleeps out its own wait, so request
+    /// *starts* are always at least `minRequestInterval` apart no matter how many
+    /// callers are in flight.
+    private var nextAllowedRequestAt = Date.distantPast
+    private let minRequestInterval: TimeInterval = 0.6
+
+    private func pace() async throws {
+        let now = Date()
+        let wait = nextAllowedRequestAt.timeIntervalSince(now)
+        nextAllowedRequestAt = max(now, nextAllowedRequestAt).addingTimeInterval(minRequestInterval)
+        if wait > 0 {
+            try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        }
     }
 
     // MARK: Requests
@@ -57,6 +85,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private func performFetch(from url: URL) async throws -> Data {
         Log.network.debug("GET \(url.absoluteString, privacy: .public)")
         return try await withRetry {
+            try await pace()
             let (data, response) = try await session.data(from: url)
             try Self.check(response)
             return data
@@ -70,6 +99,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         switch http.statusCode {
         case 200 ... 299: return
         case 429: throw AO3Error.rateLimited(retryAfter: retryAfter(from: http))
+        case 403: throw AO3Error.forbidden
         case 404: throw AO3Error.notFound
         case 500 ... 599: throw AO3Error.server(status: http.statusCode)
         default: throw AO3Error.http(status: http.statusCode)
@@ -296,6 +326,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
 
         let (data, response) = try await withRetry {
+            try await pace()
             let (data, response) = try await session.data(for: request)
             try Self.check(response)
             return (data, response)
@@ -321,6 +352,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         var request = request
         request.httpShouldHandleCookies = false
         Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
+        try await pace()
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
@@ -472,6 +504,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             throw AO3Error.network("Bad download URL.")
         }
         let tempURL = try await withRetry { () -> URL in
+            try await pace()
             let (tempURL, response) = try await session.download(from: url)
             try Self.check(response)
             return tempURL

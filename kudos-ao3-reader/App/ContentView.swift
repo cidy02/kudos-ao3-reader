@@ -78,6 +78,9 @@ struct ContentView: View {
                 // Independent of folder sync — a local Recently Deleted item past its
                 // 90-day window is swept whether or not Auto Sync is even on.
                 PreservedWorkService.sweepExpired(in: modelContext)
+                // Backfills the derived search text for records that predate indexing,
+                // arrived via an older backup, or were indexed under an older schema.
+                WorkSearchIndex.rebuildIfNeeded(in: modelContext)
                 guard FolderSyncService.snapshot().autoSyncEnabled else { return }
                 lastForegroundFolderSyncAt = Date()
                 _ = try? await FolderSyncService.syncDown(in: modelContext)

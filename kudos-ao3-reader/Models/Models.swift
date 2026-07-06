@@ -120,6 +120,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// meaningful while `isPendingDeletion == true`.
     var permanentDeletionScheduledAt: Date?
 
+    /// Derived, rebuildable search text: the work's searchable fields (title, author,
+    /// tags, rating, language, …) normalized once (lowercased, diacritics folded) by
+    /// `WorkSearchIndex.reindex` so Library/Search matching never re-normalizes per
+    /// keystroke. Never source of truth, never exported in backups — any record can be
+    /// rebuilt from the real fields at any time (see `searchIndexVersion`).
+    var searchText: String = ""
+    /// Stamp of the `WorkSearchIndex` schema this record was last indexed with. A
+    /// mismatch with `WorkSearchIndex.currentVersion` (including 0 for records that
+    /// predate indexing or arrived via backup restore) marks it for the launch rebuild.
+    var searchIndexVersion: Int = 0
+
     /// Stable name for the EPUB asset associated with this metadata record. This is
     /// intentionally separate from title/author/source URL so future iCloud Documents
     /// asset lookup can survive AO3 metadata edits and local title changes.
