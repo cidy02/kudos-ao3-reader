@@ -23,23 +23,15 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXTargetDependency section */
-		000000000000000560000000 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 000000000000000100000000 /* AO3_App_OpenSource */;
-			targetProxy = 000000000000000550000000 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin PBXFileReference section */
-		000000000000000000000120 /* AO3_App_OpenSource.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AO3_App_OpenSource.app; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000120 /* Kudos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		000000000000000000000010 /* AO3_App_OpenSource */ = {
+		000000000000000000000010 /* kudos-ao3-reader */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = kudos-ao3-reader;
+			path = "kudos-ao3-reader";
 			sourceTree = "<group>";
 		};
 		000000000000000000000510 /* KudosTests */ = {
@@ -70,7 +62,7 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				000000000000000000000010 /* AO3_App_OpenSource */,
+				000000000000000000000010 /* kudos-ao3-reader */,
 				000000000000000000000510 /* KudosTests */,
 				000000000000000000000020 /* Products */,
 			);
@@ -79,7 +71,7 @@
 		000000000000000000000020 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				000000000000000000000120 /* AO3_App_OpenSource.app */,
+				000000000000000000000120 /* Kudos.app */,
 				000000000000000000000520 /* KudosTests.xctest */,
 			);
 			name = Products;
@@ -101,7 +93,7 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				000000000000000000000010 /* AO3_App_OpenSource */,
+				000000000000000000000010 /* kudos-ao3-reader */,
 			);
 			name = AO3_App_OpenSource;
 			packageProductDependencies = (
@@ -111,7 +103,7 @@
 				000000000000000330000000 /* ReadiumNavigator */,
 			);
 			productName = MyApp;
-			productReference = 000000000000000000000120 /* AO3_App_OpenSource.app */;
+			productReference = 000000000000000000000120 /* Kudos.app */;
 			productType = "com.apple.product-type.application";
 		};
 		000000000000000500000000 /* KudosTests */ = {
@@ -131,8 +123,6 @@
 				000000000000000000000510 /* KudosTests */,
 			);
 			name = KudosTests;
-			packageProductDependencies = (
-			);
 			productName = KudosTests;
 			productReference = 000000000000000000000520 /* KudosTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -238,11 +228,11 @@
 			inputPaths = (
 				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
 			);
+			name = "Add Background Modes to Info.plist (iOS only)";
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
 				"$(DERIVED_FILE_DIR)/BackgroundModesInjected.stamp",
 			);
-			name = "Add Background Modes to Info.plist (iOS only)";
 			shellPath = /bin/sh;
 			shellScript = (
 				"# GENERATE_INFOPLIST_FILE=YES's INFOPLIST_KEY_* mechanism does not support",
@@ -280,7 +270,7 @@
 				"",
 				"/usr/libexec/PlistBuddy -c \"Delete :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" 2>/dev/null || true",
 				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers array\" \"$PLIST\"",
-				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers:0 string devplaceholder.H17TULZJ.AO3_App_OpenSource.folderSyncRefresh\" \"$PLIST\"",
+				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers:0 string com.cidy02.Kudos.folderSyncRefresh\" \"$PLIST\"",
 				"",
 				"# Fail loudly rather than silently, since PlistBuddy itself doesn't: verify",
 				"# the keys actually landed before declaring success.",
@@ -314,6 +304,14 @@
 			);
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		000000000000000560000000 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000100000000 /* AO3_App_OpenSource */;
+			targetProxy = 000000000000000550000000 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000011000000 /* Debug configuration for PBXProject "AO3_App_OpenSource" */ = {
@@ -455,7 +453,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = NQH85H7343;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -486,7 +484,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = devplaceholder.H17TULZJ.AO3_App_OpenSource;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -508,7 +506,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = NQH85H7343;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -539,7 +537,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = devplaceholder.H17TULZJ.AO3_App_OpenSource;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -563,7 +561,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "devplaceholder.H17TULZJ.KudosTests";
+				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos.KudosTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -584,7 +582,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "devplaceholder.H17TULZJ.KudosTests";
+				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos.KudosTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";

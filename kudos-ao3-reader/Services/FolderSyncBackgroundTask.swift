@@ -12,7 +12,7 @@ import SwiftData
 /// no-entitlement folder-sync design.
 @MainActor
 enum FolderSyncBackgroundTask {
-    static let identifier = "devplaceholder.H17TULZJ.AO3_App_OpenSource.folderSyncRefresh"
+    static let identifier = "com.cidy02.Kudos.folderSyncRefresh"
 
     /// The system only honors a request roughly this far in the future or later —
     /// requesting sooner just wastes the app's limited submission budget.
