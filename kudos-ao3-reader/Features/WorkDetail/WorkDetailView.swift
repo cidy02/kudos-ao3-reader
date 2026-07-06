@@ -761,7 +761,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         case let .saved(work):
             localWork = work
         case let .remote(summary):
-            localWork = existingWork(forSource: summary.workURL, in: context)
+            // A match sitting in Recently Deleted is deliberately not adopted: the
+            // page keeps showing remote state (with Save), and saving revives the
+            // hidden record through importEPUB's Recently Deleted reuse.
+            let match = existingWork(forSource: summary.workURL, in: context)
+            localWork = match?.isPendingDeletion == true ? nil : match
         }
     }
 

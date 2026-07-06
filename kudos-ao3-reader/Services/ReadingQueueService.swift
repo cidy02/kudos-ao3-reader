@@ -254,6 +254,11 @@ enum ReadingQueueService {
         let saved: SavedWork
         let createdNewWork: Bool
         if let existing = existingWork(for: summary, in: context) {
+            // Same revival rule as addAndPreserveSummary — never queue a record that
+            // stays scheduled for permanent deletion.
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
             saved = existing
             createdNewWork = false
         } else {
@@ -418,6 +423,12 @@ enum ReadingQueueService {
             }
 
             if let existing = existingWork(for: summary, in: context) {
+                // Revive before any branch below can `continue` — a series preserve
+                // that touches a Recently Deleted record must never leave it
+                // scheduled for permanent deletion.
+                if existing.isPendingDeletion {
+                    PreservedWorkService.restore(existing, in: context)
+                }
                 if existing.ao3Unavailable {
                     result.unavailable += 1
                     progress?(result)
@@ -492,6 +503,12 @@ enum ReadingQueueService {
         let saved: SavedWork
         let createdNewWork: Bool
         if let existing = existingWork(for: summary, in: context) {
+            // Queueing a work that's sitting in Recently Deleted revives it — a
+            // pending-deletion record would otherwise be queued invisibly and then
+            // swept for good when its recovery window lapses.
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
             saved = existing
             createdNewWork = false
         } else {

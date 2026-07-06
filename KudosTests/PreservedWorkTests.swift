@@ -238,6 +238,104 @@ struct PreservedWorkTests {
         #expect(deviceAWork.permanentDeletionScheduledAt == nil)
     }
 
+    // MARK: - Re-acquiring a Recently Deleted work revives it
+
+    @Test func addToSavedForLaterRevivesRecentlyDeletedWork() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let work = try insertWork(into: context, title: "Deleted Then Requeued", ao3WorkID: 7601)
+        PreservedWorkService.softDelete(work, in: context)
+        #expect(work.isPendingDeletion)
+
+        let saved = try await ReadingQueueService.addToSavedForLater(
+            summary(7601),
+            in: context,
+            downloadEPUB: { _ in throw AO3Error.network("offline") }
+        )
+
+        #expect(saved.id == work.id)
+        #expect(!saved.isPendingDeletion)
+        #expect(saved.deletedAt == nil)
+        #expect(saved.permanentDeletionScheduledAt == nil)
+        #expect(saved.isQueuedForLater)
+        #expect(!(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.recordID == work.id }))
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test func importEPUBRevivesRecentlyDeletedRecordInsteadOfDuplicating() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let work = try insertWork(into: context, title: "Deleted Then Redownloaded", ao3WorkID: 7602)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        PreservedWorkService.softDelete(work, in: context)
+
+        // importEPUB consumes (moves) its temp file, so hand it a fresh copy of the fixture.
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PreservedWorkTests-\(UUID().uuidString).epub")
+        try FileManager.default.copyItem(at: try EPUBTests.sampleEPUB, to: temp)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let imported = try await importEPUB(
+            temp,
+            source: URL(string: "https://archiveofourown.org/works/7602"),
+            into: context
+        )
+
+        #expect(imported.id == work.id)
+        #expect(!imported.isPendingDeletion)
+        #expect(imported.permanentDeletionScheduledAt == nil)
+        #expect(imported.hasEPUB)
+        #expect(FileManager.default.fileExists(atPath: work.fileURL.path))
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test func userEPUBImportRevivesRecentlyDeletedDuplicate() async throws {
+        let container = try container()
+        let context = container.mainContext
+
+        let first = try await importUserEPUB(try EPUBTests.sampleEPUB, into: context)
+        let work = first.work
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        PreservedWorkService.softDelete(work, in: context)
+
+        let second = try await importUserEPUB(try EPUBTests.sampleEPUB, into: context)
+
+        switch second {
+        case .restored(let revived):
+            #expect(revived.id == work.id)
+            #expect(!revived.isPendingDeletion)
+            #expect(revived.permanentDeletionScheduledAt == nil)
+        case .imported, .duplicate:
+            Issue.record("Expected the re-import of a Recently Deleted work to restore it")
+        }
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    private func summary(_ id: Int) -> AO3WorkSummary {
+        AO3WorkSummary(
+            id: id,
+            title: "Summary Work \(id)",
+            authors: ["Writer"],
+            fandoms: ["Fandom"],
+            rating: "Teen And Up Audiences",
+            warnings: ["No Archive Warnings Apply"],
+            categories: [],
+            isComplete: true,
+            dateUpdated: "2026-06-30",
+            tags: ["Freeform"],
+            summary: "Summary \(id)",
+            language: "English",
+            words: 1_000,
+            chapters: "1/1",
+            comments: nil,
+            kudos: nil,
+            hits: nil,
+            seriesTitle: nil,
+            seriesURL: nil,
+            seriesPosition: nil
+        )
+    }
+
     private func container() throws -> ModelContainer {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

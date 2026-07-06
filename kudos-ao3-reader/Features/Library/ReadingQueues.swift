@@ -9,8 +9,10 @@ struct ReadingQueueCard: View {
     @Environment(ThemeManager.self) private var themeManager
     let queue: ReadingQueue
 
+    // Memberships of a soft-deleted work survive (so restoring it re-joins its
+    // queues), but the work itself belongs to Recently Deleted, not this card.
     private var works: [SavedWork] {
-        queue.memberships.compactMap(\.work)
+        queue.memberships.compactMap(\.work).filter { !$0.isPendingDeletion }
     }
 
     var body: some View {
@@ -102,6 +104,8 @@ struct ReadingQueueDetailView: View {
     /// (see `cancelRefreshOnTabChange`) — a queue can hold a large number of works.
     @State private var refreshTask: Task<Void, Never>?
 
+    // Soft-deleted works keep their membership rows (restore re-joins them here)
+    // but render only in Recently Deleted until then.
     private var works: [SavedWork] {
         queue.memberships
             .sorted {
@@ -111,6 +115,7 @@ struct ReadingQueueDetailView: View {
                 return $0.queuedAt > $1.queuedAt
             }
             .compactMap(\.work)
+            .filter { !$0.isPendingDeletion }
     }
 
     private var visibleWorks: [SavedWork] {

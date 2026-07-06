@@ -30,6 +30,36 @@ func importEPUB(
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
 
+    // Re-downloading a work that's sitting in Recently Deleted revives that record
+    // (with all its reading progress) instead of inserting a hidden-twin duplicate —
+    // without this, the new record would show in the Library while the old one stayed
+    // scheduled for permanent deletion, and a later restore would produce two copies.
+    if let source,
+       let pending = existingWork(forSource: source, in: context),
+       pending.isPendingDeletion {
+        PreservedWorkService.restore(pending, in: context)
+        if let meta {
+            applyEPUBMetadata(meta, extracted: .empty, localChapterCount: nil, to: pending, fillOnly: true)
+        }
+        pending.isComplete = isComplete || pending.isComplete
+        if pending.seriesURL.isEmpty { pending.seriesURL = seriesURL }
+        if pending.ao3WorkID == nil { pending.ao3WorkID = WorkTags.ao3WorkID(from: pending.sourceURL) }
+        if pending.ao3SeriesID == nil { pending.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: seriesURL) }
+        if pending.knownChapterCount == 0 { pending.knownChapterCount = knownChapterCount }
+        do {
+            try ReadingQueueService.replaceEPUB(for: pending, with: tempURL)
+            pending.hasEPUB = true
+        } catch {
+            Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
+        pending.markModified()
+        try? context.save()
+        Log.library.info("Import revived “\(pending.title)” from Recently Deleted")
+        Task { await WorkTags.refreshFromAO3(for: pending, in: context) }
+        return pending
+    }
+
     let work = SavedWork(
         title: title,
         author: meta?.author ?? "",
@@ -168,6 +198,13 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     }.value
 
     if let duplicate = existingWork(matching: inspection, sourceFile: url, in: context) {
+        // A duplicate sitting in Recently Deleted is revived, not reported as "already
+        // in your library" — without this the import would silently land in a record
+        // still scheduled for permanent deletion.
+        let revivedFromRecentlyDeleted = duplicate.isPendingDeletion
+        if revivedFromRecentlyDeleted {
+            PreservedWorkService.restore(duplicate, in: context)
+        }
         applyUserImportMetadata(inspection, to: duplicate, fillOnly: true)
         if !duplicate.hasEPUB {
             try copyImportedEPUB(from: url, to: duplicate.fileURL)
@@ -180,7 +217,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         }
         duplicate.markModified()
         try? context.save()
-        return .duplicate(duplicate)
+        return revivedFromRecentlyDeleted ? .restored(duplicate) : .duplicate(duplicate)
     }
 
     let fallbackTitle = url.deletingPathExtension().lastPathComponent

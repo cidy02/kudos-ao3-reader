@@ -10,6 +10,11 @@ struct CollectionCard: View {
     @Environment(ThemeManager.self) private var themeManager
     let collection: WorkCollection
 
+    // Works sitting in Recently Deleted don't count toward the card's size.
+    private var workCount: Int {
+        collection.works.count(where: { !$0.isPendingDeletion })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
@@ -18,7 +23,7 @@ struct CollectionCard: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
                 .foregroundStyle(.primary)
-            Text("\(collection.works.count) work\(collection.works.count == 1 ? "" : "s")")
+            Text("\(workCount) work\(workCount == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -91,8 +96,10 @@ struct CollectionDetailView: View {
     /// (see `cancelRefreshOnTabChange`) — a collection can hold a large number of works.
     @State private var refreshTask: Task<Void, Never>?
 
+    // A soft-deleted work stays linked to the collection (restore brings it back
+    // here) but renders only in Recently Deleted until then.
     private var works: [SavedWork] {
-        collection.works.sorted { $0.dateAdded > $1.dateAdded }
+        collection.works.filter { !$0.isPendingDeletion }.sorted { $0.dateAdded > $1.dateAdded }
     }
 
     /// The collection's works after the active filters. With no filter set, the default
@@ -264,7 +271,7 @@ struct AddToCollectionView: View {
                                 HStack {
                                     Text(collection.name).foregroundStyle(.primary)
                                     Spacer()
-                                    Text("\(collection.works.count)")
+                                    Text("\(collection.works.count(where: { !$0.isPendingDeletion }))")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     if isMember(collection) {

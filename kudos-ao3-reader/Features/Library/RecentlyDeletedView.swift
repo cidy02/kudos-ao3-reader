@@ -159,7 +159,9 @@ struct RecentlyDeletedView: View {
 
     private func daysRemaining(_ date: Date?) -> Int {
         guard let date else { return 0 }
-        let days = Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
+        // Round up: an hour after deleting, the honest answer is still "90 days left",
+        // not the truncated 89.
+        let days = Int((date.timeIntervalSinceNow / 86_400).rounded(.up))
         return max(0, days)
     }
 }

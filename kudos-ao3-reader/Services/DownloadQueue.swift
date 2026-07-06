@@ -76,10 +76,20 @@ final class DownloadQueue {
 
         while let index = items.firstIndex(where: { $0.status == .queued }) {
             let item = items[index]
-            // Already in the library? skip rather than make a duplicate.
-            if let source = item.sourceURL, existingWork(forSource: source, in: context) != nil {
-                items[index].status = .skipped
-                continue
+            // Already in the library? skip rather than make a duplicate. A match in
+            // Recently Deleted that still has its EPUB on disk is simply restored —
+            // no download needed; one without an EPUB falls through to the download,
+            // which revives it via importEPUB's Recently Deleted reuse.
+            if let source = item.sourceURL, let existing = existingWork(forSource: source, in: context) {
+                if !existing.isPendingDeletion {
+                    items[index].status = .skipped
+                    continue
+                }
+                if existing.hasEPUB {
+                    PreservedWorkService.restore(existing, in: context)
+                    items[index].status = .skipped
+                    continue
+                }
             }
             items[index].status = .downloading
             do {

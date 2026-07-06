@@ -84,7 +84,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     }
 
     private var legacySavedWorksForQueueMigration: [SavedWork] {
-        works.filter { $0.isSaved && !$0.isQueuedForLater }
+        // Recently Deleted works aren't migrated into Saved for Later — queueing one
+        // would resurrect a record the user explicitly deleted.
+        works.filter { $0.isSaved && !$0.isQueuedForLater && !$0.isPendingDeletion }
     }
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
