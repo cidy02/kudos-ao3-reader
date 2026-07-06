@@ -298,13 +298,16 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// The AO3 Marked-for-Later (remote) list, narrowed by the active fandom
+    /// The AO3 Marked-for-Later (remote) list with any locally-saved work removed —
+    /// a work in both lists renders once, as its richer local card (which may live
+    /// in another section, e.g. Reading Now) — then narrowed by the active fandom
     /// quick-filter so the chips affect this section too. The other, metadata-only
     /// filters don't apply to remote summaries (they carry no rating/word count).
     private var filteredMarkedForLater: [AO3WorkSummary] {
-        guard !filters.fandoms.isEmpty else { return markedForLater }
+        let remoteOnly = CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
+        guard !filters.fandoms.isEmpty else { return remoteOnly }
         let wanted = Set(filters.fandoms.map { $0.lowercased() })
-        return markedForLater.filter { summary in
+        return remoteOnly.filter { summary in
             summary.fandoms.contains { wanted.contains($0.lowercased()) }
         }
     }

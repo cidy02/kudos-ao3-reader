@@ -1531,37 +1531,25 @@ enum KudosBackupService {
         }
     }
 
+    /// Thin adapter over the shared `WorkIdentityIndex` for archived backup records
+    /// (which carry the originating record's UUID as a last-resort identity tier).
     private struct WorkRestoreIndex {
-        private var worksByID: [UUID: SavedWork] = [:]
-        private var worksByAO3WorkID: [Int: SavedWork] = [:]
-        private var worksByCanonicalSourceURL: [String: SavedWork] = [:]
+        private var identity: WorkIdentityIndex
 
         init(_ works: [SavedWork]) {
-            for work in works {
-                index(work)
-            }
+            identity = WorkIdentityIndex(works)
         }
 
         mutating func index(_ work: SavedWork) {
-            worksByID[work.id] = work
-            if let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) {
-                worksByAO3WorkID[id] = work
-            }
-            if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: work.sourceURL) {
-                worksByCanonicalSourceURL[canonicalURL] = work
-            }
+            identity.index(work)
         }
 
         func existingWork(for archived: KudosBackupWork) -> SavedWork? {
-            if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
-               let work = worksByAO3WorkID[archivedAO3WorkID] {
-                return work
-            }
-            if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: archived.sourceURL),
-               let work = worksByCanonicalSourceURL[canonicalURL] {
-                return work
-            }
-            return worksByID[archived.id]
+            identity.existingWork(
+                ao3WorkID: archived.ao3WorkID,
+                sourceURL: archived.sourceURL,
+                recordID: archived.id
+            )
         }
     }
 

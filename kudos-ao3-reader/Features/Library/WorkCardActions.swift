@@ -246,12 +246,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     @State private var pendingDelete: SavedWork?
 
     private var existingLocalWork: SavedWork? {
-        let canonicalURL = WorkTags.canonicalAO3WorkURL(from: work.workURL.absoluteString)
-        return savedWorks.first { saved in
-            saved.ao3WorkID == work.id
-                || WorkTags.ao3WorkID(from: saved.sourceURL) == work.id
-                || WorkTags.canonicalAO3WorkURL(from: saved.sourceURL) == canonicalURL
-        }
+        WorkIdentityIndex(savedWorks).existingWork(for: work)
     }
 
     func body(content: Content) -> some View {

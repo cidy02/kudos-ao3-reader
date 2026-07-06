@@ -580,12 +580,7 @@ enum ReadingQueueService {
 
     static func existingWork(for summary: AO3WorkSummary, in context: ModelContext) -> SavedWork? {
         let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-        let canonicalURL = WorkTags.canonicalAO3WorkURL(from: summary.workURL.absoluteString)
-        return works.first { work in
-            work.ao3WorkID == summary.id
-                || WorkTags.ao3WorkID(from: work.sourceURL) == summary.id
-                || WorkTags.canonicalAO3WorkURL(from: work.sourceURL) == canonicalURL
-        }
+        return WorkIdentityIndex(works).existingWork(for: summary)
     }
 
     // Metadata merge is a field-by-field guard sequence by design.

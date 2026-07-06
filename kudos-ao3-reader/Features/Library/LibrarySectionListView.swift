@@ -48,12 +48,18 @@ struct LibrarySectionListView: View {
         filters.hasActiveFilters ? filters.apply(to: items) : items
     }
 
-    /// The remote Marked-for-Later list, narrowed by the active fandom filter (the
+    /// The remote Marked-for-Later list with any locally-saved work removed — a work
+    /// in both renders once, in the local section above, as its richer local row.
+    private var remoteOnlyMarkedForLater: [AO3WorkSummary] {
+        CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
+    }
+
+    /// The de-duplicated remote list, narrowed by the active fandom filter (the
     /// other facets need local metadata these summaries don't carry).
     private var visibleMarkedForLater: [AO3WorkSummary] {
-        guard !filters.fandoms.isEmpty else { return markedForLater }
+        guard !filters.fandoms.isEmpty else { return remoteOnlyMarkedForLater }
         let wanted = Set(filters.fandoms.map { $0.lowercased() })
-        return markedForLater.filter { summary in
+        return remoteOnlyMarkedForLater.filter { summary in
             summary.fandoms.contains { wanted.contains($0.lowercased()) }
         }
     }
@@ -65,7 +71,7 @@ struct LibrarySectionListView: View {
 
     /// Whether the section has any works at all (pre-filter) — drives the toolbar.
     private var hasAnyContent: Bool {
-        !items.isEmpty || (kind == .savedForLater && !markedForLater.isEmpty)
+        !items.isEmpty || (kind == .savedForLater && !remoteOnlyMarkedForLater.isEmpty)
     }
 
     var body: some View {

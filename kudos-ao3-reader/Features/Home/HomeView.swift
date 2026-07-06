@@ -107,18 +107,25 @@ struct HomeView: View {
         // Show cover skeletons only while the request is in flight and we have nothing
         // yet; once it finishes (empty or not) the real cards / empty state take over.
         let showSkeleton = isLoadingSubscriptions && subscriptions.isEmpty
+        // A subscribed work that's also saved locally renders once, as its richer
+        // local card, in AO3's own subscription order. Matching only against
+        // privacy-visible works so a hidden Mature work isn't leaked via its
+        // local card here.
+        let merged = CanonicalWorkMerge.remoteLed(
+            remote: subscriptions,
+            localLibrary: works.filter(passesPrivacy)
+        )
         return WorkCarouselSection(
             title: "Subscriptions",
             collapseKey: "home.subscriptions",
-            hasItems: !subscriptions.isEmpty || showSkeleton,
-            onSeeAll: subscriptions.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
+            hasItems: !merged.isEmpty || showSkeleton,
+            onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
         ) {
             if showSkeleton {
                 ForEach(0 ..< 6, id: \.self) { _ in WorkCoverCardSkeleton() }
             } else {
-                ForEach(subscriptions.prefix(12)) { work in
-                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
-                        .buttonStyle(.plain)
+                ForEach(merged.prefix(12)) { entry in
+                    CanonicalWorkCoverCard(entry: entry)
                 }
             }
         } emptyState: {
