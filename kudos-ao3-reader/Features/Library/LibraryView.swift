@@ -17,10 +17,20 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var works: [SavedWork]
     @Query(sort: \Tag.name) private var tags: [Tag]
-    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
-    @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
+    @Query(
+        filter: #Predicate<WorkCollection> { !$0.isPendingDeletion },
+        sort: \WorkCollection.dateAdded, order: .reverse
+    )
+    private var collections: [WorkCollection]
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
+    private var readingQueues: [ReadingQueue]
+    // Counts only — RecentlyDeletedView does its own full @Query for the actual list.
+    @Query(filter: #Predicate<SavedWork> { $0.isPendingDeletion }) private var deletedWorks: [SavedWork]
+    @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
+    @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -69,9 +79,24 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
     }
 
+    /// Escalates when any selected work is no longer available on AO3 — see
+    /// `PreservedWorkService.deleteConfirmationMessage`, same reasoning applied
+    /// across the whole selection rather than per-work.
+    private var bulkDeleteMessage: String {
+        let base = "The selected works will be moved to Recently Deleted. "
+            + "You can restore them anytime in the next 90 days."
+        guard selectedWorks.contains(where: \.ao3Unavailable) else { return base }
+        return base + " Some of these are no longer available on AO3 — "
+            + "if you don't restore them in time, they can't be re-saved afterward."
+    }
+
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
     private var statisticsWorks: [SavedWork] {
         works.filter { !$0.isQueueOnlyWork && (!hideMature || !$0.isAdult || gate.isRevealed($0)) }
+    }
+
+    private var recentlyDeletedCount: Int {
+        deletedWorks.count + deletedCollections.count + deletedQueues.count
     }
 
     /// Drops Mature/Explicit works in Hide mode (until revealed); Blur mode keeps them
@@ -107,6 +132,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
@@ -139,7 +165,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     Button("Delete", role: .destructive) { bulkDelete() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("The selected works will be removed from your Library. This can't be undone.")
+                    Text(bulkDeleteMessage)
                 }
                 .inspector(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -186,10 +212,40 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 readingQueuesCarousel
                 collectionsCarousel
                 localCarousel(.downloaded)
+                if recentlyDeletedCount > 0 {
+                    recentlyDeletedRow
+                }
             }
             .padding(.vertical, 12)
         }
         .refreshable { await refreshLibraryDashboard() }
+    }
+
+    /// Only shown once something is actually pending deletion — matches every other
+    /// section's hide-when-empty convention. A plain row rather than a card carousel,
+    /// since it spans three different record types rather than a list of works.
+    private var recentlyDeletedRow: some View {
+        Button {
+            path.append(RecentlyDeletedDestination())
+        } label: {
+            HStack {
+                Label("Recently Deleted", systemImage: "trash")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(recentlyDeletedCount)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 16)
+        }
+        .buttonStyle(.plain)
     }
 
     /// A purely local section carousel (Reading Now / Finished / Downloaded). Applies
@@ -242,13 +298,16 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// The AO3 Marked-for-Later (remote) list, narrowed by the active fandom
+    /// The AO3 Marked-for-Later (remote) list with any locally-saved work removed —
+    /// a work in both lists renders once, as its richer local card (which may live
+    /// in another section, e.g. Reading Now) — then narrowed by the active fandom
     /// quick-filter so the chips affect this section too. The other, metadata-only
     /// filters don't apply to remote summaries (they carry no rating/word count).
     private var filteredMarkedForLater: [AO3WorkSummary] {
-        guard !filters.fandoms.isEmpty else { return markedForLater }
+        let remoteOnly = CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
+        guard !filters.fandoms.isEmpty else { return remoteOnly }
         let wanted = Set(filters.fandoms.map { $0.lowercased() })
-        return markedForLater.filter { summary in
+        return remoteOnly.filter { summary in
             summary.fandoms.contains { wanted.contains($0.lowercased()) }
         }
     }
@@ -658,7 +717,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private func bulkDelete() {
         for work in selectedWorks {
-            WorkLifecycle.delete(work, in: context)
+            PreservedWorkService.softDelete(work, in: context)
         }
         exitSelectMode()
     }
@@ -677,8 +736,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// Same toggle behavior as `bulkSave`.
     private func bulkFavorite() {
         let shouldFavorite = !allSelectedAreFavorited
+        let now = Date()
         for work in selectedWorks {
             work.isFavorite = shouldFavorite
+            work.markModified(now)
         }
         try? context.save()
     }

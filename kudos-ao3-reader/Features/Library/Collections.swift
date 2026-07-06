@@ -10,6 +10,11 @@ struct CollectionCard: View {
     @Environment(ThemeManager.self) private var themeManager
     let collection: WorkCollection
 
+    // Works sitting in Recently Deleted don't count toward the card's size.
+    private var workCount: Int {
+        collection.works.count(where: { !$0.isPendingDeletion })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
@@ -18,7 +23,7 @@ struct CollectionCard: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
                 .foregroundStyle(.primary)
-            Text("\(collection.works.count) work\(collection.works.count == 1 ? "" : "s")")
+            Text("\(workCount) work\(workCount == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -91,8 +96,10 @@ struct CollectionDetailView: View {
     /// (see `cancelRefreshOnTabChange`) — a collection can hold a large number of works.
     @State private var refreshTask: Task<Void, Never>?
 
+    // A soft-deleted work stays linked to the collection (restore brings it back
+    // here) but renders only in Recently Deleted until then.
     private var works: [SavedWork] {
-        collection.works.sorted { $0.dateAdded > $1.dateAdded }
+        collection.works.filter { !$0.isPendingDeletion }.sorted { $0.dateAdded > $1.dateAdded }
     }
 
     /// The collection's works after the active filters. With no filter set, the default
@@ -187,7 +194,11 @@ struct CollectionDetailView: View {
                 TextField("Name", text: $renameText)
                 Button("Save") {
                     let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty { collection.name = trimmed; try? context.save() }
+                    if !trimmed.isEmpty {
+                        collection.name = trimmed
+                        collection.markModified()
+                        try? context.save()
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             }
@@ -197,18 +208,23 @@ struct CollectionDetailView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
-                    context.delete(collection)
-                    try? context.save()
+                    PreservedWorkService.softDelete(collection, in: context)
                     dismiss()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("The collection is removed. The works themselves stay in your Library.")
+                Text(
+                    "The collection moves to Recently Deleted for 90 days. The works "
+                        + "themselves stay in your Library either way."
+                )
             }
     }
 
     private func remove(_ work: SavedWork) {
+        SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
         work.collections.removeAll { $0.id == collection.id }
+        work.markModified()
+        collection.markModified()
         try? context.save()
     }
 }
@@ -222,7 +238,11 @@ struct AddToCollectionView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \WorkCollection.dateAdded, order: .reverse) private var collections: [WorkCollection]
+    @Query(
+        filter: #Predicate<WorkCollection> { !$0.isPendingDeletion },
+        sort: \WorkCollection.dateAdded, order: .reverse
+    )
+    private var collections: [WorkCollection]
     @State private var newName = ""
 
     var body: some View {
@@ -251,7 +271,7 @@ struct AddToCollectionView: View {
                                 HStack {
                                     Text(collection.name).foregroundStyle(.primary)
                                     Spacer()
-                                    Text("\(collection.works.count)")
+                                    Text("\(collection.works.count(where: { !$0.isPendingDeletion }))")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     if isMember(collection) {
@@ -287,10 +307,14 @@ struct AddToCollectionView: View {
 
     private func toggle(_ collection: WorkCollection) {
         if let index = work.collections.firstIndex(where: { $0.id == collection.id }) {
+            SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
             work.collections.remove(at: index)
         } else {
             work.collections.append(collection)
         }
+        let now = Date()
+        work.markModified(now)
+        collection.markModified(now)
         try? context.save()
     }
 
@@ -300,6 +324,7 @@ struct AddToCollectionView: View {
         let collection = WorkCollection(name: trimmed)
         context.insert(collection)
         work.collections.append(collection)
+        work.markModified()
         try? context.save()
         newName = ""
     }

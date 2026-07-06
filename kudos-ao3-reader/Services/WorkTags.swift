@@ -11,6 +11,11 @@ enum WorkTags {
     /// un-flagged in those last cases so a later attempt can still succeed.
     @MainActor
     static func refreshFromAO3(for work: SavedWork, in context: ModelContext) async {
+        // Callers fire this as a detached best-effort Task, so the work can already be
+        // deleted (or, in tests, its whole container torn down) by the time this runs —
+        // and touching any attribute of an invalidated model is a SwiftData assertion
+        // crash. Same liveness guard PersistenceMigrationService uses.
+        guard work.modelContext != nil else { return }
         guard let id = work.ao3WorkID ?? ao3WorkID(from: work.sourceURL) else { return }
         work.ao3WorkID = id
         // Fetch when never fetched, when fetched before categorized tags existed, or
@@ -19,6 +24,8 @@ enum WorkTags {
         guard work.needsAO3Refresh else { return }
         do {
             let groups = try await AO3Client.shared.workTags(workID: id)
+            // Re-check after the network await — the work can be deleted mid-fetch.
+            guard work.modelContext != nil else { return }
             guard !groups.isEmpty else { return } // locked/empty page — keep EPUB tags, retry later
             work.workFandoms = TagMerge.merged(work.workFandoms, groups.fandoms)
             work.workRelationships = TagMerge.merged(work.workRelationships, groups.relationships)
@@ -43,11 +50,14 @@ enum WorkTags {
             if let comments = groups.comments { work.comments = comments }
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
+            work.markModified()
             try? context.save()
         } catch AO3Error.notFound {
             // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
             // whatever tags it already has (EPUB-derived or a prior AO3 fetch).
+            guard work.modelContext != nil else { return }
             work.ao3Unavailable = true
+            work.markModified()
             try? context.save()
         } catch {
             // Other network or parse failure: keep the EPUB-derived tags and retry next time.
@@ -73,6 +83,7 @@ enum WorkTags {
         guard !tags.isEmpty else { return }
         work.workTags = tags
         if work.rating.isEmpty { work.rating = meta.rating }
+        work.markModified()
         try? context.save()
     }
 

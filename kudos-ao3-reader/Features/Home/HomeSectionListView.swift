@@ -13,7 +13,8 @@ struct HomeSectionListView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var expandAll = false
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs

@@ -10,8 +10,9 @@ struct PrivacyDataView: View {
 
     /// Exclude queued works: a queued work whose preservation is still pending or failed
     /// has hasEPUB == false but is protected — it must not be swept into (or cleared with)
-    /// reading history.
-    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater },
+    /// reading history. Also excludes soft-deleted works (Recently Deleted) — they belong
+    /// there, not in history, whether or not their EPUB happens to still be freed.
+    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater && !$0.isPendingDeletion },
            sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]
 
@@ -95,14 +96,13 @@ struct PrivacyDataView: View {
             ) {
                 Button("Clear \(history.count) Work\(history.count == 1 ? "" : "s")", role: .destructive) {
                     for work in history {
-                        context.delete(work)
+                        PreservedWorkService.softDelete(work, in: context)
                     }
-                    try? context.save()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Removes your local reading-history records. The works themselves can be "
-                    + "re-downloaded from AO3 anytime.")
+                Text("Moves your local reading-history records to Recently Deleted for 90 days. "
+                    + "The works themselves can also be re-downloaded from AO3 anytime.")
             }
     }
 }

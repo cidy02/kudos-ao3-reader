@@ -1,10 +1,12 @@
+import SwiftData
 import SwiftUI
 
 /// A login-gated list of AO3 works fetched from one of the user's account pages
 /// (Marked for Later, bookmarks, …). Self-contained: signed-out prompt, loading,
 /// empty, error + retry, and a paginated list reusing the search result card.
-/// Navigates to the canonical `WorkDetailView` through the host's navigation stack,
-/// so the host must register an `AO3WorkSummary` destination.
+/// A work that's also saved locally renders as its richer local row instead of a
+/// second, remote card. Navigates through the host's navigation stack, so the host
+/// must register `AO3WorkSummary` and `SavedWork` destinations (all hosts do).
 struct AO3AccountWorksList: View {
     /// Which account list to show. Holds the page's copy, URL, and fetch method so
     /// the view body is identical across lists.
@@ -89,6 +91,11 @@ struct AO3AccountWorksList: View {
     let kind: Kind
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
 
     @State private var works: [AO3WorkSummary] = []
     @State private var currentPage = 1
@@ -108,6 +115,17 @@ struct AO3AccountWorksList: View {
     /// The loaded page narrowed by the active refine filters.
     private var visibleWorks: [AO3WorkSummary] {
         filters.apply(to: works)
+    }
+
+    /// The visible page with locally-saved matches paired in, so each renders as
+    /// the richer local row. Matching only against privacy-visible works keeps a
+    /// Hide-mode Mature work on its plain remote row instead of surfacing local
+    /// state for it; in Blur mode the paired local row blurs itself.
+    private var visibleEntries: [CanonicalWork] {
+        CanonicalWorkMerge.remoteLed(
+            remote: visibleWorks,
+            localLibrary: localWorks.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        )
     }
 
     var body: some View {
@@ -184,8 +202,12 @@ struct AO3AccountWorksList: View {
                 Section { paginationRow }
             }
             Section {
-                ForEach(visibleWorks) { work in
-                    AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
+                ForEach(visibleEntries) { entry in
+                    if let work = entry.local {
+                        SensitiveWorkRow(work: work, expandAll: expandAll)
+                    } else if let remote = entry.remote {
+                        AO3WorkRow(work: remote, expandAll: expandAll).cardNavigation(to: remote)
+                    }
                 }
                 .cardRow()
             }

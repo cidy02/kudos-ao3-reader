@@ -96,6 +96,7 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				000000000000000150000000 /* Strip Readium Bundle xattrs (for signing) */,
+				000000000000000160000000 /* Add Background Modes to Info.plist (iOS only) */,
 			);
 			buildRules = (
 			);
@@ -228,6 +229,74 @@
 				"fi",
 				"",
 				"echo \"Readium xattr cleanup complete.\"",
+				"",
+			);
+		};
+		000000000000000160000000 /* Add Background Modes to Info.plist (iOS only) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+				"$(DERIVED_FILE_DIR)/BackgroundModesInjected.stamp",
+			);
+			name = "Add Background Modes to Info.plist (iOS only)";
+			shellPath = /bin/sh;
+			shellScript = (
+				"# GENERATE_INFOPLIST_FILE=YES's INFOPLIST_KEY_* mechanism does not support",
+				"# array-valued keys like UIBackgroundModes/BGTaskSchedulerPermittedIdentifiers",
+				"# (confirmed empirically: build succeeds but silently omits them), and",
+				"# INFOPLIST_FILE cannot be combined with GENERATE_INFOPLIST_FILE=YES (both",
+				"# try to produce the same output path, a hard Xcode build error). Inject the",
+				"# two array keys directly into the already-generated Info.plist instead.",
+				"#",
+				"# Declaring the processed Info.plist as both input and output does two things:",
+				"# (1) gives Xcode's build-graph scheduler the edge it needs to run this phase",
+				"# strictly after Info.plist generation instead of racing it, and (2) is",
+				"# required for User Script Sandboxing (ENABLE_USER_SCRIPT_SANDBOXING=YES) to",
+				"# permit writing to this path at all — without a declared output, PlistBuddy's",
+				"# writes here are silently sandbox-denied (it prints \\\"Operation not",
+				"# permitted\\\" but still exits 0, so the failure was invisible until this",
+				"# script started checking its own output below).",
+				"",
+				"set -eu",
+				"",
+				"case \"${PLATFORM_NAME}\" in",
+				"  iphoneos|iphonesimulator) ;;",
+				"  *) exit 0 ;;",
+				"esac",
+				"",
+				"PLIST=\"${CODESIGNING_FOLDER_PATH}/Info.plist\"",
+				"if [ ! -f \"$PLIST\" ]; then",
+				"  echo \"warning: $PLIST not found; skipping background-modes injection.\"",
+				"  exit 0",
+				"fi",
+				"",
+				"/usr/libexec/PlistBuddy -c \"Delete :UIBackgroundModes\" \"$PLIST\" 2>/dev/null || true",
+				"/usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes array\" \"$PLIST\"",
+				"/usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:0 string fetch\" \"$PLIST\"",
+				"",
+				"/usr/libexec/PlistBuddy -c \"Delete :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" 2>/dev/null || true",
+				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers array\" \"$PLIST\"",
+				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers:0 string devplaceholder.H17TULZJ.AO3_App_OpenSource.folderSyncRefresh\" \"$PLIST\"",
+				"",
+				"# Fail loudly rather than silently, since PlistBuddy itself doesn't: verify",
+				"# the keys actually landed before declaring success.",
+				"if ! /usr/libexec/PlistBuddy -c \"Print :UIBackgroundModes\" \"$PLIST\" >/dev/null 2>&1 || \\",
+				"   ! /usr/libexec/PlistBuddy -c \"Print :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" >/dev/null 2>&1; then",
+				"  echo \"error: failed to inject background-modes keys into $PLIST\"",
+				"  exit 1",
+				"fi",
+				"",
+				"echo \"Injected UIBackgroundModes/BGTaskSchedulerPermittedIdentifiers into Info.plist.\"",
+				"",
+				"# Second declared output required alongside a mutable (input==output) node —",
+				"# Xcode's build system otherwise errors with \\\"mutable output but no other",
+				"# virtual output node.\\\" Content is irrelevant; only its existence matters.",
+				"mkdir -p \"$(dirname \"${DERIVED_FILE_DIR}/BackgroundModesInjected.stamp\")\"",
+				"touch \"${DERIVED_FILE_DIR}/BackgroundModesInjected.stamp\"",
 				"",
 			);
 		};

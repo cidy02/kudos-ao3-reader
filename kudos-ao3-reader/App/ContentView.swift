@@ -8,14 +8,39 @@ import UIKit
 /// at the bottom of the sidebar; on iOS it's an adaptive tab bar / sidebar.
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Query private var folderSyncWorks: [SavedWork]
+    @Query private var folderSyncBookmarks: [Bookmark]
+    @Query private var folderSyncFonts: [CustomFont]
+    @Query private var folderSyncCollections: [WorkCollection]
+    @Query private var folderSyncQueues: [ReadingQueue]
+    @Query private var folderSyncMemberships: [ReadingQueueMembership]
+    @Query private var folderSyncTombstones: [SyncTombstone]
     @State private var router = AppRouter()
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
+    @State private var folderSyncUpTask: Task<Void, Never>?
+    @State private var lastForegroundFolderSyncAt: Date?
+
+    /// Automatic sync triggers only run more than once a minute when the scene keeps
+    /// flipping active (Control Center, quick app-switches); an explicit dirty change
+    /// or a manual Sync Now still goes through immediately regardless of this gate.
+    private static let foregroundSyncThrottle: TimeInterval = 60
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    /// Library Sync Folder onboarding gates — separate from the welcome gate above so
+    /// completing one never implies the other. Mirrors FolderSyncOnboardingState's keys
+    /// so this view re-renders when either changes (a plain UserDefaults read wouldn't).
+    @AppStorage(FolderSyncOnboardingState.configuredKey) private var hasConfiguredSyncFolder = false
+    @AppStorage(FolderSyncOnboardingState.permanentlyDismissedKey)
+    private var syncOnboardingDismissedPermanently = false
+    /// In-memory only — dismissing without "Don't remind me again" should still let the
+    /// user into the app for the rest of THIS launch, without touching either persisted
+    /// flag above (so it reappears next launch, per the required behavior).
+    @State private var dismissedSyncFolderOnboardingThisSession = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
     #if os(iOS)
@@ -49,6 +74,61 @@ struct ContentView: View {
                 await auth.restoreSession()
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
+                await PersistenceMigrationService.runIfNeeded(in: modelContext)
+                // Independent of folder sync — a local Recently Deleted item past its
+                // 90-day window is swept whether or not Auto Sync is even on.
+                PreservedWorkService.sweepExpired(in: modelContext)
+                guard FolderSyncService.snapshot().autoSyncEnabled else { return }
+                lastForegroundFolderSyncAt = Date()
+                _ = try? await FolderSyncService.syncDown(in: modelContext)
+                // Catches up anything a prior session's debounce lost to a force-quit —
+                // the dirty flag is durable across launches, unlike the debounce Task.
+                if FolderSyncService.snapshot().isDirty {
+                    _ = try? await FolderSyncService.syncUp(in: modelContext)
+                }
+                #if os(iOS)
+                FolderSyncBackgroundTask.scheduleNext()
+                #endif
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard FolderSyncService.snapshot().autoSyncEnabled else { return }
+                switch phase {
+                case .active:
+                    let now = Date()
+                    if let last = lastForegroundFolderSyncAt,
+                       now.timeIntervalSince(last) < Self.foregroundSyncThrottle,
+                       !FolderSyncService.snapshot().isDirty {
+                        return
+                    }
+                    lastForegroundFolderSyncAt = now
+                    Task { @MainActor in
+                        _ = try? await FolderSyncService.syncDown(in: modelContext)
+                    }
+                case .inactive, .background:
+                    folderSyncUpTask?.cancel()
+                    #if os(iOS)
+                    // Submitting right before backgrounding is the pattern most
+                    // likely to actually get honored by the OS soon.
+                    FolderSyncBackgroundTask.scheduleNext()
+                    #endif
+                    guard FolderSyncService.snapshot().isDirty else { return }
+                    Task { @MainActor in
+                        _ = try? await FolderSyncService.syncUp(in: modelContext)
+                    }
+                @unknown default:
+                    break
+                }
+            }
+            .onChange(of: folderSyncChangeToken) { _, _ in
+                FolderSyncService.markDirty()
+                scheduleFolderSyncUp()
+            }
+            // Settings that ship in the backup manifest (reader/privacy prefs) live in
+            // SettingsView's own @AppStorage bindings — it marks sync dirty itself via
+            // NotificationCenter since it isn't always mounted while ContentView is.
+            .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
+                FolderSyncService.markDirty()
+                scheduleFolderSyncUp()
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
             .onShake {
@@ -65,7 +145,8 @@ struct ContentView: View {
                 BugReportView()
                 #endif
             }
-        // First-launch welcome, shown before normal navigation. The theme is
+        // First-launch welcome, then (once that's done) sync-folder onboarding — never
+        // both at once, never sync-onboarding in place of welcome. The theme is
         // re-injected because presented covers/sheets don't inherit it here.
         #if os(iOS)
             .fullScreenCover(isPresented: onboardingPresented) {
@@ -73,9 +154,19 @@ struct ContentView: View {
                     .environment(theme)
                     .tint(theme.effectiveTint)
             }
+            .fullScreenCover(isPresented: syncFolderOnboardingPresented) {
+                SyncFolderOnboardingView(onFinished: { dismissedSyncFolderOnboardingThisSession = true })
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
+            }
         #else
             .sheet(isPresented: onboardingPresented) {
                 WelcomeView(onContinue: { hasCompletedOnboarding = true })
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
+            }
+            .sheet(isPresented: syncFolderOnboardingPresented) {
+                SyncFolderOnboardingView(onFinished: { dismissedSyncFolderOnboardingThisSession = true })
                     .environment(theme)
                     .tint(theme.effectiveTint)
             }
@@ -88,6 +179,51 @@ struct ContentView: View {
             get: { !hasCompletedOnboarding },
             set: { if !$0 { hasCompletedOnboarding = true } }
         )
+    }
+
+    /// Presents once welcome is done and sync-folder onboarding hasn't been configured
+    /// or permanently dismissed. Dismissing without "Don't remind me again" doesn't touch
+    /// either persisted flag — `dismissedSyncFolderOnboardingThisSession` is what actually
+    /// closes the cover for the rest of this launch, so it correctly reappears next time.
+    private var syncFolderOnboardingPresented: Binding<Bool> {
+        Binding(
+            get: {
+                hasCompletedOnboarding
+                    && !hasConfiguredSyncFolder
+                    && !syncOnboardingDismissedPermanently
+                    && !dismissedSyncFolderOnboardingThisSession
+            },
+            set: { isPresented in
+                if !isPresented { dismissedSyncFolderOnboardingThisSession = true }
+            }
+        )
+    }
+
+    private var folderSyncChangeToken: String {
+        [
+            "\(folderSyncWorks.count):\(newestDate(folderSyncWorks.map(\.lastModifiedAt)))",
+            "\(folderSyncBookmarks.count):\(newestDate(folderSyncBookmarks.map(\.dateAdded)))",
+            "\(folderSyncFonts.count):\(newestDate(folderSyncFonts.map(\.dateAdded)))",
+            "\(folderSyncCollections.count):\(newestDate(folderSyncCollections.map(\.lastModifiedAt)))",
+            "\(folderSyncQueues.count):\(newestDate(folderSyncQueues.map(\.dateUpdated)))",
+            "\(folderSyncMemberships.count):\(newestDate(folderSyncMemberships.map(\.lastModifiedAt)))",
+            "\(folderSyncTombstones.count):\(newestDate(folderSyncTombstones.map(\.lastModifiedAt)))"
+        ].joined(separator: "|")
+    }
+
+    private func newestDate(_ dates: [Date]) -> TimeInterval {
+        dates.max()?.timeIntervalSince1970 ?? 0
+    }
+
+    private func scheduleFolderSyncUp() {
+        let snapshot = FolderSyncService.snapshot()
+        guard snapshot.isConnected, snapshot.autoSyncEnabled else { return }
+        folderSyncUpTask?.cancel()
+        folderSyncUpTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 7_000_000_000)
+            guard !Task.isCancelled else { return }
+            _ = try? await FolderSyncService.syncUp(in: modelContext)
+        }
     }
 
     /// Warms `UISegmentedControl` for Sepia (resets to default for Light/Dark).

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
@@ -34,12 +35,12 @@ struct KudosBackupDocument: FileDocument {
     }
 }
 
-struct KudosBackupContents {
+nonisolated struct KudosBackupContents {
     let manifest: KudosBackupManifest
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]
 
-    init(
+    nonisolated init(
         manifest: KudosBackupManifest,
         epubFiles: [UUID: Data] = [:],
         fontFiles: [String: Data] = [:]
@@ -49,14 +50,14 @@ struct KudosBackupContents {
         self.fontFiles = fontFiles
     }
 
-    init(fileWrapper root: FileWrapper) throws {
+    nonisolated init(fileWrapper root: FileWrapper) throws {
         guard root.isDirectory, let rootFiles = root.fileWrappers,
               let manifestData = rootFiles["manifest.json"]?.regularFileContents
         else {
             throw KudosBackupError.invalidPackage
         }
 
-        manifest = try Self.decoder.decode(KudosBackupManifest.self, from: manifestData)
+        manifest = try Self.makeDecoder().decode(KudosBackupManifest.self, from: manifestData)
         guard KudosBackupManifest.supportedVersions.contains(manifest.version) else {
             throw KudosBackupError.unsupportedVersion(manifest.version)
         }
@@ -82,13 +83,13 @@ struct KudosBackupContents {
         fontFiles = fonts
     }
 
-    static func read(from url: URL) throws -> Self {
+    nonisolated static func read(from url: URL) throws -> Self {
         let wrapper = try FileWrapper(url: url, options: .immediate)
         return try Self(fileWrapper: wrapper)
     }
 
-    func fileWrapper() throws -> FileWrapper {
-        let manifestData = try Self.encoder.encode(manifest)
+    nonisolated func fileWrapper() throws -> FileWrapper {
+        let manifestData = try Self.makeEncoder().encode(manifest)
         var rootFiles = [
             "manifest.json": FileWrapper(regularFileWithContents: manifestData)
         ]
@@ -107,20 +108,55 @@ struct KudosBackupContents {
         return FileWrapper(directoryWithFileWrappers: rootFiles)
     }
 
-    private static let encoder: JSONEncoder = {
+    // Plain `.iso8601` has no fractional-second support (whole-seconds only), which
+    // silently truncates every timestamp on export. Two edits from different devices
+    // landing in the same wall-clock second — a real possibility with auto-sync —
+    // would then be unorderable by every lastModifiedAt-based merge decision in this
+    // file. A custom formatter with fractional seconds fixes that; the decoder falls
+    // back to the plain formatter so older `.kudosbackup` files (encoded without
+    // fractional seconds) still decode correctly.
+    nonisolated private static let fractionalSecondsISO8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    nonisolated private static let wholeSecondISO8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    nonisolated private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(fractionalSecondsISO8601Formatter.string(from: date))
+        }
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
-    }()
+    }
 
-    private static let decoder: JSONDecoder = {
+    nonisolated private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            if let date = fractionalSecondsISO8601Formatter.date(from: string) {
+                return date
+            }
+            if let date = wholeSecondISO8601Formatter.date(from: string) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(string)"
+            )
+        }
         return decoder
-    }()
+    }
 
-    private static func isSafeFileName(_ fileName: String) -> Bool {
+    nonisolated private static func isSafeFileName(_ fileName: String) -> Bool {
         !fileName.isEmpty
             && URL(fileURLWithPath: fileName).lastPathComponent == fileName
             && !fileName.contains("/")
@@ -128,18 +164,26 @@ struct KudosBackupContents {
     }
 }
 
-struct KudosBackupManifest: Codable, Equatable {
-    static let currentVersion = 2
-    static let supportedVersions: Set<Int> = [1, currentVersion]
+nonisolated struct KudosBackupManifest: Codable, Equatable {
+    // v7 adds permanentDeletionScheduledAt (Recently Deleted / 90-day recovery) to
+    // works, collections, and reading queues, plus isDeleted/deletedAt for reading
+    // queues (previously never carried in the manifest at all).
+    static let currentVersion = 7
+    static let supportedVersions: Set<Int> = [1, 2, 3, 4, 5, 6, currentVersion]
 
     let version: Int
     let exportedAt: Date
     let works: [KudosBackupWork]
     let bookmarks: [KudosBackupBookmark]
     let fonts: [KudosBackupFont]
+    let collections: [KudosBackupCollection]
     let readingQueues: [KudosBackupReadingQueue]
     let readingQueueMemberships: [KudosBackupReadingQueueMembership]
     let settings: KudosBackupSettings
+    // Carrying tombstones with the backup means a fresh install/reinstall restoring
+    // this file inherits the source device's deletion history, instead of having zero
+    // tombstone knowledge and silently resurrecting anything deleted after export.
+    let tombstones: [KudosBackupTombstone]
 
     init(
         version: Int = currentVersion,
@@ -147,18 +191,22 @@ struct KudosBackupManifest: Codable, Equatable {
         works: [KudosBackupWork],
         bookmarks: [KudosBackupBookmark],
         fonts: [KudosBackupFont],
+        collections: [KudosBackupCollection] = [],
         readingQueues: [KudosBackupReadingQueue] = [],
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
-        settings: KudosBackupSettings
+        settings: KudosBackupSettings,
+        tombstones: [KudosBackupTombstone] = []
     ) {
         self.version = version
         self.exportedAt = exportedAt
         self.works = works
         self.bookmarks = bookmarks
         self.fonts = fonts
+        self.collections = collections
         self.readingQueues = readingQueues
         self.readingQueueMemberships = readingQueueMemberships
         self.settings = settings
+        self.tombstones = tombstones
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -167,9 +215,11 @@ struct KudosBackupManifest: Codable, Equatable {
         case works
         case bookmarks
         case fonts
+        case collections
         case readingQueues
         case readingQueueMemberships
         case settings
+        case tombstones
     }
 
     init(from decoder: Decoder) throws {
@@ -179,6 +229,10 @@ struct KudosBackupManifest: Codable, Equatable {
         works = try container.decode([KudosBackupWork].self, forKey: .works)
         bookmarks = try container.decode([KudosBackupBookmark].self, forKey: .bookmarks)
         fonts = try container.decode([KudosBackupFont].self, forKey: .fonts)
+        collections = try container.decodeIfPresent(
+            [KudosBackupCollection].self,
+            forKey: .collections
+        ) ?? []
         readingQueues = try container.decodeIfPresent(
             [KudosBackupReadingQueue].self,
             forKey: .readingQueues
@@ -188,16 +242,50 @@ struct KudosBackupManifest: Codable, Equatable {
             forKey: .readingQueueMemberships
         ) ?? []
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
+        tombstones = try container.decodeIfPresent(
+            [KudosBackupTombstone].self,
+            forKey: .tombstones
+        ) ?? []
     }
 }
 
-struct KudosBackupWork: Codable, Equatable {
+nonisolated struct KudosBackupTombstone: Codable, Equatable {
+    let id: UUID
+    let recordID: UUID
+    let recordTypeRaw: String
+    let createdAt: Date
+    let lastModifiedAt: Date
+    let sourceURL: String
+    let ao3WorkID: Int?
+    let deletedOnDeviceID: String
+    let deletionReason: String
+
+    init(tombstone: SyncTombstone) {
+        id = tombstone.id
+        recordID = tombstone.recordID
+        recordTypeRaw = tombstone.recordTypeRaw
+        createdAt = tombstone.createdAt
+        lastModifiedAt = tombstone.lastModifiedAt
+        sourceURL = tombstone.sourceURL
+        ao3WorkID = tombstone.ao3WorkID
+        deletedOnDeviceID = tombstone.deletedOnDeviceID
+        deletionReason = tombstone.deletionReason
+    }
+}
+
+nonisolated struct KudosBackupWork: Codable, Equatable {
     let id: UUID
     let title: String
     let author: String
     let summary: String
     let sourceURL: String
     let dateAdded: Date
+    let createdAt: Date?
+    let lastModifiedAt: Date?
+    let deletedAt: Date?
+    let isDeleted: Bool?
+    let permanentDeletionScheduledAt: Date?
+    let assetIdentifier: String?
     let isFavorite: Bool
     let isSaved: Bool
     let isFinished: Bool
@@ -221,6 +309,7 @@ struct KudosBackupWork: Codable, Equatable {
     let lastSpineIndex: Int
     let lastScrollFraction: Double
     let lastReadDate: Date?
+    let progressModifiedAt: Date?
     let workTags: [String]
     let workFandoms: [String]
     let workCharacters: [String]
@@ -246,6 +335,12 @@ struct KudosBackupWork: Codable, Equatable {
         summary = work.summary
         sourceURL = work.sourceURL
         dateAdded = work.dateAdded
+        createdAt = work.createdAt
+        lastModifiedAt = work.lastModifiedAt
+        deletedAt = work.deletedAt
+        isDeleted = work.isPendingDeletion
+        permanentDeletionScheduledAt = work.permanentDeletionScheduledAt
+        assetIdentifier = work.effectiveAssetIdentifier
         isFavorite = work.isFavorite
         isSaved = work.isSaved
         isFinished = work.isFinished
@@ -269,6 +364,7 @@ struct KudosBackupWork: Codable, Equatable {
         lastSpineIndex = work.lastSpineIndex
         lastScrollFraction = work.lastScrollFraction
         lastReadDate = work.lastReadDate
+        progressModifiedAt = work.progressModifiedAt
         workTags = work.workTags
         workFandoms = work.workFandoms
         workCharacters = work.workCharacters
@@ -298,6 +394,12 @@ struct KudosBackupWork: Codable, Equatable {
         case summary
         case sourceURL
         case dateAdded
+        case createdAt
+        case lastModifiedAt
+        case deletedAt
+        case isDeleted
+        case permanentDeletionScheduledAt
+        case assetIdentifier
         case isFavorite
         case isSaved
         case isFinished
@@ -321,6 +423,7 @@ struct KudosBackupWork: Codable, Equatable {
         case lastSpineIndex
         case lastScrollFraction
         case lastReadDate
+        case progressModifiedAt
         case workTags
         case workFandoms
         case workCharacters
@@ -347,6 +450,15 @@ struct KudosBackupWork: Codable, Equatable {
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
         dateAdded = try container.decodeIfPresent(Date.self, forKey: .dateAdded) ?? Date()
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted)
+        permanentDeletionScheduledAt = try container.decodeIfPresent(
+            Date.self,
+            forKey: .permanentDeletionScheduledAt
+        )
+        assetIdentifier = try container.decodeIfPresent(String.self, forKey: .assetIdentifier)
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFinished = try container.decodeIfPresent(Bool.self, forKey: .isFinished) ?? false
@@ -370,6 +482,7 @@ struct KudosBackupWork: Codable, Equatable {
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         lastScrollFraction = try container.decodeIfPresent(Double.self, forKey: .lastScrollFraction) ?? 0
         lastReadDate = try container.decodeIfPresent(Date.self, forKey: .lastReadDate)
+        progressModifiedAt = try container.decodeIfPresent(Date.self, forKey: .progressModifiedAt)
         workTags = try container.decodeIfPresent([String].self, forKey: .workTags) ?? []
         workFandoms = try container.decodeIfPresent([String].self, forKey: .workFandoms) ?? []
         workCharacters = try container.decodeIfPresent([String].self, forKey: .workCharacters) ?? []
@@ -398,7 +511,7 @@ struct KudosBackupWork: Codable, Equatable {
     }
 }
 
-struct KudosBackupBookmark: Codable, Equatable {
+nonisolated struct KudosBackupBookmark: Codable, Equatable {
     let title: String
     let urlString: String
     let dateAdded: Date
@@ -411,7 +524,7 @@ struct KudosBackupBookmark: Codable, Equatable {
     }
 }
 
-struct KudosBackupFont: Codable, Equatable {
+nonisolated struct KudosBackupFont: Codable, Equatable {
     let name: String
     let fileName: String
     let dateAdded: Date
@@ -424,13 +537,44 @@ struct KudosBackupFont: Codable, Equatable {
     }
 }
 
-struct KudosBackupReadingQueue: Codable, Equatable {
+nonisolated struct KudosBackupCollection: Codable, Equatable {
+    let id: UUID
+    let name: String
+    let dateAdded: Date
+    let createdAt: Date?
+    let lastModifiedAt: Date?
+    let deletedAt: Date?
+    let isDeleted: Bool?
+    let permanentDeletionScheduledAt: Date?
+    let syncStatusRaw: String?
+    let workIDs: [UUID]
+
+    @MainActor
+    init(collection: WorkCollection) {
+        id = collection.id
+        name = collection.name
+        dateAdded = collection.dateAdded
+        createdAt = collection.createdAt
+        lastModifiedAt = collection.lastModifiedAt
+        deletedAt = collection.deletedAt
+        isDeleted = collection.isPendingDeletion
+        permanentDeletionScheduledAt = collection.permanentDeletionScheduledAt
+        syncStatusRaw = collection.syncStatusRaw
+        workIDs = collection.works.map(\.id).sorted { $0.uuidString < $1.uuidString }
+    }
+}
+
+nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     let id: UUID
     let name: String
     let kindRaw: String
     let sortOrder: Int
     let dateCreated: Date
     let dateUpdated: Date
+    let lastMembershipChangedAt: Date?
+    let deletedAt: Date?
+    let isDeleted: Bool?
+    let permanentDeletionScheduledAt: Date?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -440,14 +584,27 @@ struct KudosBackupReadingQueue: Codable, Equatable {
         sortOrder = queue.sortOrder
         dateCreated = queue.dateCreated
         dateUpdated = queue.dateUpdated
+        lastMembershipChangedAt = queue.lastMembershipChangedAt
+        deletedAt = queue.deletedAt
+        isDeleted = queue.isPendingDeletion
+        permanentDeletionScheduledAt = queue.permanentDeletionScheduledAt
+    }
+
+    func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
+        SyncMerge.effectiveQueueModifiedAt(
+            queueUpdatedAt: dateUpdated,
+            lastMembershipChangedAt: lastMembershipChangedAt,
+            membershipModifiedAts: memberships.map { $0.lastModifiedAt ?? $0.queuedAt }
+        )
     }
 }
 
-struct KudosBackupReadingQueueMembership: Codable, Equatable {
+nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
     let id: UUID
     let queueID: UUID
     let workID: UUID
     let queuedAt: Date
+    let lastModifiedAt: Date?
     let sortOrderInQueue: Int
     let note: String
 
@@ -460,12 +617,18 @@ struct KudosBackupReadingQueueMembership: Codable, Equatable {
         self.queueID = queueID
         self.workID = workID
         queuedAt = membership.queuedAt
+        lastModifiedAt = membership.lastModifiedAt
         sortOrderInQueue = membership.sortOrderInQueue
         note = membership.note
     }
 }
 
-struct KudosBackupSettings: Codable, Equatable {
+nonisolated struct KudosBackupSettings: Codable, Equatable {
+    private static let defaultReaderFontSizePt: Double = 18
+    private static let defaultReaderLineHeight: Double = 1.65
+    private static let defaultReaderMargin: Double = 28
+    private static let defaultAccentColorHex = "#990000"
+
     var readerFontID: String
     var readerMode: String
     var readerTwoPage: Bool
@@ -568,13 +731,13 @@ struct KudosBackupSettings: Codable, Equatable {
             readerCustomize: container.decodeIfPresent(Bool.self, forKey: .readerCustomize) ?? false,
             readerBoldText: container.decodeIfPresent(Bool.self, forKey: .readerBoldText) ?? false,
             readerFontPt: container.decodeIfPresent(Double.self, forKey: .readerFontPt)
-                ?? ReaderTextStyle.defaultFontSizePt,
+                ?? Self.defaultReaderFontSizePt,
             readerLineHeight: container.decodeIfPresent(Double.self, forKey: .readerLineHeight)
-                ?? ReaderTextStyle.defaultLineHeight,
+                ?? Self.defaultReaderLineHeight,
             readerLetterSpacing: container.decodeIfPresent(Double.self, forKey: .readerLetterSpacing) ?? 0,
             readerWordSpacing: container.decodeIfPresent(Double.self, forKey: .readerWordSpacing) ?? 0,
             readerMargin: container.decodeIfPresent(Double.self, forKey: .readerMargin)
-                ?? ReaderTextStyle.defaultMargin,
+                ?? Self.defaultReaderMargin,
             readerJustify: container.decodeIfPresent(Bool.self, forKey: .readerJustify) ?? false,
             confirmBeforeDelete: container.decodeIfPresent(Bool.self, forKey: .confirmBeforeDelete) ?? true,
             hideMatureContent: container.decodeIfPresent(Bool.self, forKey: .hideMatureContent) ?? true,
@@ -590,7 +753,7 @@ struct KudosBackupSettings: Codable, Equatable {
                 ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: container.decodeIfPresent(Bool.self, forKey: .matchAppReaderTheme) ?? true,
             accentColorHex: container.decodeIfPresent(String.self, forKey: .accentColorHex)
-                ?? ThemeManager.ao3Red,
+                ?? Self.defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: container.decodeIfPresent(
                 Bool.self,
                 forKey: .autoPreserveSmallSeriesOnSaveForLater
@@ -612,19 +775,19 @@ struct KudosBackupSettings: Codable, Equatable {
             readerFontPt: number(
                 defaults,
                 "readerFontPt",
-                fallback: ReaderTextStyle.defaultFontSizePt
+                fallback: Self.defaultReaderFontSizePt
             ),
             readerLineHeight: number(
                 defaults,
                 "readerLineHeight",
-                fallback: ReaderTextStyle.defaultLineHeight
+                fallback: Self.defaultReaderLineHeight
             ),
             readerLetterSpacing: number(defaults, "readerLetterSpacing", fallback: 0),
             readerWordSpacing: number(defaults, "readerWordSpacing", fallback: 0),
             readerMargin: number(
                 defaults,
                 "readerMargin",
-                fallback: ReaderTextStyle.defaultMargin
+                fallback: Self.defaultReaderMargin
             ),
             readerJustify: bool(defaults, "readerJustify", fallback: false),
             confirmBeforeDelete: bool(defaults, "confirmBeforeDelete", fallback: true),
@@ -639,7 +802,7 @@ struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            accentColorHex: defaults.string(forKey: "accentColorHex") ?? ThemeManager.ao3Red,
+            accentColorHex: defaults.string(forKey: "accentColorHex") ?? Self.defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
                 "autoPreserveSmallSeriesOnSaveForLater",
@@ -694,13 +857,52 @@ struct KudosBackupSettings: Codable, Equatable {
     }
 }
 
-struct KudosBackupRestoreSummary: Equatable {
+nonisolated struct KudosBackupRestoreSummary: Equatable {
     let works: Int
     let bookmarks: Int
     let fonts: Int
+    var suppressedQueues: Int = 0
+    var suppressedQueueMemberships: Int = 0
+    var revivedQueues: Int = 0
+    var restoredRevivedQueueMemberships: Int = 0
+    var ambiguousQueueConflicts: Int = 0
+    var suppressedCollections: Int = 0
+    var revivedCollections: Int = 0
+    var ambiguousCollectionConflicts: Int = 0
+
+    var conflictMessage: String {
+        var parts: [String] = []
+        if revivedQueues > 0 {
+            parts.append("Restored \(revivedQueues) queue\(revivedQueues == 1 ? "" : "s") "
+                + "with newer changes than a previous deletion.")
+        }
+        if suppressedQueues > 0 {
+            parts.append("Skipped \(suppressedQueues) previously deleted queue"
+                + "\(suppressedQueues == 1 ? "" : "s") and "
+                + "\(suppressedQueueMemberships) membership"
+                + "\(suppressedQueueMemberships == 1 ? "" : "s").")
+        }
+        if ambiguousQueueConflicts > 0 {
+            parts.append("Preserved \(ambiguousQueueConflicts) queue conflict"
+                + "\(ambiguousQueueConflicts == 1 ? "" : "s") because the state was ambiguous.")
+        }
+        if revivedCollections > 0 {
+            parts.append("Restored \(revivedCollections) collection\(revivedCollections == 1 ? "" : "s") "
+                + "with newer changes than a previous deletion.")
+        }
+        if suppressedCollections > 0 {
+            parts.append("Skipped \(suppressedCollections) previously deleted collection"
+                + "\(suppressedCollections == 1 ? "" : "s").")
+        }
+        if ambiguousCollectionConflicts > 0 {
+            parts.append("Preserved \(ambiguousCollectionConflicts) collection conflict"
+                + "\(ambiguousCollectionConflicts == 1 ? "" : "s") because the state was ambiguous.")
+        }
+        return parts.joined(separator: " ")
+    }
 }
 
-enum KudosBackupError: LocalizedError {
+nonisolated enum KudosBackupError: LocalizedError {
     case invalidPackage
     case unsupportedVersion(Int)
 
@@ -714,13 +916,17 @@ enum KudosBackupError: LocalizedError {
     }
 }
 
+// Backup restore stays intentionally linear so conflict and asset safety rules remain auditable.
 @MainActor
+// swiftlint:disable:next type_body_length
 enum KudosBackupService {
     static func makeDocument(
         works: [SavedWork],
         bookmarks: [Bookmark],
         fonts: [CustomFont],
+        collections: [WorkCollection] = [],
         readingQueues: [ReadingQueue],
+        tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupDocument {
         var epubFiles: [UUID: Data] = [:]
@@ -743,9 +949,11 @@ enum KudosBackupService {
             works: works.map(KudosBackupWork.init),
             bookmarks: bookmarks.map(KudosBackupBookmark.init),
             fonts: fonts.map(KudosBackupFont.init),
+            collections: collections.map(KudosBackupCollection.init),
             readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
             readingQueueMemberships: queueMemberships,
-            settings: .capture(defaults: defaults)
+            settings: .capture(defaults: defaults),
+            tombstones: tombstones.map(KudosBackupTombstone.init)
         )
         return KudosBackupDocument(contents: KudosBackupContents(
             manifest: manifest,
@@ -765,6 +973,31 @@ enum KudosBackupService {
         var workIndex = WorkRestoreIndex(existingWorks)
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
 
+        // Adopt the source device's deletion history so a fresh install/reinstall
+        // restoring this backup inherits the same tombstone protection the source
+        // device had, instead of having zero local tombstones to consult.
+        var localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+        var knownTombstoneKeys = Set(localTombstones.map { "\($0.recordTypeRaw)|\($0.recordID)" })
+        for archived in contents.manifest.tombstones {
+            let key = "\(archived.recordTypeRaw)|\(archived.recordID)"
+            guard !knownTombstoneKeys.contains(key) else { continue }
+            let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) ?? .savedWork
+            let tombstone = SyncTombstone(
+                recordID: archived.recordID,
+                recordType: recordType,
+                sourceURL: archived.sourceURL,
+                ao3WorkID: archived.ao3WorkID,
+                createdAt: archived.createdAt,
+                deletedOnDeviceID: archived.deletedOnDeviceID,
+                deletionReason: archived.deletionReason
+            )
+            tombstone.lastModifiedAt = archived.lastModifiedAt
+            context.insert(tombstone)
+            localTombstones.append(tombstone)
+            knownTombstoneKeys.insert(key)
+        }
+        let tombstones = TombstoneIndex(localTombstones)
+
         let existingTags = try context.fetch(FetchDescriptor<Tag>())
         var tagsByName = Dictionary(
             existingTags.map { ($0.name, $0) },
@@ -773,8 +1006,14 @@ enum KudosBackupService {
 
         for archived in contents.manifest.works {
             let work: SavedWork
+            let isNewRecord: Bool
             if let existing = workIndex.existingWork(for: archived) {
                 work = existing
+                isNewRecord = false
+            } else if tombstones.suppressesResurrection(of: archived) {
+                // The user explicitly deleted this work on this device and this backup
+                // predates that deletion — do not resurrect it.
+                continue
             } else {
                 work = SavedWork(
                     id: archived.id,
@@ -782,8 +1021,9 @@ enum KudosBackupService {
                     author: archived.author
                 )
                 context.insert(work)
+                isNewRecord = true
             }
-            apply(archived, to: work)
+            apply(archived, to: work, isNewRecord: isNewRecord)
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -809,21 +1049,146 @@ enum KudosBackupService {
             }
         }
 
+        let existingCollections = try context.fetch(FetchDescriptor<WorkCollection>())
+        var collectionsByID = Dictionary(
+            existingCollections.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var suppressedCollections = 0
+        var revivedCollections = 0
+        var ambiguousCollectionConflicts = 0
+        for archived in contents.manifest.collections {
+            let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
+            let collection: WorkCollection
+            let isNewCollection: Bool
+            if let existing = collectionsByID[archived.id] {
+                collection = existing
+                isNewCollection = false
+            } else {
+                switch tombstones.collectionResolution(
+                    id: archived.id,
+                    incomingModifiedAt: incomingModifiedAt
+                ) {
+                case .suppressStaleData:
+                    suppressedCollections += 1
+                    continue
+                case .preserveAmbiguous:
+                    ambiguousCollectionConflicts += 1
+                    Log.library.notice(
+                        "Preserving ambiguous collection \(archived.id.uuidString, privacy: .public)"
+                    )
+                case .reviveNewerData:
+                    revivedCollections += 1
+                case .noTombstone:
+                    break
+                }
+                collection = WorkCollection(name: archived.name)
+                collection.id = archived.id
+                context.insert(collection)
+                collectionsByID[archived.id] = collection
+                isNewCollection = true
+            }
+
+            let incomingWins = isNewCollection || SyncMerge.shouldApplyIncoming(
+                localModifiedAt: collection.lastModifiedAt,
+                incomingModifiedAt: incomingModifiedAt
+            )
+            if incomingWins || collection.name.isEmpty {
+                collection.name = archived.name
+                collection.syncStatusRaw = archived.syncStatusRaw ?? collection.syncStatusRaw
+            }
+            collection.dateAdded = min(collection.dateAdded, archived.dateAdded)
+            if let archivedCreatedAt = archived.createdAt {
+                collection.createdAt = min(collection.createdAt, archivedCreatedAt)
+            }
+            collection.lastModifiedAt = max(collection.lastModifiedAt, incomingModifiedAt)
+            collection.deletedAt = collection.deletedAt ?? archived.deletedAt
+            // Gated the same way as SavedWork's isFavorite/isSaved/isFinished/isComplete
+            // fix: an unconditional merge here would let an older, non-deleted snapshot
+            // permanently flip a soft-deleted collection back to not-deleted the moment
+            // it syncs in, the same bug class fixed for those boolean flags.
+            collection.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : collection.isPendingDeletion
+            collection.permanentDeletionScheduledAt = incomingWins
+                ? archived.permanentDeletionScheduledAt
+                : collection.permanentDeletionScheduledAt
+
+            for workID in archived.workIDs {
+                guard let work = restoredWorksByArchivedID[workID] else { continue }
+                // A stale manifest can still list a work the user explicitly removed
+                // from this collection since — don't let the union-merge below silently
+                // re-add it unless the archive is demonstrably newer than that removal.
+                if tombstones.suppressesCollectionMembership(
+                    collectionID: collection.id,
+                    workID: work.id,
+                    incomingModifiedAt: incomingModifiedAt
+                ) {
+                    continue
+                }
+                if !collection.works.contains(where: { $0.id == work.id }) {
+                    collection.works.append(work)
+                }
+                if !work.collections.contains(where: { $0.id == collection.id }) {
+                    work.collections.append(collection)
+                }
+            }
+        }
+
         let savedForLaterQueue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
         let existingQueues = try context.fetch(FetchDescriptor<ReadingQueue>())
         var queuesByID = Dictionary(
             existingQueues.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let archivedMembershipsByQueueID = Dictionary(
+            grouping: contents.manifest.readingQueueMemberships,
+            by: \.queueID
+        )
         var queueIDMap: [UUID: ReadingQueue] = [:]
+        var suppressedQueueIDs: Set<UUID> = []
+        var revivedQueueIDs: Set<UUID> = []
+        var suppressedQueues = 0
+        var suppressedQueueMemberships = 0
+        var revivedQueues = 0
+        var restoredRevivedQueueMemberships = 0
+        var ambiguousQueueConflicts = 0
         for archived in contents.manifest.readingQueues {
             let queue: ReadingQueue
             let kind = ReadingQueueKind(rawValue: archived.kindRaw) ?? .custom
+            let archivedMemberships = archivedMembershipsByQueueID[archived.id] ?? []
+            let incomingModifiedAt = archived.effectiveModifiedAt(memberships: archivedMemberships)
+            let hadExistingQueue = queuesByID[archived.id] != nil
+            let resolution = kind == .savedForLater ? .noTombstone : tombstones.queueResolution(
+                id: archived.id,
+                incomingModifiedAt: incomingModifiedAt
+            )
             if kind == .savedForLater {
                 queue = savedForLaterQueue
             } else if let existing = queuesByID[archived.id] {
                 queue = existing
             } else {
+                let archivedQueueID = archived.id.uuidString
+                switch resolution {
+                case .suppressStaleData:
+                    // This queue snapshot is older than a local explicit delete.
+                    // Drop its memberships with it; never re-home them elsewhere.
+                    suppressedQueueIDs.insert(archived.id)
+                    suppressedQueues += 1
+                    suppressedQueueMemberships += archivedMemberships.count
+                    continue
+                case .reviveNewerData:
+                    revivedQueueIDs.insert(archived.id)
+                    revivedQueues += 1
+                    Log.library.notice(
+                        "Reviving queue \(archivedQueueID, privacy: .public) because backup is newer than tombstone"
+                    )
+                case .preserveAmbiguous:
+                    ambiguousQueueConflicts += 1
+                    Log.library.notice(
+                        "Preserving queue \(archivedQueueID, privacy: .public) because tombstone conflict is ambiguous"
+                    )
+                case .noTombstone:
+                    break
+                }
                 queue = ReadingQueue(
                     id: archived.id,
                     name: archived.name,
@@ -835,18 +1200,98 @@ enum KudosBackupService {
                 context.insert(queue)
                 queuesByID[archived.id] = queue
             }
-            queue.name = kind == .savedForLater ? ReadingQueueService.savedForLaterName : archived.name
-            queue.kind = kind
-            queue.sortOrder = archived.sortOrder
-            queue.dateCreated = archived.dateCreated
-            queue.dateUpdated = archived.dateUpdated
+
+            if hadExistingQueue, resolution != .noTombstone,
+               !revivedQueueIDs.contains(archived.id) {
+                ambiguousQueueConflicts += 1
+                Log.library.notice(
+                    "Preserving existing queue \(archived.id.uuidString, privacy: .public) despite tombstone conflict"
+                )
+            }
+            let localModifiedAt = SyncMerge.effectiveQueueModifiedAt(queue)
+            let incomingWins = SyncMerge.shouldApplyIncoming(
+                localModifiedAt: localModifiedAt,
+                incomingModifiedAt: incomingModifiedAt
+            )
+            if kind == .savedForLater {
+                queue.name = ReadingQueueService.savedForLaterName
+                queue.kind = .savedForLater
+            } else if incomingWins || queue.name.isEmpty {
+                queue.name = archived.name
+                queue.kind = kind
+                queue.sortOrder = archived.sortOrder
+            }
+            queue.dateCreated = min(queue.dateCreated, archived.dateCreated)
+            queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
+            if let archivedChangedAt = archived.lastMembershipChangedAt {
+                queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, archivedChangedAt)
+            }
+            queue.deletedAt = newest(queue.deletedAt, archived.deletedAt)
+            // Same incomingWins gating as SavedWork/WorkCollection's isDeleted merge —
+            // a device that already restored a queue must win over a stale device that
+            // hasn't synced the restore yet.
+            queue.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : queue.isPendingDeletion
+            queue.permanentDeletionScheduledAt = incomingWins
+                ? archived.permanentDeletionScheduledAt
+                : queue.permanentDeletionScheduledAt
             queueIDMap[archived.id] = queue
         }
 
         for archived in contents.manifest.readingQueueMemberships {
             guard let work = restoredWorksByArchivedID[archived.workID] else { continue }
-            let queue = queueIDMap[archived.queueID] ?? savedForLaterQueue
-            if work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) {
+            switch tombstones.membershipResolution(
+                id: archived.id,
+                incomingModifiedAt: archived.lastModifiedAt ?? archived.queuedAt
+            ) {
+            case .suppressStaleData:
+                // The user explicitly removed this queue membership on this device —
+                // don't resurrect it from an older backup.
+                suppressedQueueMemberships += 1
+                continue
+            case .preserveAmbiguous:
+                ambiguousQueueConflicts += 1
+            case .reviveNewerData, .noTombstone:
+                break
+            }
+            if suppressedQueueIDs.contains(archived.queueID) {
+                // Its whole queue was deleted here; dropping the membership with it is
+                // the user's intent — never re-home it into Saved for Later.
+                continue
+            }
+            let queue: ReadingQueue
+            if let mapped = queueIDMap[archived.queueID] {
+                queue = mapped
+            } else {
+                // A malformed/older backup can contain a membership without the queue
+                // metadata. Preserve it in a clearly-restored custom queue instead of
+                // silently dumping it into Saved for Later.
+                let date = archived.lastModifiedAt ?? archived.queuedAt
+                let restoredQueue = ReadingQueue(
+                    id: archived.queueID,
+                    name: "Restored Queue",
+                    kind: .custom,
+                    sortOrder: queuesByID.count,
+                    dateCreated: archived.queuedAt,
+                    dateUpdated: date
+                )
+                restoredQueue.lastMembershipChangedAt = date
+                context.insert(restoredQueue)
+                queuesByID[archived.queueID] = restoredQueue
+                queueIDMap[archived.queueID] = restoredQueue
+                ambiguousQueueConflicts += 1
+                queue = restoredQueue
+            }
+            if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
+                let incomingModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
+                if SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: existing.lastModifiedAt,
+                    incomingModifiedAt: incomingModifiedAt
+                ) {
+                    existing.sortOrderInQueue = archived.sortOrderInQueue
+                    existing.note = archived.note
+                    existing.lastModifiedAt = incomingModifiedAt
+                    queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, incomingModifiedAt)
+                }
                 work.isQueuedForLater = true
                 continue
             }
@@ -858,10 +1303,15 @@ enum KudosBackupService {
                 sortOrderInQueue: archived.sortOrderInQueue,
                 note: archived.note
             )
+            membership.lastModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
             context.insert(membership)
             queue.memberships.append(membership)
             work.queueMemberships.append(membership)
+            queue.lastMembershipChangedAt = max(queue.lastMembershipChangedAt, membership.lastModifiedAt)
             work.isQueuedForLater = true
+            if revivedQueueIDs.contains(queue.id) {
+                restoredRevivedQueueMemberships += 1
+            }
         }
         ReadingQueueService.normalizeAllQueuedWorks(in: context)
 
@@ -917,90 +1367,315 @@ enum KudosBackupService {
         }
         settings.apply(to: defaults)
         return KudosBackupRestoreSummary(
-            works: contents.manifest.works.count,
+            // Count what was actually applied — tombstone-suppressed works are skipped
+            // and must not inflate the user-facing "N works restored" confirmation.
+            works: restoredWorksByArchivedID.count,
             bookmarks: contents.manifest.bookmarks.count,
-            fonts: restoredFonts
+            fonts: restoredFonts,
+            suppressedQueues: suppressedQueues,
+            suppressedQueueMemberships: suppressedQueueMemberships,
+            revivedQueues: revivedQueues,
+            restoredRevivedQueueMemberships: restoredRevivedQueueMemberships,
+            ambiguousQueueConflicts: ambiguousQueueConflicts,
+            suppressedCollections: suppressedCollections,
+            revivedCollections: revivedCollections,
+            ambiguousCollectionConflicts: ambiguousCollectionConflicts
         )
     }
 
-    private struct WorkRestoreIndex {
-        private var worksByID: [UUID: SavedWork] = [:]
-        private var worksByAO3WorkID: [Int: SavedWork] = [:]
-        private var worksByCanonicalSourceURL: [String: SavedWork] = [:]
+    /// Prevents backup import from resurrecting a record the user explicitly deleted on
+    /// this device. A work tombstone only suppresses recreation when it is at least as
+    /// new as the archived snapshot — an archived work with a strictly newer modification
+    /// time (the user re-saved it after deleting it, then took a fresh backup) is let
+    /// through normally rather than blocked forever by a stale tombstone. Queue and
+    /// membership tombstones use the same timestamp-aware policy: newer queue or
+    /// membership activity revives older tombstones, while older stale snapshots stay
+    /// suppressed.
+    private struct TombstoneIndex {
+        private var savedWorkTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var savedWorkTombstonesByAO3WorkID: [Int: SyncTombstone] = [:]
+        private var savedWorkTombstonesByCanonicalURL: [String: SyncTombstone] = [:]
+        private var collectionTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var queueTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var membershipTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var collectionMembershipTombstonesByID: [UUID: SyncTombstone] = [:]
 
-        init(_ works: [SavedWork]) {
-            for work in works {
-                index(work)
+        init(_ tombstones: [SyncTombstone]) {
+            for tombstone in tombstones {
+                switch tombstone.recordType {
+                case .savedWork:
+                    // Delete → re-download → delete leaves several tombstones sharing an
+                    // AO3 identity, and the fetch order is unspecified — always keep the
+                    // newest so a stale tombstone can't wrongly re-admit an old snapshot.
+                    indexNewest(tombstone, byID: tombstone.recordID)
+                    if let ao3WorkID = tombstone.ao3WorkID {
+                        indexNewest(tombstone, byAO3WorkID: ao3WorkID)
+                    }
+                    if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: tombstone.sourceURL) {
+                        indexNewest(tombstone, byCanonicalURL: canonicalURL)
+                    }
+                case .workCollection:
+                    indexNewest(tombstone, byCollectionID: tombstone.recordID)
+                case .readingQueue:
+                    indexNewest(tombstone, byQueueID: tombstone.recordID)
+                case .readingQueueMembership:
+                    indexNewest(tombstone, byMembershipID: tombstone.recordID)
+                case .workCollectionMembership:
+                    indexNewest(tombstone, byCollectionMembershipID: tombstone.recordID)
+                }
             }
         }
 
-        mutating func index(_ work: SavedWork) {
-            worksByID[work.id] = work
-            if let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) {
-                worksByAO3WorkID[id] = work
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byID id: UUID) {
+            if let existing = savedWorkTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
             }
-            if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: work.sourceURL) {
-                worksByCanonicalSourceURL[canonicalURL] = work
-            }
+            savedWorkTombstonesByID[id] = tombstone
         }
 
-        func existingWork(for archived: KudosBackupWork) -> SavedWork? {
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byAO3WorkID id: Int) {
+            if let existing = savedWorkTombstonesByAO3WorkID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            savedWorkTombstonesByAO3WorkID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byCanonicalURL url: String) {
+            if let existing = savedWorkTombstonesByCanonicalURL[url],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            savedWorkTombstonesByCanonicalURL[url] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionID id: UUID) {
+            if let existing = collectionTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            collectionTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byQueueID id: UUID) {
+            if let existing = queueTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            queueTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byMembershipID id: UUID) {
+            if let existing = membershipTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            membershipTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionMembershipID id: UUID) {
+            if let existing = collectionMembershipTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            collectionMembershipTombstonesByID[id] = tombstone
+        }
+
+        /// Whether importing this archived work would resurrect an explicit local delete.
+        func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
+            let tombstone: SyncTombstone?
             if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
-               let work = worksByAO3WorkID[archivedAO3WorkID] {
-                return work
+               let match = savedWorkTombstonesByAO3WorkID[archivedAO3WorkID] {
+                tombstone = match
+            } else if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: archived.sourceURL),
+                      let match = savedWorkTombstonesByCanonicalURL[canonicalURL] {
+                tombstone = match
+            } else {
+                tombstone = savedWorkTombstonesByID[archived.id]
             }
-            if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: archived.sourceURL),
-               let work = worksByCanonicalSourceURL[canonicalURL] {
-                return work
-            }
-            return worksByID[archived.id]
+            guard let tombstone else { return false }
+            let archivedModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
+            return tombstone.lastModifiedAt >= archivedModifiedAt
+        }
+
+        func collectionResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: collectionTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func queueResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: queueTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func membershipResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: membershipTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        /// Whether a work explicitly removed from this collection should stay removed
+        /// rather than being re-added by an archived manifest that still lists it.
+        func suppressesCollectionMembership(
+            collectionID: UUID,
+            workID: UUID,
+            incomingModifiedAt: Date?
+        ) -> Bool {
+            let id = SyncTombstone.collectionMembershipID(collectionID: collectionID, workID: workID)
+            guard let tombstone = collectionMembershipTombstonesByID[id] else { return false }
+            guard let incomingModifiedAt else { return true }
+            return tombstone.lastModifiedAt >= incomingModifiedAt
         }
     }
 
-    private static func apply(_ archived: KudosBackupWork, to work: SavedWork) {
-        work.title = archived.title
-        work.author = archived.author
-        work.summary = archived.summary
-        work.sourceURL = archived.sourceURL
-        work.dateAdded = archived.dateAdded
-        work.isFavorite = archived.isFavorite
-        work.isSaved = archived.isSaved
-        work.isFinished = archived.isFinished
-        work.isComplete = archived.isComplete
-        work.rating = archived.rating
-        work.language = archived.language
-        work.wordCount = archived.wordCount
-        work.datePublished = archived.datePublished ?? ""
-        work.dateUpdated = archived.dateUpdated ?? ""
-        work.chapters = archived.chapters
-        work.kudos = archived.kudos
-        work.comments = archived.comments
-        work.hits = archived.hits
-        work.workWarnings = archived.workWarnings
-        work.workCategories = archived.workCategories
-        work.seriesTitle = archived.seriesTitle
-        work.seriesPosition = archived.seriesPosition
-        work.seriesURL = archived.seriesURL
-        work.ao3SeriesID = archived.ao3SeriesID
-        work.lastSpineIndex = archived.lastSpineIndex
-        work.lastScrollFraction = archived.lastScrollFraction
-        work.lastReadDate = archived.lastReadDate
-        work.workTags = archived.workTags
-        work.workFandoms = archived.workFandoms
-        work.workCharacters = archived.workCharacters
-        work.workRelationships = archived.workRelationships
-        work.workFreeforms = archived.workFreeforms
-        work.workTagsFetched = archived.workTagsFetched
-        work.ao3Unavailable = archived.ao3Unavailable
-        work.isQueuedForLater = archived.isQueuedForLater
-        work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw
-        work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
-        work.preservedAt = archived.preservedAt
-        work.lastPreservationAttemptAt = archived.lastPreservationAttemptAt
-        work.lastAvailabilityCheck = archived.lastAvailabilityCheck
-        work.ao3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL)
-        #if canImport(ReadiumShared)
-        work.readiumLocator = archived.readiumLocator ?? ""
-        #endif
+    /// Thin adapter over the shared `WorkIdentityIndex` for archived backup records
+    /// (which carry the originating record's UUID as a last-resort identity tier).
+    private struct WorkRestoreIndex {
+        private var identity: WorkIdentityIndex
+
+        init(_ works: [SavedWork]) {
+            identity = WorkIdentityIndex(works)
+        }
+
+        mutating func index(_ work: SavedWork) {
+            identity.index(work)
+        }
+
+        func existingWork(for archived: KudosBackupWork) -> SavedWork? {
+            identity.existingWork(
+                ao3WorkID: archived.ao3WorkID,
+                sourceURL: archived.sourceURL,
+                recordID: archived.id
+            )
+        }
+    }
+
+    private static func apply(_ archived: KudosBackupWork, to work: SavedWork, isNewRecord: Bool) {
+        let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
+        // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
+        // always at least as new as any real archived snapshot — so incomingWins alone would
+        // never let a brand-new record adopt the archive's flags. Treat "no prior local state
+        // to protect" the same way mergedText/mergedPositive already treat an empty/zero
+        // current value: always accept the incoming value.
+        let incomingWins = isNewRecord || SyncMerge.shouldApplyIncoming(
+            localModifiedAt: work.lastModifiedAt,
+            incomingModifiedAt: incomingModifiedAt
+        )
+
+        work.createdAt = min(work.createdAt, archived.createdAt ?? archived.dateAdded)
+        work.dateAdded = min(work.dateAdded, archived.dateAdded)
+        if let assetIdentifier = archived.assetIdentifier, !assetIdentifier.isEmpty {
+            work.assetIdentifier = work.assetIdentifier.isEmpty ? assetIdentifier : work.assetIdentifier
+        }
+
+        work.title = mergedText(current: work.title, incoming: archived.title, incomingWins: incomingWins)
+        work.author = mergedText(current: work.author, incoming: archived.author, incomingWins: incomingWins)
+        work.summary = mergedText(current: work.summary, incoming: archived.summary, incomingWins: incomingWins)
+        work.sourceURL = mergedText(current: work.sourceURL, incoming: archived.sourceURL, incomingWins: incomingWins)
+        work.rating = mergedText(current: work.rating, incoming: archived.rating, incomingWins: incomingWins)
+        work.language = mergedText(current: work.language, incoming: archived.language, incomingWins: incomingWins)
+        work.datePublished = mergedText(
+            current: work.datePublished,
+            incoming: archived.datePublished ?? "",
+            incomingWins: incomingWins
+        )
+        work.dateUpdated = mergedText(
+            current: work.dateUpdated,
+            incoming: archived.dateUpdated ?? "",
+            incomingWins: incomingWins
+        )
+        work.chapters = mergedText(current: work.chapters, incoming: archived.chapters, incomingWins: incomingWins)
+        work.seriesTitle = mergedText(
+            current: work.seriesTitle,
+            incoming: archived.seriesTitle,
+            incomingWins: incomingWins
+        )
+        work.seriesURL = mergedText(current: work.seriesURL, incoming: archived.seriesURL, incomingWins: incomingWins)
+
+        work.isFavorite = incomingWins ? archived.isFavorite : work.isFavorite
+        work.isSaved = incomingWins ? archived.isSaved : work.isSaved
+        work.isFinished = incomingWins ? archived.isFinished : work.isFinished
+        work.isComplete = incomingWins ? archived.isComplete : work.isComplete
+        work.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : work.isPendingDeletion
+        work.deletedAt = newest(work.deletedAt, archived.deletedAt)
+        // incomingWins-gated like isDeleted, not a blind "newest wins" — a device that
+        // already called restore() (clearing this field) must win over a stale device
+        // that hasn't synced the restore yet, the same way an un-set isDeleted does.
+        work.permanentDeletionScheduledAt = incomingWins
+            ? archived.permanentDeletionScheduledAt
+            : work.permanentDeletionScheduledAt
+
+        work.wordCount = mergedPositive(
+            current: work.wordCount,
+            incoming: archived.wordCount,
+            incomingWins: incomingWins
+        )
+        work.kudos = mergedPositive(current: work.kudos, incoming: archived.kudos, incomingWins: incomingWins)
+        work.comments = mergedPositive(current: work.comments, incoming: archived.comments, incomingWins: incomingWins)
+        work.hits = mergedPositive(current: work.hits, incoming: archived.hits, incomingWins: incomingWins)
+        if incomingWins || work.seriesPosition == 0 {
+            work.seriesPosition = max(work.seriesPosition, archived.seriesPosition)
+        }
+        work.ao3SeriesID = work.ao3SeriesID ?? archived.ao3SeriesID
+        work.ao3WorkID = work.ao3WorkID ?? archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL)
+
+        work.workWarnings = TagMerge.merged(work.workWarnings, archived.workWarnings)
+        work.workCategories = TagMerge.merged(work.workCategories, archived.workCategories)
+        work.workTags = TagMerge.merged(work.workTags, archived.workTags)
+        work.workFandoms = TagMerge.merged(work.workFandoms, archived.workFandoms)
+        work.workCharacters = TagMerge.merged(work.workCharacters, archived.workCharacters)
+        work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
+        work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
+        work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
+        work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
+        work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater
+
+        if incomingWins || work.epubPreservationStatus == .notPreserved {
+            work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw
+        }
+        if incomingWins || work.metadataSyncStatus == .unknown {
+            work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
+        }
+        work.preservedAt = newest(work.preservedAt, archived.preservedAt)
+        work.lastPreservationAttemptAt = newest(
+            work.lastPreservationAttemptAt,
+            archived.lastPreservationAttemptAt
+        )
+        work.lastAvailabilityCheck = newest(work.lastAvailabilityCheck, archived.lastAvailabilityCheck)
+
+        SyncMerge.applyProgress(
+            SyncMerge.ProgressSnapshot(
+                lastSpineIndex: archived.lastSpineIndex,
+                lastScrollFraction: archived.lastScrollFraction,
+                readiumLocator: archived.readiumLocator ?? "",
+                lastReadDate: archived.lastReadDate,
+                modifiedAt: archived.progressModifiedAt
+            ),
+            to: work
+        )
+        work.lastModifiedAt = max(work.lastModifiedAt, incomingModifiedAt)
+    }
+
+    private static func mergedText(current: String, incoming: String, incomingWins: Bool) -> String {
+        let trimmed = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return current }
+        return current.isEmpty || incomingWins ? incoming : current
+    }
+
+    private static func mergedPositive(current: Int, incoming: Int, incomingWins: Bool) -> Int {
+        guard incoming > 0 else { return current }
+        return current == 0 || incomingWins ? incoming : current
+    }
+
+    private static func newest(_ first: Date?, _ second: Date?) -> Date? {
+        switch (first, second) {
+        case let (first?, second?): max(first, second)
+        case let (first?, nil): first
+        case let (nil, second?): second
+        case (nil, nil): nil
+        }
     }
 }

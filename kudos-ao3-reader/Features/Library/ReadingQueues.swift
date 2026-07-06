@@ -9,8 +9,10 @@ struct ReadingQueueCard: View {
     @Environment(ThemeManager.self) private var themeManager
     let queue: ReadingQueue
 
+    // Memberships of a soft-deleted work survive (so restoring it re-joins its
+    // queues), but the work itself belongs to Recently Deleted, not this card.
     private var works: [SavedWork] {
-        queue.memberships.compactMap(\.work)
+        queue.memberships.compactMap(\.work).filter { !$0.isPendingDeletion }
     }
 
     var body: some View {
@@ -102,6 +104,8 @@ struct ReadingQueueDetailView: View {
     /// (see `cancelRefreshOnTabChange`) — a queue can hold a large number of works.
     @State private var refreshTask: Task<Void, Never>?
 
+    // Soft-deleted works keep their membership rows (restore re-joins them here)
+    // but render only in Recently Deleted until then.
     private var works: [SavedWork] {
         queue.memberships
             .sorted {
@@ -111,6 +115,7 @@ struct ReadingQueueDetailView: View {
                 return $0.queuedAt > $1.queuedAt
             }
             .compactMap(\.work)
+            .filter { !$0.isPendingDeletion }
     }
 
     private var visibleWorks: [SavedWork] {
@@ -206,7 +211,7 @@ struct ReadingQueueDetailView: View {
                     let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         queue.name = trimmed
-                        queue.dateUpdated = Date()
+                        queue.markModified()
                         saveBestEffort("Saving queue rename failed")
                     }
                 }
@@ -222,16 +227,15 @@ struct ReadingQueueDetailView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("The queue is removed. Works stay in Kudos; only this queue membership is cleared.")
+                Text(
+                    "The queue moves to Recently Deleted for 90 days, with everything in it "
+                        + "intact. Works stay in Kudos either way."
+                )
             }
     }
 
     private func deleteQueue() {
-        for work in works {
-            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
-        }
-        context.delete(queue)
-        saveBestEffort("Saving queue deletion failed")
+        PreservedWorkService.softDelete(queue, in: context)
         dismiss()
     }
 
@@ -250,7 +254,8 @@ struct ReadingQueueDetailView: View {
 
 struct ReadingQueueStorageView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var works: [SavedWork]
     @State private var pendingQueueRemoval: SavedWork?
 
     private var queuedWorks: [SavedWork] {
@@ -422,7 +427,8 @@ struct AddToQueueView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \ReadingQueue.sortOrder) private var queues: [ReadingQueue]
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
+    private var queues: [ReadingQueue]
     @State private var newName = ""
     @State private var workingQueueIDs: Set<UUID> = []
     @State private var includeSeries = false

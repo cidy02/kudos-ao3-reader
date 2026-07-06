@@ -6,6 +6,7 @@ import UIKit
 #endif
 
 // Lint: this existing form is kept together to avoid behavior refactors.
+// swiftlint:disable file_length
 /// The toggleable reading options, grouped into categories. Shared between the
 /// reader's inspector (quick access while reading) and the Settings page, so the
 /// two always show the same controls and stay in sync via `@AppStorage`.
@@ -23,7 +24,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @Query(sort: \SavedWork.dateAdded) private var works: [SavedWork]
     @Query(sort: \Bookmark.dateAdded) private var bookmarks: [Bookmark]
+    @Query(sort: \WorkCollection.dateAdded) private var collections: [WorkCollection]
     @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
+    @Query private var syncTombstones: [SyncTombstone]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -44,6 +47,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var exportingBackup = false
     @State private var importingBackup = false
     @State private var importingEPUB = false
+    @State private var choosingSyncFolder = false
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
     @State private var showImportConfirmation = false
@@ -57,6 +61,12 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
+    @State private var persistenceStatus = PersistenceStatusStore.snapshot()
+    @State private var isPreparingPersistence = false
+    @State private var folderSyncStatus = FolderSyncService.snapshot()
+    @State private var isFolderSyncing = false
+    @State private var showingSyncDetails = false
+    @State private var lastFolderSyncResult: FolderSyncResult?
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -74,7 +84,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     }
 
     private var legacySavedWorksForQueueMigration: [SavedWork] {
-        works.filter { $0.isSaved && !$0.isQueuedForLater }
+        // Recently Deleted works aren't migrated into Saved for Later — queueing one
+        // would resurrect a record the user explicitly deleted.
+        works.filter { $0.isSaved && !$0.isQueuedForLater && !$0.isPendingDeletion }
     }
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
@@ -165,10 +177,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     } header: {
                         Text("Theme")
                     } footer: {
-                        Text(themeManager.matchAppAndReader
-                            ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
-                            : "The app and reader use separate themes.")
-                            + Text(" The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
+                        Text((themeManager.matchAppAndReader
+                              ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
+                              : "The app and reader use separate themes.")
+                            + " The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
                     }
                 }
 
@@ -256,6 +268,19 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     BackupSettingsSection(
                         onExport: exportBackup,
                         onImport: { importingBackup = true }
+                    )
+
+                    FolderSyncSettingsSection(
+                        persistenceStatus: persistenceStatus,
+                        folderStatus: folderSyncStatus,
+                        isPreparing: isPreparingPersistence,
+                        isSyncing: isFolderSyncing,
+                        onChooseFolder: { choosingSyncFolder = true },
+                        onSyncNow: startFolderSyncNow,
+                        onDisconnect: disconnectSyncFolder,
+                        onRetryPreparation: preparePersistenceForSync,
+                        onToggleAutoSync: setAutoSyncEnabled,
+                        onShowSyncDetails: { showingSyncDetails = true }
                     )
 
                     EPUBImportSettingsSection(
@@ -350,6 +375,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         .formStyle(.grouped)
         .appThemedScroll()
+        .onAppear {
+            persistenceStatus = PersistenceStatusStore.snapshot()
+            folderSyncStatus = FolderSyncService.snapshot()
+        }
         .fileImporter(
             isPresented: $importing,
             allowedContentTypes: [.font],
@@ -390,6 +419,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             allowsMultipleSelection: true
         ) { result in
             importEPUBSelection(result)
+        }
+        .fileImporter(
+            isPresented: $choosingSyncFolder,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            connectSyncFolder(result)
         }
         .confirmationDialog(
             "Import this backup?",
@@ -452,6 +488,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         .sheet(isPresented: $showAbout) {
             NavigationStack { AboutView() }
+        }
+        .sheet(isPresented: $showingSyncDetails) {
+            NavigationStack {
+                FolderSyncDetailsView(folderStatus: folderSyncStatus, lastResult: lastFolderSyncResult)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -537,7 +580,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 works: works,
                 bookmarks: bookmarks,
                 fonts: customFonts,
-                readingQueues: readingQueues
+                collections: collections,
+                readingQueues: readingQueues,
+                tombstones: syncTombstones
             )
             exportingBackup = true
         } catch {
@@ -566,13 +611,24 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func restorePendingBackup() {
         guard let backup = pendingBackup else { return }
         pendingBackup = nil
+        guard PersistenceOperationGate.begin(.backupImport) else {
+            backupNotice = BackupNotice(
+                title: "Import Already Busy",
+                message: "Kudos is already running "
+                    + "\(PersistenceOperationGate.active?.title ?? "another persistence operation")."
+            )
+            return
+        }
+        defer { PersistenceOperationGate.end(.backupImport) }
         do {
             let summary = try KudosBackupService.restore(backup, into: context)
             applyRestoredTheme(backup.manifest.settings)
+            let conflictMessage = summary.conflictMessage
             backupNotice = BackupNotice(
                 title: "Backup Imported",
                 message: "Merged \(summary.works) Library records, "
                     + "\(summary.bookmarks) saved links, and \(summary.fonts) custom fonts."
+                    + (conflictMessage.isEmpty ? "" : " \(conflictMessage)")
             )
         } catch {
             backupNotice = BackupNotice(
@@ -588,6 +644,67 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         themeManager.readerTheme = ReaderTheme(rawValue: settings.readerTheme) ?? .light
         themeManager.accentHex = settings.accentColorHex
         themeManager.matchAppAndReader = settings.matchAppReaderTheme
+    }
+
+    private func preparePersistenceForSync() {
+        guard !isPreparingPersistence else { return }
+        isPreparingPersistence = true
+        Task { @MainActor in
+            let state = await PersistenceMigrationService.run(in: context)
+            persistenceStatus = PersistenceStatusStore.snapshot()
+            isPreparingPersistence = false
+            if state == .failedRecoverable {
+                backupNotice = BackupNotice(
+                    title: "Folder Sync Prep Needs Retry",
+                    message: persistenceStatus.detail
+                )
+            }
+        }
+    }
+
+    private func connectSyncFolder(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            try FolderSyncService.connect(to: url)
+            folderSyncStatus = FolderSyncService.snapshot()
+            startFolderSyncNow()
+        } catch {
+            folderSyncStatus = FolderSyncService.snapshot()
+            backupNotice = BackupNotice(
+                title: "Couldn't Connect Sync Folder",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func startFolderSyncNow() {
+        guard !isFolderSyncing else { return }
+        isFolderSyncing = true
+        Task { @MainActor in
+            defer {
+                folderSyncStatus = FolderSyncService.snapshot()
+                persistenceStatus = PersistenceStatusStore.snapshot()
+                isFolderSyncing = false
+            }
+            do {
+                lastFolderSyncResult = try await FolderSyncService.syncNow(in: context)
+            } catch {
+                backupNotice = BackupNotice(
+                    title: "Folder Sync Couldn't Finish",
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func disconnectSyncFolder() {
+        FolderSyncService.disconnect()
+        folderSyncStatus = FolderSyncService.snapshot()
+    }
+
+    private func setAutoSyncEnabled(_ enabled: Bool) {
+        FolderSyncService.setAutoSyncEnabled(enabled)
+        folderSyncStatus = FolderSyncService.snapshot()
     }
 
     private var savedWorkMigrationButtonTitle: String {
@@ -712,6 +829,158 @@ struct BackupSettingsSection: View {
                 + "merges without deleting items already on this device. AO3 sessions "
                 + "and passwords are never included.")
         }
+    }
+}
+
+struct FolderSyncSettingsSection: View {
+    let persistenceStatus: PersistenceStatusSnapshot
+    let folderStatus: FolderSyncSnapshot
+    let isPreparing: Bool
+    let isSyncing: Bool
+    let onChooseFolder: () -> Void
+    let onSyncNow: () -> Void
+    let onDisconnect: () -> Void
+    let onRetryPreparation: () -> Void
+    let onToggleAutoSync: (Bool) -> Void
+    let onShowSyncDetails: () -> Void
+
+    var body: some View {
+        Section {
+            LabeledContent {
+                Text(persistenceStatus.migrationState.title)
+            } label: {
+                Label("Metadata", systemImage: "externaldrive")
+            }
+
+            if folderStatus.isConnected {
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(folderStatus.folderDisplayName)
+                        if !folderStatus.folderPath.isEmpty {
+                            Text(folderStatus.folderPath)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                } label: {
+                    Label("Folder", systemImage: "folder")
+                }
+
+                Toggle(isOn: Binding(
+                    get: { folderStatus.autoSyncEnabled },
+                    set: onToggleAutoSync
+                )) {
+                    Label("Auto Sync", systemImage: "arrow.triangle.2.circlepath.circle")
+                }
+
+                Button(action: onSyncNow) {
+                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(isSyncing || isPreparing)
+
+                Button(action: onChooseFolder) {
+                    Label("Change Folder", systemImage: "folder.badge.gearshape")
+                }
+                .disabled(isSyncing || isPreparing)
+
+                Button(action: onShowSyncDetails) {
+                    Label("Sync Details", systemImage: "list.bullet.rectangle")
+                }
+
+                Button(role: .destructive, action: onDisconnect) {
+                    Label("Disconnect", systemImage: "xmark.circle")
+                }
+                .disabled(isSyncing)
+            } else {
+                Button(action: onChooseFolder) {
+                    Label("Choose Sync Folder", systemImage: "folder.badge.plus")
+                }
+                .disabled(isSyncing || isPreparing)
+            }
+
+            if let date = persistenceStatus.lastMigrationAttempt {
+                LabeledContent("Last Checked", value: date.formatted(date: .abbreviated, time: .shortened))
+            }
+
+            if let date = folderStatus.lastSyncAt {
+                LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .shortened))
+            }
+
+            Button(action: onRetryPreparation) {
+                Label(
+                    persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep",
+                    systemImage: "arrow.clockwise"
+                )
+            }
+            .disabled(isPreparing || isSyncing)
+
+            if isPreparing || isSyncing {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text(isSyncing ? "Syncing library…" : "Preparing metadata…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !folderStatus.lastError.isEmpty {
+                Text(folderStatus.lastError)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Library Sync Folder")
+        } footer: {
+            Text(persistenceStatus.detail + " Your library data — including reading history — is written "
+                + "to the folder you choose. If that folder is in iCloud Drive, Apple syncs it to your "
+                + "other devices through your personal iCloud account. Kudos still works fully offline. "
+                + "This is folder-based sync using the existing backup format, not real-time CloudKit sync. "
+                + "Turning off Auto Sync stops automatic background/launch syncing — Sync Now still works.")
+        }
+    }
+}
+
+/// Lightweight diagnostics, mainly useful during development/testing — deliberately
+/// tucked behind its own screen rather than cluttering the main Settings list.
+struct FolderSyncDetailsView: View {
+    let folderStatus: FolderSyncSnapshot
+    let lastResult: FolderSyncResult?
+
+    var body: some View {
+        Form {
+            Section("Status") {
+                LabeledContent("Connected", value: folderStatus.isConnected ? "Yes" : "No")
+                LabeledContent("Auto Sync", value: folderStatus.autoSyncEnabled ? "On" : "Off")
+                LabeledContent("Pending Changes", value: folderStatus.isDirty ? "Yes" : "No")
+                if let date = folderStatus.lastSyncAt {
+                    LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .standard))
+                }
+                if !folderStatus.lastError.isEmpty {
+                    LabeledContent("Last Error", value: folderStatus.lastError)
+                }
+            }
+            if let lastResult {
+                Section("Last Sync Result") {
+                    LabeledContent("Read Remote File", value: lastResult.didReadRemoteFile ? "Yes" : "No")
+                    LabeledContent("Wrote Remote File", value: lastResult.didWriteRemoteFile ? "Yes" : "No")
+                    LabeledContent("Missing Remote File", value: lastResult.missingRemoteFile ? "Yes" : "No")
+                    LabeledContent("Conflicts Folded", value: "\(lastResult.foldedConflicts)")
+                    LabeledContent("Works Restored", value: "\(lastResult.restoredWorks)")
+                    LabeledContent("Queues Suppressed", value: "\(lastResult.suppressedQueues)")
+                    LabeledContent("Queues Revived", value: "\(lastResult.revivedQueues)")
+                    LabeledContent("Ambiguous Queue Conflicts", value: "\(lastResult.ambiguousQueueConflicts)")
+                }
+            } else {
+                Section {
+                    Text("No sync has run yet this session.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Sync Details")
+        #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 

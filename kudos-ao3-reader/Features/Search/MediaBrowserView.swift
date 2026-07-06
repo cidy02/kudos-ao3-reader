@@ -12,7 +12,7 @@ import SwiftUI
 struct MediaBrowserView: View {
     var onSelectFandom: (String) -> Void
 
-    @Query private var library: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var library: [SavedWork]
 
     @State private var categories: [AO3MediaCategory] = []
     @State private var phase: Phase = .loading

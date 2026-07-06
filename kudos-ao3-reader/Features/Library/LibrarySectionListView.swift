@@ -18,7 +18,8 @@ struct LibrarySectionListView: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
 
-    @Query(sort: \SavedWork.dateAdded, order: .reverse) private var works: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?
     @State private var markedForLater: [AO3WorkSummary] = []
@@ -47,12 +48,18 @@ struct LibrarySectionListView: View {
         filters.hasActiveFilters ? filters.apply(to: items) : items
     }
 
-    /// The remote Marked-for-Later list, narrowed by the active fandom filter (the
+    /// The remote Marked-for-Later list with any locally-saved work removed — a work
+    /// in both renders once, in the local section above, as its richer local row.
+    private var remoteOnlyMarkedForLater: [AO3WorkSummary] {
+        CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
+    }
+
+    /// The de-duplicated remote list, narrowed by the active fandom filter (the
     /// other facets need local metadata these summaries don't carry).
     private var visibleMarkedForLater: [AO3WorkSummary] {
-        guard !filters.fandoms.isEmpty else { return markedForLater }
+        guard !filters.fandoms.isEmpty else { return remoteOnlyMarkedForLater }
         let wanted = Set(filters.fandoms.map { $0.lowercased() })
-        return markedForLater.filter { summary in
+        return remoteOnlyMarkedForLater.filter { summary in
             summary.fandoms.contains { wanted.contains($0.lowercased()) }
         }
     }
@@ -64,7 +71,7 @@ struct LibrarySectionListView: View {
 
     /// Whether the section has any works at all (pre-filter) — drives the toolbar.
     private var hasAnyContent: Bool {
-        !items.isEmpty || (kind == .savedForLater && !markedForLater.isEmpty)
+        !items.isEmpty || (kind == .savedForLater && !remoteOnlyMarkedForLater.isEmpty)
     }
 
     var body: some View {
@@ -95,8 +102,8 @@ struct LibrarySectionListView: View {
                 for: $pendingDelete,
                 title: "Delete this work?",
                 confirmLabel: "Delete",
-                message: { "“\($0.title)” will be removed from your Library. This can't be undone." },
-                perform: { WorkLifecycle.delete($0, in: context) }
+                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
+                perform: { PreservedWorkService.softDelete($0, in: context) }
             )
             .task(id: auth.isLoggedIn) {
                 if kind == .savedForLater { await loadMarkedForLater() }
@@ -173,6 +180,7 @@ struct LibrarySectionListView: View {
 
                 Button {
                     work.isFavorite.toggle()
+                    work.markModified()
                     try? context.save()
                 } label: {
                     Label(work.isFavorite ? "Unfavorite" : "Favorite",
@@ -193,7 +201,11 @@ struct LibrarySectionListView: View {
                     }
                 } else {
                     Button(role: .destructive) {
-                        if confirmBeforeDelete { pendingDelete = work } else { WorkLifecycle.delete(work, in: context) }
+                        if confirmBeforeDelete {
+                            pendingDelete = work
+                        } else {
+                            PreservedWorkService.softDelete(work, in: context)
+                        }
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }

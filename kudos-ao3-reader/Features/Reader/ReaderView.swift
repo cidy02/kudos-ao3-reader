@@ -526,7 +526,7 @@ struct ReaderView: View {
             landOnLast: landNextChapterOnLastPage
         )
         work.lastSpineIndex = currentIndex
-        work.lastReadDate = Date()
+        work.markProgressModified()
         landNextChapterOnLastPage = false
     }
 }

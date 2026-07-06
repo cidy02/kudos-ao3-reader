@@ -222,8 +222,9 @@ private struct LocalReadingHistoryView: View {
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
 
     // Queued works whose preservation is pending/failed have hasEPUB == false but are
-    // protected; keep them out of the reading-history list.
-    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater },
+    // protected; keep them out of the reading-history list. Soft-deleted works belong
+    // in Recently Deleted, not history.
+    @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater && !$0.isPendingDeletion },
            sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
@@ -313,14 +314,13 @@ private struct LocalReadingHistoryView: View {
                 for: $pendingDelete,
                 title: "Remove from History?",
                 confirmLabel: "Remove",
-                message: { "“\($0.title)” will be removed from your History." },
+                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: remove
             )
     }
 
     private func remove(_ work: SavedWork) {
-        context.delete(work)
-        try? context.save()
+        PreservedWorkService.softDelete(work, in: context)
     }
 }
 
@@ -332,7 +332,8 @@ private struct LocalFavoritesView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
-    @Query(filter: #Predicate<SavedWork> { $0.isFavorite }, sort: \SavedWork.dateAdded, order: .reverse)
+    @Query(filter: #Predicate<SavedWork> { $0.isFavorite && !$0.isPendingDeletion },
+           sort: \SavedWork.dateAdded, order: .reverse)
     private var favorites: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var expandAll = false
@@ -372,6 +373,7 @@ private struct LocalFavoritesView: View {
                             .swipeActions(edge: .trailing) {
                                 Button {
                                     work.isFavorite = false
+                                    work.markModified()
                                     try? context.save()
                                 } label: {
                                     Label("Unfavorite", systemImage: "star.slash")

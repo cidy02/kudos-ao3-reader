@@ -88,7 +88,8 @@ the status here in sync with the board.
   Export a versioned `.kudosbackup` package containing Library metadata, User
   Tags, saved links, EPUBs, custom fonts, and app/reader settings. Import merges
   safely with the current Library. The system document picker supports iCloud
-  Drive without requiring CloudKit entitlements; automatic sync remains later.
+  Drive without requiring CloudKit entitlements; the Library Sync Folder now
+  reuses this package format for folder-based sync.
   Verified with package round-trip, merge-restore, and format-version tests plus
   a simulator visual check of the Settings backup controls.
 

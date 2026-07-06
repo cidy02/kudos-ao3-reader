@@ -101,6 +101,10 @@ enum ReadingQueueService {
             primary.name = savedForLaterName
             primary.kind = .savedForLater
             primary.sortOrder = min(primary.sortOrder, -1000)
+            primary.lastMembershipChangedAt = max(
+                primary.lastMembershipChangedAt,
+                primary.memberships.map(\.lastModifiedAt).max() ?? primary.dateCreated
+            )
 
             for duplicate in savedQueues.dropFirst() {
                 for membership in duplicate.memberships {
@@ -108,6 +112,7 @@ enum ReadingQueueService {
                        !primary.memberships.contains(where: { $0.work?.id == work.id }) {
                         membership.queue = primary
                         primary.memberships.append(membership)
+                        primary.markMembershipChanged(max(membership.lastModifiedAt, Date()))
                     }
                 }
                 context.delete(duplicate)
@@ -209,7 +214,10 @@ enum ReadingQueueService {
         context.insert(membership)
         queue.memberships.append(membership)
         work.queueMemberships.append(membership)
-        queue.dateUpdated = Date()
+        let now = Date()
+        queue.markMembershipChanged(now)
+        membership.markModified(now)
+        work.markModified(now)
         work.isQueuedForLater = true
         normalize(work)
         saveBestEffort(context, reason: "Saving queue membership failed")
@@ -246,6 +254,11 @@ enum ReadingQueueService {
         let saved: SavedWork
         let createdNewWork: Bool
         if let existing = existingWork(for: summary, in: context) {
+            // Same revival rule as addAndPreserveSummary — never queue a record that
+            // stays scheduled for permanent deletion.
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
             saved = existing
             createdNewWork = false
         } else {
@@ -410,6 +423,12 @@ enum ReadingQueueService {
             }
 
             if let existing = existingWork(for: summary, in: context) {
+                // Revive before any branch below can `continue` — a series preserve
+                // that touches a Recently Deleted record must never leave it
+                // scheduled for permanent deletion.
+                if existing.isPendingDeletion {
+                    PreservedWorkService.restore(existing, in: context)
+                }
                 if existing.ao3Unavailable {
                     result.unavailable += 1
                     progress?(result)
@@ -484,6 +503,12 @@ enum ReadingQueueService {
         let saved: SavedWork
         let createdNewWork: Bool
         if let existing = existingWork(for: summary, in: context) {
+            // Queueing a work that's sitting in Recently Deleted revives it — a
+            // pending-deletion record would otherwise be queued invisibly and then
+            // swept for good when its recovery window lapses.
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
             saved = existing
             createdNewWork = false
         } else {
@@ -513,11 +538,14 @@ enum ReadingQueueService {
     static func removeFromQueue(_ work: SavedWork, from queue: ReadingQueue, in context: ModelContext) {
         let matches = work.queueMemberships.filter { $0.queue?.id == queue.id }
         for membership in matches {
+            SyncTombstones.recordDeletion(of: membership, in: context)
             work.queueMemberships.removeAll { $0.id == membership.id }
             queue.memberships.removeAll { $0.id == membership.id }
             context.delete(membership)
         }
-        queue.dateUpdated = Date()
+        let now = Date()
+        queue.markMembershipChanged(now)
+        work.markModified(now)
         work.isQueuedForLater = !work.queueMemberships.isEmpty
         normalize(work)
         saveBestEffort(context, reason: "Saving queue removal failed")
@@ -531,7 +559,7 @@ enum ReadingQueueService {
         let wasQueueOnly = work.isQueueOnlyWork
         removeFromQueue(work, from: queue, in: context)
         if wasQueueOnly, !work.isQueuedForLater, !work.isSaved, !work.isFavorite {
-            WorkLifecycle.delete(work, in: context)
+            PreservedWorkService.softDelete(work, in: context)
         }
     }
 
@@ -546,18 +574,13 @@ enum ReadingQueueService {
         let wasQueueOnly = work.isQueueOnlyWork
         removeFromAllQueues(work, in: context)
         if wasQueueOnly, !work.isQueuedForLater, !work.isSaved, !work.isFavorite {
-            WorkLifecycle.delete(work, in: context)
+            PreservedWorkService.softDelete(work, in: context)
         }
     }
 
     static func existingWork(for summary: AO3WorkSummary, in context: ModelContext) -> SavedWork? {
         let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-        let canonicalURL = WorkTags.canonicalAO3WorkURL(from: summary.workURL.absoluteString)
-        return works.first { work in
-            work.ao3WorkID == summary.id
-                || WorkTags.ao3WorkID(from: work.sourceURL) == summary.id
-                || WorkTags.canonicalAO3WorkURL(from: work.sourceURL) == canonicalURL
-        }
+        return WorkIdentityIndex(works).existingWork(for: summary)
     }
 
     // Metadata merge is a field-by-field guard sequence by design.
@@ -588,6 +611,7 @@ enum ReadingQueueService {
         if work.seriesURL.isEmpty { work.seriesURL = summary.seriesURL ?? "" }
         if work.seriesPosition == 0 { work.seriesPosition = summary.seriesPosition ?? 0 }
         if work.ao3SeriesID == nil { work.ao3SeriesID = ao3SeriesID(from: work.seriesURL) }
+        work.markModified()
     }
 
     static func ao3SeriesID(from urlString: String) -> Int? {

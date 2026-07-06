@@ -37,7 +37,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3AuthService.self) private var auth
     @Environment(DownloadQueue.self) private var downloadQueue
     @Query(sort: \Tag.name) private var allTags: [Tag]
-    @Query private var allWorks: [SavedWork]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
 
     /// The resolved local record: the saved work itself, an existing library match for
     /// a remote summary, or the record created when a remote work is imported on tap.
@@ -382,6 +382,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             Button {
                 withLocalWork { work in
                     work.isFavorite.toggle()
+                    work.markModified()
                     saveBestEffort("Saving favorite state failed")
                 }
             } label: {
@@ -760,7 +761,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         case let .saved(work):
             localWork = work
         case let .remote(summary):
-            localWork = existingWork(forSource: summary.workURL, in: context)
+            // A match sitting in Recently Deleted is deliberately not adopted: the
+            // page keeps showing remote state (with Save), and saving revives the
+            // hidden record through importEPUB's Recently Deleted reuse.
+            let match = existingWork(forSource: summary.workURL, in: context)
+            localWork = match?.isPendingDeletion == true ? nil : match
         }
     }
 

@@ -11,6 +11,7 @@ enum WorkLifecycle {
     @MainActor
     static func markFinished(_ work: SavedWork, in context: ModelContext) {
         work.isFinished = true
+        work.markModified()
         if !work.isProtected { freeEPUB(work) }
         saveBestEffort(context, reason: "Saving finished state failed")
     }
@@ -20,6 +21,7 @@ enum WorkLifecycle {
     @MainActor
     static func markStillReading(_ work: SavedWork, in context: ModelContext) {
         work.isFinished = false
+        work.markModified()
         saveBestEffort(context, reason: "Saving still-reading state failed")
     }
 
@@ -36,6 +38,7 @@ enum WorkLifecycle {
     @MainActor
     static func setSaved(_ work: SavedWork, _ saved: Bool, in context: ModelContext) {
         work.isSaved = saved
+        work.markModified()
         saveBestEffort(context, reason: "Saving saved state failed")
     }
 
@@ -49,12 +52,23 @@ enum WorkLifecycle {
         if work.isQueuedForLater {
             work.epubPreservationStatus = .missingFile
         }
+        work.markModified()
     }
 
-    /// Removes a work from the Library entirely: its EPUB, reader cache, and record.
-    /// Saves the context.
+    /// Permanently removes a work from the Library: its EPUB, reader cache, and
+    /// record. Saves the context. Called only by `PreservedWorkService` (after the
+    /// 90-day Recently Deleted window expires, or an explicit "Delete Permanently"
+    /// action) — everyday deletion goes through `PreservedWorkService.softDelete`
+    /// instead, so a work is always recoverable first.
     @MainActor
-    static func delete(_ work: SavedWork, in context: ModelContext) {
+    static func hardDelete(_ work: SavedWork, in context: ModelContext) {
+        SyncTombstones.recordDeletion(of: work, in: context)
+        // The cascade delete rule on SavedWork.queueMemberships removes these rows as a
+        // side effect of context.delete(work) below — tombstone them explicitly first so
+        // a future cloud merge doesn't resurrect a queue membership for a deleted work.
+        for membership in work.queueMemberships {
+            SyncTombstones.recordDeletion(of: membership, in: context)
+        }
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         context.delete(work)

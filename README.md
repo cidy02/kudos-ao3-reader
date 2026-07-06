@@ -16,9 +16,10 @@ and SwiftData.
   Keychain persistence as the foundation for future account sync.
 - **Library & bookmarks** — saved works with rich metadata (rating, word count,
   chapters, kudos, series), custom tags, filtering, reading history, and favorites.
-- **Portable backups** — export Library records, EPUBs, tags, bookmarks, custom
-  fonts, and settings to a versioned `.kudosbackup` package; imports merge safely
-  and the system document picker supports iCloud Drive.
+- **Portable backups and folder sync** — export Library records, EPUBs, tags,
+  bookmarks, custom fonts, and settings to a versioned `.kudosbackup` package;
+  imports merge safely, and an optional Library Sync Folder can keep
+  `KudosLibrary.kudosbackup` in iCloud Drive or another user-selected folder.
 - **Privacy-aware** — mature works can be hidden behind a Face ID gate.
 - **Cross-platform** — one SwiftUI codebase for iPhone, iPad, and Mac.
 
@@ -127,6 +128,9 @@ Planning and tracking notes live in [`TASKS.md`](TASKS.md) and [`docs/`](docs/):
   security, and authenticated-request architecture.
 - [`docs/EPUBParsing.md`](docs/EPUBParsing.md) — supported EPUB structures,
   parser/import assumptions, failure behavior, and branch differences.
+- [`docs/iCloudPersistence.md`](docs/iCloudPersistence.md) — no-entitlement
+  Library Sync Folder architecture, migration, merge rules, EPUB asset strategy,
+  and manual iCloud Drive test checklist.
 
 ## License
 
