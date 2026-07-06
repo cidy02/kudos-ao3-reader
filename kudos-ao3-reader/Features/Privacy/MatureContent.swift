@@ -64,6 +64,12 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .hide && !isRevealed(work)
     }
 
+    /// Whether a Privacy button should show for this currently-visible/filtered work
+    /// list — the single rule every toolbar's Privacy-button condition shares.
+    static func hasVisibleMatureWorks(in works: [SavedWork], hideMature: Bool) -> Bool {
+        hideMature && works.contains(where: \.isAdult)
+    }
+
     private func authenticate(_ onSuccess: @escaping () -> Void) {
         guard UserDefaults.standard.bool(forKey: "requireBiometricToReveal") else {
             onSuccess(); return
@@ -161,6 +167,74 @@ struct SensitiveWorkRow: View {
             case .reader:
                 row.cardNavigation(to: LocalWorkDestination.reader(work))
             }
+        }
+    }
+}
+
+/// A carousel card that respects content privacy, mirroring `SensitiveWorkRow` for
+/// `WorkCoverCard`. When the work is Mature/Explicit and Blur mode is on, it blurs
+/// the card and reveals on tap; in Hide mode the carousel filters the work out
+/// before it reaches this view. Also covers the selection-mode carousel case
+/// (`SelectableWorkCoverCard`), so a single component is the drop-in replacement
+/// for both of `LibraryView`'s carousel-card branches.
+struct SensitiveWorkCoverCard: View {
+    let work: SavedWork
+    var footer: String?
+    var progress: Double?
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
+    var onToggleSelection: (() -> Void)?
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
+
+    private var blurred: Bool {
+        hideMature && work.isAdult && mode == .obscure && !gate.isRevealed(work)
+    }
+
+    var body: some View {
+        if blurred {
+            let card = WorkCoverCard(work: work, footer: footer, progress: progress)
+                .blur(radius: 6)
+                .overlay {
+                    Label("Tap to reveal", systemImage: "eye.slash.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.regularMaterial, in: Capsule())
+                }
+                .contentShape(Rectangle())
+            if isSelecting {
+                card
+                    .overlay(alignment: .topTrailing) {
+                        WorkSelectionBubble(isSelected: isSelected)
+                            .padding(8)
+                    }
+                    .onTapGesture { onToggleSelection?() }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(work.title)
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+            } else {
+                card
+                    .onTapGesture { gate.reveal(work) }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Hidden mature work. Activate to reveal.")
+            }
+        } else if isSelecting {
+            Button {
+                onToggleSelection?()
+            } label: {
+                SelectableWorkCoverCard(work: work, footer: footer, progress: progress, isSelected: isSelected)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(work.title)
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else {
+            WorkCoverCard(work: work, footer: footer, progress: progress)
         }
     }
 }

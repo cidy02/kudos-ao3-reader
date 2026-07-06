@@ -52,6 +52,13 @@ struct HomeView: View {
         section(.recentlyOpened)
     }
 
+    /// The union of every local section, untruncated, for the Privacy button's
+    /// visibility check — a `.prefix(12)`-truncated set could hide the button even
+    /// though an adult work is sitting further down a section.
+    private var allLocalSectionWorks: [SavedWork] {
+        readingNow + recentlyUpdated + favorites + recentlyOpened
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
@@ -79,6 +86,13 @@ struct HomeView: View {
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
                 .task(id: auth.isLoggedIn) { await loadSubscriptions() }
                 .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        if PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature) {
+                            MatureRevealToggle()
+                        }
+                    }
+                }
         }
     }
 
@@ -93,7 +107,7 @@ struct HomeView: View {
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
                 NavigationLink(value: LocalWorkDestination.reader(work)) {
-                    WorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
+                    SensitiveWorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
                 }
                 .buttonStyle(.plain)
                 .localWorkContextMenu(work: work)

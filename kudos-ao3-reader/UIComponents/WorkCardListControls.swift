@@ -13,6 +13,7 @@ struct WorkCardListControls: View {
     var filtersActive: Bool
     @Binding var showingFilters: Bool
     var filterHelp: String = "Filter the works on this page"
+    var onClearFilters: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 2) {
@@ -30,6 +31,13 @@ struct WorkCardListControls: View {
                     : "line.3.horizontal.decrease.circle")
             }
             .help(filterHelp)
+            .contextMenu {
+                if filtersActive, let onClearFilters {
+                    Button(role: .destructive, action: onClearFilters) {
+                        Label("Clear All Filters", systemImage: "arrow.counterclockwise")
+                    }
+                }
+            }
         }
         .labelStyle(.iconOnly)
     }

@@ -387,28 +387,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
     @MainActor
     private func resolveLocalWork() async throws -> SavedWork {
-        if let existing = ReadingQueueService.existingWork(for: work, in: context) {
-            // Acting on a remote card whose local twin sits in Recently Deleted
-            // revives it — otherwise the action would mutate a hidden record still
-            // scheduled for permanent deletion.
-            if existing.isPendingDeletion {
-                PreservedWorkService.restore(existing, in: context)
-            }
-            return existing
-        }
-
-        let temp = try await AO3Client.shared.downloadEPUB(workID: work.id)
-        let saved = try await importEPUB(
-            temp,
-            source: work.workURL,
-            isComplete: work.isComplete ?? false,
-            seriesURL: work.seriesURL ?? "",
-            knownChapterCount: SavedWork.postedChapterCount(from: work.chapters),
-            into: context
-        )
-        ReadingQueueService.applyRemoteMetadata(work, to: saved)
-        try? context.save()
-        return saved
+        try await ReadingQueueService.resolveLocalWork(for: work, in: context)
     }
 }
 

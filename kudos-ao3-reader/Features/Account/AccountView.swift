@@ -299,7 +299,8 @@ private struct LocalReadingHistoryView: View {
                         WorkCardListControls(expandAll: $expandAll,
                                              filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in your history")
+                                             filterHelp: "Filter the works in your history",
+                                             onClearFilters: { filters = LibraryFilters() })
                     }
                 }
             }
@@ -408,7 +409,8 @@ private struct LocalFavoritesView: View {
                         WorkCardListControls(expandAll: $expandAll,
                                              filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
-                                             filterHelp: "Filter your favorites")
+                                             filterHelp: "Filter your favorites",
+                                             onClearFilters: { filters = LibraryFilters() })
                     }
                 }
             }

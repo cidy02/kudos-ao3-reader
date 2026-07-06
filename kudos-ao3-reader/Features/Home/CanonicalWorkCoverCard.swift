@@ -13,7 +13,7 @@ struct CanonicalWorkCoverCard: View {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 // readingProgress is nil until there's something meaningful to show,
                 // so a freshly-saved work keeps the clean cover.
-                WorkCoverCard(work: work, progress: work.readingProgress)
+                SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)

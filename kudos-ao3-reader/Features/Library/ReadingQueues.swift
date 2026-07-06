@@ -182,7 +182,8 @@ struct ReadingQueueDetailView: View {
                         WorkCardListControls(expandAll: $expandAll,
                                              filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in this queue")
+                                             filterHelp: "Filter the works in this queue",
+                                             onClearFilters: { filters = LibraryFilters() })
                     }
                 }
                 if queue.kind == .custom {
@@ -423,7 +424,15 @@ struct ReadingQueueStorageView: View {
 // MARK: - Add to queue
 
 struct AddToQueueView: View {
-    let work: SavedWork
+    let works: [SavedWork]
+
+    init(work: SavedWork) {
+        works = [work]
+    }
+
+    init(works: [SavedWork]) {
+        self.works = works
+    }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -560,15 +569,22 @@ struct AddToQueueView: View {
     }
 
     private func isMember(_ queue: ReadingQueue) -> Bool {
-        work.queueMemberships.contains { $0.queue?.id == queue.id }
+        works.allSatisfy { work in work.queueMemberships.contains { $0.queue?.id == queue.id } }
     }
 
     private func queueSymbol(_ queue: ReadingQueue) -> String {
         queue.kind == .savedForLater ? "bookmark" : "list.bullet.rectangle"
     }
 
+    // Series preservation is anchored to a single AO3 series, so it only applies
+    // when this sheet is managing one work.
+    private var soloWork: SavedWork? {
+        works.count == 1 ? works[0] : nil
+    }
+
     private var hasSeries: Bool {
-        URL(string: work.seriesURL) != nil && !work.seriesURL.isEmpty
+        guard let soloWork else { return false }
+        return URL(string: soloWork.seriesURL) != nil && !soloWork.seriesURL.isEmpty
     }
 
     private var selectedQueuesForSeries: [ReadingQueue] {
@@ -576,7 +592,7 @@ struct AddToQueueView: View {
     }
 
     private func loadSeriesPreview() async {
-        guard includeSeries, let url = URL(string: work.seriesURL) else { return }
+        guard includeSeries, let soloWork, let url = URL(string: soloWork.seriesURL) else { return }
         checkingSeriesPreview = true
         do {
             let preview = try await AO3Client.shared.seriesPreview(seriesURL: url)
@@ -588,7 +604,7 @@ struct AddToQueueView: View {
     }
 
     private func preserveSelectedSeries() {
-        guard !preservingSeries, URL(string: work.seriesURL) != nil else { return }
+        guard !preservingSeries, let soloWork, URL(string: soloWork.seriesURL) != nil else { return }
         let queues = selectedQueuesForSeries
         guard !queues.isEmpty else { return }
         preservingSeries = true
@@ -605,7 +621,7 @@ struct AddToQueueView: View {
                 )
             } else {
                 await ReadingQueueService.preserveSeries(
-                    anchoredAt: work,
+                    anchoredAt: soloWork,
                     to: queues,
                     in: context,
                     progress: { seriesResult = $0 }
@@ -624,12 +640,17 @@ struct AddToQueueView: View {
 
     private func toggle(_ queue: ReadingQueue) {
         if isMember(queue) {
-            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+            for work in works {
+                ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+            }
             return
         }
+        let nonMembers = works.filter { work in !work.queueMemberships.contains { $0.queue?.id == queue.id } }
         workingQueueIDs.insert(queue.id)
         Task {
-            _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+            for work in nonMembers {
+                _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+            }
             workingQueueIDs.remove(queue.id)
         }
     }
@@ -669,7 +690,9 @@ struct AddToQueueView: View {
         newName = ""
         workingQueueIDs.insert(queue.id)
         Task {
-            _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+            for work in works {
+                _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+            }
             workingQueueIDs.remove(queue.id)
         }
     }

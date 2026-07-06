@@ -138,11 +138,17 @@ struct AO3AccountWorksList: View {
         }
         .hidesFloatingTabBar()
         .toolbar {
+            if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
+                ToolbarItem(placement: .primaryAction) {
+                    MatureRevealToggle()
+                }
+            }
             if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     WorkCardListControls(expandAll: $expandAll,
                                          filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters)
+                                         showingFilters: $showingFilters,
+                                         onClearFilters: { filters = AO3SearchFilters() })
                 }
             }
         }

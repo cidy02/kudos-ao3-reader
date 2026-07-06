@@ -76,12 +76,18 @@ struct HomeSectionListView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .toolbar {
+                if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
+                    ToolbarItem(placement: .primaryAction) {
+                        MatureRevealToggle()
+                    }
+                }
                 if !items.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
                         WorkCardListControls(expandAll: $expandAll,
                                              filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in this section")
+                                             filterHelp: "Filter the works in this section",
+                                             onClearFilters: { filters = LibraryFilters() })
                     }
                 }
             }

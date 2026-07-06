@@ -169,7 +169,8 @@ struct CollectionDetailView: View {
                         WorkCardListControls(expandAll: $expandAll,
                                              filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in this collection")
+                                             filterHelp: "Filter the works in this collection",
+                                             onClearFilters: { filters = LibraryFilters() })
                     }
                 }
                 ToolbarItem {
@@ -234,7 +235,15 @@ struct CollectionDetailView: View {
 /// A sheet to add/remove a work from collections, and create new ones. Presented
 /// from a work's detail page.
 struct AddToCollectionView: View {
-    let work: SavedWork
+    let works: [SavedWork]
+
+    init(work: SavedWork) {
+        works = [work]
+    }
+
+    init(works: [SavedWork]) {
+        self.works = works
+    }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -302,18 +311,23 @@ struct AddToCollectionView: View {
     }
 
     private func isMember(_ collection: WorkCollection) -> Bool {
-        work.collections.contains { $0.id == collection.id }
+        works.allSatisfy { work in work.collections.contains { $0.id == collection.id } }
     }
 
     private func toggle(_ collection: WorkCollection) {
-        if let index = work.collections.firstIndex(where: { $0.id == collection.id }) {
-            SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
-            work.collections.remove(at: index)
-        } else {
-            work.collections.append(collection)
-        }
         let now = Date()
-        work.markModified(now)
+        if isMember(collection) {
+            for work in works {
+                SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
+                work.collections.removeAll { $0.id == collection.id }
+                work.markModified(now)
+            }
+        } else {
+            for work in works where !work.collections.contains(where: { $0.id == collection.id }) {
+                work.collections.append(collection)
+                work.markModified(now)
+            }
+        }
         collection.markModified(now)
         try? context.save()
     }
@@ -323,8 +337,11 @@ struct AddToCollectionView: View {
         guard !trimmed.isEmpty else { return }
         let collection = WorkCollection(name: trimmed)
         context.insert(collection)
-        work.collections.append(collection)
-        work.markModified()
+        let now = Date()
+        for work in works {
+            work.collections.append(collection)
+            work.markModified(now)
+        }
         try? context.save()
         newName = ""
     }

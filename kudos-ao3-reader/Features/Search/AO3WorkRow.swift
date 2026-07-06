@@ -8,6 +8,10 @@ struct AO3WorkRow: View {
     /// Driven by the list's "expand/collapse all" toggle; each card follows it
     /// (and can still be toggled individually afterwards).
     var expandAll: Bool = false
+    /// When true, a selection bubble takes the top-right corner (mirrors `WorkRow`)
+    /// and the caller is expected to route taps to selection instead of navigation.
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
 
     @Environment(AppRouter.self) private var router
     @State private var expanded = false
@@ -20,6 +24,19 @@ struct AO3WorkRow: View {
     }
 
     var body: some View {
+        Group {
+            if isSelecting {
+                card
+            } else {
+                card.remoteWorkContextMenu(work: work)
+            }
+        }
+        // Follow the global expand/collapse-all toggle (also applies on first
+        // appearance so cards scrolled into view match the current state).
+        .onChange(of: expandAll, initial: true) { _, value in expanded = value }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Title + author share a tight block so the hierarchy reads as one unit;
             // the expand control sits at the card's top-right corner.
@@ -36,6 +53,9 @@ struct AO3WorkRow: View {
                 }
                 Spacer(minLength: 0)
                 if isExpandable { expandButton }
+                if isSelecting {
+                    WorkSelectionBubble(isSelected: isSelected)
+                }
             }
 
             if !work.fandoms.isEmpty {
@@ -88,10 +108,6 @@ struct AO3WorkRow: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .remoteWorkContextMenu(work: work)
-        // Follow the global expand/collapse-all toggle (also applies on first
-        // appearance so cards scrolled into view match the current state).
-        .onChange(of: expandAll, initial: true) { _, value in expanded = value }
     }
 
     /// Top-right expand/collapse control. A bordered circular button (not plain

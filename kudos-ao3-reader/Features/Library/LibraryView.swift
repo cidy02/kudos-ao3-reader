@@ -95,6 +95,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         works.filter { !$0.isQueueOnlyWork && (!hideMature || !$0.isAdult || gate.isRevealed($0)) }
     }
 
+    /// The dashboard's currently-visible/filtered works (mirrors `dashboardWorks(for:)`
+    /// minus its `.prefix(12)` truncation, which would wrongly hide the Privacy button
+    /// if an adult work sat outside the first 12 in every section) — what the main
+    /// toolbar's Privacy button condition should actually check.
+    private var visibleDashboardWorksUnbounded: [SavedWork] {
+        filters.apply(to: works.filter { !$0.isQueueOnlyWork })
+    }
+
     private var recentlyDeletedCount: Int {
         deletedWorks.count + deletedCollections.count + deletedQueues.count
     }
@@ -454,6 +462,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { exitSelectMode() }
             }
+            if PrivacyGate.hasVisibleMatureWorks(in: selectableWorks, hideMature: hideMature) {
+                ToolbarItem(placement: .primaryAction) {
+                    MatureRevealToggle()
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingSelectionList.toggle()
@@ -476,7 +489,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // large "Library" title. Icon-only so they read as a compact cluster.
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
-                    if hideMature, works.contains(where: \.isAdult) {
+                    if PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature) {
                         MatureRevealToggle()
                     }
                     if !statisticsWorks.isEmpty {
@@ -516,6 +529,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 : "line.3.horizontal.decrease.circle")
         }
         .help("Filters")
+        .contextMenu {
+            if filters.hasActiveFilters {
+                Button(role: .destructive, action: { filters = LibraryFilters() }) {
+                    Label("Clear All Filters", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
     }
 
     // MARK: Loading
@@ -675,32 +695,25 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private func localCarouselCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
         #if os(iOS)
         if isSelecting {
-            Button {
-                toggleSelection(work)
-            } label: {
-                SelectableWorkCoverCard(
-                    work: work,
-                    footer: footer,
-                    progress: progress,
-                    isSelected: selection.contains(work.id)
-                )
-            }
-            .buttonStyle(.plain)
+            SensitiveWorkCoverCard(
+                work: work,
+                footer: footer,
+                progress: progress,
+                isSelecting: true,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) }
+            )
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-            .accessibilityLabel(work.title)
-            .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-            .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
-            .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
-                WorkCoverCard(work: work, footer: footer, progress: progress)
+                SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
         #else
         NavigationLink(value: LocalWorkDestination.reader(work)) {
-            WorkCoverCard(work: work, footer: footer, progress: progress)
+            SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
         }
         .buttonStyle(.plain)
         .localWorkContextMenu(work: work, onSelect: selectAction(for: work))

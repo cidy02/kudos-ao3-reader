@@ -583,6 +583,31 @@ enum ReadingQueueService {
         return WorkIdentityIndex(works).existingWork(for: summary)
     }
 
+    static func resolveLocalWork(for summary: AO3WorkSummary, in context: ModelContext) async throws -> SavedWork {
+        if let existing = existingWork(for: summary, in: context) {
+            // Acting on a remote card whose local twin sits in Recently Deleted
+            // revives it — otherwise the action would mutate a hidden record still
+            // scheduled for permanent deletion.
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
+            return existing
+        }
+
+        let temp = try await AO3Client.shared.downloadEPUB(workID: summary.id)
+        let saved = try await importEPUB(
+            temp,
+            source: summary.workURL,
+            isComplete: summary.isComplete ?? false,
+            seriesURL: summary.seriesURL ?? "",
+            knownChapterCount: SavedWork.postedChapterCount(from: summary.chapters),
+            into: context
+        )
+        applyRemoteMetadata(summary, to: saved)
+        try? context.save()
+        return saved
+    }
+
     // Metadata merge is a field-by-field guard sequence by design.
     // swiftlint:disable:next cyclomatic_complexity
     static func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
