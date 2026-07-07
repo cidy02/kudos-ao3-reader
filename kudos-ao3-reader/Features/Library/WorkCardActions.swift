@@ -178,6 +178,15 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 }
 
                 Button {
+                    toggleSavedForLater()
+                } label: {
+                    Label(
+                        work.isInSavedForLaterQueue ? "Remove from Saved for Later" : "Save for Later",
+                        systemImage: work.isInSavedForLaterQueue ? "bookmark.slash" : "bookmark.fill"
+                    )
+                }
+
+                Button {
                     showingAddToQueue = true
                 } label: {
                     Label("Add to Queue", systemImage: "list.bullet.rectangle")
@@ -223,6 +232,19 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
             WorkLifecycle.markStillReading(work, in: context)
         } else {
             WorkLifecycle.markFinished(work, in: context)
+        }
+    }
+
+    @MainActor
+    private func toggleSavedForLater() {
+        if work.isInSavedForLaterQueue {
+            ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
+                work,
+                from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
+                in: context
+            )
+        } else {
+            Task { await ReadingQueueService.addToSavedForLater(work, in: context) }
         }
     }
 }
@@ -278,6 +300,18 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     }
                     .disabled(working)
                 }
+
+                Button {
+                    toggleSavedForLater()
+                } label: {
+                    Label(
+                        existingLocalWork?.isInSavedForLaterQueue == true
+                            ? "Remove from Saved for Later" : "Save for Later",
+                        systemImage: existingLocalWork?.isInSavedForLaterQueue == true
+                            ? "bookmark.slash" : "bookmark.fill"
+                    )
+                }
+                .disabled(working)
 
                 Button {
                     addToQueue()
@@ -350,6 +384,20 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     private func addToQueue() {
         performRemoteAction { saved in
             queueWork = saved
+        }
+    }
+
+    private func toggleSavedForLater() {
+        performRemoteAction { saved in
+            if saved.isInSavedForLaterQueue {
+                ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
+                    saved,
+                    from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
+                    in: context
+                )
+            } else {
+                _ = await ReadingQueueService.addToSavedForLater(saved, in: context)
+            }
         }
     }
 
