@@ -258,7 +258,6 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         if !duplicate.hasEPUB {
             try copyImportedEPUB(from: url, to: duplicate.fileURL)
             duplicate.hasEPUB = true
-            duplicate.isSaved = true
             duplicate.markModified()
             WorkSearchIndex.reindex(duplicate)
             try? context.save()
@@ -278,7 +277,6 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         summary: inspection.summary,
         sourceURL: inspection.sourceURL
     )
-    work.isSaved = true
     applyUserImportMetadata(inspection, to: work, fillOnly: false)
     work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
     work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)

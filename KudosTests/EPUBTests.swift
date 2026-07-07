@@ -90,9 +90,17 @@ struct EPUBTests {
         #expect(imported.rating == "Teen And Up Audiences")
         #expect(imported.workTags == ["Fluff", "Angst"])
         #expect(imported.chapters == "2/2")
-        #expect(imported.isSaved)
         #expect(imported.hasEPUB)
         #expect(FileManager.default.fileExists(atPath: imported.fileURL.path))
+
+        // A plain import must not be marked isSaved — that flag (plus !isQueuedForLater)
+        // is what LibrarySectionKind.savedForLater treats as "belongs in Saved for
+        // Later", a legacy carve-out for pre-queue saves that a fresh import should
+        // never fall into. It still lands in Downloaded via hasEPUB, matching
+        // importEPUB's (the AO3-download path) existing, unaffected convention.
+        #expect(!imported.isSaved)
+        #expect(!LibrarySectionKind.savedForLater.works(from: [imported], visible: { _ in true }).contains(imported))
+        #expect(LibrarySectionKind.downloaded.works(from: [imported], visible: { _ in true }).contains(imported))
 
         let duplicateOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
         switch duplicateOutcome {
