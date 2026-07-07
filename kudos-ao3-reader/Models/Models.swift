@@ -251,6 +251,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// the background and retries on failure, so this only flips on success.
     var workTagsFetched: Bool = false
 
+    /// When a tag refresh was last *attempted* (success or not), so locked/failing
+    /// works aren't re-fetched every session. Device-local politeness state, not
+    /// user data — deliberately NOT carried in `.kudosbackup`.
+    var lastTagRefreshAttemptAt: Date?
+
     /// Set once AO3 returns 404 for this work — it's been deleted (or hidden) on the
     /// site, so the background refresh stops re-fetching it and the work keeps whatever
     /// tags it already has (EPUB-derived or a prior AO3 fetch). Distinct from a locked /
@@ -263,6 +268,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
             && workRelationships.isEmpty && workFreeforms.isEmpty)
     }
 
+    /// Don't re-attempt a tag refresh for the same work more often than this.
+    static let tagRefreshMinInterval: TimeInterval = 24 * 3600
+
     /// Whether an AO3 refresh would still add data the Library filters rely on:
     /// the categorized Work Tags, or the newer warnings/categories/language/word
     /// count. Drives both the on-demand refresh and the Library's background
@@ -271,6 +279,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         // A work deleted from AO3 can't be refreshed — keep the tags we have and stop
         // hitting the site for it.
         guard !ao3Unavailable else { return false }
+        // Locked/empty pages stay retryable, but only after a cooldown — otherwise
+        // the Library backfill re-fetches every locked work each session forever.
+        if let attempt = lastTagRefreshAttemptAt,
+           Date().timeIntervalSince(attempt) < Self.tagRefreshMinInterval {
+            return false
+        }
         return !workTagsFetched || !hasCategorizedWorkTags
             || (workWarnings.isEmpty && workCategories.isEmpty
                 && language.isEmpty && wordCount == 0)

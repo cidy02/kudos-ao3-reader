@@ -67,6 +67,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// at once share one network round-trip (politeness: no duplicate requests).
     private let coalescer = RequestCoalescer<URL, Data>()
 
+    /// Same, for authenticated GETs. Keyed by URL *and* Cookie header so a mid-flight
+    /// account switch can never hand one session's response to another. The value
+    /// carries the response URL's path instead of the URLResponse (not Sendable) for
+    /// the login-redirect check.
+    private let authCoalescer = RequestCoalescer<String, (Data, String?)>()
+
     /// Fetches a URL's body, validating the HTTP status and retrying transient
     /// failures with backoff (see `withRetry`). Concurrent requests for the same URL
     /// are coalesced into a single fetch.
@@ -319,16 +325,23 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         request.httpShouldHandleCookies = false
         Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
 
-        let (data, response) = try await withRetry {
-            try await pace()
-            let (data, response) = try await session.data(for: request)
-            try Self.check(response)
-            return (data, response)
+        let key = (request.url?.absoluteString ?? "") + "|" + (request.value(forHTTPHeaderField: "Cookie") ?? "")
+        let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
+            try await performAuthenticatedFetch(for: request)
         }
-        if let url = response.url, url.path.contains("/users/login") {
+        if let path = responsePath, path.contains("/users/login") {
             throw AO3Error.authenticationRequired
         }
         return Self.htmlString(from: data)
+    }
+
+    private func performAuthenticatedFetch(for request: URLRequest) async throws -> (Data, String?) {
+        try await withRetry {
+            try await pace()
+            let (data, response) = try await session.data(for: request)
+            try Self.check(response)
+            return (data, response.url?.path)
+        }
     }
 
     // MARK: - Write actions (authenticated, single-shot POSTs)

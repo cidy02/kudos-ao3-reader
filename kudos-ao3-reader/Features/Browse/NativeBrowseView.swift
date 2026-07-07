@@ -75,6 +75,7 @@ struct FandomWorksView: View {
     @State private var isSelecting = false
     @State private var selection: Set<Int> = []
     @State private var isProcessingBatch = false
+    @State private var batchTask: Task<Void, Never>?
     @State private var resolvedQueueWorks: [SavedWork] = []
     @State private var showingAddToQueue = false
     @State private var resolvedCollectionWorks: [SavedWork] = []
@@ -160,6 +161,9 @@ struct FandomWorksView: View {
                 Text(batchActionError ?? "")
             }
             .task { await load(page: 1) }
+            // Unstructured batch tasks outlive the view unless explicitly cancelled;
+            // the bulk loops bail out cleanly on CancellationError.
+            .onDisappear { batchTask?.cancel() }
     }
 
     @ViewBuilder
@@ -309,7 +313,7 @@ struct FandomWorksView: View {
     @ViewBuilder
     private var bulkActionBar: some View {
         Button {
-            Task { await bulkSave() }
+            batchTask = Task { await bulkSave() }
         } label: {
             Label("Save", systemImage: "bookmark")
         }
@@ -318,7 +322,7 @@ struct FandomWorksView: View {
         Spacer()
 
         Button {
-            Task { await bulkSaveForLater() }
+            batchTask = Task { await bulkSaveForLater() }
         } label: {
             Label("Save for Later", systemImage: "clock.arrow.circlepath")
         }
@@ -327,7 +331,7 @@ struct FandomWorksView: View {
         Spacer()
 
         Button {
-            Task { await bulkAddToCollection() }
+            batchTask = Task { await bulkAddToCollection() }
         } label: {
             Label("Add to Collection", systemImage: "square.stack")
         }
@@ -336,7 +340,7 @@ struct FandomWorksView: View {
         Spacer()
 
         Button {
-            Task { await bulkAddToQueue() }
+            batchTask = Task { await bulkAddToQueue() }
         } label: {
             Label("Add to Queue", systemImage: "list.bullet.rectangle")
         }

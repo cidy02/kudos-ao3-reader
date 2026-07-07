@@ -40,14 +40,15 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @AppStorage("autoPreserveSeriesWorkThreshold")
     private var autoPreserveSeriesWorkThreshold = 5
 
-    @State private var importing = false
+    @State private var activeImport: FileImportKind?
+    /// The kind most recently presented — only ever overwritten, never cleared — so
+    /// the shared importer's completion can still route its result if dismissal
+    /// already niled `activeImport`. Recorded by the `.onChange` below the importer.
+    @State private var lastPresentedImport: FileImportKind?
     @State private var showCustomize = false
     @State private var showAO3Login = false
     @State private var showAbout = false
     @State private var exportingBackup = false
-    @State private var importingBackup = false
-    @State private var importingEPUB = false
-    @State private var choosingSyncFolder = false
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
     @State private var showImportConfirmation = false
@@ -250,7 +251,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     .onDelete(perform: deleteCustomFonts)
 
                     Button {
-                        importing = true
+                        activeImport = .fonts
                     } label: {
                         Label("Add Font…", systemImage: "plus")
                     }
@@ -267,7 +268,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
                     BackupSettingsSection(
                         onExport: exportBackup,
-                        onImport: { importingBackup = true }
+                        onImport: { activeImport = .backup }
                     )
 
                     FolderSyncSettingsSection(
@@ -275,7 +276,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         folderStatus: folderSyncStatus,
                         isPreparing: isPreparingPersistence,
                         isSyncing: isFolderSyncing,
-                        onChooseFolder: { choosingSyncFolder = true },
+                        onChooseFolder: { activeImport = .syncFolder },
                         onSyncNow: startFolderSyncNow,
                         onDisconnect: disconnectSyncFolder,
                         onRetryPreparation: preparePersistenceForSync,
@@ -286,7 +287,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     EPUBImportSettingsSection(
                         isImporting: isImportingEPUB,
                         progressText: epubImportProgress,
-                        onImport: { importingEPUB = true }
+                        onImport: { activeImport = .epub }
                     )
 
                     Section {
@@ -379,12 +380,35 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             persistenceStatus = PersistenceStatusStore.snapshot()
             folderSyncStatus = FolderSyncService.snapshot()
         }
+        // A view node honors only one file-dialog presenter, so every import
+        // shares this modifier and an enum picks the configuration.
         .fileImporter(
-            isPresented: $importing,
-            allowedContentTypes: [.font],
-            allowsMultipleSelection: true
+            isPresented: Binding(
+                get: { activeImport != nil },
+                set: { if !$0 { activeImport = nil } }
+            ),
+            allowedContentTypes: activeImportContentTypes,
+            allowsMultipleSelection: activeImportAllowsMultipleSelection
         ) { result in
-            if case let .success(urls) = result { urls.forEach(importFont) }
+            // Dismissal nils activeImport via the binding, and whether that happens
+            // before or after this closure is an OS implementation detail — fall back
+            // to the kind recorded at presentation time so the result is never dropped.
+            let kind = activeImport ?? lastPresentedImport
+            switch kind {
+            case .fonts:
+                if case let .success(urls) = result { urls.forEach(importFont) }
+            case .backup:
+                importBackup(result)
+            case .epub:
+                importEPUBSelection(result)
+            case .syncFolder:
+                connectSyncFolder(result)
+            case nil:
+                break
+            }
+        }
+        .onChange(of: activeImport) { _, kind in
+            if let kind { lastPresentedImport = kind }
         }
         .fileExporter(
             isPresented: $exportingBackup,
@@ -405,27 +429,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 )
             }
             backupDocument = nil
-        }
-        .fileImporter(
-            isPresented: $importingBackup,
-            allowedContentTypes: [.kudosBackup],
-            allowsMultipleSelection: false
-        ) { result in
-            importBackup(result)
-        }
-        .fileImporter(
-            isPresented: $importingEPUB,
-            allowedContentTypes: [Self.epubContentType],
-            allowsMultipleSelection: true
-        ) { result in
-            importEPUBSelection(result)
-        }
-        .fileImporter(
-            isPresented: $choosingSyncFolder,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            connectSyncFolder(result)
         }
         .confirmationDialog(
             "Import this backup?",
@@ -794,6 +797,25 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         let id = UUID()
         let title: String
         let message: String
+    }
+
+    private enum FileImportKind { case fonts, backup, epub, syncFolder }
+
+    private var activeImportContentTypes: [UTType] {
+        switch activeImport {
+        case .fonts: [.font]
+        case .backup: [.kudosBackup]
+        case .epub: [Self.epubContentType]
+        case .syncFolder: [.folder]
+        case nil: [.item] // never presented; keeps the modifier well-formed
+        }
+    }
+
+    private var activeImportAllowsMultipleSelection: Bool {
+        switch activeImport {
+        case .fonts, .epub: true
+        case .backup, .syncFolder, nil: false
+        }
     }
 
     private static let backupDateFormatter: DateFormatter = {

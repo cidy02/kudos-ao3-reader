@@ -30,35 +30,41 @@ func importEPUB(
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
 
-    // Re-downloading a work that's sitting in Recently Deleted revives that record
-    // (with all its reading progress) instead of inserting a hidden-twin duplicate —
-    // without this, the new record would show in the Library while the old one stayed
-    // scheduled for permanent deletion, and a later restore would produce two copies.
-    if let source,
-       let pending = existingWork(forSource: source, in: context),
-       pending.isPendingDeletion {
-        PreservedWorkService.restore(pending, in: context)
-        if let meta {
-            applyEPUBMetadata(meta, extracted: .empty, localChapterCount: nil, to: pending, fillOnly: true)
+    // Callers pre-check for an existing copy before the multi-second EPUB download,
+    // so two concurrent acquisitions of the same work can both pass that check and
+    // land here together. Re-check now and merge into any existing record instead of
+    // inserting a duplicate; a match sitting in Recently Deleted is revived first
+    // (with all its reading progress) rather than left scheduled for permanent deletion.
+    if let source, let existing = existingWork(forSource: source, in: context) {
+        let revived = existing.isPendingDeletion
+        if revived {
+            PreservedWorkService.restore(existing, in: context)
         }
-        pending.isComplete = isComplete || pending.isComplete
-        if pending.seriesURL.isEmpty { pending.seriesURL = seriesURL }
-        if pending.ao3WorkID == nil { pending.ao3WorkID = WorkTags.ao3WorkID(from: pending.sourceURL) }
-        if pending.ao3SeriesID == nil { pending.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: seriesURL) }
-        if pending.knownChapterCount == 0 { pending.knownChapterCount = knownChapterCount }
+        if let meta {
+            applyEPUBMetadata(meta, extracted: .empty, localChapterCount: nil, to: existing, fillOnly: true)
+        }
+        existing.isComplete = isComplete || existing.isComplete
+        if existing.seriesURL.isEmpty { existing.seriesURL = seriesURL }
+        if existing.ao3WorkID == nil { existing.ao3WorkID = WorkTags.ao3WorkID(from: existing.sourceURL) }
+        if existing.ao3SeriesID == nil { existing.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: seriesURL) }
+        if existing.knownChapterCount == 0 { existing.knownChapterCount = knownChapterCount }
         do {
-            try ReadingQueueService.replaceEPUB(for: pending, with: tempURL)
-            pending.hasEPUB = true
+            try ReadingQueueService.replaceEPUB(for: existing, with: tempURL)
+            existing.hasEPUB = true
         } catch {
             Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
             throw error
         }
-        pending.markModified()
-        WorkSearchIndex.reindex(pending)
+        existing.markModified()
+        WorkSearchIndex.reindex(existing)
         try? context.save()
-        Log.library.info("Import revived “\(pending.title)” from Recently Deleted")
-        Task { await WorkTags.refreshFromAO3(for: pending, in: context) }
-        return pending
+        if revived {
+            Log.library.info("Import revived “\(existing.title)” from Recently Deleted")
+        } else {
+            Log.library.info("Import merged into existing “\(existing.title)”")
+        }
+        Task { await WorkTags.refreshFromAO3(for: existing, in: context) }
+        return existing
     }
 
     let work = SavedWork(

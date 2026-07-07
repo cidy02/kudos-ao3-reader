@@ -73,17 +73,17 @@ struct WorkSearchIndexTests {
         #expect(work.searchText.contains("remotia chronicles"))
     }
 
-    @Test func rebuildIfNeededIndexesStaleRecordsOnceAndOnlyOnce() throws {
+    @Test func rebuildIfNeededIndexesStaleRecordsOnceAndOnlyOnce() async throws {
         let context = try makeContext()
         let work = SavedWork(title: "Unindexed Résumé", author: "Writer", sourceURL: "")
         context.insert(work)
         try context.save()
         #expect(work.searchIndexVersion == 0)
 
-        #expect(WorkSearchIndex.rebuildIfNeeded(in: context) == 1)
+        #expect(await WorkSearchIndex.rebuildIfNeeded(in: context) == 1)
         #expect(work.searchText.contains("unindexed resume"))
         // Everything current now — the sweep is a no-op.
-        #expect(WorkSearchIndex.rebuildIfNeeded(in: context) == 0)
+        #expect(await WorkSearchIndex.rebuildIfNeeded(in: context) == 0)
     }
 
     @Test func backupRestoreRebuildsSearchTextWithoutCarryingIt() throws {

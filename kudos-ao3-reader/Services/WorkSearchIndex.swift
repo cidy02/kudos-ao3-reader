@@ -22,6 +22,10 @@ enum WorkSearchIndex {
     /// recall — AO3 blurbs are typically well under it.
     private static let summaryLimit = 600
 
+    /// Yield to the run loop every N records so a large stale library doesn't
+    /// freeze the UI for the whole launch-time rebuild.
+    private static let yieldInterval = 200
+
     // MARK: Normalization
 
     /// One shared normalization for both indexed text and queries: lowercased and
@@ -93,14 +97,21 @@ enum WorkSearchIndex {
     /// installs' pre-index libraries, records restored from backups, and records
     /// indexed under an older schema. Cheap no-op when everything is current.
     @discardableResult
-    static func rebuildIfNeeded(in context: ModelContext) -> Int {
+    static func rebuildIfNeeded(in context: ModelContext) async -> Int {
         let version = currentVersion
         let stale = (try? context.fetch(
             FetchDescriptor<SavedWork>(predicate: #Predicate { $0.searchIndexVersion != version })
         )) ?? []
         guard !stale.isEmpty else { return 0 }
+        var processed = 0
         for work in stale {
+            // The yields below let other main-actor work interleave — including a
+            // user deleting one of the fetched works. Touching an invalidated model
+            // asserts, so re-check liveness (same guard as the migration service).
+            guard work.modelContext != nil else { continue }
             reindex(work)
+            processed += 1
+            if processed.isMultiple(of: yieldInterval) { await Task.yield() }
         }
         try? context.save()
         Log.library.info("Search index rebuilt for \(stale.count, privacy: .public) work(s)")

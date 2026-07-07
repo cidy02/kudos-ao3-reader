@@ -334,6 +334,88 @@ struct FolderSyncTests {
         #expect(collection.lastModifiedAt == modifiedAt)
     }
 
+    /// A failed sync-up write must never destroy the existing remote package — the
+    /// previous copy is the only cloud copy, so other devices must still be able to
+    /// restore from it.
+    @Test func failedSyncUpWritePreservesExistingRemotePackage() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+
+        try insertWork(into: context, title: "Survivor Work", ao3WorkID: 7001)
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+
+        // A read-only parent makes the swap-into-place step fail after the new package
+        // has already been staged — the window where the old copy used to be deleted.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+
+        try insertWork(into: context, title: "Doomed Update", ao3WorkID: 7002)
+        await #expect(throws: (any Error).self) {
+            _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+        }
+
+        let syncFileURL = folder.appendingPathComponent(FolderSyncService.syncFileName)
+        let contents = try KudosBackupContents.read(from: syncFileURL)
+        #expect(contents.manifest.works.count == 1)
+        #expect(contents.manifest.works.first?.title == "Survivor Work")
+    }
+
+    @Test func syncDownSkipsUnchangedRemotePackage() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let sourceDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: sourceDefaults) }
+        try insertWork(into: sourceContext, title: "Skip Candidate", ao3WorkID: 6001)
+        try FolderSyncService.connect(to: folder, defaults: sourceDefaults)
+        _ = try await FolderSyncService.syncUp(in: sourceContext, defaults: sourceDefaults)
+
+        // The writing device must not fully re-restore its own just-written file.
+        let ownDown = try await FolderSyncService.syncDown(in: sourceContext, defaults: sourceDefaults)
+        #expect(ownDown.skippedUnchanged)
+        #expect(ownDown.didReadRemoteFile == false)
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let first = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(first.didReadRemoteFile)
+        #expect(first.skippedUnchanged == false)
+        #expect(first.restoredWorks == 1)
+
+        let second = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(second.skippedUnchanged)
+        #expect(second.didReadRemoteFile == false)
+        #expect(second.restoredWorks == 0)
+        #expect(second.foldedConflicts == 0)
+
+        // A genuine remote change makes the next sync-down restore again. The explicit
+        // modification-date bump guards against filesystem timestamp granularity.
+        try insertWork(into: sourceContext, title: "Second Work", ao3WorkID: 6002)
+        _ = try await FolderSyncService.syncUp(in: sourceContext, defaults: sourceDefaults)
+        let syncFileURL = folder.appendingPathComponent(FolderSyncService.syncFileName)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(10)],
+            ofItemAtPath: syncFileURL.path
+        )
+
+        let third = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(third.skippedUnchanged == false)
+        #expect(third.didReadRemoteFile)
+        let targetWorks = try targetContext.fetch(FetchDescriptor<SavedWork>())
+        #expect(Set(targetWorks.compactMap(\.ao3WorkID)) == [6001, 6002])
+    }
+
     private func container() throws -> ModelContainer {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

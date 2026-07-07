@@ -80,7 +80,7 @@ struct ContentView: View {
                 PreservedWorkService.sweepExpired(in: modelContext)
                 // Backfills the derived search text for records that predate indexing,
                 // arrived via an older backup, or were indexed under an older schema.
-                WorkSearchIndex.rebuildIfNeeded(in: modelContext)
+                await WorkSearchIndex.rebuildIfNeeded(in: modelContext)
                 guard FolderSyncService.snapshot().autoSyncEnabled else { return }
                 lastForegroundFolderSyncAt = Date()
                 _ = try? await FolderSyncService.syncDown(in: modelContext)

@@ -22,6 +22,10 @@ enum WorkTags {
         // when the newer filter metadata (warnings/categories/language/word count) is
         // still absent — so works saved by an older build gain all of it.
         guard work.needsAO3Refresh else { return }
+        // Stamp every attempt so a locked/failing work waits out the cooldown before
+        // the next try. The success/404 paths save it; on a pure failure it lives
+        // only for this session, which is enough to stop same-session re-fetches.
+        work.lastTagRefreshAttemptAt = Date()
         do {
             let groups = try await AO3Client.shared.workTags(workID: id)
             // Re-check after the network await — the work can be deleted mid-fetch.
