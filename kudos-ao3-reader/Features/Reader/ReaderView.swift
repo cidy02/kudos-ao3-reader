@@ -38,6 +38,10 @@ struct ReaderView: View {
 
     @State private var controller = ReaderController()
     @State private var document: EPUBDocument?
+    /// `document?.chapters` reconciled against the full spine into AO3-aware
+    /// sections (Preface/Summary/Chapter/Afterword). Built once per `load()`
+    /// alongside `document` rather than recomputed per access. See `ReaderSection`.
+    @State private var sections: [ReaderSection] = []
     @State private var openError: String?
     @State private var readRoot: URL?
     @State private var currentIndex = 0
@@ -275,9 +279,40 @@ struct ReaderView: View {
     }
 
     private var positionLabel: String {
-        readingMode == .paged
-            ? "Ch \(currentIndex + 1)/\(chapterCount) · Pg \(controller.page)/\(controller.pageTotal)"
-            : "Chapter \(currentIndex + 1) of \(chapterCount)"
+        if readingMode == .paged {
+            let chapterPart = currentSectionLabel.map { "Ch \($0)" } ?? "Ch \(currentIndex + 1)/\(chapterCount)"
+            return "\(chapterPart) · Pg \(controller.page)/\(controller.pageTotal)"
+        }
+        return longFormPositionLabel
+    }
+
+    /// This position's normalized short label ("P"/"S"/"A"/"<i>/<total>"), or nil
+    /// if sections haven't been built yet or this position is `.other` — callers
+    /// fall back to the raw spine-position text.
+    private var currentSectionLabel: String? {
+        guard sections.indices.contains(currentIndex) else { return nil }
+        let storyTotal = SavedWork.totalChapterCount(from: work.chapters) ?? sections.storyChapterCount
+        let label = sections[currentIndex].pillLabel(storyChapterTotal: storyTotal)
+        return label.isEmpty ? nil : label
+    }
+
+    /// Scroll mode's spoken-out label: the section's own name for front/back
+    /// matter, "Chapter <i> of <total>" for a real story chapter — normalized
+    /// against AO3 sections instead of a raw spine position (see `ReaderSection`).
+    private var longFormPositionLabel: String {
+        guard sections.indices.contains(currentIndex) else {
+            return "Chapter \(currentIndex + 1) of \(chapterCount)"
+        }
+        let section = sections[currentIndex]
+        switch section.kind {
+        case .preface: return "Preface"
+        case .summary: return "Summary"
+        case .afterword: return "Afterword"
+        case .chapter:
+            let storyTotal = SavedWork.totalChapterCount(from: work.chapters) ?? sections.storyChapterCount
+            return "Chapter \(section.storyChapterIndex ?? currentIndex + 1) of \(storyTotal)"
+        case .other: return "Chapter \(currentIndex + 1) of \(chapterCount)"
+        }
     }
 
     /// The bottom chapter controls. On iOS they're part of the reader chrome and
@@ -367,13 +402,17 @@ struct ReaderView: View {
     /// labels the panel without touching the window title (which stays the work
     /// title), mirroring the "Theme"/"Font" headers in the options panel.
     private var chapterRows: some View {
-        ForEach(document?.chapters ?? []) { chapter in
-            let isCurrent = chapter.spineIndex == currentIndex
+        // .other sections have no navigable heading of their own (AO3/Calibre
+        // never gave them one) and aren't part of the story — not shown here,
+        // matching the reader index's documented Preface/Summary/Chapter/
+        // Afterword-only contract. Still reachable by normal page-turning.
+        ForEach(sections.filter { $0.kind != .other }) { section in
+            let isCurrent = section.spineIndex == currentIndex
             Button {
-                jump(to: chapter.spineIndex)
+                jump(to: section.spineIndex)
             } label: {
                 HStack {
-                    Text(chapter.title)
+                    Text(section.title)
                         .lineLimit(2)
                         .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     Spacer()
@@ -505,11 +544,18 @@ struct ReaderView: View {
                 try EPUBDocument.open(epubURL: fileURL, into: directory)
             }.value
             document = parsed
+            sections = ReaderSectionBuilder.build(
+                tocEntries: parsed.chapters.map {
+                    ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
+                },
+                spineHrefs: parsed.spineURLs.map(\.absoluteString)
+            )
             readRoot = directory
             currentIndex = min(max(work.lastSpineIndex, 0), parsed.spineURLs.count - 1)
             Log.epub.info("Opened EPUB: \(parsed.chapters.count) chapters")
         } catch {
             document = nil
+            sections = []
             openError = (error as? EPUBError)?.errorDescription
             Log.epub.error("Couldn't open EPUB: \(error.localizedDescription, privacy: .public)")
         }
