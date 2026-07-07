@@ -1,6 +1,6 @@
 # REGRESSION_TEST_MATRIX.md
 
-What must keep working, where it's tested, and what is manual-only. Run everything via `Scripts/test.sh 'platform=iOS Simulator,name=iPhone 17,OS=26.5'` (parallel testing deliberately disabled). 198 tests / 27 suites green as of T-73.
+What must keep working, where it's tested, and what is manual-only. Run everything via `Scripts/verify.sh` (or just the suite via `Scripts/test.sh 'platform=iOS Simulator,name=iPhone 17,OS=26.5'`; parallel testing deliberately disabled). 216 tests / 29 suites green as of T-74.
 
 | Area | Invariant | Automated coverage | Manual-only residue |
 |---|---|---|---|
@@ -23,8 +23,10 @@ What must keep working, where it's tested, and what is manual-only. Run everythi
 
 ## Known coverage gaps (acknowledged, not licenses to skip)
 
-1. `LibraryFilters.matches` has no dedicated unit suite.
-2. `AO3Client.withRetry`/`pace()` are private — politeness is enforced by review, not tests.
+1. ~~`LibraryFilters.matches` has no dedicated unit suite~~ — closed by `LibraryFiltersTests` (T-74).
+2. ~~Retry/pacing policies untested~~ — closed by `AO3ClientPolicyTests` over the now-internal `AO3Client.retryDelay` and pure `paceStep` (T-74). `withRetry`'s loop itself remains review-enforced.
 3. SwiftUI presentation behavior (file importers, pickers, blur rendering) — logic-tested only; the TASKS.md UI approval gate covers it.
+
+Mechanical invariants (single UA, one fileImporter, no `isDeleted` model property, index-out-of-backups, no raw AO3 URLSessions, staged package writes, no `try!`/`as!`) are enforced by `Scripts/check-invariants.sh`, which runs as step 1 of `Scripts/verify.sh`.
 
 **When you add behavior in an area above, add the test to the named suite** — new suites need `@Suite(.serialized)` + registration in the schema helper only if they touch SwiftData/the gate.

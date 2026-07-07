@@ -51,10 +51,10 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, GPL-
 
 ## Definition of done (all of it, before saying "done")
 
-1. `Scripts/lint.sh` — zero new warnings.
-2. `Scripts/test.sh 'platform=iOS Simulator,name=iPhone 17,OS=26.5'` — full suite green (198 tests as of T-73; the count only goes up).
-3. `Scripts/build-macos.sh` — succeeds (iOS-only APIs must be `#if os(iOS)`-guarded).
-4. `git diff --check` — clean.
-5. New behavior has tests (see REGRESSION_TEST_MATRIX for suite placement).
-6. `TASKS.md` row updated with what was verified and what remains **manual** — honesty about unverified device/UI behavior is a project convention.
-7. UI changes: note that the human screenshot gate still applies; don't claim visual correctness you didn't see.
+1. **`Scripts/verify.sh`** — the whole gate in one command: mechanical invariants (`Scripts/check-invariants.sh`) → lint → full iOS suite → macOS build → `git diff --check`. All green, no exceptions. (iOS-only APIs must be `#if os(iOS)`-guarded or step 4 fails.)
+2. New behavior has tests (see REGRESSION_TEST_MATRIX for suite placement). Suite count only goes up (216 tests / 29 suites as of T-74).
+3. If your change makes any statement in `docs/*.md` false, update that doc **in the same commit** — stale docs become hallucination sources (this file's own AGENTS.md predecessor rotted exactly that way).
+4. `TASKS.md` row updated with what was verified and what remains **manual** — honesty about unverified device/UI behavior is a project convention.
+5. Merge-bound branches get an adversarial review per [`ADVERSARIAL_REVIEW_TEMPLATE.md`](ADVERSARIAL_REVIEW_TEMPLATE.md). Multi-part work should be prompted per [`TASK_PROMPT_TEMPLATE.md`](TASK_PROMPT_TEMPLATE.md).
+6. UI changes: the human screenshot gate still applies; don't claim visual correctness you didn't see.
+7. **Reporting discipline:** every finding or implementation claim cites the exact file/function/class involved. Never state "the app currently does X" unless you verified it in code this session — recalled or inferred behavior is labeled as such. Numbers (test counts, line refs) come from command output, not estimation.

@@ -152,5 +152,6 @@ The next agent should continue from `TASKS.md` + your commit with **zero archaeo
 4. Locate your target in [`docs/ARCHITECTURE_MAP.md`](docs/ARCHITECTURE_MAP.md) — reuse the named service/component; do not write a second matcher, importer, UA string, or blur implementation.
 5. Touching models/backup/sync/deletion? Re-read [`docs/DATA_AND_PERSISTENCE_INVARIANTS.md`](docs/DATA_AND_PERSISTENCE_INVARIANTS.md). Touching AO3 traffic? [`docs/AO3_NETWORKING_POLICY.md`](docs/AO3_NETWORKING_POLICY.md) — the "must not implement" list is binding.
 6. New Swift files need **no** pbxproj edit; revert cosmetic pbxproj churn.
-7. Before "done": lint clean → full iOS suite green → macOS build → `git diff --check` → tests added per [`docs/REGRESSION_TEST_MATRIX.md`](docs/REGRESSION_TEST_MATRIX.md) → `TASKS.md` row updated with what was verified **and what remains manual**.
-8. Never claim UI is visually correct without seeing it; the human screenshot gate applies to all UI changes.
+7. Before "done": **`Scripts/verify.sh`** all green (invariants → lint → iOS suite → macOS build → whitespace) → tests added per [`docs/REGRESSION_TEST_MATRIX.md`](docs/REGRESSION_TEST_MATRIX.md) → any `docs/*.md` statement your change falsified updated in the same commit → `TASKS.md` row updated with what was verified **and what remains manual**.
+8. Merge-bound work gets an adversarial review per [`docs/ADVERSARIAL_REVIEW_TEMPLATE.md`](docs/ADVERSARIAL_REVIEW_TEMPLATE.md); write multi-part task prompts per [`docs/TASK_PROMPT_TEMPLATE.md`](docs/TASK_PROMPT_TEMPLATE.md).
+9. Never claim UI is visually correct without seeing it; the human screenshot gate applies to all UI changes.

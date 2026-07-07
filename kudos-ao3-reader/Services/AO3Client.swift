@@ -42,12 +42,24 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private let minRequestInterval: TimeInterval = 0.6
 
     private func pace() async throws {
-        let now = Date()
-        let wait = nextAllowedRequestAt.timeIntervalSince(now)
-        nextAllowedRequestAt = max(now, nextAllowedRequestAt).addingTimeInterval(minRequestInterval)
-        if wait > 0 {
-            try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        let step = Self.paceStep(now: Date(), nextAllowed: nextAllowedRequestAt, minInterval: minRequestInterval)
+        nextAllowedRequestAt = step.nextAllowed
+        if step.wait > 0 {
+            try await Task.sleep(nanoseconds: UInt64(step.wait * 1_000_000_000))
         }
+    }
+
+    /// The slot-claiming computation behind `pace()`, pure so the politeness math
+    /// is unit-testable (the actor state + sleep around it are not).
+    static func paceStep(
+        now: Date,
+        nextAllowed: Date,
+        minInterval: TimeInterval
+    ) -> (wait: TimeInterval, nextAllowed: Date) {
+        (
+            wait: nextAllowed.timeIntervalSince(now),
+            nextAllowed: max(now, nextAllowed).addingTimeInterval(minInterval)
+        )
     }
 
     // MARK: Requests
@@ -147,7 +159,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Backoff (seconds) before retrying a transient error, or nil if it should
     /// not be retried. Base 0.5s, doubled per attempt; 429 respects Retry-After.
-    private static func retryDelay(for error: Error, attempt: Int) -> TimeInterval? {
+    /// Internal (not private) so the retry policy itself is unit-testable.
+    static func retryDelay(for error: Error, attempt: Int) -> TimeInterval? {
         let backoff = 0.5 * pow(2, Double(attempt - 1)) // 0.5, 1.0, 2.0…
         switch error {
         case let AO3Error.rateLimited(retryAfter):
