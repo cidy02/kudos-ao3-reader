@@ -21,16 +21,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     init() {
         let config = URLSessionConfiguration.default
-        // Browser-like base (AO3 throttles unfamiliar clients harder) + an honest,
-        // unique product token with a contact URL, per polite-scraper convention —
-        // AO3 admins can identify the app and reach its repository if they ever
-        // need it to change behavior.
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
-        config.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 "
-                + "KudosReader/\(version) (+https://github.com/cidy02/kudos-ao3-reader)"
-        ]
+        // The shared app identity (browser-like base + product token + contact URL) —
+        // single-sourced in AO3RequestDefaults because authenticated requests set the
+        // same header per-request, which would silently override a diverging default.
+        config.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         config.timeoutIntervalForRequest = 30
         session = URLSession(configuration: config)
     }

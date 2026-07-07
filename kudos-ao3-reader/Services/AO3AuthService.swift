@@ -157,8 +157,18 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
 }
 
 enum AO3RequestDefaults {
-    static let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    /// The one User-Agent every AO3-facing request sends (AO3Client's session default,
+    /// authenticated per-request headers, and the session validator all use this):
+    /// browser-like base + an honest product token with a contact URL, so AO3 admins
+    /// can identify the app and reach its repository. Keep single-sourced — a
+    /// per-request header silently overrides any session-level default, so a second
+    /// definition would fork the app's identity.
+    static let userAgent: String = {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 "
+            + "KudosReader/\(version) (+https://github.com/cidy02/kudos-ao3-reader)"
+    }()
 
     static func isTrustedURL(_ url: URL?) -> Bool {
         guard url?.scheme?.lowercased() == "https",
