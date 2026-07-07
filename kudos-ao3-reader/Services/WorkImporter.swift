@@ -3,6 +3,10 @@ import OSLog
 import SwiftData
 import SwiftSoup
 
+// Import funnels (AO3 download + user-file) and their shared iCloud-materialization
+// helper are cohesive; avoid a behavior-risking split for lint.
+// swiftlint:disable file_length
+
 /// Imports a downloaded EPUB into the library: reads its metadata, moves the
 /// file into permanent storage, and inserts a `SavedWork`. Returns the inserted
 /// work, or throws if the file couldn't be saved. Shared by the Browse tab's
@@ -132,6 +136,9 @@ enum UserEPUBImportOutcome {
 enum UserEPUBImportError: LocalizedError {
     case notLocalFile
     case invalidExtension
+    /// A `.fileImporter`-selected file lives in iCloud Drive and wasn't fully
+    /// downloaded within the wait window — see `waitForUbiquitousDownload(of:)`.
+    case iCloudDownloadTimedOut
 
     var errorDescription: String? {
         switch self {
@@ -139,7 +146,41 @@ enum UserEPUBImportError: LocalizedError {
             "Choose a local EPUB file."
         case .invalidExtension:
             "Choose a file ending in .epub."
+        case .iCloudDownloadTimedOut:
+            "This file is still downloading from iCloud Drive. Wait for it to finish "
+                + "downloading in the Files app, then try importing again."
         }
+    }
+}
+
+/// Waits for a `.fileImporter`-selected file to finish downloading from iCloud
+/// Drive before it's read. The document picker can return a URL to a
+/// not-yet-materialized placeholder — e.g. any file showing the cloud-download
+/// icon in Files — and reading it immediately (`Data(contentsOf:)`) fails with an
+/// opaque "unreadable file" error instead of actually waiting for the download.
+/// A no-op for files that are already local (including the common case of
+/// picking from "On My iPhone"/"On My Mac").
+func waitForUbiquitousDownload(
+    of url: URL,
+    pollInterval: TimeInterval = 0.3,
+    timeout: TimeInterval = 120
+) async throws {
+    guard let isUbiquitous = try? url.resourceValues(forKeys: [.isUbiquitousItemKey]).isUbiquitousItem,
+          isUbiquitous
+    else { return }
+
+    // Idempotent: harmless (and necessary) to call even if a download is already
+    // in progress or finished — it's how the placeholder actually starts
+    // materializing rather than sitting inert until something else touches it.
+    try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while true {
+        let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+            .ubiquitousItemDownloadingStatus
+        if status == .current { return }
+        guard Date() < deadline else { throw UserEPUBImportError.iCloudDownloadTimedOut }
+        try await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
     }
 }
 

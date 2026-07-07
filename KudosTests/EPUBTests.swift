@@ -142,4 +142,16 @@ struct EPUBTests {
             Issue.record("Unexpected error: \(error)")
         }
     }
+
+    /// A plain local file (the overwhelmingly common import case — "On My iPhone",
+    /// or any non-iCloud source) is not a ubiquitous item, so the iCloud-download
+    /// wait must no-op immediately rather than adding any latency or hanging.
+    @Test func waitForUbiquitousDownloadNoOpsOnAPlainLocalFile() async throws {
+        let local = try Self.sampleEPUB
+        let start = Date()
+        try await waitForUbiquitousDownload(of: local, pollInterval: 5, timeout: 30)
+        // If this fell through to the poll loop it would take at least one
+        // `pollInterval` (5s) — asserting well under that proves the early return.
+        #expect(Date().timeIntervalSince(start) < 1)
+    }
 }

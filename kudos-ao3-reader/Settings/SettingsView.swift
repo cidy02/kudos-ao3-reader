@@ -559,12 +559,25 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             epubImportProgress = nil
         }
 
+        // Security scope is held for the whole pass (download wait + import), not
+        // just the read — a not-yet-downloaded iCloud Drive file needs access while
+        // it materializes, not only once it's finally readable.
+        let accessedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
+        defer { accessedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+
+        // Kick off iCloud materialization for every file up front, so files later
+        // in the list are already downloading by the time their turn comes instead
+        // of each one only starting once the previous file's full import finishes.
+        for url in urls {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        }
+
         var summary = EPUBImportNoticeSummary()
         for (index, url) in urls.enumerated() {
-            epubImportProgress = "Importing \(index + 1) of \(urls.count)…"
-            let accessed = url.startAccessingSecurityScopedResource()
             do {
-                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                epubImportProgress = "Waiting for iCloud Drive… (\(index + 1) of \(urls.count))"
+                try await waitForUbiquitousDownload(of: url)
+                epubImportProgress = "Importing \(index + 1) of \(urls.count)…"
                 let outcome = try await importUserEPUB(url, into: context)
                 summary.record(outcome)
             } catch {
