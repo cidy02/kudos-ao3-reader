@@ -220,6 +220,13 @@ struct SensitiveWorkCoverCard: View {
                         WorkSelectionBubble(isSelected: isSelected)
                             .padding(8)
                     }
+                    // Matches SelectableWorkCoverCard's whole-card outline — without
+                    // it, a blurred selected card only shows the small corner bubble,
+                    // not the same selected-state ring unblurred cards get.
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    }
                     .onTapGesture { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(work.title)
