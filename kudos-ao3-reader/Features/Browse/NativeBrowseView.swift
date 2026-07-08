@@ -296,14 +296,16 @@ struct FandomWorksView: View {
         } else if phase == .loaded, !results.isEmpty {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
-                    Button { isSelecting = true } label: {
-                        Label("Select", systemImage: "checklist")
+                    FilterButton(filtersActive: hasExtraFilters,
+                                 showingFilters: $showingFilters,
+                                 filterHelp: "Filter works in this fandom",
+                                 onClearFilters: resetFilters)
+                    WorkListMoreMenu {
+                        Button { isSelecting = true } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                        ExpandAllMenuItem(expandAll: $expandAll)
                     }
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: hasExtraFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter works in this fandom",
-                                         onClearFilters: resetFilters)
                 }
                 .labelStyle(.iconOnly)
             }
@@ -532,13 +534,15 @@ struct TagWorksView: View {
         } else if phase == .loaded, !results.isEmpty {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
-                    Button { isSelecting = true } label: {
-                        Label("Select", systemImage: "checklist")
+                    FilterButton(filtersActive: filters.hasActiveFilters,
+                                 showingFilters: $showingFilters,
+                                 onClearFilters: { filters = AO3SearchFilters() })
+                    WorkListMoreMenu {
+                        Button { isSelecting = true } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                        ExpandAllMenuItem(expandAll: $expandAll)
                     }
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         onClearFilters: { filters = AO3SearchFilters() })
                 }
                 .labelStyle(.iconOnly)
             }

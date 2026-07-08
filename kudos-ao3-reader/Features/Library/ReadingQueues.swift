@@ -219,42 +219,38 @@ struct ReadingQueueDetailView: View {
                             Button("Done") { setReordering(false) }
                         } else {
                             HStack(spacing: 2) {
-                                Button {
-                                    setReordering(true)
-                                } label: {
-                                    Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                FilterButton(filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter the works in this queue",
+                                             onClearFilters: { filters = LibraryFilters() })
+                                WorkListMoreMenu {
+                                    Button {
+                                        setReordering(true)
+                                    } label: {
+                                        Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                    }
+                                    .disabled(filters.hasActiveFilters)
+                                    .help(filters.hasActiveFilters
+                                        ? "Clear filters to reorder"
+                                        : "Reorder works in this queue")
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                    if queue.kind == .custom {
+                                        Divider()
+                                        Button {
+                                            renameText = queue.name
+                                            showingRename = true
+                                        } label: {
+                                            Label("Rename", systemImage: "pencil")
+                                        }
+                                        Button(role: .destructive) {
+                                            confirmDelete = true
+                                        } label: {
+                                            Label("Delete Queue", systemImage: "trash")
+                                        }
+                                    }
                                 }
-                                .labelStyle(.iconOnly)
-                                .disabled(filters.hasActiveFilters)
-                                .help(filters.hasActiveFilters
-                                    ? "Clear filters to reorder"
-                                    : "Reorder works in this queue")
-                                DisplayModeToggle(mode: $displayMode)
-                                WorkCardListControls(expandAll: $expandAll,
-                                                     filtersActive: filters.hasActiveFilters,
-                                                     showingFilters: $showingFilters,
-                                                     filterHelp: "Filter the works in this queue",
-                                                     onClearFilters: { filters = LibraryFilters() })
                             }
-                        }
-                    }
-                }
-                if queue.kind == .custom, !isReordering {
-                    ToolbarItem {
-                        Menu {
-                            Button {
-                                renameText = queue.name
-                                showingRename = true
-                            } label: {
-                                Label("Rename", systemImage: "pencil")
-                            }
-                            Button(role: .destructive) {
-                                confirmDelete = true
-                            } label: {
-                                Label("Delete Queue", systemImage: "trash")
-                            }
-                        } label: {
-                            Label("Queue options", systemImage: "ellipsis.circle")
                         }
                     }
                 }

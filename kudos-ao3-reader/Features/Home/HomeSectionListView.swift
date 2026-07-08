@@ -126,18 +126,19 @@ struct HomeSectionListView: View {
                                 MatureRevealToggle()
                             }
                             if !items.isEmpty {
-                                Button {
-                                    isSelecting = true
-                                } label: {
-                                    Label("Select", systemImage: "checklist")
+                                FilterButton(filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter the works in this section",
+                                             onClearFilters: { filters = LibraryFilters() })
+                                WorkListMoreMenu {
+                                    Button {
+                                        isSelecting = true
+                                    } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    ExpandAllMenuItem(expandAll: $expandAll)
                                 }
-                                .labelStyle(.iconOnly)
-                                DisplayModeToggle(mode: $displayMode)
-                                WorkCardListControls(expandAll: $expandAll,
-                                                     filtersActive: filters.hasActiveFilters,
-                                                     showingFilters: $showingFilters,
-                                                     filterHelp: "Filter the works in this section",
-                                                     onClearFilters: { filters = LibraryFilters() })
                             }
                         }
                     }

@@ -296,11 +296,15 @@ private struct LocalReadingHistoryView: View {
             .toolbar {
                 if !visibleHistory.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in your history",
-                                             onClearFilters: { filters = LibraryFilters() })
+                        HStack(spacing: 2) {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in your history",
+                                         onClearFilters: { filters = LibraryFilters() })
+                            WorkListMoreMenu {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                            }
+                        }
                     }
                 }
             }
@@ -406,11 +410,15 @@ private struct LocalFavoritesView: View {
             .toolbar {
                 if !visibleFavorites.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter your favorites",
-                                             onClearFilters: { filters = LibraryFilters() })
+                        HStack(spacing: 2) {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter your favorites",
+                                         onClearFilters: { filters = LibraryFilters() })
+                            WorkListMoreMenu {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                            }
+                        }
                     }
                 }
             }

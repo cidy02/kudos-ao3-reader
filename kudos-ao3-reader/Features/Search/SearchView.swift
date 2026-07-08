@@ -122,15 +122,23 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                         #endif
                         ToolbarItem(placement: .principal) { searchField }
+                        // Filter sits directly visible, right after the search field —
+                        // everything else (Select, Expand/Collapse) lives behind "...".
+                        ToolbarItem(placement: .primaryAction) {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: router.isShowing(.searchFilters),
+                                         onClearFilters: clearAllFilters)
+                        }
                         if phase == .loaded, !results.isEmpty {
                             ToolbarItem(placement: .primaryAction) {
-                                Button { isSelecting = true } label: {
-                                    Label("Select", systemImage: "checklist")
+                                WorkListMoreMenu {
+                                    Button { isSelecting = true } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                    ExpandAllMenuItem(expandAll: $expandAllCards)
                                 }
                             }
-                            ToolbarItem(placement: .primaryAction) { expandAllButton }
                         }
-                        ToolbarItem(placement: .primaryAction) { filterButton }
                     }
                 }
             #if os(iOS)
@@ -554,38 +562,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    private var expandAllButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { expandAllCards.toggle() }
-        } label: {
-            Image(systemName: expandAllCards
-                ? "rectangle.compress.vertical"
-                : "rectangle.expand.vertical")
-        }
-        .help(expandAllCards ? "Collapse all cards" : "Expand all cards")
-        .accessibilityLabel(expandAllCards ? "Collapse all cards" : "Expand all cards")
-    }
-
-    private var filterButton: some View {
-        Button {
-            router.toggle(.searchFilters)
-        } label: {
-            Image(systemName: filters.hasActiveFilters
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
-        }
-        .help("Filters")
-        // Long-press the Filters button to quickly clear every active filter
-        // without opening the sidebar. A context menu is the reliable long-press
-        // affordance for toolbar buttons; the destructive item confirms the action.
-        .contextMenu {
-            if filters.hasActiveFilters {
-                Button(role: .destructive, action: clearAllFilters) {
-                    Label("Clear All Filters", systemImage: "arrow.counterclockwise")
-                }
-            }
-        }
-    }
 
     /// Resets every filter (keeping the query) and refreshes — shared by the
     /// long-press confirmation and mirroring the sidebar's "Reset Filters".

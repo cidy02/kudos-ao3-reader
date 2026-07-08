@@ -132,20 +132,21 @@ struct LibrarySectionListView: View {
                                 MatureRevealToggle()
                             }
                             if hasAnyContent {
-                                if !items.isEmpty {
-                                    Button {
-                                        isSelecting = true
-                                    } label: {
-                                        Label("Select", systemImage: "checklist")
+                                FilterButton(filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             filterHelp: "Filter the works in this section",
+                                             onClearFilters: { filters = LibraryFilters() })
+                                WorkListMoreMenu {
+                                    if !items.isEmpty {
+                                        Button {
+                                            isSelecting = true
+                                        } label: {
+                                            Label("Select", systemImage: "checklist")
+                                        }
                                     }
-                                    .labelStyle(.iconOnly)
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    ExpandAllMenuItem(expandAll: $expandAll)
                                 }
-                                DisplayModeToggle(mode: $displayMode)
-                                WorkCardListControls(expandAll: $expandAll,
-                                                     filtersActive: filters.hasActiveFilters,
-                                                     showingFilters: $showingFilters,
-                                                     filterHelp: "Filter the works in this section",
-                                                     onClearFilters: { filters = LibraryFilters() })
                             }
                         }
                     }

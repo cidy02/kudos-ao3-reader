@@ -150,10 +150,12 @@ struct HomeView: View {
                                     MatureRevealToggle()
                                 }
                                 if !allLocalSectionWorks.isEmpty {
-                                    Button {
-                                        enterSelectMode()
-                                    } label: {
-                                        Label("Select", systemImage: "checklist")
+                                    WorkListMoreMenu {
+                                        Button {
+                                            enterSelectMode()
+                                        } label: {
+                                            Label("Select", systemImage: "checklist")
+                                        }
                                     }
                                 }
                             }

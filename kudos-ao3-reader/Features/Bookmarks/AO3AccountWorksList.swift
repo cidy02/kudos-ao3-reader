@@ -148,10 +148,12 @@ struct AO3AccountWorksList: View {
                         MatureRevealToggle()
                     }
                     if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             onClearFilters: { filters = AO3SearchFilters() })
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: $showingFilters,
+                                     onClearFilters: { filters = AO3SearchFilters() })
+                        WorkListMoreMenu {
+                            ExpandAllMenuItem(expandAll: $expandAll)
+                        }
                     }
                 }
             }

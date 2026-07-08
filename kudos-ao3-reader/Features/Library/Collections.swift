@@ -167,30 +167,31 @@ struct CollectionDetailView: View {
                 #endif
             }
             .toolbar {
-                if !works.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in this collection",
-                                             onClearFilters: { filters = LibraryFilters() })
-                    }
-                }
-                ToolbarItem {
-                    Menu {
-                        Button {
-                            renameText = collection.name
-                            showingRename = true
-                        } label: {
-                            Label("Rename", systemImage: "pencil")
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 2) {
+                        if !works.isEmpty {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in this collection",
+                                         onClearFilters: { filters = LibraryFilters() })
                         }
-                        Button(role: .destructive) {
-                            confirmDelete = true
-                        } label: {
-                            Label("Delete Collection", systemImage: "trash")
+                        WorkListMoreMenu {
+                            if !works.isEmpty {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                                Divider()
+                            }
+                            Button {
+                                renameText = collection.name
+                                showingRename = true
+                            } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                confirmDelete = true
+                            } label: {
+                                Label("Delete Collection", systemImage: "trash")
+                            }
                         }
-                    } label: {
-                        Label("Collection options", systemImage: "ellipsis.circle")
                     }
                 }
             }

@@ -518,48 +518,33 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     if PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature) {
                         MatureRevealToggle()
                     }
-                    if !statisticsWorks.isEmpty {
-                        NavigationLink {
-                            ReadingStatisticsView(works: statisticsWorks)
-                        } label: {
-                            Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                        }
-                    }
-                    #if os(iOS)
+                    // Filter sits directly visible, right after Privacy — everything
+                    // else (Reading Insights, Select) lives behind the "..." menu.
                     if !works.isEmpty {
-                        Button {
-                            enterSelectMode()
-                        } label: {
-                            Label("Select", systemImage: "checklist")
-                        }
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
                     }
-                    #endif
-                    // Filters sits rightmost — matched on Browse.
-                    if !works.isEmpty {
-                        filterButton
+                    WorkListMoreMenu {
+                        if !statisticsWorks.isEmpty {
+                            NavigationLink {
+                                ReadingStatisticsView(works: statisticsWorks)
+                            } label: {
+                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                            }
+                        }
+                        #if os(iOS)
+                        if !works.isEmpty {
+                            Button {
+                                enterSelectMode()
+                            } label: {
+                                Label("Select", systemImage: "checklist")
+                            }
+                        }
+                        #endif
                     }
                 }
                 .labelStyle(.iconOnly)
-            }
-        }
-    }
-
-    /// Opens the filter panel; the icon fills while any filter is active. Routed
-    /// through the shared router so only one inspector is ever open app-wide.
-    private var filterButton: some View {
-        Button {
-            router.toggle(.libraryFilters)
-        } label: {
-            Label("Filter", systemImage: filters.hasActiveFilters
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
-        }
-        .help("Filters")
-        .contextMenu {
-            if filters.hasActiveFilters {
-                Button(role: .destructive, action: { filters = LibraryFilters() }) {
-                    Label("Clear All Filters", systemImage: "arrow.counterclockwise")
-                }
             }
         }
     }
