@@ -14,7 +14,19 @@ id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
 
 ---
 
-## Status snapshot (2026-07-08)
+## Status snapshot (2026-07-08, updated same day)
+
+### Latest: Phase 5 item 16 (session health) landed — `a80e517` / T-80
+Found a complete, coherent uncommitted session-health implementation on the
+branch (AO3SessionHealth enum + verifySession() + Account UI row/button).
+Verified it, added 4 regression tests (`ConfigurableAO3SessionValidator`
+mock), fixed a test-authoring trap (the suite's `testSession` is computed —
+mints a fresh `savedAt` per access; capture once per test), full verify.sh
+ALL GREEN (244 tests / 31 suites). **Pending owner sim verification** like
+everything else on this branch. Phase 5 items 15 (author profiles) and 17
+(account reconciliation) remain unbuilt.
+
+## Earlier snapshot (2026-07-08)
 
 ### Done + committed this session (pending the owner's manual sim verification)
 Plan Branches A/B/C (BGTask, PreservedWork, CanonicalIdentity) and Branch D
@@ -106,8 +118,8 @@ E=Phase6 update-detection wiring into filters/badges. Read-only — no verify pa
 
 ## Next action
 
-Phase 2 is now closed (item 12 was already done via `WorkBulkActionBar`; item 11
-shipped as `e54402e`/T-78). **Next chunk = Phase 3 item 9: `ReadingState` enum.**
+Phase 2 closed (T-78); Phase 5 item 16 closed (T-80, `a80e517`).
+**Next chunk = Phase 3 item 9: `ReadingState` enum.**
 Per R1 area B: a pure computed convenience on `SavedWork` (`.unread/.inProgress/
 .finished/.freedHistory`) folding the existing booleans (`isFinished`/`hasEPUB`/
 `isInProgress`/queue/history predicates) in ONE place — no stored @Attribute, no
