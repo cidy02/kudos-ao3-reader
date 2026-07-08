@@ -696,9 +696,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     /// Pushes the current filters onto the history stack before overwriting them —
     /// the "overwrite" → "push" change that makes each tag-tap drill-down reversible
-    /// one step at a time via `goBack()`.
+    /// one step at a time via `goBack()`. Skipped when the current filters aren't
+    /// searchable (the very first tag tap into a fresh Search, e.g. from Browse) —
+    /// there's no real prior search to return to, and pushing that empty state
+    /// anyway just forced an extra Back tap through a blank results screen before
+    /// `goBack()`'s own idle/Browse fallback ever got a chance to run.
     private func pushFilters(_ new: AO3SearchFilters) {
-        filterHistory.append(FilterHistoryEntry(filters: filters, page: currentPage))
+        if filters.isSearchable {
+            filterHistory.append(FilterHistoryEntry(filters: filters, page: currentPage))
+        }
         filters = new
         runSearch()
     }
