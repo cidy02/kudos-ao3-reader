@@ -597,8 +597,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         isSelected: selection.contains(work.id),
                         onToggleSelection: { toggleSelection(work) }
                     )
+                    .cardRow(isSelected: selection.contains(work.id))
                 }
-                    .cardRow()
             }
         }
         .cardList()

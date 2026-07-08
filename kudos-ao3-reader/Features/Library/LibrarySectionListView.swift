@@ -238,7 +238,9 @@ struct LibrarySectionListView: View {
         List {
             if !visibleItems.isEmpty {
                 Section {
-                    ForEach(visibleItems, content: row).cardRow()
+                    ForEach(visibleItems) { work in
+                        row(work).cardRow(isSelected: isSelecting && selection.contains(work.id))
+                    }
                 } header: {
                     if showsMarkedForLater { Text("Saved for Later in Kudos") }
                 }

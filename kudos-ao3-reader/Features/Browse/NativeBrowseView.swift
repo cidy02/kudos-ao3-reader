@@ -116,8 +116,8 @@ struct FandomWorksView: View {
                     Section {
                         ForEach(results) { work in
                             workRow(for: work)
+                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
                         }
-                        .cardRow()
                     }
                     if showPagination { Section { paginationRow } }
                 }
@@ -449,8 +449,8 @@ struct TagWorksView: View {
                     Section {
                         ForEach(visibleResults) { work in
                             workRow(for: work)
+                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
                         }
-                        .cardRow()
                     }
                     if showPagination { Section { paginationRow } }
                 }

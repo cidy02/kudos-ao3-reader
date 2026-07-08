@@ -109,6 +109,10 @@ struct SensitiveWorkRow: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
+    /// Drives the blurred row's own expand toggle — WorkRow's internal state isn't
+    /// reachable since its expand button is suppressed (`showsExpandButton: false`)
+    /// in favor of the unblurred external copy below.
+    @State private var blurredExpanded = false
 
     private var blurred: Bool {
         hideMature && work.isAdult && mode == .obscure && !gate.isRevealed(work)
@@ -119,12 +123,13 @@ struct SensitiveWorkRow: View {
             // isSelecting/isSelected are deliberately NOT passed to WorkRow here —
             // its own inline selection bubble would otherwise be blurred into
             // illegibility along with the rest of the row. showsExpandButton: false
-            // suppresses WorkRow's own expand control too, since it would otherwise
-            // still render (isExpandable doesn't depend on isSelecting) and collide
-            // with the externally-overlaid bubble in the same top-trailing corner.
-            // The bubble and outline are added back AFTER .blur(), same as
-            // SensitiveWorkCoverCard's already-correct pattern.
-            let row = WorkRow(work: work, showsExpandButton: false)
+            // suppresses WorkRow's own expand control for the same reason; an
+            // unblurred copy is overlaid below instead, bound to the same expanded
+            // state via `externalExpanded` so it still expands the blurred content.
+            // The card's selection outline comes from the enclosing `.cardRow(isSelected:)`
+            // at the card's true edge, not from an overlay here (matches WorkRow).
+            let isExpandableWork = WorkRow.isExpandable(for: work)
+            let content = WorkRow(work: work, showsExpandButton: false, externalExpanded: $blurredExpanded)
                 .blur(radius: 6)
                 .overlay {
                     Label("Tap to reveal", systemImage: "eye.slash.fill")
@@ -135,26 +140,42 @@ struct SensitiveWorkRow: View {
                         .background(.regularMaterial, in: Capsule())
                 }
                 .contentShape(Rectangle())
+                .overlay(alignment: .topTrailing) {
+                    // Rendered outside the blur so it stays legible and tappable —
+                    // mirrors WorkRow's own top-trailing [expand][bubble] cluster.
+                    HStack(spacing: 6) {
+                        if isExpandableWork {
+                            WorkRowExpandButton(expanded: $blurredExpanded)
+                        }
+                        if isSelecting {
+                            WorkSelectionBubble(isSelected: isSelected)
+                        }
+                    }
+                    .padding(8)
+                }
             if isSelecting {
-                row
-                    .overlay(alignment: .topTrailing) {
-                        WorkSelectionBubble(isSelected: isSelected)
-                            .padding(8)
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-                    }
-                    .onTapGesture { onToggleSelection?() }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(work.title)
-                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+                // A real Button (not `.onTapGesture`) so the nested expand button
+                // above reliably captures its own taps first — the same nesting
+                // pattern `visibleRow`'s selecting branch already relies on.
+                Button {
+                    onToggleSelection?()
+                } label: {
+                    content
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(work.title)
+                .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             } else {
-                row
-                    .onTapGesture { gate.reveal(work) }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Hidden mature work. Activate to reveal.")
+                Button {
+                    gate.reveal(work)
+                } label: {
+                    content
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work. Activate to reveal.")
             }
         } else {
             visibleRow
@@ -230,9 +251,13 @@ struct SensitiveWorkCoverCard: View {
                     // Matches SelectableWorkCoverCard's whole-card outline — without
                     // it, a blurred selected card only shows the small corner bubble,
                     // not the same selected-state ring unblurred cards get.
+                    // allowsHitTesting(false): purely decorative — a stroked Shape
+                    // overlay is still hit-testable across its full bounds by
+                    // default, which would otherwise swallow the onTapGesture below.
                     .overlay {
                         RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                            .allowsHitTesting(false)
                     }
                     .onTapGesture { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)

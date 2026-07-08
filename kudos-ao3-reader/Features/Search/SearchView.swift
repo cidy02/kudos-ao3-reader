@@ -212,8 +212,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     Section {
                         ForEach(results) { work in
                             searchResultRow(for: work)
+                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
                         }
-                        .cardRow()
                     }
 
                     if showPagination {

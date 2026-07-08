@@ -184,8 +184,8 @@ struct HomeSectionListView: View {
                     isSelected: selection.contains(work.id),
                     onToggleSelection: { toggleSelection(work) }
                 )
+                .cardRow(isSelected: isSelecting && selection.contains(work.id))
             }
-            .cardRow()
         }
         .cardList()
     }

@@ -16,12 +16,21 @@ struct WorkRow: View {
     var isSelecting: Bool = false
     var isSelected: Bool = false
     /// False suppresses the row's own expand/collapse button — used when a caller
-    /// (SensitiveWorkRow's blurred branch) renders its own selection bubble
-    /// externally instead, so the two don't compete for the same top-trailing corner.
+    /// (SensitiveWorkRow's blurred branch) renders its own copy externally instead,
+    /// so the two don't compete for the same top-trailing corner.
     var showsExpandButton: Bool = true
+    /// Lets a caller drive (and observe) this row's expanded state from outside —
+    /// used by SensitiveWorkRow's blurred branch, which renders its own unblurred
+    /// expand button but still needs it to expand the blurred content underneath.
+    /// Falls back to purely-internal state when nil.
+    var externalExpanded: Binding<Bool>?
 
     @Environment(AppRouter.self) private var router
-    @State private var expanded = false
+    @State private var internalExpanded = false
+
+    private var expandedBinding: Binding<Bool> {
+        externalExpanded ?? $internalExpanded
+    }
 
     private var summaryText: String {
         work.summary.strippingHTML()
@@ -37,11 +46,16 @@ struct WorkRow: View {
     }
 
     /// Worth an expand toggle only when there's more to reveal than the clamped view:
-    /// a long summary or any categorized tags.
-    private var isExpandable: Bool {
-        summaryText.count > 120 || !work.workRelationships.isEmpty
+    /// a long summary or any categorized tags. Exposed statically so SensitiveWorkRow
+    /// can decide whether to render an external expand button without building a row.
+    static func isExpandable(for work: SavedWork) -> Bool {
+        work.summary.strippingHTML().count > 120 || !work.workRelationships.isEmpty
             || !work.workCharacters.isEmpty || !work.workFreeforms.isEmpty
             || (!work.hasCategorizedWorkTags && !work.workTags.isEmpty)
+    }
+
+    private var isExpandable: Bool {
+        Self.isExpandable(for: work)
     }
 
     var body: some View {
@@ -84,14 +98,14 @@ struct WorkRow: View {
                         .foregroundStyle(.secondary)
                 }
                 .font(.caption)
-                .lineLimit(expanded ? nil : 1)
+                .lineLimit(expandedBinding.wrappedValue ? nil : 1)
             }
 
             if !summaryText.isEmpty {
                 Text(summaryText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(expanded ? nil : 3)
+                    .lineLimit(expandedBinding.wrappedValue ? nil : 3)
                     .multilineTextAlignment(.leading)
             }
 
@@ -100,11 +114,11 @@ struct WorkRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .labelStyle(.titleAndIcon)
-                    .lineLimit(expanded ? nil : 1)
+                    .lineLimit(expandedBinding.wrappedValue ? nil : 1)
             }
 
             // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
-            if expanded {
+            if expandedBinding.wrappedValue {
                 if work.hasCategorizedWorkTags {
                     chipGroup("Relationships", work.workRelationships, field: .relationship)
                     chipGroup("Characters", work.workCharacters, field: .character)
@@ -132,33 +146,17 @@ struct WorkRow: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Follow the list's expand/collapse-all toggle (also on first appearance so
-        // cards scrolled into view match the current state).
-        .onChange(of: expandAll, initial: true) { _, value in expanded = value }
-        .overlay {
-            // Matches SelectableWorkCoverCard's whole-card outline (compact layout) —
-            // cornerRadius 16 matches CardListMetrics.cornerRadius (AppThemeSurface.swift),
-            // the row's own card background, so the stroke sits flush with its edges.
-            if isSelecting && isSelected {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: 2)
-            }
-        }
+        // cards scrolled into view match the current state). The row's outline for
+        // selection is drawn by the enclosing `.cardRow(isSelected:)` at the card's
+        // true edge (its List row background), not here — this content sits inside
+        // that background's own padding, so a same-size overlay here would draw
+        // inset from the visible card border instead of flush with it.
+        .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
     }
 
-    /// Top-right expand/collapse control, matching AO3WorkRow. A bordered circular
-    /// button captures its own tap so it never triggers the row's navigation link.
+    /// Top-right expand/collapse control, matching AO3WorkRow.
     private var expandButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
-        } label: {
-            Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                .font(.caption.weight(.semibold))
-        }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.circle)
-        .controlSize(.small)
-        .tint(.accentColor)
-        .accessibilityLabel(expanded ? "Show less" : "Show more")
+        WorkRowExpandButton(expanded: expandedBinding)
     }
 
     /// A labeled group of tappable tag chips; each runs an AO3 search for that tag
@@ -179,5 +177,27 @@ struct WorkRow: View {
             }
             .padding(.top, 2)
         }
+    }
+}
+
+/// The bordered circular expand/collapse toggle shared by `WorkRow` and
+/// `SensitiveWorkRow`'s blurred branch (which renders its own copy outside the
+/// blur so it stays legible and tappable, driving the row's content via a
+/// `Binding` rather than owning its own state).
+struct WorkRowExpandButton: View {
+    @Binding var expanded: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+        } label: {
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .controlSize(.small)
+        .tint(.accentColor)
+        .accessibilityLabel(expanded ? "Show less" : "Show more")
     }
 }
