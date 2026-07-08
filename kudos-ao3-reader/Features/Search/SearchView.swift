@@ -35,6 +35,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
+    /// One entry per tag-tap drill-down (tag A → tag B → …), so Back can restore the
+    /// previous filter level instead of losing it to applyTagSearch's overwrite.
+    /// Manual typed searches don't push here — only the tag-tap chain does.
+    @State private var filterHistory: [FilterHistoryEntry] = []
+
+    private struct FilterHistoryEntry {
+        let filters: AO3SearchFilters
+        let page: Int
+    }
 
     // Multi-select / bulk actions over AO3 search results, mirroring Browse's
     // FandomWorksView/TagWorksView (same shared resolution helpers).
@@ -580,6 +589,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// Resets every filter (keeping the query) and refreshes — shared by the
     /// long-press confirmation and mirroring the sidebar's "Reset Filters".
     private func clearAllFilters() {
+        filterHistory.removeAll()
         filters = AO3SearchFilters(query: filters.query)
         if filters.isSearchable {
             runSearch()
@@ -621,6 +631,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             onApply: runSearch,
             onSave: presentSaveDialog,
             onReset: {
+                filterHistory.removeAll()
                 filters = AO3SearchFilters(query: filters.query)
                 // Nothing left to search → return to the Media Browser.
                 if !filters.isSearchable {
@@ -634,12 +645,20 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     // MARK: Navigation
 
-    /// Back action for the focused Search tab. Because search results replace the
-    /// Browse-by-fandom view in place rather than pushing a page, a plain "leave the
-    /// tab" Back would skip past Browse. So step back through the real history:
+    /// Back action for the focused Search tab. A tag-tap drill-down (tag A → tag B)
+    /// pops one filter level at a time before falling through to the real history:
     /// results → Browse, then (already on Browse) → the previous tab.
     private func goBack() {
-        if phase == .idle {
+        if let previous = filterHistory.popLast() {
+            loadToken += 1
+            filters = previous.filters
+            if filters.isSearchable {
+                load(page: previous.page)
+            } else {
+                results = []
+                phase = .idle
+            }
+        } else if phase == .idle {
             router.exitSearch()
         } else {
             returnToBrowse()
@@ -650,6 +669,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// came from (a typed query or a tapped fandom chip) so Browse shows fresh.
     private func returnToBrowse() {
         loadToken += 1 // discard any in-flight load so it can't re-show results
+        filterHistory.removeAll()
         filters = AO3SearchFilters()
         results = []
         currentPage = 1
@@ -694,7 +714,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 newFilters.additionalTags = request.value
             }
         }
-        filters = newFilters
+        pushFilters(newFilters)
+    }
+
+    /// Pushes the current filters onto the history stack before overwriting them —
+    /// the "overwrite" → "push" change that makes each tag-tap drill-down reversible
+    /// one step at a time via `goBack()`.
+    private func pushFilters(_ new: AO3SearchFilters) {
+        filterHistory.append(FilterHistoryEntry(filters: filters, page: currentPage))
+        filters = new
         runSearch()
     }
 
