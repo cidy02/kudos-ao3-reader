@@ -441,6 +441,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func clearQuery() {
         filters.query = ""
         if !filters.hasActiveFilters {
+            filterHistory.removeAll()
             results = []
             phase = .idle
         }
@@ -760,6 +761,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     /// Loads a saved search's filters and runs it.
     private func runSaved(_ saved: SavedSearch) {
+        filterHistory.removeAll()
         filters = saved.filters
         router.panel = .none
         runSearch()
@@ -777,6 +779,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// the new one loads so the pagination bar doesn't flicker away.
     private func loadPage(_ page: Int) {
         guard page >= 1, page <= totalPages, page != currentPage else { return }
+        // A different page replaces `results` with different works entirely — a
+        // stale selection would otherwise reference IDs that no longer exist.
+        selection.removeAll()
         load(page: page)
     }
 

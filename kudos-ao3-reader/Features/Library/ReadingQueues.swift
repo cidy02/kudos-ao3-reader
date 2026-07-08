@@ -135,6 +135,10 @@ struct ReadingQueueDetailView: View {
         #else
         isReorderingMac = active
         #endif
+        // A drag abandoned mid-gesture (e.g. tapping Done before releasing) only
+        // clears draggedWorkID on a completed drop — reset it here too so a stale
+        // id can't leave an unrelated card faded on the next reorder-mode entry.
+        draggedWorkID = nil
     }
 
     // Soft-deleted works keep their membership rows (restore re-joins them here)
@@ -221,6 +225,10 @@ struct ReadingQueueDetailView: View {
                                     Label("Reorder", systemImage: "arrow.up.arrow.down")
                                 }
                                 .labelStyle(.iconOnly)
+                                .disabled(filters.hasActiveFilters)
+                                .help(filters.hasActiveFilters
+                                    ? "Clear filters to reorder"
+                                    : "Reorder works in this queue")
                                 DisplayModeToggle(mode: $displayMode)
                                 WorkCardListControls(expandAll: $expandAll,
                                                      filtersActive: filters.hasActiveFilters,
@@ -291,6 +299,11 @@ struct ReadingQueueDetailView: View {
                             Label("Remove from Queue", systemImage: "minus.circle")
                         }
                     }
+                    // moveDisabled removes the drag affordance itself outside reorder
+                    // mode — on macOS, .onMove has no EditMode gate the way iOS does,
+                    // so a List with an unconditional .onMove is draggable at all
+                    // times regardless of the Reorder toggle otherwise.
+                    .moveDisabled(!isReordering)
             }
             .onMove(perform: moveWorks)
             .cardRow()
@@ -317,16 +330,14 @@ struct ReadingQueueDetailView: View {
     @ViewBuilder
     private func compactCard(_ work: SavedWork) -> some View {
         if isReordering {
+            // The card body is hit-test-disabled here — a blurred Mature card's own
+            // reveal-tap gesture would otherwise still fire underneath a short tap,
+            // and only the handle should ever start a drag. The handle is a sibling
+            // overlay, not a descendant, so disabling the card doesn't disable it.
             SensitiveWorkCoverCard(work: work)
                 .opacity(draggedWorkID == work.id ? 0.4 : 1)
-                .overlay(alignment: .topTrailing) {
-                    ReorderHandleView()
-                        .padding(6)
-                }
-                .onDrag {
-                    draggedWorkID = work.id
-                    return NSItemProvider(object: work.id.uuidString as NSString)
-                }
+                .allowsHitTesting(false)
+                .overlay(alignment: .topTrailing) { dragHandle(for: work) }
                 .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
                     target: work,
                     works: works,
@@ -343,9 +354,24 @@ struct ReadingQueueDetailView: View {
         }
     }
 
+    /// The compact grid's drag source — split out from `compactCard` since the
+    /// combined overlay/onDrag/onDrop expression was too complex for the type
+    /// checker to diagnose in one go.
+    private func dragHandle(for work: SavedWork) -> some View {
+        ReorderHandleView()
+            .padding(6)
+            .onDrag {
+                draggedWorkID = work.id
+                return NSItemProvider(object: work.id.uuidString as NSString)
+            }
+    }
+
     /// `.onMove`'s indices are relative to `displayedWorks`, which is the unfiltered
-    /// `works` while reordering — the same array `reorder(_:)` writes back to.
+    /// `works` while reordering — the same array `reorder(_:)` writes back to. Guards
+    /// on `isReordering` itself (not just the optional `.onMove` above) as defense in
+    /// depth against any platform where the drag affordance isn't fully gated.
     private func moveWorks(from source: IndexSet, to destination: Int) {
+        guard isReordering else { return }
         var ids = works.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
         ReadingQueueService.reorder(ids, in: queue, context: context)

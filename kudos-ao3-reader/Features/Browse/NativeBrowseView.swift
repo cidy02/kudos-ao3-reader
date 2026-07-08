@@ -200,6 +200,9 @@ struct FandomWorksView: View {
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+            // A different page replaces `results` with different works entirely —
+            // a stale selection would otherwise reference IDs that no longer exist.
+            selection.removeAll()
             Task { await load(page: page) }
         }
         .cardRow()
@@ -635,6 +638,9 @@ struct TagWorksView: View {
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+            // A different page replaces `results` with different works entirely —
+            // a stale selection would otherwise reference IDs that no longer exist.
+            selection.removeAll()
             Task { await load(page: page) }
         }
         .cardRow()

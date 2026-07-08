@@ -329,9 +329,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         isQueuedForLater && !isSaved && !isFavorite
     }
 
-    /// Kept works (saved, favorited, or queued) never have their EPUB freed.
+    /// Kept works (saved, favorited, or queued) never have their EPUB freed. A work
+    /// with no known AO3 origin is also always protected — freeing only makes sense
+    /// when the EPUB can be re-downloaded, and a plain (non-AO3) import has no way
+    /// back if its only copy is deleted.
     var isProtected: Bool {
-        isSaved || isFavorite || isQueuedForLater
+        isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil
     }
 
     var isInSavedForLaterQueue: Bool {

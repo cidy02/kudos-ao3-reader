@@ -102,6 +102,12 @@ struct EPUBTests {
         #expect(!LibrarySectionKind.savedForLater.works(from: [imported], visible: { _ in true }).contains(imported))
         #expect(LibrarySectionKind.downloaded.works(from: [imported], visible: { _ in true }).contains(imported))
 
+        // Removing isSaved must not remove protection from a plain (non-AO3) import:
+        // with no ao3WorkID, freeing the EPUB would make it permanently unrecoverable.
+        // isProtected has to stay true through some other path when isSaved is false.
+        #expect(imported.ao3WorkID == nil)
+        #expect(imported.isProtected)
+
         let duplicateOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
         switch duplicateOutcome {
         case .duplicate(let duplicate):
