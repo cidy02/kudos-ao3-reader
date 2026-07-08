@@ -50,7 +50,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var editMode: EditMode = .inactive
     #endif
     @State private var selection = Set<UUID>()
-    @State private var confirmBulkDelete = false
     @State private var showingSelectionList = false
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
@@ -66,28 +65,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var selectedWorks: [SavedWork] {
         works.filter { selection.contains($0.id) }
-    }
-
-    /// Whether the bulk Save/Favorite buttons show as "on" — every selected work is
-    /// already in that state. Tapping toggles: makes the selection consistently on
-    /// if it isn't already, otherwise undoes it for all of them.
-    private var allSelectedAreSaved: Bool {
-        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
-    }
-
-    private var allSelectedAreFavorited: Bool {
-        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
-    }
-
-    /// Escalates when any selected work is no longer available on AO3 — see
-    /// `PreservedWorkService.deleteConfirmationMessage`, same reasoning applied
-    /// across the whole selection rather than per-work.
-    private var bulkDeleteMessage: String {
-        let base = "The selected works will be moved to Recently Deleted. "
-            + "You can restore them anytime in the next 90 days."
-        guard selectedWorks.contains(where: \.ao3Unavailable) else { return base }
-        return base + " Some of these are no longer available on AO3 — "
-            + "if you don't restore them in time, they can't be re-saved afterward."
     }
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
@@ -188,16 +165,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     Button("Cancel", role: .cancel) { newQueueName = "" }
                 } message: {
                     Text("Name your reading queue.")
-                }
-                .confirmationDialog(
-                    "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
-                    isPresented: $confirmBulkDelete,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) { bulkDelete() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text(bulkDeleteMessage)
                 }
                 .inspector(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -486,7 +453,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var toolbarContent: some ToolbarContent {
         if isSelecting {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { exitSelectMode() }
+                SelectAllButton(allSelected: allSelectableSelected, action: toggleSelectAll)
             }
             if PrivacyGate.hasVisibleMatureWorks(in: selectableWorks, hideMature: hideMature) {
                 ToolbarItem(placement: .primaryAction) {
@@ -505,9 +472,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .help(showingSelectionList ? "Show carousels" : "Show detailed list")
             }
             #if os(iOS)
-            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+            ToolbarItemGroup(placement: .bottomBar) {
+                WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+            }
             #else
-            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+            ToolbarItemGroup(placement: .primaryAction) {
+                WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+            }
             #endif
         } else {
             // A single item holding a tight HStack — separate ToolbarItems (and even
@@ -642,38 +613,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         #endif
     }
 
-    /// The bulk-action controls shown while selecting (bottom bar on iOS). Delete
-    /// always confirms — it's a batch and can't be undone.
-    @ViewBuilder
-    private var bulkActionBar: some View {
-        Button(role: .destructive) {
-            confirmBulkDelete = true
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-        .disabled(selection.isEmpty)
+    private var allSelectableSelected: Bool {
+        let ids = Set(selectableWorks.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
 
-        Spacer()
-
-        Button {
-            bulkSave()
-        } label: {
-            Label(allSelectedAreSaved ? "Saved" : "Save",
-                  systemImage: allSelectedAreSaved ? "bookmark.fill" : "bookmark")
-        }
-        .tint(allSelectedAreSaved ? themeManager.accentColor : nil)
-        .disabled(selection.isEmpty)
-
-        Spacer()
-
-        Button {
-            bulkFavorite()
-        } label: {
-            Label(allSelectedAreFavorited ? "Favorited" : "Favorite",
-                  systemImage: allSelectedAreFavorited ? "star.fill" : "star")
-        }
-        .tint(allSelectedAreFavorited ? themeManager.accentColor : nil)
-        .disabled(selection.isEmpty)
+    private func toggleSelectAll() {
+        selection = allSelectableSelected ? [] : Set(selectableWorks.map(\.id))
     }
 
     #if os(iOS)
@@ -737,35 +683,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         } else {
             selection.insert(work.id)
         }
-    }
-
-    private func bulkDelete() {
-        for work in selectedWorks {
-            PreservedWorkService.softDelete(work, in: context)
-        }
-        exitSelectMode()
-    }
-
-    /// Toggles saved (keeps its EPUB permanently): if the selection isn't already
-    /// all saved, saves everything; if it is, un-saves everything (tap again to
-    /// undo). Select mode stays active — unlike Delete, the works are still there,
-    /// so the user can keep stacking actions or adjusting the selection.
-    private func bulkSave() {
-        let shouldSave = !allSelectedAreSaved
-        for work in selectedWorks {
-            WorkLifecycle.setSaved(work, shouldSave, in: context)
-        }
-    }
-
-    /// Same toggle behavior as `bulkSave`.
-    private func bulkFavorite() {
-        let shouldFavorite = !allSelectedAreFavorited
-        let now = Date()
-        for work in selectedWorks {
-            work.isFavorite = shouldFavorite
-            work.markModified(now)
-        }
-        try? context.save()
     }
 
     private func refreshLibraryDashboard() async {

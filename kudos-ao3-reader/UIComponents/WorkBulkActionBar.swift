@@ -2,17 +2,18 @@ import SwiftData
 import SwiftUI
 
 /// The bulk-action controls shown while a selection is active on any surface with
-/// multiple local work cards — Delete / Save / Favorite, mirroring LibraryView's
-/// own bulk action bar so selection behaves consistently everywhere it appears.
-/// Delete always confirms (a batch, can't be undone); Save/Favorite are stackable
-/// toggles that leave selection mode active.
+/// multiple local work cards, consistent everywhere it appears: Delete on the left
+/// (always confirms — a batch, can't be undone), an "Actions" menu (Save/Favorite —
+/// stackable toggles that leave selection mode active) in the middle, and a
+/// checkmark on the right to exit selection mode without deleting anything.
 struct WorkBulkActionBar: View {
     let selectedWorks: [SavedWork]
     /// Called after a confirmed bulk delete, so the caller can exit selection mode.
     var onDeleted: () -> Void = {}
+    /// Called when the checkmark is tapped to exit selection mode without deleting.
+    var onDone: () -> Void = {}
 
     @Environment(\.modelContext) private var context
-    @Environment(ThemeManager.self) private var themeManager
     @State private var confirmDelete = false
 
     private var allSaved: Bool {
@@ -41,23 +42,30 @@ struct WorkBulkActionBar: View {
 
         Spacer()
 
-        Button {
-            bulkSave()
+        Menu {
+            Button {
+                bulkSave()
+            } label: {
+                Label(allSaved ? "Saved" : "Save", systemImage: allSaved ? "bookmark.fill" : "bookmark")
+            }
+            Button {
+                bulkFavorite()
+            } label: {
+                Label(allFavorited ? "Favorited" : "Favorite", systemImage: allFavorited ? "star.fill" : "star")
+            }
         } label: {
-            Label(allSaved ? "Saved" : "Save", systemImage: allSaved ? "bookmark.fill" : "bookmark")
+            Label("Actions", systemImage: "ellipsis.circle")
         }
-        .tint(allSaved ? themeManager.accentColor : nil)
         .disabled(selectedWorks.isEmpty)
 
         Spacer()
 
         Button {
-            bulkFavorite()
+            onDone()
         } label: {
-            Label(allFavorited ? "Favorited" : "Favorite", systemImage: allFavorited ? "star.fill" : "star")
+            Image(systemName: "checkmark")
         }
-        .tint(allFavorited ? themeManager.accentColor : nil)
-        .disabled(selectedWorks.isEmpty)
+        .accessibilityLabel("Done")
         .confirmationDialog(
             "Delete \(selectedWorks.count) work\(selectedWorks.count == 1 ? "" : "s")?",
             isPresented: $confirmDelete,
@@ -92,5 +100,16 @@ struct WorkBulkActionBar: View {
             work.markModified(now)
         }
         try? context.save()
+    }
+}
+
+/// "Select All"/"Deselect All" toggle — takes over the top-right slot that used to
+/// hold "Done" now that Done lives in `WorkBulkActionBar`'s checkmark instead.
+struct SelectAllButton: View {
+    let allSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(allSelected ? "Deselect All" : "Select All", action: action)
     }
 }

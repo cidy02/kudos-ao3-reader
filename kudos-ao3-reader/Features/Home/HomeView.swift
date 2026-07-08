@@ -61,6 +61,15 @@ struct HomeView: View {
         selection = []
     }
 
+    private var allLocalSelected: Bool {
+        let ids = Set(allLocalSectionWorks.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    private func toggleSelectAll() {
+        selection = allLocalSelected ? [] : Set(allLocalSectionWorks.map(\.id))
+    }
+
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
     }
@@ -127,7 +136,7 @@ struct HomeView: View {
                 .toolbar {
                     if isSelecting {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { exitSelectMode() }
+                            SelectAllButton(allSelected: allLocalSelected, action: toggleSelectAll)
                         }
                         if PrivacyGate.hasVisibleMatureWorks(in: selectedWorks, hideMature: hideMature) {
                             ToolbarItem(placement: .primaryAction) {
@@ -136,11 +145,11 @@ struct HomeView: View {
                         }
                         #if os(iOS)
                         ToolbarItemGroup(placement: .bottomBar) {
-                            WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                            WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                         }
                         #else
                         ToolbarItemGroup(placement: .primaryAction) {
-                            WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                            WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                         }
                         #endif
                     } else {

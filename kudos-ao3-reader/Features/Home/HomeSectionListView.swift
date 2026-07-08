@@ -64,6 +64,15 @@ struct HomeSectionListView: View {
         selection = []
     }
 
+    private var allVisibleSelected: Bool {
+        let ids = Set(visibleItems.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    private func toggleSelectAll() {
+        selection = allVisibleSelected ? [] : Set(visibleItems.map(\.id))
+    }
+
     var body: some View {
         Group {
             if items.isEmpty {
@@ -104,15 +113,15 @@ struct HomeSectionListView: View {
             .toolbar {
                 if isSelecting {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { exitSelectMode() }
+                        SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                     }
                     #if os(iOS)
                     ToolbarItemGroup(placement: .bottomBar) {
-                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                     }
                     #else
                     ToolbarItemGroup(placement: .primaryAction) {
-                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                     }
                     #endif
                 } else {
