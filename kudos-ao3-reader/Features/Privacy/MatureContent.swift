@@ -132,12 +132,17 @@ struct SensitiveWorkRow: View {
             let content = WorkRow(work: work, showsExpandButton: false, externalExpanded: $blurredExpanded)
                 .blur(radius: 6)
                 .overlay {
-                    Label("Tap to reveal", systemImage: "eye.slash.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.regularMaterial, in: Capsule())
+                    // Only while a tap would actually reveal — in select mode a tap
+                    // toggles selection instead (use the toolbar's "Show mature" to
+                    // reveal while selecting), so the label shouldn't promise otherwise.
+                    if !isSelecting {
+                        Label("Tap to reveal", systemImage: "eye.slash.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.regularMaterial, in: Capsule())
+                    }
                 }
                 .contentShape(Rectangle())
                 .overlay(alignment: .topTrailing) {
@@ -234,12 +239,17 @@ struct SensitiveWorkCoverCard: View {
             let card = WorkCoverCard(work: work, footer: footer, progress: progress)
                 .blur(radius: 6)
                 .overlay {
-                    Label("Tap to reveal", systemImage: "eye.slash.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.regularMaterial, in: Capsule())
+                    // Only while a tap would actually reveal — in select mode a tap
+                    // toggles selection instead (use the toolbar's "Show mature" to
+                    // reveal while selecting), so the label shouldn't promise otherwise.
+                    if !isSelecting {
+                        Label("Tap to reveal", systemImage: "eye.slash.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.regularMaterial, in: Capsule())
+                    }
                 }
                 .contentShape(Rectangle())
             if isSelecting {
