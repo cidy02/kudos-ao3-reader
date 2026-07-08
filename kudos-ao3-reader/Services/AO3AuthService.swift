@@ -11,6 +11,24 @@ enum AO3AuthStatus: Equatable {
     case signedIn(username: String)
 }
 
+/// The result of the most recent on-demand session check, for the account UI's
+/// health indicator. Orthogonal to `AO3AuthStatus` (which says whether we hold a
+/// session at all); this says how confident we are that the held session is live.
+enum AO3SessionHealth: Equatable {
+    /// Signed out, or signed in but never re-checked this session.
+    case unknown
+    /// A check is in flight.
+    case verifying
+    /// Confirmed valid against AO3 at the given time.
+    case healthy(Date)
+    /// AO3 reported the session is no longer valid (the user was signed out).
+    case expired
+    /// Couldn't reach AO3 to check (offline / transient). The session is kept.
+    case unreachable
+
+    var isChecking: Bool { self == .verifying }
+}
+
 enum AO3AuthenticatedRequestError: LocalizedError {
     case notAuthenticated
     case nonAO3URL
@@ -188,6 +206,9 @@ final class AO3AuthService {
     private(set) var errorMessage: String?
     private(set) var noticeMessage: String?
     private(set) var fallbackMessage: String?
+    /// Confidence in the currently-held session, driven by `verifySession()` and by
+    /// the launch restore/login/expiry paths. Purely informational for the account UI.
+    private(set) var sessionHealth: AO3SessionHealth = .unknown
 
     var isLoggedIn: Bool {
         if case .signedIn = status { true } else { false }
@@ -310,6 +331,7 @@ final class AO3AuthService {
         sessionHintStore.deleteUsername()
         await cookieManager.clear()
         status = .signedOut
+        sessionHealth = .unknown
         noticeMessage = "Logged out of AO3."
         Log.auth.info("Cleared the local AO3 session")
     }
@@ -318,8 +340,47 @@ final class AO3AuthService {
     /// login page or otherwise reports that the saved session is no longer valid.
     func sessionDidExpire() async {
         await clearStoredSession()
+        sessionHealth = .expired
         noticeMessage = "Your AO3 session expired. Please log in again."
         Log.auth.notice("AO3 reported that the saved session expired")
+    }
+
+    /// On-demand re-validation of the stored session, driven by the account UI's
+    /// "Verify Session" control. Unlike `restoreSession()` (single-shot at launch),
+    /// this can run whenever the user asks. Mirrors `restore()`'s valid/expired/
+    /// transient handling: a transient failure (offline / server hiccup) keeps the
+    /// session and reports `.unreachable` rather than logging the user out.
+    func verifySession() async {
+        guard isLoggedIn, let session = currentSession else {
+            sessionHealth = .unknown
+            return
+        }
+        sessionHealth = .verifying
+        do {
+            switch try await validator.validate(session) {
+            case let .valid(refreshed):
+                do {
+                    try vault.save(refreshed)
+                } catch {
+                    if !isMissingKeychainEntitlement(error) {
+                        Log.auth.error(
+                            "Could not refresh the saved AO3 session: \(error.localizedDescription, privacy: .public)"
+                        )
+                    }
+                }
+                await finishAccepting(refreshed) // sets sessionHealth = .healthy(now)
+                Log.auth.info("AO3 session re-verified on request")
+            case .expired:
+                await clearStoredSession()
+                sessionHealth = .expired
+                noticeMessage = "Your AO3 session expired. Please log in again."
+                Log.auth.notice("On-demand check found the AO3 session expired")
+            }
+        } catch {
+            // Transient (offline / server hiccup): keep the session, flag unverified.
+            sessionHealth = .unreachable
+            Log.auth.notice("Could not reach AO3 to verify the session; keeping it")
+        }
     }
 
     /// Creates a request carrying the current AO3 cookies. Future feature clients
@@ -423,6 +484,9 @@ final class AO3AuthService {
         errorMessage = nil
         noticeMessage = nil
         fallbackMessage = nil
+        // Reached only after a successful validate() (launch restore, login, or an
+        // on-demand verify), so the session is confirmed live as of now.
+        sessionHealth = .healthy(Date())
     }
 
     private enum RestoreSource {
@@ -496,5 +560,8 @@ final class AO3AuthService {
         sessionHintStore.deleteUsername()
         await cookieManager.clear()
         status = .signedOut
+        // Bare cleared state is "signed out / unknown"; callers meaning "expired"
+        // set that explicitly right after this returns.
+        sessionHealth = .unknown
     }
 }

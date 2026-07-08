@@ -83,6 +83,18 @@ struct AccountView: View {
                     Label("Signed In", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 }
+                LabeledContent {
+                    sessionHealthValue(auth.sessionHealth)
+                } label: {
+                    Label("Session", systemImage: "antenna.radiowaves.left.and.right")
+                }
+                Button {
+                    Task { await auth.verifySession() }
+                } label: {
+                    Label(auth.sessionHealth.isChecking ? "Checking…" : "Verify Session",
+                          systemImage: "arrow.clockwise")
+                }
+                .disabled(auth.sessionHealth.isChecking)
                 Button(role: .destructive) {
                     Task { await auth.logout() }
                 } label: {
@@ -104,6 +116,31 @@ struct AccountView: View {
                 Text("Log in to use your AO3 subscriptions, bookmarks, history, and "
                     + "reading list. Your session stays on this device.")
             }
+        }
+    }
+
+    /// The trailing status pill for the "Session" row, reflecting the last check.
+    @ViewBuilder
+    private func sessionHealthValue(_ health: AO3SessionHealth) -> some View {
+        switch health {
+        case .unknown:
+            Text("Not checked").foregroundStyle(.secondary)
+        case .verifying:
+            Label("Checking…", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
+        case let .healthy(at):
+            Label(at.formatted(.relative(presentation: .named)), systemImage: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        case .expired:
+            Label("Expired", systemImage: "xmark.seal.fill")
+                .foregroundStyle(.red)
+                .labelStyle(.titleAndIcon)
+        case .unreachable:
+            Label("Couldn’t verify", systemImage: "wifi.exclamationmark")
+                .foregroundStyle(.orange)
+                .labelStyle(.titleAndIcon)
         }
     }
 
