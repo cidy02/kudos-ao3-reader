@@ -43,6 +43,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private struct FilterHistoryEntry {
         let filters: AO3SearchFilters
         let page: Int
+        /// The results (and paging) that were on screen at this level, captured when
+        /// we drilled deeper. Restored verbatim on Back so returning to a level never
+        /// re-hits AO3 — a re-fetch would occasionally come back empty or rate-limited
+        /// and strand the user on a blank "no results" page for a level that had works.
+        let results: [AO3WorkSummary]
+        let totalPages: Int
     }
 
     // Multi-select / bulk actions over AO3 search results, mirroring Browse's
@@ -627,14 +633,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// results → Browse, then (already on Browse) → the previous tab.
     private func goBack() {
         if let previous = filterHistory.popLast() {
+            // Restore the level's captured results instead of re-fetching — the
+            // bump discards any load still in flight from the level we're leaving so
+            // it can't overwrite what we just restored. Selection is cleared because
+            // the works (and their IDs) change wholesale, mirroring loadPage.
             loadToken += 1
+            selection.removeAll()
             filters = previous.filters
-            if filters.isSearchable {
-                load(page: previous.page)
-            } else {
-                results = []
-                phase = .idle
-            }
+            results = previous.results
+            currentPage = previous.page
+            totalPages = previous.totalPages
+            phase = .loaded
         } else if phase == .idle {
             router.exitSearch()
         } else {
@@ -703,7 +712,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// `goBack()`'s own idle/Browse fallback ever got a chance to run.
     private func pushFilters(_ new: AO3SearchFilters) {
         if filters.isSearchable {
-            filterHistory.append(FilterHistoryEntry(filters: filters, page: currentPage))
+            filterHistory.append(FilterHistoryEntry(
+                filters: filters,
+                page: currentPage,
+                results: results,
+                totalPages: totalPages
+            ))
         }
         filters = new
         runSearch()
