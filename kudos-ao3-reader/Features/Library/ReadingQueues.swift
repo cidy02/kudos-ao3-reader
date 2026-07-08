@@ -3,6 +3,9 @@ import OSLog
 import SwiftData
 import SwiftUI
 
+/// Navigation route for the Reading Queues carousel's "See all" destination.
+struct AllReadingQueuesDestination: Hashable {}
+
 // MARK: - Cards
 
 struct ReadingQueueCard: View {

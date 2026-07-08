@@ -141,6 +141,30 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
+                .navigationDestination(for: AllCollectionsDestination.self) { _ in
+                    LibraryEntityGridView(
+                        title: "Collections",
+                        items: collections,
+                        onNew: {
+                            newCollectionName = ""
+                            showingNewCollection = true
+                        },
+                        card: { CollectionCard(collection: $0) },
+                        newCard: { NewCollectionCard() }
+                    )
+                }
+                .navigationDestination(for: AllReadingQueuesDestination.self) { _ in
+                    LibraryEntityGridView(
+                        title: "Reading Queues",
+                        items: readingQueues.filter { $0.kind == .custom }.sorted { $0.sortOrder < $1.sortOrder },
+                        onNew: {
+                            newQueueName = ""
+                            showingNewQueue = true
+                        },
+                        card: { ReadingQueueCard(queue: $0) },
+                        newCard: { NewReadingQueueCard() }
+                    )
+                }
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
@@ -321,14 +345,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     /// User-named Collections (shelves). A leading "New" card is always present so
-    /// creating one is one tap away; existing collections follow. Tapping a card
-    /// opens the collection; the `>` chevron isn't used (the New card covers create).
+    /// creating one is one tap away; existing collections follow, capped like every
+    /// other carousel — the `>` chevron opens the full, uncapped grid.
     private var collectionsCarousel: some View {
         let kind = LibrarySectionKind.collections
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: true
+            hasItems: true,
+            onSeeAll: collections.count > 11 ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             Button {
                 newCollectionName = ""
@@ -338,7 +363,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             .buttonStyle(.plain)
 
-            ForEach(collections) { collection in
+            ForEach(collections.prefix(12)) { collection in
                 NavigationLink(value: collection) {
                     CollectionCard(collection: collection)
                 }
@@ -356,7 +381,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         return WorkCarouselSection(
             title: "Reading Queues",
             collapseKey: "library.readingQueues",
-            hasItems: true
+            hasItems: true,
+            onSeeAll: customQueues.count > 11 ? { path.append(AllReadingQueuesDestination()) } : nil
         ) {
             Button {
                 newQueueName = ""
@@ -366,7 +392,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             .buttonStyle(.plain)
 
-            ForEach(customQueues) { queue in
+            ForEach(customQueues.prefix(12)) { queue in
                 NavigationLink(value: queue) {
                     ReadingQueueCard(queue: queue)
                 }

@@ -1,6 +1,9 @@
 import SwiftData
 import SwiftUI
 
+/// Navigation route for the Collections carousel's "See all" destination.
+struct AllCollectionsDestination: Hashable {}
+
 // MARK: - Cards
 
 /// A Library Collections carousel card: a tinted tile (hued from the collection
