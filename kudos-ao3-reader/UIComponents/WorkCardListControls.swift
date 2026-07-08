@@ -1,5 +1,28 @@
 import SwiftUI
 
+/// A category detail page's card layout — "Detailed" is the existing full `WorkRow`/
+/// `AO3WorkRow` list; "Compact" lays the same works out as `WorkCoverCard`/
+/// `AO3WorkCoverCard` cover cards, two side-by-side, Apple Books-style.
+nonisolated enum WorkListDisplayMode: String, CaseIterable {
+    case detailed
+    case compact
+}
+
+/// A tight segmented toggle between `WorkListDisplayMode.detailed`/`.compact`, meant
+/// to sit in the same toolbar cluster as `WorkCardListControls`.
+struct DisplayModeToggle: View {
+    @Binding var mode: WorkListDisplayMode
+
+    var body: some View {
+        Picker("Layout", selection: $mode) {
+            Image(systemName: "list.bullet").tag(WorkListDisplayMode.detailed)
+            Image(systemName: "square.grid.2x2").tag(WorkListDisplayMode.compact)
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
+    }
+}
+
 /// The shared toolbar cluster for any page that lists full work cards: an
 /// expand/collapse-all toggle and a filter button, grouped tightly so they read as a
 /// unit (separate `ToolbarItem`s get the system's wider spacing). The expand toggle

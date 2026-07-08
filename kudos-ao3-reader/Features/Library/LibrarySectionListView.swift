@@ -17,6 +17,8 @@ struct LibrarySectionListView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
+    /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
+    @AppStorage private var displayMode: WorkListDisplayMode
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
@@ -31,6 +33,11 @@ struct LibrarySectionListView: View {
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+
+    init(kind: LibrarySectionKind) {
+        self.kind = kind
+        _displayMode = AppStorage(wrappedValue: .detailed, "library.\(kind.rawValue).displayMode")
+    }
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
@@ -92,6 +99,7 @@ struct LibrarySectionListView: View {
                             MatureRevealToggle()
                         }
                         if hasAnyContent {
+                            DisplayModeToggle(mode: $displayMode)
                             WorkCardListControls(expandAll: $expandAll,
                                                  filtersActive: filters.hasActiveFilters,
                                                  showingFilters: $showingFilters,
@@ -136,24 +144,13 @@ struct LibrarySectionListView: View {
                 Text(kind.emptyMessage)
             }
         } else {
-            List {
-                if !visibleItems.isEmpty {
-                    Section {
-                        ForEach(visibleItems, content: row).cardRow()
-                    } header: {
-                        if showsMarkedForLater { Text("Saved for Later in Kudos") }
-                    }
-                }
-                if showsMarkedForLater {
-                    Section("Marked for Later on AO3") {
-                        ForEach(visibleMarkedForLater) { work in
-                            AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
-                        }
-                        .cardRow()
-                    }
+            Group {
+                if displayMode == .detailed {
+                    detailedList
+                } else {
+                    compactGrid
                 }
             }
-            .cardList()
             .refreshable {
                 let task = Task { await refreshSection() }
                 refreshTask = task
@@ -172,6 +169,53 @@ struct LibrarySectionListView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var detailedList: some View {
+        List {
+            if !visibleItems.isEmpty {
+                Section {
+                    ForEach(visibleItems, content: row).cardRow()
+                } header: {
+                    if showsMarkedForLater { Text("Saved for Later in Kudos") }
+                }
+            }
+            if showsMarkedForLater {
+                Section("Marked for Later on AO3") {
+                    ForEach(visibleMarkedForLater) { work in
+                        AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
+                    }
+                    .cardRow()
+                }
+            }
+        }
+        .cardList()
+    }
+
+    /// Apple Books-style two-up grid — the same cover cards every carousel already
+    /// uses, wrapping down the page instead of scrolling horizontally.
+    private var compactGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                ForEach(visibleItems) { work in
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        SensitiveWorkCoverCard(work: work)
+                    }
+                    .buttonStyle(.plain)
+                    .localWorkContextMenu(work: work)
+                }
+                if showsMarkedForLater {
+                    ForEach(visibleMarkedForLater) { work in
+                        NavigationLink(value: work) {
+                            AO3WorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .remoteWorkContextMenu(work: work)
+                    }
+                }
+            }
+            .padding(16)
         }
     }
 

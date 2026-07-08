@@ -12,6 +12,8 @@ struct HomeSectionListView: View {
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
+    @AppStorage private var displayMode: WorkListDisplayMode
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
@@ -23,6 +25,11 @@ struct HomeSectionListView: View {
     /// Filters scoped to this one section, applied live to the works on the page.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+
+    init(kind: HomeSectionKind) {
+        self.kind = kind
+        _displayMode = AppStorage(wrappedValue: .detailed, "home.\(kind.rawValue).displayMode")
+    }
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
@@ -43,13 +50,13 @@ struct HomeSectionListView: View {
             if items.isEmpty {
                 ContentUnavailableView("Nothing here yet", systemImage: "books.vertical")
             } else {
-                List {
-                    ForEach(visibleItems) { work in
-                        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
+                Group {
+                    if displayMode == .detailed {
+                        detailedList
+                    } else {
+                        compactGrid
                     }
-                    .cardRow()
                 }
-                .cardList()
                 .refreshable {
                     let task = Task { _ = await WorkMetadataRefresh.refresh(visibleItems, in: context) }
                     refreshTask = task
@@ -86,6 +93,7 @@ struct HomeSectionListView: View {
                             MatureRevealToggle()
                         }
                         if !items.isEmpty {
+                            DisplayModeToggle(mode: $displayMode)
                             WorkCardListControls(expandAll: $expandAll,
                                                  filtersActive: filters.hasActiveFilters,
                                                  showingFilters: $showingFilters,
@@ -102,5 +110,32 @@ struct HomeSectionListView: View {
                     .presentationDragIndicator(.visible)
                 #endif
             }
+    }
+
+    private var detailedList: some View {
+        List {
+            ForEach(visibleItems) { work in
+                SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
+            }
+            .cardRow()
+        }
+        .cardList()
+    }
+
+    /// Apple Books-style two-up grid — the same cover cards every carousel already
+    /// uses, wrapping down the page instead of scrolling horizontally.
+    private var compactGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                ForEach(visibleItems) { work in
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        SensitiveWorkCoverCard(work: work)
+                    }
+                    .buttonStyle(.plain)
+                    .localWorkContextMenu(work: work)
+                }
+            }
+            .padding(16)
+        }
     }
 }
