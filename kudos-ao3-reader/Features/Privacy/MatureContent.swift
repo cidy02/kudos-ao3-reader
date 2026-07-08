@@ -116,7 +116,12 @@ struct SensitiveWorkRow: View {
 
     var body: some View {
         if blurred {
-            let row = WorkRow(work: work, isSelecting: isSelecting, isSelected: isSelected)
+            // isSelecting/isSelected are deliberately NOT passed to WorkRow here —
+            // its own inline selection bubble (with the accent-color outline that
+            // marks selected state) would otherwise be blurred into illegibility
+            // along with the rest of the row. Instead, the bubble is overlaid AFTER
+            // .blur(), same as SensitiveWorkCoverCard's already-correct pattern.
+            let row = WorkRow(work: work)
                 .blur(radius: 6)
                 .overlay {
                     Label("Tap to reveal", systemImage: "eye.slash.fill")
@@ -129,6 +134,10 @@ struct SensitiveWorkRow: View {
                 .contentShape(Rectangle())
             if isSelecting {
                 row
+                    .overlay(alignment: .topTrailing) {
+                        WorkSelectionBubble(isSelected: isSelected)
+                            .padding(8)
+                    }
                     .onTapGesture { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(work.title)
