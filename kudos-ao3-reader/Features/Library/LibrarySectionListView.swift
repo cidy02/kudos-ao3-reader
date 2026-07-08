@@ -145,7 +145,10 @@ struct LibrarySectionListView: View {
                                         }
                                     }
                                     DisplayModeMenuPicker(mode: $displayMode)
-                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                    // Compact cards don't expand/collapse — only detailed rows do.
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
                                 }
                             }
                         }

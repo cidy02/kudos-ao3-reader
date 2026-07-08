@@ -234,7 +234,10 @@ struct ReadingQueueDetailView: View {
                                         ? "Clear filters to reorder"
                                         : "Reorder works in this queue")
                                     DisplayModeMenuPicker(mode: $displayMode)
-                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                    // Compact cards don't expand/collapse — only detailed rows do.
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
                                     if queue.kind == .custom {
                                         Divider()
                                         Button {
@@ -326,21 +329,24 @@ struct ReadingQueueDetailView: View {
     @ViewBuilder
     private func compactCard(_ work: SavedWork) -> some View {
         if isReordering {
-            // The card body is hit-test-disabled here — a blurred Mature card's own
-            // reveal-tap gesture would otherwise still fire underneath a short tap,
-            // and only the handle should ever start a drag. The handle is a sibling
-            // overlay, not a descendant, so disabling the card doesn't disable it.
-            SensitiveWorkCoverCard(work: work)
-                .opacity(draggedWorkID == work.id ? 0.4 : 1)
-                .allowsHitTesting(false)
-                .overlay(alignment: .topTrailing) { dragHandle(for: work) }
-                .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
-                    target: work,
-                    works: works,
-                    draggedWorkID: $draggedWorkID,
-                    queue: queue,
-                    context: context
-                ))
+            // onDrop is attached to the ZStack container, not the card itself — the
+            // card's own allowsHitTesting(false) (which suppresses a blurred work's
+            // reveal-tap so it can't fire underneath a drag) would otherwise also
+            // swallow drop-target hit-testing if onDrop were chained directly onto
+            // the disabled view, breaking the whole drag gesture.
+            ZStack(alignment: .topTrailing) {
+                SensitiveWorkCoverCard(work: work)
+                    .opacity(draggedWorkID == work.id ? 0.4 : 1)
+                    .allowsHitTesting(false)
+                dragHandle(for: work)
+            }
+            .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
+                target: work,
+                works: works,
+                draggedWorkID: $draggedWorkID,
+                queue: queue,
+                context: context
+            ))
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 SensitiveWorkCoverCard(work: work)
