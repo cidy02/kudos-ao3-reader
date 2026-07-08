@@ -15,6 +15,10 @@ struct WorkRow: View {
     /// disappearing.
     var isSelecting: Bool = false
     var isSelected: Bool = false
+    /// False suppresses the row's own expand/collapse button — used when a caller
+    /// (SensitiveWorkRow's blurred branch) renders its own selection bubble
+    /// externally instead, so the two don't compete for the same top-trailing corner.
+    var showsExpandButton: Bool = true
 
     @Environment(AppRouter.self) private var router
     @State private var expanded = false
@@ -55,7 +59,7 @@ struct WorkRow: View {
                             .font(.caption)
                             .foregroundStyle(.yellow)
                     }
-                    if isExpandable { expandButton }
+                    if isExpandable && showsExpandButton { expandButton }
                     if isSelecting {
                         WorkSelectionBubble(isSelected: isSelected)
                     }
@@ -130,6 +134,15 @@ struct WorkRow: View {
         // Follow the list's expand/collapse-all toggle (also on first appearance so
         // cards scrolled into view match the current state).
         .onChange(of: expandAll, initial: true) { _, value in expanded = value }
+        .overlay {
+            // Matches SelectableWorkCoverCard's whole-card outline (compact layout) —
+            // cornerRadius 16 matches CardListMetrics.cornerRadius (AppThemeSurface.swift),
+            // the row's own card background, so the stroke sits flush with its edges.
+            if isSelecting && isSelected {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+            }
+        }
     }
 
     /// Top-right expand/collapse control, matching AO3WorkRow. A bordered circular

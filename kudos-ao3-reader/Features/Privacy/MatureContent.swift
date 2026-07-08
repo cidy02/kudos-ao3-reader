@@ -117,11 +117,14 @@ struct SensitiveWorkRow: View {
     var body: some View {
         if blurred {
             // isSelecting/isSelected are deliberately NOT passed to WorkRow here —
-            // its own inline selection bubble (with the accent-color outline that
-            // marks selected state) would otherwise be blurred into illegibility
-            // along with the rest of the row. Instead, the bubble is overlaid AFTER
-            // .blur(), same as SensitiveWorkCoverCard's already-correct pattern.
-            let row = WorkRow(work: work)
+            // its own inline selection bubble would otherwise be blurred into
+            // illegibility along with the rest of the row. showsExpandButton: false
+            // suppresses WorkRow's own expand control too, since it would otherwise
+            // still render (isExpandable doesn't depend on isSelecting) and collide
+            // with the externally-overlaid bubble in the same top-trailing corner.
+            // The bubble and outline are added back AFTER .blur(), same as
+            // SensitiveWorkCoverCard's already-correct pattern.
+            let row = WorkRow(work: work, showsExpandButton: false)
                 .blur(radius: 6)
                 .overlay {
                     Label("Tap to reveal", systemImage: "eye.slash.fill")
@@ -137,6 +140,10 @@ struct SensitiveWorkRow: View {
                     .overlay(alignment: .topTrailing) {
                         WorkSelectionBubble(isSelected: isSelected)
                             .padding(8)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
                     }
                     .onTapGesture { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)
