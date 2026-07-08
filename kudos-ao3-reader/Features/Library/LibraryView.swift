@@ -113,7 +113,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #endif
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
-                .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
+                .navigationDestination(for: LibrarySectionKind.self) { kind in
+                    LibrarySectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
+                }
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }

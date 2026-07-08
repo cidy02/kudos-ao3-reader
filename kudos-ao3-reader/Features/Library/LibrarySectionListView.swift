@@ -33,12 +33,17 @@ struct LibrarySectionListView: View {
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
-    @State private var isSelecting = false
-    @State private var selection = Set<UUID>()
+    @State private var isSelecting: Bool
+    @State private var selection: Set<UUID>
 
-    init(kind: LibrarySectionKind) {
+    /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
+    /// chevron mid-selection doesn't strand the works you'd already picked — without
+    /// this, the expanded list always opened with a fresh, empty selection.
+    init(kind: LibrarySectionKind, initialSelecting: Bool = false, initialSelection: Set<UUID> = []) {
         self.kind = kind
         _displayMode = AppStorage(wrappedValue: .detailed, "library.\(kind.rawValue).displayMode")
+        _isSelecting = State(initialValue: initialSelecting)
+        _selection = State(initialValue: initialSelection)
     }
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {

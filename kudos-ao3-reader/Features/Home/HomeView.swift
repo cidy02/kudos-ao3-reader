@@ -123,7 +123,9 @@ struct HomeView: View {
                 .navigationDestination(for: LocalWorkDestination.self) { destination in
                     LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
                 }
-                .navigationDestination(for: HomeSectionKind.self) { HomeSectionListView(kind: $0) }
+                .navigationDestination(for: HomeSectionKind.self) { kind in
+                    HomeSectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
+                }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
                 .task(id: auth.isLoggedIn) { await loadSubscriptions() }
