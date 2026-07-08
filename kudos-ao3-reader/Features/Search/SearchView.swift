@@ -36,8 +36,29 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
 
+    // Multi-select / bulk actions over AO3 search results, mirroring Browse's
+    // FandomWorksView/TagWorksView (same shared resolution helpers).
+    @State private var isSelecting = false
+    @State private var selection: Set<Int> = []
+    @State private var isProcessingBatch = false
+    @State private var batchTask: Task<Void, Never>?
+    @State private var resolvedQueueWorks: [SavedWork] = []
+    @State private var showingAddToQueue = false
+    @State private var resolvedCollectionWorks: [SavedWork] = []
+    @State private var showingAddToCollection = false
+    @State private var batchActionError: String?
+
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
+    }
+
+    private var selectedSummaries: [AO3WorkSummary] {
+        results.filter { selection.contains($0.id) }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
     }
 
     var body: some View {
@@ -69,23 +90,39 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     CollectionDetailView(collection: collection)
                 }
                 .toolbar {
-                    #if os(iOS)
-                    // Search is a focused, full-screen mode. Results replace the
-                    // Browse-by-fandom view in place (no navigation push), so Back steps
-                    // back through that: results → Browse, then Browse → previous tab —
-                    // landing on the page the user actually came from, not skipping it.
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button(action: goBack) {
-                            Image(systemName: "chevron.backward")
+                    if isSelecting {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { exitSelectMode() }
                         }
-                        .accessibilityLabel("Back")
+                        #if os(iOS)
+                        ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+                        #else
+                        ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+                        #endif
+                    } else {
+                        #if os(iOS)
+                        // Search is a focused, full-screen mode. Results replace the
+                        // Browse-by-fandom view in place (no navigation push), so Back steps
+                        // back through that: results → Browse, then Browse → previous tab —
+                        // landing on the page the user actually came from, not skipping it.
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(action: goBack) {
+                                Image(systemName: "chevron.backward")
+                            }
+                            .accessibilityLabel("Back")
+                        }
+                        #endif
+                        ToolbarItem(placement: .principal) { searchField }
+                        if phase == .loaded, !results.isEmpty {
+                            ToolbarItem(placement: .primaryAction) {
+                                Button { isSelecting = true } label: {
+                                    Label("Select", systemImage: "checklist")
+                                }
+                            }
+                            ToolbarItem(placement: .primaryAction) { expandAllButton }
+                        }
+                        ToolbarItem(placement: .primaryAction) { filterButton }
                     }
-                    #endif
-                    ToolbarItem(placement: .principal) { searchField }
-                    if phase == .loaded, !results.isEmpty {
-                        ToolbarItem(placement: .primaryAction) { expandAllButton }
-                    }
-                    ToolbarItem(placement: .primaryAction) { filterButton }
                 }
             #if os(iOS)
                 .toolbar(.hidden, for: .tabBar)
@@ -111,6 +148,24 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 } message: {
                     Text("Save the current search and its filters to re-run later.")
                 }
+                .sheet(isPresented: $showingAddToQueue) {
+                    AddToQueueView(works: resolvedQueueWorks)
+                }
+                .sheet(isPresented: $showingAddToCollection) {
+                    AddToCollectionView(works: resolvedCollectionWorks)
+                }
+                .alert(
+                    "Action Failed",
+                    isPresented: Binding(
+                        get: { batchActionError != nil },
+                        set: { if !$0 { batchActionError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) { batchActionError = nil }
+                } message: {
+                    Text(batchActionError ?? "")
+                }
+                .onDisappear { batchTask?.cancel() }
         }
     }
 
@@ -139,8 +194,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     Section {
                         ForEach(results) { work in
-                            AO3WorkRow(work: work, expandAll: expandAllCards)
-                                .cardNavigation(to: work)
+                            searchResultRow(for: work)
                         }
                         .cardRow()
                     }
@@ -385,6 +439,111 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     /// Expands or collapses every result card at once (each card can still be
     /// toggled individually afterwards). Shown only while results are visible.
+    @ViewBuilder
+    private func searchResultRow(for work: AO3WorkSummary) -> some View {
+        let row = AO3WorkRow(work: work, expandAll: expandAllCards, isSelecting: isSelecting, isSelected: selection.contains(work.id))
+        if isSelecting {
+            Button { toggleSelection(work) } label: { row }
+                .buttonStyle(.plain)
+                .accessibilityLabel(work.title)
+                .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
+                .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
+        } else {
+            row.cardNavigation(to: work)
+        }
+    }
+
+    private func toggleSelection(_ work: AO3WorkSummary) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    /// Mirrors Browse's FandomWorksView/TagWorksView bulk-action bar exactly, sharing
+    /// the same resolution helpers so results behave identically everywhere.
+    @ViewBuilder
+    private var bulkActionBar: some View {
+        Button {
+            batchTask = Task { await bulkSave() }
+        } label: {
+            Label("Save", systemImage: "bookmark")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkSaveForLater() }
+        } label: {
+            Label("Save for Later", systemImage: "clock.arrow.circlepath")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkAddToCollection() }
+        } label: {
+            Label("Add to Collection", systemImage: "square.stack")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkAddToQueue() }
+        } label: {
+            Label("Add to Queue", systemImage: "list.bullet.rectangle")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        if isProcessingBatch {
+            ProgressView()
+                .controlSize(.small)
+        }
+    }
+
+    private func bulkSave() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            for work in works {
+                WorkLifecycle.setSaved(work, true, in: context)
+            }
+        }
+    }
+
+    private func bulkSaveForLater() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
+    }
+
+    private func bulkAddToCollection() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            resolvedCollectionWorks = works
+            showingAddToCollection = true
+        }
+    }
+
+    private func bulkAddToQueue() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            resolvedQueueWorks = works
+            showingAddToQueue = true
+        }
+    }
+
     private var expandAllButton: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) { expandAllCards.toggle() }

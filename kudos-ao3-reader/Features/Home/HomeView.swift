@@ -25,8 +25,41 @@ struct HomeView: View {
     /// carousel can show cover skeletons instead of briefly flashing its empty state.
     @State private var isLoadingSubscriptions = false
 
+    // Multi-select / bulk actions, mirroring LibraryView's carousel selection.
+    // Scoped to the four local-work carousels — Subscriptions merges in remote
+    // entries via CanonicalWorkCoverCard, a different card type not wired for
+    // selection here.
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
+
     /// Route marker so the Subscriptions header can push the full AO3 list.
     private struct SubscriptionsRoute: Hashable {}
+
+    private var selectedWorks: [SavedWork] {
+        allLocalSectionWorks.filter { selection.contains($0.id) }
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func enterSelectMode(selecting work: SavedWork? = nil) {
+        if let work { selection.insert(work.id) }
+        isSelecting = true
+    }
+
+    private func selectAction(for work: SavedWork) -> (() -> Void)? {
+        { enterSelectMode(selecting: work) }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
@@ -86,10 +119,45 @@ struct HomeView: View {
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
                 .task(id: auth.isLoggedIn) { await loadSubscriptions() }
                 .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
+            #if os(iOS)
+                // Select mode owns the bottom edge with its bulk-action bar; matches
+                // LibraryView's own rationale for hiding the floating tab bar meanwhile.
+                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+            #endif
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        if PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature) {
-                            MatureRevealToggle()
+                    if isSelecting {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { exitSelectMode() }
+                        }
+                        if PrivacyGate.hasVisibleMatureWorks(in: selectedWorks, hideMature: hideMature) {
+                            ToolbarItem(placement: .primaryAction) {
+                                MatureRevealToggle()
+                            }
+                        }
+                        #if os(iOS)
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                        }
+                        #else
+                        ToolbarItemGroup(placement: .primaryAction) {
+                            WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                        }
+                        #endif
+                    } else {
+                        ToolbarItem(placement: .primaryAction) {
+                            HStack(spacing: 2) {
+                                if PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature) {
+                                    MatureRevealToggle()
+                                }
+                                if !allLocalSectionWorks.isEmpty {
+                                    Button {
+                                        enterSelectMode()
+                                    } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                }
+                            }
+                            .labelStyle(.iconOnly)
                         }
                     }
                 }
@@ -106,11 +174,23 @@ struct HomeView: View {
             onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
-                NavigationLink(value: LocalWorkDestination.reader(work)) {
-                    SensitiveWorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
+                if isSelecting {
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: footer(kind, work),
+                        progress: progress(kind, work),
+                        isSelecting: true,
+                        isSelected: selection.contains(work.id),
+                        onToggleSelection: { toggleSelection(work) }
+                    )
+                    .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                } else {
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        SensitiveWorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
+                    }
+                    .buttonStyle(.plain)
+                    .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                 }
-                .buttonStyle(.plain)
-                .localWorkContextMenu(work: work)
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)

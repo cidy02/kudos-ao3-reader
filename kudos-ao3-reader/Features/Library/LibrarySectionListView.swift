@@ -33,6 +33,8 @@ struct LibrarySectionListView: View {
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
 
     init(kind: LibrarySectionKind) {
         self.kind = kind
@@ -81,6 +83,23 @@ struct LibrarySectionListView: View {
         !items.isEmpty || (kind == .savedForLater && !remoteOnlyMarkedForLater.isEmpty)
     }
 
+    private var selectedWorks: [SavedWork] {
+        visibleItems.filter { selection.contains($0.id) }
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
     var body: some View {
         content
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -89,22 +108,45 @@ struct LibrarySectionListView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .toolbar {
-                // One item holding a tight HStack — separate ToolbarItems get the
-                // system's wide spacing, which reads as inconsistent between the
-                // privacy toggle and the expand/filter cluster. Matches the pattern
-                // already established in LibraryView.swift's dashboard toolbar.
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 2) {
-                        if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
-                            MatureRevealToggle()
-                        }
-                        if hasAnyContent {
-                            DisplayModeToggle(mode: $displayMode)
-                            WorkCardListControls(expandAll: $expandAll,
-                                                 filtersActive: filters.hasActiveFilters,
-                                                 showingFilters: $showingFilters,
-                                                 filterHelp: "Filter the works in this section",
-                                                 onClearFilters: { filters = LibraryFilters() })
+                if isSelecting {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { exitSelectMode() }
+                    }
+                    #if os(iOS)
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                    }
+                    #else
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode)
+                    }
+                    #endif
+                } else {
+                    // One item holding a tight HStack — separate ToolbarItems get the
+                    // system's wide spacing, which reads as inconsistent between the
+                    // privacy toggle and the expand/filter cluster. Matches the pattern
+                    // already established in LibraryView.swift's dashboard toolbar.
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack(spacing: 2) {
+                            if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
+                                MatureRevealToggle()
+                            }
+                            if hasAnyContent {
+                                if !items.isEmpty {
+                                    Button {
+                                        isSelecting = true
+                                    } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                    .labelStyle(.iconOnly)
+                                }
+                                DisplayModeToggle(mode: $displayMode)
+                                WorkCardListControls(expandAll: $expandAll,
+                                                     filtersActive: filters.hasActiveFilters,
+                                                     showingFilters: $showingFilters,
+                                                     filterHelp: "Filter the works in this section",
+                                                     onClearFilters: { filters = LibraryFilters() })
+                            }
                         }
                     }
                 }
@@ -199,11 +241,21 @@ struct LibrarySectionListView: View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                 ForEach(visibleItems) { work in
-                    NavigationLink(value: LocalWorkDestination.reader(work)) {
-                        SensitiveWorkCoverCard(work: work)
+                    if isSelecting {
+                        SensitiveWorkCoverCard(
+                            work: work,
+                            isSelecting: true,
+                            isSelected: selection.contains(work.id),
+                            onToggleSelection: { toggleSelection(work) }
+                        )
+                        .localWorkContextMenu(work: work)
+                    } else {
+                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            SensitiveWorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .localWorkContextMenu(work: work, onSelect: { isSelecting = true; selection = [work.id] })
                     }
-                    .buttonStyle(.plain)
-                    .localWorkContextMenu(work: work)
                 }
                 if showsMarkedForLater {
                     ForEach(visibleMarkedForLater) { work in
@@ -220,9 +272,32 @@ struct LibrarySectionListView: View {
     }
 
     /// A local work row with the Library's standard swipe actions (save / favorite /
-    /// delete). Tapping opens the reader via the root `LocalWorkDestination`.
+    /// delete). Tapping opens the reader via the root `LocalWorkDestination`. In
+    /// selection mode, swipe actions give way to a plain selectable row, matching
+    /// LibraryView's own selectList (swipe and selection don't mix well in one row).
+    @ViewBuilder
     private func row(_ work: SavedWork) -> some View {
-        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
+        if isSelecting {
+            SensitiveWorkRow(
+                work: work,
+                expandAll: expandAll,
+                openMode: .reader,
+                isSelecting: true,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) }
+            )
+        } else {
+            swipeableRow(work)
+        }
+    }
+
+    private func swipeableRow(_ work: SavedWork) -> some View {
+        SensitiveWorkRow(
+            work: work,
+            expandAll: expandAll,
+            openMode: .reader,
+            onSelect: { isSelecting = true; selection = [work.id] }
+        )
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
                     WorkLifecycle.setSaved(work, !work.isSaved, in: context)
