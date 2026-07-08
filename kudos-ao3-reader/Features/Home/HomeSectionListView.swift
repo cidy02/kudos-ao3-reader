@@ -147,6 +147,13 @@ struct HomeSectionListView: View {
                     }
                 }
             }
+        #if os(iOS)
+            // Select mode owns the bottom edge with its bulk-action bar; the
+            // floating tab/search glass hides meanwhile, matching HomeView's
+            // dashboard — this page is reached by pushing past it, and previously
+            // kept showing the tab bar underneath/instead of the bulk-action bar.
+            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+        #endif
             .inspector(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
