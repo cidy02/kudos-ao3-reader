@@ -80,6 +80,9 @@ struct AO3CommentsParseTests {
         #expect(rows.map(\.depth) == [0, 1, 2, 0])
         #expect(rows.map(\.threadRootID) == [1001, 1001, 1001, 1004])
         #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
+        // The card-within-a-card rendering closes each thread card on its last
+        // row: 1003 ends thread 1001; the reply-less 1004 ends its own.
+        #expect(rows.map(\.isLastInThread) == [false, false, true, true])
     }
 
     @Test func largeThreadProjectionKeepsEveryRowShallowAndStable() {

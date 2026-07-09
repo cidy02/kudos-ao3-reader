@@ -1,55 +1,54 @@
 import SwiftUI
 
-/// A lightweight bubble background for one flattened comment row. Replies get a
-/// capped indent and a guide line, while every comment remains an independent
-/// lazy List row instead of recursively instantiating its descendants.
-private struct CommentBubbleRowModifier: ViewModifier {
+/// The card-within-a-card thread treatment (the mockups' core visual): every row
+/// of one top-level thread shares a single continuous `cardSurface` card — the
+/// same surface, radius, and margins as the Library's `.cardRow()` — opened by
+/// the top-level comment and closed after the thread's last reply. Replies then
+/// render as nested bubbles *inside* that card (see `CommentThreadRow`). Rows
+/// stay flat and lazy (the polish branch's performance architecture); only the
+/// backgrounds compose into one visual group.
+private struct CommentThreadGroupRowModifier: ViewModifier {
     let depth: Int
+    let isLastInThread: Bool
 
     @Environment(ThemeManager.self) private var theme
 
-    private var indent: CGFloat { CGFloat(min(depth, 3)) * 18 }
+    private var isFirst: Bool { depth == 0 }
 
     func body(content: Content) -> some View {
         content
-            .padding(12)
+            .padding(.horizontal, 14)
+            .padding(.top, isFirst ? 14 : 4)
+            .padding(.bottom, isLastInThread ? 14 : 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(theme.appTheme.carouselCardSurface)
-                    .overlay {
-                        if depth > 0 {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.025))
-                        }
-                    }
+                UnevenRoundedRectangle(
+                    topLeadingRadius: isFirst ? 16 : 0,
+                    bottomLeadingRadius: isLastInThread ? 16 : 0,
+                    bottomTrailingRadius: isLastInThread ? 16 : 0,
+                    topTrailingRadius: isFirst ? 16 : 0,
+                    style: .continuous
+                )
+                .fill(theme.appTheme.cardSurface)
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(theme.appTheme.carouselCardBorder(hue: nil), lineWidth: 0.5)
-            }
-            .padding(.leading, indent)
-            .overlay(alignment: .leading) {
-                if depth > 0 {
-                    Capsule()
-                        .fill(Color.accentColor.opacity(0.30))
-                        .frame(width: 2)
-                        .padding(.leading, max(0, indent - 10))
-                        .padding(.vertical, 4)
-                }
-            }
-            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+            .listRowInsets(EdgeInsets(
+                top: isFirst ? 6 : 0, leading: 16,
+                bottom: isLastInThread ? 6 : 0, trailing: 16
+            ))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
     }
 }
 
 extension View {
-    func commentBubbleRow(depth: Int) -> some View {
-        modifier(CommentBubbleRowModifier(depth: depth))
+    func commentThreadGroupRow(depth: Int, isLastInThread: Bool) -> some View {
+        modifier(CommentThreadGroupRowModifier(depth: depth, isLastInThread: isLastInThread))
     }
 }
 
-/// One stable, shallow row from `CommentsModel.displayRows`.
+/// One stable, shallow row from `CommentsModel.displayRows`. Top-level comments
+/// sit directly on the thread card; replies render as indented nested bubbles
+/// with a quiet connector line — a conversation group, not a timeline rail.
 struct CommentThreadRow: View {
     let row: AO3CommentRow
     let workAuthors: [String]
@@ -61,18 +60,48 @@ struct CommentThreadRow: View {
     let onOpenURL: (URL) -> Void
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var theme
 
     private var comment: AO3Comment { row.comment }
+    private var isReplyRow: Bool { row.depth > 0 }
+    /// Nested indent inside the thread card, capped so long AO3 comments keep a
+    /// readable measure on phone widths.
+    private var bubbleIndent: CGFloat { CGFloat(min(row.depth, 3) - 1) * 14 }
 
     private var isByWorkAuthor: Bool {
         workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            CommentAvatar(comment: comment, size: row.depth == 0 ? 40 : 34)
+        if isReplyRow {
+            // Reply bubble: its own soft surface one elevation step inside the
+            // card, guided by a subtle (never red) connector line.
+            HStack(alignment: .top, spacing: 8) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(.quaternary)
+                    .frame(width: 2)
+                commentContent
+                    .padding(10)
+                    .background(
+                        theme.appTheme.nestedCardSurface,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                    }
+            }
+            .padding(.leading, bubbleIndent)
+        } else {
+            commentContent
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 7) {
+    private var commentContent: some View {
+        HStack(alignment: .top, spacing: 10) {
+            CommentAvatar(comment: comment, size: isReplyRow ? 30 : 38)
+
+            VStack(alignment: .leading, spacing: 6) {
                 byline
                 if !comment.bodyText.isEmpty {
                     Text(comment.bodyText)
@@ -185,7 +214,8 @@ struct CommentThreadRow: View {
 }
 
 /// AO3 user icon when the fetched comment included one; otherwise a quiet,
-/// theme-safe placeholder. `AsyncImage` uses the shared URL loading/cache stack
+/// neutral placeholder (AO3 red stays an accent elsewhere — a red disk per row
+/// overwhelmed the list). `AsyncImage` uses the shared URL loading/cache stack
 /// and is only instantiated for lazy rows that become visible.
 struct CommentAvatar: View {
     let comment: AO3Comment
@@ -213,11 +243,11 @@ struct CommentAvatar: View {
             }
         }
         .frame(width: size, height: size)
-        .background(Color.accentColor.opacity(0.10), in: Circle())
+        .background(.quaternary.opacity(0.5), in: Circle())
         .clipShape(Circle())
         .overlay {
             Circle()
-                .strokeBorder(Color.accentColor.opacity(0.14), lineWidth: 0.5)
+                .strokeBorder(.quaternary, lineWidth: 0.5)
         }
         .accessibilityHidden(true)
     }
@@ -225,7 +255,7 @@ struct CommentAvatar: View {
     private var placeholder: some View {
         Image(systemName: "person.fill")
             .font(.system(size: size * 0.43, weight: .medium))
-            .foregroundStyle(Color.accentColor.opacity(0.78))
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

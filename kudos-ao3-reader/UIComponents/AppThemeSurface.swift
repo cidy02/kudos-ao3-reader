@@ -57,7 +57,10 @@ private struct CardShadow {
 /// Theme-aware surfaces for the modern card-based list treatment. Sepia reuses the
 /// reader's warm paper colors; Light/Dark fall back to the system grouped surfaces,
 /// so cards read the same as the grouped style did — just rounded on all four sides.
-private extension ReaderTheme {
+/// Internal (not private) so feature-specific card treatments (e.g. the comments
+/// thread cards) build on the SAME surfaces instead of inventing near-misses that
+/// drift from the Library baseline.
+extension ReaderTheme {
     /// The page behind the cards.
     var cardBackdrop: Color {
         #if os(iOS)
@@ -80,7 +83,7 @@ private extension ReaderTheme {
     /// cards lift off the flatter backdrops; Dark stays flat (shadows muddy the dark
     /// surfaces, and the high card↔backdrop contrast there already reads well).
     /// Kept small enough to sit within the inter-card gap so it isn't clipped.
-    var cardShadow: CardShadow {
+    fileprivate var cardShadow: CardShadow {
         switch self {
         case .dark: CardShadow(color: .clear, radius: 0, y: 0)
         case .light: CardShadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
@@ -102,6 +105,19 @@ private extension ReaderTheme {
         case .light: Color.black.opacity(0.06)
         case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.15)
         }
+    }
+
+    /// A surface nested INSIDE a `cardSurface` card (the comments thread's reply
+    /// bubbles). One elevation step past the card, so the bubble reads distinct in
+    /// all three themes: Light/Dark use the system's tertiary grouped level; Sepia
+    /// steps back to the paper backdrop for a subtle warm inset.
+    var nestedCardSurface: Color {
+        if self == .sepia { return cardBackdrop }
+        #if os(iOS)
+        return Color(uiColor: .tertiarySystemGroupedBackground)
+        #else
+        return Color(nsColor: .underPageBackgroundColor)
+        #endif
     }
 }
 

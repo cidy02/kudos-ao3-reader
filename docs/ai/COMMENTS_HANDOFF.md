@@ -1,9 +1,53 @@
 # AO3 Comments Feature — Working Notes (living doc)
 
-Branch: `feature/ao3-comments` (from `release-hardening`, 2026-07-09).
+Branch lineage: `feature/ao3-comments` (initial build, 2026-07-09) →
+`comments-ui-polish` (Codex functional polish) →
+**`comments-ui-visual-regression-fix`** (current: restores the mockup/Kudos
+visual language the polish lost, keeps its functional wins — see the section
+"Visual regression fix" below).
 Owner spec: native comments UI (view all/by-chapter, threads, reply, compose,
 actions), AO3-respectful networking, never-double-post. Mockups are directional,
 not pixel-specs. Update this file as work lands so any agent can resume.
+
+## Visual regression fix (comments-ui-visual-regression-fix, 2026-07-09)
+
+Screenshots showed the polish branch drifting dark/murky/heavy. Root causes and
+fixes (all in the view layer; no networking or submission-flow changes):
+- **Murk**: rows used `carouselCardSurface` bubbles — near-invisible against
+  `cardBackdrop` in Dark. Now the thread cards use the SAME `cardSurface` as
+  the Library's `.cardRow()` (those ReaderTheme surfaces were made internal in
+  `AppThemeSurface.swift` so feature card treatments can't drift again).
+- **Card-within-a-card (core mockup ask)**: rows stay flat + lazy (polish's
+  perf architecture, stable IDs), but each top-level thread now shares ONE
+  continuous card via `commentThreadGroupRow(depth:isLastInThread:)`
+  (`UnevenRoundedRectangle` opens on the depth-0 row, closes on the thread's
+  last row — `AO3CommentRow.isLastInThread`, set at flatten time, tested).
+  Replies render as nested bubbles inside it: `nestedCardSurface` (new, one
+  elevation step past the card: tertiary grouped in Light/Dark, paper in
+  Sepia) + hairline border + a 2pt `.quaternary` connector (red rail removed).
+- **Controls card**: count + sort collapsed to one quiet secondary footnote
+  line ("N comments · Oldest First ˅", `.tint(.secondary)`) — sort no longer
+  a bright red control. Title/segmented/chapter-row hierarchy unchanged.
+- **CTA**: opaque `carouselCardSurface` slab removed — capsule
+  `.borderedProminent` floating on the page backdrop with a soft shadow; the
+  safe-area inset + trailing spacer still guarantee no content overlap.
+- **Composer field**: `cardSurface` fill + hairline that brightens on focus +
+  placeholder + auto-focus on open (was a gray-on-gray slab that read as
+  disabled). Composer titles stay short ("Reply" / "New Comment" /
+  "Edit Comment") so the header never truncates.
+- **Chapter picker**: honesty note moved from a boxed row to a plain Section
+  footer (quiet help text); fitted detent tightened for short works.
+- **Avatars**: placeholder is now neutral (`.quaternary` disk, `.secondary`
+  glyph) — the red disk read as a giant accent per row. Real parsed AO3 icons
+  unchanged (AsyncImage, lazy, no profile fetching).
+Preserved from the polish branch (verified untouched): unified entry points,
+legacy composer + Report Abuse removal, avatar support, flattened lazy rows +
+stable IDs, cancellable loads, debounced draft saves, chapter-aware reader
+entry, honesty notes (reworded quieter, still present), the submission guard,
+and all networking behavior. Not restored from `feature/ao3-comments`: the
+recursive-render thread cell (replaced by the flat-row group treatment — perf)
+and the always-on "View thread" screen idea (thread/parent links live in the
+overflow menu). No fake hearts/likes added.
 
 ## AO3 endpoints & markup (verified live, 2026-07-09, ~8 recon GETs)
 

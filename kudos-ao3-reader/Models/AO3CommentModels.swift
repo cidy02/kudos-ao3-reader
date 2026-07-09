@@ -71,6 +71,9 @@ struct AO3CommentRow: Identifiable, Equatable, Sendable {
     let comment: AO3Comment
     let depth: Int
     let threadRootID: Int
+    /// The final row of its top-level thread group — the card-within-a-card
+    /// rendering closes the shared thread card after this row.
+    var isLastInThread = false
 
     var id: Int { comment.id }
 
@@ -78,6 +81,7 @@ struct AO3CommentRow: Identifiable, Equatable, Sendable {
         var result: [AO3CommentRow] = []
         for comment in comments {
             append(comment, depth: 0, threadRootID: comment.id, to: &result)
+            if !result.isEmpty { result[result.count - 1].isLastInThread = true }
         }
         return result
     }

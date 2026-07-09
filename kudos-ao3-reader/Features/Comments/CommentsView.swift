@@ -14,7 +14,6 @@ struct CommentsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
-    @Environment(ThemeManager.self) private var theme
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
@@ -137,18 +136,15 @@ struct CommentsView: View {
                     .accessibilityValue(model.selectedChapter?.displayName ?? "No chapter selected")
                 }
 
-                HStack {
+                // One quiet secondary line: "N comments · Oldest First ˅" — the
+                // sort is a small menu, not a bright control that dominates the card.
+                HStack(spacing: 4) {
                     if let total = model.page?.totalComments {
-                        Label("\(total.formatted()) comments", systemImage: "bubble.left")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("\(total.formatted()) comments")
                     } else {
                         Text("Comments")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    // Local rendering order — AO3 has no server-side comment sort.
+                    Text("·")
                     Menu {
                         Button {
                             model.newestFirst = false
@@ -169,16 +165,19 @@ struct CommentsView: View {
                             }
                         }
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Text(model.newestFirst ? "Newest First" : "Oldest First")
                             Image(systemName: "chevron.down")
                                 .font(.caption2.weight(.semibold))
                         }
-                        .font(.subheadline.weight(.medium))
                     }
                     .accessibilityLabel("Sort comments")
                     .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
+                    Spacer()
                 }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .tint(.secondary)
             }
         }
         .cardRow()
@@ -258,7 +257,7 @@ struct CommentsView: View {
                         onCopyLink: { copyLink($0) },
                         onOpenURL: { router.open($0) }
                     )
-                    .commentBubbleRow(depth: row.depth)
+                    .commentThreadGroupRow(depth: row.depth, isLastInThread: row.isLastInThread)
                 }
                 if let page = model.page, page.totalPages > 1 {
                     paginationSection(page)
@@ -323,20 +322,24 @@ struct CommentsView: View {
     @ViewBuilder
     private var writeCommentBar: some View {
         if case .loaded = model.phase, auth.isLoggedIn {
+            // Floats over the page backdrop — no opaque slab. The safe-area inset
+            // (plus the list's trailing spacer) keeps content from ever sitting
+            // underneath it; the soft shadow does the lifting.
             Button {
                 model.startComposer()
             } label: {
                 Label("Write a comment", systemImage: "pencil")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
+                .padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
             .disabled(model.isOffline)
+            .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 4)
             .padding(.bottom, 6)
-            .background(theme.appTheme.carouselCardSurface.ignoresSafeArea())
             .accessibilityLabel("Write a comment")
         }
     }
@@ -366,53 +369,50 @@ struct CommentsView: View {
     private var chapterPicker: some View {
         NavigationStack {
             List {
-                Button {
-                    model.scope = .all
-                    showingChapterPicker = false
-                } label: {
-                    HStack {
-                        Label("All Comments", systemImage: "bubble.left")
-                        Spacer()
-                        if let total = model.page?.totalComments {
-                            Text(total.formatted())
-                                .foregroundStyle(model.scope == .all ? Color.accentColor : .secondary)
-                        }
-                        if model.scope == .all {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .foregroundStyle(model.scope == .all ? Color.accentColor : .primary)
-                }
-
-                ForEach(model.chapters) { chapter in
+                Section {
                     Button {
-                        model.selectedChapter = chapter
+                        model.scope = .all
                         showingChapterPicker = false
                     } label: {
                         HStack {
-                            Label(chapter.displayName, systemImage: "book")
-                                .lineLimit(1)
+                            Label("All Comments", systemImage: "bubble.left")
                             Spacer()
-                            if chapter == model.selectedChapter, model.scope == .byChapter {
+                            if let total = model.page?.totalComments {
+                                Text(total.formatted())
+                                    .foregroundStyle(model.scope == .all ? Color.accentColor : .secondary)
+                            }
+                            if model.scope == .all {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.tint)
                             }
                         }
-                        .foregroundStyle(
-                            chapter == model.selectedChapter && model.scope == .byChapter
-                                ? Color.accentColor : .primary
-                        )
+                        .foregroundStyle(model.scope == .all ? Color.accentColor : .primary)
                     }
-                }
 
-                Section {
-                    Text(
-                        "AO3 does not publish per-chapter totals, so Kudos does not "
-                            + "fetch every chapter just to count them."
-                    )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    ForEach(model.chapters) { chapter in
+                        Button {
+                            model.selectedChapter = chapter
+                            showingChapterPicker = false
+                        } label: {
+                            HStack {
+                                Label(chapter.displayName, systemImage: "book")
+                                    .lineLimit(1)
+                                Spacer()
+                                if chapter == model.selectedChapter, model.scope == .byChapter {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                            .foregroundStyle(
+                                chapter == model.selectedChapter && model.scope == .byChapter
+                                    ? Color.accentColor : .primary
+                            )
+                        }
+                    }
+                } footer: {
+                    // Quiet help text, not a warning panel: explains why there are
+                    // no per-chapter counts without shouting about it.
+                    Text("AO3 doesn't publish per-chapter totals, so Kudos doesn't fetch every chapter just to count them.")
                 }
             }
             .appThemedScroll()
@@ -441,8 +441,10 @@ struct CommentsView: View {
 
     private var chapterPickerDetents: Set<PresentationDetent> {
         if model.chapters.count <= 3 {
+            // Title + rows + footer note: fitted so a one-chapter work gets a
+            // compact sheet instead of a mostly-empty half screen.
             let rowCount = CGFloat(model.chapters.count + 1)
-            return [.height(190 + rowCount * 52)]
+            return [.height(150 + rowCount * 52)]
         }
         return [.medium, .large]
     }
@@ -495,8 +497,10 @@ struct CommentComposerSheet: View {
     @Bindable var model: CommentsModel
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var draftSaveTask: Task<Void, Never>?
+    @FocusState private var editorFocused: Bool
 
     private var isReply: Bool { model.composerParent != nil }
     private var isEdit: Bool { model.composerEditTarget != nil }
@@ -513,11 +517,34 @@ struct CommentComposerSheet: View {
                     if let parent = model.composerParent {
                         parentQuote(parent)
                     }
+                    // An unmistakably-editable field: card surface (not a murky
+                    // gray slab), a hairline that brightens with focus, a legible
+                    // placeholder, and the cursor ready on open.
                     TextEditor(text: $model.composerText)
                         .frame(minHeight: 180, maxHeight: 260)
                         .scrollContentBackground(.hidden)
                         .padding(8)
-                        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                        .background(
+                            theme.appTheme.cardSurface,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(
+                                    editorFocused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
+                                    lineWidth: editorFocused ? 1.5 : 1
+                                )
+                        }
+                        .overlay(alignment: .topLeading) {
+                            if model.composerText.isEmpty {
+                                Text(isReply ? "Write your reply…" : "Share your thoughts…")
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 13)
+                                    .padding(.vertical, 16)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .focused($editorFocused)
                         .disabled(model.submissionGuard.phase.isBusy)
                         .accessibilityLabel(isEdit ? "Edit comment text" : "Comment text")
 
@@ -573,6 +600,10 @@ struct CommentComposerSheet: View {
             .onDisappear {
                 draftSaveTask?.cancel()
                 model.saveDraft()
+            }
+            .onAppear {
+                // Cursor ready on open — the field reads as editable immediately.
+                editorFocused = true
             }
         }
         .presentationDetents([.medium, .large])
