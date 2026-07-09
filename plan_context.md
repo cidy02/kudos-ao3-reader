@@ -16,6 +16,19 @@ id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
 
 ## Status snapshot (2026-07-09)
 
+### Landed: Comments QoL — reader chapter-aware Comments button — `073a7f7`
+On `feature/ao3-comments`. Owner-specified (`Comments_QoL_Reader_Chapter_Aware_Button.md`).
+Tapping Comments from a reader opens By-Chapter on the AO3 chapter you're reading.
+Reusable `[ReaderSection].ao3StoryChapter(forSpineIndex:)` (Preface/Summary→1,
+chapter→own number, Afterword/post-story→last, empty/OOB→1) — reuses the T-76
+normalization, no naive `spineIndex+1`. Both readers wired (Readium direct;
+macOS via `AO3WorkActionsMenu`/`Model`). `CommentsModel.loadInitial` resolves +
+clamps against `/navigate`, one GET + index, falls back to All when no index;
+`isApplyingInitialContext` suppresses onChange double-loads. +7 tests (spec
+matrix). verify.sh ALL GREEN, **272 / 33**. Mapping + manual checklist in
+`docs/ai/COMMENTS_HANDOFF.md`. **Still merge-gated with T-82** (owner live pass).
+Doc frames the full-feature **adversarial review as the next step** — not run yet.
+
 ### Landed: Phase 4 — Native AO3 Comments — `87ef7d0` / T-82 (⛔ merge-gated)
 Owner-specified feature (mockups as direction, not pixel spec) built on
 `feature/ao3-comments` off `release-hardening`. Full working notes, live-
