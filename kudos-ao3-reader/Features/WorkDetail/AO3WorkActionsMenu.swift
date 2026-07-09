@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// The shared "On AO3" overflow-menu content. Give Kudos, Leave a Comment, Bookmark,
-/// Mark for Later, and Subscribe are **native** authenticated actions (the host
-/// presents the composers + result via `.ao3WorkActions(…)`); only "Open on AO3"
-/// opens the website. Used by Work Detail and the Reader so the two stay consistent.
+/// The shared "On AO3" overflow-menu content. Comments always opens the unified
+/// native read/write screen; Bookmark and the other authenticated actions remain
+/// native. Only "Open on AO3" opens the website.
 struct AO3WorkActionsMenu: View {
     let workID: Int
     @Bindable var actions: AO3WorkActionsModel
-    /// Context for the native comments screen ("View Comments"); optional so
+    /// Context for the native comments screen ("Comments"); optional so
     /// existing call sites keep working with just an id.
     var workTitle = ""
     var workAuthors: [String] = []
@@ -29,11 +28,7 @@ struct AO3WorkActionsMenu: View {
                 actions.startViewingComments(title: workTitle, authors: workAuthors,
                                              initialChapterPosition: commentsInitialChapterPosition)
             } label: {
-                Label("View Comments", systemImage: "bubble.left.and.bubble.right")
-            }
-
-            Button { actions.startComment() } label: {
-                Label("Leave a Comment", systemImage: "bubble.left")
+                Label("Comments", systemImage: "bubble.left.and.bubble.right")
             }
 
             Button { actions.startBookmark() } label: {

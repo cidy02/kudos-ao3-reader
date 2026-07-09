@@ -163,6 +163,11 @@ extension AO3Client {
                 comment.postedText = try posted.text()
             }
         }
+        // AO3 includes the user icon in the comment itself. Use only that URL —
+        // never follow the profile link or issue a separate discovery request.
+        if !comment.isGuest, let icon = try li.select("div.icon img.icon[src]").first() {
+            comment.avatarURL = AO3Comment.ao3URL(for: try icon.attr("src"))
+        }
 
         // Body: this comment's own blockquote. Replies are structurally siblings
         // (not descendants), so the direct child is unambiguous.
@@ -184,16 +189,22 @@ extension AO3Client {
             for link in try actions.select("a").array() {
                 let label = try link.text().lowercased()
                 let href = try link.attr("href")
-                switch label {
-                case "reply": comment.canReply = true
-                case "edit": comment.editPath = href
-                case "delete": comment.deletePath = href
-                default: break
-                }
+                applyAction(label: label, href: href, to: &comment)
             }
         }
 
         return comment
+    }
+
+    private static func applyAction(label: String, href: String, to comment: inout AO3Comment) {
+        switch label {
+        case "reply": comment.canReply = true
+        case "edit": comment.editPath = href
+        case "delete": comment.deletePath = href
+        case "thread": comment.threadPath = href
+        case "parent thread": comment.parentThreadPath = href
+        default: break
+        }
     }
 
     /// Parses `/works/<id>/navigate`: `ol.chapter.index.group > li > a` with the

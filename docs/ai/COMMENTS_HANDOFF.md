@@ -24,6 +24,9 @@ Comment markup (inside `div#comments_placeholder`):
   `span.role` " (Guest)". Chapter ctx: `span.parent a[href*=/chapters/]`.
   Time: `span.posted.datetime` (abbr day/month + span date/year/time/timezone).
 - Body: `blockquote.userstuff` (p-paragraphs, limited HTML).
+- Icon: `div.icon img.icon[src]` for registered users; guests carry AO3's
+  visitor placeholder. Kudos uses only this already-present URL and never visits
+  profiles to discover icons.
 - Actions `ul.actions#navigation_for_comment_<id>`: Reply
   (`/comments/add_comment_reply?chapter_id=<cid>&id=<id>`), Thread, Parent.
   Logged-in own comments add Edit (`/comments/<id>/edit`) / Delete — **parse by
@@ -55,15 +58,18 @@ Comment markup (inside `div#comments_placeholder`):
   defensive submit flow + `reverify` ("Check Again").
 - [x] `Features/Comments/CommentsView.swift` — card-styled screen (All /
   By Chapter, chapter sheet, local Oldest/Newest order, pagination row,
-  skeletons, empty/failed/offline-stale states), recursive `CommentThreadCell`
-  (Author/Guest badges, chapter chips, parse-gated actions menu),
-  `CommentComposerSheet` (parent quote, drafts-as-you-type, status banners,
-  Check Again), delete confirm, copy-link/open-thread/report-abuse.
+  skeletons, empty/failed/offline-stale states), lazy flattened comment rows
+  (`CommentThreadRow`, stable AO3 IDs, nested bubbles/guide lines, parsed icons
+  with placeholders, Author/Guest badges), `CommentComposerSheet` (parent
+  quote, debounced drafts-as-you-type, status banners, Check Again), delete
+  confirm, Copy Link, and parse-gated Thread / Parent Thread actions. `Report
+  Abuse` is intentionally absent until a real native AO3 report flow exists.
 - [x] Entry points: Work Detail stats "Comments" row → pushed screen;
-  `AO3WorkActionsMenu` "View Comments" (sheet via `.ao3WorkActions` host —
-  covers the macOS legacy reader); iOS Readium reader toolbar bubble button →
-  sheet.
-- [x] Tests (17): `AO3CommentsParseTests` (threading, guest/registered bylines,
+  `AO3WorkActionsMenu` "Comments" (sheet via `.ao3WorkActions` host — covers the
+  macOS legacy reader); iOS Readium reader toolbar bubble; and shared local /
+  remote work-card context menus used by Home, Library, Browse, and Search.
+  The former standalone "Leave a Comment" composer was removed.
+- [x] Tests (19): `AO3CommentsParseTests` (threading, guest/registered bylines,
   chapter refs, pagination/totals, parse-gated edit/delete, empty region,
   chapter index, URL shapes, verification matcher incl. parent-awareness) +
   `CommentSubmissionTests` (key normalization, single-flight, duplicate window
@@ -104,7 +110,8 @@ Comment markup (inside `div#comments_placeholder`):
   live session first (candidate next step).
 - Mockup's per-chapter counts in the picker: **not shown** — AO3 exposes no
   cheap per-chapter counts and harvesting them would mean fetching every
-  chapter (forbidden by the respect rules).
+  chapter (forbidden by the respect rules). The picker explains this instead of
+  inventing counts; All Comments uses the already-parsed work total.
 - Deep-thread "cut" (AO3 stops nesting very deep threads server-side): rendered
   as parsed; the per-comment "Open Thread on AO3" action covers the tail.
 
@@ -137,7 +144,7 @@ blocked throughout.
 - Kill connectivity right after tapping Post (timeout) → app must NOT re-POST;
   verification runs; if unreachable, "Check Again" flow; draft preserved.
 - Edit + Delete own comment (verifies the parse-gated markup + endpoints).
-- Copy Link / Report Abuse.
+- Copy Link; Thread / Parent Thread only where AO3 rendered those links.
 - Signed-out: browse public work's comments; composer shows sign-in state.
 - Offline: previously-viewed page shows with stale banner; posting disabled.
 - Adult/restricted work behavior matches existing app handling.
@@ -205,11 +212,41 @@ wrong work. Manual check below covers the common shapes.
 - [x] Reader chapter-aware Comments button (QoL) — mapping + both readers + tests;
       `Scripts/verify.sh` ALL GREEN, 272 tests / 33 suites (2026-07-09). See the
       "Reader chapter-aware Comments button" section above.
+- [x] T-83 UI/performance polish: parsed icons/placeholders; stable shallow rows;
+      lazy per-row rendering; nested bubbles; clearer controls/chapter picker;
+      non-overlapping signed-in CTA and no misleading signed-out CTA; compact
+      Reply sheet; role/markup-gated menus; unified entry points; legacy composer
+      and fake Report action removed.
 - [ ] Owner: live-session manual test (checklist above + reader chapter-mapping
       checklist below) — REQUIRED before merge
 - [ ] Candidate follow-ups: chapter-targeted top-level posting (capture the
       chapter-page form live), native thread-page view for cut-off threads,
       comment pagination jump-to-page, persisted comment cache.
+
+## T-83 performance diagnosis
+
+Code-path inspection plus a launch-only fixture pass found two concrete hot
+paths:
+
+1. `CommentsView` used a lazy outer `List`, but each visible
+   `CommentThreadCell` recursively built its entire descendant tree. Presenting a
+   menu/composer or changing screen state therefore diffed large nested value
+   trees. `CommentsModel` now projects each fetched page once into
+   `[AO3CommentRow]`; rows keep stable AO3 comment IDs and shallow comment values,
+   and `List` instantiates them individually as they become visible.
+2. `CommentComposerSheet.onChange` synchronously rewrote the full
+   `UserDefaults` draft dictionary on every keystroke. Saves are now debounced by
+   400 ms, with an immediate save on Cancel/disappear.
+
+Avatar loading is tied to visible lazy rows through `AsyncImage`; it uses only
+icon URLs already parsed from comment HTML and introduces no profile-page
+scrapes. Comment sorting/thread projection no longer runs inside SwiftUI `body`.
+The 2,500-row projection regression test verifies stable unique IDs and shallow
+row payloads and completed in 0.003 seconds in the final full-suite run. No
+Instruments before/after capture was available; the simulator fixture was used
+for render/layout validation, while live large-work interaction timing remains
+part of the owner pass. Rapid scope/sort/page changes now cancel the prior load,
+and cancellation exits without flashing a failure state.
 
 ## Manual test checklist — reader chapter mapping (owner)
 Use a real AO3 EPUB with Preface/Summary/Afterword. On iOS (Readium) and macOS (legacy):

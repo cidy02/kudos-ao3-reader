@@ -578,7 +578,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         CommentsView(workID: id, workTitle: displayTitle, workAuthors: displayAuthorList)
                     } label: {
                         LabeledContent("Comments",
-                                       value: displayComments.map { $0.formatted() } ?? "View")
+                                       value: displayComments.map { $0.formatted() } ?? "Open")
                     }
                 } else if let comments = displayComments {
                     LabeledContent("Comments", value: comments.formatted())

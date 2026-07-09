@@ -35,6 +35,9 @@ final class CommentsModel {
     private(set) var isOffline = false
     /// Serving a cached page (shown with its fetch time when offline/stale).
     private(set) var isFromCache = false
+    /// Stable, shallow rows projected once per page/order change. The SwiftUI list
+    /// reads this directly instead of recursively rebuilding reply subtrees.
+    private(set) var displayRows: [AO3CommentRow] = []
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
@@ -49,7 +52,9 @@ final class CommentsModel {
     private(set) var isApplyingInitialContext = false
     /// Local rendering order — AO3 itself has no comment sort; newest-first
     /// starts from the last page and reverses within each page.
-    var newestFirst = false
+    var newestFirst = false {
+        didSet { rebuildDisplayRows() }
+    }
 
     // Composer
     var composerContext: AO3CommentContext?
@@ -70,12 +75,6 @@ final class CommentsModel {
         self.pendingInitialChapterPosition = initialChapterPosition
     }
 
-    /// Comments of the current page in display order.
-    var displayComments: [AO3Comment] {
-        guard let page else { return [] }
-        return newestFirst ? page.comments.reversed() : page.comments
-    }
-
     var chapterForRequests: Int? {
         scope == .byChapter ? selectedChapter?.id : nil
     }
@@ -86,6 +85,7 @@ final class CommentsModel {
     /// the skeleton for the new context instead of the previous scope's comments.
     func resetForContextChange() {
         page = nil
+        displayRows = []
         phase = .idle
         currentPageNumber = 1
     }
@@ -158,8 +158,18 @@ final class CommentsModel {
             return
         }
         page = fetched
+        rebuildDisplayRows()
         currentPageNumber = fetched.currentPage
         phase = .loaded
+    }
+
+    private func rebuildDisplayRows() {
+        guard let page else {
+            displayRows = []
+            return
+        }
+        let roots = newestFirst ? Array(page.comments.reversed()) : page.comments
+        displayRows = AO3CommentRow.flatten(roots)
     }
 
     /// One page, via cache unless stale/bypassed. Returns nil after setting a
@@ -186,6 +196,10 @@ final class CommentsModel {
             isOffline = false
             isFromCache = false
             return fetched
+        } catch is CancellationError {
+            return nil
+        } catch let error as URLError where error.code == .cancelled {
+            return nil
         } catch {
             isOffline = Self.isOfflineError(error)
             // Keep showing a cached page if one exists (marked stale) — only a
@@ -213,6 +227,10 @@ final class CommentsModel {
             Self.cache.storeChapters(fetched, forWork: workID)
             chapters = fetched
             chaptersFailed = false
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
             chaptersFailed = true
         }

@@ -14,11 +14,13 @@ struct CommentsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
+    @Environment(ThemeManager.self) private var theme
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
     @State private var pendingDelete: AO3Comment?
     @State private var actionBanner: String?
+    @State private var contextLoadTask: Task<Void, Never>?
 
     init(workID: Int, workTitle: String, workAuthors: [String] = [], initialChapterPosition: Int? = nil) {
         self.workID = workID
@@ -33,6 +35,17 @@ struct CommentsView: View {
         List {
             controlsSection
             contentSections
+            if case .loaded = model.phase, auth.isLoggedIn {
+                // The safe-area inset reserves the floating CTA's footprint; this
+                // final breathing room also lets the last long comment scroll fully
+                // clear of glass/tab/home-indicator overlays.
+                Color.clear
+                    .frame(height: 64)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityHidden(true)
+            }
         }
         .cardList()
         .navigationTitle("Comments")
@@ -47,10 +60,12 @@ struct CommentsView: View {
             // loadInitial sets scope/chapter itself and does the one load; skip the
             // redundant reload its programmatic changes would otherwise trigger.
             guard !model.isApplyingInitialContext else { return }
-            Task {
+            contextLoadTask?.cancel()
+            contextLoadTask = Task {
                 model.resetForContextChange()
                 if scope == .byChapter {
                     await model.loadChaptersIfNeeded(auth: auth)
+                    guard !Task.isCancelled else { return }
                     if model.selectedChapter == nil, let first = model.chapters.first {
                         // Assigning the chapter triggers the selectedChapter
                         // onChange, which loads — don't also load here (double GET).
@@ -63,12 +78,15 @@ struct CommentsView: View {
         }
         .onChange(of: model.selectedChapter) { _, _ in
             guard !model.isApplyingInitialContext else { return }
+            contextLoadTask?.cancel()
             model.resetForContextChange()
-            Task { await model.load(auth: auth) }
+            contextLoadTask = Task { await model.load(auth: auth) }
         }
         .onChange(of: model.newestFirst) { _, _ in
-            Task { await model.load(auth: auth) }
+            contextLoadTask?.cancel()
+            contextLoadTask = Task { await model.load(auth: auth) }
         }
+        .onDisappear { contextLoadTask?.cancel() }
         .sheet(isPresented: composerBinding) {
             CommentComposerSheet(model: model)
         }
@@ -97,10 +115,7 @@ struct CommentsView: View {
                     .font(.headline)
                     .lineLimit(2)
 
-                Picker("Scope", selection: $model.scope) {
-                    ForEach(CommentsModel.Scope.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                scopePicker
 
                 if model.scope == .byChapter {
                     Button {
@@ -117,26 +132,83 @@ struct CommentsView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Browse comments by chapter")
+                    .accessibilityValue(model.selectedChapter?.displayName ?? "No chapter selected")
                 }
 
                 HStack {
-                    // Local rendering order — AO3 has no server-side comment sort.
-                    Picker("Order", selection: $model.newestFirst) {
-                        Text("Oldest First").tag(false)
-                        Text("Newest First").tag(true)
-                    }
-                    .pickerStyle(.menu)
-                    .font(.subheadline)
-                    Spacer()
                     if let total = model.page?.totalComments {
-                        Label("\(total.formatted())", systemImage: "bubble.left")
+                        Label("\(total.formatted()) comments", systemImage: "bubble.left")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Comments")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Spacer()
+                    // Local rendering order — AO3 has no server-side comment sort.
+                    Menu {
+                        Button {
+                            model.newestFirst = false
+                        } label: {
+                            if !model.newestFirst {
+                                Label("Oldest First", systemImage: "checkmark")
+                            } else {
+                                Text("Oldest First")
+                            }
+                        }
+                        Button {
+                            model.newestFirst = true
+                        } label: {
+                            if model.newestFirst {
+                                Label("Newest First", systemImage: "checkmark")
+                            } else {
+                                Text("Newest First")
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(model.newestFirst ? "Newest First" : "Oldest First")
+                            Image(systemName: "chevron.down")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .font(.subheadline.weight(.medium))
+                    }
+                    .accessibilityLabel("Sort comments")
+                    .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
                 }
             }
         }
         .cardRow()
+    }
+
+    private var scopePicker: some View {
+        HStack(spacing: 0) {
+            ForEach(CommentsModel.Scope.allCases) { scope in
+                Button {
+                    model.scope = scope
+                } label: {
+                    Text(scope.rawValue)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(model.scope == scope ? .white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 36)
+                        .background {
+                            if model.scope == scope {
+                                Capsule().fill(Color.accentColor)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(model.scope == scope ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .background(.quaternary, in: Capsule())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Comment scope")
     }
 
     // MARK: Content
@@ -165,7 +237,7 @@ struct CommentsView: View {
             if model.isFromCache && model.isOffline {
                 staleBanner
             }
-            if model.displayComments.isEmpty {
+            if model.displayRows.isEmpty {
                 Section {
                     ContentUnavailableView(
                         "No Comments Yet",
@@ -175,22 +247,18 @@ struct CommentsView: View {
                 }
                 .cardRow()
             } else {
-                ForEach(model.displayComments) { comment in
-                    Section {
-                        CommentThreadCell(
-                            comment: comment,
-                            depth: 0,
-                            workAuthors: workAuthors,
-                            showChapterBadge: model.scope == .all,
-                            onReply: { model.startComposer(replyingTo: $0) },
-                            onEdit: { model.startEditing($0) },
-                            onDelete: { pendingDelete = $0 },
-                            onCopyLink: { copyLink($0) },
-                            onOpenThread: { openThread($0) },
-                            onReportAbuse: { reportAbuse($0) }
-                        )
-                    }
-                    .cardRow()
+                ForEach(model.displayRows) { row in
+                    CommentThreadRow(
+                        row: row,
+                        workAuthors: workAuthors,
+                        showChapterBadge: model.scope == .all && row.depth == 0,
+                        onReply: { model.startComposer(replyingTo: $0) },
+                        onEdit: { model.startEditing($0) },
+                        onDelete: { pendingDelete = $0 },
+                        onCopyLink: { copyLink($0) },
+                        onOpenURL: { router.open($0) }
+                    )
+                    .commentBubbleRow(depth: row.depth)
                 }
                 if let page = model.page, page.totalPages > 1 {
                     paginationSection(page)
@@ -202,7 +270,9 @@ struct CommentsView: View {
     private var staleBanner: some View {
         Section {
             Label {
-                Text("You're offline — showing comments from \(model.page?.fetchedAt.formatted(.relative(presentation: .named)) ?? "earlier"). They may be out of date.")
+                let fetched = model.page?.fetchedAt
+                    .formatted(.relative(presentation: .named)) ?? "earlier"
+                Text("You're offline — showing comments from \(fetched). They may be out of date.")
             } icon: {
                 Image(systemName: "wifi.exclamationmark")
             }
@@ -216,7 +286,7 @@ struct CommentsView: View {
         Section {
             HStack {
                 Button {
-                    Task { await model.loadPage(model.currentPageNumber - 1, auth: auth) }
+                    loadPage(model.currentPageNumber - 1)
                 } label: {
                     Label("Previous", systemImage: "chevron.left")
                 }
@@ -230,7 +300,7 @@ struct CommentsView: View {
                 Spacer()
 
                 Button {
-                    Task { await model.loadPage(model.currentPageNumber + 1, auth: auth) }
+                    loadPage(model.currentPageNumber + 1)
                 } label: {
                     Label("Next", systemImage: "chevron.right")
                         .labelStyle(.trailingIcon)
@@ -243,26 +313,31 @@ struct CommentsView: View {
         .cardRow()
     }
 
+    private func loadPage(_ number: Int) {
+        contextLoadTask?.cancel()
+        contextLoadTask = Task { await model.loadPage(number, auth: auth) }
+    }
+
     // MARK: Write bar
 
     @ViewBuilder
     private var writeCommentBar: some View {
-        if case .loaded = model.phase {
+        if case .loaded = model.phase, auth.isLoggedIn {
             Button {
                 model.startComposer()
             } label: {
-                Label(
-                    auth.isLoggedIn ? "Write a comment" : "Log in to AO3 to comment",
-                    systemImage: auth.isLoggedIn ? "pencil" : "person.crop.circle.badge.questionmark"
-                )
+                Label("Write a comment", systemImage: "pencil")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!auth.isLoggedIn || model.isOffline)
+            .disabled(model.isOffline)
             .padding(.horizontal, 16)
+            .padding(.top, 8)
             .padding(.bottom, 6)
+            .background(theme.appTheme.carouselCardSurface.ignoresSafeArea())
+            .accessibilityLabel("Write a comment")
         }
     }
 
@@ -290,21 +365,54 @@ struct CommentsView: View {
 
     private var chapterPicker: some View {
         NavigationStack {
-            List(model.chapters) { chapter in
+            List {
                 Button {
-                    model.selectedChapter = chapter
+                    model.scope = .all
                     showingChapterPicker = false
                 } label: {
                     HStack {
-                        Label(chapter.displayName, systemImage: "book")
-                            .lineLimit(1)
-                            .foregroundStyle(.primary)
+                        Label("All Comments", systemImage: "bubble.left")
                         Spacer()
-                        if chapter == model.selectedChapter {
+                        if let total = model.page?.totalComments {
+                            Text(total.formatted())
+                                .foregroundStyle(model.scope == .all ? Color.accentColor : .secondary)
+                        }
+                        if model.scope == .all {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.tint)
                         }
                     }
+                    .foregroundStyle(model.scope == .all ? Color.accentColor : .primary)
+                }
+
+                ForEach(model.chapters) { chapter in
+                    Button {
+                        model.selectedChapter = chapter
+                        showingChapterPicker = false
+                    } label: {
+                        HStack {
+                            Label(chapter.displayName, systemImage: "book")
+                                .lineLimit(1)
+                            Spacer()
+                            if chapter == model.selectedChapter, model.scope == .byChapter {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .foregroundStyle(
+                            chapter == model.selectedChapter && model.scope == .byChapter
+                                ? Color.accentColor : .primary
+                        )
+                    }
+                }
+
+                Section {
+                    Text(
+                        "AO3 does not publish per-chapter totals, so Kudos does not "
+                            + "fetch every chapter just to count them."
+                    )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .appThemedScroll()
@@ -322,13 +430,21 @@ struct CommentsView: View {
                     }
                 }
             }
-            .navigationTitle("Browse by Chapter")
+            .navigationTitle("Browse Comments by Chapter")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(chapterPickerDetents)
         .presentationDragIndicator(.visible)
+    }
+
+    private var chapterPickerDetents: Set<PresentationDetent> {
+        if model.chapters.count <= 3 {
+            let rowCount = CGFloat(model.chapters.count + 1)
+            return [.height(190 + rowCount * 52)]
+        }
+        return [.medium, .large]
     }
 
     // MARK: Actions
@@ -355,17 +471,6 @@ struct CommentsView: View {
         actionBanner = "Link copied."
     }
 
-    private func openThread(_ comment: AO3Comment) {
-        if let url = comment.threadURL { router.open(url) }
-    }
-
-    private func reportAbuse(_ comment: AO3Comment) {
-        // AO3's abuse form; the comment link identifies what's being reported.
-        copyLink(comment)
-        if let url = URL(string: "https://archiveofourown.org/abuse_reports/new") {
-            router.open(url)
-        }
-    }
 }
 
 /// A trailing-icon label layout for the pagination "Next" button.
@@ -382,153 +487,6 @@ extension LabelStyle where Self == TrailingIconLabelStyle {
     static var trailingIcon: TrailingIconLabelStyle { TrailingIconLabelStyle() }
 }
 
-// MARK: - Thread cell
-
-/// One top-level comment with its reply tree. Indentation is capped so deep
-/// threads stay readable on phone widths.
-struct CommentThreadCell: View {
-    let comment: AO3Comment
-    let depth: Int
-    let workAuthors: [String]
-    let showChapterBadge: Bool
-    let onReply: (AO3Comment) -> Void
-    let onEdit: (AO3Comment) -> Void
-    let onDelete: (AO3Comment) -> Void
-    let onCopyLink: (AO3Comment) -> Void
-    let onOpenThread: (AO3Comment) -> Void
-    let onReportAbuse: (AO3Comment) -> Void
-
-    @Environment(AO3AuthService.self) private var auth
-
-    private var isByWorkAuthor: Bool {
-        workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            byline
-            if !comment.bodyText.isEmpty {
-                Text(comment.bodyText)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            actions
-
-            if !comment.replies.isEmpty {
-                ForEach(comment.replies) { reply in
-                    CommentThreadCell(
-                        comment: reply,
-                        depth: depth + 1,
-                        workAuthors: workAuthors,
-                        showChapterBadge: false,
-                        onReply: onReply,
-                        onEdit: onEdit,
-                        onDelete: onDelete,
-                        onCopyLink: onCopyLink,
-                        onOpenThread: onOpenThread,
-                        onReportAbuse: onReportAbuse
-                    )
-                    .padding(.leading, depth < 3 ? 14 : 0)
-                    .overlay(alignment: .leading) {
-                        if depth < 3 {
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(.quaternary)
-                                .frame(width: 2)
-                                .padding(.vertical, 2)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var byline: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(comment.author)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-            if isByWorkAuthor {
-                Text("Author")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(.tint, in: Capsule())
-                    .foregroundStyle(.white)
-            } else if comment.isGuest {
-                Text("Guest")
-                    .font(.caption2)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 4)
-            if showChapterBadge, let chapter = comment.chapterLabel {
-                Text(chapter)
-                    .font(.caption2)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    private var actions: some View {
-        HStack(spacing: 14) {
-            if !comment.postedText.isEmpty {
-                Text(comment.postedText)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            if comment.canReply && auth.isLoggedIn {
-                Button { onReply(comment) } label: {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left")
-                        .font(.caption.weight(.medium))
-                }
-                .buttonStyle(.borderless)
-            }
-            Menu {
-                if comment.canReply && auth.isLoggedIn {
-                    Button { onReply(comment) } label: {
-                        Label("Reply", systemImage: "arrowshape.turn.up.left")
-                    }
-                }
-                if comment.editPath != nil {
-                    Button { onEdit(comment) } label: {
-                        Label("Edit Comment", systemImage: "pencil")
-                    }
-                }
-                Button { onCopyLink(comment) } label: {
-                    Label("Copy Link", systemImage: "link")
-                }
-                Button { onOpenThread(comment) } label: {
-                    Label("Open Thread on AO3", systemImage: "safari")
-                }
-                Button { onReportAbuse(comment) } label: {
-                    Label("Report Abuse", systemImage: "flag")
-                }
-                if comment.deletePath != nil {
-                    Button(role: .destructive) { onDelete(comment) } label: {
-                        Label("Delete Comment", systemImage: "trash")
-                    }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 20)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-        }
-    }
-}
-
 // MARK: - Composer
 
 /// Reply / top-level comment sheet with draft preservation and the defensive
@@ -538,13 +496,14 @@ struct CommentComposerSheet: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
+    @State private var draftSaveTask: Task<Void, Never>?
 
     private var isReply: Bool { model.composerParent != nil }
     private var isEdit: Bool { model.composerEditTarget != nil }
 
     private var composerTitle: String {
         if isEdit { return "Edit Comment" }
-        return isReply ? "Reply to Comment" : "New Comment"
+        return isReply ? "Reply" : "New Comment"
     }
 
     var body: some View {
@@ -555,10 +514,12 @@ struct CommentComposerSheet: View {
                         parentQuote(parent)
                     }
                     TextEditor(text: $model.composerText)
-                        .frame(minHeight: 160)
+                        .frame(minHeight: 180, maxHeight: 260)
+                        .scrollContentBackground(.hidden)
                         .padding(8)
                         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
                         .disabled(model.submissionGuard.phase.isBusy)
+                        .accessibilityLabel(isEdit ? "Edit comment text" : "Comment text")
 
                     if !isReply, !isEdit, model.scope == .byChapter {
                         // Honesty note: AO3's work-level comment form is the only
@@ -600,7 +561,17 @@ struct CommentComposerSheet: View {
                 }
             }
             .onChange(of: model.composerText) { _, _ in
-                // Draft-as-you-type: nothing typed is lost to a dismissal or crash.
+                // Preserve draft-as-you-type without synchronously rewriting the
+                // UserDefaults dictionary on every keystroke.
+                draftSaveTask?.cancel()
+                draftSaveTask = Task {
+                    try? await Task.sleep(for: .milliseconds(400))
+                    guard !Task.isCancelled else { return }
+                    model.saveDraft()
+                }
+            }
+            .onDisappear {
+                draftSaveTask?.cancel()
                 model.saveDraft()
             }
         }
@@ -616,18 +587,28 @@ struct CommentComposerSheet: View {
     }
 
     private func parentQuote(_ parent: AO3Comment) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Replying to \(parent.author)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(parent.bodyText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
+        HStack(alignment: .top, spacing: 9) {
+            CommentAvatar(comment: parent, size: 32)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(replyContext(for: parent))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(parent.bodyText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func replyContext(for parent: AO3Comment) -> String {
+        if let chapter = parent.chapterLabel, !chapter.isEmpty {
+            return "Replying to \(parent.author) · \(chapter)"
+        }
+        return "Replying to \(parent.author)"
     }
 
     @ViewBuilder

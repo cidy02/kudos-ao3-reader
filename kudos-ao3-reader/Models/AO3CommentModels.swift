@@ -11,6 +11,9 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
     /// Site-relative profile path (`/users/<name>/pseuds/<pseud>`) for registered
     /// commenters; nil for guests.
     var userPath: String?
+    /// User icon URL already present in the fetched comment markup. The comments
+    /// UI never visits a profile page to discover one.
+    var avatarURL: URL?
     /// AO3's posted timestamp, flattened to a display string ("Wed 08 Jul 2026
     /// 02:38PM UTC"). Kept as text — AO3 renders it pre-localized to UTC and the
     /// UI shows it verbatim rather than pretending to a parsed precision.
@@ -29,6 +32,10 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
     /// the UI must never synthesize these.
     var editPath: String?
     var deletePath: String?
+    /// AO3-rendered thread actions. Kept parse-gated so the UI never invents an
+    /// action AO3 did not expose for this comment/context.
+    var threadPath: String?
+    var parentThreadPath: String?
     var replies: [AO3Comment] = []
 
     /// Permanent link to this comment's thread page on AO3.
@@ -36,9 +43,61 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
         URL(string: "https://archiveofourown.org/comments/\(id)")
     }
 
+    var threadActionURL: URL? { Self.ao3URL(for: threadPath) }
+    var parentThreadURL: URL? { Self.ao3URL(for: parentThreadPath) }
+
+    nonisolated static func ao3URL(for path: String?) -> URL? {
+        guard let path, !path.isEmpty,
+              let base = URL(string: "https://archiveofourown.org") else {
+            return nil
+        }
+        return URL(string: path, relativeTo: base)?.absoluteURL
+    }
+
     /// This comment plus all descendants, depth-first (for flat rendering/search).
     var flattened: [AO3Comment] {
         [self] + replies.flatMap(\.flattened)
+    }
+
+    var descendantCount: Int {
+        1 + replies.reduce(0) { $0 + $1.descendantCount }
+    }
+}
+
+/// A shallow, stable-ID row used by the lazy comments list. Keeping descendants
+/// out of each row prevents one visible parent from eagerly constructing and
+/// diffing its entire reply tree whenever sheet/menu state changes.
+struct AO3CommentRow: Identifiable, Equatable, Sendable {
+    let comment: AO3Comment
+    let depth: Int
+    let threadRootID: Int
+
+    var id: Int { comment.id }
+
+    static func flatten(_ comments: [AO3Comment]) -> [AO3CommentRow] {
+        var result: [AO3CommentRow] = []
+        for comment in comments {
+            append(comment, depth: 0, threadRootID: comment.id, to: &result)
+        }
+        return result
+    }
+
+    private static func append(
+        _ comment: AO3Comment,
+        depth: Int,
+        threadRootID: Int,
+        to result: inout [AO3CommentRow]
+    ) {
+        var shallow = comment
+        shallow.replies = []
+        result.append(AO3CommentRow(
+            comment: shallow,
+            depth: depth,
+            threadRootID: threadRootID
+        ))
+        for reply in comment.replies {
+            append(reply, depth: depth + 1, threadRootID: threadRootID, to: &result)
+        }
     }
 }
 
@@ -53,7 +112,7 @@ struct AO3CommentsPage: Equatable, Sendable {
     /// When this page was fetched (drives the cache TTL + offline staleness label).
     var fetchedAt = Date()
 
-    var totalOnPage: Int { comments.reduce(0) { $0 + $1.flattened.count } }
+    var totalOnPage: Int { comments.reduce(0) { $0 + $1.descendantCount } }
 }
 
 /// One chapter from a work's `/navigate` index — the AO3 chapter id is what the

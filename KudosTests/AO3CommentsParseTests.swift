@@ -28,6 +28,7 @@ struct AO3CommentsParseTests {
         #expect(first.isGuest)
         #expect(first.author == "StarrySky")
         #expect(first.userPath == nil)
+        #expect(first.avatarURL == nil)
         #expect(first.bodyText == "That quiet thank you said everything.\n\nAbsolutely broke me.")
         #expect(first.chapterID == 9003)
         #expect(first.chapterLabel == "Chapter 3")
@@ -40,6 +41,7 @@ struct AO3CommentsParseTests {
         #expect(reply.author == "Calytrix")
         #expect(!reply.isGuest)
         #expect(reply.userPath == "/users/Calytrix/pseuds/Calytrix")
+        #expect(reply.avatarURL?.absoluteString == "https://archiveofourown.org/icon.jpeg")
         #expect(reply.replies.map(\.id) == [1003])
 
         let second = try #require(page.comments.last)
@@ -66,6 +68,38 @@ struct AO3CommentsParseTests {
         let own = try #require(guest.replies.first)
         #expect(own.editPath == "/comments/1002/edit")
         #expect(own.deletePath == "/comments/1002")
+        #expect(own.threadActionURL?.absoluteString == "https://archiveofourown.org/comments/1002")
+        #expect(own.parentThreadURL?.absoluteString == "https://archiveofourown.org/comments/1001")
+    }
+
+    @Test func flattensThreadsIntoStableShallowRows() throws {
+        let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_page"), page: 1)
+        let rows = AO3CommentRow.flatten(page.comments)
+
+        #expect(rows.map(\.id) == [1001, 1002, 1003, 1004])
+        #expect(rows.map(\.depth) == [0, 1, 2, 0])
+        #expect(rows.map(\.threadRootID) == [1001, 1001, 1001, 1004])
+        #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
+    }
+
+    @Test func largeThreadProjectionKeepsEveryRowShallowAndStable() {
+        let comments = (0..<500).map { rootIndex in
+            var root = AO3Comment(id: rootIndex * 10, author: "Root", isGuest: false)
+            root.replies = (1...4).map { replyIndex in
+                AO3Comment(
+                    id: rootIndex * 10 + replyIndex,
+                    author: "Reply",
+                    isGuest: false
+                )
+            }
+            return root
+        }
+
+        let rows = AO3CommentRow.flatten(comments)
+
+        #expect(rows.count == 2_500)
+        #expect(Set(rows.map(\.id)).count == rows.count)
+        #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
     }
 
     @Test func missingCommentsRegionParsesAsEmpty() throws {

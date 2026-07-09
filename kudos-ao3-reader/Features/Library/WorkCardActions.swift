@@ -144,13 +144,30 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
+    @State private var showingComments = false
     @State private var pendingDelete: SavedWork?
+
+    private var commentsWorkID: Int? {
+        work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+    }
+
+    private var commentsAuthors: [String] {
+        work.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+    }
 
     func body(content: Content) -> some View {
         content
             .contextMenu {
                 NavigationLink(value: LocalWorkDestination.reader(work)) {
                     Label("Read", systemImage: "book")
+                }
+
+                if commentsWorkID != nil {
+                    Button {
+                        showingComments = true
+                    } label: {
+                        Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                    }
                 }
 
                 if let onSelect {
@@ -217,6 +234,13 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
             .sheet(isPresented: $showingAddToCollection) {
                 AddToCollectionView(work: work)
             }
+            .sheet(isPresented: $showingComments) {
+                if let id = commentsWorkID {
+                    NavigationStack {
+                        CommentsView(workID: id, workTitle: work.title, workAuthors: commentsAuthors)
+                    }
+                }
+            }
             .deleteConfirmation(
                 for: $pendingDelete,
                 title: "Delete this work?",
@@ -265,6 +289,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     @State private var readerWork: SavedWork?
     @State private var queueWork: SavedWork?
     @State private var collectionWork: SavedWork?
+    @State private var showingComments = false
     @State private var pendingDelete: SavedWork?
 
     private var existingLocalWork: SavedWork? {
@@ -280,6 +305,12 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     Label("Read", systemImage: "book")
                 }
                 .disabled(working)
+
+                Button {
+                    showingComments = true
+                } label: {
+                    Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                }
 
                 if let existingLocalWork, existingLocalWork.isSaved {
                     Button(role: .destructive) {
@@ -346,6 +377,11 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
             .sheet(item: $queueWork) { AddToQueueView(work: $0) }
             .sheet(item: $collectionWork) { AddToCollectionView(work: $0) }
+            .sheet(isPresented: $showingComments) {
+                NavigationStack {
+                    CommentsView(workID: work.id, workTitle: work.title, workAuthors: work.authors)
+                }
+            }
             .deleteConfirmation(
                 for: $pendingDelete,
                 title: "Delete this work?",
