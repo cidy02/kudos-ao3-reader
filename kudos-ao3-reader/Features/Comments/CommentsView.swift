@@ -14,6 +14,7 @@ struct CommentsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
+    @Environment(ThemeManager.self) private var theme
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
@@ -336,7 +337,12 @@ struct CommentsView: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .disabled(model.isOffline)
-            .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
+            // Match the theme's card-shadow language: Dark is shadow-free (the
+            // red capsule already pops there); Light/Sepia get the soft lift.
+            .shadow(
+                color: theme.appTheme == .dark ? .clear : .black.opacity(0.2),
+                radius: 10, y: 3
+            )
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 6)

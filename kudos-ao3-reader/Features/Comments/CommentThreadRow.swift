@@ -75,23 +75,26 @@ struct CommentThreadRow: View {
     var body: some View {
         if isReplyRow {
             // Reply bubble: its own soft surface one elevation step inside the
-            // card, guided by a subtle (never red) connector line.
-            HStack(alignment: .top, spacing: 8) {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(.quaternary)
-                    .frame(width: 2)
-                commentContent
-                    .padding(10)
-                    .background(
-                        theme.appTheme.nestedCardSurface,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                    }
-            }
-            .padding(.leading, bubbleIndent)
+            // card, guided by a subtle (never red) connector line. The connector
+            // is an overlay — an HStack sibling shape would collapse to its 10pt
+            // ideal height under a List row's nil height proposal.
+            commentContent
+                .padding(10)
+                .background(
+                    theme.appTheme.nestedCardSurface,
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                }
+                .padding(.leading, 10)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(.quaternary)
+                        .frame(width: 2)
+                }
+                .padding(.leading, bubbleIndent)
         } else {
             commentContent
         }

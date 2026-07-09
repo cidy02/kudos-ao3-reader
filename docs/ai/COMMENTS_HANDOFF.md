@@ -13,10 +13,14 @@ not pixel-specs. Update this file as work lands so any agent can resume.
 
 Screenshots showed the polish branch drifting dark/murky/heavy. Root causes and
 fixes (all in the view layer; no networking or submission-flow changes):
-- **Murk**: rows used `carouselCardSurface` bubbles — near-invisible against
-  `cardBackdrop` in Dark. Now the thread cards use the SAME `cardSurface` as
-  the Library's `.cardRow()` (those ReaderTheme surfaces were made internal in
-  `AppThemeSurface.swift` so feature card treatments can't drift again).
+- **Murk**: NOT the fill color itself (`carouselCardSurface` and `cardSurface`
+  resolve to the same color — a first draft of these notes misstated that).
+  The murk came from the treatment around it: every comment as its own
+  fragmented bubble, an accent-tinted wash over reply bubbles, hue-tinted
+  carousel borders, the red thread rail, and the opaque CTA slab stacking
+  similar dark layers. All replaced; thread cards now use the Library's
+  `cardSurface` via the shared internal ReaderTheme surfaces in
+  `AppThemeSurface.swift` so feature card treatments can't drift again.
 - **Card-within-a-card (core mockup ask)**: rows stay flat + lazy (polish's
   perf architecture, stable IDs), but each top-level thread now shares ONE
   continuous card via `commentThreadGroupRow(depth:isLastInThread:)`
@@ -40,6 +44,21 @@ fixes (all in the view layer; no networking or submission-flow changes):
 - **Avatars**: placeholder is now neutral (`.quaternary` disk, `.secondary`
   glyph) — the red disk read as a giant accent per row. Real parsed AO3 icons
   unchanged (AsyncImage, lazy, no profile fetching).
+Adversarial-review verdicts on this pass (workflow finders + inline
+verification after its verify agents hit a usage limit):
+- FIXED: the reply connector collapsed to a ~10pt stub (HStack sibling shape
+  under a List row's nil height proposal) — now an overlay sized by the bubble.
+- FIXED: the CTA shadow ignored the theme's shadow language — now Dark is
+  shadow-free like every other card, Light/Sepia keep the soft lift.
+- ACCEPTED TRADEOFF: multi-row thread cards omit `cardBorder`/`cardShadow`
+  (per-row strokes/shadows would draw seams at row joins). Dark is identical
+  to `.cardRow()` anyway (no border/shadow there); Light/Sepia rely on fill
+  contrast like system grouped lists. Revisit only if the owner's screenshot
+  pass flags it.
+- NOT DEFECTS: the composer field on a Light sheet is hairline-delineated
+  (native pattern; focus ring + placeholder make it read editable); Dark reply
+  bubbles rely on the system's tertiary-vs-secondary nesting contrast.
+
 Preserved from the polish branch (verified untouched): unified entry points,
 legacy composer + Report Abuse removal, avatar support, flattened lazy rows +
 stable IDs, cancellable loads, debounced draft saves, chapter-aware reader
