@@ -70,6 +70,9 @@ struct AO3CommentsParseTests {
         #expect(own.deletePath == "/comments/1002")
         #expect(own.threadActionURL?.absoluteString == "https://archiveofourown.org/comments/1002")
         #expect(own.parentThreadURL?.absoluteString == "https://archiveofourown.org/comments/1001")
+        // Drives native "Parent Thread" focus (scroll-to, not an AO3 web page).
+        #expect(own.parentCommentID == 1001)
+        #expect(guest.parentCommentID == nil)
     }
 
     @Test func flattensThreadsIntoStableShallowRows() throws {

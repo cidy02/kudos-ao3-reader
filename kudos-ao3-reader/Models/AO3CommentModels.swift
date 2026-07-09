@@ -88,6 +88,15 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
     var threadActionURL: URL? { Self.ao3URL(for: threadPath) }
     var parentThreadURL: URL? { Self.ao3URL(for: parentThreadPath) }
 
+    /// The immediate parent's id, parsed from AO3's own "Parent Thread" link —
+    /// nil for a top-level comment, or when AO3 didn't render the link. Drives
+    /// scrolling to the parent natively (`CommentsView`'s focus-thread action)
+    /// rather than opening AO3's page for it.
+    var parentCommentID: Int? {
+        guard let path = parentThreadPath, let last = path.split(separator: "/").last else { return nil }
+        return Int(last)
+    }
+
     nonisolated static func ao3URL(for path: String?) -> URL? {
         guard let path, !path.isEmpty,
               let base = URL(string: "https://archiveofourown.org") else {

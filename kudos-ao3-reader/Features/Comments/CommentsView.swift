@@ -21,15 +21,19 @@ struct CommentsView: View {
     var onRequestExpand: (() -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
-    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
+    @State private var showingLogin = false
     @State private var pendingDelete: AO3Comment?
     @State private var actionBanner: String?
     @State private var contextLoadTask: Task<Void, Never>?
+    /// The comment "Thread"/"Parent Thread" most recently scrolled to, briefly
+    /// tinted so the jump is visible even when the target was already on-screen.
+    @State private var highlightedCommentID: Int?
+    @State private var highlightClearTask: Task<Void, Never>?
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -45,104 +49,129 @@ struct CommentsView: View {
     }
 
     var body: some View {
-        List {
-            infoSection
-            scopeSection
-            chapterSection
-            contentSections
-            if case .loaded = model.phase, auth.isLoggedIn {
-                // The safe-area inset reserves the floating CTA's footprint; this
-                // final breathing room also lets the last long comment scroll fully
-                // clear of glass/tab/home-indicator overlays.
-                Color.clear
-                    .frame(height: 64)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .accessibilityHidden(true)
-            }
-        }
-        .cardList()
-        .navigationTitle("Comments")
-        #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .hidesFloatingTabBar()
-        .safeAreaInset(edge: .bottom) { writeCommentBar }
-        .refreshable { await model.load(auth: auth, forceRefresh: true) }
-        .task { await model.loadInitial(auth: auth) }
-        .onChange(of: model.scope) { _, scope in
-            // loadInitial sets scope/chapter itself and does the one load; skip the
-            // redundant reload its programmatic changes would otherwise trigger.
-            guard !model.isApplyingInitialContext else { return }
-            contextLoadTask?.cancel()
-            contextLoadTask = Task {
-                model.resetForContextChange()
-                if scope == .byChapter {
-                    await model.loadChaptersIfNeeded(auth: auth)
-                    guard !Task.isCancelled else { return }
-                    if model.selectedChapter == nil, let first = model.chapters.first {
-                        // Assigning the chapter triggers the selectedChapter
-                        // onChange, which loads — don't also load here (double GET).
-                        model.selectedChapter = first
-                        return
-                    }
+        ScrollViewReader { proxy in
+            List {
+                infoSection
+                scopeSection
+                chapterSection
+                contentSections(scrollProxy: proxy)
+                if case .loaded = model.phase {
+                    // The safe-area inset reserves the floating CTA's footprint; this
+                    // final breathing room also lets the last long comment scroll fully
+                    // clear of glass/tab/home-indicator overlays.
+                    Color.clear
+                        .frame(height: 64)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .accessibilityHidden(true)
                 }
-                await model.load(auth: auth)
             }
-        }
-        .onChange(of: model.selectedChapter) { _, _ in
-            guard !model.isApplyingInitialContext else { return }
-            contextLoadTask?.cancel()
-            model.resetForContextChange()
-            contextLoadTask = Task { await model.load(auth: auth) }
-        }
-        .onChange(of: model.newestFirst) { _, _ in
-            contextLoadTask?.cancel()
-            contextLoadTask = Task { await model.load(auth: auth) }
-        }
-        .onDisappear { contextLoadTask?.cancel() }
-        .sheet(isPresented: composerBinding) {
-            CommentComposerSheet(model: model)
-        }
-        .sheet(isPresented: $showingChapterPicker) {
-            chapterPicker
-        }
-        .alert("Delete this comment?", isPresented: deleteBinding, presenting: pendingDelete) { comment in
-            Button("Delete", role: .destructive) { delete(comment) }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("This removes the comment on AO3. It can't be undone.")
-        }
-        .alert("AO3", isPresented: bannerBinding) {
-            Button("OK") { actionBanner = nil }
-        } message: {
-            Text(actionBanner ?? "")
-        }
-        .toolbar {
-            // Only when presented modally: a push already gets the system's
-            // automatic back button, and a fully-expanded presentation (reached
-            // via onRequestExpand) has nowhere further to expand to.
-            if isModal {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Close")
-                }
-                if let onRequestExpand {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            onRequestExpand()
-                        } label: {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+            .cardList()
+            .navigationTitle("Comments")
+            #if !os(macOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .hidesFloatingTabBar()
+            .safeAreaInset(edge: .bottom) { writeCommentBar }
+            .refreshable { await model.load(auth: auth, forceRefresh: true) }
+            .task { await model.loadInitial(auth: auth) }
+            .onChange(of: model.scope) { _, scope in
+                // loadInitial sets scope/chapter itself and does the one load; skip
+                // the redundant reload its programmatic changes would otherwise trigger.
+                guard !model.isApplyingInitialContext else { return }
+                contextLoadTask?.cancel()
+                contextLoadTask = Task {
+                    model.resetForContextChange()
+                    if scope == .byChapter {
+                        await model.loadChaptersIfNeeded(auth: auth)
+                        guard !Task.isCancelled else { return }
+                        if model.selectedChapter == nil, let first = model.chapters.first {
+                            // Assigning the chapter triggers the selectedChapter
+                            // onChange, which loads — don't also load here (double GET).
+                            model.selectedChapter = first
+                            return
                         }
-                        .accessibilityLabel("Expand to full screen")
+                    }
+                    await model.load(auth: auth)
+                }
+            }
+            .onChange(of: model.selectedChapter) { _, _ in
+                guard !model.isApplyingInitialContext else { return }
+                contextLoadTask?.cancel()
+                model.resetForContextChange()
+                contextLoadTask = Task { await model.load(auth: auth) }
+            }
+            .onChange(of: model.newestFirst) { _, _ in
+                contextLoadTask?.cancel()
+                contextLoadTask = Task { await model.load(auth: auth) }
+            }
+            .onDisappear {
+                contextLoadTask?.cancel()
+                highlightClearTask?.cancel()
+            }
+            .sheet(isPresented: composerBinding) {
+                CommentComposerSheet(model: model)
+            }
+            .sheet(isPresented: $showingChapterPicker) {
+                chapterPicker
+            }
+            .sheet(isPresented: $showingLogin) {
+                AO3LoginView()
+            }
+            .alert("Delete this comment?", isPresented: deleteBinding, presenting: pendingDelete) { comment in
+                Button("Delete", role: .destructive) { delete(comment) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This removes the comment on AO3. It can't be undone.")
+            }
+            .alert("AO3", isPresented: bannerBinding) {
+                Button("OK") { actionBanner = nil }
+            } message: {
+                Text(actionBanner ?? "")
+            }
+            .toolbar {
+                // Only when presented modally: a push already gets the system's
+                // automatic back button, and a fully-expanded presentation (reached
+                // via onRequestExpand) has nowhere further to expand to.
+                if isModal {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
+                    }
+                    if let onRequestExpand {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                onRequestExpand()
+                            } label: {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            }
+                            .accessibilityLabel("Expand to full screen")
+                        }
                     }
                 }
             }
+        }
+    }
+
+    /// Scrolls to and briefly highlights `commentID` within the currently-loaded
+    /// list ("Thread"/"Parent Thread" — the native equivalent of AO3's own
+    /// isolated-thread page, no extra request since the target is always already
+    /// on this same fetched page).
+    private func focusThread(_ commentID: Int, proxy: ScrollViewProxy) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo(commentID, anchor: .center)
+        }
+        highlightedCommentID = commentID
+        highlightClearTask?.cancel()
+        highlightClearTask = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            highlightedCommentID = nil
         }
     }
 
@@ -284,7 +313,7 @@ struct CommentsView: View {
     // MARK: Content
 
     @ViewBuilder
-    private var contentSections: some View {
+    private func contentSections(scrollProxy: ScrollViewProxy) -> some View {
         switch model.phase {
         case .idle, .loading:
             Section {
@@ -326,9 +355,14 @@ struct CommentsView: View {
                         onEdit: { model.startEditing($0) },
                         onDelete: { pendingDelete = $0 },
                         onCopyLink: { copyLink($0) },
-                        onOpenURL: { router.open($0) }
+                        onFocusThread: { focusThread($0, proxy: scrollProxy) },
+                        onRequestLogin: { showingLogin = true }
                     )
-                    .commentThreadGroupRow(depth: row.depth, isLastInThread: row.isLastInThread)
+                    .id(row.comment.id)
+                    .commentThreadGroupRow(
+                        depth: row.depth, isLastInThread: row.isLastInThread,
+                        isHighlighted: highlightedCommentID == row.comment.id
+                    )
                 }
                 if let page = model.page, page.totalPages > 1 {
                     paginationSection(page)
@@ -392,14 +426,23 @@ struct CommentsView: View {
 
     @ViewBuilder
     private var writeCommentBar: some View {
-        if case .loaded = model.phase, auth.isLoggedIn {
+        if case .loaded = model.phase {
             // Floats over the page backdrop — no opaque slab. The safe-area inset
             // (plus the list's trailing spacer) keeps content from ever sitting
-            // underneath it; the soft shadow does the lifting.
+            // underneath it; the soft shadow does the lifting. Shown whether or
+            // not the user is signed in: logged out, it opens the AO3 login sheet
+            // instead of composing — it must never be a dead end.
             Button {
-                model.startComposer()
+                if auth.isLoggedIn {
+                    model.startComposer()
+                } else {
+                    showingLogin = true
+                }
             } label: {
-                Label("Write a comment", systemImage: "pencil")
+                Label(
+                    auth.isLoggedIn ? "Write a comment" : "Log in to comment",
+                    systemImage: auth.isLoggedIn ? "pencil" : "person.crop.circle.badge.questionmark"
+                )
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -416,7 +459,7 @@ struct CommentsView: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 6)
-            .accessibilityLabel("Write a comment")
+            .accessibilityLabel(auth.isLoggedIn ? "Write a comment" : "Log in to comment")
         }
     }
 

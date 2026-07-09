@@ -10,6 +10,10 @@ import SwiftUI
 private struct CommentThreadGroupRowModifier: ViewModifier {
     let depth: Int
     let isLastInThread: Bool
+    /// Briefly true right after "Thread"/"Parent Thread" scrolls to this row —
+    /// a tint flash confirms which comment got focused (scrolling to a comment
+    /// already on-screen would otherwise be invisible).
+    var isHighlighted = false
 
     @Environment(ThemeManager.self) private var theme
 
@@ -30,6 +34,18 @@ private struct CommentThreadGroupRowModifier: ViewModifier {
                     style: .continuous
                 )
                 .fill(theme.appTheme.cardSurface)
+                .overlay {
+                    if isHighlighted {
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: isFirst ? 16 : 0,
+                            bottomLeadingRadius: isLastInThread ? 16 : 0,
+                            bottomTrailingRadius: isLastInThread ? 16 : 0,
+                            topTrailingRadius: isFirst ? 16 : 0,
+                            style: .continuous
+                        )
+                        .fill(Color.accentColor.opacity(0.14))
+                    }
+                }
             }
             .listRowInsets(EdgeInsets(
                 top: isFirst ? 6 : 0, leading: 16,
@@ -37,12 +53,15 @@ private struct CommentThreadGroupRowModifier: ViewModifier {
             ))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+            .animation(.easeInOut(duration: 0.3), value: isHighlighted)
     }
 }
 
 extension View {
-    func commentThreadGroupRow(depth: Int, isLastInThread: Bool) -> some View {
-        modifier(CommentThreadGroupRowModifier(depth: depth, isLastInThread: isLastInThread))
+    func commentThreadGroupRow(depth: Int, isLastInThread: Bool, isHighlighted: Bool = false) -> some View {
+        modifier(CommentThreadGroupRowModifier(
+            depth: depth, isLastInThread: isLastInThread, isHighlighted: isHighlighted
+        ))
     }
 }
 
@@ -57,7 +76,12 @@ struct CommentThreadRow: View {
     let onEdit: (AO3Comment) -> Void
     let onDelete: (AO3Comment) -> Void
     let onCopyLink: (AO3Comment) -> Void
-    let onOpenURL: (URL) -> Void
+    /// Scrolls to and briefly highlights the given comment id within the
+    /// currently-loaded list — native in-app focus, not an AO3 web page.
+    let onFocusThread: (Int) -> Void
+    /// Presents the AO3 login sheet (from the disabled-looking "Log in to
+    /// Reply" placeholder, which must actually do something when tapped).
+    let onRequestLogin: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -175,10 +199,9 @@ struct CommentThreadRow: View {
                         Label("Reply", systemImage: "arrowshape.turn.up.left")
                     }
                 } else if comment.canReply {
-                    Button {} label: {
+                    Button { onRequestLogin() } label: {
                         Label("Log in to Reply", systemImage: "person.crop.circle.badge.questionmark")
                     }
-                    .disabled(true)
                 }
                 if comment.editPath != nil {
                     Button { onEdit(comment) } label: {
@@ -188,13 +211,15 @@ struct CommentThreadRow: View {
                 Button { onCopyLink(comment) } label: {
                     Label("Copy Link", systemImage: "link")
                 }
-                if let url = comment.threadActionURL {
-                    Button { onOpenURL(url) } label: {
+                if comment.threadPath != nil {
+                    // Scrolls to this comment in the native list (mostly useful
+                    // as a "where am I" re-center after browsing a long page).
+                    Button { onFocusThread(comment.id) } label: {
                         Label("Thread", systemImage: "bubble.left.and.bubble.right")
                     }
                 }
-                if let url = comment.parentThreadURL {
-                    Button { onOpenURL(url) } label: {
+                if let parentID = comment.parentCommentID {
+                    Button { onFocusThread(parentID) } label: {
                         Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
                     }
                 }
