@@ -64,7 +64,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     // MARK: Requests
 
-    private func getHTML(_ url: URL) async throws -> String {
+    /// Internal (not private) so feature extensions in other files (e.g.
+    /// `AO3Client+Comments`) fetch through the same coalesced/retried/paced GET
+    /// pipeline instead of growing a second one.
+    func getHTML(_ url: URL) async throws -> String {
         let data = try await fetchData(from: url)
         return Self.htmlString(from: data)
     }

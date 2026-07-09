@@ -201,7 +201,9 @@ struct ReaderView: View {
                         }
                         Menu {
                             if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
-                                AO3WorkActionsMenu(workID: id, actions: workActions)
+                                AO3WorkActionsMenu(workID: id, actions: workActions,
+                                                   workTitle: work.title,
+                                                   workAuthors: [work.author])
                             }
                         } label: {
                             Label("More actions", systemImage: "ellipsis.circle")

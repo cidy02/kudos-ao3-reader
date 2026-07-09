@@ -23,6 +23,18 @@ final class AO3WorkActionsModel {
     var bookmarkInput = AO3AuthService.BookmarkInput()
     var bookmarkError: String?
 
+    /// Drives the native comments screen (sheet). Title/authors are captured at
+    /// tap time — the model itself stays work-agnostic.
+    var showingCommentsScreen = false
+    var commentsTitle = ""
+    var commentsAuthors: [String] = []
+
+    func startViewingComments(title: String, authors: [String]) {
+        commentsTitle = title
+        commentsAuthors = authors
+        showingCommentsScreen = true
+    }
+
     func giveKudos(workID: Int, auth: AO3AuthService) {
         run { try await auth.giveKudos(workID: workID) }
     }
@@ -122,6 +134,15 @@ private struct AO3WorkActionsModifier: ViewModifier {
             }
             .sheet(isPresented: $actions.showingBookmark) {
                 AO3BookmarkComposer(actions: actions, workID: workID, auth: auth)
+            }
+            .sheet(isPresented: $actions.showingCommentsScreen) {
+                NavigationStack {
+                    CommentsView(
+                        workID: workID,
+                        workTitle: actions.commentsTitle,
+                        workAuthors: actions.commentsAuthors
+                    )
+                }
             }
             .alert("AO3", isPresented: bannerPresented) {
                 Button("OK", role: .cancel) { actions.banner = nil }

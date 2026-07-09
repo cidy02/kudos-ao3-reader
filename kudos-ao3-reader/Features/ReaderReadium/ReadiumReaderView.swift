@@ -497,6 +497,12 @@ struct ReadiumReaderView: View {
     @AppStorage("readerJustify") private var justifyText = false
 
     @State private var book = ReadiumBook()
+    /// Native comments sheet over the reader (only for AO3-backed works).
+    @State private var showingComments = false
+
+    private var ao3WorkID: Int? {
+        work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+    }
     @State private var dismissDragOffset: CGFloat = 0
     @State private var isDismissingByDrag = false
 
@@ -594,6 +600,11 @@ struct ReadiumReaderView: View {
                 // Library toolbar (separate ToolbarItems get the system's wide spacing).
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 2) {
+                        if ao3WorkID != nil {
+                            Button { showingComments = true } label: {
+                                Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                            }
+                        }
                         Button { router.toggle(.readerChapters) } label: {
                             Label("Chapters", systemImage: "list.bullet")
                         }
@@ -605,6 +616,13 @@ struct ReadiumReaderView: View {
                 }
             }
             .sheet(isPresented: readerPanelBinding) { readerSheet }
+            .sheet(isPresented: $showingComments) {
+                if let id = ao3WorkID {
+                    NavigationStack {
+                        CommentsView(workID: id, workTitle: work.title, workAuthors: [work.author])
+                    }
+                }
+            }
             // Immersive reading: hide the tab bar; the nav/status bars follow the chrome.
             .toolbar(.hidden, for: .tabBar)
             .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)

@@ -399,7 +399,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         ToolbarItem {
             Menu {
-                if let id = ao3WorkID { AO3WorkActionsMenu(workID: id, actions: workActions) }
+                if let id = ao3WorkID {
+                    AO3WorkActionsMenu(workID: id, actions: workActions,
+                                       workTitle: displayTitle, workAuthors: displayAuthorList)
+                }
             } label: {
                 Label("More actions", systemImage: "ellipsis.circle")
             }
@@ -443,6 +446,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private var displayAuthor: String {
         if let author = localWork?.author, !author.isEmpty { return author }
         return remote?.authorText ?? ""
+    }
+
+    /// Individual author names (for the comments screen's "Author" badge).
+    private var displayAuthorList: [String] {
+        if let authors = remote?.authors, !authors.isEmpty { return authors }
+        return displayAuthor.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     private var displaySummary: String {
@@ -559,10 +568,21 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @ViewBuilder
     private var statsSection: some View {
-        if displayKudos != nil || displayComments != nil || displayHits != nil {
+        if displayKudos != nil || displayComments != nil || displayHits != nil || ao3WorkID != nil {
             Section("Stats") {
                 if let kudos = displayKudos { LabeledContent("Kudos", value: kudos.formatted()) }
-                if let comments = displayComments { LabeledContent("Comments", value: comments.formatted()) }
+                if let id = ao3WorkID {
+                    // Comments open the native comments screen; the count doubles
+                    // as the row's value when known.
+                    NavigationLink {
+                        CommentsView(workID: id, workTitle: displayTitle, workAuthors: displayAuthorList)
+                    } label: {
+                        LabeledContent("Comments",
+                                       value: displayComments.map { $0.formatted() } ?? "View")
+                    }
+                } else if let comments = displayComments {
+                    LabeledContent("Comments", value: comments.formatted())
+                }
                 if let hits = displayHits { LabeledContent("Hits", value: hits.formatted()) }
             }
         }

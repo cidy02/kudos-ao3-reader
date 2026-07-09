@@ -7,6 +7,10 @@ import SwiftUI
 struct AO3WorkActionsMenu: View {
     let workID: Int
     @Bindable var actions: AO3WorkActionsModel
+    /// Context for the native comments screen ("View Comments"); optional so
+    /// existing call sites keep working with just an id.
+    var workTitle = ""
+    var workAuthors: [String] = []
 
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -17,6 +21,10 @@ struct AO3WorkActionsMenu: View {
                 Label("Give Kudos", systemImage: "heart")
             }
             .disabled(actions.isWorking)
+
+            Button { actions.startViewingComments(title: workTitle, authors: workAuthors) } label: {
+                Label("View Comments", systemImage: "bubble.left.and.bubble.right")
+            }
 
             Button { actions.startComment() } label: {
                 Label("Leave a Comment", systemImage: "bubble.left")
