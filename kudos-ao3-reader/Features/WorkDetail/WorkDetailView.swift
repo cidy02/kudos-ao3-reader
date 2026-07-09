@@ -362,12 +362,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if work.ao3WorkID == nil, WorkTags.ao3WorkID(from: work.sourceURL) == nil {
             return "Imported EPUB — kept on this device for offline reading."
         }
-        if !work.hasEPUB {
-            return "Finished. The file was freed to save space; it re-downloads when you read it again."
+        switch work.readingState {
+        case .finished:
+            return work.hasEPUB
+                ? "Finished."
+                : "Finished. The file was freed to save space; it re-downloads when you read it again."
+        case .freedHistory:
+            // Freed without being finished — don't call it "Finished."
+            return "In your reading history. The file was freed to save space; it re-downloads when you read it again."
+        case .inProgress, .unread:
+            if work.isFavorite { return "Favorited, so its file is kept when finished." }
+            return "Reading. When you finish, the file is freed unless you save or favorite it."
         }
-        if work.isFinished { return "Finished." }
-        if work.isFavorite { return "Favorited, so its file is kept when finished." }
-        return "Reading. When you finish, the file is freed unless you save or favorite it."
     }
 
     private func hasReadableEPUB(for work: SavedWork) -> Bool {

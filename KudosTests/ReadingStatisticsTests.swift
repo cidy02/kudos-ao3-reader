@@ -64,6 +64,19 @@ struct ReadingStatisticsTests {
         #expect(statistics.latestReadDate == now)
     }
 
+    @Test func readiumOnlyWorkCountsAsStarted() {
+        // Regression: a private re-listing of the "started" fields here once missed
+        // the Readium locator, undercounting works read only in the iOS reader.
+        let readiumOnly = work("Readium only")
+        readiumOnly.readiumLocator =
+            #"{"href":"c1.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":0.3}}"#
+
+        let statistics = ReadingStatistics(works: [readiumOnly])
+
+        #expect(statistics.startedWorks == 1)
+        #expect(statistics.inProgressWorks == 1)
+    }
+
     @Test func topFandomsCountEachFandomOncePerStartedWork() {
         let first = work("First")
         first.lastReadDate = Date()

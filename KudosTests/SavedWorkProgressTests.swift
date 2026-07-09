@@ -101,4 +101,58 @@ struct SavedWorkProgressTests {
         reading.readiumLocator = Self.readiumLocator(total: 0.8)
         #expect(reading.readingProgress == 0.8)
     }
+
+    // MARK: readingState — one partition for the whole reading lifecycle
+
+    @Test func readingStatePartitionsTheLifecycle() {
+        // Fresh EPUB, never opened.
+        #expect(work().readingState == .unread)
+
+        // Opened (either reader) with the file on disk.
+        let reading = work()
+        reading.lastScrollFraction = 0.3
+        #expect(reading.readingState == .inProgress)
+
+        let readiumRead = work()
+        readiumRead.readiumLocator = Self.readiumLocator(total: 0.2)
+        #expect(readiumRead.readingState == .inProgress)
+
+        // Marked finished.
+        let finished = work()
+        finished.isFinished = true
+        #expect(finished.readingState == .finished)
+
+        // EPUB freed without finishing → history-only record.
+        let freed = work()
+        freed.lastReadDate = Date()
+        freed.hasEPUB = false
+        #expect(freed.readingState == .freedHistory)
+    }
+
+    @Test func finishedWinsOverFreedEPUB() {
+        // Finished works can have their EPUB freed (WorkLifecycle) — they must stay
+        // "finished", not degrade to history, so the Finished shelf keeps them.
+        let finishedFreed = work()
+        finishedFreed.isFinished = true
+        finishedFreed.hasEPUB = false
+        #expect(finishedFreed.readingState == .finished)
+    }
+
+    @Test func readingStateMatchesIsInProgress() {
+        // isInProgress is defined via the partition; a work is in progress iff its
+        // state says so, across the axes that feed it.
+        let variants: [(SavedWork) -> Void] = [
+            { _ in },                                  // unread
+            { $0.lastScrollFraction = 0.5 },           // legacy scroll
+            { $0.readiumLocator = Self.readiumLocator(total: 0.1) },
+            { $0.isFinished = true },
+            { $0.hasEPUB = false },
+            { $0.hasEPUB = false; $0.lastReadDate = Date() },
+        ]
+        for configure in variants {
+            let sample = work()
+            configure(sample)
+            #expect(sample.isInProgress == (sample.readingState == .inProgress))
+        }
+    }
 }

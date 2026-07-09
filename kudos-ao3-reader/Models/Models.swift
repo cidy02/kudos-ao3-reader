@@ -373,10 +373,38 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
             || lastSpineIndex > 0 || lastScrollFraction > 0
     }
 
+    /// The single reading-lifecycle state, folding `isFinished` / `hasEPUB` /
+    /// `hasStartedReading` into one partition so shelf filters, statistics, and
+    /// (eventually) Library/History filter facets can't drift on the definitions.
+    /// Exactly one case is true for every work.
+    ///
+    /// Orthogonal concerns stay out on purpose: AO3's posted status (`isComplete`,
+    /// the WIP-vs-complete search filter), queue membership, privacy, and
+    /// soft-deletion (`isPendingDeletion`) are separate axes callers still filter on.
+    /// Note SwiftData `#Predicate`s can't call computed properties — @Query sites
+    /// (e.g. reading history) keep the equivalent stored-field predicate instead.
+    enum ReadingState: String, CaseIterable {
+        /// EPUB on disk, never opened in a reader.
+        case unread
+        /// Started but not finished, with its EPUB on disk (the "Reading Now" state).
+        case inProgress
+        /// Marked finished by the user — wins even after the EPUB is freed.
+        case finished
+        /// EPUB freed without being finished: a history-only record; revisiting
+        /// re-downloads it.
+        case freedHistory
+    }
+
+    var readingState: ReadingState {
+        if isFinished { return .finished }
+        if !hasEPUB { return .freedHistory }
+        return hasStartedReading ? .inProgress : .unread
+    }
+
     /// Started but not finished, with its EPUB on disk — the in-progress / "Reading
     /// Now" state shared by the Home and Library shelves.
     var isInProgress: Bool {
-        hasEPUB && !isFinished && hasStartedReading
+        readingState == .inProgress
     }
 
     /// Reading progress in 0…1 for the Reading Now shelves. Prefers the Readium

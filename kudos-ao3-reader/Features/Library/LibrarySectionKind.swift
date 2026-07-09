@@ -67,7 +67,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .readingNow:
             // In-progress (started, not finished, file present) — most recently read first.
             works
-                .filter { $0.isInProgress && !$0.isQueueOnlyWork && visible($0) }
+                .filter { $0.readingState == .inProgress && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .savedForLater:
             // Native Saved for Later queue members plus legacy "saved" works that
@@ -78,7 +78,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
                 .sorted { recency($0) > recency($1) }
         case .finished:
             works
-                .filter { $0.isFinished && !$0.isQueueOnlyWork && visible($0) }
+                .filter { $0.readingState == .finished && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { ($0.lastReadDate ?? .distantPast) > ($1.lastReadDate ?? .distantPast) }
         case .collections:
             []

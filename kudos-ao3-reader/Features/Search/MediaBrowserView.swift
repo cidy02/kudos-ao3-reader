@@ -282,8 +282,12 @@ struct MediaBrowserView: View {
 }
 
 private extension SavedWork {
-    /// The user has opened this work at least once (has reader progress / finished).
+    /// The user has opened this work at least once (or finished it, even if its
+    /// progress fields were later reset). Defers to the model's canonical
+    /// `hasStartedReading` — a local re-listing of its fields here once missed the
+    /// Readium reader's locator, so works read only on iOS never surfaced a
+    /// recently-read fandom.
     var hasBeenRead: Bool {
-        isFinished || lastSpineIndex > 0
+        isFinished || hasStartedReading
     }
 }

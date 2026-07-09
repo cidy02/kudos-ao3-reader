@@ -260,7 +260,9 @@ private struct LocalReadingHistoryView: View {
 
     // Queued works whose preservation is pending/failed have hasEPUB == false but are
     // protected; keep them out of the reading-history list. Soft-deleted works belong
-    // in Recently Deleted, not history.
+    // in Recently Deleted, not history. This is the stored-field spelling of "freed"
+    // (`.freedHistory` plus finished-then-freed) — #Predicate can't call computed
+    // properties like `readingState`, so keep it in sync with that partition.
     @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater && !$0.isPendingDeletion },
            sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]

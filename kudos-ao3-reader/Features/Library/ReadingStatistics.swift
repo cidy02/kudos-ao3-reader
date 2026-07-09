@@ -59,11 +59,12 @@ struct ReadingStatistics {
         topFandoms = Self.fandomCounts(in: started)
     }
 
+    /// Finished counts as started even when the progress fields were reset. Defers
+    /// to the model's canonical `hasStartedReading` — a private re-listing of its
+    /// fields here once drifted (it missed the Readium reader's locator, undercounting
+    /// works read only on iOS).
     private static func hasStarted(_ work: SavedWork) -> Bool {
-        work.isFinished
-            || work.lastReadDate != nil
-            || work.lastSpineIndex > 0
-            || work.lastScrollFraction > 0
+        work.isFinished || work.hasStartedReading
     }
 
     private static func countOpened(
