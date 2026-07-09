@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import WebKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -50,6 +51,9 @@ struct ContentView: View {
 
     var body: some View {
         content
+            // Warms WebKit at launch instead of on first real use (the AO3 login
+            // sheet, or Browse) — see WebKitPrewarmView.
+            .background { WebKitPrewarmView() }
             // Overlay first so the environments below wrap it too — otherwise the
             // banner sits outside the .environment scope and can't find the queue.
             .overlay(alignment: .bottom) { DownloadQueueBanner() }
@@ -338,6 +342,51 @@ struct ContentView: View {
                 searchButton
             }
         #endif
+    }
+}
+
+/// Warms WebKit's shared WebContent/Networking process pool at launch instead of
+/// on first real use. The very first `WKWebView` load in a process incurs a
+/// one-time process spin-up that's markedly slower on Simulator and under this
+/// app's ad-hoc "Sign to Run Locally" debug signing — several seconds, enough to
+/// read as a freeze right after whichever screen first needs a webview (commonly
+/// the AO3 login sheet, since Comments/Account don't otherwise use one). Loads a
+/// local `about:blank` "page" — no network request, no AO3 traffic — in its own
+/// throwaway webview that's entirely decoupled from `AO3AuthService`'s login
+/// webview, so it can never race or get pulled away from it mid-login.
+///
+/// Needs a real window to avoid WebKit throttling/suspending an off-screen
+/// content process (see the same concern noted in `AO3LoginView`), so this stays
+/// mounted (tiny, invisible) for the app's lifetime rather than firing once and
+/// tearing down — once warm, an idle 1×1 webview costs nothing further.
+private struct WebKitPrewarmView: View {
+    @State private var webView: WKWebView?
+
+    var body: some View {
+        Group {
+            if let webView {
+                WebView(webView: webView)
+            }
+        }
+        .frame(width: 1, height: 1)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .task {
+            guard webView == nil else { return }
+            // Let the first frame settle before spending WebKit's spin-up cost,
+            // so this never competes with cold-launch rendering itself.
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, webView == nil else { return }
+            let configuration = WKWebViewConfiguration()
+            // Matches AO3WebLoginCoordinator's configuration so this also warms
+            // the .default() datastore's on-disk cookie-store initialization,
+            // not just the WebContent rendering process.
+            configuration.websiteDataStore = .default()
+            let created = WKWebView(frame: .zero, configuration: configuration)
+            webView = created
+            created.load(URLRequest(url: URL(string: "about:blank")!))
+        }
     }
 }
 
