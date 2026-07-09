@@ -2,9 +2,9 @@
 
 Branch lineage: `feature/ao3-comments` (initial build, 2026-07-09) →
 `comments-ui-polish` (Codex functional polish) →
-**`comments-ui-visual-regression-fix`** (current: restores the mockup/Kudos
-visual language the polish lost, keeps its functional wins — see the section
-"Visual regression fix" below).
+`comments-ui-visual-regression-fix` (restores the mockup/Kudos visual language
+the polish lost) → **`comments-thread-nesting-polish`** (current: reply-depth,
+connector, inline timestamp, and action-row correction — see T-85 below).
 Owner spec: native comments UI (view all/by-chapter, threads, reply, compose,
 actions), AO3-respectful networking, never-double-post. Mockups are directional,
 not pixel-specs. Update this file as work lands so any agent can resume.
@@ -67,6 +67,34 @@ and all networking behavior. Not restored from `feature/ao3-comments`: the
 recursive-render thread cell (replaced by the flat-row group treatment — perf)
 and the always-on "View thread" screen idea (thread/parent links live in the
 overflow menu). No fake hearts/likes added.
+
+## T-85 thread nesting and timestamp correction (2026-07-09)
+
+- `AO3CommentRow.flatten` still produces shallow, stable-ID lazy rows, but now
+  carries only the connector facts each row needs: direct children, next
+  sibling, and ancestor depths that must remain open through a branched
+  subtree. Logical depth remains unbounded; `CommentThreadGeometry` caps only
+  visual indentation at depth 3 so phone-width comment text stays readable.
+- `CommentThreadConnector` draws thin neutral avatar-to-avatar elbow paths.
+  Lines stop at avatar edges, continue through branched descendants, and use
+  the real avatar center for each visual depth instead of a fixed far-edge rail.
+- `AO3CommentTimestamp` parses the timestamp already present in the fetched
+  comment markup (no new request), keeps the raw text as a failure fallback,
+  and renders under-24-hour relative time, local-calendar Yesterday, or compact
+  localized absolute date/time with the user's timezone abbreviation.
+- Timestamp now sits inline after author/Guest/Author; Reply owns the left side
+  of the action row when the session can reply, overflow stays neutral/right,
+  and signed-out users get only the explicit Log in to Reply menu action.
+- Coverage added for named-zone/offset parsing, recent/yesterday/older output,
+  local-midnight boundaries, invalid fallback, branched connector projection,
+  and visual-depth capping. `Scripts/verify.sh` ALL GREEN: **279 tests / 33
+  suites**, iOS + macOS builds, invariants, lint gate, whitespace.
+- Launch-only production-row fixture was inspected on iPhone 17/iOS 26.5 in
+  Light and Dark: parent → reply → reply-to-reply indentation/connectors,
+  inline Guest/Author timestamps, left Reply, and right overflow were readable.
+  The fixture hooks were removed before verification/commit. Deleted-parent
+  visual state was not available (the existing parser skips id-less AO3 deleted
+  placeholders); owner screenshot approval and live action targeting remain.
 
 ## AO3 endpoints & markup (verified live, 2026-07-09, ~8 recon GETs)
 

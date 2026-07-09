@@ -57,9 +57,12 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
     /// UI never visits a profile page to discover one.
     var avatarURL: URL?
     /// AO3's posted timestamp, flattened to a display string ("Wed 08 Jul 2026
-    /// 02:38PM UTC"). Kept as text — AO3 renders it pre-localized to UTC and the
-    /// UI shows it verbatim rather than pretending to a parsed precision.
+    /// 02:38PM UTC"). Kept as a fallback if Foundation cannot parse an
+    /// unexpected AO3 timestamp shape.
     var postedText: String = ""
+    /// Parsed instant for relative/local display. This is presentation-only
+    /// data from the same fetched markup; it does not trigger another request.
+    var postedAt: Date?
     /// The chapter this comment was left on, when AO3 shows one (multichapter
     /// works viewed whole; single-chapter works omit it).
     var chapterID: Int?
@@ -119,9 +122,24 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
 /// out of each row prevents one visible parent from eagerly constructing and
 /// diffing its entire reply tree whenever sheet/menu state changes.
 struct AO3CommentRow: Identifiable, Equatable, Sendable {
+    private struct ProjectionContext {
+        let hasNextSibling: Bool
+        let continuingAncestorDepths: [Int]
+    }
+
     let comment: AO3Comment
     let depth: Int
     let threadRootID: Int
+    /// Whether this comment has at least one direct reply. Lets the view extend
+    /// the connector below this avatar without retaining the reply subtree.
+    let hasReplies: Bool
+    /// Whether another comment follows beside this one under the same parent.
+    /// The parent connector stays open through this row when true.
+    let hasNextSibling: Bool
+    /// Logical ancestor depths whose lines must pass through this row to reach
+    /// a later sibling. Small value-only metadata preserves branched hierarchy
+    /// without putting descendant comments back into the lazy row payload.
+    let continuingAncestorDepths: [Int]
     /// The final row of its top-level thread group — the card-within-a-card
     /// rendering closes the shared thread card after this row.
     var isLastInThread = false
@@ -131,7 +149,16 @@ struct AO3CommentRow: Identifiable, Equatable, Sendable {
     static func flatten(_ comments: [AO3Comment]) -> [AO3CommentRow] {
         var result: [AO3CommentRow] = []
         for comment in comments {
-            append(comment, depth: 0, threadRootID: comment.id, to: &result)
+            append(
+                comment,
+                depth: 0,
+                threadRootID: comment.id,
+                context: ProjectionContext(
+                    hasNextSibling: false,
+                    continuingAncestorDepths: []
+                ),
+                to: &result
+            )
             if !result.isEmpty { result[result.count - 1].isLastInThread = true }
         }
         return result
@@ -141,17 +168,35 @@ struct AO3CommentRow: Identifiable, Equatable, Sendable {
         _ comment: AO3Comment,
         depth: Int,
         threadRootID: Int,
+        context: ProjectionContext,
         to result: inout [AO3CommentRow]
     ) {
+        let hasReplies = !comment.replies.isEmpty
         var shallow = comment
         shallow.replies = []
         result.append(AO3CommentRow(
             comment: shallow,
             depth: depth,
-            threadRootID: threadRootID
+            threadRootID: threadRootID,
+            hasReplies: hasReplies,
+            hasNextSibling: context.hasNextSibling,
+            continuingAncestorDepths: context.continuingAncestorDepths
         ))
-        for reply in comment.replies {
-            append(reply, depth: depth + 1, threadRootID: threadRootID, to: &result)
+        for (index, reply) in comment.replies.enumerated() {
+            var childContinuations = context.continuingAncestorDepths
+            if context.hasNextSibling, depth > 0 {
+                childContinuations.append(depth - 1)
+            }
+            append(
+                reply,
+                depth: depth + 1,
+                threadRootID: threadRootID,
+                context: ProjectionContext(
+                    hasNextSibling: index < comment.replies.count - 1,
+                    continuingAncestorDepths: childContinuations
+                ),
+                to: &result
+            )
         }
     }
 }

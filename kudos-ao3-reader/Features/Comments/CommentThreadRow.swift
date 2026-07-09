@@ -65,6 +65,99 @@ extension View {
     }
 }
 
+/// Pure layout constants for the lazy threaded rows. Logical depth is never
+/// capped in `AO3CommentRow`; only the on-screen indent is capped so deeply
+/// nested AO3 conversations retain a readable text measure on phones.
+enum CommentThreadGeometry {
+    static let maximumVisualDepth = 3
+    static let rootAvatarSize: CGFloat = 38
+    static let replyAvatarSize: CGFloat = 30
+    static let replyBubblePadding: CGFloat = 10
+    static let firstReplyIndent: CGFloat = 28
+    static let depthStep: CGFloat = 22
+
+    static func visualDepth(for logicalDepth: Int) -> Int {
+        min(max(logicalDepth, 0), maximumVisualDepth)
+    }
+
+    static func bubbleLeadingInset(for logicalDepth: Int) -> CGFloat {
+        let depth = visualDepth(for: logicalDepth)
+        guard depth > 0 else { return 0 }
+        return firstReplyIndent + CGFloat(depth - 1) * depthStep
+    }
+
+    static func avatarCenterX(for logicalDepth: Int) -> CGFloat {
+        guard logicalDepth > 0 else { return rootAvatarSize / 2 }
+        return bubbleLeadingInset(for: logicalDepth)
+            + replyBubblePadding
+            + replyAvatarSize / 2
+    }
+}
+
+/// Draws only the connector segments needed by one shallow row. Incoming and
+/// outgoing segments meet across adjacent List rows, while ancestor lines stay
+/// open through branched subtrees. Lines stop at avatar edges so they sit
+/// behind the conversation hierarchy rather than painting over profile icons.
+private struct CommentThreadConnector: View {
+    let row: AO3CommentRow
+
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                let height = geometry.size.height
+                let avatarCenterX = CommentThreadGeometry.avatarCenterX(for: row.depth)
+
+                for ancestorDepth in row.continuingAncestorDepths {
+                    let x = CommentThreadGeometry.avatarCenterX(for: ancestorDepth)
+                    guard abs(x - avatarCenterX) > 0.5 else { continue }
+                    path.move(to: CGPoint(x: x, y: -10))
+                    path.addLine(to: CGPoint(x: x, y: height + 10))
+                }
+
+                if row.depth == 0 {
+                    if row.hasReplies {
+                        path.move(to: CGPoint(
+                            x: avatarCenterX,
+                            y: CommentThreadGeometry.rootAvatarSize
+                        ))
+                        path.addLine(to: CGPoint(x: avatarCenterX, y: height + 10))
+                    }
+                    return
+                }
+
+                let parentX = CommentThreadGeometry.avatarCenterX(for: row.depth - 1)
+                let avatarTop = CommentThreadGeometry.replyBubblePadding
+                let branchY = avatarTop / 2
+
+                path.move(to: CGPoint(x: parentX, y: -10))
+                path.addLine(to: CGPoint(
+                    x: parentX,
+                    y: row.hasNextSibling ? height + 10 : branchY
+                ))
+                path.move(to: CGPoint(x: parentX, y: branchY))
+                path.addQuadCurve(
+                    to: CGPoint(x: avatarCenterX, y: avatarTop),
+                    control: CGPoint(x: parentX, y: avatarTop)
+                )
+
+                if row.hasReplies {
+                    path.move(to: CGPoint(
+                        x: avatarCenterX,
+                        y: avatarTop + CommentThreadGeometry.replyAvatarSize
+                    ))
+                    path.addLine(to: CGPoint(x: avatarCenterX, y: height + 10))
+                }
+            }
+            .stroke(
+                Color.secondary.opacity(0.24),
+                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 /// One stable, shallow row from `CommentsModel.displayRows`. Top-level comments
 /// sit directly on the thread card; replies render as indented nested bubbles
 /// with a quiet connector line — a conversation group, not a timeline rail.
@@ -88,22 +181,26 @@ struct CommentThreadRow: View {
 
     private var comment: AO3Comment { row.comment }
     private var isReplyRow: Bool { row.depth > 0 }
-    /// Nested indent inside the thread card, capped so long AO3 comments keep a
-    /// readable measure on phone widths.
-    private var bubbleIndent: CGFloat { CGFloat(min(row.depth, 3) - 1) * 14 }
+    private var bubbleLeadingInset: CGFloat {
+        CommentThreadGeometry.bubbleLeadingInset(for: row.depth)
+    }
 
     private var isByWorkAuthor: Bool {
         workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
     }
 
+    private var canShowReply: Bool {
+        comment.canReply && auth.isLoggedIn
+    }
+
     var body: some View {
         if isReplyRow {
             // Reply bubble: its own soft surface one elevation step inside the
-            // card, guided by a subtle (never red) connector line. The connector
-            // is an overlay — an HStack sibling shape would collapse to its 10pt
-            // ideal height under a List row's nil height proposal.
+            // card. The full-height overlay reads the row's projection metadata,
+            // so reply-to-reply and branched paths remain visible without
+            // rebuilding the recursive comment tree.
             commentContent
-                .padding(10)
+                .padding(CommentThreadGeometry.replyBubblePadding)
                 .background(
                     theme.appTheme.nestedCardSurface,
                     in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -112,21 +209,22 @@ struct CommentThreadRow: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
                 }
-                .padding(.leading, 10)
-                .overlay(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(.quaternary)
-                        .frame(width: 2)
-                }
-                .padding(.leading, bubbleIndent)
+                .padding(.leading, bubbleLeadingInset)
+                .overlay { CommentThreadConnector(row: row) }
         } else {
             commentContent
+                .overlay { CommentThreadConnector(row: row) }
         }
     }
 
     private var commentContent: some View {
         HStack(alignment: .top, spacing: 10) {
-            CommentAvatar(comment: comment, size: isReplyRow ? 30 : 38)
+            CommentAvatar(
+                comment: comment,
+                size: isReplyRow
+                    ? CommentThreadGeometry.replyAvatarSize
+                    : CommentThreadGeometry.rootAvatarSize
+            )
 
             VStack(alignment: .leading, spacing: 6) {
                 byline
@@ -136,7 +234,7 @@ struct CommentThreadRow: View {
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                timestampAndActions
+                commentActions
             }
         }
     }
@@ -162,6 +260,17 @@ struct CommentThreadRow: View {
                     .background(.quaternary, in: Capsule())
                     .foregroundStyle(.secondary)
             }
+            if !comment.postedText.isEmpty {
+                Text(AO3CommentTimestamp.displayText(
+                    rawText: comment.postedText,
+                    date: comment.postedAt
+                ))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .allowsTightening(true)
+            }
             Spacer(minLength: 4)
             if showChapterBadge, let chapter = comment.chapterLabel {
                 Text(chapter)
@@ -175,16 +284,9 @@ struct CommentThreadRow: View {
         }
     }
 
-    private var timestampAndActions: some View {
+    private var commentActions: some View {
         HStack(spacing: 8) {
-            if !comment.postedText.isEmpty {
-                Text(comment.postedText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            if comment.canReply && auth.isLoggedIn {
+            if canShowReply {
                 Button { onReply(comment) } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                         .font(.caption.weight(.medium))
@@ -193,12 +295,9 @@ struct CommentThreadRow: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Reply to \(comment.author)")
             }
+            Spacer(minLength: 0)
             Menu {
-                if comment.canReply && auth.isLoggedIn {
-                    Button { onReply(comment) } label: {
-                        Label("Reply", systemImage: "arrowshape.turn.up.left")
-                    }
-                } else if comment.canReply {
+                if comment.canReply && !canShowReply {
                     Button { onRequestLogin() } label: {
                         Label("Log in to Reply", systemImage: "person.crop.circle.badge.questionmark")
                     }
@@ -236,6 +335,7 @@ struct CommentThreadRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .tint(.secondary)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
         }
     }

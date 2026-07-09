@@ -33,6 +33,7 @@ struct AO3CommentsParseTests {
         #expect(first.chapterID == 9003)
         #expect(first.chapterLabel == "Chapter 3")
         #expect(first.postedText.contains("Jul 2026"))
+        #expect(first.postedAt != nil)
         #expect(first.canReply)
 
         // Reply chain: 1001 ← 1002 ← 1003.
@@ -83,9 +84,56 @@ struct AO3CommentsParseTests {
         #expect(rows.map(\.depth) == [0, 1, 2, 0])
         #expect(rows.map(\.threadRootID) == [1001, 1001, 1001, 1004])
         #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
+        #expect(rows.map(\.hasReplies) == [true, true, false, false])
+        #expect(rows.map(\.hasNextSibling) == [false, false, false, false])
+        #expect(rows.allSatisfy { $0.continuingAncestorDepths.isEmpty })
         // The card-within-a-card rendering closes each thread card on its last
         // row: 1003 ends thread 1001; the reply-less 1004 ends its own.
         #expect(rows.map(\.isLastInThread) == [false, false, true, true])
+    }
+
+    @Test func projectionKeepsBranchedAncestorConnectorsWithoutReplyTrees() {
+        var grandchild = AO3Comment(id: 3, author: "Grandchild", isGuest: false)
+        grandchild.replies = [
+            AO3Comment(id: 4, author: "Great-grandchild", isGuest: false)
+        ]
+        var firstReply = AO3Comment(id: 2, author: "First reply", isGuest: false)
+        firstReply.replies = [grandchild]
+        let secondReply = AO3Comment(id: 5, author: "Second reply", isGuest: false)
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = [firstReply, secondReply]
+
+        let rows = AO3CommentRow.flatten([root])
+
+        #expect(rows.map(\.id) == [1, 2, 3, 4, 5])
+        #expect(rows.map(\.depth) == [0, 1, 2, 3, 1])
+        #expect(rows.map(\.hasReplies) == [true, true, true, false, false])
+        #expect(rows.map(\.hasNextSibling) == [false, true, false, false, false])
+        // Root's line remains open through the first reply's descendants so it
+        // can reach the later sibling without reconstructing the subtree.
+        #expect(rows[2].continuingAncestorDepths == [0])
+        #expect(rows[3].continuingAncestorDepths == [0])
+        #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
+    }
+
+    @Test func visualNestingCapsOnlyIndentNotLogicalDepth() {
+        #expect(CommentThreadGeometry.visualDepth(for: 0) == 0)
+        #expect(CommentThreadGeometry.visualDepth(for: 1) == 1)
+        #expect(CommentThreadGeometry.visualDepth(for: 2) == 2)
+        #expect(CommentThreadGeometry.visualDepth(for: 3) == 3)
+        #expect(CommentThreadGeometry.visualDepth(for: 8) == 3)
+        #expect(
+            CommentThreadGeometry.avatarCenterX(for: 1)
+                < CommentThreadGeometry.avatarCenterX(for: 2)
+        )
+        #expect(
+            CommentThreadGeometry.avatarCenterX(for: 2)
+                < CommentThreadGeometry.avatarCenterX(for: 3)
+        )
+        #expect(
+            CommentThreadGeometry.avatarCenterX(for: 3)
+                == CommentThreadGeometry.avatarCenterX(for: 8)
+        )
     }
 
     @Test func largeThreadProjectionKeepsEveryRowShallowAndStable() {
@@ -113,6 +161,72 @@ struct AO3CommentsParseTests {
         #expect(page.comments.isEmpty)
         #expect(page.currentPage == 2)
         #expect(page.totalPages == 2)
+    }
+
+    // MARK: Comment timestamps
+
+    @Test func parsesAO3CommentTimestampWithNamedZoneAndOffset() throws {
+        let utc = try #require(TimeZone(identifier: "UTC"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        let expected = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 8, hour: 14, minute: 38
+        )))
+
+        #expect(AO3CommentTimestamp.parse("Wed 08 Jul 2026 02:38PM UTC") == expected)
+        #expect(AO3CommentTimestamp.parse("Wed 08 Jul 2026 10:38AM -0400") == expected)
+    }
+
+    @Test func formatsRecentYesterdayAndOlderTimestampsInLocalZone() throws {
+        let zone = try #require(TimeZone(identifier: "America/New_York"))
+        let locale = Locale(identifier: "en_US")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let now = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 10, hour: 23
+        )))
+        let recent = try #require(calendar.date(byAdding: .hour, value: -2, to: now))
+        let yesterday = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 9, hour: 21, minute: 30
+        )))
+        let older = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 7, hour: 14, minute: 26
+        )))
+
+        #expect(AO3CommentTimestamp.displayText(
+            rawText: "", date: recent, relativeTo: now,
+            calendar: calendar, timeZone: zone, locale: locale
+        ) == "2 hours ago")
+        #expect(AO3CommentTimestamp.displayText(
+            rawText: "", date: yesterday, relativeTo: now,
+            calendar: calendar, timeZone: zone, locale: locale
+        ) == "Yesterday at 9:30 PM EDT")
+        #expect(AO3CommentTimestamp.displayText(
+            rawText: "", date: older, relativeTo: now,
+            calendar: calendar, timeZone: zone, locale: locale
+        ) == "7/7/2026 at 2:26 PM EDT")
+    }
+
+    @Test func under24HoursWinsAcrossLocalMidnightAndInvalidTextFallsBack() throws {
+        let zone = try #require(TimeZone(identifier: "America/New_York"))
+        let locale = Locale(identifier: "en_US")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let now = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 10, hour: 0, minute: 30
+        )))
+        let previousLocalDay = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 9, hour: 23, minute: 30
+        )))
+
+        #expect(AO3CommentTimestamp.displayText(
+            rawText: "", date: previousLocalDay, relativeTo: now,
+            calendar: calendar, timeZone: zone, locale: locale
+        ) == "1 hour ago")
+        #expect(AO3CommentTimestamp.displayText(
+            rawText: "AO3 changed this timestamp", date: nil, relativeTo: now,
+            calendar: calendar, timeZone: zone, locale: locale
+        ) == "AO3 changed this timestamp")
     }
 
     // MARK: Chapter index (/navigate)
