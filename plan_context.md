@@ -16,6 +16,38 @@ id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
 
 ## Status snapshot (2026-07-08, updated same day)
 
+### Landed: Phase 3 item 9 (ReadingState enum) — `a4c844e` / T-81
+Picked up Fable's complete-but-uncommitted ReadingState work (cut off by a
+usage limit). Reviewed the full diff: `SavedWork.ReadingState`
+(`.unread/.inProgress/.finished/.freedHistory`, exactly one true per work,
+`.finished` wins even after the EPUB is freed) + `var readingState` +
+`isInProgress` reimplemented via it (provably identical). Consumers updated
+behavior-preservingly: `LibrarySectionKind` readingNow/finished shelves
+(`== .inProgress`/`== .finished` ⟺ old `isInProgress`/`isFinished`);
+`ReadingStatistics.hasStarted` now defers to `hasStartedReading` (a documented
+strict-superset bug fix — old private re-listing missed the Readium locator,
+undercounting iOS-only reads); History `@Query` predicate UNCHANGED (only its
+comment), so the flagged History-vs-Finished product decision is sidestepped,
+not made. Tests: +4 total (3 in `SavedWorkProgressTests`, 1 in
+`ReadingStatisticsTests`; 244 → 248).
+First `Scripts/verify.sh` run: ALL GREEN (`/tmp/verify_rs.log`, 18:03).
+
+**Adversarial review (workflow `wf_1b4eef1d-e56`) triaged** — its verify agents
+died on the same usage limit, so findings were re-verified inline by Fable:
+- CONFIRMED + FIXED: `MediaBrowserView.hasBeenRead` re-rolled "started" from
+  `isFinished || lastSpineIndex > 0` (missed Readium locator → iOS-only reads
+  never surfaced recent fandoms). Now `isFinished || hasStartedReading`.
+- CONFIRMED + FIXED: `WorkDetailView` keep-status text checked `!hasEPUB`
+  before `isFinished`, labeling unfinished freed works "Finished." Now switches
+  on `work.readingState` (finished wins; `.freedHistory` gets honest copy).
+- REFUTED (left as-is): `ReadingStatistics.inProgressWorks` counts freed-but-
+  unfinished works as in progress — intentional stats semantics (reading
+  behavior, not shelf placement), not accidental drift.
+- REFUTED by workflow: PersistenceSync keep-in-sync comment — already in sync.
+Second full `Scripts/verify.sh` (post-review-fixes): ALL GREEN, 248/31.
+Committed `a4c844e`, TASKS.md row T-81. **Pending owner sim verification**
+(Library shelves, Work Detail keep-status line, Browse recent fandoms).
+
 ### Latest: Phase 5 item 16 (session health) landed — `a80e517` / T-80
 Found a complete, coherent uncommitted session-health implementation on the
 branch (AO3SessionHealth enum + verifySession() + Account UI row/button).
@@ -118,15 +150,16 @@ E=Phase6 update-detection wiring into filters/badges. Read-only — no verify pa
 
 ## Next action
 
-Phase 2 closed (T-78); Phase 5 item 16 closed (T-80, `a80e517`).
-**Next chunk = Phase 3 item 9: `ReadingState` enum.**
-Per R1 area B: a pure computed convenience on `SavedWork` (`.unread/.inProgress/
-.finished/.freedHistory`) folding the existing booleans (`isFinished`/`hasEPUB`/
-`isInProgress`/queue/history predicates) in ONE place — no stored @Attribute, no
-schema change, backup format untouched. Keep existing `isInProgress`/
-`hasStartedReading` working. Then (optionally, incrementally) refactor the three
-drifting consumers to read `work.readingState`: `LibrarySectionKind.works(from:)`,
-`ReadingStatistics` (deleting its duplicated `hasStarted`), and
-`LocalReadingHistoryView`'s @Query (`AccountView.swift:227`). MUST stay orthogonal
-to the AO3 `Completion` (WIP-vs-complete) filter — different concept. S / low-risk.
+Phase 2 closed (T-78); Phase 3 item 9 closed (T-81, `a4c844e`); Phase 5
+item 16 closed (T-80, `a80e517`).
+**Next chunk = wire `ReadingState` into the user-facing filters** — the value
+the enum was built for (backlog items 10 + 19, the small end of Phase 6):
+- Library filter panel: add a Reading State facet (`LibraryFilters` +
+  wherever its facets render) filtering on `work.readingState`.
+- Local reading-history filter (`LocalReadingHistoryView`,
+  `AccountView.swift`): finished-vs-unfinished-history split.
+- Keep orthogonal to the AO3 `Completion` (WIP-vs-complete) facet.
+After that: Phase 6 items 18/20 (update badges into cards/filters — re-recon
+first, agents were flaky) or Phase 5 item 15/17 (author profiles / account
+reconcile, larger). Phase 4 (comments) needs its own planning pass.
 Verify + sim + commit + TASKS.md row as usual.
