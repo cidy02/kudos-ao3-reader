@@ -149,6 +149,26 @@ extension Array where Element == ReaderSection {
     var storyChapterCount: Int {
         count(where: { $0.kind == .chapter })
     }
+
+    /// The 1-based AO3 **story-chapter** number a reader position maps to — for
+    /// chapter-aware features like opening comments on the chapter you're reading.
+    /// Uses the normalized sections (never a raw `spineIndex + 1`, which AO3 EPUBs'
+    /// Preface/Summary/Afterword would offset):
+    /// - a real `.chapter` → its own `storyChapterIndex`;
+    /// - front matter (Preface / Summary / any `.other` before Chapter 1) → **1**;
+    /// - back matter (Afterword / any `.other` after the last chapter) → the **last**
+    ///   story chapter (nearest preceding `.chapter`).
+    /// Falls back to **1** when `spineIndex` is out of range or the work has no story
+    /// chapters at all (front-matter-only) — the safe default the caller can hand to
+    /// the comments layer, which itself clamps to the live AO3 chapter index.
+    func ao3StoryChapter(forSpineIndex spineIndex: Int) -> Int {
+        guard indices.contains(spineIndex) else { return 1 }
+        if let storyIndex = self[spineIndex].storyChapterIndex { return storyIndex }
+        // Non-chapter section: the nearest preceding real chapter (so an Afterword or
+        // any post-story matter lands on the final chapter); if none precedes it, it's
+        // front matter → Chapter 1.
+        return self[...spineIndex].last(where: { $0.kind == .chapter })?.storyChapterIndex ?? 1
+    }
 }
 
 extension SavedWork {

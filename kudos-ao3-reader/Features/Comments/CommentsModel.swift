@@ -40,6 +40,13 @@ final class CommentsModel {
     private(set) var chapters: [AO3ChapterRef] = []
     private(set) var chaptersFailed = false
     var selectedChapter: AO3ChapterRef?
+    /// A 1-based AO3 story-chapter to open on (from the reader's chapter-aware
+    /// Comments button), applied once by `loadInitial`. nil = open on All.
+    private var pendingInitialChapterPosition: Int?
+    /// True only while `loadInitial` is programmatically setting scope/chapter, so
+    /// the view's scope/selectedChapter `onChange` handlers skip the redundant loads
+    /// they'd otherwise stack on the single load `loadInitial` already performs.
+    private(set) var isApplyingInitialContext = false
     /// Local rendering order — AO3 itself has no comment sort; newest-first
     /// starts from the last page and reverses within each page.
     var newestFirst = false
@@ -57,9 +64,10 @@ final class CommentsModel {
     /// Session-wide page cache; 5-minute TTL.
     private static let cache = CommentsPageCache()
 
-    init(workID: Int, workAuthors: [String]) {
+    init(workID: Int, workAuthors: [String], initialChapterPosition: Int? = nil) {
         self.workID = workID
         self.workAuthors = workAuthors
+        self.pendingInitialChapterPosition = initialChapterPosition
     }
 
     /// Comments of the current page in display order.
@@ -80,6 +88,51 @@ final class CommentsModel {
         page = nil
         phase = .idle
         currentPageNumber = 1
+    }
+
+    /// The screen's first load. With no preselected chapter it's a plain All load;
+    /// with one (the reader's chapter-aware Comments button) it resolves that AO3
+    /// story-chapter against the live `/navigate` index and opens By Chapter on it,
+    /// falling back to All if the index is unavailable or empty. Runs one page fetch
+    /// (plus the small chapter index) — the `isApplyingInitialContext` flag keeps the
+    /// view's onChange handlers from firing extra loads while scope/chapter are set.
+    func loadInitial(auth: AO3AuthService) async {
+        guard let target = pendingInitialChapterPosition else {
+            await load(auth: auth)
+            return
+        }
+        pendingInitialChapterPosition = nil
+        isApplyingInitialContext = true
+        defer { isApplyingInitialContext = false }
+
+        await loadChaptersIfNeeded(auth: auth)
+        guard let ref = chapterRef(forStoryPosition: target) else {
+            // Index failed or the work has no chapter list (e.g. single-chapter):
+            // work-level All comments show the same thread anyway.
+            await load(auth: auth)
+            return
+        }
+        scope = .byChapter
+        selectedChapter = ref
+        await load(auth: auth)
+    }
+
+    /// Maps a 1-based AO3 story-chapter number (already normalized by the reader
+    /// against Preface/Summary/Afterword) to an actual chapter ref from `/navigate`,
+    /// clamped into range so an over-count (e.g. Afterword past the last real chapter)
+    /// lands on the last chapter. nil when the index is empty/unavailable.
+    func chapterRef(forStoryPosition position: Int) -> AO3ChapterRef? {
+        guard let clamped = Self.clampedChapterPosition(position, chapterCount: chapters.count) else {
+            return nil
+        }
+        return chapters.first { $0.position == clamped } ?? chapters.last
+    }
+
+    /// Clamps a target story-chapter number into `1...chapterCount`; nil when there
+    /// are no chapters. Pure (nonisolated) so it's unit-testable off the main actor.
+    nonisolated static func clampedChapterPosition(_ position: Int, chapterCount: Int) -> Int? {
+        guard chapterCount > 0 else { return nil }
+        return min(max(position, 1), chapterCount)
     }
 
     /// Initial load (or scope/chapter/order change). Serves fresh cache instantly;

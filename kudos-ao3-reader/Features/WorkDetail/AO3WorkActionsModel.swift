@@ -28,10 +28,14 @@ final class AO3WorkActionsModel {
     var showingCommentsScreen = false
     var commentsTitle = ""
     var commentsAuthors: [String] = []
+    /// The AO3 story chapter to open comments on, when launched from a reader
+    /// (chapter-aware button). nil from Work Detail → opens on All comments.
+    var commentsInitialChapterPosition: Int?
 
-    func startViewingComments(title: String, authors: [String]) {
+    func startViewingComments(title: String, authors: [String], initialChapterPosition: Int? = nil) {
         commentsTitle = title
         commentsAuthors = authors
+        commentsInitialChapterPosition = initialChapterPosition
         showingCommentsScreen = true
     }
 
@@ -140,7 +144,8 @@ private struct AO3WorkActionsModifier: ViewModifier {
                     CommentsView(
                         workID: workID,
                         workTitle: actions.commentsTitle,
-                        workAuthors: actions.commentsAuthors
+                        workAuthors: actions.commentsAuthors,
+                        initialChapterPosition: actions.commentsInitialChapterPosition
                     )
                 }
             }

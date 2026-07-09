@@ -619,7 +619,8 @@ struct ReadiumReaderView: View {
             .sheet(isPresented: $showingComments) {
                 if let id = ao3WorkID {
                     NavigationStack {
-                        CommentsView(workID: id, workTitle: work.title, workAuthors: [work.author])
+                        CommentsView(workID: id, workTitle: work.title, workAuthors: [work.author],
+                                     initialChapterPosition: currentAO3Chapter)
                     }
                 }
             }
@@ -782,6 +783,15 @@ struct ReadiumReaderView: View {
             .frame(height: 40)
             .glassEffect(.regular, in: .capsule)
             .opacity(label.isEmpty ? 0 : 1)
+    }
+
+    /// The AO3 story chapter the reader is currently on, for the chapter-aware
+    /// Comments button. `pos.chapter - 1` is the current spine index (same basis the
+    /// pill uses); the section list normalizes it past Preface/Summary/Afterword.
+    /// nil (→ open on All comments) until a position and built sections both exist.
+    private var currentAO3Chapter: Int? {
+        guard let pos = book.readingPosition, !book.sections.isEmpty else { return nil }
+        return book.sections.ao3StoryChapter(forSpineIndex: pos.chapter - 1)
     }
 
     /// The pill's chapter segment, normalized against AO3 front/back matter

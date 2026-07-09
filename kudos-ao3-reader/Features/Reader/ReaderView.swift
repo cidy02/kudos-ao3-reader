@@ -203,7 +203,8 @@ struct ReaderView: View {
                             if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
                                 AO3WorkActionsMenu(workID: id, actions: workActions,
                                                    workTitle: work.title,
-                                                   workAuthors: [work.author])
+                                                   workAuthors: [work.author],
+                                                   commentsInitialChapterPosition: currentAO3Chapter)
                             }
                         } label: {
                             Label("More actions", systemImage: "ellipsis.circle")
@@ -286,6 +287,14 @@ struct ReaderView: View {
             return "\(chapterPart) · Pg \(controller.page)/\(controller.pageTotal)"
         }
         return longFormPositionLabel
+    }
+
+    /// The AO3 story chapter currently being read, for the chapter-aware Comments
+    /// button — `currentIndex` normalized past Preface/Summary/Afterword. nil
+    /// (→ open comments on All) until sections are built.
+    private var currentAO3Chapter: Int? {
+        guard !sections.isEmpty else { return nil }
+        return sections.ao3StoryChapter(forSpineIndex: currentIndex)
     }
 
     /// This position's normalized short label ("P"/"S"/"A"/"<i>/<total>"), or nil

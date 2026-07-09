@@ -20,11 +20,13 @@ struct CommentsView: View {
     @State private var pendingDelete: AO3Comment?
     @State private var actionBanner: String?
 
-    init(workID: Int, workTitle: String, workAuthors: [String] = []) {
+    init(workID: Int, workTitle: String, workAuthors: [String] = [], initialChapterPosition: Int? = nil) {
         self.workID = workID
         self.workTitle = workTitle
         self.workAuthors = workAuthors
-        _model = State(initialValue: CommentsModel(workID: workID, workAuthors: workAuthors))
+        _model = State(initialValue: CommentsModel(
+            workID: workID, workAuthors: workAuthors, initialChapterPosition: initialChapterPosition
+        ))
     }
 
     var body: some View {
@@ -40,8 +42,11 @@ struct CommentsView: View {
         .hidesFloatingTabBar()
         .safeAreaInset(edge: .bottom) { writeCommentBar }
         .refreshable { await model.load(auth: auth, forceRefresh: true) }
-        .task { await model.load(auth: auth) }
+        .task { await model.loadInitial(auth: auth) }
         .onChange(of: model.scope) { _, scope in
+            // loadInitial sets scope/chapter itself and does the one load; skip the
+            // redundant reload its programmatic changes would otherwise trigger.
+            guard !model.isApplyingInitialContext else { return }
             Task {
                 model.resetForContextChange()
                 if scope == .byChapter {
@@ -57,6 +62,7 @@ struct CommentsView: View {
             }
         }
         .onChange(of: model.selectedChapter) { _, _ in
+            guard !model.isApplyingInitialContext else { return }
             model.resetForContextChange()
             Task { await model.load(auth: auth) }
         }

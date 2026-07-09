@@ -142,6 +142,57 @@ blocked throughout.
 - Offline: previously-viewed page shows with stale banner; posting disabled.
 - Adult/restricted work behavior matches existing app handling.
 
+## Reader chapter-aware Comments button (QoL, 2026-07-09)
+
+Tapping Comments from inside a reader opens `CommentsView` in **By Chapter** on the
+AO3 chapter you're reading — not All / Chapter 1.
+
+**Where the mapping lives (single source of truth):** `[ReaderSection]
+.ao3StoryChapter(forSpineIndex:)` in `Reading/ReaderSection.swift`, alongside the
+existing `pillLabel`/`storyChapterCount` used by the progress pill + TOC. Reuses the
+T-76 normalization, so reader pill, TOC, and comments can't drift. **Never** uses a
+raw `spineIndex + 1`.
+
+**How EPUB sections map to AO3 chapters:**
+- a real `.chapter` section → its own 1-based `storyChapterIndex` (front matter is
+  already excluded from that count);
+- **Preface / Summary / any `.other` before Chapter 1** → **Chapter 1** (no preceding
+  `.chapter`);
+- **Afterword / any `.other` after the last chapter** → the **last** story chapter
+  (nearest preceding `.chapter`);
+- single-chapter, empty section list, or out-of-range index → **1** (safe default).
+
+**Reader → comments plumbing:**
+- Readium reader (`ReadiumReaderView.currentAO3Chapter`): `book.readingPosition
+  .chapter - 1` is the current spine index (same basis as the pill) → mapped → passed
+  as `CommentsView(initialChapterPosition:)`. nil until a position + built sections
+  exist.
+- macOS legacy reader (`ReaderView.currentAO3Chapter`): `sections
+  .ao3StoryChapter(forSpineIndex: currentIndex)`, threaded through
+  `AO3WorkActionsMenu` → `AO3WorkActionsModel.startViewingComments(...:
+  initialChapterPosition:)` → the modifier's `CommentsView`. Work Detail passes nil
+  (opens All), so its behavior is unchanged.
+- `CommentsModel.loadInitial(auth:)` applies it: fetches the `/navigate` index once,
+  resolves the target via `chapterRef(forStoryPosition:)` (which **clamps** into the
+  live chapter range via `clampedChapterPosition`, so an Afterword past the last real
+  chapter lands on the last one), sets `.byChapter` + the ref, and does **one** page
+  load. Falls back to **All** if the index is empty/unavailable (e.g. single-chapter
+  works with no `/navigate`) — the same comments show either way. The
+  `isApplyingInitialContext` flag suppresses the view's scope/chapter `onChange`
+  reloads so the programmatic setup stays a single GET (+ the small index).
+
+**Tests added** (`ReaderSectionTests`): the spec's mapping matrix over the reference
+EPUB (Preface/Summary→1, chapters→own number, Epilogues→96–101, Afterword→101), plus
+single-chapter-with-front-matter, no-Afterword, Preface-without-Summary-gap, non-AO3
+(every item its own chapter), and unmappable/out-of-range/empty → 1; and
+`clampedChapterPosition` (floor/ceil/single/none-→-nil).
+
+**Remaining edge (documented):** the mapping assumes the EPUB's story-chapter count
+matches AO3's live `/navigate` count; when they differ (stale EPUB, extra/fewer
+posted chapters) the target is clamped into the live range rather than guessed — a
+mid-story mismatch could land a chapter or two off, but never out of bounds or on the
+wrong work. Manual check below covers the common shapes.
+
 ## Status / next steps
 - [x] Live recon of endpoints + markup (table above is ground truth)
 - [x] Models + parser + fixtures + parse tests
@@ -151,7 +202,23 @@ blocked throughout.
 - [x] Adversarial self-review (5 findings fixed — see above)
 - [x] `Scripts/verify.sh` ALL GREEN — 265 tests / 33 suites, iOS + macOS builds,
       invariants, lint, whitespace (2026-07-09); TASKS.md row T-82
-- [ ] Owner: live-session manual test (checklist above) — REQUIRED before merge
+- [x] Reader chapter-aware Comments button (QoL) — mapping + both readers + tests;
+      `Scripts/verify.sh` ALL GREEN, 272 tests / 33 suites (2026-07-09). See the
+      "Reader chapter-aware Comments button" section above.
+- [ ] Owner: live-session manual test (checklist above + reader chapter-mapping
+      checklist below) — REQUIRED before merge
 - [ ] Candidate follow-ups: chapter-targeted top-level posting (capture the
       chapter-page form live), native thread-page view for cut-off threads,
       comment pagination jump-to-page, persisted comment cache.
+
+## Manual test checklist — reader chapter mapping (owner)
+Use a real AO3 EPUB with Preface/Summary/Afterword. On iOS (Readium) and macOS (legacy):
+- Open reader on Preface → tap Comments → **Chapter 1** selected, By Chapter.
+- Open on Summary → Comments → **Chapter 1**.
+- Open on Chapter 1 → Comments → **Chapter 1**.
+- Open on a middle chapter → Comments → **that** AO3 chapter.
+- Open on the final story chapter → Comments → **final** chapter.
+- Open on Afterword → Comments → **final** chapter.
+- Switch to All Comments still works; manually pick another chapter still works.
+- Single-chapter work → opens All (no chapter index) showing the work's comments.
+- Returning to the reader does not lose reading position.

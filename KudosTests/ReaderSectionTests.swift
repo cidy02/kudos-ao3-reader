@@ -203,4 +203,90 @@ struct ReaderSectionTests {
             == ReaderSectionBuilder.hrefKey("Text/CH1.XHTML"))
         #expect(ReaderSectionBuilder.hrefKey("a.xhtml") != ReaderSectionBuilder.hrefKey("b.xhtml"))
     }
+
+    // MARK: - ao3StoryChapter mapping (reader position → AO3 comment chapter)
+
+    /// The spec's reference table over the real EPUB shape: Preface(0),
+    /// Summary(1), Chapter 1-95(2...96), Epilogue 1-6(97...102 → story 96-101),
+    /// Afterword(103). 101 story chapters.
+    @Test func mapsReaderPositionToAO3StoryChapterAcrossFrontAndBackMatter() {
+        let sections = ReaderSectionBuilder.build(tocEntries: referenceEPUBTOC(), spineHrefs: spine(104))
+
+        #expect(sections.ao3StoryChapter(forSpineIndex: 0) == 1)   // Preface → Ch 1
+        #expect(sections.ao3StoryChapter(forSpineIndex: 1) == 1)   // Summary → Ch 1
+        #expect(sections.ao3StoryChapter(forSpineIndex: 2) == 1)   // Chapter 1 → 1
+        #expect(sections.ao3StoryChapter(forSpineIndex: 6) == 5)   // Chapter 5 → 5
+        #expect(sections.ao3StoryChapter(forSpineIndex: 96) == 95) // Chapter 95 → 95
+        #expect(sections.ao3StoryChapter(forSpineIndex: 97) == 96) // Epilogue 1 → story 96
+        #expect(sections.ao3StoryChapter(forSpineIndex: 102) == 101) // final story chapter
+        #expect(sections.ao3StoryChapter(forSpineIndex: 103) == 101) // Afterword → last chapter
+    }
+
+    @Test func singleChapterWorkWithFrontMatterAlwaysMapsToChapter1() {
+        // Preface(0), untitled Summary gap(1), Chapter 1(2).
+        let toc = [Raw(title: "Preface", spineIndex: 0), Raw(title: "Chapter 1", spineIndex: 2)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(3))
+
+        #expect(sections.storyChapterCount == 1)
+        #expect(sections.ao3StoryChapter(forSpineIndex: 0) == 1) // Preface
+        #expect(sections.ao3StoryChapter(forSpineIndex: 1) == 1) // Summary
+        #expect(sections.ao3StoryChapter(forSpineIndex: 2) == 1) // the one chapter
+    }
+
+    @Test func mapsWorkWithNoAfterword() {
+        // Preface(0), Summary(1), Chapter 1(2), Chapter 2(3) — no back matter.
+        let toc = [Raw(title: "Preface", spineIndex: 0),
+                   Raw(title: "Chapter 1", spineIndex: 2),
+                   Raw(title: "Chapter 2", spineIndex: 3)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(4))
+
+        #expect(sections[1].kind == .summary)
+        #expect(sections.ao3StoryChapter(forSpineIndex: 3) == 2) // final chapter, no afterword
+    }
+
+    @Test func mapsWorkWithPrefaceButNoSummaryGap() {
+        // Preface immediately followed by Chapter 1 (no untitled gap → no Summary).
+        let toc = [Raw(title: "Preface", spineIndex: 0),
+                   Raw(title: "Chapter 1", spineIndex: 1),
+                   Raw(title: "Chapter 2", spineIndex: 2)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(3))
+
+        #expect(!sections.contains { $0.kind == .summary })
+        #expect(sections.ao3StoryChapter(forSpineIndex: 0) == 1) // Preface → Ch 1
+        #expect(sections.ao3StoryChapter(forSpineIndex: 2) == 2) // Chapter 2
+    }
+
+    @Test func nonAO3EPUBMapsEverySpineItemToItsOwnChapter() {
+        // No Preface entry → every spine item is a plain .chapter, numbered by order
+        // (today's unchanged behavior; the naive index happens to be correct here).
+        let toc = [Raw(title: "Intro", spineIndex: 0),
+                   Raw(title: "Middle", spineIndex: 1),
+                   Raw(title: "End", spineIndex: 2)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(3))
+
+        #expect(sections.storyChapterCount == 3)
+        #expect(sections.ao3StoryChapter(forSpineIndex: 0) == 1)
+        #expect(sections.ao3StoryChapter(forSpineIndex: 2) == 3)
+    }
+
+    @Test func unmappableSectionAndOutOfRangeFallBackToChapter1() {
+        // A stray cover (.other, no TOC entry, no Preface) before Chapter 1.
+        let toc = [Raw(title: "Chapter 1", spineIndex: 1)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(2))
+
+        #expect(sections[0].kind == .other)
+        #expect(sections.ao3StoryChapter(forSpineIndex: 0) == 1)  // .other before Ch 1 → 1
+        #expect(sections.ao3StoryChapter(forSpineIndex: 99) == 1) // out of range → 1
+        #expect([ReaderSection]().ao3StoryChapter(forSpineIndex: 0) == 1) // empty → 1
+    }
+
+    // MARK: - Comments-layer clamp (target chapter → live /navigate index)
+
+    @Test func clampedChapterPositionStaysInRangeOrNilWhenNoChapters() {
+        #expect(CommentsModel.clampedChapterPosition(3, chapterCount: 10) == 3)
+        #expect(CommentsModel.clampedChapterPosition(0, chapterCount: 10) == 1)  // floor
+        #expect(CommentsModel.clampedChapterPosition(99, chapterCount: 10) == 10) // ceil → last
+        #expect(CommentsModel.clampedChapterPosition(1, chapterCount: 1) == 1)   // single chapter
+        #expect(CommentsModel.clampedChapterPosition(5, chapterCount: 0) == nil) // no index → All
+    }
 }

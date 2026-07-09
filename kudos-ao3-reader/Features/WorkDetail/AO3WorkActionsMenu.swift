@@ -11,6 +11,9 @@ struct AO3WorkActionsMenu: View {
     /// existing call sites keep working with just an id.
     var workTitle = ""
     var workAuthors: [String] = []
+    /// When shown from a reader, the AO3 story chapter to open comments on so the
+    /// user lands on the chapter they're reading. nil (Work Detail) → All comments.
+    var commentsInitialChapterPosition: Int?
 
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -22,7 +25,10 @@ struct AO3WorkActionsMenu: View {
             }
             .disabled(actions.isWorking)
 
-            Button { actions.startViewingComments(title: workTitle, authors: workAuthors) } label: {
+            Button {
+                actions.startViewingComments(title: workTitle, authors: workAuthors,
+                                             initialChapterPosition: commentsInitialChapterPosition)
+            } label: {
                 Label("View Comments", systemImage: "bubble.left.and.bubble.right")
             }
 
