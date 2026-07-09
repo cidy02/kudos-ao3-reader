@@ -1,5 +1,47 @@
 import Foundation
 
+/// The AO3 work context shown atop the Comments screen: title, author, fandom,
+/// rating, chapters — the same fields Work Detail's own overview card shows.
+/// Deliberately no cover thumbnail: most AO3 works don't have one, and Work
+/// Detail's card omits it too, so this reuses that pattern rather than adding a
+/// new one. Convenience inits mirror WorkDetailView's local-vs-remote sourcing
+/// so every call site can build one from whatever it already has on hand.
+struct AO3CommentsWorkContext: Equatable, Sendable {
+    var title: String
+    var authors: [String]
+    var fandoms: [String] = []
+    var rating: String = ""
+    var chapters: String = ""
+
+    init(
+        title: String, authors: [String], fandoms: [String] = [],
+        rating: String = "", chapters: String = ""
+    ) {
+        self.title = title
+        self.authors = authors
+        self.fandoms = fandoms
+        self.rating = rating
+        self.chapters = chapters
+    }
+
+    init(savedWork: SavedWork) {
+        self.init(
+            title: savedWork.title,
+            authors: savedWork.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
+            fandoms: savedWork.workFandoms,
+            rating: savedWork.rating,
+            chapters: savedWork.chapters
+        )
+    }
+
+    init(remote: AO3WorkSummary) {
+        self.init(
+            title: remote.title, authors: remote.authors,
+            fandoms: remote.fandoms, rating: remote.rating, chapters: remote.chapters
+        )
+    }
+}
+
 /// One AO3 comment, with its replies nested (AO3 renders threads as nested
 /// `ol.thread` lists; see `docs/ai/COMMENTS_HANDOFF.md` for the observed markup).
 /// Value type — the comments UI is read-mostly and pages are re-fetched, not

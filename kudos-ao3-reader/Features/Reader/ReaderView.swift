@@ -202,8 +202,7 @@ struct ReaderView: View {
                         Menu {
                             if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
                                 AO3WorkActionsMenu(workID: id, actions: workActions,
-                                                   workTitle: work.title,
-                                                   workAuthors: [work.author],
+                                                   workContext: .init(savedWork: work),
                                                    commentsInitialChapterPosition: currentAO3Chapter)
                             }
                         } label: {

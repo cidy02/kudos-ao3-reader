@@ -8,13 +8,22 @@ import AppKit
 /// Work Detail and presented as a sheet from the reader's actions menu.
 struct CommentsView: View {
     let workID: Int
-    let workTitle: String
-    /// Author names, for the byline badge on their own comments.
-    var workAuthors: [String] = []
+    let workContext: AO3CommentsWorkContext
+    /// True when presented modally (a sheet/pop-up card) rather than pushed onto
+    /// a `NavigationStack` — a push gets the system's automatic back button, but
+    /// a sheet's own root `NavigationStack` has no way back without one, so this
+    /// drives an explicit Close button (and, when `onRequestExpand` is set, an
+    /// Expand button promoting the pop-up card to a full-screen presentation).
+    var isModal = false
+    /// Present when shown modally and expansion is available; promotes the sheet
+    /// to a `fullScreenCover` (see `commentsSheet(...)` below) — for long threads
+    /// or composing, where the pop-up card feels cramped.
+    var onRequestExpand: (() -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dismiss) private var dismiss
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
@@ -22,18 +31,24 @@ struct CommentsView: View {
     @State private var actionBanner: String?
     @State private var contextLoadTask: Task<Void, Never>?
 
-    init(workID: Int, workTitle: String, workAuthors: [String] = [], initialChapterPosition: Int? = nil) {
+    init(
+        workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
+        isModal: Bool = false, onRequestExpand: (() -> Void)? = nil
+    ) {
         self.workID = workID
-        self.workTitle = workTitle
-        self.workAuthors = workAuthors
+        self.workContext = context
+        self.isModal = isModal
+        self.onRequestExpand = onRequestExpand
         _model = State(initialValue: CommentsModel(
-            workID: workID, workAuthors: workAuthors, initialChapterPosition: initialChapterPosition
+            workID: workID, workAuthors: context.authors, initialChapterPosition: initialChapterPosition
         ))
     }
 
     var body: some View {
         List {
-            controlsSection
+            infoSection
+            scopeSection
+            chapterSection
             contentSections
             if case .loaded = model.phase, auth.isLoggedIn {
                 // The safe-area inset reserves the floating CTA's footprint; this
@@ -104,48 +119,99 @@ struct CommentsView: View {
         } message: {
             Text(actionBanner ?? "")
         }
+        .toolbar {
+            // Only when presented modally: a push already gets the system's
+            // automatic back button, and a fully-expanded presentation (reached
+            // via onRequestExpand) has nowhere further to expand to.
+            if isModal {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+                if let onRequestExpand {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            onRequestExpand()
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        }
+                        .accessibilityLabel("Expand to full screen")
+                    }
+                }
+            }
+        }
     }
 
-    // MARK: Controls
+    // MARK: Info card
 
-    private var controlsSection: some View {
+    /// Reuses Work Detail's own overview-card pattern (title/author/fandom/stats
+    /// row via `WorkStatLabel`) rather than inventing a second one. No cover
+    /// thumbnail — most AO3 works don't have one, and Work Detail's card omits
+    /// it too. Comment count joins rating/chapters once the page has loaded.
+    private var infoSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
-                Text(workTitle)
-                    .font(.headline)
-                    .lineLimit(2)
+                Text(workContext.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                scopePicker
-
-                if model.scope == .byChapter {
-                    Button {
-                        showingChapterPicker = true
-                    } label: {
-                        HStack {
-                            Label(model.selectedChapter?.displayName ?? "Choose a chapter",
-                                  systemImage: "book")
-                                .lineLimit(1)
-                            Spacer()
-                            Image(systemName: "chevron.down")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(minHeight: 44)
-                    .accessibilityLabel("Browse comments by chapter")
-                    .accessibilityValue(model.selectedChapter?.displayName ?? "No chapter selected")
+                if !workContext.authors.isEmpty {
+                    Label(workContext.authors.joined(separator: ", "), systemImage: "person")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
 
-                // One quiet secondary line: "N comments · Oldest First ˅" — the
-                // sort is a small menu, not a bright control that dominates the card.
-                HStack(spacing: 4) {
-                    if let total = model.page?.totalComments {
-                        Text("\(total.formatted()) comments")
-                    } else {
-                        Text("Comments")
+                if !workContext.fandoms.isEmpty {
+                    Label(workContext.fandoms.joined(separator: ", "), systemImage: "books.vertical")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+
+                FlowLayout(spacing: 10, rowSpacing: 6) {
+                    if !workContext.rating.isEmpty {
+                        WorkStatLabel(text: workContext.rating, symbol: "checkmark.shield")
                     }
-                    Text("·")
+                    if !workContext.chapters.isEmpty {
+                        WorkStatLabel(text: workContext.chapters, symbol: "book")
+                    }
+                    if let total = model.page?.totalComments {
+                        WorkStatLabel(text: total.formatted(), symbol: "bubble.left")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        }
+        .cardRow()
+    }
+
+    // MARK: Scope + sort
+
+    /// All/By Chapter plus the (local-only — AO3 has no server sort) order menu.
+    /// Its own card, separate from the info card above and the chapter selector
+    /// below, matching the mockup's three distinct control cards.
+    private var scopeSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                // The native segmented style — matches Reader Settings' own
+                // Scrolled/Paged control exactly, rather than a bespoke capsule.
+                Picker("Scope", selection: $model.scope) {
+                    ForEach(CommentsModel.Scope.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Comment scope")
+
+                // One quiet secondary line — the sort is a small menu, not a
+                // bright control that dominates the card.
+                HStack(spacing: 4) {
                     Menu {
                         Button {
                             model.newestFirst = false
@@ -184,31 +250,35 @@ struct CommentsView: View {
         .cardRow()
     }
 
-    private var scopePicker: some View {
-        HStack(spacing: 0) {
-            ForEach(CommentsModel.Scope.allCases) { scope in
+    // MARK: Chapter selector
+
+    /// Its own card, not glued onto the info card — matches the mockup, and
+    /// reads more clearly as "which comments am I viewing" rather than as
+    /// metadata about the work.
+    @ViewBuilder
+    private var chapterSection: some View {
+        if model.scope == .byChapter {
+            Section {
                 Button {
-                    model.scope = scope
+                    showingChapterPicker = true
                 } label: {
-                    Text(scope.rawValue)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(model.scope == scope ? .white : .primary)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 36)
-                        .background {
-                            if model.scope == scope {
-                                Capsule().fill(Color.accentColor)
-                            }
-                        }
+                    HStack {
+                        Label(model.selectedChapter?.displayName ?? "Choose a chapter",
+                              systemImage: "book")
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(model.scope == scope ? .isSelected : [])
+                .frame(minHeight: 44)
+                .accessibilityLabel("Browse comments by chapter")
+                .accessibilityValue(model.selectedChapter?.displayName ?? "No chapter selected")
             }
+            .cardRow()
         }
-        .padding(4)
-        .background(.quaternary, in: Capsule())
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Comment scope")
     }
 
     // MARK: Content
@@ -250,7 +320,7 @@ struct CommentsView: View {
                 ForEach(model.displayRows) { row in
                     CommentThreadRow(
                         row: row,
-                        workAuthors: workAuthors,
+                        workAuthors: workContext.authors,
                         showChapterBadge: model.scope == .all && row.depth == 0,
                         onReply: { model.startComposer(replyingTo: $0) },
                         onEdit: { model.startEditing($0) },
@@ -493,6 +563,84 @@ private struct TrailingIconLabelStyle: LabelStyle {
 
 extension LabelStyle where Self == TrailingIconLabelStyle {
     static var trailingIcon: TrailingIconLabelStyle { TrailingIconLabelStyle() }
+}
+
+// MARK: - Sheet presentation with expand-to-full-screen
+
+/// Presents `CommentsView` as a pop-up card with an "expand" affordance that
+/// promotes it to a `fullScreenCover` — for long threads or composing, where the
+/// sheet feels cramped. Reused by every call site that shows Comments modally
+/// (the actions menu, both readers, and the Library/Search context menus) so
+/// the sheet→full-screen handoff is written once.
+private struct CommentsSheetModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let workID: Int
+    let context: AO3CommentsWorkContext
+    var initialChapterPosition: Int?
+
+    #if !os(macOS)
+    @State private var isFullScreen = false
+    @State private var pendingExpand = false
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        // macOS has no fullScreenCover concept (sheets already resize to the
+        // window); present as a plain sheet with no expand affordance.
+        content.sheet(isPresented: $isPresented) {
+            NavigationStack {
+                CommentsView(
+                    workID: workID, context: context, initialChapterPosition: initialChapterPosition,
+                    isModal: true
+                )
+            }
+        }
+        #else
+        content
+            // The full-screen presentation only starts once the sheet has fully
+            // dismissed (onDismiss) — flipping both bindings in the same pass
+            // races the two presentations and can drop the fullScreenCover.
+            .sheet(isPresented: $isPresented, onDismiss: {
+                if pendingExpand {
+                    pendingExpand = false
+                    isFullScreen = true
+                }
+            }) {
+                NavigationStack {
+                    CommentsView(
+                        workID: workID, context: context, initialChapterPosition: initialChapterPosition,
+                        isModal: true,
+                        onRequestExpand: {
+                            pendingExpand = true
+                            isPresented = false
+                        }
+                    )
+                }
+            }
+            .fullScreenCover(isPresented: $isFullScreen) {
+                NavigationStack {
+                    CommentsView(
+                        workID: workID, context: context, initialChapterPosition: initialChapterPosition,
+                        isModal: true
+                    )
+                }
+            }
+        #endif
+    }
+}
+
+extension View {
+    /// Presents the native AO3 comments screen as an expandable pop-up card. See
+    /// `CommentsSheetModifier`.
+    func commentsSheet(
+        isPresented: Binding<Bool>, workID: Int, context: AO3CommentsWorkContext,
+        initialChapterPosition: Int? = nil
+    ) -> some View {
+        modifier(CommentsSheetModifier(
+            isPresented: isPresented, workID: workID, context: context,
+            initialChapterPosition: initialChapterPosition
+        ))
+    }
 }
 
 // MARK: - Composer

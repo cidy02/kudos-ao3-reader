@@ -616,14 +616,12 @@ struct ReadiumReaderView: View {
                 }
             }
             .sheet(isPresented: readerPanelBinding) { readerSheet }
-            .sheet(isPresented: $showingComments) {
-                if let id = ao3WorkID {
-                    NavigationStack {
-                        CommentsView(workID: id, workTitle: work.title, workAuthors: [work.author],
-                                     initialChapterPosition: currentAO3Chapter)
-                    }
-                }
-            }
+            .commentsSheet(
+                isPresented: $showingComments,
+                workID: ao3WorkID ?? 0,
+                context: .init(savedWork: work),
+                initialChapterPosition: currentAO3Chapter
+            )
             // Immersive reading: hide the tab bar; the nav/status bars follow the chrome.
             .toolbar(.hidden, for: .tabBar)
             .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)

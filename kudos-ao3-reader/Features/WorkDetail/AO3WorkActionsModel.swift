@@ -16,18 +16,16 @@ final class AO3WorkActionsModel {
     var bookmarkInput = AO3AuthService.BookmarkInput()
     var bookmarkError: String?
 
-    /// Drives the native comments screen (sheet). Title/authors are captured at
+    /// Drives the native comments screen (sheet). The work context is captured at
     /// tap time — the model itself stays work-agnostic.
     var showingCommentsScreen = false
-    var commentsTitle = ""
-    var commentsAuthors: [String] = []
+    var commentsContext = AO3CommentsWorkContext(title: "", authors: [])
     /// The AO3 story chapter to open comments on, when launched from a reader
     /// (chapter-aware button). nil from Work Detail → opens on All comments.
     var commentsInitialChapterPosition: Int?
 
-    func startViewingComments(title: String, authors: [String], initialChapterPosition: Int? = nil) {
-        commentsTitle = title
-        commentsAuthors = authors
+    func startViewingComments(context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil) {
+        commentsContext = context
         commentsInitialChapterPosition = initialChapterPosition
         showingCommentsScreen = true
     }
@@ -106,16 +104,12 @@ private struct AO3WorkActionsModifier: ViewModifier {
             .sheet(isPresented: $actions.showingBookmark) {
                 AO3BookmarkComposer(actions: actions, workID: workID, auth: auth)
             }
-            .sheet(isPresented: $actions.showingCommentsScreen) {
-                NavigationStack {
-                    CommentsView(
-                        workID: workID,
-                        workTitle: actions.commentsTitle,
-                        workAuthors: actions.commentsAuthors,
-                        initialChapterPosition: actions.commentsInitialChapterPosition
-                    )
-                }
-            }
+            .commentsSheet(
+                isPresented: $actions.showingCommentsScreen,
+                workID: workID,
+                context: actions.commentsContext,
+                initialChapterPosition: actions.commentsInitialChapterPosition
+            )
             .alert("AO3", isPresented: bannerPresented) {
                 Button("OK", role: .cancel) { actions.banner = nil }
             } message: {

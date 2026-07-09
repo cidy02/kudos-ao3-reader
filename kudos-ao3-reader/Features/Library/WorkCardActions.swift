@@ -151,10 +151,6 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
         work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
     }
 
-    private var commentsAuthors: [String] {
-        work.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-    }
-
     func body(content: Content) -> some View {
         content
             .contextMenu {
@@ -234,13 +230,11 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
             .sheet(isPresented: $showingAddToCollection) {
                 AddToCollectionView(work: work)
             }
-            .sheet(isPresented: $showingComments) {
-                if let id = commentsWorkID {
-                    NavigationStack {
-                        CommentsView(workID: id, workTitle: work.title, workAuthors: commentsAuthors)
-                    }
-                }
-            }
+            .commentsSheet(
+                isPresented: $showingComments,
+                workID: commentsWorkID ?? 0,
+                context: .init(savedWork: work)
+            )
             .deleteConfirmation(
                 for: $pendingDelete,
                 title: "Delete this work?",
@@ -377,11 +371,11 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
             .sheet(item: $queueWork) { AddToQueueView(work: $0) }
             .sheet(item: $collectionWork) { AddToCollectionView(work: $0) }
-            .sheet(isPresented: $showingComments) {
-                NavigationStack {
-                    CommentsView(workID: work.id, workTitle: work.title, workAuthors: work.authors)
-                }
-            }
+            .commentsSheet(
+                isPresented: $showingComments,
+                workID: work.id,
+                context: .init(remote: work)
+            )
             .deleteConfirmation(
                 for: $pendingDelete,
                 title: "Delete this work?",

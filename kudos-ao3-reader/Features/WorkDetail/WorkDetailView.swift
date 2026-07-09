@@ -400,8 +400,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         ToolbarItem {
             Menu {
                 if let id = ao3WorkID {
-                    AO3WorkActionsMenu(workID: id, actions: workActions,
-                                       workTitle: displayTitle, workAuthors: displayAuthorList)
+                    AO3WorkActionsMenu(workID: id, actions: workActions, workContext: .init(
+                        title: displayTitle, authors: displayAuthorList,
+                        fandoms: displayFandoms, rating: displayRating, chapters: displayChapters
+                    ))
                 }
             } label: {
                 Label("More actions", systemImage: "ellipsis.circle")
@@ -575,7 +577,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     // Comments open the native comments screen; the count doubles
                     // as the row's value when known.
                     NavigationLink {
-                        CommentsView(workID: id, workTitle: displayTitle, workAuthors: displayAuthorList)
+                        CommentsView(workID: id, context: .init(
+                            title: displayTitle, authors: displayAuthorList,
+                            fandoms: displayFandoms, rating: displayRating, chapters: displayChapters
+                        ))
                     } label: {
                         LabeledContent("Comments",
                                        value: displayComments.map { $0.formatted() } ?? "Open")

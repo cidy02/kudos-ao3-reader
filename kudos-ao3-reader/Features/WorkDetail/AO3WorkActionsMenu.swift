@@ -8,8 +8,7 @@ struct AO3WorkActionsMenu: View {
     @Bindable var actions: AO3WorkActionsModel
     /// Context for the native comments screen ("Comments"); optional so
     /// existing call sites keep working with just an id.
-    var workTitle = ""
-    var workAuthors: [String] = []
+    var workContext = AO3CommentsWorkContext(title: "", authors: [])
     /// When shown from a reader, the AO3 story chapter to open comments on so the
     /// user lands on the chapter they're reading. nil (Work Detail) → All comments.
     var commentsInitialChapterPosition: Int?
@@ -25,7 +24,7 @@ struct AO3WorkActionsMenu: View {
             .disabled(actions.isWorking)
 
             Button {
-                actions.startViewingComments(title: workTitle, authors: workAuthors,
+                actions.startViewingComments(context: workContext,
                                              initialChapterPosition: commentsInitialChapterPosition)
             } label: {
                 Label("Comments", systemImage: "bubble.left.and.bubble.right")
