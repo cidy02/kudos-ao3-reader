@@ -14,7 +14,18 @@ id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
 
 ---
 
-## Status snapshot (2026-07-08, updated same day)
+## Status snapshot (2026-07-09)
+
+### Landed: Phase 4 — Native AO3 Comments — `87ef7d0` / T-82 (⛔ merge-gated)
+Owner-specified feature (mockups as direction, not pixel spec) built on
+`feature/ao3-comments` off `release-hardening`. Full working notes, live-
+verified endpoint table, respect rules, double-post design, scope-outs, and
+the owner's manual test checklist live in `docs/ai/COMMENTS_HANDOFF.md` —
+read that first when resuming. verify.sh ALL GREEN (265 tests / 33 suites).
+**Do NOT merge** until the owner's live-session pass (post/reply/edit/delete +
+double-post sims). Candidate follow-ups listed in the handoff doc.
+
+## Earlier snapshot (2026-07-08, updated same day)
 
 ### Landed: Phase 3 item 9 (ReadingState enum) — `a4c844e` / T-81
 Picked up Fable's complete-but-uncommitted ReadingState work (cut off by a
