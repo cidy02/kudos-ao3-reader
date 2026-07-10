@@ -217,10 +217,9 @@ private struct NestedReplyCard: View {
         )
         .id(comment.id)
         .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
-        .padding(.vertical, 8)
-        .padding(.trailing, CommentThreadGeometry.nestedCardPadding)
-        // Leading 0 keeps avatars on the same column as the root spine / bridges.
-        .padding(.leading, 0)
+        // Equal inset on every side so the avatar isn’t pushed down relative
+        // to the leading edge (top used to be 8 while leading was 0).
+        .padding(CommentThreadGeometry.nestedCardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.appTheme.cardSurface, in: shape)
         .overlay {
