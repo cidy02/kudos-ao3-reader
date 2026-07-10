@@ -148,11 +148,12 @@ struct AO3CommentsParseTests {
     }
 
     @Test func childTrailingInsetCapsVisualDepthWithoutLogicalCap() {
-        // Leading outer inset stays 0 so avatar centers can share a vertical
-        // line with the parent; trailing still caps after depth 3.
+        // Leading outer inset is −pad so inner pad stays corner-safe while the
+        // avatar column still shares the parent's centerline; trailing caps
+        // after depth 3.
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 0) == 0)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == 0)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 8) == 0)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == -10)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 8) == -10)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 0) == 0)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 1) == 10)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 3) == 10)
@@ -160,23 +161,20 @@ struct AO3CommentsParseTests {
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 8) == 0)
     }
 
-    @Test func nestedAvatarCentersAlignWithImmediateParent() {
-        // depth 1 (44pt parent → 36pt child): leading pad = 22 - 18 = 4
-        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 1) == 4)
-        // depth 2+ (36 → 36): pad = 0
-        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 2) == 0)
-        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 5) == 0)
+    @Test func nestedAvatarCentersAlignOnSharedColumn() {
+        // Nested cards keep full corner-safe padding on every side.
+        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 1) == 10)
+        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 2) == 10)
+        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 5) == 10)
 
-        // Relative to the shared parent-content leading edge, each child's
-        // avatar center matches its parent's.
+        // Outer −pad + inner pad + column/2 == parent column center for every
+        // depth (smaller reply avatars are centered inside the 44pt column).
+        let columnCenter = CommentThreadGeometry.avatarColumnWidth / 2
+        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 0) == columnCenter)
         for depth in 1...6 {
-            let parentCenter = CommentThreadGeometry.avatarSize(forDepth: depth - 1) / 2
-            let childCenter = CommentThreadGeometry.avatarCenterX(forDepth: depth)
-            #expect(childCenter == parentCenter)
+            #expect(CommentThreadGeometry.avatarCenterX(forDepth: depth) == columnCenter)
         }
-        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 0) == 22)
-        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 1) == 22)
-        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 2) == 18)
+        #expect(columnCenter == 22)
     }
 
     @Test func displayThreadsPreservesReplyTreesAndNewestFirstRootOrder() {
