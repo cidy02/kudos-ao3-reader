@@ -335,4 +335,59 @@ struct AO3ClientTests {
         #expect(metadata.dateUpdated == "03 Jan 2026")
         #expect(metadata.isComplete == false)
     }
+
+    // MARK: Fandom index (/media/<name>/fandoms) — linear-scan parser
+
+    /// Two letter-group `<ol>`s mirroring AO3's fandom index markup: entities in
+    /// names, comma-grouped counts, whitespace, a count-less entry, a duplicate
+    /// name across groups, a swapped-attribute-order link, and a non-index `<ol>`
+    /// (letter nav) that must be skipped.
+    static let fandomIndexHTML = """
+    <html><body>
+    <ol class="alphabet fandom listbox group">
+      <li><a href="#A">A</a></li>
+    </ol>
+    <ol class="fandom index group">
+      <li>
+        <a class="tag" href="/tags/A*20Song/works">A Song of Ice &amp; Fire</a>
+        (12,345)
+      </li>
+      <li><a class="tag" href="/tags/Arcane/works">Arcane</a> (987)</li>
+      <li><a class="tag" href="/tags/Uncounted/works">Uncounted Fandom</a></li>
+    </ol>
+    <ol class="fandom index group">
+      <li><a href="/tags/Boruto/works" class="tag">Boruto</a> (56)</li>
+      <li><a class="tag" href="/tags/Arcane/works">Arcane</a> (987)</li>
+      <li><a href="/media">Not a tag link</a> (999)</li>
+    </ol>
+    </body></html>
+    """
+
+    @Test func parsesFandomIndexNamesCountsAndEntities() {
+        let fandoms = AO3Client.parseFandomIndex(Self.fandomIndexHTML)
+
+        #expect(fandoms.map(\.name) == [
+            "A Song of Ice & Fire", "Arcane", "Uncounted Fandom", "Boruto"
+        ])
+        #expect(fandoms[0].workCount == 12345) // entities decoded, commas stripped
+        #expect(fandoms[1].workCount == 987)
+        #expect(fandoms[2].workCount == nil) // no "(n)" after the link
+        #expect(fandoms[3].workCount == 56) // href-before-class attribute order
+    }
+
+    @Test func fandomIndexSkipsNavListsAndDuplicates() {
+        let fandoms = AO3Client.parseFandomIndex(Self.fandomIndexHTML)
+
+        // The alphabet nav <ol> has "fandom" but not "index" in its class list —
+        // its "A" anchor must not become a fandom; the repeated "Arcane" appears once.
+        #expect(!fandoms.contains { $0.name == "A" })
+        #expect(fandoms.count(where: { $0.name == "Arcane" }) == 1)
+        // Plain links inside an index block (no class="tag") are skipped.
+        #expect(!fandoms.contains { $0.name == "Not a tag link" })
+    }
+
+    @Test func fandomIndexOfUnrelatedHTMLIsEmpty() {
+        #expect(AO3Client.parseFandomIndex("<html><body><p>maintenance</p></body></html>").isEmpty)
+        #expect(AO3Client.parseFandomIndex("").isEmpty)
+    }
 }

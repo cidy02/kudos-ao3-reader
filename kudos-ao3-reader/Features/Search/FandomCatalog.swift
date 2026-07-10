@@ -104,17 +104,19 @@ final class FandomCatalog {
                     return (key, list)
                 }
             }
-            var changed = false
             for await (key, list) in group {
                 if let list {
                     fandomsByCategory[key] = list
                     entries[key] = FandomCatalogCache.Entry(fandoms: list, fetchedAt: Date())
-                    changed = true
+                    // Persist per landing, not once after the whole group: if the
+                    // process dies mid-load (the exact jetsam scenario BUG-5 chased),
+                    // a single end-of-group persist loses every fetched list and the
+                    // next Browse open repeats the full burst — a kill loop.
+                    persist()
                 }
                 inFlight.remove(key)
                 if Task.isCancelled { group.cancelAll() }
             }
-            if changed { persist() }
         }
     }
 
@@ -143,17 +145,15 @@ final class FandomCatalog {
                     return (key, list)
                 }
             }
-            var changed = false
             for await (key, list) in group {
                 if let list {
                     fandomsByCategory[key] = list
                     entries[key] = FandomCatalogCache.Entry(fandoms: list, fetchedAt: Date())
-                    changed = true
+                    persist() // per landing — see loadMissing's rationale
                 }
                 inFlight.remove(key)
                 if Task.isCancelled { group.cancelAll() }
             }
-            if changed { persist() }
         }
     }
 

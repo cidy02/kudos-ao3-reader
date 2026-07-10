@@ -809,19 +809,76 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let absolute = path.hasPrefix("http") ? path : base + path
         guard let url = URL(string: absolute) else { throw AO3Error.network("Bad fandoms URL.") }
         let html = try await getHTML(url)
-        let doc = try SwiftSoup.parse(html)
-        var result: [AO3Fandom] = []
-        var seen = Set<String>()
-        for li in try doc.select("ol.fandom.index li").array() {
-            guard let link = try li.select("a.tag").first() else { continue }
-            let name = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty, seen.insert(name).inserted else { continue }
-            // The li's own text after the link is the work count, e.g. "(1,234)".
-            let count = try Int((li.ownText()).filter(\.isNumber))
-            result.append(AO3Fandom(name: name, workCount: count))
-        }
+        let result = Self.parseFandomIndex(html)
         guard !result.isEmpty else { throw AO3Error.parse }
         return result
+    }
+
+    /// Extracts every fandom (+work count) from a `/media/<name>/fandoms` index page
+    /// with a single linear string scan — deliberately **not** SwiftSoup.
+    ///
+    /// These pages are enormous (the big categories list 10k+ fandoms; multiple MB of
+    /// HTML). Building a full DOM for them, then running a `select` per `<li>`, cost
+    /// seconds of pegged CPU and a transient memory balloon well past 1GB (SwiftSoup's
+    /// per-select query-index rebuilds over a several-hundred-thousand-node tree) —
+    /// enough for iOS to jetsam the app on device the moment Browse opened (BUG-5's
+    /// second, deeper root cause; the first was the per-render stats storm).
+    ///
+    /// The page's relevant markup is flat and regular — one `<ol class="fandom index
+    /// group">` per letter, each `<li>` holding `<a class="tag" href="…">Name</a>
+    /// (1,234)` — so a cursor scan is exact, order-of-attributes tolerant, and runs in
+    /// O(page) time with O(result) memory. Static + internal for fixture tests,
+    /// matching `parseSearchPage`'s convention.
+    static func parseFandomIndex(_ html: String) -> [AO3Fandom] {
+        var result: [AO3Fandom] = []
+        var seen = Set<String>()
+        var cursor = html.startIndex
+
+        // Each letter section is its own <ol class="fandom index group">.
+        while let olOpen = html.range(of: "<ol", range: cursor..<html.endIndex) {
+            guard let olTagEnd = html.range(of: ">", range: olOpen.upperBound..<html.endIndex) else { break }
+            cursor = olTagEnd.upperBound
+            let olClasses = Self.classList(in: html[olOpen.upperBound..<olTagEnd.lowerBound])
+            guard olClasses.contains("fandom"), olClasses.contains("index") else { continue }
+            let blockEnd = html.range(of: "</ol>", range: cursor..<html.endIndex)?.lowerBound ?? html.endIndex
+
+            // Every fandom link inside the block: <a … class="tag" …>Name</a> (count)
+            var linkCursor = cursor
+            while let aOpen = html.range(of: "<a ", range: linkCursor..<blockEnd) {
+                guard let aTagEnd = html.range(of: ">", range: aOpen.upperBound..<blockEnd) else { break }
+                linkCursor = aTagEnd.upperBound
+                let aAttrs = html[aOpen.upperBound..<aTagEnd.lowerBound]
+                guard Self.classList(in: aAttrs).contains("tag") else { continue }
+                guard let aClose = html.range(of: "</a>", range: aTagEnd.upperBound..<blockEnd) else { break }
+
+                let rawName = String(html[aTagEnd.upperBound..<aClose.lowerBound])
+                let name = rawName.decodingHTMLEntities()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // The text between </a> and the next tag is the work count, e.g.
+                // " (1,234)" (same digits-only read the old DOM parse used).
+                let tailEnd = html.range(of: "<", range: aClose.upperBound..<blockEnd)?.lowerBound ?? blockEnd
+                let digits = html[aClose.upperBound..<tailEnd].filter(\.isNumber)
+                let count = Int(digits)
+
+                if !name.isEmpty, seen.insert(name).inserted {
+                    result.append(AO3Fandom(name: name, workCount: count))
+                }
+                linkCursor = aClose.upperBound
+            }
+            cursor = blockEnd
+        }
+        return result
+    }
+
+    /// The space-separated class names from a tag's attribute text — so matching
+    /// `class="tag"` keeps CSS `a.tag` semantics (word membership, any order,
+    /// tolerant of extra classes), not an exact-string comparison.
+    private static func classList(in attributes: Substring) -> [Substring] {
+        guard let attrStart = attributes.range(of: "class=\"") else { return [] }
+        let valueStart = attrStart.upperBound
+        guard let valueEnd = attributes[valueStart...].firstIndex(of: "\"") else { return [] }
+        return attributes[valueStart..<valueEnd].split(separator: " ")
     }
 
     // MARK: Parsing (ported selectors)
