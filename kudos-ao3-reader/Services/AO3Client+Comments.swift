@@ -184,11 +184,14 @@ extension AO3Client {
         }
 
         // Actions: expose exactly what AO3 rendered for this session, nothing
-        // more. Replies are siblings (not descendants), so the only ul.actions
-        // inside this li is this comment's own.
-        if let actions = try li.select("ul.actions").first() {
+        // more. Prefer the comment's own navigation list; fall back to any
+        // `ul.actions` that is a direct structural action bar for this li.
+        let actionLists = try li.select("ul[id^=navigation_for_comment_], ul.actions")
+        if let actions = actionLists.first() {
             for link in try actions.select("a").array() {
-                let label = try link.text().lowercased()
+                let label = try link.text()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
                 let href = try link.attr("href")
                 applyAction(label: label, href: href, to: &comment)
             }
@@ -198,8 +201,13 @@ extension AO3Client {
     }
 
     private static func applyAction(label: String, href: String, to comment: inout AO3Comment) {
+        // Prefer href for Reply: full-work comment pages sometimes differ in
+        // label whitespace / remote markup, but always use add_comment_reply.
+        if label == "reply" || href.contains("add_comment_reply") {
+            comment.canReply = true
+            return
+        }
         switch label {
-        case "reply": comment.canReply = true
         case "edit": comment.editPath = href
         case "delete": comment.deletePath = href
         case "thread": comment.threadPath = href

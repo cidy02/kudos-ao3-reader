@@ -65,15 +65,40 @@ struct AO3CommentsParseTests {
         let guest = try #require(page.comments.first)
         #expect(guest.editPath == nil)
         #expect(guest.deletePath == nil)
+        #expect(guest.canReply)
 
         let own = try #require(guest.replies.first)
         #expect(own.editPath == "/comments/1002/edit")
         #expect(own.deletePath == "/comments/1002")
+        #expect(own.canReply)
         #expect(own.threadActionURL?.absoluteString == "https://archiveofourown.org/comments/1002")
         #expect(own.parentThreadURL?.absoluteString == "https://archiveofourown.org/comments/1001")
         // Drives native "Parent Thread" focus (scroll-to, not an AO3 web page).
         #expect(own.parentCommentID == 1001)
         #expect(guest.parentCommentID == nil)
+    }
+
+    @Test func replyActionDetectedFromAddCommentReplyHref() throws {
+        // Full-work pages can vary label whitespace; the add_comment_reply path
+        // is the durable signal that AO3 offered a Reply action.
+        let html = """
+        <div id="comments_placeholder">
+          <ol class="thread">
+            <li class="comment group" id="comment_42" role="article">
+              <h4 class="heading byline"><a href="/users/A/pseuds/A">A</a></h4>
+              <blockquote class="userstuff"><p>Hi</p></blockquote>
+              <ul class="actions" id="navigation_for_comment_42">
+                <li><a data-remote="true" href="/comments/add_comment_reply?chapter_id=9&amp;id=42&amp;view_full_work=true">  Reply  </a></li>
+                <li><a href="/comments/42">Thread</a></li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+        """
+        let page = try AO3Client.parseCommentsPage(html, page: 1)
+        let comment = try #require(page.comments.first)
+        #expect(comment.canReply)
+        #expect(comment.threadPath == "/comments/42")
     }
 
     @Test func topLevelCommentWithNoRepliesStaysLeaf() throws {

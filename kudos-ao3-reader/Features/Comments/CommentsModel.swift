@@ -143,7 +143,7 @@ final class CommentsModel {
         // first to learn the page count (cached afterwards).
         var target = 1
         if newestFirst {
-            if let known = knownTotalPages() {
+            if let known = knownTotalPages(auth: auth) {
                 target = known
             } else if let first = await fetchPage(1, auth: auth, forceRefresh: forceRefresh) {
                 target = first.totalPages
@@ -206,7 +206,15 @@ final class CommentsModel {
     private func fetchPage(
         _ number: Int, auth: AO3AuthService, forceRefresh: Bool
     ) async -> AO3CommentsPage? {
-        let key = CommentsPageCache.Key(workID: workID, chapterID: chapterForRequests, page: number)
+        // Key includes session identity so a signed-out fetch (no Reply/Edit
+        // actions) is never reused after login — that was hiding Reply in All
+        // when By Chapter was loaded fresh under the same work id.
+        let key = CommentsPageCache.Key(
+            workID: workID,
+            chapterID: chapterForRequests,
+            page: number,
+            sessionIdentity: auth.username ?? ""
+        )
         if !forceRefresh, let cached = Self.cache.page(for: key) {
             isFromCache = true
             if phase != .loaded { phase = .loaded }
@@ -265,9 +273,18 @@ final class CommentsModel {
         }
     }
 
-    private func knownTotalPages() -> Int? {
-        let key = CommentsPageCache.Key(workID: workID, chapterID: chapterForRequests, page: 1)
-        return Self.cache.page(for: key, ignoringTTL: true)?.totalPages
+    private func knownTotalPages(auth: AO3AuthService? = nil) -> Int? {
+        // Prefer the caller's session when available so newest-first doesn't
+        // read a signed-out page count from a mismatched cache entry.
+        let identity = auth?.username ?? ""
+        let key = CommentsPageCache.Key(
+            workID: workID, chapterID: chapterForRequests, page: 1, sessionIdentity: identity
+        )
+        if let pages = Self.cache.page(for: key, ignoringTTL: true)?.totalPages {
+            return pages
+        }
+        // Fallback: any cached page for this work/chapter (legacy / other session).
+        return Self.cache.anyTotalPages(workID: workID, chapterID: chapterForRequests)
     }
 
     // MARK: Composer
@@ -424,6 +441,10 @@ final class CommentsPageCache {
         let workID: Int
         let chapterID: Int?
         let page: Int
+        /// Signed-in AO3 username, or `""` when signed out. Session-scoped
+        /// actions (Reply/Edit/Delete) differ by auth, so the cache must not
+        /// mix signed-in and signed-out HTML for the same work page.
+        let sessionIdentity: String
     }
 
     private var pages: [Key: AO3CommentsPage] = [:]
@@ -442,6 +463,14 @@ final class CommentsPageCache {
 
     func store(_ page: AO3CommentsPage, for key: Key) {
         pages[key] = page
+    }
+
+    /// Any cached total-pages value for this work/chapter, regardless of session
+    /// (used only as a soft fallback when sizing newest-first).
+    func anyTotalPages(workID: Int, chapterID: Int?) -> Int? {
+        pages.first { key, _ in
+            key.workID == workID && key.chapterID == chapterID && key.page == 1
+        }?.value.totalPages
     }
 
     /// Chapter lists barely change; keep them for the session.
