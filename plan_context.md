@@ -16,6 +16,29 @@ id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
 
 ## Status snapshot (2026-07-10)
 
+### DONE: T-84 comment-UI restoration (merge clobber) — `20d6f74`
+Owner caught that "comment ui fixes in the other branches aren't in this one."
+Root cause: merge `b684e54` resolved `CommentThreadRow.swift` to the OLDER
+T-85 nesting version, discarding the same-day owner-corrected T-84 rounds
+(3d573c8/96b1827/08446cc — connector geometry, avatar-in-bubble). Every branch
+was ancestry-contained but content was lost (rev-list can't catch this; tree
+diffs + chronology did). Restored bbf3116's file + grafted T-85's
+`AO3CommentTimestamp.displayText` rendering into T-84's placement; geometry
+test now pins T-84's occlusion invariant. Consciously dropped (documented in
+COMMENTS_HANDOFF.md, recoverable from d0a51ea): T-85's branched ancestor
+connector drawing. verify.sh ALL GREEN 282/33. **Merge-clobber audit of the
+whole stack:** only 3 merges exist; signature audit confirmed all other
+features' content intact (initialChapterPosition/loadInitial/ao3StoryChapter/
+parseFandomIndex/AO3SessionHealth/verifySession/CollectionWorkPicker/
+readingState). CommentThreadRow was the only casualty.
+
+### Branch-consolidation readiness (owner asked)
+All branches (local + origin) are fully contained in `merge-test`; `main` is a
+strict ancestor (fast-forward possible); android branch excluded per owner.
+Remaining gates before consolidating: owner visual pass of the restored
+comment thread UI, T-82 live-session write checklist, BUG-5 device retest,
+drag-reorder still pinned/broken (rides as known-open).
+
 ### DONE: BUG-5 second root cause — fandom-index parse balloon — `9ab14c2`
 Fixed, verified (282/33 green), empirically re-measured (peak 1.33GB → 427MB,
 parser byte-identical on real pages), committed, BUG-5 entry updated.
