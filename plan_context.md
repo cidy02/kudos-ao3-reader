@@ -14,6 +14,39 @@ id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
 
 ---
 
+## Status snapshot (2026-07-10)
+
+### DONE: BUG-5 second root cause — fandom-index parse balloon — `9ab14c2`
+Fixed, verified (282/33 green), empirically re-measured (peak 1.33GB → 427MB,
+parser byte-identical on real pages), committed, BUG-5 entry updated.
+**Owner must rebuild/reinstall on the iPhone to pick it up.** Details below
+kept for the record:
+
+### (diagnosis record) BUG-5 second root cause — fandom-index parse balloon
+Owner re-reported Browse CPU/memory balloon → jetsam on iPhone 17 Pro, AFTER
+`685c8a3` (view-side stats-storm fix). **Reproduced empirically in the sim**
+(merge-test build, fandom disk cache wiped, tapped Browse via computer-use,
+1 Hz `ps` sampler): RSS 330MB → **1.25–1.33GB in ~10s**, CPU pegged ~100%;
+sim survives (footprint peak 982MB then settles ~105MB), a phone jetsams.
+`sample` hot stacks (`/tmp/kudos_sample2.txt`): the cost is INSIDE
+`AO3Client.fandoms(atPath:)` — SwiftSoup full-DOM parse of each multi-MB
+`/media/<cat>/fandoms` page, then `li.select("a.tag")` PER `<li>` (14k+ per big
+category), each triggering vendored SwiftSoup's
+`rebuildQueryIndexes…`/`traverseElementsDepthFirst` over the giant tree —
+quadratic CPU + massive transient allocation churn, ×3 concurrent categories.
+**Fix (uncommitted, verify.sh running `/tmp/verify_bug5b.log`):**
+1. `AO3Client.parseFandomIndex(_:)` — linear string-scan extractor (no DOM),
+   CSS-faithful class matching via `classList(in:)`; `fandoms(atPath:)` now uses
+   it. +3 fixture tests in `AO3ClientTests`.
+2. `FandomCatalog.loadMissing/refresh` persist PER landed category (was once
+   after the whole group — a mid-load jetsam lost everything → refetch kill loop).
+Baseline for post-fix A/B (SwiftSoup run's real-page counts): Movies 14,496 /
+Books 14,212 / TV 11,558 / VG 8,342 / Anime&Manga 5,079 / Theater 1,796
+(cache `fandom-catalog.json` 3.3MB; 4 categories failed that run → refetch).
+Next: verify green → rebuild sim → cold-open Browse again → compare memory
+curve + per-category counts (parser equivalence on real pages) → commit →
+TASKS.md/BUG-5 update → owner rebuilds on device.
+
 ## Status snapshot (2026-07-09)
 
 ### Landed: Comments QoL — reader chapter-aware Comments button — `073a7f7`
