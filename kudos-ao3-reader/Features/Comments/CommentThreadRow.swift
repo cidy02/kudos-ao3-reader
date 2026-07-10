@@ -2,34 +2,29 @@ import SwiftUI
 
 /// Fixed geometry for the comment thread's avatar column and connector line.
 ///
-/// The parent row places its avatar in a left column; every reply's avatar
-/// overlaps its OWN bubble's top-left corner (the mockup's "avatar badge" —
-/// half poking above/outside the card, half over its top-left interior)
-/// instead of sitting inside the bubble's content. Both constructions still
-/// share one fixed centerline, so the mockups' key invariant holds with a
-/// single straight line and no elbows:
-///
-///     connectorLineX == parentAvatar.centerX == replyAvatar.centerX
-///
-/// True at every depth: a reply's avatar offset explicitly cancels out its own
-/// bubble's `bubbleIndent`, so the avatar's absolute x never moves even though
-/// the bubble around it does (see that function's doc for the resulting depth
-/// ≥ 3 trade-off). All values are in the group card's coordinate space; the
-/// connector is drawn by `CommentThreadGroupRowModifier`, which owns the same
-/// paddings.
+/// The parent row places its avatar in a left column, content beside it.
+/// Every reply's avatar sits INSIDE its own nested bubble the same way — an
+/// avatar-then-content row — with the whole thing wrapped in a floating card
+/// (margin on every side, its own surface/border). The connector line runs
+/// down the parent's fixed avatar-column centerline; for replies it only needs
+/// to reach each bubble's own top edge, because the bubble's opaque fill —
+/// not any per-avatar occlusion trick — hides the rest of the line for
+/// whatever height the bubble turns out to be (its content is variable-height
+/// AO3 text, so the geometry deliberately never needs to know that height).
+/// All values are in the group card's coordinate space; the connector is
+/// drawn by `CommentThreadGroupRowModifier`, which owns the same paddings.
 enum CommentThreadGeometry {
     /// The group card's inner horizontal padding (both edges).
     static let cardPadding: CGFloat = 14
     /// Row top padding before the parent's own content begins.
     static let firstRowTopPadding: CGFloat = 14
-    /// Row top padding before a reply's bubble begins — sized so the avatar,
-    /// which overlaps the bubble's top edge and pokes `replyAvatarSize / 2`
-    /// above it, stays fully within this row rather than into the row above.
-    static let replyRowTopPadding: CGFloat = 22
-    /// Extra margin a reply's own bubble gets beyond the group card's shared
-    /// trailing inset, and the row's own bottom gap before the next row —
-    /// together with the corner-overlapping avatar, this is what makes a reply
-    /// read as a floating card rather than a full-width tinted strip.
+    /// Row top padding before a reply's bubble begins.
+    static let replyRowTopPadding: CGFloat = 8
+    /// A reply bubble's own left margin (row-local, i.e. relative to the row's
+    /// content after the shared `cardPadding` inset) — real space on every
+    /// side (this, `replyBubbleTrailingMargin`, `replyRowBottomPadding`) is
+    /// what makes a reply read as a floating card, not a full-width strip.
+    static let replyBubbleLeadingMargin: CGFloat = 8
     static let replyBubbleTrailingMargin: CGFloat = 10
     static let replyRowBottomPadding: CGFloat = 10
 
@@ -38,63 +33,40 @@ enum CommentThreadGeometry {
     /// The parent avatar's column width == its size (no extra column margin).
     static let avatarColumnWidth: CGFloat = parentAvatarSize
 
-    /// Extra bubble indent per depth level past the first reply, capped so long
-    /// AO3 comments keep a readable measure on phone widths. Zero at depth 1
-    /// (the first reply) — its bubble sits exactly where `replyBubbleLeadingMargin`
-    /// places it, so its avatar overlaps THAT bubble's real corner exactly.
-    ///
-    /// At depth ≥ 2 the bubble indents further right, but the avatar's own
-    /// offset (see `CommentThreadRow.replyBubble`) explicitly subtracts this
-    /// same amount, so the avatar's ABSOLUTE position never moves — the
-    /// connector stays a single straight line with no elbow at every depth.
-    /// The trade-off lands on the avatar instead: at depth 2 it still clips the
-    /// (now-indented) bubble's corner by `replyAvatarSize/2 - bubbleIndent(2)`
-    /// (6pt here); at depth ≥ 3 the numbers cross and the avatar sits fully
-    /// detached in the gap to the bubble's left. Accepted, since keeping the
-    /// connector's integrity at the common depth-0/1/2 cases matters more than
-    /// a precise corner-overlap this deep, and AO3 threads rarely nest this far.
+    /// Extra bubble indent for a reply-to-a-reply (depth 2+), capped at ONE step
+    /// past the first reply level. This cap is load-bearing, not just a phone-
+    /// width nicety: the connector for a non-last reply runs the row's full
+    /// height and relies on the bubble's own opaque fill to hide it (see
+    /// `CommentThreadGroupRowModifier.connector`) — that only works while the
+    /// bubble's left edge stays at or left of `connectorCenterX`. A per-depth
+    /// indent (12pt/level) pushes the edge past that line at depth 3+
+    /// (bubble left = cardPadding + replyBubbleLeadingMargin + indent = 14+8+24
+    /// = 46 > connectorCenterX's 36), which would leave the line floating,
+    /// unhidden, to the left of a triply-nested bubble. Flattening to ONE step
+    /// keeps every depth safely at bubbleLeft=34 <= 36, at the cost of not
+    /// visually distinguishing depth 3+ from depth 2 — an acceptable trade for
+    /// a rare, deep case, since AO3's own UI doesn't distinguish them either.
     static func bubbleIndent(forDepth depth: Int) -> CGFloat {
-        CGFloat(min(depth, 4) - 1) * 12
+        CGFloat(min(depth, 2) - 1) * 12
     }
 
     /// The connector's center x within the group card (padding + column center)
-    /// — also every avatar's center x, parent or reply.
+    /// — also the parent avatar's center x. Reply avatars live inside their own
+    /// bubble's independent layout and are no longer pinned to this line (see
+    /// the type's own doc) — the connector only needs to reach the bubble.
     static var connectorCenterX: CGFloat { cardPadding + avatarColumnWidth / 2 }
     static let connectorWidth: CGFloat = 2
-    /// Breathing room between an avatar's edge and the line segment beneath it.
+    /// Breathing room between the parent avatar's edge and the line segment
+    /// beneath it (replies have no equivalent gap — see `parentContinuationTop`).
     static let connectorGap: CGFloat = 3
 
-    /// A reply bubble's own left margin (row-local, i.e. relative to the row's
-    /// content after the shared `cardPadding` inset): exactly enough that its
-    /// top-left corner sits ON the fixed centerline, so the corner-overlapping
-    /// avatar (see `CommentThreadRow`) lands on the same line as the parent's.
-    static var replyBubbleLeadingMargin: CGFloat { avatarColumnWidth / 2 }
-
-    /// Leading/top padding inside a reply's bubble content, clearing the
-    /// avatar's inside half (the half that overlaps the bubble's interior).
-    static var replyContentInset: CGFloat { replyAvatarSize / 2 + 8 }
-
-    /// Where the continuation segment starts, measured from the row's top edge:
-    /// just below this row's avatar.
-    static func continuationTop(forDepth depth: Int) -> CGFloat {
-        if depth == 0 {
-            // The parent avatar is top-anchored (plain HStack, no center-offset
-            // trick), so `firstRowTopPadding` is its TOP edge, not its center —
-            // its bottom edge is a full `parentAvatarSize` below that, not half.
-            return firstRowTopPadding + parentAvatarSize + connectorGap
-        }
-        // A reply's avatar IS center-anchored (the corner-overlap offset in
-        // `CommentThreadRow.replyBubble` puts its center at `replyRowTopPadding`
-        // exactly), so its bottom edge is only half a diameter further down.
-        return replyRowTopPadding + replyAvatarSize / 2 + connectorGap
-    }
-
-    /// Where a reply row's arrival segment ends, measured from the row's top
-    /// edge: this row's avatar center. A reply's avatar center sits exactly at
-    /// its bubble's top edge (that's the corner-overlap), which is
-    /// `replyRowTopPadding` below the row's own top.
-    static var arrivalBottom: CGFloat {
-        replyRowTopPadding
+    /// Where the continuation segment starts for a PARENT row, measured from
+    /// the row's top edge: just below the avatar's real bottom edge. The
+    /// parent avatar is top-anchored (plain HStack, no center-offset trick),
+    /// so `firstRowTopPadding` is its top edge — the bottom edge is a full
+    /// `parentAvatarSize` further down, not half of it.
+    static var parentContinuationTop: CGFloat {
+        firstRowTopPadding + parentAvatarSize + connectorGap
     }
 }
 
@@ -102,11 +74,13 @@ enum CommentThreadGeometry {
 /// of one top-level thread shares a single continuous `cardSurface` card — the
 /// same surface, radius, and margins as the Library's `.cardRow()` — opened by
 /// the top-level comment and closed after the thread's last reply. Replies then
-/// render as nested bubbles *inside* that card (see `CommentThreadRow`), and the
-/// connector line runs down the shared avatar column's centerline, connecting
-/// avatar to avatar — not a rail pasted on the card's left edge. Rows stay flat
-/// and lazy (the polish branch's performance architecture); only the backgrounds
-/// compose into one visual group.
+/// render as nested bubbles *inside* that card (see `CommentThreadRow`), each
+/// with its own avatar-then-content row inside it. The connector line runs down
+/// the parent avatar's column centerline and simply reaches down to touch each
+/// reply bubble's own top edge — not a rail pasted on the card's left edge, but
+/// also not threaded through any reply avatar (which lives inside its own
+/// bubble's independent layout). Rows stay flat and lazy (the polish branch's
+/// performance architecture); only the backgrounds compose into one visual group.
 private struct CommentThreadGroupRowModifier: ViewModifier {
     let depth: Int
     let isLastInThread: Bool
@@ -127,9 +101,9 @@ private struct CommentThreadGroupRowModifier: ViewModifier {
                 : CommentThreadGeometry.replyRowTopPadding)
             .padding(.bottom, isLastInThread ? 14 : 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            // Directly behind the content (and above the card fill below), so the
-            // arrival segment passes behind the opaquely-backed avatar instead of
-            // drawing over it.
+            // Directly behind the content (and above the card fill below), so
+            // a reply's own bubble fill — and the parent avatar's opaque
+            // backing — occlude the connector rather than drawing over it.
             .background { connector }
             .background {
                 UnevenRoundedRectangle(
@@ -162,32 +136,44 @@ private struct CommentThreadGroupRowModifier: ViewModifier {
             .animation(.easeInOut(duration: 0.3), value: isHighlighted)
     }
 
-    /// The thread's connector segments for this row, on the avatar centerline.
-    /// Rows are stacked flush inside the group card, so a continuation ending at
-    /// this row's bottom edge meets the next row's arrival starting at its top
-    /// edge — one continuous line through every avatar center in the thread.
+    /// The thread's connector segments for this row, drawn BEHIND the whole
+    /// row content (including a reply's own bubble fill), which is what lets
+    /// this stay simple: a reply's bubble has variable height (AO3 comments
+    /// vary in length), so rather than compute where the bubble visually ends,
+    /// the line for a non-last reply just runs the row's FULL height — the
+    /// bubble's own opaque `nestedCardSurface` fill (in `CommentThreadRow`)
+    /// occludes whatever portion falls behind it, and the line naturally
+    /// "re-emerges" below the bubble however tall it turns out to be.
     ///
-    /// - Arrival (replies only): row top → this row's avatar center.
-    /// - Continuation (any row followed by another in the same thread):
-    ///   just below this row's avatar → row bottom.
+    /// - A reply row's arrival (row top → the bubble's own top edge) is the
+    ///   only segment that needs a fixed length; everything past that is
+    ///   either occluded by the bubble or, for a non-last reply, simply the
+    ///   rest of the row's height.
+    /// - A PARENT row has no enclosing bubble, so its continuation (when it
+    ///   has replies) still needs the avatar's real bottom edge, precisely.
     @ViewBuilder
     private var connector: some View {
         if depth > 0 || !isLastInThread {
-            ZStack(alignment: .top) {
+            Group {
                 if depth > 0 {
+                    if isLastInThread {
+                        // Just the arrival: stops at the bubble's top edge:
+                        // nothing below needs a visible line (there's no next
+                        // reply to reach), so this never runs past the bubble.
+                        line
+                            .frame(height: CommentThreadGeometry.replyRowTopPadding)
+                            .frame(maxHeight: .infinity, alignment: .top)
+                    } else {
+                        // Full row height — see the doc above.
+                        line
+                    }
+                } else {
+                    // Parent with replies: starts precisely below the avatar.
                     line
-                        .frame(height: CommentThreadGeometry.arrivalBottom)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                }
-                if !isLastInThread {
-                    line
-                        .padding(.top, CommentThreadGeometry.continuationTop(forDepth: depth))
+                        .padding(.top, CommentThreadGeometry.parentContinuationTop)
                 }
             }
-            .frame(
-                width: CommentThreadGeometry.connectorWidth,
-                alignment: .top
-            )
+            .frame(width: CommentThreadGeometry.connectorWidth, alignment: .top)
             .padding(.leading,
                      CommentThreadGeometry.connectorCenterX
                         - CommentThreadGeometry.connectorWidth / 2)
@@ -258,58 +244,32 @@ struct CommentThreadRow: View {
         }
     }
 
-    /// A reply's floating nested card (the mockup's "avatar badge" look): the
-    /// avatar overlaps the bubble's own top-left corner — half poking above and
-    /// outside the card, half over its top-left interior — rather than sitting
-    /// inline inside the bubble's content. Positioned via `.overlay` + `.offset`
-    /// so it's a pure visual overlap that doesn't affect the bubble's own
-    /// layout; the bubble reserves `replyContentInset` of leading/top padding
-    /// so its text never runs under the avatar's inside half.
+    /// A reply's floating nested card: the avatar sits INSIDE it (avatar-then-
+    /// content, exactly like the parent's own layout), with the whole thing
+    /// wrapped in a card that has real margin on every side — not overlapping
+    /// the card's edge, and not threaded onto the connector's fixed centerline
+    /// (which only needs to reach this bubble's top edge; see
+    /// `CommentThreadGroupRowModifier.connector`).
     private var replyBubble: some View {
-        commentBody
-            .padding(.leading, CommentThreadGeometry.replyContentInset)
-            .padding(.top, CommentThreadGeometry.replyContentInset)
-            .padding(.trailing, 10)
-            .padding(.bottom, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                theme.appTheme.nestedCardSurface,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-            }
-            .overlay(alignment: .topLeading) {
-                CommentAvatar(comment: comment, size: CommentThreadGeometry.replyAvatarSize)
-                    // Opaque backing (the avatar's own placeholder fill is only
-                    // 50% quaternary) so the connector's arrival segment, which
-                    // ends exactly at this avatar's center, disappears cleanly
-                    // behind it instead of bleeding through.
-                    .background(Circle().fill(theme.appTheme.nestedCardSurface))
-                    // Shifts the avatar so its CENTER (not its top-left) lands
-                    // on the bubble's corner — the point the overlap pivots on.
-                    // The x-offset ALSO subtracts this row's own bubbleIndent:
-                    // the outer .padding(.leading, ...) below moves the whole
-                    // bubble+overlay composite right by that same amount at
-                    // depth ≥ 2, so without this the avatar would drift off the
-                    // fixed centerline the connector draws at. Subtracting it
-                    // here cancels that shift, keeping the avatar's ABSOLUTE x
-                    // pinned to the centerline at every depth (see
-                    // CommentThreadGeometry.bubbleIndent's doc for the resulting
-                    // depth ≥ 3 trade-off: the avatar stays on the line, not on
-                    // the deeper bubble's own corner).
-                    .offset(
-                        x: -CommentThreadGeometry.replyAvatarSize / 2
-                            - CommentThreadGeometry.bubbleIndent(forDepth: row.depth),
-                        y: -CommentThreadGeometry.replyAvatarSize / 2
-                    )
-            }
-            .padding(.leading,
-                     CommentThreadGeometry.replyBubbleLeadingMargin
-                        + CommentThreadGeometry.bubbleIndent(forDepth: row.depth))
-            .padding(.trailing, CommentThreadGeometry.replyBubbleTrailingMargin)
-            .padding(.bottom, CommentThreadGeometry.replyRowBottomPadding)
+        HStack(alignment: .top, spacing: 8) {
+            CommentAvatar(comment: comment, size: CommentThreadGeometry.replyAvatarSize)
+            commentBody
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            theme.appTheme.nestedCardSurface,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        }
+        .padding(.leading,
+                 CommentThreadGeometry.replyBubbleLeadingMargin
+                    + CommentThreadGeometry.bubbleIndent(forDepth: row.depth))
+        .padding(.trailing, CommentThreadGeometry.replyBubbleTrailingMargin)
+        .padding(.bottom, CommentThreadGeometry.replyRowBottomPadding)
     }
 
     private var commentBody: some View {
