@@ -309,7 +309,10 @@ private struct SpinePostRow: View {
             if !comment.bodyText.isEmpty {
                 ExpandableCommentBody(text: comment.bodyText)
             }
+            // Tighter gap above the action strip so bottom padding matches the
+            // card’s side inset instead of a tall empty actions band.
             actionsRow
+                .padding(.top, 2)
         }
     }
 
@@ -357,18 +360,23 @@ private struct SpinePostRow: View {
         }
     }
 
+    /// Compact bottom strip: Reply bottom-leading, overflow bottom-trailing.
+    /// Visual height stays tight so card padding reads even; hit targets use
+    /// contentShape rather than a 44pt layout frame that inflated the strip.
     private var actionsRow: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .center, spacing: 4) {
             if comment.canReply && auth.isLoggedIn {
                 Button { handlers.onReply(comment) } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                         .font(.caption.weight(.medium))
-                        .frame(minHeight: 44)
+                        .padding(.vertical, 4)
+                        .padding(.trailing, 4)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Reply to \(comment.author)")
             }
-            Spacer()
+            Spacer(minLength: 0)
             Menu {
                 if comment.canReply && auth.isLoggedIn {
                     Button { handlers.onReply(comment) } label: {
@@ -406,7 +414,7 @@ private struct SpinePostRow: View {
                 Image(systemName: "ellipsis")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
+                    .padding(6)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
@@ -476,8 +484,9 @@ private struct ThreadSpineSegment: View {
 private extension View {
     @ViewBuilder
     func highlightChrome(isHighlighted: Bool) -> some View {
+        // No extra layout padding — card insets already provide even margins;
+        // only paint a highlight fill when focused.
         self
-            .padding(4)
             .background {
                 if isHighlighted {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
