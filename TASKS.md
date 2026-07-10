@@ -187,6 +187,7 @@ _Consolidated from the former `docs/Bugs.md`._ **Status:** Open · In Progress �
 **Active:** _none._
 
 **Fixed & verified:**
+- **BUG-5** — Opening Browse spiked CPU + memory: `MediaBrowserView.stats(for:)` built a `Set` of each big media category's full (tens-of-thousands) fandom-name list and scanned the whole library, synchronously in the view body, per card, re-run on every render as `@Observable` fandom lists streamed in (~O(categories²×fandoms) on main). Moved off render+main: cards read a precomputed `statsByCategory`; a debounced `.task(id:)` snapshots works to `Sendable` structs and computes each name-`Set` once in `Task.detached`. Semantics preserved. (`685c8a3` on `comments-ui-visual-regression-fix`, `Scripts/verify.sh` green 274/33 iOS+macOS, 2026-07-09.)
 - **BUG-4** — Library bulk-select `EditMode` broke the macOS build; guarded `#if os(iOS)`, macOS uses a plain list (T-43, 2026-06-21).
 - **BUG-3** — AO3 login was discarded when Keychain was unavailable; now falls back to WebKit's app-scoped cookie store (T-31, 2026-06-20).
 - **BUG-2** — T-09 tag-cycling UI + tag-picker search-field placement regression (T-22, 2026-06-18).
