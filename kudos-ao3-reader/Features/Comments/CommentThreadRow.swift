@@ -317,11 +317,47 @@ private struct SpinePostRow: View {
     }
 
     private var byline: some View {
+        // Prefer author + timestamp on one line; when the timestamp won't fit
+        // next to the name (long names, Author/Guest + chapter badge), drop it
+        // onto the line under the author.
+        ViewThatFits(in: .horizontal) {
+            bylineSingleLine
+            bylineWrappedTimestamp
+        }
+    }
+
+    /// Author, role badge, and timestamp on one row (preferred when space allows).
+    private var bylineSingleLine: some View {
         HStack(alignment: .center, spacing: 6) {
+            authorIdentity
+            if !comment.postedText.isEmpty {
+                timestampText
+            }
+            Spacer(minLength: 4)
+            chapterBadge
+        }
+    }
+
+    /// Timestamp under the author when the single-line layout is too wide.
+    private var bylineWrappedTimestamp: some View {
+        HStack(alignment: .top, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                authorIdentity
+                if !comment.postedText.isEmpty {
+                    timestampText
+                }
+            }
+            .layoutPriority(1)
+            Spacer(minLength: 4)
+            chapterBadge
+        }
+    }
+
+    private var authorIdentity: some View {
+        HStack(spacing: 6) {
             Text(comment.author)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-                .layoutPriority(1)
             if isByWorkAuthor {
                 Text("Author")
                     .font(.caption2.weight(.semibold))
@@ -337,26 +373,29 @@ private struct SpinePostRow: View {
                     .background(.quaternary, in: Capsule())
                     .foregroundStyle(.secondary)
             }
-            if !comment.postedText.isEmpty {
-                Text(AO3CommentTimestamp.displayText(
-                    rawText: comment.postedText,
-                    date: comment.postedAt
-                ))
+        }
+    }
+
+    private var timestampText: some View {
+        Text(AO3CommentTimestamp.displayText(
+            rawText: comment.postedText,
+            date: comment.postedAt
+        ))
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private var chapterBadge: some View {
+        if showChapterBadge, let chapter = comment.chapterLabel {
+            Text(chapter)
                 .font(.caption2)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(.quaternary, in: Capsule())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .layoutPriority(-1)
-            }
-            Spacer(minLength: 4)
-            if showChapterBadge, let chapter = comment.chapterLabel {
-                Text(chapter)
-                    .font(.caption2)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
         }
     }
 
