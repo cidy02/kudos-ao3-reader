@@ -107,10 +107,10 @@ extension ReaderTheme {
         }
     }
 
-    /// A surface nested INSIDE a `cardSurface` card (the comments thread's reply
-    /// bubbles). One elevation step past the card, so the bubble reads distinct in
-    /// all three themes: Light/Dark use the system's tertiary grouped level; Sepia
-    /// steps back to the paper backdrop for a subtle warm inset.
+    /// A surface nested INSIDE a `cardSurface` card when an inset shade is
+    /// wanted. Comment reply cards no longer use this — they stay on
+    /// `cardSurface` and lift with `nestedCardShadow` instead — but other
+    /// call sites may still want a true one-step inset fill.
     var nestedCardSurface: Color {
         if self == .sepia { return cardBackdrop }
         #if os(iOS)
@@ -119,6 +119,32 @@ extension ReaderTheme {
         return Color(nsColor: .underPageBackgroundColor)
         #endif
     }
+
+    /// Elevation for a same-surface card nested inside another card (comment
+    /// reply bubbles). Stronger and more surround-like than `cardShadow`
+    /// because parent and child share `cardSurface` — shade alone is not used.
+    /// Dark keeps a real shadow here (unlike list cards) so nesting still reads.
+    var nestedCardShadow: NestedCardShadow {
+        switch self {
+        case .dark:
+            NestedCardShadow(color: Color.black.opacity(0.55), radius: 8, y: 2)
+        case .light:
+            NestedCardShadow(color: Color.black.opacity(0.18), radius: 8, y: 2)
+        case .sepia:
+            NestedCardShadow(
+                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.28),
+                radius: 8,
+                y: 2
+            )
+        }
+    }
+}
+
+/// Theme-aware shadow for nested same-surface cards (comments reply bubbles).
+struct NestedCardShadow {
+    let color: Color
+    let radius: CGFloat
+    let y: CGFloat
 }
 
 /// Card-list spacing constants, kept in one place so every adopting list matches.

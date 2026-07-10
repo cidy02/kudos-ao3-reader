@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Fixed geometry for recursive comment cards. The values intentionally mirror
 /// the owner-approved T-84 card language: a top-level thread uses the app's
-/// normal `cardSurface`; replies are complete nested cards on
-/// `nestedCardSurface`, with the same avatar/body/actions structure.
+/// normal `cardSurface`; replies are complete nested cards on the **same**
+/// `cardSurface`, differentiated by a surrounding theme shadow rather than a
+/// second shade.
 ///
 /// Visual nesting is recursive (T-86). That intentionally trades the T-83
 /// one-row-per-comment List virtualization for card-within-card containment.
@@ -174,23 +175,26 @@ struct CommentThreadRow: View {
     }
 
     private var nestedCard: some View {
-        cardContents
+        let shape = RoundedRectangle(
+            cornerRadius: CommentThreadGeometry.replyCornerRadius,
+            style: .continuous
+        )
+        let elevation = theme.appTheme.nestedCardShadow
+        return cardContents
             .padding(CommentThreadGeometry.replyBubblePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                theme.appTheme.nestedCardSurface,
-                in: RoundedRectangle(
-                    cornerRadius: CommentThreadGeometry.replyCornerRadius,
-                    style: .continuous
-                )
-            )
+            // Same surface as the parent thread card — nesting reads via shadow,
+            // not a second fill shade.
+            .background(theme.appTheme.cardSurface, in: shape)
             .overlay {
-                RoundedRectangle(
-                    cornerRadius: CommentThreadGeometry.replyCornerRadius,
-                    style: .continuous
-                )
-                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
             }
+            .shadow(
+                color: elevation.color,
+                radius: elevation.radius,
+                x: 0,
+                y: elevation.y
+            )
             .overlay(highlightOverlay(cornerRadius: CommentThreadGeometry.replyCornerRadius))
             .padding(.leading, CommentThreadGeometry.childLeadingInset(forDepth: depth))
             .padding(.trailing, CommentThreadGeometry.childTrailingInset(forDepth: depth))
