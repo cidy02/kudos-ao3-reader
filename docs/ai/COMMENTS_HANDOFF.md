@@ -291,6 +291,33 @@ posted chapters) the target is clamped into the live range rather than guessed �
 mid-story mismatch could land a chapter or two off, but never out of bounds or on the
 wrong work. Manual check below covers the common shapes.
 
+## Merge-clobber incident + restoration (2026-07-10)
+
+Merge `b684e54` ("Merge comments thread nesting polish branch") resolved
+`CommentThreadRow.swift` to the **older** T-85 nesting version (authored 09:52),
+silently discarding the T-84 owner-corrected rounds from later that same day
+(`3d573c8` 12:18 connector-follows-avatar-centers, `96b1827` 18:20 avatar
+overlap, `08446cc` 21:21 "reply avatar back inside the bubble, per owner
+correction"). The owner caught it pre-consolidation ("comment ui fixes …
+aren't in this one").
+
+**Restoration:** `CommentThreadRow.swift` is back to `bbf3116`'s state (T-84
+final: card-within-card thread, avatar-inside-bubble replies, fixed-centerline
+connector with bubble-fill occlusion, one-step depth cap) **plus one graft
+from T-85**: the timestamp now renders via `AO3CommentTimestamp.displayText`
+(relative within 24h, readable local date after) in T-84's owner-approved
+placement (between Reply and the overflow menu). T-85's model-side work all
+stays (`AO3CommentRow` projection metadata + `flatten`, `AO3CommentTimestamp`,
+`postedAt` parsing, parse tests).
+
+**Consciously dropped** (recoverable from `d0a51ea` if ever wanted): T-85's
+row-level *drawing* of branched ancestor connector lines
+(`continuingAncestorDepths` paths) and its per-depth avatar-centerline
+geometry — superseded by the T-84 design the owner iterated to later that day,
+which flattens depth 3+ and occludes via bubble fill instead. The geometry
+regression test now pins T-84's invariant (bubble left edge ≤ connector
+centerline at every depth).
+
 ## Status / next steps
 - [x] Live recon of endpoints + markup (table above is ground truth)
 - [x] Models + parser + fixtures + parse tests

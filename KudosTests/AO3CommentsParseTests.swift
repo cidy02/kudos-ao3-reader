@@ -116,24 +116,26 @@ struct AO3CommentsParseTests {
         #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
     }
 
-    @Test func visualNestingCapsOnlyIndentNotLogicalDepth() {
-        #expect(CommentThreadGeometry.visualDepth(for: 0) == 0)
-        #expect(CommentThreadGeometry.visualDepth(for: 1) == 1)
-        #expect(CommentThreadGeometry.visualDepth(for: 2) == 2)
-        #expect(CommentThreadGeometry.visualDepth(for: 3) == 3)
-        #expect(CommentThreadGeometry.visualDepth(for: 8) == 3)
-        #expect(
-            CommentThreadGeometry.avatarCenterX(for: 1)
-                < CommentThreadGeometry.avatarCenterX(for: 2)
-        )
-        #expect(
-            CommentThreadGeometry.avatarCenterX(for: 2)
-                < CommentThreadGeometry.avatarCenterX(for: 3)
-        )
-        #expect(
-            CommentThreadGeometry.avatarCenterX(for: 3)
-                == CommentThreadGeometry.avatarCenterX(for: 8)
-        )
+    @Test func bubbleIndentCapsDepthAndKeepsConnectorOccluded() {
+        // T-84's owner-approved geometry: a reply-to-a-reply indents ONE step,
+        // and depth 3+ flattens to the same step — deeper indents would push
+        // the bubble's left edge past the connector centerline, leaving the
+        // full-height line visibly floating beside triply-nested bubbles
+        // (see CommentThreadGeometry.bubbleIndent's doc).
+        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 1) == 0)
+        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 2) == 12)
+        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 3) == 12)
+        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 8) == 12)
+
+        // The load-bearing occlusion invariant: every bubble's left edge stays
+        // at or left of the connector's centerline, so the bubble fill hides
+        // the line for whatever height the bubble has.
+        for depth in 1...8 {
+            let bubbleLeft = CommentThreadGeometry.cardPadding
+                + CommentThreadGeometry.replyBubbleLeadingMargin
+                + CommentThreadGeometry.bubbleIndent(forDepth: depth)
+            #expect(bubbleLeft <= CommentThreadGeometry.connectorCenterX)
+        }
     }
 
     @Test func largeThreadProjectionKeepsEveryRowShallowAndStable() {
