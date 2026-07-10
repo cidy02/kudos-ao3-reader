@@ -2,6 +2,18 @@ import Foundation
 import OSLog
 import WebKit
 
+extension WKProcessPool {
+    /// One process pool shared by every `WKWebView` the app creates (this login
+    /// webview, the in-app Browse webview, and the launch-time WebKit prewarm —
+    /// see `ContentView.WebKitPrewarmView`). `WKWebViewConfiguration` defaults to
+    /// a *unique* process pool per configuration unless one is assigned, which
+    /// silently defeats prewarming: warming one configuration's WebContent process
+    /// does nothing for a different, unshared pool. Assign this to every
+    /// `configuration.processPool` in the app so warming any one webview actually
+    /// warms what every other webview will use.
+    static let shared = WKProcessPool()
+}
+
 enum AO3WebLoginError: LocalizedError, Equatable {
     case invalidCredentials(String)
     case fallbackRequired(String)
@@ -94,6 +106,7 @@ final class AO3WebLoginCoordinator: NSObject, AO3LoginPerforming {
     override init() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
+        configuration.processPool = .shared
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         webView.navigationDelegate = self

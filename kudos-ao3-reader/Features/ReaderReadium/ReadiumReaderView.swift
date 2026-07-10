@@ -137,6 +137,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private(set) var phase: Phase = .loading
     /// Flat table of contents (falls back to the reading order / spine).
     private(set) var toc: [ReadiumShared.Link] = []
+    /// The full spine, in reading order — kept so synthesized `ReaderSection`s
+    /// (e.g. AO3's un-navigable Summary page) can still be navigated to via
+    /// `go(toSpineIndex:)`, not just the entries `toc` itself lists.
+    private(set) var readingOrder: [ReadiumShared.Link] = []
+    /// `toc`/`readingOrder` reconciled into AO3-aware sections (Preface/Summary/
+    /// Chapter/Afterword), one per spine item. See `ReaderSection`.
+    private(set) var sections: [ReaderSection] = []
     private(set) var currentLocator: Locator?
     private(set) var navigator: EPUBNavigatorViewController?
     /// Readium's static position list grouped by reading-order item (chapter).
@@ -211,8 +218,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             navigator.delegate = self
             let tocLinks = await (try? publication.tableOfContents().get()) ?? []
             self.navigator = navigator
-            toc = tocLinks.isEmpty ? publication.readingOrder : tocLinks
+            readingOrder = publication.readingOrder
+            toc = tocLinks.isEmpty ? readingOrder : tocLinks
             positionsByReadingOrder = await (try? publication.positionsByReadingOrder().get()) ?? []
+            sections = Self.buildSections(toc: toc, readingOrder: readingOrder)
             phase = .ready
             Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
         } catch {
@@ -235,6 +244,33 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     func go(to link: ReadiumShared.Link) {
         Task { @MainActor in await navigator?.go(to: link) }
+    }
+
+    /// Navigates to a spine position directly — needed for `ReaderSection`s (like
+    /// AO3's synthesized Summary) that have no TOC `Link` of their own to pass to
+    /// `go(to:)`.
+    func go(toSpineIndex index: Int) {
+        guard readingOrder.indices.contains(index) else { return }
+        go(to: readingOrder[index])
+    }
+
+    /// Resolves `toc`'s `Link`s to spine indices (by href, fragment/path-insensitive)
+    /// and reconciles them against the full `readingOrder` into normalized sections.
+    private static func buildSections(
+        toc: [ReadiumShared.Link],
+        readingOrder: [ReadiumShared.Link]
+    ) -> [ReaderSection] {
+        let spineHrefs = readingOrder.map(\.href)
+        let spineKeys = spineHrefs.map(ReaderSectionBuilder.hrefKey)
+        let rawTOC: [ReaderSectionBuilder.RawTOCEntry] = toc.compactMap { link in
+            let key = ReaderSectionBuilder.hrefKey(link.href)
+            guard let spineIndex = spineKeys.firstIndex(of: key) else { return nil }
+            return ReaderSectionBuilder.RawTOCEntry(
+                title: link.title ?? "Section \(spineIndex + 1)",
+                spineIndex: spineIndex
+            )
+        }
+        return ReaderSectionBuilder.build(tocEntries: rawTOC, spineHrefs: spineHrefs)
     }
 
     // MARK: EPUBNavigatorDelegate
@@ -461,6 +497,12 @@ struct ReadiumReaderView: View {
     @AppStorage("readerJustify") private var justifyText = false
 
     @State private var book = ReadiumBook()
+    /// Native comments sheet over the reader (only for AO3-backed works).
+    @State private var showingComments = false
+
+    private var ao3WorkID: Int? {
+        work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+    }
     @State private var dismissDragOffset: CGFloat = 0
     @State private var isDismissingByDrag = false
 
@@ -558,6 +600,11 @@ struct ReadiumReaderView: View {
                 // Library toolbar (separate ToolbarItems get the system's wide spacing).
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 2) {
+                        if ao3WorkID != nil {
+                            Button { showingComments = true } label: {
+                                Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                            }
+                        }
                         Button { router.toggle(.readerChapters) } label: {
                             Label("Chapters", systemImage: "list.bullet")
                         }
@@ -569,6 +616,12 @@ struct ReadiumReaderView: View {
                 }
             }
             .sheet(isPresented: readerPanelBinding) { readerSheet }
+            .commentsSheet(
+                isPresented: $showingComments,
+                workID: ao3WorkID ?? 0,
+                context: .init(savedWork: work),
+                initialChapterPosition: currentAO3Chapter
+            )
             // Immersive reading: hide the tab bar; the nav/status bars follow the chrome.
             .toolbar(.hidden, for: .tabBar)
             .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
@@ -714,7 +767,7 @@ struct ReadiumReaderView: View {
     private var progressPill: some View {
         // Just the essentials: overall percent, chapter, and page within the chapter.
         let label = if let pos = book.readingPosition {
-            "\(pos.percent)%  ·  Ch. \(pos.chapter)/\(pos.chapterCount)  ·  Pg. \(pos.page)/\(pos.pageCount)"
+            "\(pos.percent)%  ·  \(sectionLabel(for: pos))  ·  Pg. \(pos.page)/\(pos.pageCount)"
         } else if let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) {
             "\(percent)%"
         } else {
@@ -728,6 +781,30 @@ struct ReadiumReaderView: View {
             .frame(height: 40)
             .glassEffect(.regular, in: .capsule)
             .opacity(label.isEmpty ? 0 : 1)
+    }
+
+    /// The AO3 story chapter the reader is currently on, for the chapter-aware
+    /// Comments button. `pos.chapter - 1` is the current spine index (same basis the
+    /// pill uses); the section list normalizes it past Preface/Summary/Afterword.
+    /// nil (→ open on All comments) until a position and built sections both exist.
+    private var currentAO3Chapter: Int? {
+        guard let pos = book.readingPosition, !book.sections.isEmpty else { return nil }
+        return book.sections.ao3StoryChapter(forSpineIndex: pos.chapter - 1)
+    }
+
+    /// The pill's chapter segment, normalized against AO3 front/back matter
+    /// (`ReaderSection`) instead of a raw spine position — "P"/"S"/"A", or
+    /// "<index>/<total>" for a real story chapter, preferring AO3's own posted
+    /// chapter total over one derived purely from the section list. Falls back to
+    /// the raw "Ch. x/x" reading if sections haven't been built (shouldn't happen
+    /// once `.ready`, but a locator can theoretically outrace it).
+    private func sectionLabel(for pos: ReadiumBook.ReadingPosition) -> String {
+        guard book.sections.indices.contains(pos.chapter - 1) else {
+            return "Ch. \(pos.chapter)/\(pos.chapterCount)"
+        }
+        let storyTotal = SavedWork.totalChapterCount(from: work.chapters) ?? book.sections.storyChapterCount
+        let label = book.sections[pos.chapter - 1].pillLabel(storyChapterTotal: storyTotal)
+        return label.isEmpty ? "Ch. \(pos.chapter)/\(pos.chapterCount)" : label
     }
 
     // MARK: Chapters / Display sheet
@@ -755,12 +832,16 @@ struct ReadiumReaderView: View {
     }
 
     private var chapterRows: some View {
-        ForEach(Array(book.toc.enumerated()), id: \.offset) { _, link in
+        // .other sections have no navigable heading of their own (AO3/Calibre
+        // never gave them one) and aren't part of the story — not shown here,
+        // matching the reader index's documented Preface/Summary/Chapter/
+        // Afterword-only contract. Still reachable by normal page-turning.
+        ForEach(book.sections.filter { $0.kind != .other }) { section in
             Button {
-                book.go(to: link)
+                book.go(toSpineIndex: section.spineIndex)
                 router.panel = .none
             } label: {
-                Text(link.title ?? link.href)
+                Text(section.title)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }

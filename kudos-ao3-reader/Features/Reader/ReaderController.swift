@@ -50,6 +50,9 @@ final class ReaderController: NSObject {
 
     override init() {
         let configuration = WKWebViewConfiguration()
+        // Shares the WebContent process with the login/Browse webviews and the
+        // launch-time prewarm — see WKProcessPool.shared.
+        configuration.processPool = .shared
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         proxy.controller = self

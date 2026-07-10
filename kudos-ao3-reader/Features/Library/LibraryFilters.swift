@@ -46,13 +46,21 @@ struct LibraryFilters: Equatable {
     // Lint: multi-facet predicate reads safest as one guard sequence.
     /// Whether a single work passes every active filter (AND across fields; AND
     /// within a multi-select field, matching AO3's "include all" tag behavior).
+    /// Each tag facet builds its per-work `Set` only when that facet is actually
+    /// set — with no active filters this is pure guard fall-through, so applying
+    /// default filters over a large library costs no per-work set construction
+    /// (and no faulting of the `tags` relationship).
     func matches(_ work: SavedWork) -> Bool { // swiftlint:disable:this cyclomatic_complexity
-        if !userTags.isSubset(of: Set(work.tags.map(\.name))) { return false }
-        if !fandoms.isSubset(of: tagSet(work.workFandoms, fallback: work.workTags)) { return false }
-        if !characters.isSubset(of: tagSet(work.workCharacters, fallback: work.workTags)) { return false }
-        if !relationships.isSubset(of: tagSet(work.workRelationships, fallback: work.workTags)) { return false }
-        if !additionalTags.isSubset(of: tagSet(work.workFreeforms, fallback: work.workTags)) { return false }
-        if !excludeTags.isDisjoint(with: Set(work.workTags)) { return false }
+        if !userTags.isEmpty, !userTags.isSubset(of: Set(work.tags.map(\.name))) { return false }
+        if !fandoms.isEmpty,
+           !fandoms.isSubset(of: tagSet(work.workFandoms, fallback: work.workTags)) { return false }
+        if !characters.isEmpty,
+           !characters.isSubset(of: tagSet(work.workCharacters, fallback: work.workTags)) { return false }
+        if !relationships.isEmpty,
+           !relationships.isSubset(of: tagSet(work.workRelationships, fallback: work.workTags)) { return false }
+        if !additionalTags.isEmpty,
+           !additionalTags.isSubset(of: tagSet(work.workFreeforms, fallback: work.workTags)) { return false }
+        if !excludeTags.isEmpty, !excludeTags.isDisjoint(with: Set(work.workTags)) { return false }
 
         if rating != .any, !rating.matchesRatingText(work.rating) { return false }
 

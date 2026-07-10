@@ -637,6 +637,7 @@ enum ReadingQueueService {
         if work.seriesPosition == 0 { work.seriesPosition = summary.seriesPosition ?? 0 }
         if work.ao3SeriesID == nil { work.ao3SeriesID = ao3SeriesID(from: work.seriesURL) }
         work.markModified()
+        WorkSearchIndex.reindex(work)
     }
 
     static func ao3SeriesID(from urlString: String) -> Int? {
@@ -681,5 +682,27 @@ enum ReadingQueueService {
 
     private static func nextMembershipSortOrder(in queue: ReadingQueue) -> Int {
         (queue.memberships.map(\.sortOrderInQueue).max() ?? -1) + 1
+    }
+
+    /// Applies a user-dragged reorder of a queue's works. `workIDs` is the full,
+    /// unfiltered work list in its new order; each matching membership's
+    /// `sortOrderInQueue` is rewritten to its index, so the same ordering survives
+    /// relaunch, backup/restore, and sync exactly like the existing sort already does.
+    static func reorder(_ workIDs: [UUID], in queue: ReadingQueue, context: ModelContext) {
+        let membershipsByWorkID = Dictionary(
+            queue.memberships.compactMap { membership in
+                membership.work.map { ($0.id, membership) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for (index, workID) in workIDs.enumerated() {
+            guard let membership = membershipsByWorkID[workID] else { continue }
+            membership.sortOrderInQueue = index
+            // Each reordered membership is its own sync record — flip it to .pending
+            // too, not just the queue's own timestamp, so the new order actually syncs.
+            membership.markModified()
+        }
+        queue.markMembershipChanged()
+        saveBestEffort(context, reason: "Saving queue reorder failed")
     }
 }

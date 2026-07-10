@@ -50,7 +50,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var editMode: EditMode = .inactive
     #endif
     @State private var selection = Set<UUID>()
-    @State private var confirmBulkDelete = false
     @State private var showingSelectionList = false
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
@@ -66,28 +65,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var selectedWorks: [SavedWork] {
         works.filter { selection.contains($0.id) }
-    }
-
-    /// Whether the bulk Save/Favorite buttons show as "on" — every selected work is
-    /// already in that state. Tapping toggles: makes the selection consistently on
-    /// if it isn't already, otherwise undoes it for all of them.
-    private var allSelectedAreSaved: Bool {
-        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
-    }
-
-    private var allSelectedAreFavorited: Bool {
-        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
-    }
-
-    /// Escalates when any selected work is no longer available on AO3 — see
-    /// `PreservedWorkService.deleteConfirmationMessage`, same reasoning applied
-    /// across the whole selection rather than per-work.
-    private var bulkDeleteMessage: String {
-        let base = "The selected works will be moved to Recently Deleted. "
-            + "You can restore them anytime in the next 90 days."
-        guard selectedWorks.contains(where: \.ao3Unavailable) else { return base }
-        return base + " Some of these are no longer available on AO3 — "
-            + "if you don't restore them in time, they can't be re-saved afterward."
     }
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
@@ -136,11 +113,37 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #endif
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
-                .navigationDestination(for: LibrarySectionKind.self) { LibrarySectionListView(kind: $0) }
+                .navigationDestination(for: LibrarySectionKind.self) { kind in
+                    LibrarySectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
+                }
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
+                .navigationDestination(for: AllCollectionsDestination.self) { _ in
+                    LibraryEntityGridView(
+                        title: "Collections",
+                        items: collections,
+                        onNew: {
+                            newCollectionName = ""
+                            showingNewCollection = true
+                        },
+                        card: { CollectionCard(collection: $0) },
+                        newCard: { NewCollectionCard() }
+                    )
+                }
+                .navigationDestination(for: AllReadingQueuesDestination.self) { _ in
+                    LibraryEntityGridView(
+                        title: "Reading Queues",
+                        items: readingQueues.filter { $0.kind == .custom }.sorted { $0.sortOrder < $1.sortOrder },
+                        onNew: {
+                            newQueueName = ""
+                            showingNewQueue = true
+                        },
+                        card: { ReadingQueueCard(queue: $0) },
+                        newCard: { NewReadingQueueCard() }
+                    )
+                }
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
@@ -164,16 +167,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     Button("Cancel", role: .cancel) { newQueueName = "" }
                 } message: {
                     Text("Name your reading queue.")
-                }
-                .confirmationDialog(
-                    "Delete \(selection.count) work\(selection.count == 1 ? "" : "s")?",
-                    isPresented: $confirmBulkDelete,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) { bulkDelete() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text(bulkDeleteMessage)
                 }
                 .inspector(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -321,14 +314,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     /// User-named Collections (shelves). A leading "New" card is always present so
-    /// creating one is one tap away; existing collections follow. Tapping a card
-    /// opens the collection; the `>` chevron isn't used (the New card covers create).
+    /// creating one is one tap away; existing collections follow, capped like every
+    /// other carousel — the `>` chevron opens the full, uncapped grid.
     private var collectionsCarousel: some View {
         let kind = LibrarySectionKind.collections
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: true
+            hasItems: true,
+            onSeeAll: collections.count > 11 ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             Button {
                 newCollectionName = ""
@@ -338,7 +332,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             .buttonStyle(.plain)
 
-            ForEach(collections) { collection in
+            ForEach(collections.prefix(12)) { collection in
                 NavigationLink(value: collection) {
                     CollectionCard(collection: collection)
                 }
@@ -356,7 +350,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         return WorkCarouselSection(
             title: "Reading Queues",
             collapseKey: "library.readingQueues",
-            hasItems: true
+            hasItems: true,
+            onSeeAll: customQueues.count > 11 ? { path.append(AllReadingQueuesDestination()) } : nil
         ) {
             Button {
                 newQueueName = ""
@@ -366,7 +361,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             .buttonStyle(.plain)
 
-            ForEach(customQueues) { queue in
+            ForEach(customQueues.prefix(12)) { queue in
                 NavigationLink(value: queue) {
                     ReadingQueueCard(queue: queue)
                 }
@@ -460,7 +455,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var toolbarContent: some ToolbarContent {
         if isSelecting {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { exitSelectMode() }
+                SelectAllButton(allSelected: allSelectableSelected, action: toggleSelectAll)
             }
             if PrivacyGate.hasVisibleMatureWorks(in: selectableWorks, hideMature: hideMature) {
                 ToolbarItem(placement: .primaryAction) {
@@ -479,9 +474,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .help(showingSelectionList ? "Show carousels" : "Show detailed list")
             }
             #if os(iOS)
-            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+            ToolbarItemGroup(placement: .bottomBar) {
+                WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+            }
             #else
-            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+            ToolbarItemGroup(placement: .primaryAction) {
+                WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+            }
             #endif
         } else {
             // A single item holding a tight HStack — separate ToolbarItems (and even
@@ -492,48 +491,33 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     if PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature) {
                         MatureRevealToggle()
                     }
-                    if !statisticsWorks.isEmpty {
-                        NavigationLink {
-                            ReadingStatisticsView(works: statisticsWorks)
-                        } label: {
-                            Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                        }
-                    }
-                    #if os(iOS)
+                    // Filter sits directly visible, right after Privacy — everything
+                    // else (Reading Insights, Select) lives behind the "..." menu.
                     if !works.isEmpty {
-                        Button {
-                            enterSelectMode()
-                        } label: {
-                            Label("Select", systemImage: "checklist")
-                        }
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
                     }
-                    #endif
-                    // Filters sits rightmost — matched on Browse.
-                    if !works.isEmpty {
-                        filterButton
+                    WorkListMoreMenu {
+                        if !statisticsWorks.isEmpty {
+                            NavigationLink {
+                                ReadingStatisticsView(works: statisticsWorks)
+                            } label: {
+                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                            }
+                        }
+                        #if os(iOS)
+                        if !works.isEmpty {
+                            Button {
+                                enterSelectMode()
+                            } label: {
+                                Label("Select", systemImage: "checklist")
+                            }
+                        }
+                        #endif
                     }
                 }
                 .labelStyle(.iconOnly)
-            }
-        }
-    }
-
-    /// Opens the filter panel; the icon fills while any filter is active. Routed
-    /// through the shared router so only one inspector is ever open app-wide.
-    private var filterButton: some View {
-        Button {
-            router.toggle(.libraryFilters)
-        } label: {
-            Label("Filter", systemImage: filters.hasActiveFilters
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
-        }
-        .help("Filters")
-        .contextMenu {
-            if filters.hasActiveFilters {
-                Button(role: .destructive, action: { filters = LibraryFilters() }) {
-                    Label("Clear All Filters", systemImage: "arrow.counterclockwise")
-                }
             }
         }
     }
@@ -615,8 +599,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         isSelected: selection.contains(work.id),
                         onToggleSelection: { toggleSelection(work) }
                     )
+                    .cardRow(isSelected: selection.contains(work.id))
                 }
-                    .cardRow()
             }
         }
         .cardList()
@@ -631,38 +615,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         #endif
     }
 
-    /// The bulk-action controls shown while selecting (bottom bar on iOS). Delete
-    /// always confirms — it's a batch and can't be undone.
-    @ViewBuilder
-    private var bulkActionBar: some View {
-        Button(role: .destructive) {
-            confirmBulkDelete = true
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-        .disabled(selection.isEmpty)
+    private var allSelectableSelected: Bool {
+        let ids = Set(selectableWorks.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
 
-        Spacer()
-
-        Button {
-            bulkSave()
-        } label: {
-            Label(allSelectedAreSaved ? "Saved" : "Save",
-                  systemImage: allSelectedAreSaved ? "bookmark.fill" : "bookmark")
-        }
-        .tint(allSelectedAreSaved ? themeManager.accentColor : nil)
-        .disabled(selection.isEmpty)
-
-        Spacer()
-
-        Button {
-            bulkFavorite()
-        } label: {
-            Label(allSelectedAreFavorited ? "Favorited" : "Favorite",
-                  systemImage: allSelectedAreFavorited ? "star.fill" : "star")
-        }
-        .tint(allSelectedAreFavorited ? themeManager.accentColor : nil)
-        .disabled(selection.isEmpty)
+    private func toggleSelectAll() {
+        selection = allSelectableSelected ? [] : Set(selectableWorks.map(\.id))
     }
 
     #if os(iOS)
@@ -726,35 +685,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         } else {
             selection.insert(work.id)
         }
-    }
-
-    private func bulkDelete() {
-        for work in selectedWorks {
-            PreservedWorkService.softDelete(work, in: context)
-        }
-        exitSelectMode()
-    }
-
-    /// Toggles saved (keeps its EPUB permanently): if the selection isn't already
-    /// all saved, saves everything; if it is, un-saves everything (tap again to
-    /// undo). Select mode stays active — unlike Delete, the works are still there,
-    /// so the user can keep stacking actions or adjusting the selection.
-    private func bulkSave() {
-        let shouldSave = !allSelectedAreSaved
-        for work in selectedWorks {
-            WorkLifecycle.setSaved(work, shouldSave, in: context)
-        }
-    }
-
-    /// Same toggle behavior as `bulkSave`.
-    private func bulkFavorite() {
-        let shouldFavorite = !allSelectedAreFavorited
-        let now = Date()
-        for work in selectedWorks {
-            work.isFavorite = shouldFavorite
-            work.markModified(now)
-        }
-        try? context.save()
     }
 
     private func refreshLibraryDashboard() async {

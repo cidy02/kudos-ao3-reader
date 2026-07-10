@@ -138,17 +138,23 @@ struct AO3AccountWorksList: View {
         }
         .hidesFloatingTabBar()
         .toolbar {
-            if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
-                ToolbarItem(placement: .primaryAction) {
-                    MatureRevealToggle()
-                }
-            }
-            if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         onClearFilters: { filters = AO3SearchFilters() })
+            // One item holding a tight HStack — separate ToolbarItems get the
+            // system's wide spacing, which reads as inconsistent between the privacy
+            // toggle and the expand/filter cluster. Matches the pattern already
+            // established in LibraryView.swift's dashboard toolbar.
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 2) {
+                    if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
+                        MatureRevealToggle()
+                    }
+                    if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: $showingFilters,
+                                     onClearFilters: { filters = AO3SearchFilters() })
+                        WorkListMoreMenu {
+                            ExpandAllMenuItem(expandAll: $expandAll)
+                        }
+                    }
                 }
             }
         }

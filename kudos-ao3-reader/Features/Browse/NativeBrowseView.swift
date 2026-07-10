@@ -75,6 +75,7 @@ struct FandomWorksView: View {
     @State private var isSelecting = false
     @State private var selection: Set<Int> = []
     @State private var isProcessingBatch = false
+    @State private var batchTask: Task<Void, Never>?
     @State private var resolvedQueueWorks: [SavedWork] = []
     @State private var showingAddToQueue = false
     @State private var resolvedCollectionWorks: [SavedWork] = []
@@ -115,8 +116,8 @@ struct FandomWorksView: View {
                     Section {
                         ForEach(results) { work in
                             workRow(for: work)
+                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
                         }
-                        .cardRow()
                     }
                     if showPagination { Section { paginationRow } }
                 }
@@ -160,6 +161,9 @@ struct FandomWorksView: View {
                 Text(batchActionError ?? "")
             }
             .task { await load(page: 1) }
+            // Unstructured batch tasks outlive the view unless explicitly cancelled;
+            // the bulk loops bail out cleanly on CancellationError.
+            .onDisappear { batchTask?.cancel() }
     }
 
     @ViewBuilder
@@ -196,6 +200,9 @@ struct FandomWorksView: View {
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+            // A different page replaces `results` with different works entirely —
+            // a stale selection would otherwise reference IDs that no longer exist.
+            selection.removeAll()
             Task { await load(page: page) }
         }
         .cardRow()
@@ -289,14 +296,16 @@ struct FandomWorksView: View {
         } else if phase == .loaded, !results.isEmpty {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
-                    Button { isSelecting = true } label: {
-                        Label("Select", systemImage: "checklist")
+                    FilterButton(filtersActive: hasExtraFilters,
+                                 showingFilters: $showingFilters,
+                                 filterHelp: "Filter works in this fandom",
+                                 onClearFilters: resetFilters)
+                    WorkListMoreMenu {
+                        Button { isSelecting = true } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                        ExpandAllMenuItem(expandAll: $expandAll)
                     }
-                    WorkCardListControls(expandAll: $expandAll,
-                                         filtersActive: hasExtraFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter works in this fandom",
-                                         onClearFilters: resetFilters)
                 }
                 .labelStyle(.iconOnly)
             }
@@ -309,7 +318,7 @@ struct FandomWorksView: View {
     @ViewBuilder
     private var bulkActionBar: some View {
         Button {
-            Task { await bulkSave() }
+            batchTask = Task { await bulkSave() }
         } label: {
             Label("Save", systemImage: "bookmark")
         }
@@ -318,7 +327,7 @@ struct FandomWorksView: View {
         Spacer()
 
         Button {
-            Task { await bulkSaveForLater() }
+            batchTask = Task { await bulkSaveForLater() }
         } label: {
             Label("Save for Later", systemImage: "clock.arrow.circlepath")
         }
@@ -327,7 +336,7 @@ struct FandomWorksView: View {
         Spacer()
 
         Button {
-            Task { await bulkAddToCollection() }
+            batchTask = Task { await bulkAddToCollection() }
         } label: {
             Label("Add to Collection", systemImage: "square.stack")
         }
@@ -336,7 +345,7 @@ struct FandomWorksView: View {
         Spacer()
 
         Button {
-            Task { await bulkAddToQueue() }
+            batchTask = Task { await bulkAddToQueue() }
         } label: {
             Label("Add to Queue", systemImage: "list.bullet.rectangle")
         }
@@ -353,36 +362,11 @@ struct FandomWorksView: View {
         selection = []
     }
 
-    /// Resolves each selected summary to a local work, sequentially (one AO3 request
-    /// at a time), then hands the resolved works to `body`.
-    private func resolveSelectedWorks(body: @escaping ([SavedWork]) async -> Void) async {
+    private func bulkSave() async {
         guard !isProcessingBatch else { return }
         isProcessingBatch = true
         defer { isProcessingBatch = false }
-
-        var resolved: [SavedWork] = []
-        var failureCount = 0
-        for summary in selectedSummaries {
-            do {
-                resolved.append(try await ReadingQueueService.resolveLocalWork(for: summary, in: context))
-            } catch {
-                failureCount += 1
-            }
-        }
-        if failureCount > 0 {
-            batchActionError = failureCount == selectedSummaries.count
-                ? "Couldn't save any of the selected works. Check your connection and try again."
-                : "\(failureCount) of \(selectedSummaries.count) selected works couldn't be saved and were skipped."
-        }
-        // Don't hand an empty list to `body` — for the Add to Collection/Queue sheets,
-        // presenting with zero works would otherwise show every row as a false
-        // checkmark (an empty selection vacuously satisfies "all works are members").
-        guard !resolved.isEmpty else { return }
-        await body(resolved)
-    }
-
-    private func bulkSave() async {
-        await resolveSelectedWorks { works in
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
             for work in works {
                 WorkLifecycle.setSaved(work, true, in: context)
             }
@@ -393,32 +377,24 @@ struct FandomWorksView: View {
         guard !isProcessingBatch else { return }
         isProcessingBatch = true
         defer { isProcessingBatch = false }
-
-        var failureCount = 0
-        for summary in selectedSummaries {
-            do {
-                _ = try await ReadingQueueService.addToSavedForLater(summary, in: context)
-            } catch {
-                failureCount += 1
-            }
-        }
-        if failureCount > 0 {
-            batchActionError = failureCount == selectedSummaries.count
-                ? "Couldn't save any of the selected works for later. Check your connection and try again."
-                : "\(failureCount) of \(selectedSummaries.count) selected works couldn't be saved "
-                    + "for later and were skipped."
-        }
+        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
     }
 
     private func bulkAddToCollection() async {
-        await resolveSelectedWorks { works in
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
             resolvedCollectionWorks = works
             showingAddToCollection = true
         }
     }
 
     private func bulkAddToQueue() async {
-        await resolveSelectedWorks { works in
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
             resolvedQueueWorks = works
             showingAddToQueue = true
         }
@@ -441,11 +417,26 @@ struct TagWorksView: View {
     @State private var filters = AO3SearchFilters()
     @State private var showingFilters = false
 
+    @Environment(\.modelContext) private var context
+    @State private var isSelecting = false
+    @State private var selection: Set<Int> = []
+    @State private var isProcessingBatch = false
+    @State private var batchTask: Task<Void, Never>?
+    @State private var resolvedQueueWorks: [SavedWork] = []
+    @State private var showingAddToQueue = false
+    @State private var resolvedCollectionWorks: [SavedWork] = []
+    @State private var showingAddToCollection = false
+    @State private var batchActionError: String?
+
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
     /// This page's works narrowed by the active refine filters.
     private var visibleResults: [AO3WorkSummary] {
         filters.apply(to: results)
+    }
+
+    private var selectedSummaries: [AO3WorkSummary] {
+        visibleResults.filter { selection.contains($0.id) }
     }
 
     var body: some View {
@@ -457,10 +448,9 @@ struct TagWorksView: View {
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(visibleResults) { work in
-                            AO3WorkRow(work: work, expandAll: expandAll)
-                                .cardNavigation(to: work)
+                            workRow(for: work)
+                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
                         }
-                        .cardRow()
                     }
                     if showPagination { Section { paginationRow } }
                 }
@@ -474,16 +464,7 @@ struct TagWorksView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .hidesFloatingTabBar()
-            .toolbar {
-                if phase == .loaded, !results.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             onClearFilters: { filters = AO3SearchFilters() })
-                    }
-                }
-            }
+            .toolbar { toolbarContent }
             .inspector(isPresented: $showingFilters) {
                 AO3FilterPanel(
                     filters: $filters,
@@ -495,7 +476,164 @@ struct TagWorksView: View {
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 .navigationTitle("Filter Works")
             }
+            .sheet(isPresented: $showingAddToQueue) {
+                AddToQueueView(works: resolvedQueueWorks)
+            }
+            .sheet(isPresented: $showingAddToCollection) {
+                AddToCollectionView(works: resolvedCollectionWorks)
+            }
+            .alert(
+                "Action Failed",
+                isPresented: Binding(
+                    get: { batchActionError != nil },
+                    set: { if !$0 { batchActionError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { batchActionError = nil }
+            } message: {
+                Text(batchActionError ?? "")
+            }
             .task { await load(page: 1) }
+            .onDisappear { batchTask?.cancel() }
+    }
+
+    @ViewBuilder
+    private func workRow(for work: AO3WorkSummary) -> some View {
+        let row = AO3WorkRow(work: work, expandAll: expandAll, isSelecting: isSelecting, isSelected: selection.contains(work.id))
+        if isSelecting {
+            Button { toggleSelection(work) } label: { row }
+                .buttonStyle(.plain)
+                .accessibilityLabel(work.title)
+                .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
+                .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
+        } else {
+            row.cardNavigation(to: work)
+        }
+    }
+
+    private func toggleSelection(_ work: AO3WorkSummary) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isSelecting {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { exitSelectMode() }
+            }
+            #if os(iOS)
+            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+            #else
+            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+            #endif
+        } else if phase == .loaded, !results.isEmpty {
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 2) {
+                    FilterButton(filtersActive: filters.hasActiveFilters,
+                                 showingFilters: $showingFilters,
+                                 onClearFilters: { filters = AO3SearchFilters() })
+                    WorkListMoreMenu {
+                        Button { isSelecting = true } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                        ExpandAllMenuItem(expandAll: $expandAll)
+                    }
+                }
+                .labelStyle(.iconOnly)
+            }
+        }
+    }
+
+    /// Mirrors FandomWorksView's bulk-action bar exactly, sharing the same resolution
+    /// helpers so both surfaces behave identically for the same batch actions.
+    @ViewBuilder
+    private var bulkActionBar: some View {
+        Button {
+            batchTask = Task { await bulkSave() }
+        } label: {
+            Label("Save", systemImage: "bookmark")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkSaveForLater() }
+        } label: {
+            Label("Save for Later", systemImage: "clock.arrow.circlepath")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkAddToCollection() }
+        } label: {
+            Label("Add to Collection", systemImage: "square.stack")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkAddToQueue() }
+        } label: {
+            Label("Add to Queue", systemImage: "list.bullet.rectangle")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        if isProcessingBatch {
+            ProgressView()
+                .controlSize(.small)
+        }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func bulkSave() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            for work in works {
+                WorkLifecycle.setSaved(work, true, in: context)
+            }
+        }
+    }
+
+    private func bulkSaveForLater() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
+    }
+
+    private func bulkAddToCollection() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            resolvedCollectionWorks = works
+            showingAddToCollection = true
+        }
+    }
+
+    private func bulkAddToQueue() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            resolvedQueueWorks = works
+            showingAddToQueue = true
+        }
     }
 
     private var showPagination: Bool {
@@ -504,6 +642,9 @@ struct TagWorksView: View {
 
     private var paginationRow: some View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+            // A different page replaces `results` with different works entirely —
+            // a stale selection would otherwise reference IDs that no longer exist.
+            selection.removeAll()
             Task { await load(page: page) }
         }
         .cardRow()

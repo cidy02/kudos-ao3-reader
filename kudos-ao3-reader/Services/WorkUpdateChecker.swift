@@ -32,7 +32,11 @@ enum WorkUpdateChecker {
                 work.lastUpdateCheck = Date()
                 try? context.save()
             } catch {
-                // Network / parse / locked page — keep what we have and retry later.
+                // Network / parse / locked page — keep what we have, but still stamp
+                // the check so a failing work waits out `minInterval` instead of
+                // being retried on every Home visit.
+                work.lastUpdateCheck = Date()
+                try? context.save()
             }
         }
     }

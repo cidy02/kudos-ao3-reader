@@ -105,6 +105,46 @@ struct ReadingQueueTests {
         #expect(queue.memberships.count == 1)
     }
 
+    @Test func reorderRewritesSortOrderAndMarksMembershipsPending() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Reorder Test", in: context)
+        let works = (1 ... 3).map { SavedWork(title: "Work \($0)", author: "Writer") }
+        for work in works {
+            context.insert(work)
+            ReadingQueueService.add(work, to: queue, in: context)
+        }
+        // Insertion order: Work 1, 2, 3 (sortOrderInQueue 0, 1, 2).
+        #expect(queue.memberships.sorted { $0.sortOrderInQueue < $1.sortOrderInQueue }.compactMap(\.work?.title)
+            == ["Work 1", "Work 2", "Work 3"])
+        for membership in queue.memberships {
+            membership.syncStatusRaw = SyncRecordStatus.synced.rawValue
+        }
+
+        // Drag Work 3 to the front.
+        let newOrder = [works[2].id, works[0].id, works[1].id]
+        ReadingQueueService.reorder(newOrder, in: queue, context: context)
+
+        #expect(queue.memberships.sorted { $0.sortOrderInQueue < $1.sortOrderInQueue }.compactMap(\.work?.title)
+            == ["Work 3", "Work 1", "Work 2"])
+        // A user-dragged reorder is a real local change — it must be visible to sync,
+        // not silently dropped because nothing else about the membership changed.
+        #expect(queue.memberships.allSatisfy { $0.syncStatus == .pending })
+    }
+
+    @Test func reorderIgnoresUnknownWorkIDs() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Reorder Test", in: context)
+        let work = SavedWork(title: "Solo Work", author: "Writer")
+        context.insert(work)
+        ReadingQueueService.add(work, to: queue, in: context)
+
+        // A stale/unrelated UUID in the dragged order (e.g. a work removed mid-drag)
+        // must not crash or corrupt the real membership's order.
+        ReadingQueueService.reorder([UUID(), work.id], in: queue, context: context)
+
+        #expect(queue.memberships.first?.sortOrderInQueue == 1)
+    }
+
     @Test func queuedWorkKeepsEPUBWhenMarkedFinished() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

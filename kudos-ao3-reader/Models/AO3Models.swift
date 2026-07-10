@@ -470,6 +470,9 @@ enum AO3Error: LocalizedError {
     /// HTTP 429. `retryAfter` is the server's `Retry-After` hint in seconds, if given.
     case rateLimited(retryAfter: TimeInterval?)
     case notFound
+    /// HTTP 403 — AO3 (or its CDN) refused the request outright. Not retried:
+    /// hammering a block only prolongs it.
+    case forbidden
     /// HTTP 5xx — a transient server-side error (retried automatically).
     case server(status: Int)
     /// Any other unexpected HTTP status (e.g. 4xx other than 404/429).
@@ -483,6 +486,7 @@ enum AO3Error: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .rateLimited: "AO3 is rate-limiting requests. Wait a moment and try again."
+        case .forbidden: "AO3 refused the request (HTTP 403). Wait a while before trying again."
         case .notFound: "That work or page couldn't be found (it may be restricted)."
         case let .server(status): "AO3 had a server problem (HTTP \(status)). Try again shortly."
         case let .http(status): "AO3 returned an unexpected response (HTTP \(status))."

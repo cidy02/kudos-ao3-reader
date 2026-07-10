@@ -1,27 +1,34 @@
 import SwiftUI
 
-/// UI state + drivers for the native "On AO3" actions (kudos, comment). Held by the
-/// host (Work Detail / Reader) as `@State` and shared with the actions menu, the
-/// comment composer, and the result alert via `.ao3WorkActions(…)`. Holds no work id
-/// or service — those are passed per action so the model is trivial to create.
+/// UI state + drivers for the native "On AO3" actions. Held by the host (Work
+/// Detail / Reader) and shared with the actions menu, comments screen, bookmark
+/// composer, and result alert via `.ao3WorkActions(…)`.
 @MainActor
 @Observable
 final class AO3WorkActionsModel {
     /// True while a write is in flight (disables re-taps; shows progress).
     var isWorking = false
-    /// A short result/info message shown as a host alert (kudos result, comment posted).
+    /// A short result/info message shown as a host alert.
     var banner: String?
-    /// Drives the comment composer sheet.
-    var showingComment = false
-    var commentText = ""
-    /// An error shown *inside* the composer so the user can fix + retry without losing
-    /// their text.
-    var composerError: String?
 
     /// Drives the bookmark composer sheet.
     var showingBookmark = false
     var bookmarkInput = AO3AuthService.BookmarkInput()
     var bookmarkError: String?
+
+    /// Drives the native comments screen (sheet). The work context is captured at
+    /// tap time — the model itself stays work-agnostic.
+    var showingCommentsScreen = false
+    var commentsContext = AO3CommentsWorkContext(title: "", authors: [])
+    /// The AO3 story chapter to open comments on, when launched from a reader
+    /// (chapter-aware button). nil from Work Detail → opens on All comments.
+    var commentsInitialChapterPosition: Int?
+
+    func startViewingComments(context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil) {
+        commentsContext = context
+        commentsInitialChapterPosition = initialChapterPosition
+        showingCommentsScreen = true
+    }
 
     func giveKudos(workID: Int, auth: AO3AuthService) {
         run { try await auth.giveKudos(workID: workID) }
@@ -44,29 +51,6 @@ final class AO3WorkActionsModel {
                 banner = try await action()
             } catch {
                 banner = Self.message(for: error)
-            }
-            isWorking = false
-        }
-    }
-
-    func startComment() {
-        commentText = ""
-        composerError = nil
-        showingComment = true
-    }
-
-    func submitComment(workID: Int, auth: AO3AuthService) {
-        guard !isWorking else { return }
-        let text = commentText
-        isWorking = true
-        composerError = nil
-        Task {
-            do {
-                let message = try await auth.postComment(workID: workID, content: text)
-                showingComment = false
-                banner = message
-            } catch {
-                composerError = Self.message(for: error)
             }
             isWorking = false
         }
@@ -103,7 +87,7 @@ final class AO3WorkActionsModel {
 // MARK: - Host wiring
 
 extension View {
-    /// Presents the comment composer + result alert for the given actions model.
+    /// Presents the comments screen, bookmark composer, and result alert.
     /// Apply on the host that also shows `AO3WorkActionsMenu`.
     func ao3WorkActions(_ actions: AO3WorkActionsModel, workID: Int, auth: AO3AuthService) -> some View {
         modifier(AO3WorkActionsModifier(actions: actions, workID: workID, auth: auth))
@@ -117,12 +101,15 @@ private struct AO3WorkActionsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(isPresented: $actions.showingComment) {
-                AO3CommentComposer(actions: actions, workID: workID, auth: auth)
-            }
             .sheet(isPresented: $actions.showingBookmark) {
                 AO3BookmarkComposer(actions: actions, workID: workID, auth: auth)
             }
+            .commentsSheet(
+                isPresented: $actions.showingCommentsScreen,
+                workID: workID,
+                context: actions.commentsContext,
+                initialChapterPosition: actions.commentsInitialChapterPosition
+            )
             .alert("AO3", isPresented: bannerPresented) {
                 Button("OK", role: .cancel) { actions.banner = nil }
             } message: {
@@ -133,72 +120,6 @@ private struct AO3WorkActionsModifier: ViewModifier {
     private var bannerPresented: Binding<Bool> {
         Binding(get: { actions.banner != nil },
                 set: { if !$0 { actions.banner = nil } })
-    }
-}
-
-/// A small compose sheet for a native AO3 comment, with an explicit confirm step
-/// before posting (the comment is published to AO3 under the user's default pseud).
-private struct AO3CommentComposer: View {
-    @Bindable var actions: AO3WorkActionsModel
-    let workID: Int
-    let auth: AO3AuthService
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var confirming = false
-
-    private var trimmed: String {
-        actions.commentText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Group {
-                    Section {
-                        TextEditor(text: $actions.commentText)
-                            .frame(minHeight: 160)
-                            .disabled(actions.isWorking)
-                    } footer: {
-                        Text("Posts to AO3 as a comment under your default pseud.")
-                    }
-                    if let error = actions.composerError {
-                        Section {
-                            Label(error, systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.red)
-                        }
-                    }
-                }
-                .appThemedRows()
-            }
-            .formStyle(.grouped)
-            .appThemedScroll()
-            .navigationTitle("Leave a Comment")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }.disabled(actions.isWorking)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        if actions.isWorking {
-                            ProgressView()
-                        } else {
-                            Button("Post") { confirming = true }
-                                .disabled(trimmed.isEmpty)
-                        }
-                    }
-                }
-                .confirmationDialog("Post this comment to AO3?", isPresented: $confirming,
-                                    titleVisibility: .visible) {
-                    Button("Post Comment") { actions.submitComment(workID: workID, auth: auth) }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("This publishes your comment on AO3.")
-                }
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled(actions.isWorking)
-        }
     }
 }
 

@@ -187,8 +187,10 @@ extension AO3AuthService {
     }
 
     /// Builds an authenticated `POST` carrying the CSRF token, form body, and (for
-    /// AO3's UJS endpoints like kudos) the AJAX headers AO3 expects.
-    private func writeRequest(
+    /// AO3's UJS endpoints like kudos) the AJAX headers AO3 expects. Internal (not
+    /// private) so sibling write-action extensions (`AO3CommentActions`) share the
+    /// one implementation instead of forking it.
+    func writeRequest(
         to url: URL, body: Data, csrf: String, referer: URL, ajax: Bool
     ) throws -> URLRequest {
         var request = try authenticatedRequest(for: url, method: "POST")

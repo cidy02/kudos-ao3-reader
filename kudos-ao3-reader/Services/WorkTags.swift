@@ -22,6 +22,10 @@ enum WorkTags {
         // when the newer filter metadata (warnings/categories/language/word count) is
         // still absent — so works saved by an older build gain all of it.
         guard work.needsAO3Refresh else { return }
+        // Stamp every attempt so a locked/failing work waits out the cooldown before
+        // the next try. The success/404 paths save it; on a pure failure it lives
+        // only for this session, which is enough to stop same-session re-fetches.
+        work.lastTagRefreshAttemptAt = Date()
         do {
             let groups = try await AO3Client.shared.workTags(workID: id)
             // Re-check after the network await — the work can be deleted mid-fetch.
@@ -51,6 +55,7 @@ enum WorkTags {
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
             work.markModified()
+            WorkSearchIndex.reindex(work)
             try? context.save()
         } catch AO3Error.notFound {
             // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
@@ -84,6 +89,7 @@ enum WorkTags {
         work.workTags = tags
         if work.rating.isEmpty { work.rating = meta.rating }
         work.markModified()
+        WorkSearchIndex.reindex(work)
         try? context.save()
     }
 

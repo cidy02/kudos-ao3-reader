@@ -83,6 +83,18 @@ struct AccountView: View {
                     Label("Signed In", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 }
+                LabeledContent {
+                    sessionHealthValue(auth.sessionHealth)
+                } label: {
+                    Label("Session", systemImage: "antenna.radiowaves.left.and.right")
+                }
+                Button {
+                    Task { await auth.verifySession() }
+                } label: {
+                    Label(auth.sessionHealth.isChecking ? "Checking…" : "Verify Session",
+                          systemImage: "arrow.clockwise")
+                }
+                .disabled(auth.sessionHealth.isChecking)
                 Button(role: .destructive) {
                     Task { await auth.logout() }
                 } label: {
@@ -104,6 +116,31 @@ struct AccountView: View {
                 Text("Log in to use your AO3 subscriptions, bookmarks, history, and "
                     + "reading list. Your session stays on this device.")
             }
+        }
+    }
+
+    /// The trailing status pill for the "Session" row, reflecting the last check.
+    @ViewBuilder
+    private func sessionHealthValue(_ health: AO3SessionHealth) -> some View {
+        switch health {
+        case .unknown:
+            Text("Not checked").foregroundStyle(.secondary)
+        case .verifying:
+            Label("Checking…", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
+        case let .healthy(at):
+            Label(at.formatted(.relative(presentation: .named)), systemImage: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        case .expired:
+            Label("Expired", systemImage: "xmark.seal.fill")
+                .foregroundStyle(.red)
+                .labelStyle(.titleAndIcon)
+        case .unreachable:
+            Label("Couldn’t verify", systemImage: "wifi.exclamationmark")
+                .foregroundStyle(.orange)
+                .labelStyle(.titleAndIcon)
         }
     }
 
@@ -223,7 +260,9 @@ private struct LocalReadingHistoryView: View {
 
     // Queued works whose preservation is pending/failed have hasEPUB == false but are
     // protected; keep them out of the reading-history list. Soft-deleted works belong
-    // in Recently Deleted, not history.
+    // in Recently Deleted, not history. This is the stored-field spelling of "freed"
+    // (`.freedHistory` plus finished-then-freed) — #Predicate can't call computed
+    // properties like `readingState`, so keep it in sync with that partition.
     @Query(filter: #Predicate<SavedWork> { !$0.hasEPUB && !$0.isQueuedForLater && !$0.isPendingDeletion },
            sort: \SavedWork.dateAdded, order: .reverse)
     private var history: [SavedWork]
@@ -296,11 +335,15 @@ private struct LocalReadingHistoryView: View {
             .toolbar {
                 if !visibleHistory.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in your history",
-                                             onClearFilters: { filters = LibraryFilters() })
+                        HStack(spacing: 2) {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in your history",
+                                         onClearFilters: { filters = LibraryFilters() })
+                            WorkListMoreMenu {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                            }
+                        }
                     }
                 }
             }
@@ -406,11 +449,15 @@ private struct LocalFavoritesView: View {
             .toolbar {
                 if !visibleFavorites.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter your favorites",
-                                             onClearFilters: { filters = LibraryFilters() })
+                        HStack(spacing: 2) {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter your favorites",
+                                         onClearFilters: { filters = LibraryFilters() })
+                            WorkListMoreMenu {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                            }
+                        }
                     }
                 }
             }

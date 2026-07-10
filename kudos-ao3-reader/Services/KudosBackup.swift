@@ -1026,6 +1026,10 @@ enum KudosBackupService {
             apply(archived, to: work, isNewRecord: isNewRecord)
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
+            // Merged/created from source-of-truth archive fields — the derived search
+            // text (never carried in the backup itself) is rebuilt here so restored
+            // works are searchable immediately, not only after the next launch sweep.
+            WorkSearchIndex.reindex(work)
 
             var seenTags = Set<String>()
             work.tags = archived.userTags.compactMap { name in

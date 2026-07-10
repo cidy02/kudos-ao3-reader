@@ -35,9 +35,45 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
+    /// One entry per tag-tap drill-down (tag A → tag B → …), so Back can restore the
+    /// previous filter level instead of losing it to applyTagSearch's overwrite.
+    /// Manual typed searches don't push here — only the tag-tap chain does.
+    @State private var filterHistory: [FilterHistoryEntry] = []
+
+    private struct FilterHistoryEntry {
+        let filters: AO3SearchFilters
+        let page: Int
+        /// The results (and paging) that were on screen at this level, captured when
+        /// we drilled deeper. Restored verbatim on Back so returning to a level never
+        /// re-hits AO3 — a re-fetch would occasionally come back empty or rate-limited
+        /// and strand the user on a blank "no results" page for a level that had works.
+        let results: [AO3WorkSummary]
+        let totalPages: Int
+    }
+
+    // Multi-select / bulk actions over AO3 search results, mirroring Browse's
+    // FandomWorksView/TagWorksView (same shared resolution helpers).
+    @State private var isSelecting = false
+    @State private var selection: Set<Int> = []
+    @State private var isProcessingBatch = false
+    @State private var batchTask: Task<Void, Never>?
+    @State private var resolvedQueueWorks: [SavedWork] = []
+    @State private var showingAddToQueue = false
+    @State private var resolvedCollectionWorks: [SavedWork] = []
+    @State private var showingAddToCollection = false
+    @State private var batchActionError: String?
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
+    }
+
+    private var selectedSummaries: [AO3WorkSummary] {
+        results.filter { selection.contains($0.id) }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
     }
 
     var body: some View {
@@ -69,23 +105,47 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     CollectionDetailView(collection: collection)
                 }
                 .toolbar {
-                    #if os(iOS)
-                    // Search is a focused, full-screen mode. Results replace the
-                    // Browse-by-fandom view in place (no navigation push), so Back steps
-                    // back through that: results → Browse, then Browse → previous tab —
-                    // landing on the page the user actually came from, not skipping it.
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button(action: goBack) {
-                            Image(systemName: "chevron.backward")
+                    if isSelecting {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { exitSelectMode() }
                         }
-                        .accessibilityLabel("Back")
+                        #if os(iOS)
+                        ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
+                        #else
+                        ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
+                        #endif
+                    } else {
+                        #if os(iOS)
+                        // Search is a focused, full-screen mode. Results replace the
+                        // Browse-by-fandom view in place (no navigation push), so Back steps
+                        // back through that: results → Browse, then Browse → previous tab —
+                        // landing on the page the user actually came from, not skipping it.
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(action: goBack) {
+                                Image(systemName: "chevron.backward")
+                            }
+                            .accessibilityLabel("Back")
+                        }
+                        #endif
+                        ToolbarItem(placement: .principal) { searchField }
+                        // Filter sits directly visible, right after the search field —
+                        // everything else (Select, Expand/Collapse) lives behind "...".
+                        ToolbarItem(placement: .primaryAction) {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: router.isShowing(.searchFilters),
+                                         onClearFilters: clearAllFilters)
+                        }
+                        if phase == .loaded, !results.isEmpty {
+                            ToolbarItem(placement: .primaryAction) {
+                                WorkListMoreMenu {
+                                    Button { isSelecting = true } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                    ExpandAllMenuItem(expandAll: $expandAllCards)
+                                }
+                            }
+                        }
                     }
-                    #endif
-                    ToolbarItem(placement: .principal) { searchField }
-                    if phase == .loaded, !results.isEmpty {
-                        ToolbarItem(placement: .primaryAction) { expandAllButton }
-                    }
-                    ToolbarItem(placement: .primaryAction) { filterButton }
                 }
             #if os(iOS)
                 .toolbar(.hidden, for: .tabBar)
@@ -111,6 +171,24 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 } message: {
                     Text("Save the current search and its filters to re-run later.")
                 }
+                .sheet(isPresented: $showingAddToQueue) {
+                    AddToQueueView(works: resolvedQueueWorks)
+                }
+                .sheet(isPresented: $showingAddToCollection) {
+                    AddToCollectionView(works: resolvedCollectionWorks)
+                }
+                .alert(
+                    "Action Failed",
+                    isPresented: Binding(
+                        get: { batchActionError != nil },
+                        set: { if !$0 { batchActionError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) { batchActionError = nil }
+                } message: {
+                    Text(batchActionError ?? "")
+                }
+                .onDisappear { batchTask?.cancel() }
         }
     }
 
@@ -139,10 +217,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     Section {
                         ForEach(results) { work in
-                            AO3WorkRow(work: work, expandAll: expandAllCards)
-                                .cardNavigation(to: work)
+                            searchResultRow(for: work)
+                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
                         }
-                        .cardRow()
                     }
 
                     if showPagination {
@@ -229,11 +306,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         filters.query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Matches against the precomputed `WorkSearchIndex` text — case- and
+    /// diacritic-insensitive over title, author, tags, rating, language, and summary
+    /// (previously title/author only, re-lowercased per keystroke). The query's
+    /// terms must all match, so multi-word queries can span fields; results keep the
+    /// query's own newest-first order.
     private var matchingWorks: [SavedWork] {
-        let query = localQuery.lowercased()
-        return savedWorks.filter {
-            $0.title.lowercased().contains(query) || $0.author.lowercased().contains(query)
-        }
+        let terms = WorkSearchIndex.terms(from: localQuery)
+        return savedWorks.filter { WorkSearchIndex.matches($0, terms: terms) }
     }
 
     private var matchingFandoms: [String] {
@@ -375,6 +455,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func clearQuery() {
         filters.query = ""
         if !filters.hasActiveFilters {
+            filterHistory.removeAll()
             results = []
             phase = .idle
         }
@@ -382,42 +463,116 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     /// Expands or collapses every result card at once (each card can still be
     /// toggled individually afterwards). Shown only while results are visible.
-    private var expandAllButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { expandAllCards.toggle() }
-        } label: {
-            Image(systemName: expandAllCards
-                ? "rectangle.compress.vertical"
-                : "rectangle.expand.vertical")
+    @ViewBuilder
+    private func searchResultRow(for work: AO3WorkSummary) -> some View {
+        let row = AO3WorkRow(work: work, expandAll: expandAllCards, isSelecting: isSelecting, isSelected: selection.contains(work.id))
+        if isSelecting {
+            Button { toggleSelection(work) } label: { row }
+                .buttonStyle(.plain)
+                .accessibilityLabel(work.title)
+                .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
+                .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
+        } else {
+            row.cardNavigation(to: work)
         }
-        .help(expandAllCards ? "Collapse all cards" : "Expand all cards")
-        .accessibilityLabel(expandAllCards ? "Collapse all cards" : "Expand all cards")
     }
 
-    private var filterButton: some View {
-        Button {
-            router.toggle(.searchFilters)
-        } label: {
-            Image(systemName: filters.hasActiveFilters
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
+    private func toggleSelection(_ work: AO3WorkSummary) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
         }
-        .help("Filters")
-        // Long-press the Filters button to quickly clear every active filter
-        // without opening the sidebar. A context menu is the reliable long-press
-        // affordance for toolbar buttons; the destructive item confirms the action.
-        .contextMenu {
-            if filters.hasActiveFilters {
-                Button(role: .destructive, action: clearAllFilters) {
-                    Label("Clear All Filters", systemImage: "arrow.counterclockwise")
-                }
+    }
+
+    /// Mirrors Browse's FandomWorksView/TagWorksView bulk-action bar exactly, sharing
+    /// the same resolution helpers so results behave identically everywhere.
+    @ViewBuilder
+    private var bulkActionBar: some View {
+        Button {
+            batchTask = Task { await bulkSave() }
+        } label: {
+            Label("Save", systemImage: "bookmark")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkSaveForLater() }
+        } label: {
+            Label("Save for Later", systemImage: "clock.arrow.circlepath")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkAddToCollection() }
+        } label: {
+            Label("Add to Collection", systemImage: "square.stack")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        Spacer()
+
+        Button {
+            batchTask = Task { await bulkAddToQueue() }
+        } label: {
+            Label("Add to Queue", systemImage: "list.bullet.rectangle")
+        }
+        .disabled(selection.isEmpty || isProcessingBatch)
+
+        if isProcessingBatch {
+            ProgressView()
+                .controlSize(.small)
+        }
+    }
+
+    private func bulkSave() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            for work in works {
+                WorkLifecycle.setSaved(work, true, in: context)
             }
         }
     }
 
+    private func bulkSaveForLater() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
+    }
+
+    private func bulkAddToCollection() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            resolvedCollectionWorks = works
+            showingAddToCollection = true
+        }
+    }
+
+    private func bulkAddToQueue() async {
+        guard !isProcessingBatch else { return }
+        isProcessingBatch = true
+        defer { isProcessingBatch = false }
+        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
+            resolvedQueueWorks = works
+            showingAddToQueue = true
+        }
+    }
+
+
     /// Resets every filter (keeping the query) and refreshes — shared by the
     /// long-press confirmation and mirroring the sidebar's "Reset Filters".
     private func clearAllFilters() {
+        filterHistory.removeAll()
         filters = AO3SearchFilters(query: filters.query)
         if filters.isSearchable {
             runSearch()
@@ -459,6 +614,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             onApply: runSearch,
             onSave: presentSaveDialog,
             onReset: {
+                filterHistory.removeAll()
                 filters = AO3SearchFilters(query: filters.query)
                 // Nothing left to search → return to the Media Browser.
                 if !filters.isSearchable {
@@ -472,12 +628,23 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     // MARK: Navigation
 
-    /// Back action for the focused Search tab. Because search results replace the
-    /// Browse-by-fandom view in place rather than pushing a page, a plain "leave the
-    /// tab" Back would skip past Browse. So step back through the real history:
+    /// Back action for the focused Search tab. A tag-tap drill-down (tag A → tag B)
+    /// pops one filter level at a time before falling through to the real history:
     /// results → Browse, then (already on Browse) → the previous tab.
     private func goBack() {
-        if phase == .idle {
+        if let previous = filterHistory.popLast() {
+            // Restore the level's captured results instead of re-fetching — the
+            // bump discards any load still in flight from the level we're leaving so
+            // it can't overwrite what we just restored. Selection is cleared because
+            // the works (and their IDs) change wholesale, mirroring loadPage.
+            loadToken += 1
+            selection.removeAll()
+            filters = previous.filters
+            results = previous.results
+            currentPage = previous.page
+            totalPages = previous.totalPages
+            phase = .loaded
+        } else if phase == .idle {
             router.exitSearch()
         } else {
             returnToBrowse()
@@ -488,6 +655,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// came from (a typed query or a tapped fandom chip) so Browse shows fresh.
     private func returnToBrowse() {
         loadToken += 1 // discard any in-flight load so it can't re-show results
+        filterHistory.removeAll()
         filters = AO3SearchFilters()
         results = []
         currentPage = 1
@@ -532,7 +700,26 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 newFilters.additionalTags = request.value
             }
         }
-        filters = newFilters
+        pushFilters(newFilters)
+    }
+
+    /// Pushes the current filters onto the history stack before overwriting them —
+    /// the "overwrite" → "push" change that makes each tag-tap drill-down reversible
+    /// one step at a time via `goBack()`. Skipped when the current filters aren't
+    /// searchable (the very first tag tap into a fresh Search, e.g. from Browse) —
+    /// there's no real prior search to return to, and pushing that empty state
+    /// anyway just forced an extra Back tap through a blank results screen before
+    /// `goBack()`'s own idle/Browse fallback ever got a chance to run.
+    private func pushFilters(_ new: AO3SearchFilters) {
+        if filters.isSearchable {
+            filterHistory.append(FilterHistoryEntry(
+                filters: filters,
+                page: currentPage,
+                results: results,
+                totalPages: totalPages
+            ))
+        }
+        filters = new
         runSearch()
     }
 
@@ -570,6 +757,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     /// Loads a saved search's filters and runs it.
     private func runSaved(_ saved: SavedSearch) {
+        filterHistory.removeAll()
         filters = saved.filters
         router.panel = .none
         runSearch()
@@ -587,6 +775,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// the new one loads so the pagination bar doesn't flicker away.
     private func loadPage(_ page: Int) {
         guard page >= 1, page <= totalPages, page != currentPage else { return }
+        // A different page replaces `results` with different works entirely — a
+        // stale selection would otherwise reference IDs that no longer exist.
+        selection.removeAll()
         load(page: page)
     }
 

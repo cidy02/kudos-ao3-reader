@@ -3,6 +3,10 @@ import OSLog
 import SwiftData
 import SwiftSoup
 
+// Import funnels (AO3 download + user-file) and their shared iCloud-materialization
+// helper are cohesive; avoid a behavior-risking split for lint.
+// swiftlint:disable file_length
+
 /// Imports a downloaded EPUB into the library: reads its metadata, moves the
 /// file into permanent storage, and inserts a `SavedWork`. Returns the inserted
 /// work, or throws if the file couldn't be saved. Shared by the Browse tab's
@@ -30,34 +34,41 @@ func importEPUB(
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
 
-    // Re-downloading a work that's sitting in Recently Deleted revives that record
-    // (with all its reading progress) instead of inserting a hidden-twin duplicate —
-    // without this, the new record would show in the Library while the old one stayed
-    // scheduled for permanent deletion, and a later restore would produce two copies.
-    if let source,
-       let pending = existingWork(forSource: source, in: context),
-       pending.isPendingDeletion {
-        PreservedWorkService.restore(pending, in: context)
-        if let meta {
-            applyEPUBMetadata(meta, extracted: .empty, localChapterCount: nil, to: pending, fillOnly: true)
+    // Callers pre-check for an existing copy before the multi-second EPUB download,
+    // so two concurrent acquisitions of the same work can both pass that check and
+    // land here together. Re-check now and merge into any existing record instead of
+    // inserting a duplicate; a match sitting in Recently Deleted is revived first
+    // (with all its reading progress) rather than left scheduled for permanent deletion.
+    if let source, let existing = existingWork(forSource: source, in: context) {
+        let revived = existing.isPendingDeletion
+        if revived {
+            PreservedWorkService.restore(existing, in: context)
         }
-        pending.isComplete = isComplete || pending.isComplete
-        if pending.seriesURL.isEmpty { pending.seriesURL = seriesURL }
-        if pending.ao3WorkID == nil { pending.ao3WorkID = WorkTags.ao3WorkID(from: pending.sourceURL) }
-        if pending.ao3SeriesID == nil { pending.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: seriesURL) }
-        if pending.knownChapterCount == 0 { pending.knownChapterCount = knownChapterCount }
+        if let meta {
+            applyEPUBMetadata(meta, extracted: .empty, localChapterCount: nil, to: existing, fillOnly: true)
+        }
+        existing.isComplete = isComplete || existing.isComplete
+        if existing.seriesURL.isEmpty { existing.seriesURL = seriesURL }
+        if existing.ao3WorkID == nil { existing.ao3WorkID = WorkTags.ao3WorkID(from: existing.sourceURL) }
+        if existing.ao3SeriesID == nil { existing.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: seriesURL) }
+        if existing.knownChapterCount == 0 { existing.knownChapterCount = knownChapterCount }
         do {
-            try ReadingQueueService.replaceEPUB(for: pending, with: tempURL)
-            pending.hasEPUB = true
+            try ReadingQueueService.replaceEPUB(for: existing, with: tempURL)
+            existing.hasEPUB = true
         } catch {
             Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
             throw error
         }
-        pending.markModified()
+        existing.markModified()
+        WorkSearchIndex.reindex(existing)
         try? context.save()
-        Log.library.info("Import revived “\(pending.title)” from Recently Deleted")
-        Task { await WorkTags.refreshFromAO3(for: pending, in: context) }
-        return pending
+        if revived {
+            Log.library.info("Import revived “\(existing.title)” from Recently Deleted")
+        } else {
+            Log.library.info("Import merged into existing “\(existing.title)”")
+        }
+        Task { await WorkTags.refreshFromAO3(for: existing, in: context) }
+        return existing
     }
 
     let work = SavedWork(
@@ -96,6 +107,7 @@ func importEPUB(
     }
 
     context.insert(work)
+    WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported work “\(title)”")
 
@@ -124,6 +136,9 @@ enum UserEPUBImportOutcome {
 enum UserEPUBImportError: LocalizedError {
     case notLocalFile
     case invalidExtension
+    /// A `.fileImporter`-selected file lives in iCloud Drive and wasn't fully
+    /// downloaded within the wait window — see `waitForUbiquitousDownload(of:)`.
+    case iCloudDownloadTimedOut
 
     var errorDescription: String? {
         switch self {
@@ -131,7 +146,41 @@ enum UserEPUBImportError: LocalizedError {
             "Choose a local EPUB file."
         case .invalidExtension:
             "Choose a file ending in .epub."
+        case .iCloudDownloadTimedOut:
+            "This file is still downloading from iCloud Drive. Wait for it to finish "
+                + "downloading in the Files app, then try importing again."
         }
+    }
+}
+
+/// Waits for a `.fileImporter`-selected file to finish downloading from iCloud
+/// Drive before it's read. The document picker can return a URL to a
+/// not-yet-materialized placeholder — e.g. any file showing the cloud-download
+/// icon in Files — and reading it immediately (`Data(contentsOf:)`) fails with an
+/// opaque "unreadable file" error instead of actually waiting for the download.
+/// A no-op for files that are already local (including the common case of
+/// picking from "On My iPhone"/"On My Mac").
+func waitForUbiquitousDownload(
+    of url: URL,
+    pollInterval: TimeInterval = 0.3,
+    timeout: TimeInterval = 120
+) async throws {
+    guard let isUbiquitous = try? url.resourceValues(forKeys: [.isUbiquitousItemKey]).isUbiquitousItem,
+          isUbiquitous
+    else { return }
+
+    // Idempotent: harmless (and necessary) to call even if a download is already
+    // in progress or finished — it's how the placeholder actually starts
+    // materializing rather than sitting inert until something else touches it.
+    try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while true {
+        let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+            .ubiquitousItemDownloadingStatus
+        if status == .current { return }
+        guard Date() < deadline else { throw UserEPUBImportError.iCloudDownloadTimedOut }
+        try await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
     }
 }
 
@@ -209,13 +258,14 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         if !duplicate.hasEPUB {
             try copyImportedEPUB(from: url, to: duplicate.fileURL)
             duplicate.hasEPUB = true
-            duplicate.isSaved = true
             duplicate.markModified()
+            WorkSearchIndex.reindex(duplicate)
             try? context.save()
             Task { await WorkTags.refreshFromAO3(for: duplicate, in: context) }
             return .restored(duplicate)
         }
         duplicate.markModified()
+        WorkSearchIndex.reindex(duplicate)
         try? context.save()
         return revivedFromRecentlyDeleted ? .restored(duplicate) : .duplicate(duplicate)
     }
@@ -227,7 +277,6 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         summary: inspection.summary,
         sourceURL: inspection.sourceURL
     )
-    work.isSaved = true
     applyUserImportMetadata(inspection, to: work, fillOnly: false)
     work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
     work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
@@ -236,6 +285,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     try copyImportedEPUB(from: url, to: work.fileURL)
 
     context.insert(work)
+    WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported user EPUB “\(work.title)”")
 

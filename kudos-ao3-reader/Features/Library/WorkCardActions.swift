@@ -144,13 +144,26 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
+    @State private var showingComments = false
     @State private var pendingDelete: SavedWork?
+
+    private var commentsWorkID: Int? {
+        work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+    }
 
     func body(content: Content) -> some View {
         content
             .contextMenu {
                 NavigationLink(value: LocalWorkDestination.reader(work)) {
                     Label("Read", systemImage: "book")
+                }
+
+                if commentsWorkID != nil {
+                    Button {
+                        showingComments = true
+                    } label: {
+                        Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                    }
                 }
 
                 if let onSelect {
@@ -175,6 +188,15 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     } label: {
                         Label("Save", systemImage: "bookmark")
                     }
+                }
+
+                Button {
+                    toggleSavedForLater()
+                } label: {
+                    Label(
+                        work.isInSavedForLaterQueue ? "Remove from Saved for Later" : "Save for Later",
+                        systemImage: work.isInSavedForLaterQueue ? "bookmark.slash" : "bookmark.fill"
+                    )
                 }
 
                 Button {
@@ -208,6 +230,11 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
             .sheet(isPresented: $showingAddToCollection) {
                 AddToCollectionView(work: work)
             }
+            .commentsSheet(
+                isPresented: $showingComments,
+                workID: commentsWorkID ?? 0,
+                context: .init(savedWork: work)
+            )
             .deleteConfirmation(
                 for: $pendingDelete,
                 title: "Delete this work?",
@@ -223,6 +250,19 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
             WorkLifecycle.markStillReading(work, in: context)
         } else {
             WorkLifecycle.markFinished(work, in: context)
+        }
+    }
+
+    @MainActor
+    private func toggleSavedForLater() {
+        if work.isInSavedForLaterQueue {
+            ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
+                work,
+                from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
+                in: context
+            )
+        } else {
+            Task { await ReadingQueueService.addToSavedForLater(work, in: context) }
         }
     }
 }
@@ -243,6 +283,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     @State private var readerWork: SavedWork?
     @State private var queueWork: SavedWork?
     @State private var collectionWork: SavedWork?
+    @State private var showingComments = false
     @State private var pendingDelete: SavedWork?
 
     private var existingLocalWork: SavedWork? {
@@ -258,6 +299,12 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     Label("Read", systemImage: "book")
                 }
                 .disabled(working)
+
+                Button {
+                    showingComments = true
+                } label: {
+                    Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                }
 
                 if let existingLocalWork, existingLocalWork.isSaved {
                     Button(role: .destructive) {
@@ -278,6 +325,18 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     }
                     .disabled(working)
                 }
+
+                Button {
+                    toggleSavedForLater()
+                } label: {
+                    Label(
+                        existingLocalWork?.isInSavedForLaterQueue == true
+                            ? "Remove from Saved for Later" : "Save for Later",
+                        systemImage: existingLocalWork?.isInSavedForLaterQueue == true
+                            ? "bookmark.slash" : "bookmark.fill"
+                    )
+                }
+                .disabled(working)
 
                 Button {
                     addToQueue()
@@ -312,6 +371,11 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
             .sheet(item: $queueWork) { AddToQueueView(work: $0) }
             .sheet(item: $collectionWork) { AddToCollectionView(work: $0) }
+            .commentsSheet(
+                isPresented: $showingComments,
+                workID: work.id,
+                context: .init(remote: work)
+            )
             .deleteConfirmation(
                 for: $pendingDelete,
                 title: "Delete this work?",
@@ -350,6 +414,20 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     private func addToQueue() {
         performRemoteAction { saved in
             queueWork = saved
+        }
+    }
+
+    private func toggleSavedForLater() {
+        performRemoteAction { saved in
+            if saved.isInSavedForLaterQueue {
+                ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
+                    saved,
+                    from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
+                    in: context
+                )
+            } else {
+                _ = await ReadingQueueService.addToSavedForLater(saved, in: context)
+            }
         }
     }
 

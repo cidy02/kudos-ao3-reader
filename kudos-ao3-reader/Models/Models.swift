@@ -120,6 +120,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// meaningful while `isPendingDeletion == true`.
     var permanentDeletionScheduledAt: Date?
 
+    /// Derived, rebuildable search text: the work's searchable fields (title, author,
+    /// tags, rating, language, …) normalized once (lowercased, diacritics folded) by
+    /// `WorkSearchIndex.reindex` so Library/Search matching never re-normalizes per
+    /// keystroke. Never source of truth, never exported in backups — any record can be
+    /// rebuilt from the real fields at any time (see `searchIndexVersion`).
+    var searchText: String = ""
+    /// Stamp of the `WorkSearchIndex` schema this record was last indexed with. A
+    /// mismatch with `WorkSearchIndex.currentVersion` (including 0 for records that
+    /// predate indexing or arrived via backup restore) marks it for the launch rebuild.
+    var searchIndexVersion: Int = 0
+
     /// Stable name for the EPUB asset associated with this metadata record. This is
     /// intentionally separate from title/author/source URL so future iCloud Documents
     /// asset lookup can survive AO3 metadata edits and local title changes.
@@ -240,6 +251,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// the background and retries on failure, so this only flips on success.
     var workTagsFetched: Bool = false
 
+    /// When a tag refresh was last *attempted* (success or not), so locked/failing
+    /// works aren't re-fetched every session. Device-local politeness state, not
+    /// user data — deliberately NOT carried in `.kudosbackup`.
+    var lastTagRefreshAttemptAt: Date?
+
     /// Set once AO3 returns 404 for this work — it's been deleted (or hidden) on the
     /// site, so the background refresh stops re-fetching it and the work keeps whatever
     /// tags it already has (EPUB-derived or a prior AO3 fetch). Distinct from a locked /
@@ -252,6 +268,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
             && workRelationships.isEmpty && workFreeforms.isEmpty)
     }
 
+    /// Don't re-attempt a tag refresh for the same work more often than this.
+    static let tagRefreshMinInterval: TimeInterval = 24 * 3600
+
     /// Whether an AO3 refresh would still add data the Library filters rely on:
     /// the categorized Work Tags, or the newer warnings/categories/language/word
     /// count. Drives both the on-demand refresh and the Library's background
@@ -260,6 +279,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         // A work deleted from AO3 can't be refreshed — keep the tags we have and stop
         // hitting the site for it.
         guard !ao3Unavailable else { return false }
+        // Locked/empty pages stay retryable, but only after a cooldown — otherwise
+        // the Library backfill re-fetches every locked work each session forever.
+        if let attempt = lastTagRefreshAttemptAt,
+           Date().timeIntervalSince(attempt) < Self.tagRefreshMinInterval {
+            return false
+        }
         return !workTagsFetched || !hasCategorizedWorkTags
             || (workWarnings.isEmpty && workCategories.isEmpty
                 && language.isEmpty && wordCount == 0)
@@ -304,9 +329,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         isQueuedForLater && !isSaved && !isFavorite
     }
 
-    /// Kept works (saved, favorited, or queued) never have their EPUB freed.
+    /// Kept works (saved, favorited, or queued) never have their EPUB freed. A work
+    /// with no known AO3 origin is also always protected — freeing only makes sense
+    /// when the EPUB can be re-downloaded, and a plain (non-AO3) import has no way
+    /// back if its only copy is deleted.
     var isProtected: Bool {
-        isSaved || isFavorite || isQueuedForLater
+        isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil
     }
 
     var isInSavedForLaterQueue: Bool {
@@ -345,10 +373,38 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
             || lastSpineIndex > 0 || lastScrollFraction > 0
     }
 
+    /// The single reading-lifecycle state, folding `isFinished` / `hasEPUB` /
+    /// `hasStartedReading` into one partition so shelf filters, statistics, and
+    /// (eventually) Library/History filter facets can't drift on the definitions.
+    /// Exactly one case is true for every work.
+    ///
+    /// Orthogonal concerns stay out on purpose: AO3's posted status (`isComplete`,
+    /// the WIP-vs-complete search filter), queue membership, privacy, and
+    /// soft-deletion (`isPendingDeletion`) are separate axes callers still filter on.
+    /// Note SwiftData `#Predicate`s can't call computed properties — @Query sites
+    /// (e.g. reading history) keep the equivalent stored-field predicate instead.
+    enum ReadingState: String, CaseIterable {
+        /// EPUB on disk, never opened in a reader.
+        case unread
+        /// Started but not finished, with its EPUB on disk (the "Reading Now" state).
+        case inProgress
+        /// Marked finished by the user — wins even after the EPUB is freed.
+        case finished
+        /// EPUB freed without being finished: a history-only record; revisiting
+        /// re-downloads it.
+        case freedHistory
+    }
+
+    var readingState: ReadingState {
+        if isFinished { return .finished }
+        if !hasEPUB { return .freedHistory }
+        return hasStartedReading ? .inProgress : .unread
+    }
+
     /// Started but not finished, with its EPUB on disk — the in-progress / "Reading
     /// Now" state shared by the Home and Library shelves.
     var isInProgress: Bool {
-        hasEPUB && !isFinished && hasStartedReading
+        readingState == .inProgress
     }
 
     /// Reading progress in 0…1 for the Reading Now shelves. Prefers the Readium

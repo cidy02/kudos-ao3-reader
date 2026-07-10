@@ -17,6 +17,8 @@ struct LibrarySectionListView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
+    /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
+    @AppStorage private var displayMode: WorkListDisplayMode
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
@@ -31,6 +33,18 @@ struct LibrarySectionListView: View {
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    @State private var isSelecting: Bool
+    @State private var selection: Set<UUID>
+
+    /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
+    /// chevron mid-selection doesn't strand the works you'd already picked — without
+    /// this, the expanded list always opened with a fresh, empty selection.
+    init(kind: LibrarySectionKind, initialSelecting: Bool = false, initialSelection: Set<UUID> = []) {
+        self.kind = kind
+        _displayMode = AppStorage(wrappedValue: .detailed, "library.\(kind.rawValue).displayMode")
+        _isSelecting = State(initialValue: initialSelecting)
+        _selection = State(initialValue: initialSelection)
+    }
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
@@ -74,6 +88,32 @@ struct LibrarySectionListView: View {
         !items.isEmpty || (kind == .savedForLater && !remoteOnlyMarkedForLater.isEmpty)
     }
 
+    private var selectedWorks: [SavedWork] {
+        visibleItems.filter { selection.contains($0.id) }
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
+    private var allVisibleSelected: Bool {
+        let ids = Set(visibleItems.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    private func toggleSelectAll() {
+        selection = allVisibleSelected ? [] : Set(visibleItems.map(\.id))
+    }
+
     var body: some View {
         content
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -82,21 +122,60 @@ struct LibrarySectionListView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .toolbar {
-                if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
-                    ToolbarItem(placement: .primaryAction) {
-                        MatureRevealToggle()
+                if isSelecting {
+                    ToolbarItem(placement: .confirmationAction) {
+                        SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                     }
-                }
-                if hasAnyContent {
+                    #if os(iOS)
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+                    }
+                    #else
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+                    }
+                    #endif
+                } else {
+                    // One item holding a tight HStack — separate ToolbarItems get the
+                    // system's wide spacing, which reads as inconsistent between the
+                    // privacy toggle and the expand/filter cluster. Matches the pattern
+                    // already established in LibraryView.swift's dashboard toolbar.
                     ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
+                        HStack(spacing: 2) {
+                            if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
+                                MatureRevealToggle()
+                            }
+                            if hasAnyContent {
+                                FilterButton(filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
                                              filterHelp: "Filter the works in this section",
                                              onClearFilters: { filters = LibraryFilters() })
+                                WorkListMoreMenu {
+                                    if !items.isEmpty {
+                                        Button {
+                                            isSelecting = true
+                                        } label: {
+                                            Label("Select", systemImage: "checklist")
+                                        }
+                                    }
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    // Compact cards don't expand/collapse — only detailed rows do.
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+        #if os(iOS)
+            // Select mode owns the bottom edge with its bulk-action bar; the
+            // floating tab/search glass hides meanwhile, matching LibraryView's
+            // dashboard — this page is reached by pushing past it, and previously
+            // kept showing the tab bar underneath/instead of the bulk-action bar.
+            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+        #endif
             .inspector(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
@@ -132,24 +211,13 @@ struct LibrarySectionListView: View {
                 Text(kind.emptyMessage)
             }
         } else {
-            List {
-                if !visibleItems.isEmpty {
-                    Section {
-                        ForEach(visibleItems, content: row).cardRow()
-                    } header: {
-                        if showsMarkedForLater { Text("Saved for Later in Kudos") }
-                    }
-                }
-                if showsMarkedForLater {
-                    Section("Marked for Later on AO3") {
-                        ForEach(visibleMarkedForLater) { work in
-                            AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
-                        }
-                        .cardRow()
-                    }
+            Group {
+                if displayMode == .detailed {
+                    detailedList
+                } else {
+                    compactGrid
                 }
             }
-            .cardList()
             .refreshable {
                 let task = Task { await refreshSection() }
                 refreshTask = task
@@ -171,10 +239,92 @@ struct LibrarySectionListView: View {
         }
     }
 
+    private var detailedList: some View {
+        List {
+            if !visibleItems.isEmpty {
+                Section {
+                    ForEach(visibleItems) { work in
+                        row(work).cardRow(isSelected: isSelecting && selection.contains(work.id))
+                    }
+                } header: {
+                    if showsMarkedForLater { Text("Saved for Later in Kudos") }
+                }
+            }
+            if showsMarkedForLater {
+                Section("Marked for Later on AO3") {
+                    ForEach(visibleMarkedForLater) { work in
+                        AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
+                    }
+                    .cardRow()
+                }
+            }
+        }
+        .cardList()
+    }
+
+    /// Apple Books-style two-up grid — the same cover cards every carousel already
+    /// uses, wrapping down the page instead of scrolling horizontally.
+    private var compactGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                ForEach(visibleItems) { work in
+                    if isSelecting {
+                        SensitiveWorkCoverCard(
+                            work: work,
+                            isSelecting: true,
+                            isSelected: selection.contains(work.id),
+                            onToggleSelection: { toggleSelection(work) }
+                        )
+                        .localWorkContextMenu(work: work)
+                    } else {
+                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            SensitiveWorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .localWorkContextMenu(work: work, onSelect: { isSelecting = true; selection = [work.id] })
+                    }
+                }
+                if showsMarkedForLater {
+                    ForEach(visibleMarkedForLater) { work in
+                        NavigationLink(value: work) {
+                            AO3WorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .remoteWorkContextMenu(work: work)
+                    }
+                }
+            }
+            .padding(16)
+        }
+    }
+
     /// A local work row with the Library's standard swipe actions (save / favorite /
-    /// delete). Tapping opens the reader via the root `LocalWorkDestination`.
+    /// delete). Tapping opens the reader via the root `LocalWorkDestination`. In
+    /// selection mode, swipe actions give way to a plain selectable row, matching
+    /// LibraryView's own selectList (swipe and selection don't mix well in one row).
+    @ViewBuilder
     private func row(_ work: SavedWork) -> some View {
-        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
+        if isSelecting {
+            SensitiveWorkRow(
+                work: work,
+                expandAll: expandAll,
+                openMode: .reader,
+                isSelecting: true,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) }
+            )
+        } else {
+            swipeableRow(work)
+        }
+    }
+
+    private func swipeableRow(_ work: SavedWork) -> some View {
+        SensitiveWorkRow(
+            work: work,
+            expandAll: expandAll,
+            openMode: .reader,
+            onSelect: { isSelecting = true; selection = [work.id] }
+        )
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
                     WorkLifecycle.setSaved(work, !work.isSaved, in: context)

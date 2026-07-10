@@ -362,12 +362,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if work.ao3WorkID == nil, WorkTags.ao3WorkID(from: work.sourceURL) == nil {
             return "Imported EPUB — kept on this device for offline reading."
         }
-        if !work.hasEPUB {
-            return "Finished. The file was freed to save space; it re-downloads when you read it again."
+        switch work.readingState {
+        case .finished:
+            return work.hasEPUB
+                ? "Finished."
+                : "Finished. The file was freed to save space; it re-downloads when you read it again."
+        case .freedHistory:
+            // Freed without being finished — don't call it "Finished."
+            return "In your reading history. The file was freed to save space; it re-downloads when you read it again."
+        case .inProgress, .unread:
+            if work.isFavorite { return "Favorited, so its file is kept when finished." }
+            return "Reading. When you finish, the file is freed unless you save or favorite it."
         }
-        if work.isFinished { return "Finished." }
-        if work.isFavorite { return "Favorited, so its file is kept when finished." }
-        return "Reading. When you finish, the file is freed unless you save or favorite it."
     }
 
     private func hasReadableEPUB(for work: SavedWork) -> Bool {
@@ -393,7 +399,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         ToolbarItem {
             Menu {
-                if let id = ao3WorkID { AO3WorkActionsMenu(workID: id, actions: workActions) }
+                if let id = ao3WorkID {
+                    AO3WorkActionsMenu(workID: id, actions: workActions, workContext: .init(
+                        title: displayTitle, authors: displayAuthorList,
+                        fandoms: displayFandoms, rating: displayRating, chapters: displayChapters
+                    ))
+                }
             } label: {
                 Label("More actions", systemImage: "ellipsis.circle")
             }
@@ -437,6 +448,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private var displayAuthor: String {
         if let author = localWork?.author, !author.isEmpty { return author }
         return remote?.authorText ?? ""
+    }
+
+    /// Individual author names (for the comments screen's "Author" badge).
+    private var displayAuthorList: [String] {
+        if let authors = remote?.authors, !authors.isEmpty { return authors }
+        return displayAuthor.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     private var displaySummary: String {
@@ -553,10 +570,24 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @ViewBuilder
     private var statsSection: some View {
-        if displayKudos != nil || displayComments != nil || displayHits != nil {
+        if displayKudos != nil || displayComments != nil || displayHits != nil || ao3WorkID != nil {
             Section("Stats") {
                 if let kudos = displayKudos { LabeledContent("Kudos", value: kudos.formatted()) }
-                if let comments = displayComments { LabeledContent("Comments", value: comments.formatted()) }
+                if let id = ao3WorkID {
+                    // Comments open the native comments screen; the count doubles
+                    // as the row's value when known.
+                    NavigationLink {
+                        CommentsView(workID: id, context: .init(
+                            title: displayTitle, authors: displayAuthorList,
+                            fandoms: displayFandoms, rating: displayRating, chapters: displayChapters
+                        ))
+                    } label: {
+                        LabeledContent("Comments",
+                                       value: displayComments.map { $0.formatted() } ?? "Open")
+                    }
+                } else if let comments = displayComments {
+                    LabeledContent("Comments", value: comments.formatted())
+                }
                 if let hits = displayHits { LabeledContent("Hits", value: hits.formatted()) }
             }
         }

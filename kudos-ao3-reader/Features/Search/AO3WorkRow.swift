@@ -60,18 +60,22 @@ struct AO3WorkRow: View {
 
             if !work.fandoms.isEmpty {
                 // Each fandom is individually tappable → AO3 search for that fandom.
+                // Only the icon is tinted — fandom text stays readable/secondary like
+                // the rest of the metadata (CardMetaLabel's convention), not
+                // accent-colored like a link.
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "books.vertical")
                         .fontWeight(.bold)
+                        .foregroundStyle(.tint)
                     FlowLayout(spacing: 4, rowSpacing: 2) {
                         ForEach(work.fandoms, id: \.self) { fandom in
                             Button { router.searchAO3(.fandom, fandom) } label: { Text(fandom) }
                                 .buttonStyle(.borderless)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.tint)
             }
 
             if !work.summary.isEmpty {

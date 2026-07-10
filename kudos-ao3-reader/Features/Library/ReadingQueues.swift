@@ -2,6 +2,10 @@ import Foundation
 import OSLog
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// Navigation route for the Reading Queues carousel's "See all" destination.
+struct AllReadingQueuesDestination: Hashable {}
 
 // MARK: - Cards
 
@@ -100,9 +104,42 @@ struct ReadingQueueDetailView: View {
     @State private var expandAll = false
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    @State private var displayMode: WorkListDisplayMode = .detailed
+    // EditMode is iOS-only (matches LibraryView's own selection state), so it drives
+    // the native List reorder grip in detailed mode there; macOS falls back to a
+    // plain Bool. `isReordering`/`setReordering(_:)` are the single cross-platform
+    // source of truth both layouts read.
+    #if os(iOS)
+    @State private var reorderEditMode: EditMode = .inactive
+    #else
+    @State private var isReorderingMac = false
+    #endif
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — a queue can hold a large number of works.
     @State private var refreshTask: Task<Void, Never>?
+    /// Which card is currently mid-drag in the compact grid — read by
+    /// `WorkReorderDropDelegate` rather than decoding the drag payload asynchronously.
+    @State private var draggedWorkID: UUID?
+
+    private var isReordering: Bool {
+        #if os(iOS)
+        reorderEditMode.isEditing
+        #else
+        isReorderingMac
+        #endif
+    }
+
+    private func setReordering(_ active: Bool) {
+        #if os(iOS)
+        reorderEditMode = active ? .active : .inactive
+        #else
+        isReorderingMac = active
+        #endif
+        // A drag abandoned mid-gesture (e.g. tapping Done before releasing) only
+        // clears draggedWorkID on a completed drop — reset it here too so a stale
+        // id can't leave an unrelated card faded on the next reorder-mode entry.
+        draggedWorkID = nil
+    }
 
     // Soft-deleted works keep their membership rows (restore re-joins them here)
     // but render only in Recently Deleted until then.
@@ -122,6 +159,12 @@ struct ReadingQueueDetailView: View {
         filters.hasActiveFilters ? filters.apply(to: works) : works
     }
 
+    /// While reordering, filters step aside — .onMove and the drag handle both need
+    /// index-stability against the same unfiltered array `reorder(_:)` writes back.
+    private var displayedWorks: [SavedWork] {
+        isReordering ? works : visibleWorks
+    }
+
     var body: some View {
         Group {
             if works.isEmpty {
@@ -131,20 +174,13 @@ struct ReadingQueueDetailView: View {
                     Text("Works you add to this queue will keep a local EPUB for offline reading.")
                 }
             } else {
-                List {
-                    ForEach(visibleWorks) { work in
-                        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    ReadingQueueService.removeFromQueue(work, from: queue, in: context)
-                                } label: {
-                                    Label("Remove from Queue", systemImage: "minus.circle")
-                                }
-                            }
+                Group {
+                    if displayMode == .detailed {
+                        detailedList
+                    } else {
+                        compactGrid
                     }
-                    .cardRow()
                 }
-                .cardList()
                 .refreshable {
                     let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
                     refreshTask = task
@@ -152,7 +188,7 @@ struct ReadingQueueDetailView: View {
                 }
                 .cancelRefreshOnTabChange($refreshTask)
                 .overlay {
-                    if visibleWorks.isEmpty {
+                    if visibleWorks.isEmpty, !isReordering {
                         ContentUnavailableView {
                             Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
                         } description: {
@@ -179,29 +215,45 @@ struct ReadingQueueDetailView: View {
             .toolbar {
                 if !works.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        WorkCardListControls(expandAll: $expandAll,
-                                             filtersActive: filters.hasActiveFilters,
+                        if isReordering {
+                            Button("Done") { setReordering(false) }
+                        } else {
+                            HStack(spacing: 2) {
+                                FilterButton(filtersActive: filters.hasActiveFilters,
                                              showingFilters: $showingFilters,
                                              filterHelp: "Filter the works in this queue",
                                              onClearFilters: { filters = LibraryFilters() })
-                    }
-                }
-                if queue.kind == .custom {
-                    ToolbarItem {
-                        Menu {
-                            Button {
-                                renameText = queue.name
-                                showingRename = true
-                            } label: {
-                                Label("Rename", systemImage: "pencil")
+                                WorkListMoreMenu {
+                                    Button {
+                                        setReordering(true)
+                                    } label: {
+                                        Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                    }
+                                    .disabled(filters.hasActiveFilters)
+                                    .help(filters.hasActiveFilters
+                                        ? "Clear filters to reorder"
+                                        : "Reorder works in this queue")
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    // Compact cards don't expand/collapse — only detailed rows do.
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
+                                    if queue.kind == .custom {
+                                        Divider()
+                                        Button {
+                                            renameText = queue.name
+                                            showingRename = true
+                                        } label: {
+                                            Label("Rename", systemImage: "pencil")
+                                        }
+                                        Button(role: .destructive) {
+                                            confirmDelete = true
+                                        } label: {
+                                            Label("Delete Queue", systemImage: "trash")
+                                        }
+                                    }
+                                }
                             }
-                            Button(role: .destructive) {
-                                confirmDelete = true
-                            } label: {
-                                Label("Delete Queue", systemImage: "trash")
-                            }
-                        } label: {
-                            Label("Queue options", systemImage: "ellipsis.circle")
                         }
                     }
                 }
@@ -235,6 +287,98 @@ struct ReadingQueueDetailView: View {
             }
     }
 
+    private var detailedList: some View {
+        List {
+            ForEach(displayedWorks) { work in
+                SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+                        } label: {
+                            Label("Remove from Queue", systemImage: "minus.circle")
+                        }
+                    }
+                    // moveDisabled removes the drag affordance itself outside reorder
+                    // mode — on macOS, .onMove has no EditMode gate the way iOS does,
+                    // so a List with an unconditional .onMove is draggable at all
+                    // times regardless of the Reorder toggle otherwise.
+                    .moveDisabled(!isReordering)
+            }
+            .onMove(perform: moveWorks)
+            .cardRow()
+        }
+        .cardList()
+        #if os(iOS)
+            .environment(\.editMode, $reorderEditMode)
+        #endif
+    }
+
+    /// Apple Books-style two-up grid — the same cover cards every carousel already
+    /// uses, wrapping down the page instead of scrolling horizontally.
+    private var compactGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                ForEach(displayedWorks) { work in
+                    compactCard(work)
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    @ViewBuilder
+    private func compactCard(_ work: SavedWork) -> some View {
+        if isReordering {
+            // onDrop is attached to the ZStack container, not the card itself — the
+            // card's own allowsHitTesting(false) (which suppresses a blurred work's
+            // reveal-tap so it can't fire underneath a drag) would otherwise also
+            // swallow drop-target hit-testing if onDrop were chained directly onto
+            // the disabled view, breaking the whole drag gesture.
+            ZStack(alignment: .topTrailing) {
+                SensitiveWorkCoverCard(work: work)
+                    .opacity(draggedWorkID == work.id ? 0.4 : 1)
+                    .allowsHitTesting(false)
+                dragHandle(for: work)
+            }
+            .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
+                target: work,
+                works: works,
+                draggedWorkID: $draggedWorkID,
+                queue: queue,
+                context: context
+            ))
+        } else {
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                SensitiveWorkCoverCard(work: work)
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work)
+        }
+    }
+
+    /// The compact grid's drag source — split out from `compactCard` since the
+    /// combined overlay/onDrag/onDrop expression was too complex for the type
+    /// checker to diagnose in one go.
+    private func dragHandle(for work: SavedWork) -> some View {
+        ReorderHandleView()
+            .padding(6)
+            .onDrag {
+                draggedWorkID = work.id
+                return NSItemProvider(object: work.id.uuidString as NSString)
+            }
+    }
+
+    /// `.onMove`'s indices are relative to `displayedWorks`, which is the unfiltered
+    /// `works` while reordering — the same array `reorder(_:)` writes back to. Guards
+    /// on `isReordering` itself (not just the optional `.onMove` above) as defense in
+    /// depth against any platform where the drag affordance isn't fully gated.
+    private func moveWorks(from source: IndexSet, to destination: Int) {
+        guard isReordering else { return }
+        var ids = works.map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        ReadingQueueService.reorder(ids, in: queue, context: context)
+    }
+
     private func deleteQueue() {
         PreservedWorkService.softDelete(queue, in: context)
         dismiss()
@@ -248,6 +392,40 @@ struct ReadingQueueDetailView: View {
                 "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
             )
         }
+    }
+}
+
+/// Live-reorders `works` as the drag crosses into each card's drop target, purely
+/// from `draggedWorkID` state — the drag payload itself is never decoded back, which
+/// keeps this synchronous and avoids `NSItemProvider` async-decode pitfalls for what
+/// is always a same-app-only reorder.
+private struct WorkReorderDropDelegate: DropDelegate {
+    let target: SavedWork
+    let works: [SavedWork]
+    @Binding var draggedWorkID: UUID?
+    let queue: ReadingQueue
+    let context: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedWorkID, draggedWorkID != target.id,
+              let fromIndex = works.firstIndex(where: { $0.id == draggedWorkID }),
+              let toIndex = works.firstIndex(where: { $0.id == target.id })
+        else { return }
+        var ids = works.map(\.id)
+        ids.move(
+            fromOffsets: IndexSet(integer: fromIndex),
+            toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex
+        )
+        ReadingQueueService.reorder(ids, in: queue, context: context)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedWorkID = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 

@@ -57,7 +57,10 @@ private struct CardShadow {
 /// Theme-aware surfaces for the modern card-based list treatment. Sepia reuses the
 /// reader's warm paper colors; Light/Dark fall back to the system grouped surfaces,
 /// so cards read the same as the grouped style did — just rounded on all four sides.
-private extension ReaderTheme {
+/// Internal (not private) so feature-specific card treatments (e.g. the comments
+/// thread cards) build on the SAME surfaces instead of inventing near-misses that
+/// drift from the Library baseline.
+extension ReaderTheme {
     /// The page behind the cards.
     var cardBackdrop: Color {
         #if os(iOS)
@@ -80,7 +83,7 @@ private extension ReaderTheme {
     /// cards lift off the flatter backdrops; Dark stays flat (shadows muddy the dark
     /// surfaces, and the high card↔backdrop contrast there already reads well).
     /// Kept small enough to sit within the inter-card gap so it isn't clipped.
-    var cardShadow: CardShadow {
+    fileprivate var cardShadow: CardShadow {
         switch self {
         case .dark: CardShadow(color: .clear, radius: 0, y: 0)
         case .light: CardShadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
@@ -102,6 +105,19 @@ private extension ReaderTheme {
         case .light: Color.black.opacity(0.06)
         case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.15)
         }
+    }
+
+    /// A surface nested INSIDE a `cardSurface` card (the comments thread's reply
+    /// bubbles). One elevation step past the card, so the bubble reads distinct in
+    /// all three themes: Light/Dark use the system's tertiary grouped level; Sepia
+    /// steps back to the paper backdrop for a subtle warm inset.
+    var nestedCardSurface: Color {
+        if self == .sepia { return cardBackdrop }
+        #if os(iOS)
+        return Color(uiColor: .tertiarySystemGroupedBackground)
+        #else
+        return Color(nsColor: .underPageBackgroundColor)
+        #endif
     }
 }
 
@@ -132,6 +148,10 @@ private struct CardList: ViewModifier {
 /// inner padding. Applies to a row, a `ForEach`, or a `Section`.
 private struct CardRow: ViewModifier {
     @Environment(ThemeManager.self) private var theme
+    /// True draws the card's own border in accent color instead of the default
+    /// hairline — the selection outline for a row, at its true outer edge (the row's
+    /// own background), rather than an inset overlay drawn on the row's content.
+    var isSelected: Bool
 
     func body(content: Content) -> some View {
         let half = CardListMetrics.interCardSpacing / 2
@@ -146,10 +166,14 @@ private struct CardRow: ViewModifier {
             .listRowBackground(
                 RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
                     .fill(theme.appTheme.cardSurface)
-                    // Hairline edge for crisp separation on flat Light/Sepia backdrops.
+                    // Hairline edge for crisp separation on flat Light/Sepia backdrops —
+                    // or the accent-color selection outline, at the same true card edge.
                     .overlay(
                         RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                            .strokeBorder(
+                                isSelected ? Color.accentColor : theme.appTheme.cardBorder,
+                                lineWidth: isSelected ? 2 : 0.5
+                            )
                     )
                     // Subtle elevation (Light/Sepia only).
                     .shadow(color: theme.appTheme.cardShadow.color,
@@ -174,8 +198,11 @@ extension View {
 
     /// Renders a list row (or every row in a `ForEach`/`Section`) as a rounded card
     /// with ~12pt spacing between cards. Keeps taps, swipe actions, etc. intact.
-    func cardRow() -> some View {
-        modifier(CardRow())
+    /// `isSelected` draws the card's own border in accent color instead of the
+    /// default hairline — pass this per-row (inside the `ForEach` content, not on
+    /// the `ForEach` itself) wherever rows are individually selectable.
+    func cardRow(isSelected: Bool = false) -> some View {
+        modifier(CardRow(isSelected: isSelected))
     }
 
     /// Value-based row navigation **without** the trailing disclosure chevron — the

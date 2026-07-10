@@ -301,6 +301,87 @@ struct AO3AuthServiceTests {
         #expect(hints.username == nil)
     }
 
+    // MARK: On-demand session health (verifySession)
+
+    @Test func verifySessionReportsHealthyAndKeepsSession() async {
+        // Capture one session value — `testSession` mints a fresh instance (new
+        // `savedAt`) on each access, so reuse the same one everywhere it's compared.
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: session)
+        let validator = ConfigurableAO3SessionValidator(result: .valid(session))
+        let service = AO3AuthService(
+            vault: vault,
+            validator: validator,
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: MockAO3CookieManager()
+        )
+
+        await service.restoreSession()
+        await service.verifySession()
+
+        guard case .healthy = service.sessionHealth else {
+            Issue.record("expected .healthy, got \(String(describing: service.sessionHealth))")
+            return
+        }
+        #expect(service.isLoggedIn)
+        #expect(vault.session == session)
+    }
+
+    @Test func verifySessionExpiresAndClearsWhenAO3RejectsIt() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: session)
+        let validator = ConfigurableAO3SessionValidator(result: .valid(session))
+        let cookies = MockAO3CookieManager()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: validator,
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: cookies
+        )
+
+        await service.restoreSession()
+        validator.result = .expired          // AO3 now says the session is gone
+        await service.verifySession()
+
+        #expect(service.sessionHealth == .expired)
+        #expect(service.status == .signedOut)
+        #expect(vault.session == nil)
+    }
+
+    @Test func verifySessionKeepsSessionWhenAO3IsUnreachable() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: session)
+        let validator = ConfigurableAO3SessionValidator(result: .valid(session))
+        let service = AO3AuthService(
+            vault: vault,
+            validator: validator,
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: MockAO3CookieManager()
+        )
+
+        await service.restoreSession()
+        validator.error = URLError(.notConnectedToInternet)   // transient failure
+        await service.verifySession()
+
+        #expect(service.sessionHealth == .unreachable)
+        #expect(service.isLoggedIn)               // session kept, not logged out
+        #expect(vault.session == session)
+    }
+
+    @Test func verifySessionIsANoOpWhileSignedOut() async {
+        let session = testSession
+        let service = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: ConfigurableAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: MockAO3CookieManager()
+        )
+
+        await service.verifySession()
+
+        #expect(service.sessionHealth == .unknown)
+    }
+
     private var testSession: AO3Session {
         AO3Session(
             username: "reader",
@@ -355,6 +436,22 @@ private final class MemoryAO3SessionHintStore: AO3SessionHintPersisting {
 private struct MockAO3SessionValidator: AO3SessionValidating {
     let result: AO3SessionValidation
     func validate(_ session: AO3Session) async throws -> AO3SessionValidation { result }
+}
+
+/// A validator whose outcome can change between calls and which can be made to
+/// throw — needed to drive `verifySession()` through healthy → expired →
+/// unreachable within a single logged-in service instance.
+@MainActor
+private final class ConfigurableAO3SessionValidator: AO3SessionValidating {
+    var result: AO3SessionValidation
+    var error: (any Error)?
+
+    init(result: AO3SessionValidation) { self.result = result }
+
+    func validate(_ session: AO3Session) async throws -> AO3SessionValidation {
+        if let error { throw error }
+        return result
+    }
 }
 
 @MainActor

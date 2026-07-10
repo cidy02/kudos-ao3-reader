@@ -24,6 +24,7 @@ struct FolderSyncResult: Equatable {
     var didReadRemoteFile = false
     var didWriteRemoteFile = false
     var missingRemoteFile = false
+    var skippedUnchanged = false
     var foldedConflicts = 0
     var restoredWorks = 0
     var suppressedQueues = 0
@@ -69,6 +70,7 @@ enum FolderSyncService {
     private static let lastErrorKey = "folderSyncLastError"
     private static let dirtyFlagKey = "hasPendingFolderSyncChanges"
     private static let autoSyncEnabledKey = "folderSyncAutoSyncEnabled"
+    private static let lastRestoredRemoteStampKey = "folderSyncLastRestoredRemoteStamp"
 
     static func snapshot(defaults: UserDefaults = .standard) -> FolderSyncSnapshot {
         let bookmarkData = defaults.data(forKey: bookmarkDataKey)
@@ -116,6 +118,7 @@ enum FolderSyncService {
         defaults.removeObject(forKey: lastSyncAtKey)
         defaults.removeObject(forKey: lastErrorKey)
         defaults.removeObject(forKey: dirtyFlagKey)
+        defaults.removeObject(forKey: lastRestoredRemoteStampKey)
     }
 
     @discardableResult
@@ -209,6 +212,20 @@ enum FolderSyncService {
                 return
             }
             requestDownloadIfNeeded(syncFileURL)
+            // A full restore loads every EPUB blob into memory, so skip it when the
+            // package hasn't changed since the last successful restore or this device's
+            // own write. Never skip while unresolved conflict versions exist — those can
+            // arrive without the main file's modification date moving.
+            let remoteStamp = try? await Task.detached {
+                try coordinatedContentModificationDate(of: syncFileURL)
+            }.value
+            if let storedStamp = defaults.object(forKey: lastRestoredRemoteStampKey) as? Date,
+               let remoteStamp,
+               remoteStamp == storedStamp,
+               NSFileVersion.unresolvedConflictVersionsOfItem(at: syncFileURL)?.isEmpty ?? true {
+                result.skippedUnchanged = true
+                return
+            }
             let contents = try await Task.detached {
                 try coordinatedReadContents(from: syncFileURL)
             }.value
@@ -220,6 +237,11 @@ enum FolderSyncService {
                 into: context,
                 defaults: defaults
             )
+            if let remoteStamp {
+                defaults.set(remoteStamp, forKey: lastRestoredRemoteStampKey)
+            } else {
+                defaults.removeObject(forKey: lastRestoredRemoteStampKey)
+            }
         }
         return result
     }
@@ -238,6 +260,11 @@ enum FolderSyncService {
                 try coordinatedWriteContents(contents, to: syncFileURL)
             }.value
             result.didWriteRemoteFile = true
+            // Stamp our own write so the next sync-down doesn't fully re-restore it.
+            if let stamp = try? syncFileURL.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate {
+                defaults.set(stamp, forKey: lastRestoredRemoteStampKey)
+            }
         }
         return result
     }
@@ -394,10 +421,52 @@ nonisolated private func coordinatedWriteContents(_ contents: KudosBackupContent
     coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { coordinatedURL in
         writeResult = Result {
             let wrapper = try contents.fileWrapper()
-            try? FileManager.default.removeItem(at: coordinatedURL)
-            try wrapper.write(to: coordinatedURL, options: .atomic, originalContentsURL: nil)
+            // Stage into a temp location and swap it in, so a failed write can never
+            // leave the destination missing — the existing package must survive.
+            // itemReplacementDirectory keeps the staging area on the destination's
+            // own volume; a global temp dir would make the swap a cross-volume move
+            // (EXDEV) for sync folders on external drives.
+            let stagingDirectory = (try? FileManager.default.url(
+                for: .itemReplacementDirectory,
+                in: .userDomainMask,
+                appropriateFor: coordinatedURL,
+                create: true
+            )) ?? FileManager.default.temporaryDirectory
+            let tempURL = stagingDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            do {
+                try wrapper.write(to: tempURL, options: .atomic, originalContentsURL: nil)
+                if FileManager.default.fileExists(atPath: coordinatedURL.path) {
+                    _ = try FileManager.default.replaceItemAt(
+                        coordinatedURL,
+                        withItemAt: tempURL,
+                        backupItemName: nil,
+                        options: []
+                    )
+                } else {
+                    try FileManager.default.moveItem(at: tempURL, to: coordinatedURL)
+                }
+            } catch {
+                try? FileManager.default.removeItem(at: tempURL)
+                throw error
+            }
         }
     }
     if let coordinationError { throw coordinationError }
     try writeResult?.get()
+}
+
+nonisolated private func coordinatedContentModificationDate(of url: URL) throws -> Date? {
+    let coordinator = NSFileCoordinator(filePresenter: nil)
+    var coordinationError: NSError?
+    var dateResult: Result<Date?, Error>?
+    coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
+        dateResult = Result {
+            try coordinatedURL.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate
+        }
+    }
+    if let coordinationError { throw coordinationError }
+    guard let dateResult else { throw FolderSyncError.unreadableSyncFile }
+    return try dateResult.get()
 }

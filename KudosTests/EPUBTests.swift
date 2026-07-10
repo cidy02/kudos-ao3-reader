@@ -90,9 +90,23 @@ struct EPUBTests {
         #expect(imported.rating == "Teen And Up Audiences")
         #expect(imported.workTags == ["Fluff", "Angst"])
         #expect(imported.chapters == "2/2")
-        #expect(imported.isSaved)
         #expect(imported.hasEPUB)
         #expect(FileManager.default.fileExists(atPath: imported.fileURL.path))
+
+        // A plain import must not be marked isSaved — that flag (plus !isQueuedForLater)
+        // is what LibrarySectionKind.savedForLater treats as "belongs in Saved for
+        // Later", a legacy carve-out for pre-queue saves that a fresh import should
+        // never fall into. It still lands in Downloaded via hasEPUB, matching
+        // importEPUB's (the AO3-download path) existing, unaffected convention.
+        #expect(!imported.isSaved)
+        #expect(!LibrarySectionKind.savedForLater.works(from: [imported], visible: { _ in true }).contains(imported))
+        #expect(LibrarySectionKind.downloaded.works(from: [imported], visible: { _ in true }).contains(imported))
+
+        // Removing isSaved must not remove protection from a plain (non-AO3) import:
+        // with no ao3WorkID, freeing the EPUB would make it permanently unrecoverable.
+        // isProtected has to stay true through some other path when isSaved is false.
+        #expect(imported.ao3WorkID == nil)
+        #expect(imported.isProtected)
 
         let duplicateOutcome = try await importUserEPUB(try Self.sampleEPUB, into: context)
         switch duplicateOutcome {
@@ -141,5 +155,17 @@ struct EPUBTests {
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
+    }
+
+    /// A plain local file (the overwhelmingly common import case — "On My iPhone",
+    /// or any non-iCloud source) is not a ubiquitous item, so the iCloud-download
+    /// wait must no-op immediately rather than adding any latency or hanging.
+    @Test func waitForUbiquitousDownloadNoOpsOnAPlainLocalFile() async throws {
+        let local = try Self.sampleEPUB
+        let start = Date()
+        try await waitForUbiquitousDownload(of: local, pollInterval: 5, timeout: 30)
+        // If this fell through to the poll loop it would take at least one
+        // `pollInterval` (5s) — asserting well under that proves the early return.
+        #expect(Date().timeIntervalSince(start) < 1)
     }
 }

@@ -289,6 +289,29 @@ struct PreservedWorkTests {
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
     }
 
+    @Test func importEPUBMergesIntoExistingWorkInsteadOfDuplicating() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let work = try insertWork(into: context, title: "Downloaded Twice", ao3WorkID: 8201)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        // importEPUB consumes (moves) its temp file, so hand it a fresh copy of the fixture.
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PreservedWorkTests-\(UUID().uuidString).epub")
+        try FileManager.default.copyItem(at: try EPUBTests.sampleEPUB, to: temp)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let imported = try await importEPUB(
+            temp,
+            source: URL(string: "https://archiveofourown.org/works/8201"),
+            into: context
+        )
+
+        #expect(imported.id == work.id)
+        #expect(imported.hasEPUB)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
     @Test func userEPUBImportRevivesRecentlyDeletedDuplicate() async throws {
         let container = try container()
         let context = container.mainContext
