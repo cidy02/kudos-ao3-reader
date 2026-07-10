@@ -147,18 +147,19 @@ struct AO3CommentsParseTests {
         #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    @Test func threadsStyleSpineUsesSharedAvatarColumn() {
-        // Single-column spine (depthIndent 0): every depth shares the same
-        // avatar center — Meta Threads conversation pattern.
-        #expect(CommentThreadGeometry.depthIndent == 0)
+    @Test func twoLevelCardsAndSharedSpineColumn() {
+        // Card shells stop at depth 1 (root + direct-reply cards); deeper
+        // nodes share the same avatar-column center for the spine.
+        #expect(CommentThreadGeometry.maximumCardDepth == 1)
         #expect(CommentThreadGeometry.avatarSize == 40)
         #expect(CommentThreadGeometry.avatarColumnWidth == 40)
         let center = CommentThreadGeometry.avatarColumnWidth / 2
         for depth in 0...6 {
             #expect(CommentThreadGeometry.avatarCenterX(forDepth: depth) == center)
-            #expect(CommentThreadGeometry.leadingIndent(forDepth: depth) == 0)
         }
         #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies == 8)
+        #expect(CommentThreadGeometry.postSpacing > 0)
+        #expect(CommentThreadGeometry.spineWidth == 2)
     }
 
     @Test func displayThreadsPreservesReplyTreesAndNewestFirstRootOrder() {
