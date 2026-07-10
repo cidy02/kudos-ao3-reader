@@ -20,7 +20,7 @@ What must keep working, where it's tested, and what is manual-only. Run everythi
 | Reader progress | iOS: saved on every `locationDidChange`; survives force-quit; drives Continue Reading | `SavedWorkProgressTests`, `ReadiumReaderTests` | Kill-app-mid-chapter check; macOS legacy reader *(least covered area)* |
 | Queues | Membership lifecycle, preservation, series preservation accounting, removal semantics | `ReadingQueueTests` (largest suite) | — |
 | Write actions | Kudos/comment POST construction, CSRF, no-retry | `AO3WriteActionsTests` (construction only) | ⚠️ Never live-verified — release gate item |
-| Native comments | AO3 thread nesting/actions/icons parse from fetched HTML; lazy presentation rows retain stable comment IDs and shallow payloads; duplicate-post guard remains intact | `AO3CommentsParseTests`, `CommentSubmissionTests`, `ReaderSectionTests` (reader→chapter mapping) | Logged-in post/reply/edit/delete, large-thread interaction timing, and Light/Dark/Sepia screenshot gate |
+| Native comments | AO3 thread nesting/actions/icons/timestamps parse from fetched HTML; lazy rows retain stable IDs, shallow payloads, logical depth, and branched connector metadata; duplicate-post guard remains intact | `AO3CommentsParseTests` (including depth/connector projection and localized timestamp boundaries), `CommentSubmissionTests`, `ReaderSectionTests` (reader→chapter mapping) | Logged-in post/reply/edit/delete, deleted-parent placeholder state, large-thread interaction timing, and owner Light/Dark/Sepia screenshot gate |
 
 ## Known coverage gaps (acknowledged, not licenses to skip)
 

@@ -161,6 +161,7 @@ extension AO3Client {
             }
             if let posted = try byline.select("span.posted.datetime").first() {
                 comment.postedText = try posted.text()
+                comment.postedAt = AO3CommentTimestamp.parse(comment.postedText)
             }
         }
         // AO3 includes the user icon in the comment itself. Use only that URL —

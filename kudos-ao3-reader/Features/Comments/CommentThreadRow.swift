@@ -1,86 +1,12 @@
 import SwiftUI
 
-/// Fixed geometry for the comment thread's avatar column and connector line.
-///
-/// The parent row places its avatar in a left column, content beside it.
-/// Every reply's avatar sits INSIDE its own nested bubble the same way — an
-/// avatar-then-content row — with the whole thing wrapped in a floating card
-/// (margin on every side, its own surface/border). The connector line runs
-/// down the parent's fixed avatar-column centerline; for replies it only needs
-/// to reach each bubble's own top edge, because the bubble's opaque fill —
-/// not any per-avatar occlusion trick — hides the rest of the line for
-/// whatever height the bubble turns out to be (its content is variable-height
-/// AO3 text, so the geometry deliberately never needs to know that height).
-/// All values are in the group card's coordinate space; the connector is
-/// drawn by `CommentThreadGroupRowModifier`, which owns the same paddings.
-enum CommentThreadGeometry {
-    /// The group card's inner horizontal padding (both edges).
-    static let cardPadding: CGFloat = 14
-    /// Row top padding before the parent's own content begins.
-    static let firstRowTopPadding: CGFloat = 14
-    /// Row top padding before a reply's bubble begins.
-    static let replyRowTopPadding: CGFloat = 8
-    /// A reply bubble's own left margin (row-local, i.e. relative to the row's
-    /// content after the shared `cardPadding` inset) — real space on every
-    /// side (this, `replyBubbleTrailingMargin`, `replyRowBottomPadding`) is
-    /// what makes a reply read as a floating card, not a full-width strip.
-    static let replyBubbleLeadingMargin: CGFloat = 8
-    static let replyBubbleTrailingMargin: CGFloat = 10
-    static let replyRowBottomPadding: CGFloat = 10
-
-    static let parentAvatarSize: CGFloat = 44
-    static let replyAvatarSize: CGFloat = 36
-    /// The parent avatar's column width == its size (no extra column margin).
-    static let avatarColumnWidth: CGFloat = parentAvatarSize
-
-    /// Extra bubble indent for a reply-to-a-reply (depth 2+), capped at ONE step
-    /// past the first reply level. This cap is load-bearing, not just a phone-
-    /// width nicety: the connector for a non-last reply runs the row's full
-    /// height and relies on the bubble's own opaque fill to hide it (see
-    /// `CommentThreadGroupRowModifier.connector`) — that only works while the
-    /// bubble's left edge stays at or left of `connectorCenterX`. A per-depth
-    /// indent (12pt/level) pushes the edge past that line at depth 3+
-    /// (bubble left = cardPadding + replyBubbleLeadingMargin + indent = 14+8+24
-    /// = 46 > connectorCenterX's 36), which would leave the line floating,
-    /// unhidden, to the left of a triply-nested bubble. Flattening to ONE step
-    /// keeps every depth safely at bubbleLeft=34 <= 36, at the cost of not
-    /// visually distinguishing depth 3+ from depth 2 — an acceptable trade for
-    /// a rare, deep case, since AO3's own UI doesn't distinguish them either.
-    static func bubbleIndent(forDepth depth: Int) -> CGFloat {
-        CGFloat(min(depth, 2) - 1) * 12
-    }
-
-    /// The connector's center x within the group card (padding + column center)
-    /// — also the parent avatar's center x. Reply avatars live inside their own
-    /// bubble's independent layout and are no longer pinned to this line (see
-    /// the type's own doc) — the connector only needs to reach the bubble.
-    static var connectorCenterX: CGFloat { cardPadding + avatarColumnWidth / 2 }
-    static let connectorWidth: CGFloat = 2
-    /// Breathing room between the parent avatar's edge and the line segment
-    /// beneath it (replies have no equivalent gap — see `parentContinuationTop`).
-    static let connectorGap: CGFloat = 3
-
-    /// Where the continuation segment starts for a PARENT row, measured from
-    /// the row's top edge: just below the avatar's real bottom edge. The
-    /// parent avatar is top-anchored (plain HStack, no center-offset trick),
-    /// so `firstRowTopPadding` is its top edge — the bottom edge is a full
-    /// `parentAvatarSize` further down, not half of it.
-    static var parentContinuationTop: CGFloat {
-        firstRowTopPadding + parentAvatarSize + connectorGap
-    }
-}
-
 /// The card-within-a-card thread treatment (the mockups' core visual): every row
 /// of one top-level thread shares a single continuous `cardSurface` card — the
 /// same surface, radius, and margins as the Library's `.cardRow()` — opened by
 /// the top-level comment and closed after the thread's last reply. Replies then
-/// render as nested bubbles *inside* that card (see `CommentThreadRow`), each
-/// with its own avatar-then-content row inside it. The connector line runs down
-/// the parent avatar's column centerline and simply reaches down to touch each
-/// reply bubble's own top edge — not a rail pasted on the card's left edge, but
-/// also not threaded through any reply avatar (which lives inside its own
-/// bubble's independent layout). Rows stay flat and lazy (the polish branch's
-/// performance architecture); only the backgrounds compose into one visual group.
+/// render as nested bubbles *inside* that card (see `CommentThreadRow`). Rows
+/// stay flat and lazy (the polish branch's performance architecture); only the
+/// backgrounds compose into one visual group.
 private struct CommentThreadGroupRowModifier: ViewModifier {
     let depth: Int
     let isLastInThread: Bool
@@ -95,16 +21,10 @@ private struct CommentThreadGroupRowModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, CommentThreadGeometry.cardPadding)
-            .padding(.top, isFirst
-                ? CommentThreadGeometry.firstRowTopPadding
-                : CommentThreadGeometry.replyRowTopPadding)
+            .padding(.horizontal, 14)
+            .padding(.top, isFirst ? 14 : 4)
             .padding(.bottom, isLastInThread ? 14 : 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            // Directly behind the content (and above the card fill below), so
-            // a reply's own bubble fill — and the parent avatar's opaque
-            // backing — occlude the connector rather than drawing over it.
-            .background { connector }
             .background {
                 UnevenRoundedRectangle(
                     topLeadingRadius: isFirst ? 16 : 0,
@@ -135,57 +55,6 @@ private struct CommentThreadGroupRowModifier: ViewModifier {
             .listRowSeparator(.hidden)
             .animation(.easeInOut(duration: 0.3), value: isHighlighted)
     }
-
-    /// The thread's connector segments for this row, drawn BEHIND the whole
-    /// row content (including a reply's own bubble fill), which is what lets
-    /// this stay simple: a reply's bubble has variable height (AO3 comments
-    /// vary in length), so rather than compute where the bubble visually ends,
-    /// the line for a non-last reply just runs the row's FULL height — the
-    /// bubble's own opaque `nestedCardSurface` fill (in `CommentThreadRow`)
-    /// occludes whatever portion falls behind it, and the line naturally
-    /// "re-emerges" below the bubble however tall it turns out to be.
-    ///
-    /// - A reply row's arrival (row top → the bubble's own top edge) is the
-    ///   only segment that needs a fixed length; everything past that is
-    ///   either occluded by the bubble or, for a non-last reply, simply the
-    ///   rest of the row's height.
-    /// - A PARENT row has no enclosing bubble, so its continuation (when it
-    ///   has replies) still needs the avatar's real bottom edge, precisely.
-    @ViewBuilder
-    private var connector: some View {
-        if depth > 0 || !isLastInThread {
-            Group {
-                if depth > 0 {
-                    if isLastInThread {
-                        // Just the arrival: stops at the bubble's top edge:
-                        // nothing below needs a visible line (there's no next
-                        // reply to reach), so this never runs past the bubble.
-                        line
-                            .frame(height: CommentThreadGeometry.replyRowTopPadding)
-                            .frame(maxHeight: .infinity, alignment: .top)
-                    } else {
-                        // Full row height — see the doc above.
-                        line
-                    }
-                } else {
-                    // Parent with replies: starts precisely below the avatar.
-                    line
-                        .padding(.top, CommentThreadGeometry.parentContinuationTop)
-                }
-            }
-            .frame(width: CommentThreadGeometry.connectorWidth, alignment: .top)
-            .padding(.leading,
-                     CommentThreadGeometry.connectorCenterX
-                        - CommentThreadGeometry.connectorWidth / 2)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-
-    private var line: some View {
-        RoundedRectangle(cornerRadius: 1)
-            .fill(.quaternary)
-            .frame(width: CommentThreadGeometry.connectorWidth)
-    }
 }
 
 extension View {
@@ -193,6 +62,99 @@ extension View {
         modifier(CommentThreadGroupRowModifier(
             depth: depth, isLastInThread: isLastInThread, isHighlighted: isHighlighted
         ))
+    }
+}
+
+/// Pure layout constants for the lazy threaded rows. Logical depth is never
+/// capped in `AO3CommentRow`; only the on-screen indent is capped so deeply
+/// nested AO3 conversations retain a readable text measure on phones.
+enum CommentThreadGeometry {
+    static let maximumVisualDepth = 3
+    static let rootAvatarSize: CGFloat = 38
+    static let replyAvatarSize: CGFloat = 30
+    static let replyBubblePadding: CGFloat = 10
+    static let firstReplyIndent: CGFloat = 28
+    static let depthStep: CGFloat = 22
+
+    static func visualDepth(for logicalDepth: Int) -> Int {
+        min(max(logicalDepth, 0), maximumVisualDepth)
+    }
+
+    static func bubbleLeadingInset(for logicalDepth: Int) -> CGFloat {
+        let depth = visualDepth(for: logicalDepth)
+        guard depth > 0 else { return 0 }
+        return firstReplyIndent + CGFloat(depth - 1) * depthStep
+    }
+
+    static func avatarCenterX(for logicalDepth: Int) -> CGFloat {
+        guard logicalDepth > 0 else { return rootAvatarSize / 2 }
+        return bubbleLeadingInset(for: logicalDepth)
+            + replyBubblePadding
+            + replyAvatarSize / 2
+    }
+}
+
+/// Draws only the connector segments needed by one shallow row. Incoming and
+/// outgoing segments meet across adjacent List rows, while ancestor lines stay
+/// open through branched subtrees. Lines stop at avatar edges so they sit
+/// behind the conversation hierarchy rather than painting over profile icons.
+private struct CommentThreadConnector: View {
+    let row: AO3CommentRow
+
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                let height = geometry.size.height
+                let avatarCenterX = CommentThreadGeometry.avatarCenterX(for: row.depth)
+
+                for ancestorDepth in row.continuingAncestorDepths {
+                    let x = CommentThreadGeometry.avatarCenterX(for: ancestorDepth)
+                    guard abs(x - avatarCenterX) > 0.5 else { continue }
+                    path.move(to: CGPoint(x: x, y: -10))
+                    path.addLine(to: CGPoint(x: x, y: height + 10))
+                }
+
+                if row.depth == 0 {
+                    if row.hasReplies {
+                        path.move(to: CGPoint(
+                            x: avatarCenterX,
+                            y: CommentThreadGeometry.rootAvatarSize
+                        ))
+                        path.addLine(to: CGPoint(x: avatarCenterX, y: height + 10))
+                    }
+                    return
+                }
+
+                let parentX = CommentThreadGeometry.avatarCenterX(for: row.depth - 1)
+                let avatarTop = CommentThreadGeometry.replyBubblePadding
+                let branchY = avatarTop / 2
+
+                path.move(to: CGPoint(x: parentX, y: -10))
+                path.addLine(to: CGPoint(
+                    x: parentX,
+                    y: row.hasNextSibling ? height + 10 : branchY
+                ))
+                path.move(to: CGPoint(x: parentX, y: branchY))
+                path.addQuadCurve(
+                    to: CGPoint(x: avatarCenterX, y: avatarTop),
+                    control: CGPoint(x: parentX, y: avatarTop)
+                )
+
+                if row.hasReplies {
+                    path.move(to: CGPoint(
+                        x: avatarCenterX,
+                        y: avatarTop + CommentThreadGeometry.replyAvatarSize
+                    ))
+                    path.addLine(to: CGPoint(x: avatarCenterX, y: height + 10))
+                }
+            }
+            .stroke(
+                Color.secondary.opacity(0.24),
+                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -219,69 +181,61 @@ struct CommentThreadRow: View {
 
     private var comment: AO3Comment { row.comment }
     private var isReplyRow: Bool { row.depth > 0 }
+    private var bubbleLeadingInset: CGFloat {
+        CommentThreadGeometry.bubbleLeadingInset(for: row.depth)
+    }
 
     private var isByWorkAuthor: Bool {
         workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
     }
 
+    private var canShowReply: Bool {
+        comment.canReply && auth.isLoggedIn
+    }
+
     var body: some View {
         if isReplyRow {
-            replyBubble
+            // Reply bubble: its own soft surface one elevation step inside the
+            // card. The full-height overlay reads the row's projection metadata,
+            // so reply-to-reply and branched paths remain visible without
+            // rebuilding the recursive comment tree.
+            commentContent
+                .padding(CommentThreadGeometry.replyBubblePadding)
+                .background(
+                    theme.appTheme.nestedCardSurface,
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                }
+                .padding(.leading, bubbleLeadingInset)
+                .overlay { CommentThreadConnector(row: row) }
         } else {
-            // Parent: avatar in the shared column, content directly on the
-            // thread card (no nested bubble) — matches the mockup's top-level
-            // comment, and anchors the connector's fixed centerline.
-            HStack(alignment: .top, spacing: 8) {
-                CommentAvatar(comment: comment, size: CommentThreadGeometry.parentAvatarSize)
-                    // Opaque backing (the avatar's own placeholder fill is only
-                    // 50% quaternary) so the continuation segment — which runs
-                    // behind this whole row and passes just below this avatar —
-                    // never bleeds through it.
-                    .background(Circle().fill(theme.appTheme.cardSurface))
-                    .frame(width: CommentThreadGeometry.avatarColumnWidth)
-                commentBody
-            }
+            commentContent
+                .overlay { CommentThreadConnector(row: row) }
         }
     }
 
-    /// A reply's floating nested card: the avatar sits INSIDE it (avatar-then-
-    /// content, exactly like the parent's own layout), with the whole thing
-    /// wrapped in a card that has real margin on every side — not overlapping
-    /// the card's edge, and not threaded onto the connector's fixed centerline
-    /// (which only needs to reach this bubble's top edge; see
-    /// `CommentThreadGroupRowModifier.connector`).
-    private var replyBubble: some View {
-        HStack(alignment: .top, spacing: 8) {
-            CommentAvatar(comment: comment, size: CommentThreadGeometry.replyAvatarSize)
-            commentBody
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            theme.appTheme.nestedCardSurface,
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-        }
-        .padding(.leading,
-                 CommentThreadGeometry.replyBubbleLeadingMargin
-                    + CommentThreadGeometry.bubbleIndent(forDepth: row.depth))
-        .padding(.trailing, CommentThreadGeometry.replyBubbleTrailingMargin)
-        .padding(.bottom, CommentThreadGeometry.replyRowBottomPadding)
-    }
+    private var commentContent: some View {
+        HStack(alignment: .top, spacing: 10) {
+            CommentAvatar(
+                comment: comment,
+                size: isReplyRow
+                    ? CommentThreadGeometry.replyAvatarSize
+                    : CommentThreadGeometry.rootAvatarSize
+            )
 
-    private var commentBody: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            byline
-            if !comment.bodyText.isEmpty {
-                Text(comment.bodyText)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                byline
+                if !comment.bodyText.isEmpty {
+                    Text(comment.bodyText)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                commentActions
             }
-            timestampAndActions
         }
     }
 
@@ -306,6 +260,17 @@ struct CommentThreadRow: View {
                     .background(.quaternary, in: Capsule())
                     .foregroundStyle(.secondary)
             }
+            if !comment.postedText.isEmpty {
+                Text(AO3CommentTimestamp.displayText(
+                    rawText: comment.postedText,
+                    date: comment.postedAt
+                ))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .allowsTightening(true)
+            }
             Spacer(minLength: 4)
             if showChapterBadge, let chapter = comment.chapterLabel {
                 Text(chapter)
@@ -319,11 +284,9 @@ struct CommentThreadRow: View {
         }
     }
 
-    private var timestampAndActions: some View {
-        // Mockup order: Reply anchors the left, the overflow menu the right,
-        // with the (long, AO3-format) timestamp quiet in between.
+    private var commentActions: some View {
         HStack(spacing: 8) {
-            if comment.canReply && auth.isLoggedIn {
+            if canShowReply {
                 Button { onReply(comment) } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                         .font(.caption.weight(.medium))
@@ -332,21 +295,9 @@ struct CommentThreadRow: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Reply to \(comment.author)")
             }
-            Spacer()
-            if !comment.postedText.isEmpty {
-                Text(comment.postedText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    // Yields first when space is tight — the actions must not shrink.
-                    .layoutPriority(-1)
-            }
+            Spacer(minLength: 0)
             Menu {
-                if comment.canReply && auth.isLoggedIn {
-                    Button { onReply(comment) } label: {
-                        Label("Reply", systemImage: "arrowshape.turn.up.left")
-                    }
-                } else if comment.canReply {
+                if comment.canReply && !canShowReply {
                     Button { onRequestLogin() } label: {
                         Label("Log in to Reply", systemImage: "person.crop.circle.badge.questionmark")
                     }
@@ -384,6 +335,7 @@ struct CommentThreadRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .tint(.secondary)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
         }
     }
