@@ -336,7 +336,7 @@ struct CommentsView: View {
             if model.isFromCache && model.isOffline {
                 staleBanner
             }
-            if model.displayRows.isEmpty {
+            if model.displayThreads.isEmpty {
                 Section {
                     ContentUnavailableView(
                         "No Comments Yet",
@@ -346,22 +346,19 @@ struct CommentsView: View {
                 }
                 .cardRow()
             } else {
-                ForEach(model.displayRows) { row in
+                ForEach(model.displayThreads) { comment in
                     CommentThreadRow(
-                        row: row,
+                        comment: comment,
+                        depth: 0,
                         workAuthors: workContext.authors,
-                        showChapterBadge: model.scope == .all && row.depth == 0,
+                        showChapterBadge: model.scope == .all,
+                        highlightedCommentID: highlightedCommentID,
                         onReply: { model.startComposer(replyingTo: $0) },
                         onEdit: { model.startEditing($0) },
                         onDelete: { pendingDelete = $0 },
                         onCopyLink: { copyLink($0) },
                         onFocusThread: { focusThread($0, proxy: scrollProxy) },
                         onRequestLogin: { showingLogin = true }
-                    )
-                    .id(row.comment.id)
-                    .commentThreadGroupRow(
-                        depth: row.depth, isLastInThread: row.isLastInThread,
-                        isHighlighted: highlightedCommentID == row.comment.id
                     )
                 }
                 if let page = model.page, page.totalPages > 1 {

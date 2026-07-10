@@ -35,9 +35,10 @@ final class CommentsModel {
     private(set) var isOffline = false
     /// Serving a cached page (shown with its fetch time when offline/stale).
     private(set) var isFromCache = false
-    /// Stable, shallow rows projected once per page/order change. The SwiftUI list
-    /// reads this directly instead of recursively rebuilding reply subtrees.
-    private(set) var displayRows: [AO3CommentRow] = []
+    /// Root comment nodes in the current display order. Each node keeps its full
+    /// direct-reply tree so the view can render replies recursively inside the
+    /// specific comment they answer.
+    private(set) var displayThreads: [AO3Comment] = []
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
@@ -53,7 +54,7 @@ final class CommentsModel {
     /// Local rendering order — AO3 itself has no comment sort; newest-first
     /// starts from the last page and reverses within each page.
     var newestFirst = false {
-        didSet { rebuildDisplayRows() }
+        didSet { rebuildDisplayThreads() }
     }
 
     // Composer
@@ -85,7 +86,7 @@ final class CommentsModel {
     /// the skeleton for the new context instead of the previous scope's comments.
     func resetForContextChange() {
         page = nil
-        displayRows = []
+        displayThreads = []
         phase = .idle
         currentPageNumber = 1
     }
@@ -158,18 +159,17 @@ final class CommentsModel {
             return
         }
         page = fetched
-        rebuildDisplayRows()
+        rebuildDisplayThreads()
         currentPageNumber = fetched.currentPage
         phase = .loaded
     }
 
-    private func rebuildDisplayRows() {
+    private func rebuildDisplayThreads() {
         guard let page else {
-            displayRows = []
+            displayThreads = []
             return
         }
-        let roots = newestFirst ? Array(page.comments.reversed()) : page.comments
-        displayRows = AO3CommentRow.flatten(roots)
+        displayThreads = newestFirst ? Array(page.comments.reversed()) : page.comments
     }
 
     /// One page, via cache unless stale/bypassed. Returns nil after setting a

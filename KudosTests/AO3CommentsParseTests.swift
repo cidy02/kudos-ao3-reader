@@ -76,69 +76,89 @@ struct AO3CommentsParseTests {
         #expect(guest.parentCommentID == nil)
     }
 
-    @Test func flattensThreadsIntoStableShallowRows() throws {
+    @Test func topLevelCommentWithNoRepliesStaysLeaf() throws {
         let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_page"), page: 1)
-        let rows = AO3CommentRow.flatten(page.comments)
-
-        #expect(rows.map(\.id) == [1001, 1002, 1003, 1004])
-        #expect(rows.map(\.depth) == [0, 1, 2, 0])
-        #expect(rows.map(\.threadRootID) == [1001, 1001, 1001, 1004])
-        #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
-        #expect(rows.map(\.hasReplies) == [true, true, false, false])
-        #expect(rows.map(\.hasNextSibling) == [false, false, false, false])
-        #expect(rows.allSatisfy { $0.continuingAncestorDepths.isEmpty })
-        // The card-within-a-card rendering closes each thread card on its last
-        // row: 1003 ends thread 1001; the reply-less 1004 ends its own.
-        #expect(rows.map(\.isLastInThread) == [false, false, true, true])
+        let replyLess = try #require(page.comments.last)
+        #expect(replyLess.replies.isEmpty)
     }
 
-    @Test func projectionKeepsBranchedAncestorConnectorsWithoutReplyTrees() {
-        var grandchild = AO3Comment(id: 3, author: "Grandchild", isGuest: false)
-        grandchild.replies = [
-            AO3Comment(id: 4, author: "Great-grandchild", isGuest: false)
+    @Test func topLevelCommentWithMultipleDirectRepliesKeepsSiblings() {
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = [
+            AO3Comment(id: 2, author: "First", isGuest: false),
+            AO3Comment(id: 3, author: "Second", isGuest: false),
         ]
+
+        #expect(root.replies.map(\.id) == [2, 3])
+        #expect(root.replies.allSatisfy { $0.replies.isEmpty })
+        #expect(root.flattened.map(\.id) == [1, 2, 3])
+    }
+
+    @Test func replyToReplyNestsUnderImmediateParent() throws {
+        let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_page"), page: 1)
+        let root = try #require(page.comments.first)
+        let reply = try #require(root.replies.first)
+        let replyToReply = try #require(reply.replies.first)
+
+        #expect(root.replies.map(\.id) == [1002])
+        #expect(reply.replies.map(\.id) == [1003])
+        #expect(replyToReply.replies.isEmpty)
+        #expect(root.flattened.map(\.id) == [1001, 1002, 1003])
+    }
+
+    @Test func supportsAtLeastFourNestingLevels() {
+        var level4 = AO3Comment(id: 5, author: "L4", isGuest: false)
+        var level3 = AO3Comment(id: 4, author: "L3", isGuest: false)
+        level3.replies = [level4]
+        var level2 = AO3Comment(id: 3, author: "L2", isGuest: false)
+        level2.replies = [level3]
+        var level1 = AO3Comment(id: 2, author: "L1", isGuest: false)
+        level1.replies = [level2]
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = [level1]
+
+        #expect(root.flattened.map(\.id) == [1, 2, 3, 4, 5])
+        #expect(level1.replies.map(\.id) == [3])
+        #expect(level2.replies.map(\.id) == [4])
+        #expect(level3.replies.map(\.id) == [5])
+    }
+
+    @Test func multipleBranchesAtDifferentDepthsPreserveOrder() {
+        var grandchild = AO3Comment(id: 3, author: "Grandchild", isGuest: false)
+        grandchild.replies = [AO3Comment(id: 4, author: "Great-grandchild", isGuest: false)]
         var firstReply = AO3Comment(id: 2, author: "First reply", isGuest: false)
         firstReply.replies = [grandchild]
         let secondReply = AO3Comment(id: 5, author: "Second reply", isGuest: false)
         var root = AO3Comment(id: 1, author: "Root", isGuest: false)
         root.replies = [firstReply, secondReply]
 
-        let rows = AO3CommentRow.flatten([root])
-
-        #expect(rows.map(\.id) == [1, 2, 3, 4, 5])
-        #expect(rows.map(\.depth) == [0, 1, 2, 3, 1])
-        #expect(rows.map(\.hasReplies) == [true, true, true, false, false])
-        #expect(rows.map(\.hasNextSibling) == [false, true, false, false, false])
-        // Root's line remains open through the first reply's descendants so it
-        // can reach the later sibling without reconstructing the subtree.
-        #expect(rows[2].continuingAncestorDepths == [0])
-        #expect(rows[3].continuingAncestorDepths == [0])
-        #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
+        #expect(root.replies.map(\.id) == [2, 5])
+        #expect(firstReply.replies.map(\.id) == [3])
+        #expect(grandchild.replies.map(\.id) == [4])
+        #expect(root.flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    @Test func bubbleIndentCapsDepthAndKeepsConnectorOccluded() {
-        // T-84's owner-approved geometry: a reply-to-a-reply indents ONE step,
-        // and depth 3+ flattens to the same step — deeper indents would push
-        // the bubble's left edge past the connector centerline, leaving the
-        // full-height line visibly floating beside triply-nested bubbles
-        // (see CommentThreadGeometry.bubbleIndent's doc).
-        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 1) == 0)
-        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 2) == 12)
-        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 3) == 12)
-        #expect(CommentThreadGeometry.bubbleIndent(forDepth: 8) == 12)
-
-        // The load-bearing occlusion invariant: every bubble's left edge stays
-        // at or left of the connector's centerline, so the bubble fill hides
-        // the line for whatever height the bubble has.
-        for depth in 1...8 {
-            let bubbleLeft = CommentThreadGeometry.cardPadding
-                + CommentThreadGeometry.replyBubbleLeadingMargin
-                + CommentThreadGeometry.bubbleIndent(forDepth: depth)
-            #expect(bubbleLeft <= CommentThreadGeometry.connectorCenterX)
-        }
+    @Test func childLeadingInsetCapsVisualDepthWithoutLogicalCap() {
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 0) == 0)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == 8)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 2) == 8)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 3) == 8)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 4) == 0)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 8) == 0)
     }
 
-    @Test func largeThreadProjectionKeepsEveryRowShallowAndStable() {
+    @Test func displayThreadRootsReverseForNewestFirst() {
+        var firstRoot = AO3Comment(id: 1, author: "A", isGuest: false)
+        firstRoot.replies = [AO3Comment(id: 10, author: "Reply", isGuest: false)]
+        let secondRoot = AO3Comment(id: 2, author: "B", isGuest: false)
+        let roots = [firstRoot, secondRoot]
+
+        let newestFirst = Array(roots.reversed())
+        #expect(newestFirst.map(\.id) == [2, 1])
+        #expect(newestFirst[1].replies.map(\.id) == [10])
+    }
+
+    @Test func largeThreadTreeKeepsStableIDs() {
         let comments = (0..<500).map { rootIndex in
             var root = AO3Comment(id: rootIndex * 10, author: "Root", isGuest: false)
             root.replies = (1...4).map { replyIndex in
@@ -151,11 +171,11 @@ struct AO3CommentsParseTests {
             return root
         }
 
-        let rows = AO3CommentRow.flatten(comments)
-
-        #expect(rows.count == 2_500)
-        #expect(Set(rows.map(\.id)).count == rows.count)
-        #expect(rows.allSatisfy { $0.comment.replies.isEmpty })
+        #expect(comments.count == 500)
+        #expect(comments.reduce(0) { $0 + $1.descendantCount } == 2_500)
+        let allIDs = comments.flatMap { $0.flattened.map(\.id) }
+        #expect(allIDs.count == 2_500)
+        #expect(Set(allIDs).count == 2_500)
     }
 
     @Test func missingCommentsRegionParsesAsEmpty() throws {
