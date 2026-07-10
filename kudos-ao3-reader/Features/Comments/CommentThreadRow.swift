@@ -132,22 +132,17 @@ struct CommentThreadRow: View {
 
             if !comment.replies.isEmpty {
                 if showsReplies {
-                    // Root `SpinePostRow` already reserves `postSpacing` in the
-                    // rail; each reply is its own card (no card-in-card).
+                    // Root post owns the only in-card spine (down to the first
+                    // reply). Nested reply cards have no internal rail — only
+                    // the bridges between them.
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(replyItems.enumerated()), id: \.element.id) { index, item in
-                            let isFirst = index == 0
-                            let isLast = index == replyItems.count - 1
-                            if !isFirst {
-                                // Continuous rail through the gap between cards.
+                            if index > 0 {
                                 spineBridge(height: CommentThreadGeometry.nestedCardSpacing)
                             }
                             NestedReplyCard(
                                 comment: item.comment,
-                                workAuthors: workAuthors,
-                                // Spine only when another avatar follows — never
-                                // a dead-end rail inside a leaf card.
-                                connectsToNext: !isLast
+                                workAuthors: workAuthors
                             )
                         }
                     }
@@ -197,20 +192,14 @@ struct CommentThreadRow: View {
 
 // MARK: - Nested reply card (one reply = one card)
 
-/// A single reply enclosed in its own card. Sits inside the root conversation
-/// card; never wraps further nested card shells.
+/// A single reply enclosed in its own card. No internal spine — the rail lives
+/// only on the root post and in the gaps between these cards.
 private struct NestedReplyCard: View {
     let comment: AO3Comment
     let workAuthors: [String]
-    /// True when another reply card follows — draw a rail under the avatar that
-    /// runs to the card’s bottom edge so the inter-card bridge can meet it.
-    /// False for the last reply: no spine at all (nothing to connect to).
-    let connectsToNext: Bool
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentHighlightID) private var highlightedCommentID
-
-    private let verticalPad: CGFloat = 8
 
     var body: some View {
         let elevation = theme.appTheme.nestedCardShadow
@@ -219,50 +208,19 @@ private struct NestedReplyCard: View {
             style: .continuous
         )
 
-        // Avatar column owns vertical padding so the rail can enter/exit the
-        // card edge. A spine is drawn under the avatar only when another card
-        // follows — never a dead-end rail on the last reply.
-        HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
-            VStack(spacing: 0) {
-                // Arrive from the root gap / previous bridge.
-                ThreadSpineSegment()
-                    .frame(height: verticalPad)
-
-                CommentAvatar(comment: comment, size: CommentThreadGeometry.avatarSize)
-                    .frame(
-                        width: CommentThreadGeometry.avatarColumnWidth,
-                        height: CommentThreadGeometry.avatarSize
-                    )
-
-                if connectsToNext {
-                    ThreadSpineSegment()
-                        .frame(maxHeight: .infinity)
-                    // Exit through the bottom edge toward the next bridge.
-                    ThreadSpineSegment()
-                        .frame(height: verticalPad)
-                } else {
-                    // Leaf card: stop at the avatar — no orphan rail.
-                    Color.clear
-                        .frame(height: verticalPad)
-                        .accessibilityHidden(true)
-                }
-            }
-            .frame(width: CommentThreadGeometry.avatarColumnWidth, alignment: .top)
-
-            SpinePostRow(
-                comment: comment,
-                workAuthors: workAuthors,
-                showChapterBadge: false,
-                drawsSpineBelow: false,
-                includeTrailingGap: false,
-                showsAvatar: false
-            )
-            .padding(.top, verticalPad)
-            .padding(.bottom, verticalPad)
-            .padding(.trailing, CommentThreadGeometry.nestedCardPadding)
-        }
+        SpinePostRow(
+            comment: comment,
+            workAuthors: workAuthors,
+            showChapterBadge: false,
+            drawsSpineBelow: false,
+            includeTrailingGap: false
+        )
         .id(comment.id)
         .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
+        .padding(.vertical, 8)
+        .padding(.trailing, CommentThreadGeometry.nestedCardPadding)
+        // Leading 0 keeps avatars on the same column as the root spine / bridges.
+        .padding(.leading, 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.appTheme.cardSurface, in: shape)
         .overlay {
@@ -290,9 +248,6 @@ private struct SpinePostRow: View {
     /// When true, reserves `postSpacing` under the body and fills it with rail
     /// so the next avatar sits on a continuous line.
     var includeTrailingGap: Bool = true
-    /// Nested reply cards own their avatar column (so the rail can run through
-    /// card padding); set false to render body-only.
-    var showsAvatar: Bool = true
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -307,22 +262,20 @@ private struct SpinePostRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: showsAvatar ? CommentThreadGeometry.avatarContentSpacing : 0) {
-            if showsAvatar {
-                VStack(spacing: 0) {
-                    CommentAvatar(comment: comment, size: CommentThreadGeometry.avatarSize)
-                        .frame(
-                            width: CommentThreadGeometry.avatarColumnWidth,
-                            height: CommentThreadGeometry.avatarSize
-                        )
+        HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
+            VStack(spacing: 0) {
+                CommentAvatar(comment: comment, size: CommentThreadGeometry.avatarSize)
+                    .frame(
+                        width: CommentThreadGeometry.avatarColumnWidth,
+                        height: CommentThreadGeometry.avatarSize
+                    )
 
-                    if drawsSpineBelow {
-                        ThreadSpineSegment()
-                            .frame(maxHeight: .infinity)
-                    }
+                if drawsSpineBelow {
+                    ThreadSpineSegment()
+                        .frame(maxHeight: .infinity)
                 }
-                .frame(width: CommentThreadGeometry.avatarColumnWidth, alignment: .top)
             }
+            .frame(width: CommentThreadGeometry.avatarColumnWidth, alignment: .top)
 
             VStack(alignment: .leading, spacing: 0) {
                 commentBody
