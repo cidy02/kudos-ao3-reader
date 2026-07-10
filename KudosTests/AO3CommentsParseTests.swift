@@ -148,8 +148,7 @@ struct AO3CommentsParseTests {
     }
 
     @Test func twoLevelCardsAndSharedSpineColumn() {
-        // Card shells stop at depth 1 (root + direct-reply cards); deeper
-        // nodes share the same avatar-column center for the spine.
+        // Card shells: root + one nested card per reply (never card-in-card).
         #expect(CommentThreadGeometry.maximumCardDepth == 1)
         #expect(CommentThreadGeometry.avatarSize == 40)
         #expect(CommentThreadGeometry.avatarColumnWidth == 40)
@@ -160,6 +159,22 @@ struct AO3CommentsParseTests {
         #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies == 8)
         #expect(CommentThreadGeometry.postSpacing > 0)
         #expect(CommentThreadGeometry.spineWidth == 2)
+    }
+
+    @Test func flattenedRepliesAreOneCardPerReplyDepthFirst() {
+        var grandchild = AO3Comment(id: 3, author: "G", isGuest: false)
+        grandchild.replies = [AO3Comment(id: 4, author: "GG", isGuest: false)]
+        var first = AO3Comment(id: 2, author: "R1", isGuest: false)
+        first.replies = [grandchild]
+        let second = AO3Comment(id: 5, author: "R2", isGuest: false)
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = [first, second]
+
+        let flat = CommentThreadGeometry.flattenedReplies(from: root)
+        #expect(flat.map(\.id) == [2, 3, 4, 5])
+        #expect(flat.map(\.depth) == [1, 2, 3, 1])
+        // Root itself is not a nested reply card.
+        #expect(!flat.contains { $0.id == 1 })
     }
 
     @Test func displayThreadsPreservesReplyTreesAndNewestFirstRootOrder() {

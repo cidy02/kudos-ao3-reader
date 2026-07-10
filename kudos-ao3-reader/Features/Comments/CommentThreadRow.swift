@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Geometry for comment threads.
 ///
-/// **Two card levels only** (no matryoshka):
-/// 1. Top-level conversation card (Library `cardSurface`)
-/// 2. Direct-reply cards nested inside it (same surface + lift shadow)
+/// **Two card shells only** (no matryoshka):
+/// 1. Top-level conversation card
+/// 2. One nested card **per reply** (any logical depth), all sitting inside the
+///    root card — never a card inside a reply card.
 ///
-/// Deeper replies (depth ≥ 2) stay inside the direct-reply card and stack on a
-/// Threads-style avatar spine — never a third card shell.
+/// Hierarchy is the Threads-style avatar spine connecting those reply cards
+/// in depth-first order.
 enum CommentThreadGeometry {
     static let cardPadding: CGFloat = 14
     static let cardCornerRadius: CGFloat = 16
@@ -21,7 +22,8 @@ enum CommentThreadGeometry {
     /// never breaks across SwiftUI `VStack` spacing.
     static let postSpacing: CGFloat = 12
     static let spineWidth: CGFloat = 2
-    /// Card nesting cap: 0 = root card, 1 = nested reply card. Depth ≥ 2 is spine-only.
+    /// Card nesting cap: root shell + reply shells only (reply cards are never
+    /// nested inside each other).
     static let maximumCardDepth = 1
     /// Direct-reply stacks larger than this start collapsed.
     static let autoExpandedMaxDirectReplies = 8
@@ -30,6 +32,27 @@ enum CommentThreadGeometry {
         _ = depth
         return avatarColumnWidth / 2
     }
+
+    /// Depth-first list of every reply under a root (root itself excluded),
+    /// each becoming its own nested card.
+    static func flattenedReplies(from root: AO3Comment) -> [FlattenedReply] {
+        flatten(root.replies, depth: 1)
+    }
+
+    private static func flatten(_ comments: [AO3Comment], depth: Int) -> [FlattenedReply] {
+        comments.flatMap { comment in
+            [FlattenedReply(comment: comment, depth: depth)]
+                + flatten(comment.replies, depth: depth + 1)
+        }
+    }
+}
+
+/// One reply in display order (DFS under a top-level comment).
+struct FlattenedReply: Identifiable, Equatable {
+    var id: Int { comment.id }
+    let comment: AO3Comment
+    /// Logical AO3 depth (1 = direct reply to the root card).
+    let depth: Int
 }
 
 // MARK: - Thread environment (highlight + actions)
@@ -74,8 +97,8 @@ extension EnvironmentValues {
 
 // MARK: - Top-level list row (card level 0)
 
-/// One top-level AO3 comment as a Library card. Direct replies are nested cards
-/// (level 1); anything deeper is a spine stack inside those nested cards.
+/// One top-level AO3 comment as a Library card. Every reply in its tree is a
+/// separate nested card inside this shell, linked by the avatar spine.
 struct CommentThreadRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
@@ -86,6 +109,10 @@ struct CommentThreadRow: View {
 
     @State private var forceExpandReplies = false
 
+    private var replyItems: [FlattenedReply] {
+        CommentThreadGeometry.flattenedReplies(from: comment)
+    }
+
     private var showsReplies: Bool {
         comment.replies.count <= CommentThreadGeometry.autoExpandedMaxDirectReplies
             || forceExpandReplies
@@ -93,7 +120,7 @@ struct CommentThreadRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Root post — spine continues under the avatar when there are replies.
+            // Root post — spine continues under the avatar when replies show.
             SpinePostRow(
                 comment: comment,
                 workAuthors: workAuthors,
@@ -105,17 +132,17 @@ struct CommentThreadRow: View {
 
             if !comment.replies.isEmpty {
                 if showsReplies {
-                    // No extra top padding — the root `SpinePostRow` already
-                    // reserves `postSpacing` in the rail under its body.
+                    // Root `SpinePostRow` already reserves `postSpacing` in the
+                    // rail; each reply is its own card (no card-in-card).
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(comment.replies.enumerated()), id: \.element.id) { index, reply in
+                        ForEach(Array(replyItems.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
-                                // Rail through the gap between sibling nested cards.
                                 spineOnlyBridge
                             }
                             NestedReplyCard(
-                                comment: reply,
-                                workAuthors: workAuthors
+                                comment: item.comment,
+                                workAuthors: workAuthors,
+                                drawsSpineBelow: index < replyItems.count - 1
                             )
                         }
                     }
@@ -153,7 +180,7 @@ struct CommentThreadRow: View {
         .listRowSeparator(.hidden)
     }
 
-    /// Short rail segment used between sibling nested cards.
+    /// Rail segment between sibling nested reply cards.
     private var spineOnlyBridge: some View {
         HStack(spacing: 0) {
             ThreadSpineSegment()
@@ -167,21 +194,19 @@ struct CommentThreadRow: View {
     }
 }
 
-// MARK: - Nested reply card (card level 1 only)
+// MARK: - Nested reply card (one reply = one card)
 
-/// Direct reply as a nested card. Its own reply tree is rendered as a spine
-/// stack inside this card — never another nested card shell.
+/// A single reply enclosed in its own card. Sits inside the root conversation
+/// card; never wraps further nested card shells.
 private struct NestedReplyCard: View {
     let comment: AO3Comment
     let workAuthors: [String]
+    /// When true, the post’s spine continues under the body so the inter-card
+    /// bridge (or next card) can meet it.
+    let drawsSpineBelow: Bool
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentHighlightID) private var highlightedCommentID
-
-    /// This reply plus every descendant, depth-first — one continuous spine.
-    private var spinePosts: [AO3Comment] {
-        Self.flattenDepthFirst(comment)
-    }
 
     var body: some View {
         let elevation = theme.appTheme.nestedCardShadow
@@ -190,26 +215,18 @@ private struct NestedReplyCard: View {
             style: .continuous
         )
 
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(spinePosts.enumerated()), id: \.element.id) { index, post in
-                let isLast = index == spinePosts.count - 1
-                // Keep the rail alive for later in-card posts; the inter-card
-                // gap is drawn by the parent bridge, not inside this shell.
-                SpinePostRow(
-                    comment: post,
-                    workAuthors: workAuthors,
-                    showChapterBadge: false,
-                    drawsSpineBelow: !isLast,
-                    includeTrailingGap: !isLast
-                )
-                .id(post.id)
-                .highlightChrome(isHighlighted: highlightedCommentID == post.id)
-            }
-        }
-        // Leading 0 keeps nested avatars on the root spine column. Modest
-        // vertical + trailing pad keeps text clear of the rounded border
-        // without opening a large hole in the rail (root already reserved
-        // `postSpacing` before the first nested card).
+        SpinePostRow(
+            comment: comment,
+            workAuthors: workAuthors,
+            showChapterBadge: false,
+            // Inter-card gap is the parent bridge; in-card tail only needed if
+            // we drew multiple posts here (we don't).
+            drawsSpineBelow: drawsSpineBelow,
+            includeTrailingGap: false
+        )
+        .id(comment.id)
+        .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
+        // Leading 0 keeps avatars on the root spine column.
         .padding(.top, 8)
         .padding(.bottom, 8)
         .padding(.trailing, CommentThreadGeometry.nestedCardPadding)
@@ -226,16 +243,12 @@ private struct NestedReplyCard: View {
             y: elevation.y
         )
     }
-
-    private static func flattenDepthFirst(_ root: AO3Comment) -> [AO3Comment] {
-        [root] + root.replies.flatMap(flattenDepthFirst)
-    }
 }
 
 // MARK: - Spine post row
 
 /// One comment on the Threads-style avatar rail. The rail under the avatar
-/// grows with the body and includes the inter-post gap so SwiftUI spacing
+/// grows with the body and can include the inter-post gap so SwiftUI spacing
 /// never punches a hole in the line.
 private struct SpinePostRow: View {
     let comment: AO3Comment
@@ -260,8 +273,6 @@ private struct SpinePostRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
-            // Avatar + continuous rail. The clear tail under the body is what
-            // gives the flexible rail a height to fill (including postSpacing).
             VStack(spacing: 0) {
                 CommentAvatar(comment: comment, size: CommentThreadGeometry.avatarSize)
                     .frame(
@@ -405,7 +416,6 @@ private struct SpinePostRow: View {
 
 // MARK: - Spine primitive
 
-/// Centered 2pt rail segment for the avatar column.
 private struct ThreadSpineSegment: View {
     @Environment(ThemeManager.self) private var theme
 
@@ -454,9 +464,6 @@ private func expandRepliesButton(count: Int, action: @escaping () -> Void) -> so
 
 // MARK: - Avatar
 
-/// AO3 user icon when the fetched comment included one; otherwise a quiet,
-/// neutral placeholder. `AsyncImage` uses the shared URL loading/cache stack
-/// and is only instantiated for rendered comment cards.
 struct CommentAvatar: View {
     let comment: AO3Comment
     var size: CGFloat = 40
