@@ -147,20 +147,36 @@ struct AO3CommentsParseTests {
         #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    @Test func childInsetsCapVisualDepthWithoutLogicalCap() {
+    @Test func childTrailingInsetCapsVisualDepthWithoutLogicalCap() {
+        // Leading outer inset stays 0 so avatar centers can share a vertical
+        // line with the parent; trailing still caps after depth 3.
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 0) == 0)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == 8)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 2) == 8)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 3) == 8)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 4) == 0)
+        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == 0)
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 8) == 0)
-        // Trailing matches leading while the indent language is active, then
-        // both drop to 0 so deep cards stay symmetric.
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 0) == 0)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 1) == 10)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 3) == 10)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 4) == 0)
         #expect(CommentThreadGeometry.childTrailingInset(forDepth: 8) == 0)
+    }
+
+    @Test func nestedAvatarCentersAlignWithImmediateParent() {
+        // depth 1 (44pt parent → 36pt child): leading pad = 22 - 18 = 4
+        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 1) == 4)
+        // depth 2+ (36 → 36): pad = 0
+        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 2) == 0)
+        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 5) == 0)
+
+        // Relative to the shared parent-content leading edge, each child's
+        // avatar center matches its parent's.
+        for depth in 1...6 {
+            let parentCenter = CommentThreadGeometry.avatarSize(forDepth: depth - 1) / 2
+            let childCenter = CommentThreadGeometry.avatarCenterX(forDepth: depth)
+            #expect(childCenter == parentCenter)
+        }
+        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 0) == 22)
+        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 1) == 22)
+        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 2) == 18)
     }
 
     @Test func displayThreadsPreservesReplyTreesAndNewestFirstRootOrder() {

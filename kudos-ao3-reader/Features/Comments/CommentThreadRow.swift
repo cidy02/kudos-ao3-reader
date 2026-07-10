@@ -17,7 +17,6 @@ enum CommentThreadGeometry {
     static let firstRowTopPadding: CGFloat = 14
     static let rootBottomPadding: CGFloat = 14
     static let replyBubblePadding: CGFloat = 10
-    static let replyBubbleLeadingMargin: CGFloat = 8
     static let replyBubbleTrailingMargin: CGFloat = 10
     /// Spacing between sibling nested cards — single mechanism (no per-child
     /// bottom padding on top of this, which was stacking to ~20pt).
@@ -33,18 +32,18 @@ enum CommentThreadGeometry {
     /// row does not eagerly build an enormous nested subtree (T-83 stall path).
     static let autoExpandedMaxDirectReplies = 8
 
-    /// Each child is already contained by its parent card; this small extra
-    /// leading inset makes the relationship visible without letting deep AO3
-    /// conversations collapse into unusably narrow columns. Logical depth is
-    /// never capped — only this additional visual inset stops after depth 3.
+    /// Outer leading inset on a nested card. Always 0 so the child's avatar can
+    /// share a vertical centerline with its parent's avatar (see
+    /// `nestedContentLeadingPadding(forDepth:)`). Nesting still reads via shadow
+    /// + trailing inset, not a stepped avatar column.
     static func childLeadingInset(forDepth depth: Int) -> CGFloat {
-        guard depth > 0, depth <= maximumIndentedVisualDepth else { return 0 }
-        return replyBubbleLeadingMargin
+        _ = depth
+        return 0
     }
 
-    /// Matching trailing inset while the indent language is active; past the
-    /// visual depth cap both outer insets are 0 so deep cards stay symmetric
-    /// (inner `replyBubblePadding` still applies for readable text).
+    /// Trailing inset while the indent language is active; past the visual depth
+    /// cap it drops to 0 so deep cards don't keep narrowing. Does not affect
+    /// avatar alignment (leading-only).
     static func childTrailingInset(forDepth depth: Int) -> CGFloat {
         guard depth > 0, depth <= maximumIndentedVisualDepth else { return 0 }
         return replyBubbleTrailingMargin
@@ -52,6 +51,32 @@ enum CommentThreadGeometry {
 
     static func avatarSize(forDepth depth: Int) -> CGFloat {
         depth == 0 ? parentAvatarSize : replyAvatarSize
+    }
+
+    /// Inner leading padding of a nested card chosen so this card's avatar
+    /// center lines up with its immediate parent's avatar center.
+    ///
+    /// Parent header and the child stack share a content leading edge (padding
+    /// wraps both). Parent center is `avatarSize(parent)/2` from that edge;
+    /// child center is `leadingPadding + avatarSize(child)/2`. Solving for
+    /// padding: `parentRadius - childRadius` (clamped at 0).
+    static func nestedContentLeadingPadding(forDepth depth: Int) -> CGFloat {
+        guard depth > 0 else { return replyBubblePadding }
+        let parentRadius = avatarSize(forDepth: depth - 1) / 2
+        let childRadius = avatarSize(forDepth: depth) / 2
+        return max(0, parentRadius - childRadius)
+    }
+
+    /// Distance from the shared parent-content leading edge to this node's
+    /// avatar center (outer leading inset + content leading pad + radius).
+    /// Used by tests to pin the alignment contract.
+    static func avatarCenterX(forDepth depth: Int) -> CGFloat {
+        if depth <= 0 {
+            return avatarSize(forDepth: 0) / 2
+        }
+        return childLeadingInset(forDepth: depth)
+            + nestedContentLeadingPadding(forDepth: depth)
+            + avatarSize(forDepth: depth) / 2
     }
 }
 
@@ -180,8 +205,14 @@ struct CommentThreadRow: View {
             style: .continuous
         )
         let elevation = theme.appTheme.nestedCardShadow
+        // Leading content pad is smaller than the other sides so the reply
+        // avatar's center shares a vertical line with the parent's avatar.
+        let leadingPad = CommentThreadGeometry.nestedContentLeadingPadding(forDepth: depth)
         return cardContents
-            .padding(CommentThreadGeometry.replyBubblePadding)
+            .padding(.top, CommentThreadGeometry.replyBubblePadding)
+            .padding(.bottom, CommentThreadGeometry.replyBubblePadding)
+            .padding(.trailing, CommentThreadGeometry.replyBubblePadding)
+            .padding(.leading, leadingPad)
             .frame(maxWidth: .infinity, alignment: .leading)
             // Same surface as the parent thread card — nesting reads via shadow,
             // not a second fill shade.
@@ -216,7 +247,9 @@ struct CommentThreadRow: View {
                     comment: comment,
                     size: CommentThreadGeometry.avatarSize(forDepth: depth)
                 )
-                .frame(width: isRoot ? CommentThreadGeometry.avatarColumnWidth : nil)
+                // Fixed column width so avatar centers stay on the same vertical
+                // axis as parent/child (root is larger; replies use reply size).
+                .frame(width: CommentThreadGeometry.avatarSize(forDepth: depth))
                 commentBody
             }
 
