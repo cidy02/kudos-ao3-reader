@@ -147,34 +147,18 @@ struct AO3CommentsParseTests {
         #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    @Test func childTrailingInsetCapsVisualDepthWithoutLogicalCap() {
-        // Leading outer inset is −pad so inner pad stays corner-safe while the
-        // avatar column still shares the parent's centerline; trailing caps
-        // after depth 3.
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 0) == 0)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == -10)
-        #expect(CommentThreadGeometry.childLeadingInset(forDepth: 8) == -10)
-        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 0) == 0)
-        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 1) == 10)
-        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 3) == 10)
-        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 4) == 0)
-        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 8) == 0)
-    }
-
-    @Test func nestedAvatarCentersAlignOnSharedColumn() {
-        // Nested cards keep full corner-safe padding on every side.
-        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 1) == 10)
-        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 2) == 10)
-        #expect(CommentThreadGeometry.nestedContentLeadingPadding(forDepth: 5) == 10)
-
-        // Outer −pad + inner pad + column/2 == parent column center for every
-        // depth (smaller reply avatars are centered inside the 44pt column).
-        let columnCenter = CommentThreadGeometry.avatarColumnWidth / 2
-        #expect(CommentThreadGeometry.avatarCenterX(forDepth: 0) == columnCenter)
-        for depth in 1...6 {
-            #expect(CommentThreadGeometry.avatarCenterX(forDepth: depth) == columnCenter)
+    @Test func threadsStyleSpineUsesSharedAvatarColumn() {
+        // Single-column spine (depthIndent 0): every depth shares the same
+        // avatar center — Meta Threads conversation pattern.
+        #expect(CommentThreadGeometry.depthIndent == 0)
+        #expect(CommentThreadGeometry.avatarSize == 40)
+        #expect(CommentThreadGeometry.avatarColumnWidth == 40)
+        let center = CommentThreadGeometry.avatarColumnWidth / 2
+        for depth in 0...6 {
+            #expect(CommentThreadGeometry.avatarCenterX(forDepth: depth) == center)
+            #expect(CommentThreadGeometry.leadingIndent(forDepth: depth) == 0)
         }
-        #expect(columnCenter == 22)
+        #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies == 8)
     }
 
     @Test func displayThreadsPreservesReplyTreesAndNewestFirstRootOrder() {

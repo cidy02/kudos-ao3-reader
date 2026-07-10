@@ -365,7 +365,6 @@ struct CommentsView: View {
                 ForEach(model.displayThreads) { comment in
                     CommentThreadRow(
                         comment: comment,
-                        depth: 0,
                         workAuthors: workContext.authors,
                         showChapterBadge: model.scope == .all
                     )
