@@ -27,10 +27,25 @@ enum CommentThreadGeometry {
     static let maximumCardDepth = 1
     /// Direct-reply stacks larger than this start collapsed.
     static let autoExpandedMaxDirectReplies = 8
+    /// Collapsed body height before "Read more".
+    static let collapsedBodyLineLimit = 5
+    /// Character budget roughly matching ~5 lines of body text; longer bodies
+    /// (or more hard newlines than the line limit) get a Read more control.
+    static let collapsedBodyCharacterBudget = collapsedBodyLineLimit * 55
 
     static func avatarCenterX(forDepth depth: Int) -> CGFloat {
         _ = depth
         return avatarColumnWidth / 2
+    }
+
+    /// Whether the body should offer expand/collapse (pure, testable).
+    static func bodyNeedsExpansion(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let newlineCount = text.reduce(into: 0) { count, char in
+            if char.isNewline { count += 1 }
+        }
+        if newlineCount + 1 > collapsedBodyLineLimit { return true }
+        return text.count > collapsedBodyCharacterBudget
     }
 
     /// Depth-first list of every reply under a root (root itself excluded),
@@ -292,10 +307,7 @@ private struct SpinePostRow: View {
         VStack(alignment: .leading, spacing: 6) {
             byline
             if !comment.bodyText.isEmpty {
-                Text(comment.bodyText)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                ExpandableCommentBody(text: comment.bodyText)
             }
             actionsRow
         }
@@ -399,6 +411,48 @@ private struct SpinePostRow: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
+        }
+    }
+}
+
+// MARK: - Expandable body
+
+/// Comment body with a collapsed line limit and a Read more / Show less control
+/// when the text is long enough to need it.
+private struct ExpandableCommentBody: View {
+    let text: String
+    @State private var isExpanded = false
+
+    private var needsExpansion: Bool {
+        CommentThreadGeometry.bodyNeedsExpansion(text)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(isExpanded || !needsExpansion
+                    ? nil
+                    : CommentThreadGeometry.collapsedBodyLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if needsExpansion {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    Text(isExpanded ? "Show less" : "Read more")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint(
+                    isExpanded
+                        ? "Collapses the full comment"
+                        : "Expands the full comment"
+                )
+            }
         }
     }
 }

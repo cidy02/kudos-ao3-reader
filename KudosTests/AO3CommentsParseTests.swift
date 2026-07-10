@@ -161,6 +161,16 @@ struct AO3CommentsParseTests {
         #expect(CommentThreadGeometry.spineWidth == 2)
     }
 
+    @Test func bodyNeedsExpansionUsesLineAndCharacterBudget() {
+        #expect(!CommentThreadGeometry.bodyNeedsExpansion(""))
+        #expect(!CommentThreadGeometry.bodyNeedsExpansion("Short comment."))
+        let long = String(repeating: "word ", count: 80)
+        #expect(CommentThreadGeometry.bodyNeedsExpansion(long))
+        let manyLines = (0..<8).map { "Line \($0)" }.joined(separator: "\n")
+        #expect(CommentThreadGeometry.bodyNeedsExpansion(manyLines))
+        #expect(CommentThreadGeometry.collapsedBodyLineLimit == 5)
+    }
+
     @Test func flattenedRepliesAreOneCardPerReplyDepthFirst() {
         var grandchild = AO3Comment(id: 3, author: "G", isGuest: false)
         grandchild.replies = [AO3Comment(id: 4, author: "GG", isGuest: false)]
