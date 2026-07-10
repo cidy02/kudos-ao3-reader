@@ -161,8 +161,13 @@ struct CommentsView: View {
     /// Scrolls to and briefly highlights `commentID` within the currently-loaded
     /// list ("Thread"/"Parent Thread" — the native equivalent of AO3's own
     /// isolated-thread page, no extra request since the target is always already
-    /// on this same fetched page).
+    /// on this same fetched page). Nested replies live inside the root List row,
+    /// so we first scroll to the owning root (materializes the tall cell) and
+    /// then to the nested `.id`.
     private func focusThread(_ commentID: Int, proxy: ScrollViewProxy) {
+        if let rootID = model.rootID(containing: commentID), rootID != commentID {
+            proxy.scrollTo(rootID, anchor: .center)
+        }
         withAnimation(.easeInOut(duration: 0.3)) {
             proxy.scrollTo(commentID, anchor: .center)
         }
@@ -173,6 +178,17 @@ struct CommentsView: View {
             guard !Task.isCancelled else { return }
             highlightedCommentID = nil
         }
+    }
+
+    private func threadHandlers(scrollProxy: ScrollViewProxy) -> CommentThreadHandlers {
+        CommentThreadHandlers(
+            onReply: { model.startComposer(replyingTo: $0) },
+            onEdit: { model.startEditing($0) },
+            onDelete: { pendingDelete = $0 },
+            onCopyLink: { copyLink($0) },
+            onFocusThread: { focusThread($0, proxy: scrollProxy) },
+            onRequestLogin: { showingLogin = true }
+        )
     }
 
     // MARK: Info card
@@ -351,16 +367,11 @@ struct CommentsView: View {
                         comment: comment,
                         depth: 0,
                         workAuthors: workContext.authors,
-                        showChapterBadge: model.scope == .all,
-                        highlightedCommentID: highlightedCommentID,
-                        onReply: { model.startComposer(replyingTo: $0) },
-                        onEdit: { model.startEditing($0) },
-                        onDelete: { pendingDelete = $0 },
-                        onCopyLink: { copyLink($0) },
-                        onFocusThread: { focusThread($0, proxy: scrollProxy) },
-                        onRequestLogin: { showingLogin = true }
+                        showChapterBadge: model.scope == .all
                     )
                 }
+                .environment(\.commentHighlightID, highlightedCommentID)
+                .environment(\.commentThreadHandlers, threadHandlers(scrollProxy: scrollProxy))
                 if let page = model.page, page.totalPages > 1 {
                     paginationSection(page)
                 }

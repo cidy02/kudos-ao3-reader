@@ -89,14 +89,20 @@ struct AO3CommentsParseTests {
             AO3Comment(id: 3, author: "Second", isGuest: false),
         ]
 
-        #expect(root.replies.map(\.id) == [2, 3])
-        #expect(root.replies.allSatisfy { $0.replies.isEmpty })
-        #expect(root.flattened.map(\.id) == [1, 2, 3])
+        // displayThreads preserves the full sibling reply tree under the root.
+        let displayed = CommentsModel.orderedDisplayThreads(from: [root], newestFirst: false)
+        #expect(displayed.map(\.id) == [1])
+        #expect(displayed[0].replies.map(\.id) == [2, 3])
+        #expect(displayed[0].replies.allSatisfy { $0.replies.isEmpty })
+        #expect(displayed[0].flattened.map(\.id) == [1, 2, 3])
     }
 
     @Test func replyToReplyNestsUnderImmediateParent() throws {
         let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_page"), page: 1)
-        let root = try #require(page.comments.first)
+        let displayed = CommentsModel.orderedDisplayThreads(
+            from: page.comments, newestFirst: false
+        )
+        let root = try #require(displayed.first)
         let reply = try #require(root.replies.first)
         let replyToReply = try #require(reply.replies.first)
 
@@ -117,10 +123,12 @@ struct AO3CommentsParseTests {
         var root = AO3Comment(id: 1, author: "Root", isGuest: false)
         root.replies = [level1]
 
-        #expect(root.flattened.map(\.id) == [1, 2, 3, 4, 5])
-        #expect(level1.replies.map(\.id) == [3])
-        #expect(level2.replies.map(\.id) == [4])
-        #expect(level3.replies.map(\.id) == [5])
+        let displayed = CommentsModel.orderedDisplayThreads(from: [root], newestFirst: false)
+        #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
+        #expect(displayed[0].replies.map(\.id) == [2])
+        #expect(displayed[0].replies[0].replies.map(\.id) == [3])
+        #expect(displayed[0].replies[0].replies[0].replies.map(\.id) == [4])
+        #expect(displayed[0].replies[0].replies[0].replies[0].replies.map(\.id) == [5])
     }
 
     @Test func multipleBranchesAtDifferentDepthsPreserveOrder() {
@@ -132,33 +140,47 @@ struct AO3CommentsParseTests {
         var root = AO3Comment(id: 1, author: "Root", isGuest: false)
         root.replies = [firstReply, secondReply]
 
-        #expect(root.replies.map(\.id) == [2, 5])
-        #expect(firstReply.replies.map(\.id) == [3])
-        #expect(grandchild.replies.map(\.id) == [4])
-        #expect(root.flattened.map(\.id) == [1, 2, 3, 4, 5])
+        let displayed = CommentsModel.orderedDisplayThreads(from: [root], newestFirst: false)
+        #expect(displayed[0].replies.map(\.id) == [2, 5])
+        #expect(displayed[0].replies[0].replies.map(\.id) == [3])
+        #expect(displayed[0].replies[0].replies[0].replies.map(\.id) == [4])
+        #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    @Test func childLeadingInsetCapsVisualDepthWithoutLogicalCap() {
+    @Test func childInsetsCapVisualDepthWithoutLogicalCap() {
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 0) == 0)
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 1) == 8)
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 2) == 8)
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 3) == 8)
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 4) == 0)
         #expect(CommentThreadGeometry.childLeadingInset(forDepth: 8) == 0)
+        // Trailing matches leading while the indent language is active, then
+        // both drop to 0 so deep cards stay symmetric.
+        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 0) == 0)
+        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 1) == 10)
+        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 3) == 10)
+        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 4) == 0)
+        #expect(CommentThreadGeometry.childTrailingInset(forDepth: 8) == 0)
     }
 
-    @Test func displayThreadRootsReverseForNewestFirst() {
+    @Test func displayThreadsPreservesReplyTreesAndNewestFirstRootOrder() {
         var firstRoot = AO3Comment(id: 1, author: "A", isGuest: false)
         firstRoot.replies = [AO3Comment(id: 10, author: "Reply", isGuest: false)]
         let secondRoot = AO3Comment(id: 2, author: "B", isGuest: false)
         let roots = [firstRoot, secondRoot]
 
-        let newestFirst = Array(roots.reversed())
+        let oldestFirst = CommentsModel.orderedDisplayThreads(from: roots, newestFirst: false)
+        #expect(oldestFirst.map(\.id) == [1, 2])
+        #expect(oldestFirst[0].replies.map(\.id) == [10])
+
+        let newestFirst = CommentsModel.orderedDisplayThreads(from: roots, newestFirst: true)
         #expect(newestFirst.map(\.id) == [2, 1])
+        // Newest-first only reorders roots — reply trees stay under the same root.
         #expect(newestFirst[1].replies.map(\.id) == [10])
+        #expect(newestFirst[0].replies.isEmpty)
     }
 
-    @Test func largeThreadTreeKeepsStableIDs() {
+    @Test func largeDisplayThreadProjectionKeepsStableUniqueIDs() {
         let comments = (0..<500).map { rootIndex in
             var root = AO3Comment(id: rootIndex * 10, author: "Root", isGuest: false)
             root.replies = (1...4).map { replyIndex in
@@ -171,11 +193,40 @@ struct AO3CommentsParseTests {
             return root
         }
 
-        #expect(comments.count == 500)
-        #expect(comments.reduce(0) { $0 + $1.descendantCount } == 2_500)
-        let allIDs = comments.flatMap { $0.flattened.map(\.id) }
+        let displayed = CommentsModel.orderedDisplayThreads(from: comments, newestFirst: false)
+        #expect(displayed.count == 500)
+        #expect(displayed.reduce(0) { $0 + $1.descendantCount } == 2_500)
+        let allIDs = displayed.flatMap { $0.flattened.map(\.id) }
         #expect(allIDs.count == 2_500)
         #expect(Set(allIDs).count == 2_500)
+
+        let newestFirst = CommentsModel.orderedDisplayThreads(from: comments, newestFirst: true)
+        #expect(newestFirst.first?.id == comments.last?.id)
+        #expect(newestFirst.last?.id == comments.first?.id)
+        #expect(newestFirst.first?.replies.map(\.id) == comments.last?.replies.map(\.id))
+    }
+
+    @Test func rootIDContainingFindsNestedDescendant() {
+        var child = AO3Comment(id: 20, author: "Child", isGuest: false)
+        child.replies = [AO3Comment(id: 30, author: "Grandchild", isGuest: false)]
+        var root = AO3Comment(id: 10, author: "Root", isGuest: false)
+        root.replies = [child]
+        let other = AO3Comment(id: 40, author: "Other", isGuest: false)
+
+        let threads = CommentsModel.orderedDisplayThreads(
+            from: [root, other], newestFirst: false
+        )
+        #expect(threads.map(\.id) == [10, 40])
+        #expect(CommentsModel.rootID(containing: 10, in: threads) == 10)
+        #expect(CommentsModel.rootID(containing: 20, in: threads) == 10)
+        #expect(CommentsModel.rootID(containing: 30, in: threads) == 10)
+        #expect(CommentsModel.rootID(containing: 40, in: threads) == 40)
+        #expect(CommentsModel.rootID(containing: 999, in: threads) == nil)
+    }
+
+    @Test func autoCollapseThresholdIsPositive() {
+        #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies > 0)
+        #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies == 8)
     }
 
     @Test func missingCommentsRegionParsesAsEmpty() throws {

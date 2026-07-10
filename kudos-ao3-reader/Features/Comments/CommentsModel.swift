@@ -169,7 +169,36 @@ final class CommentsModel {
             displayThreads = []
             return
         }
-        displayThreads = newestFirst ? Array(page.comments.reversed()) : page.comments
+        displayThreads = Self.orderedDisplayThreads(
+            from: page.comments, newestFirst: newestFirst
+        )
+    }
+
+    /// Root-thread display order for a fetched page. Newest-first reverses only
+    /// the top-level roots; each root keeps its full reply tree intact so the
+    /// view can nest cards under the immediate parent (T-86). Pure so tests can
+    /// pin the contract without standing up a live model load.
+    nonisolated static func orderedDisplayThreads(
+        from comments: [AO3Comment], newestFirst: Bool
+    ) -> [AO3Comment] {
+        newestFirst ? Array(comments.reversed()) : comments
+    }
+
+    /// The top-level root that owns `commentID` (itself or a descendant), used
+    /// to materialize the List row before scrolling to a nested `.id`.
+    func rootID(containing commentID: Int) -> Int? {
+        Self.rootID(containing: commentID, in: displayThreads)
+    }
+
+    /// Pure lookup over a display-thread list (testable without a live load).
+    nonisolated static func rootID(containing commentID: Int, in threads: [AO3Comment]) -> Int? {
+        for root in threads {
+            if root.id == commentID { return root.id }
+            if root.flattened.contains(where: { $0.id == commentID }) {
+                return root.id
+            }
+        }
+        return nil
     }
 
     /// One page, via cache unless stale/bypassed. Returns nil after setting a

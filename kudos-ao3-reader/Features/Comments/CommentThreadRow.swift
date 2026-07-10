@@ -4,6 +4,13 @@ import SwiftUI
 /// the owner-approved T-84 card language: a top-level thread uses the app's
 /// normal `cardSurface`; replies are complete nested cards on
 /// `nestedCardSurface`, with the same avatar/body/actions structure.
+///
+/// Visual nesting is recursive (T-86). That intentionally trades the T-83
+/// one-row-per-comment List virtualization for card-within-card containment.
+/// Mitigations: reply stacks auto-collapse past a direct-reply threshold
+/// (local expand, no network), outer insets stop after depth 3, and
+/// highlight/actions travel via Environment so the recursive call site stays
+/// shallow.
 enum CommentThreadGeometry {
     static let cardPadding: CGFloat = 14
     static let firstRowTopPadding: CGFloat = 14
@@ -11,15 +18,19 @@ enum CommentThreadGeometry {
     static let replyBubblePadding: CGFloat = 10
     static let replyBubbleLeadingMargin: CGFloat = 8
     static let replyBubbleTrailingMargin: CGFloat = 10
-    static let replyRowBottomPadding: CGFloat = 10
-    static let childStackTopPadding: CGFloat = 10
+    /// Spacing between sibling nested cards — single mechanism (no per-child
+    /// bottom padding on top of this, which was stacking to ~20pt).
     static let childStackSpacing: CGFloat = 10
+    static let childStackTopPadding: CGFloat = 10
     static let parentAvatarSize: CGFloat = 44
     static let replyAvatarSize: CGFloat = 36
     static let avatarColumnWidth: CGFloat = parentAvatarSize
     static let rootCornerRadius: CGFloat = 16
     static let replyCornerRadius: CGFloat = 16
     static let maximumIndentedVisualDepth = 3
+    /// Direct-reply stacks larger than this start collapsed so a single List
+    /// row does not eagerly build an enormous nested subtree (T-83 stall path).
+    static let autoExpandedMaxDirectReplies = 8
 
     /// Each child is already contained by its parent card; this small extra
     /// leading inset makes the relationship visible without letting deep AO3
@@ -30,10 +41,66 @@ enum CommentThreadGeometry {
         return replyBubbleLeadingMargin
     }
 
+    /// Matching trailing inset while the indent language is active; past the
+    /// visual depth cap both outer insets are 0 so deep cards stay symmetric
+    /// (inner `replyBubblePadding` still applies for readable text).
+    static func childTrailingInset(forDepth depth: Int) -> CGFloat {
+        guard depth > 0, depth <= maximumIndentedVisualDepth else { return 0 }
+        return replyBubbleTrailingMargin
+    }
+
     static func avatarSize(forDepth depth: Int) -> CGFloat {
         depth == 0 ? parentAvatarSize : replyAvatarSize
     }
 }
+
+// MARK: - Thread environment (highlight + actions)
+
+/// Closures for comment actions. Held in the environment so recursive
+/// `CommentThreadRow` construction does not re-thread six handlers at every depth.
+struct CommentThreadHandlers {
+    var onReply: (AO3Comment) -> Void
+    var onEdit: (AO3Comment) -> Void
+    var onDelete: (AO3Comment) -> Void
+    var onCopyLink: (AO3Comment) -> Void
+    /// Scrolls to and briefly highlights the given comment id within the
+    /// currently-loaded tree — native in-app focus, not an AO3 web page.
+    var onFocusThread: (Int) -> Void
+    /// Presents the AO3 login sheet (from the disabled-looking "Log in to
+    /// Reply" placeholder, which must actually do something when tapped).
+    var onRequestLogin: () -> Void
+
+    static let noop = CommentThreadHandlers(
+        onReply: { _ in },
+        onEdit: { _ in },
+        onDelete: { _ in },
+        onCopyLink: { _ in },
+        onFocusThread: { _ in },
+        onRequestLogin: {}
+    )
+}
+
+private struct CommentHighlightIDKey: EnvironmentKey {
+    static let defaultValue: Int? = nil
+}
+
+private struct CommentThreadHandlersKey: EnvironmentKey {
+    static let defaultValue = CommentThreadHandlers.noop
+}
+
+extension EnvironmentValues {
+    var commentHighlightID: Int? {
+        get { self[CommentHighlightIDKey.self] }
+        set { self[CommentHighlightIDKey.self] = newValue }
+    }
+
+    var commentThreadHandlers: CommentThreadHandlers {
+        get { self[CommentThreadHandlersKey.self] }
+        set { self[CommentThreadHandlersKey.self] = newValue }
+    }
+}
+
+// MARK: - Row
 
 /// One recursive comment card node. The same component renders top-level
 /// comments and every reply; replies are nested inside the specific comment
@@ -43,20 +110,15 @@ struct CommentThreadRow: View {
     let depth: Int
     let workAuthors: [String]
     let showChapterBadge: Bool
-    let highlightedCommentID: Int?
-    let onReply: (AO3Comment) -> Void
-    let onEdit: (AO3Comment) -> Void
-    let onDelete: (AO3Comment) -> Void
-    let onCopyLink: (AO3Comment) -> Void
-    /// Scrolls to and briefly highlights the given comment id within the
-    /// currently-loaded tree — native in-app focus, not an AO3 web page.
-    let onFocusThread: (Int) -> Void
-    /// Presents the AO3 login sheet (from the disabled-looking "Log in to
-    /// Reply" placeholder, which must actually do something when tapped).
-    let onRequestLogin: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.commentHighlightID) private var highlightedCommentID
+    @Environment(\.commentThreadHandlers) private var handlers
+
+    /// Local expand override for large direct-reply stacks (starts collapsed
+    /// when over the auto-expand threshold).
+    @State private var forceExpandReplies = false
 
     private var isRoot: Bool { depth == 0 }
     private var isHighlighted: Bool { highlightedCommentID == comment.id }
@@ -64,6 +126,14 @@ struct CommentThreadRow: View {
 
     private var isByWorkAuthor: Bool {
         workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
+    }
+
+    private var repliesStartExpanded: Bool {
+        comment.replies.count <= CommentThreadGeometry.autoExpandedMaxDirectReplies
+    }
+
+    private var showsReplies: Bool {
+        repliesStartExpanded || forceExpandReplies
     }
 
     var body: some View {
@@ -92,6 +162,13 @@ struct CommentThreadRow: View {
                     style: .continuous
                 )
             )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: CommentThreadGeometry.rootCornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+            }
             .overlay(highlightOverlay(cornerRadius: CommentThreadGeometry.rootCornerRadius))
             .animation(.easeInOut(duration: 0.3), value: isHighlighted)
     }
@@ -116,8 +193,7 @@ struct CommentThreadRow: View {
             }
             .overlay(highlightOverlay(cornerRadius: CommentThreadGeometry.replyCornerRadius))
             .padding(.leading, CommentThreadGeometry.childLeadingInset(forDepth: depth))
-            .padding(.trailing, CommentThreadGeometry.replyBubbleTrailingMargin)
-            .padding(.bottom, CommentThreadGeometry.replyRowBottomPadding)
+            .padding(.trailing, CommentThreadGeometry.childTrailingInset(forDepth: depth))
             .animation(.easeInOut(duration: 0.3), value: isHighlighted)
     }
 
@@ -141,25 +217,43 @@ struct CommentThreadRow: View {
             }
 
             if !comment.replies.isEmpty {
-                VStack(alignment: .leading, spacing: CommentThreadGeometry.childStackSpacing) {
-                    ForEach(comment.replies) { reply in
-                        CommentThreadRow(
-                            comment: reply,
-                            depth: depth + 1,
-                            workAuthors: workAuthors,
-                            showChapterBadge: false,
-                            highlightedCommentID: highlightedCommentID,
-                            onReply: onReply,
-                            onEdit: onEdit,
-                            onDelete: onDelete,
-                            onCopyLink: onCopyLink,
-                            onFocusThread: onFocusThread,
-                            onRequestLogin: onRequestLogin
-                        )
-                    }
-                }
-                .padding(.top, CommentThreadGeometry.childStackTopPadding)
+                replySection
             }
+        }
+    }
+
+    @ViewBuilder
+    private var replySection: some View {
+        if showsReplies {
+            VStack(alignment: .leading, spacing: CommentThreadGeometry.childStackSpacing) {
+                ForEach(comment.replies) { reply in
+                    CommentThreadRow(
+                        comment: reply,
+                        depth: depth + 1,
+                        workAuthors: workAuthors,
+                        showChapterBadge: false
+                    )
+                }
+            }
+            .padding(.top, CommentThreadGeometry.childStackTopPadding)
+        } else {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    forceExpandReplies = true
+                }
+            } label: {
+                Label(
+                    "Show \(comment.replies.count) replies",
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+                .font(.caption.weight(.medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .padding(.top, CommentThreadGeometry.childStackTopPadding)
+            .accessibilityHint("Expands nested replies for this comment")
         }
     }
 
@@ -217,7 +311,7 @@ struct CommentThreadRow: View {
         // owner-approved placement).
         HStack(spacing: 8) {
             if comment.canReply && auth.isLoggedIn {
-                Button { onReply(comment) } label: {
+                Button { handlers.onReply(comment) } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                         .font(.caption.weight(.medium))
                         .frame(minHeight: 44)
@@ -239,36 +333,36 @@ struct CommentThreadRow: View {
             }
             Menu {
                 if comment.canReply && auth.isLoggedIn {
-                    Button { onReply(comment) } label: {
+                    Button { handlers.onReply(comment) } label: {
                         Label("Reply", systemImage: "arrowshape.turn.up.left")
                     }
                 } else if comment.canReply {
-                    Button { onRequestLogin() } label: {
+                    Button { handlers.onRequestLogin() } label: {
                         Label("Log in to Reply", systemImage: "person.crop.circle.badge.questionmark")
                     }
                 }
                 if comment.editPath != nil {
-                    Button { onEdit(comment) } label: {
+                    Button { handlers.onEdit(comment) } label: {
                         Label("Edit Comment", systemImage: "pencil")
                     }
                 }
-                Button { onCopyLink(comment) } label: {
+                Button { handlers.onCopyLink(comment) } label: {
                     Label("Copy Link", systemImage: "link")
                 }
                 if comment.threadPath != nil {
                     // Scrolls to this comment in the native list (mostly useful
                     // as a "where am I" re-center after browsing a long page).
-                    Button { onFocusThread(comment.id) } label: {
+                    Button { handlers.onFocusThread(comment.id) } label: {
                         Label("Thread", systemImage: "bubble.left.and.bubble.right")
                     }
                 }
                 if let parentID = comment.parentCommentID {
-                    Button { onFocusThread(parentID) } label: {
+                    Button { handlers.onFocusThread(parentID) } label: {
                         Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
                     }
                 }
                 if comment.deletePath != nil {
-                    Button(role: .destructive) { onDelete(comment) } label: {
+                    Button(role: .destructive) { handlers.onDelete(comment) } label: {
                         Label("Delete Comment", systemImage: "trash")
                     }
                 }
