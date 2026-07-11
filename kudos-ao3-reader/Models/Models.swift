@@ -108,6 +108,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var id: UUID = UUID()
     var title: String = ""
     var author: String = ""
+    /// AO3-verified byline identities, encoded as JSON for an additive SwiftData
+    /// migration. This is derived enrichment rather than user-authored data, so it
+    /// is intentionally omitted from `.kudosbackup`; restoring an older backup
+    /// safely leaves the author text visible but non-tappable until AO3 refreshes it.
+    var authorIdentitiesJSON: String = ""
     var summary: String = ""
     var sourceURL: String = ""
     var dateAdded: Date = Date()
@@ -266,6 +271,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var hasCategorizedWorkTags: Bool {
         !(workFandoms.isEmpty && workCharacters.isEmpty
             && workRelationships.isEmpty && workFreeforms.isEmpty)
+    }
+
+    var verifiedAuthorIdentities: [AO3AuthorIdentity] {
+        get { AO3AuthorIdentityCodec.decode(authorIdentitiesJSON) }
+        set { authorIdentitiesJSON = AO3AuthorIdentityCodec.encode(newValue) }
     }
 
     /// Don't re-attempt a tag refresh for the same work more often than this.

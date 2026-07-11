@@ -9,16 +9,19 @@ import Foundation
 struct AO3CommentsWorkContext: Equatable, Sendable {
     var title: String
     var authors: [String]
+    var authorIdentities: [AO3AuthorIdentity]
     var fandoms: [String] = []
     var rating: String = ""
     var chapters: String = ""
 
     init(
-        title: String, authors: [String], fandoms: [String] = [],
+        title: String, authors: [String], authorIdentities: [AO3AuthorIdentity] = [],
+        fandoms: [String] = [],
         rating: String = "", chapters: String = ""
     ) {
         self.title = title
         self.authors = authors
+        self.authorIdentities = authorIdentities
         self.fandoms = fandoms
         self.rating = rating
         self.chapters = chapters
@@ -27,7 +30,10 @@ struct AO3CommentsWorkContext: Equatable, Sendable {
     init(savedWork: SavedWork) {
         self.init(
             title: savedWork.title,
-            authors: savedWork.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
+            authors: savedWork.verifiedAuthorIdentities.isEmpty
+                ? (savedWork.author.isEmpty ? [] : [savedWork.author])
+                : savedWork.verifiedAuthorIdentities.map(\.displayName),
+            authorIdentities: savedWork.verifiedAuthorIdentities,
             fandoms: savedWork.workFandoms,
             rating: savedWork.rating,
             chapters: savedWork.chapters
@@ -36,7 +42,9 @@ struct AO3CommentsWorkContext: Equatable, Sendable {
 
     init(remote: AO3WorkSummary) {
         self.init(
-            title: remote.title, authors: remote.authors,
+            title: remote.title,
+            authors: remote.authors,
+            authorIdentities: remote.authorIdentities,
             fandoms: remote.fandoms, rating: remote.rating, chapters: remote.chapters
         )
     }

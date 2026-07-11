@@ -79,10 +79,12 @@ struct WorkRow: View {
                     }
                 }
                 if !work.author.isEmpty {
-                    Text("by \(work.author)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    AO3AuthorBylineView(
+                        displayText: work.author,
+                        identities: work.verifiedAuthorIdentities,
+                        font: .subheadline,
+                        compact: true
+                    )
                 }
             }
 

@@ -10,19 +10,18 @@ struct CanonicalWorkCoverCard: View {
 
     var body: some View {
         if let work = entry.local {
-            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                // readingProgress is nil until there's something meaningful to show,
-                // so a freshly-saved work keeps the clean cover.
-                SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
-            }
-            .buttonStyle(.plain)
-            .localWorkContextMenu(work: work)
+            // readingProgress is nil until there's something meaningful to show,
+            // so a freshly-saved work keeps the clean cover.
+            SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+                .cardNavigation(
+                    to: LocalWorkDestination.reader(work),
+                    accessibilityLabel: work.title
+                )
+                .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
             // AO3WorkCoverCard applies the remote context menu itself.
-            NavigationLink(value: remote) {
-                AO3WorkCoverCard(work: remote)
-            }
-            .buttonStyle(.plain)
+            AO3WorkCoverCard(work: remote)
+                .cardNavigation(to: remote, accessibilityLabel: remote.title)
         }
     }
 }

@@ -348,11 +348,12 @@ struct ReadingQueueDetailView: View {
                 context: context
             ))
         } else {
-            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                SensitiveWorkCoverCard(work: work)
-            }
-            .buttonStyle(.plain)
-            .localWorkContextMenu(work: work)
+            SensitiveWorkCoverCard(work: work)
+                .cardNavigation(
+                    to: LocalWorkDestination.reader(work),
+                    accessibilityLabel: work.title
+                )
+                .localWorkContextMenu(work: work)
         }
     }
 
@@ -549,10 +550,13 @@ struct ReadingQueueStorageView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                 if !work.author.isEmpty {
-                    Text(work.author)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    AO3AuthorBylineView(
+                        displayText: work.author,
+                        identities: work.verifiedAuthorIdentities,
+                        includesBy: false,
+                        font: .caption,
+                        compact: true
+                    )
                 }
                 Text(byteString(fileSize(for: work.fileURL)))
                     .font(.caption2)

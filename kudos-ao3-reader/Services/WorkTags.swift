@@ -27,10 +27,17 @@ enum WorkTags {
         // only for this session, which is enough to stop same-session re-fetches.
         work.lastTagRefreshAttemptAt = Date()
         do {
-            let groups = try await AO3Client.shared.workTags(workID: id)
+            // `workMetadata` reads the same page and parser as `workTags`, while
+            // also retaining the verified author hrefs already present in that
+            // response. No additional AO3 request is introduced.
+            let metadata = try await AO3Client.shared.workMetadata(workID: id)
+            let groups = metadata.tagGroups
             // Re-check after the network await — the work can be deleted mid-fetch.
             guard work.modelContext != nil else { return }
             guard !groups.isEmpty else { return } // locked/empty page — keep EPUB tags, retry later
+            if !metadata.authorIdentities.isEmpty {
+                work.verifiedAuthorIdentities = metadata.authorIdentities
+            }
             work.workFandoms = TagMerge.merged(work.workFandoms, groups.fandoms)
             work.workRelationships = TagMerge.merged(work.workRelationships, groups.relationships)
             work.workCharacters = TagMerge.merged(work.workCharacters, groups.characters)

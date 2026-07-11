@@ -119,6 +119,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in
                     LibraryEntityGridView(
@@ -290,8 +291,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     localCarouselCard(work: work, footer: nil, progress: nil)
                 }
                 ForEach(mfl.prefix(12)) { work in
-                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
-                        .buttonStyle(.plain)
+                    AO3WorkCoverCard(work: work)
+                        .cardNavigation(to: work, accessibilityLabel: work.title)
                 }
             }
         } emptyState: {
@@ -664,18 +665,20 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             )
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         } else {
-            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
-            }
-            .buttonStyle(.plain)
-            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
+                .cardNavigation(
+                    to: LocalWorkDestination.reader(work),
+                    accessibilityLabel: work.title
+                )
+                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
         #else
-        NavigationLink(value: LocalWorkDestination.reader(work)) {
-            SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
-        }
-        .buttonStyle(.plain)
-        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+        SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
+            .cardNavigation(
+                to: LocalWorkDestination.reader(work),
+                accessibilityLabel: work.title
+            )
+            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         #endif
     }
 

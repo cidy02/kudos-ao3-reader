@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-token" content="author-fixture-csrf-token">
+  <title>Avery_Archive - Dashboard</title>
+</head>
+<body class="logged-in">
+  <div id="main" class="user home" role="main">
+    <div class="primary header module">
+      <div class="icon">
+        <img src="/images/skins/iconsets/default/icon_user.png" alt="Avery_Archive's icon">
+      </div>
+      <h2 class="heading"><a href="/users/Avery_Archive">Avery_Archive</a></h2>
+      <ul class="navigation actions">
+        <li><a href="/users/Avery_Archive/profile">Profile</a></li>
+        <li><a href="/users/Avery_Archive/works">Works</a></li>
+        <li><a href="/users/Avery_Archive/muted/confirm">Mute</a></li>
+        <li><a href="/users/Avery_Archive/blocked/confirm">Block</a></li>
+      </ul>
+    </div>
+
+    <div id="dashboard">
+      <ul class="navigation actions">
+        <li><a href="/users/Avery_Archive/pseuds/Avery%20Writes">Avery Writes</a></li>
+        <li><a href="/users/Avery_Archive/pseuds/NightShift">NightShift</a></li>
+      </ul>
+    </div>
+
+    <dl class="meta">
+      <dt>User ID</dt><dd>4242</dd>
+    </dl>
+
+    <div id="user-fandoms" class="module">
+      <ul>
+        <li><a href="/tags/Star%20Wars/works?user_id=4242">Star Wars</a> (12)</li>
+        <li><a href="/tags/The%20Locked%20Tomb/works?user_id=4242">The Locked Tomb</a> (3)</li>
+      </ul>
+    </div>
+
+    <form action="/users/Avery_Archive/subscriptions" method="post">
+      <input type="hidden" name="authenticity_token" value="author-fixture-csrf-token">
+      <input type="hidden" name="subscription[subscribable_type]" value="User">
+      <input type="hidden" name="subscription[subscribable_id]" value="4242">
+      <input type="submit" value="Subscribe">
+    </form>
+  </div>
+</body>
+</html>

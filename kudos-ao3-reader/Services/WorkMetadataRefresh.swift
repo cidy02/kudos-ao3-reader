@@ -109,6 +109,9 @@ enum WorkMetadataRefresh {
 
         if !metadata.title.isEmpty { work.title = metadata.title }
         if !metadata.authors.isEmpty { work.author = metadata.authorText }
+        if !metadata.authorIdentities.isEmpty {
+            work.verifiedAuthorIdentities = metadata.authorIdentities
+        }
         if !metadata.summary.isEmpty { work.summary = metadata.summary }
         if !metadata.rating.isEmpty { work.rating = metadata.rating }
 

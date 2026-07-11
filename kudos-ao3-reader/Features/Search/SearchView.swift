@@ -104,6 +104,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: WorkCollection.self) { collection in
                     CollectionDetailView(collection: collection)
                 }
+                .ao3AuthorNavigation(path: $path, tab: .search)
                 .toolbar {
                     if isSelecting {
                         ToolbarItem(placement: .confirmationAction) {

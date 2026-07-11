@@ -46,10 +46,12 @@ struct AO3WorkRow: View {
                         .font(.headline)
                         .foregroundStyle(.primary)
                         .lineLimit(2)
-                    Text("by \(work.authorText)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    AO3AuthorBylineView(
+                        names: work.authors,
+                        identities: work.authorIdentities,
+                        font: .subheadline,
+                        compact: true
+                    )
                 }
                 Spacer(minLength: 0)
                 if isExpandable { expandButton }

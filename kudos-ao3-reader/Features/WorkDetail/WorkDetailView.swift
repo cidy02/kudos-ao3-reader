@@ -159,10 +159,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !displayAuthor.isEmpty {
-                    Label(displayAuthor, systemImage: "person")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    HStack(alignment: .top, spacing: 7) {
+                        Image(systemName: "person")
+                            .foregroundStyle(.secondary)
+                        AO3AuthorBylineView(
+                            names: displayAuthorList,
+                            identities: displayAuthorIdentities,
+                            includesBy: false,
+                            font: .subheadline
+                        )
+                    }
                 }
 
                 if !displayFandoms.isEmpty {
@@ -401,7 +407,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             Menu {
                 if let id = ao3WorkID {
                     AO3WorkActionsMenu(workID: id, actions: workActions, workContext: .init(
-                        title: displayTitle, authors: displayAuthorList,
+                        title: displayTitle,
+                        authors: displayAuthorList,
+                        authorIdentities: displayAuthorIdentities,
                         fandoms: displayFandoms, rating: displayRating, chapters: displayChapters
                     ))
                 }
@@ -416,7 +424,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private var detailsSection: some View {
         Section("Details") {
-            if !displayAuthor.isEmpty { LabeledContent("Author", value: displayAuthor) }
+            if !displayAuthor.isEmpty {
+                LabeledContent("Author") {
+                    AO3AuthorBylineView(
+                        names: displayAuthorList,
+                        identities: displayAuthorIdentities,
+                        includesBy: false,
+                        font: .body
+                    )
+                }
+            }
             if !displayRating.isEmpty { LabeledContent("Rating", value: displayRating) }
             if !displayCategories.isEmpty {
                 LabeledContent("Category", value: displayCategories.joined(separator: ", "))
@@ -453,7 +470,15 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Individual author names (for the comments screen's "Author" badge).
     private var displayAuthorList: [String] {
         if let authors = remote?.authors, !authors.isEmpty { return authors }
-        return displayAuthor.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        if let identities = localWork?.verifiedAuthorIdentities, !identities.isEmpty {
+            return identities.map(\.displayName)
+        }
+        return displayAuthor.isEmpty ? [] : [displayAuthor]
+    }
+
+    private var displayAuthorIdentities: [AO3AuthorIdentity] {
+        if let identities = remote?.authorIdentities, !identities.isEmpty { return identities }
+        return localWork?.verifiedAuthorIdentities ?? []
     }
 
     private var displaySummary: String {
@@ -578,7 +603,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     // as the row's value when known.
                     NavigationLink {
                         CommentsView(workID: id, context: .init(
-                            title: displayTitle, authors: displayAuthorList,
+                            title: displayTitle,
+                            authors: displayAuthorList,
+                            authorIdentities: displayAuthorIdentities,
                             fandoms: displayFandoms, rating: displayRating, chapters: displayChapters
                         ))
                     } label: {

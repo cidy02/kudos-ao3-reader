@@ -49,8 +49,10 @@ struct AO3SubscriptionsParseTests {
     @Test func readsTitleAndAllBylineAuthors() throws {
         let page = try AO3Client.parseSubscriptionsPage(html, page: 1)
         #expect(page.works[0].authors == ["holmes"])
+        #expect(page.works[0].authorIdentities.first?.route?.username == "holmes")
         // Co-authored works list every byline pseud.
         #expect(page.works[1].authors == ["penname", "cowriter"])
+        #expect(page.works[1].authorIdentities.count == 2)
         #expect(page.works[1].authorText == "penname, cowriter")
     }
 

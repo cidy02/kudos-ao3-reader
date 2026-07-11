@@ -1,6 +1,6 @@
 # AO3_NETWORKING_POLICY.md
 
-AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product requirement — community trust is the whole ballgame. Confirmed as of 2026-07-07.
+AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product requirement — community trust is the whole ballgame. Confirmed as of 2026-07-10.
 
 ## The rules (all implemented — keep them true)
 
@@ -19,19 +19,21 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 | Batch behavior | Strictly sequential: `DownloadQueue` one at a time; series preservation sleeps 2s/work (`preservationRequestPauseNanos`), cancellable; Browse bulk actions resolve one-by-one and cancel on view exit. |
 | Local-first | Every enrichment path checks local state first; the search index is built from local data only; `existingWork` pre-checks avoid re-downloads. |
 | Cancellation | `Task.sleep`/URLSession propagate `CancellationError`; coordinator wakes cancelled waiters; batch loops stop (never count cancellations as failures). |
+| Author profiles | Fetch only after an explicit byline/profile tap. Dashboard + selected Works tab load first; Series/Bookmarks/About and later pages load on demand. `AO3AuthorPageCache` is capped at 128 entries, uses a 5-minute TTL keyed by full URL and authentication scope, and keeps at most 24 hours of same-scope stale fallback; stale data never crosses accounts or hides session expiry. Scope/tab changes cancel superseded loads. |
 
 ## Parser fragility assumptions
 
 - All parsing is SwiftSoup over live HTML, ported from `ao3_api` selectors (`AO3Client.swift` header). Assume AO3 markup can change: parse failures must degrade to `AO3Error.parse`/empty results and **never** mutate or delete local records.
 - Logged-in/username detection selectors are duplicated between `LiveAO3SessionValidator` (SwiftSoup) and `AO3WebLoginCoordinator.inspectPage()` (in-page JS) — change both or neither (`AO3AuthService.swift:101` note).
 - Locked/restricted works return empty tag groups on a 200 — treated as "keep EPUB tags, retry after cooldown", not as an error.
+- Author index parsers distinguish recognized empty AO3 lists from unrecognized markup; parser drift is an error/retry state, never a fabricated empty profile.
 
 ## What agents must NOT implement
 
 - No parallel request fan-out outside `AO3RequestCoordinator.withSlot`; no bypassing `AO3Client` with raw `URLSession` calls to AO3 (the auth validator's single launch request is the one sanctioned exception).
 - No retry loops around writes; no auto-retry UI for kudos/comments.
 - No background polling beyond the existing BGTask folder-sync refresh; no periodic full-library metadata sweeps.
-- No scraping of logged-in pages beyond the user's own account lists; no bulk crawling/archiving features.
+- No background or bulk scraping of logged-in pages. Authenticated reads are limited to the user's own account lists and pages opened through explicit profile/work navigation; no crawling/archiving features.
 - No removal/weakening of: pacing, cooldowns, Retry-After honoring, or the contact UA.
 - Never delete/modify local works in any network error path (grep-audited invariant — keep it grep-clean: no `softDelete`/`hardDelete` reachable from a `catch`).
 

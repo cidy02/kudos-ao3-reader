@@ -56,6 +56,7 @@ struct RecentlyDeletedView: View {
                                 RecentlyDeletedRow(
                                     title: work.title,
                                     subtitle: work.author,
+                                    authorIdentities: work.verifiedAuthorIdentities,
                                     daysRemaining: daysRemaining(work.permanentDeletionScheduledAt),
                                     onRestore: { PreservedWorkService.restore(work, in: context) },
                                     onDeletePermanently: { pendingPermanentWork = work }
@@ -171,6 +172,7 @@ struct RecentlyDeletedView: View {
 private struct RecentlyDeletedRow: View {
     let title: String
     let subtitle: String
+    var authorIdentities: [AO3AuthorIdentity] = []
     let daysRemaining: Int
     let onRestore: () -> Void
     let onDeletePermanently: () -> Void
@@ -181,10 +183,20 @@ private struct RecentlyDeletedRow: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
             if !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if authorIdentities.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    AO3AuthorBylineView(
+                        displayText: subtitle,
+                        identities: authorIdentities,
+                        includesBy: false,
+                        font: .caption,
+                        compact: true
+                    )
+                }
             }
             Text(daysRemaining == 1 ? "1 day left" : "\(daysRemaining) days left")
                 .font(.caption2)

@@ -234,4 +234,19 @@ extension View {
                 .opacity(0)
         }
     }
+
+    /// The same behind-content navigation for cards outside a `List`. A clear label
+    /// fills the card's proposed size and supplies the work title to VoiceOver while
+    /// foreground controls such as author links keep priority.
+    func cardNavigation(to value: some Hashable, accessibilityLabel: String) -> some View {
+        background {
+            NavigationLink(value: value) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(accessibilityLabel)
+                    .accessibilityHint("Open work")
+            }
+            .buttonStyle(.plain)
+        }
+    }
 }

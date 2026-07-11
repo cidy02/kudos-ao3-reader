@@ -79,10 +79,13 @@ struct AO3WriteActionsTests {
         let html = """
         <html><body>
         <ul class="collection index group">
-          <li class="collection blurb group">
-            <div class="header module">
-              <h4 class="heading"><a href="/collections/cool_fics">Cool Fics</a></h4>
-              <div class="byline">Maintained by someone</div>
+          <li class="collection picture blurb group">
+            <div class="header module group">
+              <h4 class="heading">
+                <a href="/collections/cool_fics">Cool Fics</a> by
+                <a class="owner" href="/users/OwnerAccount">Owner Pseud</a> and
+                <a class="mod" href="/users/ModAccount">Mod Pseud</a>
+              </h4>
             </div>
           </li>
           <li class="collection blurb group">
@@ -95,6 +98,9 @@ struct AO3WriteActionsTests {
         #expect(collections.count == 2)
         #expect(collections.map(\.name) == ["cool_fics", "another_one"])
         #expect(collections.first?.title == "Cool Fics")
+        #expect(collections.first?.maintainerNames == ["Owner Pseud", "Mod Pseud"])
+        #expect(collections.first?.maintainerIdentities.map(\.route?.username)
+            == ["OwnerAccount", "ModAccount"])
     }
 
     @Test func parsesBookmarkPseudField() {

@@ -77,6 +77,13 @@ struct CommentThreadHandlers {
     var onCopyLink: (AO3Comment) -> Void
     var onFocusThread: (Int) -> Void
     var onRequestLogin: () -> Void
+    /// Opens a commenter's native profile (Works/Series/Bookmarks/About). nil is
+    /// a valid, common default — `AO3AuthorBylineView` renders plain, untappable
+    /// text when no route handler is supplied, matching every other call site.
+    /// The `= nil` default (not just an Optional type) is load-bearing: it's
+    /// what makes the synthesized memberwise init treat this param as optional
+    /// too, so `.noop` below keeps compiling unchanged.
+    var onOpenAuthor: ((AO3AuthorRoute) -> Void)? = nil
 
     static let noop = CommentThreadHandlers(
         onReply: { _ in },
@@ -385,11 +392,22 @@ private struct SpinePostRow: View {
         }
     }
 
+    /// Tappable, pseud-correct author name — routes to the native profile when
+    /// AO3 gave us a resolvable `/users/...` link (registered, non-guest
+    /// commenters only); guests and unresolvable bylines render as plain text
+    /// via the same component's own fallback.
     private var authorIdentity: some View {
         HStack(spacing: 6) {
-            Text(comment.author)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
+            AO3AuthorBylineView(
+                names: [comment.author],
+                identities: commentIdentity.map { [$0] } ?? [],
+                includesBy: false,
+                font: .subheadline,
+                compact: true,
+                emphasized: true,
+                onOpenRoute: handlers.onOpenAuthor
+            )
+            .layoutPriority(1)
             if isByWorkAuthor {
                 Text("Author")
                     .font(.caption2.weight(.semibold))
@@ -426,6 +444,14 @@ private struct SpinePostRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    /// The AO3 identity behind this comment's byline, when it's a real
+    /// resolvable account — `AO3AuthorBylineView` falls back to plain text for
+    /// guests and any comment whose byline link didn't resolve to a route.
+    private var commentIdentity: AO3AuthorIdentity? {
+        guard !comment.isGuest, let path = comment.userPath else { return nil }
+        return AO3AuthorIdentity(displayName: comment.author, href: path)
     }
 
     /// Compact bottom strip: Reply bottom-leading, overflow bottom-trailing.

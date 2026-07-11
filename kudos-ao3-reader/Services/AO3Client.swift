@@ -10,6 +10,7 @@ import SwiftSoup
 // polite and personal.
 
 // Lint: the existing client keeps scraping/parsing behavior centralized.
+// swiftlint:disable file_length
 /// Central AO3 network access: every request is paced (see `pace()`), retried with
 /// backoff only when transient, coalesced when identical, and status-checked into
 /// typed errors — one place owns the politeness rules.
@@ -324,8 +325,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             let slug = String(href[range.upperBound...]).split(separator: "/").first.map(String.init) ?? ""
             guard !slug.isEmpty else { continue }
             let title = (try? link.text()) ?? slug
-            let byline = (try? li.select(".byline, .heading .byline").first()?.text()) ?? ""
-            result.append(AO3Collection(name: slug, title: title, byline: byline))
+            let maintainerLinks = try li.select("h4.heading a[href*='/users/']").array()
+            let maintainerNames = try maintainerLinks.map { try $0.text() }
+            let maintainerIdentities = try maintainerLinks.compactMap { link in
+                try AO3AuthorIdentity(displayName: link.text(), href: link.attr("href"))
+            }
+            let fallbackByline = (try? li.select(".byline, .heading .byline").first()?.text()) ?? ""
+            result.append(AO3Collection(
+                name: slug,
+                title: title,
+                byline: maintainerNames.isEmpty ? fallbackByline : maintainerNames.joined(separator: ", "),
+                maintainerNames: maintainerNames,
+                maintainerIdentities: maintainerIdentities
+            ))
         }
         return result
     }
@@ -618,7 +630,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             Int(stat(cls).filter(\.isNumber))
         }
 
-        func authorNames() throws -> [String] {
+        func authorByline() throws -> (names: [String], identities: [AO3AuthorIdentity]) {
             let selectors = [
                 "h3.byline.heading a[rel=author]",
                 "h3.byline a[rel=author]",
@@ -626,10 +638,23 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                 "h3.byline a"
             ]
             for selector in selectors {
-                let names = try unique(doc.select(selector).array().map { try $0.text() })
-                if !names.isEmpty { return names }
+                let links = try doc.select(selector).array()
+                let names = try unique(links.map { try $0.text() })
+                if !names.isEmpty {
+                    let identities = try links.compactMap { link -> AO3AuthorIdentity? in
+                        try AO3AuthorIdentity(
+                            displayName: clean(link.text()),
+                            href: link.attr("href")
+                        )
+                    }
+                    return (names, identities)
+                }
             }
-            return []
+            let anonymousName = firstText(["h3.byline.heading", "h3.byline"])
+            if !anonymousName.isEmpty {
+                return ([], [.nonNavigable(anonymousName, kind: .anonymous)])
+            }
+            return ([], [])
         }
 
         func absoluteAO3URL(_ href: String) -> String? {
@@ -666,7 +691,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
 
         let title = firstText(["h2.title.heading", "h2.title"])
-        let authors = try authorNames()
+        let byline = try authorByline()
+        let authors = byline.names
         let fandoms = try tags("fandom")
         let relationships = try tags("relationship")
         let characters = try tags("character")
@@ -685,6 +711,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             id: workID,
             title: title,
             authors: authors,
+            authorIdentities: byline.identities,
             summary: firstText(["div.summary blockquote.userstuff", "blockquote.userstuff.summary"]),
             rating: rating,
             fandoms: fandoms,
@@ -912,8 +939,17 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                   let id = try Self.workID(fromPath: workLink.attr("href")) else { continue }
             let title = try workLink.text()
             // The remaining links are the byline pseuds (/users/...) — the author(s).
-            let authors = try dt.select("a[href*=\"/users/\"]").array().map { try $0.text() }
-            works.append(.subscription(id: id, title: title, authors: authors))
+            let authorLinks = try dt.select("a[href*=\"/users/\"]").array()
+            let authors = try authorLinks.map { try $0.text() }
+            let identities = try authorLinks.compactMap { link in
+                try AO3AuthorIdentity(displayName: link.text(), href: link.attr("href"))
+            }
+            works.append(.subscription(
+                id: id,
+                title: title,
+                authors: authors,
+                authorIdentities: identities
+            ))
         }
         var totalPages = page
         for li in try doc.select("ol.pagination li").array() {
@@ -948,7 +984,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return Int(path[range.upperBound...].prefix { $0.isNumber })
     }
 
-    private static func parseBlurb(_ el: Element) throws -> AO3WorkSummary {
+    static func parseBlurb(_ el: Element) throws -> AO3WorkSummary {
         // Search/readings blurbs are `li id="work_<id>"`; bookmark blurbs are
         // `li id="bookmark_<id>"`, so fall back to the work's `/works/<id>` link.
         let id: Int
@@ -962,7 +998,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
 
         let title = try el.select("h4.heading a").first()?.text() ?? "Untitled"
-        let authors = try el.select("h4.heading a[rel=author]").array().map { try $0.text() }
+        let authorLinks = try el.select("h4.heading a[rel=author]").array()
+        let authors = try authorLinks.map { try $0.text() }
+        var authorIdentities = try authorLinks.compactMap { link in
+            try AO3AuthorIdentity(displayName: link.text(), href: link.attr("href"))
+        }
+        let hasAnonymousHeader = try el.select("div.header.module.anonymous").first() != nil
+        if authorLinks.isEmpty, el.hasClass("anonymous") || hasAnonymousHeader {
+            authorIdentities = [.nonNavigable("Anonymous", kind: .anonymous)]
+        }
         let fandoms = try el.select("h5.fandoms a.tag").array().map { try $0.text() }
 
         let rating = try el.select("ul.required-tags .rating .text").first()?.text() ?? ""
@@ -1000,6 +1044,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             id: id,
             title: title,
             authors: authors,
+            authorIdentities: authorIdentities,
             fandoms: fandoms,
             rating: rating,
             warnings: warnings,

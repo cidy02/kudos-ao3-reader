@@ -33,6 +33,7 @@ struct BrowseView: View {
                 .navigationDestination(for: AO3WorkSummary.self) { work in
                     WorkDetailView(remote: work)
                 }
+                .ao3AuthorNavigation(path: $path, tab: .browse)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button { showingWebsite = true } label: {

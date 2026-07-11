@@ -128,6 +128,7 @@ struct HomeView: View {
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
+                .ao3AuthorNavigation(path: $path, tab: .home)
                 .task(id: auth.isLoggedIn) { await loadSubscriptions() }
                 .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
             #if os(iOS)
@@ -198,10 +199,15 @@ struct HomeView: View {
                     )
                     .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                 } else {
-                    NavigationLink(value: LocalWorkDestination.reader(work)) {
-                        SensitiveWorkCoverCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
-                    }
-                    .buttonStyle(.plain)
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: footer(kind, work),
+                        progress: progress(kind, work)
+                    )
+                    .cardNavigation(
+                        to: LocalWorkDestination.reader(work),
+                        accessibilityLabel: work.title
+                    )
                     .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                 }
             }

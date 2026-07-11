@@ -21,6 +21,7 @@ struct CommentsView: View {
     var onRequestExpand: (() -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
 
@@ -211,7 +212,8 @@ struct CommentsView: View {
             onDelete: { pendingDelete = $0 },
             onCopyLink: { copyLink($0) },
             onFocusThread: { focusThread($0, proxy: scrollProxy) },
-            onRequestLogin: { showingLogin = true }
+            onRequestLogin: { showingLogin = true },
+            onOpenAuthor: openAuthor
         )
     }
 
@@ -230,10 +232,17 @@ struct CommentsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !workContext.authors.isEmpty {
-                    Label(workContext.authors.joined(separator: ", "), systemImage: "person")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    HStack(alignment: .top, spacing: 7) {
+                        Image(systemName: "person")
+                            .foregroundStyle(.secondary)
+                        AO3AuthorBylineView(
+                            names: workContext.authors,
+                            identities: workContext.authorIdentities,
+                            includesBy: false,
+                            font: .subheadline,
+                            onOpenRoute: openAuthor
+                        )
+                    }
                 }
 
                 if !workContext.fandoms.isEmpty {
@@ -408,6 +417,7 @@ struct CommentsView: View {
                         showChapterBadge: model.scope == .all,
                         startsExpanded: forceExpandedRootIDs.contains(comment.id)
                     )
+                    .id(comment.id)
                 }
                 .environment(\.commentHighlightID, highlightedCommentID)
                 .environment(\.commentThreadHandlers, threadHandlers(scrollProxy: scrollProxy))
@@ -416,6 +426,11 @@ struct CommentsView: View {
                 }
             }
         }
+    }
+
+    private func openAuthor(_ route: AO3AuthorRoute) {
+        if isModal { dismiss() }
+        router.openAuthorProfile(route)
     }
 
     private var staleBanner: some View {

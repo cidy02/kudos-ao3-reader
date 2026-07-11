@@ -613,6 +613,9 @@ enum ReadingQueueService {
     static func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
         work.ao3WorkID = summary.id
         if work.author.isEmpty { work.author = summary.authorText }
+        if !summary.authorIdentities.isEmpty {
+            work.verifiedAuthorIdentities = summary.authorIdentities
+        }
         if work.workFandoms.isEmpty { work.workFandoms = summary.fandoms }
         if work.rating.isEmpty { work.rating = summary.rating }
         if work.workWarnings.isEmpty { work.workWarnings = summary.warnings }

@@ -10,6 +10,9 @@ struct AO3WorkSummary: Identifiable, Hashable {
     let id: Int
     var title: String
     var authors: [String]
+    /// Verified identities parsed from the same AO3 byline links as `authors`.
+    /// Kept alongside the legacy strings so existing consumers remain compatible.
+    var authorIdentities: [AO3AuthorIdentity] = []
     var fandoms: [String]
     var rating: String
     var warnings: [String]
@@ -45,9 +48,15 @@ struct AO3WorkSummary: Identifiable, Hashable {
     /// A sparse summary for a *work subscription*. AO3's subscriptions page lists only
     /// each work's title, id, and author — no stats, fandoms, or rating — so those
     /// fields stay empty here; opening the work loads its full detail page.
-    static func subscription(id: Int, title: String, authors: [String]) -> AO3WorkSummary {
+    static func subscription(
+        id: Int,
+        title: String,
+        authors: [String],
+        authorIdentities: [AO3AuthorIdentity] = []
+    ) -> AO3WorkSummary {
         AO3WorkSummary(
-            id: id, title: title, authors: authors, fandoms: [], rating: "",
+            id: id, title: title, authors: authors, authorIdentities: authorIdentities,
+            fandoms: [], rating: "",
             warnings: [], categories: [], isComplete: nil, dateUpdated: "",
             tags: [], summary: "", language: "", words: nil, chapters: "",
             comments: nil, kudos: nil, hits: nil,
@@ -561,6 +570,7 @@ nonisolated struct AO3WorkMetadata {
     var id: Int
     var title: String = ""
     var authors: [String] = []
+    var authorIdentities: [AO3AuthorIdentity] = []
     var summary: String = ""
     var rating: String = ""
     var fandoms: [String] = []
@@ -608,6 +618,7 @@ nonisolated struct AO3WorkMetadata {
             id: id,
             title: title,
             authors: authors,
+            authorIdentities: authorIdentities,
             fandoms: fandoms,
             rating: rating,
             warnings: warnings,
@@ -651,6 +662,8 @@ struct AO3Collection: Identifiable, Hashable {
     var name: String
     var title: String
     var byline: String = ""
+    var maintainerNames: [String] = []
+    var maintainerIdentities: [AO3AuthorIdentity] = []
     var id: String {
         name
     }

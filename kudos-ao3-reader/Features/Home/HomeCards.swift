@@ -18,8 +18,17 @@ struct WorkCoverCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !work.author.isEmpty {
-                    CardMetaLabel(text: work.author, symbol: "person")
-                        .font(.caption)
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "person")
+                            .foregroundStyle(.tint)
+                        AO3AuthorBylineView(
+                            displayText: work.author,
+                            identities: work.verifiedAuthorIdentities,
+                            includesBy: false,
+                            font: .caption,
+                            compact: true
+                        )
+                    }
                 }
 
                 if let fandom = work.workFandoms.first, !fandom.isEmpty {
@@ -143,9 +152,18 @@ struct AO3WorkCoverCard: View {
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let author = work.authors.first, !author.isEmpty {
-                    CardMetaLabel(text: author, symbol: "person")
-                        .font(.caption)
+                if !work.authors.isEmpty {
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "person")
+                            .foregroundStyle(.tint)
+                        AO3AuthorBylineView(
+                            names: work.authors,
+                            identities: work.authorIdentities,
+                            includesBy: false,
+                            font: .caption,
+                            compact: true
+                        )
+                    }
                 }
 
                 if let fandom = work.fandoms.first, !fandom.isEmpty {
@@ -274,7 +292,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     }
 }
 
-private struct WorkStateBadge: View {
+struct WorkStateBadge: View {
     let text: String
     let symbol: String
 

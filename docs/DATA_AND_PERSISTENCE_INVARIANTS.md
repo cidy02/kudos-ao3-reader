@@ -1,6 +1,6 @@
 # DATA_AND_PERSISTENCE_INVARIANTS.md
 
-Rules that protect user data. Breaking any of these is a regression even if tests pass. Confirmed as of 2026-07-07.
+Rules that protect user data. Breaking any of these is a regression even if tests pass. Confirmed as of 2026-07-10.
 
 ## Never lose
 
@@ -14,6 +14,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 |---|---|---|
 | SwiftData store (`Models.swift`) + EPUB files (`Storage.workAssetURL`) | **Source of truth** | Application Support; included in device backups. |
 | `searchText`/`searchIndexVersion` | Derived, rebuildable | Never in backups (test-asserted); `reindex` never calls `markModified`; version-stamped launch rebuild (`WorkSearchIndex.rebuildIfNeeded`). |
+| `authorIdentitiesJSON` | AO3-derived enrichment | Additive default-empty SwiftData field. Persist only identities parsed from AO3 links; never infer from `SavedWork.author`. Intentionally omitted from `.kudosbackup`, so restored legacy text remains visible but non-tappable until a later AO3 refresh. |
 | `.kudosbackup` package | Transport/backup | Manifest v7 + EPUB/font blobs. Carries source-of-truth fields incl. progress, flags, tombstones, settings, collections, queues+memberships. Versioned decode v1–v7; **fractional-second date encoder with whole-second decode fallback** — never regress either side. |
 | Folder sync (`FolderSyncService`) | Transport over iCloud Drive | Same package, one file `KudosLibrary.kudosbackup` in a user-picked folder (security-scoped bookmark in UserDefaults — dies on reinstall, file survives). No CloudKit/entitlements. `lastTagRefreshAttemptAt` is deliberately device-local (not in backups). |
 
@@ -22,6 +23,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Identity tiers: **AO3 work ID → canonical AO3 URL → record UUID** — only via `WorkIdentityIndex`. Never write a new matcher.
 - No DB-level uniqueness on `SavedWork`; dedup is application-level. `importEPUB` re-checks `existingWork(forSource:)` **after** the awaited download and merges (fill-only) into any match — keep this; it closes the TOCTOU race.
 - **Re-acquiring revives**: any acquisition path (save, import, queue add, download) that matches a Recently-Deleted record must `PreservedWorkService.restore` it, never duplicate it or mutate it while hidden.
+- Author display text is not an AO3 identifier. Only `AO3AuthorIdentity.route` may drive native profile navigation; anonymous/deleted/guest text and old local imports stay non-navigable.
 
 ## Merge rules (backup restore + folder sync share them)
 

@@ -67,6 +67,56 @@ struct KudosBackupTests {
         #expect(decoded.fontFiles[font.fileName] == fontData)
     }
 
+    @Test func authorIdentityPersistsLocallyWithoutChangingBackupSchema() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let sourceContainer = try ModelContainer(
+            for: schema,
+            configurations: [sourceConfiguration]
+        )
+        let sourceContext = ModelContext(sourceContainer)
+        let route = try #require(AO3AuthorRoute(
+            username: "Avery_Archive",
+            pseud: "Avery Writes"
+        ))
+        let identity = AO3AuthorIdentity(route: route, displayName: "Avery Writes")
+        let work = SavedWork(title: "Identity Work", author: "Avery Writes")
+        work.verifiedAuthorIdentities = [identity]
+        sourceContext.insert(work)
+        try sourceContext.save()
+
+        let persisted = try #require(sourceContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(persisted.verifiedAuthorIdentities == [identity])
+
+        let document = try KudosBackupService.makeDocument(
+            works: [persisted],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let targetConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let targetContainer = try ModelContainer(
+            for: schema,
+            configurations: [targetConfiguration]
+        )
+        let targetContext = ModelContext(targetContainer)
+
+        _ = try KudosBackupService.restore(
+            document.contents,
+            into: targetContext,
+            defaults: try testDefaults()
+        )
+
+        let restored = try #require(targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.author == "Avery Writes")
+        #expect(restored.verifiedAuthorIdentities.isEmpty)
+        #expect(document.contents.manifest.version == KudosBackupManifest.currentVersion)
+    }
+
     @Test func restoreMergesRecordsTagsAssetsAndSettings() throws {
         let sourceDefaults = try testDefaults()
         sourceDefaults.set(false, forKey: "hideMatureContent")

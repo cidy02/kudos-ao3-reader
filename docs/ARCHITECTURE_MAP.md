@@ -1,6 +1,6 @@
 # ARCHITECTURE_MAP.md — where everything lives
 
-All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-07 (branch `release-hardening`).
+All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-10.
 
 ## App shell & navigation
 
@@ -8,7 +8,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 |---|---|
 | App entry, shared `ModelContainer`, BGTask registration | `App/MyApp.swift` |
 | Root TabView, launch housekeeping (`.task`: session restore → queue normalize → migration → Recently-Deleted sweep → index rebuild → folder sync), scene-phase sync triggers | `App/ContentView.swift` |
-| Cross-tab routing (tag→search, pending URLs, inspector panel ownership) | `AppRouter` (grep `class AppRouter`) |
+| Cross-tab routing (tag→search, native author profiles, pending URLs, inspector panel ownership) | `App/AppRouter.swift`; author destinations registered by `UIComponents/AO3AuthorNavigation.swift` |
 
 ## Feature surfaces
 
@@ -20,6 +20,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Browse (categories → fandoms → works; multi-select batch actions) | `Features/Browse/NativeBrowseView.swift` (`BrowseView`, `FandomWorksView`, `TagWorksView`), `Features/Search/MediaBrowserView.swift`, `FandomListView.swift`, `FandomCatalog.swift` |
 | Search (global: local index matches + AO3 search) | `Features/Search/SearchView.swift`, `AO3WorkRow.swift` (remote result row, selection-capable) |
 | Account (AO3 lists, local history/favorites) | `Features/Account/AccountView.swift`, `PrivacyDataView.swift`, `Features/Bookmarks/AO3AccountWorksList.swift` (shared by Subscriptions/Bookmarks/MFL/History/My Works/collections) |
+| Native AO3 author profiles (pseud scope, Works/Series/Bookmarks/About, series detail) | `Features/Authors/AuthorProfileView.swift`, `AuthorProfileComponents.swift`, `AO3SeriesDetailView.swift`; shared tappable bylines in `UIComponents/AO3AuthorNavigation.swift` |
 | Settings (fonts, backup, folder sync, EPUB import, privacy prefs) | `Settings/SettingsView.swift` — ONE enum-driven `.fileImporter` (`FileImportKind`), see onboarding pitfalls |
 | Reader — iOS | `Features/ReaderReadium/ReadiumReaderView.swift` (progress saved per `locationDidChange` via `book.onLocatorChange` → `readiumLocator` + save) |
 | Reader — macOS (legacy) | `Features/Reader/ReaderView.swift` + `ReaderController.swift` (`#if os(macOS)`); progress = `lastSpineIndex`/`lastScrollFraction` *(inferred from Models fields; verify before editing)* |
@@ -35,6 +36,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Auth (WebKit login, Keychain session, validator, `authenticatedRequest`, `accountWorks`) | `Services/AO3AuthService.swift` (incl. `AO3RequestDefaults.userAgent` — the single UA), `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift` |
 | Write actions (kudos/comments; CSRF; never retried/coalesced) | `Services/AO3WriteActions.swift` + `AO3Client.submitWrite` ⚠️ never live-verified against AO3 |
 | Tag/metadata enrichment | `Services/WorkTags.swift` (24h attempt cooldown), `WorkMetadataRefresh.swift`, `WorkUpdateChecker.swift` (WIP-only, 6h throttle incl. failures) |
+| Author/profile parsing, lazy state, and auth-scoped 5-minute HTML cache | `Services/AO3Client+Authors.swift`, `AO3AuthorProfileService.swift`; values/routes in `Models/AO3AuthorModels.swift` |
 | Download queue (sequential, skip/revive existing) | `Services/DownloadQueue.swift` |
 | EPUB import funnels | `Services/WorkImporter.swift` — `importEPUB` (AO3 downloads; post-download dedup/merge/revive) and `importUserEPUB` (user files) |
 
@@ -57,6 +59,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | 3-tier work identity (AO3 id → canonical URL → record UUID) | `Services/WorkIdentityIndex.swift` — the ONLY matcher; used by restore, context menus, queue service, canonical merge |
 | Local/remote card dedup (`remoteLed` / `remoteOnly`) | `Services/CanonicalWorkMerge.swift` + `Models/CanonicalWork.swift` |
 | Derived search index (normalize/reindex/match/rebuild) | `Services/WorkSearchIndex.swift`; fields `SavedWork.searchText` + `searchIndexVersion` |
+| Verified AO3 account/pseud identity | `Models/AO3AuthorModels.swift`; parsed beside legacy author strings and persisted as `SavedWork.authorIdentitiesJSON` only after AO3 enrichment; never infer routes from display text |
 | Queue service (membership, preservation, `resolveLocalWork`, `addToSavedForLater`, series preservation) | `Services/ReadingQueueService.swift` |
 
 ## Privacy / M-E blur

@@ -50,18 +50,23 @@ struct AO3CollectionsList: View {
             List {
                 Section {
                     ForEach(collections) { collection in
-                        NavigationLink(value: AO3AccountWorksList.Kind.collection(
-                            name: collection.name, title: collection.title)) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(collection.title).foregroundStyle(.primary)
-                                    if !collection.byline.isEmpty {
-                                        Text(collection.byline)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(collection.title).foregroundStyle(.primary)
+                            if !collection.byline.isEmpty {
+                                AO3AuthorBylineView(
+                                    names: collection.maintainerNames,
+                                    identities: collection.maintainerIdentities,
+                                    fallbackText: collection.byline,
+                                    includesBy: !collection.maintainerNames.isEmpty,
+                                    font: .caption,
+                                    compact: true
+                                )
                             }
+                        }
+                        .cardNavigation(to: AO3AccountWorksList.Kind.collection(
+                            name: collection.name,
+                            title: collection.title
+                        ))
                     }
                     .cardRow()
                 }

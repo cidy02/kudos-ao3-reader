@@ -45,6 +45,7 @@ struct AccountView: View {
                 .navigationDestination(for: AO3AccountWorksList.Kind.self) { AO3AccountWorksList(kind: $0) }
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .ao3AuthorNavigation(path: $path, tab: .account)
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
                 .sheet(isPresented: $showingAbout) { NavigationStack { AboutView() } }
                 .sheet(isPresented: $showingBugReport) { BugReportView() }

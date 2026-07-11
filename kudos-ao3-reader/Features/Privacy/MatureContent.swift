@@ -130,6 +130,7 @@ struct SensitiveWorkRow: View {
             // at the card's true edge, not from an overlay here (matches WorkRow).
             let isExpandableWork = WorkRow.isExpandable(for: work)
             let content = WorkRow(work: work, showsExpandButton: false, externalExpanded: $blurredExpanded)
+                .environment(\.ao3AuthorNavigationEnabled, false)
                 .blur(radius: 6)
                 .overlay {
                     // Only while a tap would actually reveal — in select mode a tap
@@ -237,6 +238,7 @@ struct SensitiveWorkCoverCard: View {
     var body: some View {
         if blurred {
             let card = WorkCoverCard(work: work, footer: footer, progress: progress)
+                .environment(\.ao3AuthorNavigationEnabled, false)
                 .blur(radius: 6)
                 .overlay {
                     // Only while a tap would actually reveal — in select mode a tap

@@ -83,6 +83,10 @@ final class AppRouter {
     /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
     /// work's preface). Consumed + cleared by `BrowseView`.
     var pendingTagWorks: AO3TagWorksRequest?
+    /// A verified account/pseud destination to push in the currently-selected tab's
+    /// navigation stack. Every root stack consumes this through the shared author
+    /// navigation modifier, so reader/comment/byline links use one route.
+    var pendingAuthorProfile: AO3AuthorRoute?
 
     /// The one right-hand inspector panel open anywhere in the app. Routing every
     /// panel (Settings, Search filters, Reader chapters/display) through a single
@@ -104,6 +108,10 @@ final class AppRouter {
     /// action where one exists — a tag's `/tags/<name>/works` page opens a native
     /// works list — falling back to the in-app web view for everything else.
     func openAO3Link(_ url: URL) {
+        if let author = Self.authorRoute(for: url) {
+            openAuthorProfile(author)
+            return
+        }
         let parts = url.pathComponents.filter { $0 != "/" }
         if (url.host ?? "").contains("archiveofourown.org"),
            parts.first == "tags", parts.count >= 2 {
@@ -112,6 +120,17 @@ final class AppRouter {
             return
         }
         open(url)
+    }
+
+    /// Pushes a verified author route without changing tabs. Keeping the current
+    /// stack means a byline tap returns to the exact work, comment, or reader entry
+    /// point on Back.
+    func openAuthorProfile(_ route: AO3AuthorRoute) {
+        pendingAuthorProfile = route
+    }
+
+    static func authorRoute(for url: URL) -> AO3AuthorRoute? {
+        AO3AuthorRoute(url: url)
     }
 
     /// Turns an AO3 tag URL slug back into a readable name (AO3 escapes `/ & . ? #`).

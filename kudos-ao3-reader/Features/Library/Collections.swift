@@ -405,6 +405,7 @@ struct AddWorksToCollectionView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -448,12 +449,8 @@ struct AddWorksToCollectionView: View {
                 } else {
                     List {
                         ForEach(filtered) { work in
-                            Button {
-                                toggle(work)
-                            } label: {
-                                row(work)
-                            }
-                            .buttonStyle(.plain)
+                            Button { toggle(work) } label: { row(work) }
+                                .buttonStyle(.plain)
                         }
                         .appThemedRows()
                         if filtered.isEmpty {
@@ -493,10 +490,16 @@ struct AddWorksToCollectionView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                 if !work.author.isEmpty {
-                    Text("by \(work.author)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    AO3AuthorBylineView(
+                        displayText: work.author,
+                        identities: work.verifiedAuthorIdentities,
+                        font: .caption,
+                        compact: true,
+                        onOpenRoute: { route in
+                            dismiss()
+                            router.openAuthorProfile(route)
+                        }
+                    )
                 }
             }
             Spacer(minLength: 8)
