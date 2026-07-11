@@ -232,9 +232,10 @@ struct CommentsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !workContext.authors.isEmpty {
-                    HStack(alignment: .top, spacing: 7) {
-                        Image(systemName: "person")
-                            .foregroundStyle(.secondary)
+                    // A real Label (not a hand-rolled HStack) so the icon lines up
+                    // with the Fandoms Label right below it — a raw HStack can't
+                    // reproduce Label's exact icon size/gap/baseline alignment.
+                    Label {
                         AO3AuthorBylineView(
                             names: workContext.authors,
                             identities: workContext.authorIdentities,
@@ -242,6 +243,9 @@ struct CommentsView: View {
                             font: .subheadline,
                             onOpenRoute: openAuthor
                         )
+                    } icon: {
+                        Image(systemName: "person")
+                            .foregroundStyle(.secondary)
                     }
                 }
 

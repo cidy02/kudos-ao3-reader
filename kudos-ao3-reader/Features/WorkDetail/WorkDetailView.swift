@@ -175,15 +175,19 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !displayAuthor.isEmpty {
-                    HStack(alignment: .top, spacing: 7) {
-                        Image(systemName: "person")
-                            .foregroundStyle(.secondary)
+                    // A real Label (not a hand-rolled HStack) so the icon lines up
+                    // with the Fandoms Label right below it — a raw HStack can't
+                    // reproduce Label's exact icon size/gap/baseline alignment.
+                    Label {
                         AO3AuthorBylineView(
                             names: displayAuthorList,
                             identities: displayAuthorIdentities,
                             includesBy: false,
                             font: .subheadline
                         )
+                    } icon: {
+                        Image(systemName: "person")
+                            .foregroundStyle(.secondary)
                     }
                 }
 
