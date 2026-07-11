@@ -11,10 +11,12 @@ import SwiftUI
 /// in depth-first order.
 enum CommentThreadGeometry {
     static let cardPadding: CGFloat = 14
-    static let cardCornerRadius: CGFloat = 16
+    /// Comment cards use the app-wide card radius, so a thread card reads exactly
+    /// like a Library/Search card rather than a near-miss.
+    static let cardCornerRadius = CardListMetrics.cornerRadius
     static let nestedCardPadding: CGFloat = 12
-    static let nestedCardCornerRadius: CGFloat = 14
-    static let nestedCardSpacing: CGFloat = 12
+    static let nestedCardCornerRadius = CardListMetrics.cornerRadius
+    static let nestedCardSpacing = CardListMetrics.interCardSpacing
     static let avatarSize: CGFloat = 40
     static let avatarColumnWidth: CGFloat = avatarSize
     static let avatarContentSpacing: CGFloat = 10
@@ -22,43 +24,42 @@ enum CommentThreadGeometry {
     /// never breaks across SwiftUI `VStack` spacing.
     static let postSpacing: CGFloat = 12
     static let spineWidth: CGFloat = 2
-    /// Card nesting cap: root shell + reply shells only (reply cards are never
-    /// nested inside each other).
-    static let maximumCardDepth = 1
-    /// Direct-reply stacks larger than this start collapsed.
-    static let autoExpandedMaxDirectReplies = 8
+    /// Reply cards carry their own `nestedCardPadding`, which insets their avatars
+    /// from the card's edge. The root post and the bridges between reply cards take
+    /// the SAME leading inset, so every avatar — and the rail joining them — sits on
+    /// one column. Without it the rail misses each reply avatar by exactly
+    /// `nestedCardPadding`.
+    static let railInset: CGFloat = nestedCardPadding
+    /// Shared centre of the avatar rail, from the root card's content edge.
+    static let railCenterX: CGFloat = railInset + avatarColumnWidth / 2
+    /// Reply stacks larger than this start collapsed. Counts EVERY reply in the
+    /// thread — the whole depth-first stack is what expanding actually renders —
+    /// not just the root's direct children.
+    static let autoExpandedMaxReplies = 8
     /// Collapsed body height before "Read more".
     static let collapsedBodyLineLimit = 5
-    /// Character budget roughly matching ~5 lines of body text; longer bodies
-    /// (or more hard newlines than the line limit) get a Read more control.
-    static let collapsedBodyCharacterBudget = collapsedBodyLineLimit * 55
-
-    static func avatarCenterX(forDepth depth: Int) -> CGFloat {
-        _ = depth
-        return avatarColumnWidth / 2
-    }
-
-    /// Whether the body should offer expand/collapse (pure, testable).
-    static func bodyNeedsExpansion(_ text: String) -> Bool {
-        guard !text.isEmpty else { return false }
-        let newlineCount = text.reduce(into: 0) { count, char in
-            if char.isNewline { count += 1 }
-        }
-        if newlineCount + 1 > collapsedBodyLineLimit { return true }
-        return text.count > collapsedBodyCharacterBudget
-    }
+    /// The focus tint is painted inside the card's own padding, so it is
+    /// deliberately not the card's radius (it never touches the card's corners).
+    static let highlightCornerRadius: CGFloat = 12
 
     /// Depth-first list of every reply under a root (root itself excluded),
     /// each becoming its own nested card.
     static func flattenedReplies(from root: AO3Comment) -> [FlattenedReply] {
-        flatten(root.replies, depth: 1)
-    }
-
-    private static func flatten(_ comments: [AO3Comment], depth: Int) -> [FlattenedReply] {
-        comments.flatMap { comment in
-            [FlattenedReply(comment: comment, depth: depth)]
-                + flatten(comment.replies, depth: depth + 1)
+        var result: [FlattenedReply] = []
+        // An explicit stack, not recursion: AO3 doesn't cap reply nesting, and a
+        // long reply-to-reply chain would otherwise cost one frame per level. The
+        // single accumulator also avoids the O(depth²) copying that `[node] +
+        // flatten(children)` incurs at every level.
+        var stack: [FlattenedReply] = root.replies.reversed().map {
+            FlattenedReply(comment: $0, depth: 1)
         }
+        while let item = stack.popLast() {
+            result.append(item)
+            for child in item.comment.replies.reversed() {
+                stack.append(FlattenedReply(comment: child, depth: item.depth + 1))
+            }
+        }
+        return result
     }
 }
 
@@ -118,6 +119,9 @@ struct CommentThreadRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
     let showChapterBadge: Bool
+    /// Forced open by "Thread"/"Parent Thread" focus, so a collapsed thread can
+    /// never swallow the comment being scrolled to.
+    var startsExpanded = false
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentHighlightID) private var highlightedCommentID
@@ -128,30 +132,42 @@ struct CommentThreadRow: View {
         CommentThreadGeometry.flattenedReplies(from: comment)
     }
 
+    /// Gated on the total reply count, because expanding renders every descendant
+    /// (`replyItems`), not just the root's direct children.
     private var showsReplies: Bool {
-        comment.replies.count <= CommentThreadGeometry.autoExpandedMaxDirectReplies
-            || forceExpandReplies
+        forceExpandReplies || startsExpanded
+            || replyItems.count <= CommentThreadGeometry.autoExpandedMaxReplies
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let elevation = theme.appTheme.cardShadow
+        let replies = replyItems
+        let shape = RoundedRectangle(
+            cornerRadius: CommentThreadGeometry.cardCornerRadius,
+            style: .continuous
+        )
+
+        return VStack(alignment: .leading, spacing: 0) {
             // Root post — spine continues under the avatar when replies show.
             SpinePostRow(
                 comment: comment,
                 workAuthors: workAuthors,
                 showChapterBadge: showChapterBadge,
-                drawsSpineBelow: !comment.replies.isEmpty && showsReplies
+                drawsSpineBelow: !replies.isEmpty && showsReplies
             )
             .id(comment.id)
             .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
+            // Puts the root avatar on the same rail column as the reply avatars,
+            // which sit inside their own cards' padding.
+            .padding(.leading, CommentThreadGeometry.railInset)
 
-            if !comment.replies.isEmpty {
+            if !replies.isEmpty {
                 if showsReplies {
                     // Root post owns the only in-card spine (down to the first
                     // reply). Nested reply cards have no internal rail — only
                     // the bridges between them.
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(replyItems.enumerated()), id: \.element.id) { index, item in
+                        ForEach(Array(replies.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
                                 spineBridge(height: CommentThreadGeometry.nestedCardSpacing)
                             }
@@ -162,13 +178,14 @@ struct CommentThreadRow: View {
                         }
                     }
                 } else {
-                    expandRepliesButton(count: comment.replies.count) {
+                    expandRepliesButton(count: replies.count) {
                         forceExpandReplies = true
                     }
                     .padding(.top, CommentThreadGeometry.postSpacing)
                     .padding(
                         .leading,
-                        CommentThreadGeometry.avatarColumnWidth
+                        CommentThreadGeometry.railInset
+                            + CommentThreadGeometry.avatarColumnWidth
                             + CommentThreadGeometry.avatarContentSpacing
                     )
                 }
@@ -176,23 +193,23 @@ struct CommentThreadRow: View {
         }
         .padding(CommentThreadGeometry.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            theme.appTheme.cardSurface,
-            in: RoundedRectangle(
-                cornerRadius: CommentThreadGeometry.cardCornerRadius,
-                style: .continuous
-            )
-        )
+        .background(theme.appTheme.cardSurface, in: shape)
         .overlay {
-            RoundedRectangle(
-                cornerRadius: CommentThreadGeometry.cardCornerRadius,
-                style: .continuous
-            )
-            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+            shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
         }
+        // Same elevation every other card list gets (flat in Dark, by convention).
+        .shadow(color: elevation.color, radius: elevation.radius, x: 0, y: elevation.y)
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
+        .onAppear {
+            // Latch a naturally-expanded thread open. A reload that pushes it past
+            // the collapse threshold — commonly the user's OWN just-posted reply —
+            // must not snap it shut and hide the very reply they just wrote.
+            if replies.count <= CommentThreadGeometry.autoExpandedMaxReplies {
+                forceExpandReplies = true
+            }
+        }
     }
 
     private func spineBridge(height: CGFloat) -> some View {
@@ -201,6 +218,7 @@ struct CommentThreadRow: View {
                 .frame(width: CommentThreadGeometry.avatarColumnWidth, height: height)
             Spacer(minLength: 0)
         }
+        .padding(.leading, CommentThreadGeometry.railInset)
         .accessibilityHidden(true)
     }
 }
@@ -217,7 +235,7 @@ private struct NestedReplyCard: View {
     @Environment(\.commentHighlightID) private var highlightedCommentID
 
     var body: some View {
-        let elevation = theme.appTheme.nestedCardShadow
+        let elevation = theme.appTheme.cardShadow
         let shape = RoundedRectangle(
             cornerRadius: CommentThreadGeometry.nestedCardCornerRadius,
             style: .continuous
@@ -227,8 +245,7 @@ private struct NestedReplyCard: View {
             comment: comment,
             workAuthors: workAuthors,
             showChapterBadge: false,
-            drawsSpineBelow: false,
-            includeTrailingGap: false
+            drawsSpineBelow: false
         )
         .id(comment.id)
         .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
@@ -236,7 +253,9 @@ private struct NestedReplyCard: View {
         // to the leading edge (top used to be 8 while leading was 0).
         .padding(CommentThreadGeometry.nestedCardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.appTheme.cardSurface, in: shape)
+        // Dark reads the nesting off the surface (cards stay flat there); Light and
+        // Sepia keep `cardSurface` and lift with the same shadow every card uses.
+        .background(theme.appTheme.nestedCardSurface, in: shape)
         .overlay {
             shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
         }
@@ -258,10 +277,9 @@ private struct SpinePostRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
     let showChapterBadge: Bool
+    /// Also reserves `postSpacing` under the body and fills it with rail, so the
+    /// next avatar sits on a continuous line.
     let drawsSpineBelow: Bool
-    /// When true, reserves `postSpacing` under the body and fills it with rail
-    /// so the next avatar sits on a continuous line.
-    var includeTrailingGap: Bool = true
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -271,12 +289,16 @@ private struct SpinePostRow: View {
         workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
     }
 
-    private var reserveGap: Bool {
-        drawsSpineBelow && includeTrailingGap
-    }
-
     var body: some View {
-        HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
+        // Formatted once and handed to both byline candidates: `ViewThatFits` builds
+        // every candidate in order to measure it, and the date formatting isn't free.
+        let timestamp = comment.postedText.isEmpty
+            ? ""
+            : AO3CommentTimestamp.displayText(
+                rawText: comment.postedText, date: comment.postedAt
+            )
+
+        return HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
             VStack(spacing: 0) {
                 CommentAvatar(comment: comment, size: CommentThreadGeometry.avatarSize)
                     .frame(
@@ -292,8 +314,8 @@ private struct SpinePostRow: View {
             .frame(width: CommentThreadGeometry.avatarColumnWidth, alignment: .top)
 
             VStack(alignment: .leading, spacing: 0) {
-                commentBody
-                if reserveGap {
+                commentBody(timestamp: timestamp)
+                if drawsSpineBelow {
                     Color.clear
                         .frame(height: CommentThreadGeometry.postSpacing)
                         .accessibilityHidden(true)
@@ -303,35 +325,46 @@ private struct SpinePostRow: View {
         }
     }
 
-    private var commentBody: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            byline
-            if !comment.bodyText.isEmpty {
-                ExpandableCommentBody(text: comment.bodyText)
+    @ViewBuilder
+    private func commentBody(timestamp: String) -> some View {
+        if comment.isDeleted {
+            // Deleted-comment tombstone, presented the way AO3 itself does: just
+            // the placeholder text — no byline, no actions (AO3 renders none).
+            // The avatar placeholder stays so the reply rail passes through.
+            Text(comment.bodyText.isEmpty ? "(Previous comment deleted.)" : comment.bodyText)
+                .font(.subheadline.italic())
+                .foregroundStyle(.secondary)
+                .frame(minHeight: CommentThreadGeometry.avatarSize, alignment: .center)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                byline(timestamp: timestamp)
+                if !comment.bodyText.isEmpty {
+                    ExpandableCommentBody(text: comment.bodyText)
+                }
+                // Tighter gap above the action strip so bottom padding matches the
+                // card’s side inset instead of a tall empty actions band.
+                actionsRow
+                    .padding(.top, 2)
             }
-            // Tighter gap above the action strip so bottom padding matches the
-            // card’s side inset instead of a tall empty actions band.
-            actionsRow
-                .padding(.top, 2)
         }
     }
 
-    private var byline: some View {
+    private func byline(timestamp: String) -> some View {
         // Prefer author + timestamp on one line; when the timestamp won't fit
         // next to the name (long names, Author/Guest + chapter badge), drop it
         // onto the line under the author.
         ViewThatFits(in: .horizontal) {
-            bylineSingleLine
-            bylineWrappedTimestamp
+            bylineSingleLine(timestamp: timestamp)
+            bylineWrappedTimestamp(timestamp: timestamp)
         }
     }
 
     /// Author, role badge, and timestamp on one row (preferred when space allows).
-    private var bylineSingleLine: some View {
+    private func bylineSingleLine(timestamp: String) -> some View {
         HStack(alignment: .center, spacing: 6) {
             authorIdentity
-            if !comment.postedText.isEmpty {
-                timestampText
+            if !timestamp.isEmpty {
+                timestampText(timestamp)
             }
             Spacer(minLength: 4)
             chapterBadge
@@ -339,12 +372,12 @@ private struct SpinePostRow: View {
     }
 
     /// Timestamp under the author when the single-line layout is too wide.
-    private var bylineWrappedTimestamp: some View {
+    private func bylineWrappedTimestamp(timestamp: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
                 authorIdentity
-                if !comment.postedText.isEmpty {
-                    timestampText
+                if !timestamp.isEmpty {
+                    timestampText(timestamp)
                 }
             }
             .layoutPriority(1)
@@ -376,14 +409,11 @@ private struct SpinePostRow: View {
         }
     }
 
-    private var timestampText: some View {
-        Text(AO3CommentTimestamp.displayText(
-            rawText: comment.postedText,
-            date: comment.postedAt
-        ))
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
+    private func timestampText(_ timestamp: String) -> some View {
+        Text(timestamp)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
     }
 
     @ViewBuilder
@@ -469,20 +499,22 @@ private struct SpinePostRow: View {
 private struct ExpandableCommentBody: View {
     let text: String
     @State private var isExpanded = false
+    @State private var clampedHeight: CGFloat = 0
+    @State private var fullHeight: CGFloat = 0
 
+    /// Truncation is a layout fact. A character budget can't know the reader's
+    /// Dynamic Type size or the card's width, so it both misses long comments at
+    /// accessibility sizes and offers "Read more" on short ones.
     private var needsExpansion: Bool {
-        CommentThreadGeometry.bodyNeedsExpansion(text)
+        fullHeight > clampedHeight + 0.5
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .lineLimit(isExpanded || !needsExpansion
-                    ? nil
-                    : CommentThreadGeometry.collapsedBodyLineLimit)
+            bodyText
+                .lineLimit(isExpanded ? nil : CommentThreadGeometry.collapsedBodyLineLimit)
                 .fixedSize(horizontal: false, vertical: true)
+                .background(alignment: .top) { truncationProbes }
 
             if needsExpansion {
                 Button {
@@ -502,6 +534,37 @@ private struct ExpandableCommentBody: View {
             }
         }
     }
+
+    private var bodyText: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+    }
+
+    /// Hidden copies of the body laid out at the live width: one clamped to the
+    /// collapsed line limit, one unclamped. The unclamped copy being taller is the
+    /// only reliable "this truncates" signal. Measured with the clamp always
+    /// applied, so the control survives expanding (it becomes "Show less"). Neither
+    /// height depends on `needsExpansion`, so this can't feed back into layout.
+    private var truncationProbes: some View {
+        ZStack(alignment: .top) {
+            bodyText
+                .lineLimit(CommentThreadGeometry.collapsedBodyLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                    clampedHeight = $0
+                }
+            bodyText
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                    fullHeight = $0
+                }
+        }
+        .hidden()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 }
 
 // MARK: - Spine primitive
@@ -511,7 +574,7 @@ private struct ThreadSpineSegment: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.primary.opacity(theme.appTheme == .dark ? 0.28 : 0.16))
+            .fill(theme.appTheme.threadSpine)
             .frame(width: CommentThreadGeometry.spineWidth)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityHidden(true)
@@ -528,8 +591,11 @@ private extension View {
         self
             .background {
                 if isHighlighted {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.12))
+                    RoundedRectangle(
+                        cornerRadius: CommentThreadGeometry.highlightCornerRadius,
+                        style: .continuous
+                    )
+                    .fill(Color.accentColor.opacity(0.12))
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: isHighlighted)

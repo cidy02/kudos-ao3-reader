@@ -16,6 +16,21 @@ enum AO3CommentTimestamp {
         "EEE dd MMM yyyy HH:mm Z"
     ]
 
+    /// Built once rather than nine fresh `DateFormatter`s per call — `displayText`
+    /// falls back to `parse` on every render for any comment whose timestamp didn't
+    /// parse at scrape time. Configured here and only read afterwards, which is the
+    /// documented thread-safe use of `DateFormatter`.
+    nonisolated(unsafe) private static let parseFormatters: [DateFormatter] = parseFormats.map {
+        format in
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = format
+        formatter.isLenient = false
+        return formatter
+    }
+
     nonisolated static func parse(_ rawText: String) -> Date? {
         let normalized = rawText
             .replacingOccurrences(of: "\u{00a0}", with: " ")
@@ -23,13 +38,7 @@ enum AO3CommentTimestamp {
             .joined(separator: " ")
         guard !normalized.isEmpty else { return nil }
 
-        for format in parseFormats {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.calendar = Calendar(identifier: .gregorian)
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            formatter.dateFormat = format
-            formatter.isLenient = false
+        for formatter in parseFormatters {
             if let date = formatter.date(from: normalized) {
                 return date
             }

@@ -132,9 +132,15 @@ extension AO3Client {
         return comments
     }
 
-    /// One `li.comment`. Returns nil when the `li` carries no parseable id —
-    /// deleted-comment placeholders and future markup drift degrade to "skipped",
-    /// never to a crash.
+    /// One `li.comment`. Returns nil when the `li` carries no parseable id, so
+    /// future markup drift degrades to "skipped", never to a crash.
+    ///
+    /// A deleted comment whose replies survive keeps its id but renders ONLY
+    /// `<p>(Previous comment deleted.)</p>` — no byline, body, or actions
+    /// (verified live 2026-07-10). That parses as a tombstone (`isDeleted`),
+    /// not nil: dropping the node would graft its replies onto the preceding
+    /// sibling, since `parseThread` attaches a reply wrapper to the last
+    /// comment it appended.
     private static func parseComment(_ li: Element) throws -> AO3Comment? {
         let idAttr = li.id() // "comment_1252794206"
         guard idAttr.hasPrefix("comment_"), let id = Int(idAttr.dropFirst("comment_".count)) else {
@@ -142,32 +148,40 @@ extension AO3Client {
         }
         var comment = AO3Comment(id: id, author: "", isGuest: false)
 
-        if let byline = try li.select("h4.heading.byline").first() {
-            if let userLink = try byline.select("a[href^=/users/]").first() {
-                comment.author = try userLink.text()
-                comment.userPath = try userLink.attr("href")
-            } else {
-                // Guest byline: `<span>Name</span><span class="role"> (Guest)</span>`.
-                comment.isGuest = true
-                comment.author = try byline.children().array()
-                    .first(where: { $0.tagName() == "span" && !$0.hasClass("role")
-                        && !$0.hasClass("parent") && !$0.hasClass("posted") })
-                    .map { try $0.text() } ?? "Guest"
-            }
-            if let chapterLink = try byline.select("span.parent a[href*=/chapters/]").first() {
-                comment.chapterLabel = try chapterLink.text()
-                let href = try chapterLink.attr("href")
-                if let last = href.split(separator: "/").last { comment.chapterID = Int(last) }
-            }
-            if let posted = try byline.select("span.posted.datetime").first() {
-                comment.postedText = try posted.text()
-                comment.postedAt = AO3CommentTimestamp.parse(comment.postedText)
-            }
+        guard let byline = try li.select("h4.heading.byline").first() else {
+            comment.isDeleted = true
+            // AO3's own placeholder wording ("(Previous comment deleted.)"),
+            // kept verbatim so the tombstone reads exactly like the site.
+            comment.bodyText = try li.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            return comment
+        }
+
+        if let userLink = try byline.select("a[href^=/users/]").first() {
+            comment.author = try userLink.text()
+            comment.userPath = try userLink.attr("href")
+        } else {
+            // Guest byline: `<span>Name</span><span class="role"> (Guest)</span>`.
+            comment.isGuest = true
+            comment.author = try byline.children().array()
+                .first(where: { $0.tagName() == "span" && !$0.hasClass("role")
+                    && !$0.hasClass("parent") && !$0.hasClass("posted") })
+                .map { try $0.text() } ?? "Guest"
+        }
+        if let chapterLink = try byline.select("span.parent a[href*=/chapters/]").first() {
+            comment.chapterLabel = try chapterLink.text()
+            let href = try chapterLink.attr("href")
+            if let last = href.split(separator: "/").last { comment.chapterID = Int(last) }
+        }
+        if let posted = try byline.select("span.posted.datetime").first() {
+            comment.postedText = try posted.text()
+            comment.postedAt = AO3CommentTimestamp.parse(comment.postedText)
         }
         // AO3 includes the user icon in the comment itself. Use only that URL —
         // never follow the profile link or issue a separate discovery request.
+        // Accounts with no uploaded icon get AO3's own logo, which `avatarURL`
+        // rejects so the app's generic placeholder shows instead.
         if !comment.isGuest, let icon = try li.select("div.icon img.icon[src]").first() {
-            comment.avatarURL = AO3Comment.ao3URL(for: try icon.attr("src"))
+            comment.avatarURL = AO3Comment.avatarURL(forIconSource: try icon.attr("src"))
         }
 
         // Body: this comment's own blockquote. Replies are structurally siblings

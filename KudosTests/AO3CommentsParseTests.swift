@@ -172,28 +172,72 @@ struct AO3CommentsParseTests {
         #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    @Test func twoLevelCardsAndSharedSpineColumn() {
-        // Card shells: root + one nested card per reply (never card-in-card).
-        #expect(CommentThreadGeometry.maximumCardDepth == 1)
+    /// The rail must pass through the centre of EVERY avatar. Reply cards inset
+    /// their avatars by their own `nestedCardPadding`, so the root post and the
+    /// bridges take the same `railInset` — otherwise the spine misses each reply
+    /// avatar by exactly that padding.
+    @Test func rootAndReplyAvatarsShareOneRailColumn() {
         #expect(CommentThreadGeometry.avatarSize == 40)
         #expect(CommentThreadGeometry.avatarColumnWidth == 40)
-        let center = CommentThreadGeometry.avatarColumnWidth / 2
-        for depth in 0...6 {
-            #expect(CommentThreadGeometry.avatarCenterX(forDepth: depth) == center)
-        }
-        #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies == 8)
+        #expect(CommentThreadGeometry.railInset == CommentThreadGeometry.nestedCardPadding)
+
+        let halfAvatar = CommentThreadGeometry.avatarColumnWidth / 2
+        // Root post: inset by railInset inside the card's content edge.
+        let rootAvatarCenterX = CommentThreadGeometry.railInset + halfAvatar
+        // Reply card: sits at the content edge, insets its avatar by its own padding.
+        let replyAvatarCenterX = CommentThreadGeometry.nestedCardPadding + halfAvatar
+        #expect(rootAvatarCenterX == replyAvatarCenterX)
+        #expect(CommentThreadGeometry.railCenterX == rootAvatarCenterX)
+
         #expect(CommentThreadGeometry.postSpacing > 0)
         #expect(CommentThreadGeometry.spineWidth == 2)
+        #expect(CommentThreadGeometry.collapsedBodyLineLimit == 5)
     }
 
-    @Test func bodyNeedsExpansionUsesLineAndCharacterBudget() {
-        #expect(!CommentThreadGeometry.bodyNeedsExpansion(""))
-        #expect(!CommentThreadGeometry.bodyNeedsExpansion("Short comment."))
-        let long = String(repeating: "word ", count: 80)
-        #expect(CommentThreadGeometry.bodyNeedsExpansion(long))
-        let manyLines = (0..<8).map { "Line \($0)" }.joined(separator: "\n")
-        #expect(CommentThreadGeometry.bodyNeedsExpansion(manyLines))
-        #expect(CommentThreadGeometry.collapsedBodyLineLimit == 5)
+    /// Comment cards must not drift from the app-wide card language.
+    @Test func commentCardsUseTheSharedCardRadiusAndGap() {
+        #expect(CommentThreadGeometry.cardCornerRadius == CardListMetrics.cornerRadius)
+        #expect(CommentThreadGeometry.nestedCardCornerRadius == CardListMetrics.cornerRadius)
+        #expect(CommentThreadGeometry.nestedCardSpacing == CardListMetrics.interCardSpacing)
+    }
+
+    /// Expanding renders every descendant, so the collapse threshold must count
+    /// them all — a single direct reply carrying a long chain still collapses.
+    @Test func collapseThresholdCountsEveryReplyNotJustDirectChildren() {
+        var chain = AO3Comment(id: 100, author: "Deep", isGuest: false)
+        for id in stride(from: 99, through: 90, by: -1) {
+            var parent = AO3Comment(id: id, author: "N", isGuest: false)
+            parent.replies = [chain]
+            chain = parent
+        }
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = [chain]
+
+        // Only one direct child, but eleven replies actually render.
+        #expect(root.replies.count == 1)
+        let flat = CommentThreadGeometry.flattenedReplies(from: root)
+        #expect(flat.count == 11)
+        #expect(flat.count > CommentThreadGeometry.autoExpandedMaxReplies)
+        #expect(CommentThreadGeometry.autoExpandedMaxReplies == 8)
+    }
+
+    /// AO3 doesn't cap nesting depth: the traversals must not recurse per level.
+    @Test func deepReplyChainsFlattenWithoutRecursion() {
+        var node = AO3Comment(id: 2000, author: "Deep", isGuest: false)
+        for id in stride(from: 1999, through: 1, by: -1) {
+            var parent = AO3Comment(id: id, author: "N", isGuest: false)
+            parent.replies = [node]
+            node = parent
+        }
+
+        #expect(node.flattened.count == 2000)
+        #expect(node.descendantCount == 2000)
+        #expect(node.contains(commentID: 2000))
+        #expect(!node.contains(commentID: 2001))
+
+        let flat = CommentThreadGeometry.flattenedReplies(from: node)
+        #expect(flat.count == 1999)
+        #expect(flat.last?.depth == 1999)
     }
 
     @Test func flattenedRepliesAreOneCardPerReplyDepthFirst() {
@@ -273,9 +317,100 @@ struct AO3CommentsParseTests {
         #expect(CommentsModel.rootID(containing: 999, in: threads) == nil)
     }
 
-    @Test func autoCollapseThresholdIsPositive() {
-        #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies > 0)
-        #expect(CommentThreadGeometry.autoExpandedMaxDirectReplies == 8)
+    /// A deleted comment whose replies survive renders as a placeholder `li` with
+    /// the comment id but no byline/body/actions (observed live 2026-07-10 on a
+    /// heavily-commented work). It must parse as a tombstone that KEEPS its
+    /// replies — returning nil would graft them onto the preceding sibling.
+    @Test func deletedCommentParsesAsTombstoneAndKeepsItsReplies() throws {
+        let html = """
+        <html><body><div id="comments_placeholder"><ol class="thread">
+          <li class="comment group odd" id="comment_1">
+            <h4 class="heading byline"><a href="/users/First/pseuds/First">First</a></h4>
+            <blockquote class="userstuff"><p>Still here.</p></blockquote>
+          </li>
+          <li class="comment group even" id="comment_2">
+            <p>
+              (Previous comment deleted.)
+            </p>
+          </li>
+          <li>
+            <ol class="thread">
+              <li class="comment group odd" id="comment_3">
+                <h4 class="heading byline"><a href="/users/Reply/pseuds/Reply">Reply</a></h4>
+                <blockquote class="userstuff"><p>Replying to the deleted one.</p></blockquote>
+              </li>
+            </ol>
+          </li>
+        </ol></div></body></html>
+        """
+        let page = try AO3Client.parseCommentsPage(html, page: 1)
+        #expect(page.comments.map(\.id) == [1, 2])
+
+        let tombstone = try #require(page.comments.last)
+        #expect(tombstone.isDeleted)
+        #expect(tombstone.author.isEmpty)
+        #expect(tombstone.bodyText == "(Previous comment deleted.)")
+        #expect(!tombstone.canReply)
+        #expect(tombstone.editPath == nil && tombstone.deletePath == nil)
+        // The surviving reply hangs under the tombstone, not under comment 1.
+        #expect(tombstone.replies.map(\.id) == [3])
+        #expect(page.comments.first?.replies.isEmpty == true)
+    }
+
+    // MARK: Avatars
+
+    /// AO3 serves its own logo (`/images/skins/iconsets/...`) as the icon for any
+    /// account without an uploaded one. Presenting that as a user's profile picture
+    /// would be using AO3's trademark, so it must resolve to nil and fall back to
+    /// the app's generic placeholder. Real icons come from Rails ActiveStorage.
+    @Test func ao3sOwnDefaultIconIsNeverUsedAsAnAvatar() {
+        let defaultIcon = "/images/skins/iconsets/default/icon_user.png"
+        #expect(AO3Comment.avatarURL(forIconSource: defaultIcon) == nil)
+        // Also when AO3 renders it absolute rather than root-relative.
+        #expect(AO3Comment.avatarURL(
+            forIconSource: "https://archiveofourown.org" + defaultIcon
+        ) == nil)
+        // Any other bundled skin asset is AO3 artwork too, whatever the iconset.
+        #expect(AO3Comment.avatarURL(
+            forIconSource: "/images/skins/iconsets/night/icon_user.png"
+        ) == nil)
+        #expect(AO3Comment.avatarURL(forIconSource: nil) == nil)
+        #expect(AO3Comment.avatarURL(forIconSource: "") == nil)
+
+        // A real uploaded icon survives untouched.
+        let uploaded = "https://archiveofourown.org/rails/active_storage/representations/proxy/abc/IMG_5719.JPG"
+        #expect(AO3Comment.avatarURL(forIconSource: uploaded)?.absoluteString == uploaded)
+        // An icon served off-site is not AO3 artwork either.
+        let offsite = "https://s3.amazonaws.com/otw-ao3-icons/user/1.png"
+        #expect(AO3Comment.avatarURL(forIconSource: offsite)?.absoluteString == offsite)
+        // A lookalike host must not be mistaken for AO3.
+        let lookalike = "https://notarchiveofourown.org/images/skins/iconsets/default/icon_user.png"
+        #expect(AO3Comment.avatarURL(forIconSource: lookalike)?.absoluteString == lookalike)
+    }
+
+    /// End-to-end: the default icon is dropped while a sibling's real icon is kept.
+    @Test func parsingDropsDefaultIconButKeepsUploadedOne() throws {
+        let uploaded = "https://archiveofourown.org/rails/active_storage/proxy/abc/IMG_5719.JPG"
+        let html = """
+        <html><body><div id="comments_placeholder"><ol class="thread">
+          <li class="comment" id="comment_1">
+            <h4 class="heading byline"><a href="/users/Nia/pseuds/Nia">Nia</a></h4>
+            <div class="icon"><img alt="" class="icon" src="/images/skins/iconsets/default/icon_user.png" /></div>
+            <blockquote class="userstuff"><p>No icon uploaded.</p></blockquote>
+          </li>
+          <li class="comment" id="comment_2">
+            <h4 class="heading byline"><a href="/users/Ben/pseuds/Ben">Ben</a></h4>
+            <div class="icon"><img alt="" class="icon" src="\(uploaded)" /></div>
+            <blockquote class="userstuff"><p>Has an icon.</p></blockquote>
+          </li>
+        </ol></div></body></html>
+        """
+        let page = try AO3Client.parseCommentsPage(html, page: 1)
+        #expect(page.comments.count == 2)
+        #expect(page.comments[0].author == "Nia")
+        #expect(page.comments[0].avatarURL == nil)
+        #expect(page.comments[1].author == "Ben")
+        #expect(page.comments[1].avatarURL?.absoluteString == uploaded)
     }
 
     @Test func missingCommentsRegionParsesAsEmpty() throws {

@@ -81,6 +81,11 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
     /// action AO3 did not expose for this comment/context.
     var threadPath: String?
     var parentThreadPath: String?
+    /// A deleted comment whose replies AO3 kept: the placeholder `li` renders
+    /// only "(Previous comment deleted.)" — no byline, body, or actions — but
+    /// must stay in the tree so its surviving replies hang under the right
+    /// parent instead of grafting onto a sibling.
+    var isDeleted = false
     var replies: [AO3Comment] = []
 
     /// Permanent link to this comment's thread page on AO3.
@@ -108,13 +113,58 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
         return URL(string: path, relativeTo: base)?.absoluteURL
     }
 
+    /// AO3's own bundled skin artwork, served as the icon for any account that
+    /// hasn't uploaded one. It's the AO3 logo — a trademark we must not present as
+    /// someone's profile picture. Uploaded icons come from Rails ActiveStorage or
+    /// the OTW icon bucket; nothing under `/images/skins/` is ever a user's own.
+    nonisolated static func isDefaultAO3Icon(_ url: URL) -> Bool {
+        guard let host = url.host(),
+              host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org") else {
+            return false
+        }
+        return url.path().hasPrefix("/images/skins/")
+    }
+
+    /// The user icon AO3 rendered, or nil when AO3 fell back to its own default —
+    /// callers then show the app's generic placeholder instead of the AO3 logo.
+    nonisolated static func avatarURL(forIconSource source: String?) -> URL? {
+        guard let url = ao3URL(for: source), !isDefaultAO3Icon(url) else { return nil }
+        return url
+    }
+
     /// This comment plus all descendants, depth-first (for flat rendering/search).
+    /// Iterative: AO3 doesn't cap reply nesting, so a recursive walk costs one stack
+    /// frame per level, and `[self] + replies.flatMap(...)` recopied the growing
+    /// tail at every level (O(depth²) on a long reply-to-reply chain).
     var flattened: [AO3Comment] {
-        [self] + replies.flatMap(\.flattened)
+        var result: [AO3Comment] = []
+        var stack: [AO3Comment] = [self]
+        while let node = stack.popLast() {
+            result.append(node)
+            stack.append(contentsOf: node.replies.reversed())
+        }
+        return result
+    }
+
+    /// True when `commentID` is this comment or any descendant. Short-circuits and
+    /// builds no result array, unlike scanning `flattened`.
+    func contains(commentID: Int) -> Bool {
+        var stack: [AO3Comment] = [self]
+        while let node = stack.popLast() {
+            if node.id == commentID { return true }
+            stack.append(contentsOf: node.replies)
+        }
+        return false
     }
 
     var descendantCount: Int {
-        1 + replies.reduce(0) { $0 + $1.descendantCount }
+        var count = 0
+        var stack: [AO3Comment] = [self]
+        while let node = stack.popLast() {
+            count += 1
+            stack.append(contentsOf: node.replies)
+        }
+        return count
     }
 }
 

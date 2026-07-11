@@ -34,6 +34,10 @@ struct CommentsView: View {
     /// tinted so the jump is visible even when the target was already on-screen.
     @State private var highlightedCommentID: Int?
     @State private var highlightClearTask: Task<Void, Never>?
+    /// Roots forced open by a "Thread"/"Parent Thread" jump, so a collapsed reply
+    /// stack can't hide the comment being scrolled to.
+    @State private var forceExpandedRootIDs: Set<Int> = []
+    @State private var focusScrollTask: Task<Void, Never>?
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -109,6 +113,7 @@ struct CommentsView: View {
             .onDisappear {
                 contextLoadTask?.cancel()
                 highlightClearTask?.cancel()
+                focusScrollTask?.cancel()
             }
             .sheet(isPresented: composerBinding) {
                 CommentComposerSheet(model: model)
@@ -165,18 +170,36 @@ struct CommentsView: View {
     /// so we first scroll to the owning root (materializes the tall cell) and
     /// then to the nested `.id`.
     private func focusThread(_ commentID: Int, proxy: ScrollViewProxy) {
-        if let rootID = model.rootID(containing: commentID), rootID != commentID {
-            proxy.scrollTo(rootID, anchor: .center)
-        }
-        withAnimation(.easeInOut(duration: 0.3)) {
-            proxy.scrollTo(commentID, anchor: .center)
-        }
         highlightedCommentID = commentID
         highlightClearTask?.cancel()
         highlightClearTask = Task {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
             highlightedCommentID = nil
+        }
+
+        focusScrollTask?.cancel()
+        guard let rootID = model.rootID(containing: commentID), rootID != commentID else {
+            // A root comment owns its own List row — address it directly.
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(commentID, anchor: .center)
+            }
+            return
+        }
+
+        // The target is a nested reply inside `rootID`'s row. Expand that root if
+        // it's collapsed (its nested `.id` wouldn't exist in the view tree at all)
+        // and scroll the row in first. `scrollTo` silently no-ops on an id that
+        // isn't laid out yet, so the nested id needs a layout pass before we can
+        // address it — hence the yield rather than a second call in this same pass.
+        forceExpandedRootIDs.insert(rootID)
+        proxy.scrollTo(rootID, anchor: .center)
+        focusScrollTask = Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(commentID, anchor: .center)
+            }
         }
     }
 
@@ -366,7 +389,8 @@ struct CommentsView: View {
                     CommentThreadRow(
                         comment: comment,
                         workAuthors: workContext.authors,
-                        showChapterBadge: model.scope == .all
+                        showChapterBadge: model.scope == .all,
+                        startsExpanded: forceExpandedRootIDs.contains(comment.id)
                     )
                 }
                 .environment(\.commentHighlightID, highlightedCommentID)

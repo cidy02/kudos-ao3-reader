@@ -192,13 +192,7 @@ final class CommentsModel {
 
     /// Pure lookup over a display-thread list (testable without a live load).
     nonisolated static func rootID(containing commentID: Int, in threads: [AO3Comment]) -> Int? {
-        for root in threads {
-            if root.id == commentID { return root.id }
-            if root.flattened.contains(where: { $0.id == commentID }) {
-                return root.id
-            }
-        }
-        return nil
+        threads.first { $0.contains(commentID: commentID) }?.id
     }
 
     /// One page, via cache unless stale/bypassed. Returns nil after setting a
@@ -213,7 +207,7 @@ final class CommentsModel {
             workID: workID,
             chapterID: chapterForRequests,
             page: number,
-            sessionIdentity: auth.username ?? ""
+            sessionIdentity: Self.sessionIdentity(for: auth)
         )
         if !forceRefresh, let cached = Self.cache.page(for: key) {
             isFromCache = true
@@ -251,6 +245,15 @@ final class CommentsModel {
         }
     }
 
+    /// Cache identity for a session. Distinguishes a signed-in session — even one
+    /// whose username hasn't resolved yet (a reachable WebKit-restore edge case
+    /// where `AO3AuthService.username` is `""` while `isLoggedIn` is true) — from
+    /// signed-out, so a signed-out page (no Reply/Edit/Delete) and a signed-in page
+    /// never collide on one cache key. `username ?? ""` alone collapses both to `""`.
+    private static func sessionIdentity(for auth: AO3AuthService) -> String {
+        auth.isLoggedIn ? "in:\(auth.username ?? "")" : ""
+    }
+
     /// The chapter index, fetched once per work per session (small /navigate page).
     func loadChaptersIfNeeded(auth: AO3AuthService) async {
         guard chapters.isEmpty else { return }
@@ -273,18 +276,16 @@ final class CommentsModel {
         }
     }
 
-    private func knownTotalPages(auth: AO3AuthService? = nil) -> Int? {
-        // Prefer the caller's session when available so newest-first doesn't
-        // read a signed-out page count from a mismatched cache entry.
-        let identity = auth?.username ?? ""
+    private func knownTotalPages(auth: AO3AuthService) -> Int? {
+        // Session-scoped only. Another session's cached page count can legitimately
+        // differ (AO3 hides some comments from some viewers), so sizing "newest
+        // first" off it would jump to the wrong last page. A miss just costs the one
+        // page-1 fetch `load` already falls back to.
         let key = CommentsPageCache.Key(
-            workID: workID, chapterID: chapterForRequests, page: 1, sessionIdentity: identity
+            workID: workID, chapterID: chapterForRequests, page: 1,
+            sessionIdentity: Self.sessionIdentity(for: auth)
         )
-        if let pages = Self.cache.page(for: key, ignoringTTL: true)?.totalPages {
-            return pages
-        }
-        // Fallback: any cached page for this work/chapter (legacy / other session).
-        return Self.cache.anyTotalPages(workID: workID, chapterID: chapterForRequests)
+        return Self.cache.page(for: key, ignoringTTL: true)?.totalPages
     }
 
     // MARK: Composer
@@ -463,14 +464,6 @@ final class CommentsPageCache {
 
     func store(_ page: AO3CommentsPage, for key: Key) {
         pages[key] = page
-    }
-
-    /// Any cached total-pages value for this work/chapter, regardless of session
-    /// (used only as a soft fallback when sizing newest-first).
-    func anyTotalPages(workID: Int, chapterID: Int?) -> Int? {
-        pages.first { key, _ in
-            key.workID == workID && key.chapterID == chapterID && key.page == 1
-        }?.value.totalPages
     }
 
     /// Chapter lists barely change; keep them for the session.

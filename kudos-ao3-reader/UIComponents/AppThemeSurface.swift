@@ -48,7 +48,9 @@ extension View {
 
 // MARK: - Card-style lists (experimental)
 
-private struct CardShadow {
+/// Internal so feature-specific cards (the comments thread cards) lift with the
+/// SAME elevation as the Library/Search cards instead of inventing their own.
+struct CardShadow {
     let color: Color
     let radius: CGFloat
     let y: CGFloat
@@ -83,7 +85,7 @@ extension ReaderTheme {
     /// cards lift off the flatter backdrops; Dark stays flat (shadows muddy the dark
     /// surfaces, and the high card↔backdrop contrast there already reads well).
     /// Kept small enough to sit within the inter-card gap so it isn't clipped.
-    fileprivate var cardShadow: CardShadow {
+    var cardShadow: CardShadow {
         switch self {
         case .dark: CardShadow(color: .clear, radius: 0, y: 0)
         case .light: CardShadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
@@ -107,48 +109,39 @@ extension ReaderTheme {
         }
     }
 
-    /// A surface nested INSIDE a `cardSurface` card when an inset shade is
-    /// wanted. Comment reply cards no longer use this — they stay on
-    /// `cardSurface` and lift with `nestedCardShadow` instead — but other
-    /// call sites may still want a true one-step inset fill.
+    /// Fill for a card nested INSIDE a `cardSurface` card (the comment thread's
+    /// reply cards). Dark separates by *surface* — one step up the grouped scale —
+    /// because the app's cards never cast shadows in Dark (see `cardShadow`).
+    /// Light/Sepia stay on `cardSurface` and separate by elevation instead, so a
+    /// reply card lifts exactly the way a Library card lifts off its backdrop.
     var nestedCardSurface: Color {
-        if self == .sepia { return cardBackdrop }
-        #if os(iOS)
-        return Color(uiColor: .tertiarySystemGroupedBackground)
-        #else
-        return Color(nsColor: .underPageBackgroundColor)
-        #endif
+        switch self {
+        case .light, .sepia:
+            return cardSurface
+        case .dark:
+            #if os(iOS)
+            return Color(uiColor: .tertiarySystemGroupedBackground)
+            #else
+            return Color(nsColor: .underPageBackgroundColor)
+            #endif
+        }
     }
 
-    /// Elevation for a same-surface card nested inside another card (comment
-    /// reply bubbles). Stronger and more surround-like than `cardShadow`
-    /// because parent and child share `cardSurface` — shade alone is not used.
-    /// Dark keeps a real shadow here (unlike list cards) so nesting still reads.
-    var nestedCardShadow: NestedCardShadow {
+    /// The comment thread's avatar rail. Sepia takes the same warm brown as
+    /// `cardBorder`/`cardShadow` rather than falling back to a neutral grey.
+    var threadSpine: Color {
         switch self {
-        case .dark:
-            NestedCardShadow(color: Color.black.opacity(0.55), radius: 8, y: 2)
-        case .light:
-            NestedCardShadow(color: Color.black.opacity(0.18), radius: 8, y: 2)
-        case .sepia:
-            NestedCardShadow(
-                color: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.28),
-                radius: 8,
-                y: 2
-            )
+        case .dark: Color.primary.opacity(0.28)
+        case .light: Color.primary.opacity(0.16)
+        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.30)
         }
     }
 }
 
-/// Theme-aware shadow for nested same-surface cards (comments reply bubbles).
-struct NestedCardShadow {
-    let color: Color
-    let radius: CGFloat
-    let y: CGFloat
-}
-
 /// Card-list spacing constants, kept in one place so every adopting list matches.
-private enum CardListMetrics {
+/// Internal so the comments thread cards share the radius/gap rather than
+/// re-hardcoding the same numbers.
+enum CardListMetrics {
     static let cornerRadius: CGFloat = 16
     static let interCardSpacing: CGFloat = 12 // vertical gap between cards
     static let sideMargin: CGFloat = 16 // card inset from the screen edges
