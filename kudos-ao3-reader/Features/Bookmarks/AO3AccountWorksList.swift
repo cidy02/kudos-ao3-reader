@@ -19,6 +19,17 @@ struct AO3AccountWorksList: View {
         /// Works in a named collection (the user's own collections list links here).
         case collection(name: String, title: String)
 
+        var title: String {
+            switch self {
+            case .markedForLater: "Marked for Later"
+            case .bookmarks: "My AO3 Bookmarks"
+            case .history: "My AO3 History"
+            case .subscriptions: "My Subscriptions"
+            case .myWorks: "My Works"
+            case let .collection(_, title): title
+            }
+        }
+
         var emptyTitle: String {
             switch self {
             case .markedForLater: "Nothing marked for later"
@@ -137,51 +148,54 @@ struct AO3AccountWorksList: View {
             }
         }
         .hidesFloatingTabBar()
-        .toolbar {
-            // Gated as a whole, not just its inner pieces — an empty HStack still
-            // reserves an (empty-looking) toolbar slot, most commonly hit here
-            // while signed out (no local matches to reveal, no filter/menu cluster
-            // since nothing's loaded yet).
-            if (hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true }))
-                || (auth.isLoggedIn && phase == .loaded && !works.isEmpty) {
-                // One item holding a tight HStack — separate ToolbarItems get the
-                // system's wide spacing, which reads as inconsistent between the
-                // privacy toggle and the expand/filter cluster. Matches the pattern
-                // already established in LibraryView.swift's dashboard toolbar.
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 2) {
-                        if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
-                            MatureRevealToggle()
-                        }
-                        if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
-                            FilterButton(filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         onClearFilters: { filters = AO3SearchFilters() })
-                            WorkListMoreMenu {
-                                ExpandAllMenuItem(expandAll: $expandAll)
+        .navigationTitle(kind.title)
+        #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+        #endif
+            .toolbar {
+                // Gated as a whole, not just its inner pieces — an empty HStack still
+                // reserves an (empty-looking) toolbar slot, most commonly hit here
+                // while signed out (no local matches to reveal, no filter/menu cluster
+                // since nothing's loaded yet).
+                if (hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true }))
+                    || (auth.isLoggedIn && phase == .loaded && !works.isEmpty) {
+                    // One item holding a tight HStack — separate ToolbarItems get the
+                    // system's wide spacing, which reads as inconsistent between the
+                    // privacy toggle and the expand/filter cluster. Matches the pattern
+                    // already established in LibraryView.swift's dashboard toolbar.
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack(spacing: 2) {
+                            if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
+                                MatureRevealToggle()
+                            }
+                            if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
+                                FilterButton(filtersActive: filters.hasActiveFilters,
+                                             showingFilters: $showingFilters,
+                                             onClearFilters: { filters = AO3SearchFilters() })
+                                WorkListMoreMenu {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        .inspector(isPresented: $showingFilters) {
-            AO3FilterPanel(
-                filters: $filters,
-                mode: .refine,
-                canReset: filters.hasActiveFilters,
-                onApply: { showingFilters = false },
-                onReset: { filters = AO3SearchFilters() }
-            )
-            .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-            .navigationTitle("Filter Works")
-        }
-        .task(id: auth.isLoggedIn) {
-            // Load on first appearance and again right after a sign-in; skip the
-            // signed-out state so we don't fire an unauthenticated request.
-            if auth.isLoggedIn, phase == .idle { await load(page: 1) }
-        }
-        .sheet(isPresented: $showLogin) { AO3LoginView() }
+            .inspector(isPresented: $showingFilters) {
+                AO3FilterPanel(
+                    filters: $filters,
+                    mode: .refine,
+                    canReset: filters.hasActiveFilters,
+                    onApply: { showingFilters = false },
+                    onReset: { filters = AO3SearchFilters() }
+                )
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+            }
+            .task(id: auth.isLoggedIn) {
+                // Load on first appearance and again right after a sign-in; skip the
+                // signed-out state so we don't fire an unauthenticated request.
+                if auth.isLoggedIn, phase == .idle { await load(page: 1) }
+            }
+            .sheet(isPresented: $showLogin) { AO3LoginView() }
     }
 
     // MARK: Signed in

@@ -18,6 +18,82 @@ explicit `id=...` form if `xcodebuild: error: Unable to find a device...` hits.
 
 ---
 
+## Status snapshot (2026-07-11, later same day)
+
+### IN PROGRESS: AO3AccountWorksList blank nav-title bug — root cause found, fix verified visually, verify.sh running
+Picked up from `handoff.md` (repo root, written by an agent that hit its usage
+limit mid-debug; delete that file once this is committed). Bug: all 5
+`AO3AccountWorksList` destinations (My Subscriptions, My AO3 Bookmarks, Marked
+for Later, My AO3 History, My Works) showed a **completely blank** nav bar
+title, despite `.navigationTitle(kind.title)` being set. Two prior fix
+attempts (adding the title, then also removing the inspector's competing
+`.navigationTitle("Filter Works")`) both failed to fix it.
+**Root cause:** `AO3AccountWorksList` was the ONLY view in the codebase
+combining `.navigationTitle` with a *conditional* `.toolbar` (item set changes
+once `phase` goes `.loading` → `.loaded`) while leaving title display mode at
+`.automatic` (large title). Every sibling view with this same shape
+(`LocalReadingHistoryView`, `LocalFavoritesView`, `AO3CollectionsList`,
+`AO3DashboardView`, `HomeSectionListView` — confirmed by direct comparison)
+sets `.navigationBarTitleDisplayMode(.inline)` right after `.navigationTitle`.
+Large-title layout is known to render blank when the toolbar's item set
+changes after the view's initial layout pass; inline mode uses a simpler path
+that doesn't hit this. **Fix:** added `#if !os(macOS) .navigationBarTitleDisplayMode(.inline) #endif`
+in the same spot every other view has it (`AO3AccountWorksList.swift`, right
+after `.navigationTitle(kind.title)`), matching house indentation style.
+Verified visually via `mcp__computer-use` on the iPhone 17 sim — all 5
+destinations now show their correct title. `Scripts/verify.sh` running next;
+commit once green (own commit, not folded into `b3f2ad3`/`f565d42` per the
+handoff's instruction). Then dismiss task chip `task_9a8f691c`.
+
+### OPEN / UNRESOLVED: owner's "code review before merging on main" request — automated tooling failed 3×
+Owner asked (for the 3-branch merge below): resolve conflicts, resolve
+regressions, **and do a code review**, before merging `comment-ui-refinement`
+onto `main`. Three separate attempts to run a multi-agent adversarial-review
+Workflow for this failed substantially, all due to hitting Claude session
+usage limits mid-run (not a logic error in the workflow scripts themselves):
+first attempt (real-page comment-thread review) — all 6 finder agents failed;
+resumed attempt — all 6 failed again; a broader 8-dimension review of the full
+3-branch merge — 7 of 8 finder agents failed, the 1 that succeeded returned an
+empty findings array. **No usable automated review signal has been produced.**
+What HAS happened is a manual/inline review (not the requested automated
+one): reading `theme-enhancement`'s diff directly caught 2 non-exhaustive
+`ReaderTheme` switches (`AppThemeSurface.swift`'s `nestedCardSurface`/
+`threadSpine`, both would've hard-failed the next build regardless) and 1
+silent ternary regression a build could never catch
+(`CommentsView.swift`'s composer-shadow `== .dark` check, missing `.oled`) —
+see the theme-enhancement entry below. **This is still short of what the
+owner asked for and has not yet been reported to them** — say so plainly next
+turn rather than silently treating task #31 as done. Options to offer: retry
+the automated review once the session-limit window resets, do a more thorough
+manual pass myself, or proceed to merge on the strength of the manual fixes
+already made (owner's call, not mine).
+
+### DONE: merged theme-enhancement (fe41881) into comment-ui-refinement — `b366e96`
+Owner asked to bring in `theme-enhancement` as a third branch alongside the
+comment-thread rewrite and the author-profiles cherry-pick, resolve conflicts
+AND regressions (not just compile errors), and code-review before merging to
+`main`. `git cherry-pick --no-commit -n fe41881` reported **zero textual
+conflicts** — but "clean" ≠ compile-correct: adding `ReaderTheme.oled` made
+two switches in `AppThemeSurface.swift` (`nestedCardSurface`, `threadSpine` —
+both owned by this branch, never touched by `fe41881`) silently
+non-exhaustive, since git's line-level 3-way merge doesn't know the combined
+result needs every switch to re-cover the new case. Caught by direct
+inspection before attempting a build (predicted from first principles, not
+from a compiler error). Fixed by grouping `case .dark, .oled:` in both —
+justified because OLED shares Dark's `.dark` `colorScheme`
+(`ReaderTheme.colorScheme`), and both bodies use `colorScheme`-dynamic system
+tokens (`.tertiarySystemGroupedBackground`, `Color.primary`) that already
+render correctly for both without new per-case logic. Also found (via a
+deliberate repo-wide grep for `== .dark`/`== .light`/`== .sepia` — a class of
+bug NO switch-exhaustiveness check catches) a second regression:
+`CommentsView.swift`'s composer-pill shadow used a hand-rolled ternary
+(`theme.appTheme == .dark ? .clear : ...`) that would show a visible black
+shadow under the new OLED theme; extended to
+`== .dark || == .oled`. `Scripts/verify.sh` ALL GREEN: **322 tests / 37
+suites** (315 + 7 new OLED/theme tests), invariants, lint, iOS + macOS builds,
+whitespace. Sim rebuilt/relaunched. **The owner's "code review" ask is NOT
+satisfied by this — see the OPEN entry above.**
+
 ## Status snapshot (2026-07-11)
 
 ### DONE: adversarial review of cherry-picked author profiles + fixes applied
