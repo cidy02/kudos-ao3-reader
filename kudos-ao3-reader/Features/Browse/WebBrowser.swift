@@ -155,7 +155,7 @@ enum BrowserThemeStyle {
         case .sepia:
             Palette(
                 scheme: "light",
-                background: "#FBF0D9",
+                background: theme.backgroundHex,
                 raised: "#F6E8CB",
                 recessed: "#ECDDBD",
                 text: "#5B4636",
@@ -169,9 +169,25 @@ enum BrowserThemeStyle {
         case .dark:
             Palette(
                 scheme: "dark",
-                background: "#16161A",
+                background: theme.backgroundHex,
                 raised: "#222228",
                 recessed: "#111115",
+                text: "#CFCFD4",
+                secondaryText: "#A5A5AD",
+                link: "#7FB0E8",
+                visitedLink: "#AD93D8",
+                border: "#3A3A42",
+                control: "#2D2D35",
+                activeControl: "#44444F"
+            )
+        case .oled:
+            // Same dark palette, just anchored to true black — a subtle lift (rather
+            // than Dark's darker "recessed") is the only room left below the background.
+            Palette(
+                scheme: "dark",
+                background: theme.backgroundHex,
+                raised: "#1C1C1E",
+                recessed: "#0A0A0C",
                 text: "#CFCFD4",
                 secondaryText: "#A5A5AD",
                 link: "#7FB0E8",
@@ -308,19 +324,10 @@ final class BrowserModel: NSObject {
         webView.evaluateJavaScript(script)
     }
 
+    /// Derived from `theme.backgroundHex` — the same token the reader and app shell
+    /// use — rather than restating each theme's RGB values a third time here.
     private func underPageColor(for theme: ReaderTheme) -> BrowserPlatformColor {
-        switch theme {
-        case .light:
-            BrowserPlatformColor(red: 1, green: 1, blue: 1, alpha: 1)
-        case .sepia:
-            BrowserPlatformColor(
-                red: 251 / 255, green: 240 / 255, blue: 217 / 255, alpha: 1
-            )
-        case .dark:
-            BrowserPlatformColor(
-                red: 22 / 255, green: 22 / 255, blue: 26 / 255, alpha: 1
-            )
-        }
+        BrowserPlatformColor(Color(hex: theme.backgroundHex) ?? .white)
     }
 }
 

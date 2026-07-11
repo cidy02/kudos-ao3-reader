@@ -39,10 +39,12 @@ extension ReaderTheme {
 
     /// A per-title hue wash over the elevated surface so neighbouring Work cards read
     /// as distinct works. Bright enough to give the card real color at a glance while
-    /// keeping title/metadata text legible on every theme.
+    /// keeping title/metadata text legible on every theme. OLED shares Dark's wash —
+    /// it sits over `carouselCardSurface`, not the true-black backdrop, so the same
+    /// brightness still reads clearly.
     func carouselCardTint(hue: Double) -> Color {
         switch self {
-        case .dark:
+        case .dark, .oled:
             Color(hue: hue, saturation: 0.58, brightness: 0.85).opacity(0.22)
         case .light:
             Color(hue: hue, saturation: 0.62, brightness: 0.80).opacity(0.20)
@@ -54,7 +56,7 @@ extension ReaderTheme {
     func carouselCardBorder(hue: Double?) -> Color {
         if let hue {
             switch self {
-            case .dark:
+            case .dark, .oled:
                 return Color(hue: hue, saturation: 0.52, brightness: 0.90).opacity(0.34)
             case .light:
                 return Color(hue: hue, saturation: 0.58, brightness: 0.55).opacity(0.30)
@@ -63,7 +65,7 @@ extension ReaderTheme {
             }
         }
         switch self {
-        case .dark:
+        case .dark, .oled:
             return Color.white.opacity(0.12)
         case .light:
             return Color.black.opacity(0.08)
@@ -72,10 +74,15 @@ extension ReaderTheme {
         }
     }
 
+    /// No shadow on OLED: unlike Dark's card↔backdrop pairing, OLED's backdrop is
+    /// literal black, so a black shadow has nothing to darken against — the card's
+    /// own tonal contrast (`carouselCardSurface` vs. the black page) already reads.
     var carouselCardShadow: CarouselCardShadow {
         switch self {
         case .dark:
             CarouselCardShadow(color: Color.black.opacity(0.34), radius: 8, y: 4)
+        case .oled:
+            CarouselCardShadow(color: .clear, radius: 0, y: 0)
         case .light:
             CarouselCardShadow(color: Color.black.opacity(0.13), radius: 8, y: 3)
         case .sepia:
@@ -93,7 +100,7 @@ extension ReaderTheme {
     /// warm, paper-like palette from clashing.
     func carouselCollectionGradient(hue: Double) -> (start: Color, end: Color) {
         switch self {
-        case .dark:
+        case .dark, .oled:
             (Color(hue: hue, saturation: 0.50, brightness: 0.80),
              Color(hue: hue, saturation: 0.62, brightness: 0.55))
         case .light:
@@ -110,7 +117,7 @@ extension ReaderTheme {
     /// through the glass instead of nearly disappearing.
     func carouselQueueTint(hue: Double) -> Color {
         switch self {
-        case .dark:
+        case .dark, .oled:
             Color(hue: hue, saturation: 0.38, brightness: 0.78).opacity(0.30)
         case .light:
             Color(hue: hue, saturation: 0.42, brightness: 0.75).opacity(0.26)
