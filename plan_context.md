@@ -9,12 +9,70 @@ Task board: `TASKS.md` (repo root). Onboarding: `docs/AGENT_ONBOARDING.md`.
 Definition of done: `Scripts/verify.sh` (invariants → lint → full iOS suite →
 macOS build → whitespace).
 
-Working branch: `release-hardening`. Simulator: iPhone 17,
+Working branch: `comment-ui-refinement` (branched from `main`; `release-hardening`
+was consolidated into `main` earlier — see below). Simulator: iPhone 17,
 id `77492544-056E-4D4A-ABB6-7E38CC042A4D`, bundle `com.cidy02.Kudos`.
+⚠️ Multiple iPhone 17 simulator UDIDs can exist across Xcode runtime updates —
+`Scripts/test.sh`'s bare device-name destination can go ambiguous; pass the
+explicit `id=...` form if `xcodebuild: error: Unable to find a device...` hits.
 
 ---
 
-## Status snapshot (2026-07-10)
+## Status snapshot (2026-07-10, later)
+
+### DONE: cherry-picked native AO3 author profiles (f86fa07) — `f98abb8`
+Owner asked to bring Codex's `f86fa07` (only that commit, not
+`codex/native-ao3-author-profiles`'s tip `70c4863`, a TASKS.md-only note) into
+this worktree. 3 real conflicts (this branch's comment-thread rewrite landed
+after f86fa07 was authored, so most of it was f86fa07's now-stale bubble/
+connector geometry colliding with the superseded architecture — NOT a genuine
+double-edit):
+- `TASKS.md`: both branches independently claimed T-86 — kept both entries,
+  renumbered the incoming one to **T-87**.
+- `CommentThreadRow.swift`: kept this branch's current spine/rail card
+  architecture wholesale (env-based `CommentThreadHandlers`); grafted in only
+  the genuinely new content — `AO3AuthorBylineView` replacing the plain
+  author `Text`, `commentIdentity`, and a new `onOpenAuthor` case on
+  `CommentThreadHandlers` (`= nil` default so `.noop` and the one other
+  caller keep compiling).
+- `CommentsView.swift`: kept this branch's call site; wired
+  `onOpenAuthor: openAuthor` into `threadHandlers(scrollProxy:)` (the
+  `openAuthor()` helper + its other `AO3AuthorBylineView` use had already
+  auto-merged cleanly).
+- Unstaged `.idea/`/`android/` that `git add -A` swept in (untracked by
+  convention, unrelated to either branch).
+`Scripts/verify.sh` ALL GREEN: **315 tests / 36 suites** (298 + 17 new author
+fixtures), invariants, lint (pre-existing warning thresholds only), iOS +
+macOS builds, whitespace. Sim rebuilt/relaunched. **Pending owner visual pass**
+of author-profile navigation (tappable bylines everywhere, Works/Series/
+Bookmarks/About tabs) layered on top of the still-pending comment-thread
+review below.
+
+### IN PROGRESS: final sanity review of comment-ui-refinement
+Picked up from an agent that hit its usage limit mid-review. 16 branch commits
++ a large uncommitted final-polish diff got committed since (`ba10450`,
+`e849e85` — real-page tombstone handling, avatar trademark guard, highlight/
+sort/CTA/padding fixes from an owner live-testing pass). Full suite green
+(298 tests, pre-cherry-pick) including a real-page sanity probe
+(`ZZZRealPageSanityProbe.swift`, since deleted per its own throwaway
+convention) against 4 captured live AO3 pages at
+`/private/tmp/claude-501/.../39f686ea.../scratchpad/ao3_real/` (118 comments,
+9 levels deep, 68 pages, 4 deleted-comment tombstones — all pages that
+prompted this probe are LOCAL scratch files, not committed).
+An adversarial-review workflow (6 dimensions: truncation-probe geometry
+feedback loops, reply-expansion state/List-recycling, focus-scroll race,
+session-identity cache keys, parser edge cases on real markup, geometry/theme
+drift) was launched **twice** and **both times all 6 finder agents hit the
+session usage limit** before producing findings — no confirmed/refuted
+results exist yet. One concrete gap already found+fixed manually (not via the
+workflow): the probe's own invariants didn't account for deleted-comment
+tombstones; fixed by asserting on tombstone shape explicitly rather than
+loosening the check.
+**Next: re-run the 6-dimension adversarial review** (script cached at
+`wf_4d797c52-100` — `Workflow({scriptPath, resumeFromRunId: 'wf_4d797c52-100'})`
+replays anything already computed) once the usage window resets, THEN address
+any confirmed findings, THEN this cherry-picked author-profiles work should
+get its own pass too (it wasn't in scope for the original 6 dimensions).
 
 ### DONE: T-84 comment-UI restoration (merge clobber) — `20d6f74`
 Owner caught that "comment ui fixes in the other branches aren't in this one."
