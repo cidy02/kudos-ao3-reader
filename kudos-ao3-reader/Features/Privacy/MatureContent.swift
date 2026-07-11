@@ -193,10 +193,13 @@ struct SensitiveWorkRow: View {
         let row = WorkRow(work: work, expandAll: expandAll, isSelecting: isSelecting, isSelected: isSelected)
             .localWorkContextMenu(work: work, onSelect: onSelect)
         if isSelecting {
+            // A tap while selecting must always toggle selection, never open an
+            // author profile — matches the blurred branch's own
+            // ao3AuthorNavigationEnabled override above.
             Button {
                 onToggleSelection?()
             } label: {
-                row
+                row.environment(\.ao3AuthorNavigationEnabled, false)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(work.title)
@@ -283,10 +286,14 @@ struct SensitiveWorkCoverCard: View {
                     .accessibilityLabel("Hidden mature work. Activate to reveal.")
             }
         } else if isSelecting {
+            // A tap while selecting must always toggle selection, never open an
+            // author profile — matches the blurred branch's own
+            // ao3AuthorNavigationEnabled override above.
             Button {
                 onToggleSelection?()
             } label: {
                 SelectableWorkCoverCard(work: work, footer: footer, progress: progress, isSelected: isSelected)
+                    .environment(\.ao3AuthorNavigationEnabled, false)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(work.title)

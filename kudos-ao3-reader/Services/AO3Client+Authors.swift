@@ -184,8 +184,7 @@ extension AO3Client {
 
         let authorLinks = try element.select("h4.heading a[rel=author], h4.heading a[href*='/pseuds/']").array()
         var creatorNames = try authorLinks.map { try clean($0.text()) }.filter { !$0.isEmpty }
-        let hasAnonymousHeader = try element.select("div.header.module.anonymous").first() != nil
-        if creatorNames.isEmpty, element.hasClass("anonymous") || hasAnonymousHeader {
+        if creatorNames.isEmpty, try isAnonymousBlurb(element) {
             creatorNames = ["Anonymous"]
         }
         let identities = try authorLinks.compactMap {

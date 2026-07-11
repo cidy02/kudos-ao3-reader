@@ -18,7 +18,56 @@ explicit `id=...` form if `xcodebuild: error: Unable to find a device...` hits.
 
 ---
 
-## Status snapshot (2026-07-10, later)
+## Status snapshot (2026-07-11)
+
+### DONE: adversarial review of cherry-picked author profiles + fixes applied
+7-lens adversarial-review workflow (nav-blackhole, concurrency, parsing,
+persistence, reuse, ui-consistency, cross-file) run against the ORIGINAL
+`codex/native-ao3-author-profiles` worktree (same content as `f98abb8`'s
+cherry-pick below, minus the 3 conflict files — verified none of the
+confirmed findings touch those). Two usage-limit interruptions recovered by
+reading `journal.jsonl` directly instead of re-running completed agents
+(41+11 of 52+11 agent calls recovered from cache/re-verified individually).
+9 findings survived 3-vote adversarial verification and were fixed directly
+on `comment-ui-refinement` (branch had meanwhile absorbed `new-icon`'s icon
+commit `56ed207` via fast-forward merge; `new-icon` pruned local+remote):
+- **HIGH** `MatureContent.swift`: non-blurred selection-mode rows didn't
+  disable `ao3AuthorNavigationEnabled`, so tapping a byline while bulk-
+  selecting could open a profile instead of toggling selection. Fixed —
+  same override the blurred branches already had.
+- **MED** `AO3AuthorProfileService.swift` `toggleSubscription`/
+  `confirmPendingModeration`: the post-success header reload ran outside
+  `activeTask`, so it survived `cancel()`/`onDisappear` and could race a
+  scope-change's own fetch. New `reloadHeaderTracked(auth:)` routes both
+  through `launch()`.
+- **MED** `AO3CommentModels.swift` `AO3CommentsWorkContext.init(savedWork:)`:
+  had stopped splitting a comma-joined multi-author string when
+  `verifiedAuthorIdentities` is empty (freshly-imported EPUBs, locked/404'd
+  works) — silently dropped the "Author" badge for co-authors in Comments.
+  Restored the split as the fallback.
+- **MED** `AuthorProfileComponents.swift`: `AO3AuthorProfileSkeleton`'s hero
+  + segmented-picker blocks were missing `.skeletonShimmer()` (every other
+  skeleton in the app has it). Added.
+- (`Models.swift needsAO3Refresh` finding: **already fixed** by this same
+  branch's own `8d7b059` polish commit before the review landed — confirmed,
+  no action needed.)
+- **LOW** `loadHeader` re-merges About-tab pseud aliases after a reload
+  (was silently dropping them); subscribe button now hints account-vs-pseud
+  scope; "Try Loading More" got the app's `minHeight: 44` tap target;
+  anonymous-blurb detection deduped into `AO3Client.isAnonymousBlurb(_:)`
+  (was copy-pasted in `parseBlurb`/`parseSeriesBlurb`).
+Rejected after adversarial verification (real mechanism, but not a live bug
+today): JSON-decode-swallow in `AO3AuthorIdentityCodec`, the two
+`cardNavigation` overloads, `Collections.swift`'s nested byline, the
+work-detail-page anonymous-fallback "mislabeling" claim, the reserved-
+username exclusion list (real gap, no confirmed AO3 route trigger), and the
+nav-blackhole hypothesis itself (every current call site is provably
+push-only; flagged as an unenforced convention for future call sites, not
+a live bug).
+`Scripts/verify.sh` run after all fixes — see next entry for result.
+**Next:** owner sim/visual pass of the author-profile screens (Works/
+Series/Bookmarks/About tabs, subscribe/mute/block, pseud switching) —
+still the same pending gate noted below, now also covering these fixes.
 
 ### DONE: cherry-picked native AO3 author profiles (f86fa07) — `f98abb8`
 Owner asked to bring Codex's `f86fa07` (only that commit, not

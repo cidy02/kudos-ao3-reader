@@ -493,6 +493,7 @@ private extension AuthorProfileView {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Button("Try Loading More") { model.loadMore(auth: auth) }
+                    .frame(minHeight: 44)
             }
             .cardRow()
         } else if model.hasMore || model.isLoadingMore {

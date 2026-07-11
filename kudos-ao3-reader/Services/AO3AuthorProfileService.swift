@@ -270,7 +270,7 @@ final class AO3AuthorProfileModel {
                   AO3AuthorProfileFetcher.authenticationScope(for: auth)
                     == actionAuthenticationScope else { return }
             actionMessage = message
-            await loadHeader(auth: auth, bypassCache: true)
+            await reloadHeaderTracked(auth: auth)
         } catch AO3Error.authenticationRequired {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
                 == actionAuthenticationScope else { return }
@@ -347,7 +347,7 @@ final class AO3AuthorProfileModel {
                   AO3AuthorProfileFetcher.authenticationScope(for: auth)
                     == actionAuthenticationScope else { return }
             actionMessage = message
-            await loadHeader(auth: auth, bypassCache: true)
+            await reloadHeaderTracked(auth: auth)
         } catch AO3Error.authenticationRequired {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
                 == actionAuthenticationScope else { return }
@@ -389,6 +389,14 @@ final class AO3AuthorProfileModel {
         return task
     }
 
+    /// Reloads the header through the same tracked `activeTask` every other load
+    /// uses — a bare `await loadHeader(...)` here would run un-cancellable (survives
+    /// `cancel()`/`onDisappear`) and could race a scope/tab change's own in-flight
+    /// fetch of the same page instead of superseding it.
+    private func reloadHeaderTracked(auth: AO3AuthService) async {
+        await launch { await self.loadHeader(auth: auth, bypassCache: true) }.value
+    }
+
     private func loadHeader(
         auth: AO3AuthService,
         bypassCache: Bool = false
@@ -405,6 +413,11 @@ final class AO3AuthorProfileModel {
             }
             guard !Task.isCancelled, route == expectedRoute else { return }
             header = page.value
+            // A fresh dashboard parse doesn't repeat pseud aliases the About tab
+            // already found (e.g. ones only listed on the profile page, not the
+            // dashboard) — reapply them so a reload doesn't quietly drop pseuds
+            // the user could already see and select.
+            mergeAboutPseudsIntoHeader(about?.pseuds ?? [])
             isShowingStaleCache = page.isStale
             headerPhase = .loaded
         } catch is CancellationError {

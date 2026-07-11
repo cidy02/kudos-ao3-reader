@@ -30,8 +30,14 @@ struct AO3CommentsWorkContext: Equatable, Sendable {
     init(savedWork: SavedWork) {
         self.init(
             title: savedWork.title,
+            // Falls back to splitting the comma-joined `author` string (as every
+            // caller did before verifiedAuthorIdentities existed) whenever that
+            // enrichment hasn't landed yet — a freshly-imported EPUB, or a work AO3
+            // stopped returning tag groups for. Without the split, a co-author's own
+            // comment stops matching `isByWorkAuthor`'s per-name comparison and
+            // silently loses its "Author" badge.
             authors: savedWork.verifiedAuthorIdentities.isEmpty
-                ? (savedWork.author.isEmpty ? [] : [savedWork.author])
+                ? savedWork.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                 : savedWork.verifiedAuthorIdentities.map(\.displayName),
             authorIdentities: savedWork.verifiedAuthorIdentities,
             fandoms: savedWork.workFandoms,

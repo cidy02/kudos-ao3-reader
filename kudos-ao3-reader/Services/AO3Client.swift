@@ -1003,8 +1003,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         var authorIdentities = try authorLinks.compactMap { link in
             try AO3AuthorIdentity(displayName: link.text(), href: link.attr("href"))
         }
-        let hasAnonymousHeader = try el.select("div.header.module.anonymous").first() != nil
-        if authorLinks.isEmpty, el.hasClass("anonymous") || hasAnonymousHeader {
+        if authorLinks.isEmpty, try isAnonymousBlurb(el) {
             authorIdentities = [.nonNavigable("Anonymous", kind: .anonymous)]
         }
         let fandoms = try el.select("h5.fandoms a.tag").array().map { try $0.text() }
@@ -1065,5 +1064,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             seriesURL: seriesURL,
             seriesPosition: seriesPosition
         )
+    }
+
+    /// AO3 marks a blurb as anonymous two ways depending on listing type: a class
+    /// on the blurb `<li>` itself, or on its inner `div.header.module`. Shared by
+    /// every blurb-shaped parser (works, series, bookmarks) so the detection can't
+    /// drift between them.
+    static func isAnonymousBlurb(_ element: Element) throws -> Bool {
+        if element.hasClass("anonymous") { return true }
+        return try element.select("div.header.module.anonymous").first() != nil
     }
 }

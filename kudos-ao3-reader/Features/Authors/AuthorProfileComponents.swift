@@ -76,6 +76,15 @@ struct AO3AuthorHero: View {
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
                             .disabled(actionsBusy)
+                            // The button reads as scoped to whatever route is on screen,
+                            // but AO3 subscriptions are account-wide — the unsubscribe
+                            // confirmation already says so explicitly; give Subscribe
+                            // the same disclosure when viewing a specific pseud.
+                            .accessibilityHint(
+                                route.pseud != nil
+                                    ? "Applies to \(route.username)'s whole account, not only this pseud."
+                                    : ""
+                            )
                         }
 
                         if let muteAction {
@@ -319,10 +328,12 @@ struct AO3AuthorProfileSkeleton: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .skeletonShimmer()
                 .cardRow()
             }
             Section {
                 SkeletonBlock(height: 34, cornerRadius: 7)
+                    .skeletonShimmer()
                     .cardRow()
             }
             Section {
