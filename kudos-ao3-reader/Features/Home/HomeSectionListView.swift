@@ -129,7 +129,11 @@ struct HomeSectionListView: View {
                         WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                     }
                     #endif
-                } else {
+                } else if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) || !items.isEmpty {
+                    // Gated as a whole, not just its inner pieces — an empty HStack
+                    // still reserves an (empty-looking) toolbar slot when the section
+                    // has no works and no mature works to reveal.
+                    //
                     // One item holding a tight HStack — separate ToolbarItems get the
                     // system's wide spacing, which reads as inconsistent between the
                     // privacy toggle and the expand/filter cluster. Matches the pattern
