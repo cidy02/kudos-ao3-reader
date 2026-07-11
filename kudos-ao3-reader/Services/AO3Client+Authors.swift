@@ -277,6 +277,104 @@ extension AO3Client {
         return nil
     }
 
+    /// Parses AO3's block/mute confirm page the same way as
+    /// `parseAuthorSubscriptionForm`: CSRF + form action/fields via existing
+    /// helpers, plus plain-text title/message for the confirm alert.
+    static func parseAuthorModerationForm(
+        _ html: String,
+        referer: URL,
+        webKind: AO3AuthorWebAction.Kind,
+        targetUsername: String
+    ) throws -> AO3AuthorModerationForm {
+        let doc = try SwiftSoup.parse(html)
+        if let flash = writeErrorMessage(in: html), !flash.isEmpty {
+            throw AO3WriteError.rejected(flash)
+        }
+        guard let csrf = parseCSRFToken(from: html) else {
+            throw AO3WriteError.noCSRFToken
+        }
+
+        let pageTitle = clean(try doc.select("h2.heading, h2").first()?.text())
+        for form in try doc.select("form").array() {
+            guard let action = try absoluteAO3URL(form.attr("action")) else { continue }
+            // Same field extraction as `parseAuthorSubscriptionForm`.
+            let fields = try form.select("input[name]").array().compactMap { input -> AO3FormField? in
+                let name = try input.attr("name")
+                guard !name.isEmpty else { return nil }
+                return AO3FormField(name: name, value: try input.attr("value"))
+            }
+            let path = action.path.lowercased()
+            let isModerationForm = path.contains("/blocked/") || path.contains("/muted/")
+                || fields.contains {
+                    $0.name == "blocked_id" || $0.name == "muted_id"
+                }
+            guard isModerationForm else { continue }
+
+            let submit = try form.select("input[type=submit], button[type=submit]").first()
+            let valueLabel = try submit?.attr("value") ?? ""
+            let textLabel = try submit?.text() ?? ""
+            let submitLabel = clean(valueLabel.isEmpty ? textLabel : valueLabel)
+            let cancelLabel = clean(try form.select("p.actions a, .actions a").first()?.text())
+            let isUndo = fields.contains {
+                $0.name == "_method" && $0.value.lowercased() == "delete"
+            }
+                || submitLabel.localizedCaseInsensitiveContains("unblock")
+                || submitLabel.localizedCaseInsensitiveContains("unmute")
+            guard let kind = AO3AuthorModerationKind(webAction: webKind, isUndo: isUndo) else {
+                continue
+            }
+
+            let notice = try form.select(
+                "div.caution.notice, div.notice.caution, div.caution, div.notice"
+            ).first()
+            let title = pageTitle.isEmpty
+                ? "\(kind.rawValue.capitalized) \(targetUsername)"
+                : pageTitle
+
+            return AO3AuthorModerationForm(
+                kind: kind,
+                targetUsername: targetUsername,
+                title: title,
+                message: try plainAlertMessage(from: notice),
+                submitLabel: submitLabel.isEmpty ? "Confirm" : submitLabel,
+                cancelLabel: cancelLabel.isEmpty ? "Cancel" : cancelLabel,
+                actionURL: action,
+                fields: fields,
+                csrfToken: csrf,
+                referer: referer
+            )
+        }
+        throw AO3Error.parse
+    }
+
+    /// Formats AO3's caution notice for a system alert using only `clean` +
+    /// `Element.text()` (same as other author parsers). Walks `p`/`ul`/`li` so
+    /// will/will-not lists stay readable; no separate rich-text model.
+    private static func plainAlertMessage(from notice: Element?) throws -> String {
+        guard let notice else { return "" }
+        var parts: [String] = []
+        for child in notice.children().array() {
+            switch child.tagName().lowercased() {
+            case "ul", "ol":
+                let items = try child.select("li").array()
+                    .map { clean(try $0.text()) }
+                    .filter { !$0.isEmpty }
+                if !items.isEmpty {
+                    parts.append(items.map { "• \($0)" }.joined(separator: "\n"))
+                }
+            case "p", "div":
+                let text = clean(try child.text())
+                if !text.isEmpty { parts.append(text) }
+            default:
+                continue
+            }
+        }
+        if parts.isEmpty {
+            return clean(try notice.text())
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
     private static func parseAuthorActions(
         _ links: Elements,
         username: String

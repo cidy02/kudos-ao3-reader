@@ -290,6 +290,70 @@ nonisolated struct AO3AuthorSubscriptionForm: Hashable {
     }
 }
 
+/// Block / mute kind inferred from the confirm form (same role as
+/// `AO3AuthorSubscriptionForm.isSubscribed` for subscribe/unsubscribe).
+nonisolated enum AO3AuthorModerationKind: String, Hashable, Sendable {
+    case block
+    case unblock
+    case mute
+    case unmute
+
+    init?(webAction: AO3AuthorWebAction.Kind, isUndo: Bool) {
+        switch (webAction, isUndo) {
+        case (.block, false): self = .block
+        case (.block, true): self = .unblock
+        case (.mute, false): self = .mute
+        case (.mute, true): self = .unmute
+        default: return nil
+        }
+    }
+
+    var isUndo: Bool {
+        switch self {
+        case .unblock, .unmute: true
+        case .block, .mute: false
+        }
+    }
+
+    var successMessage: String {
+        switch self {
+        case .block: "Blocked."
+        case .unblock: "Unblocked."
+        case .mute: "Muted."
+        case .unmute: "Unmuted."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .block: "hand.raised"
+        case .unblock: "hand.raised.slash"
+        case .mute: "speaker.slash"
+        case .unmute: "speaker.wave.2"
+        }
+    }
+}
+
+/// Scraped block/mute confirm form — same shape as `AO3AuthorSubscriptionForm`
+/// (action URL, hidden fields, CSRF, referer) plus alert title/message text.
+nonisolated struct AO3AuthorModerationForm: Hashable, Identifiable, Sendable {
+    let kind: AO3AuthorModerationKind
+    let targetUsername: String
+    let title: String
+    /// AO3 caution notice as plain alert text (paragraphs + "• " bullets).
+    let message: String
+    let submitLabel: String
+    let cancelLabel: String
+    let actionURL: URL
+    let fields: [AO3FormField]
+    let csrfToken: String
+    let referer: URL
+
+    var id: String {
+        "\(kind.rawValue)|\(targetUsername)|\(actionURL.absoluteString)"
+    }
+}
+
 nonisolated struct AO3AuthorHeader: Hashable {
     var identity: AO3AuthorIdentity
     var pseuds: [AO3AuthorPseud]

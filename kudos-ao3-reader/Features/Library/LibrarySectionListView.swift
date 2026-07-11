@@ -277,22 +277,23 @@ struct LibrarySectionListView: View {
                         )
                         .localWorkContextMenu(work: work)
                     } else {
-                        SensitiveWorkCoverCard(work: work)
-                            .cardNavigation(
-                                to: LocalWorkDestination.reader(work),
-                                accessibilityLabel: work.title
-                            )
-                            .localWorkContextMenu(
-                                work: work,
-                                onSelect: { isSelecting = true; selection = [work.id] }
-                            )
+                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            SensitiveWorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .localWorkContextMenu(
+                            work: work,
+                            onSelect: { isSelecting = true; selection = [work.id] }
+                        )
                     }
                 }
                 if showsMarkedForLater {
                     ForEach(visibleMarkedForLater) { work in
-                        AO3WorkCoverCard(work: work)
-                            .cardNavigation(to: work, accessibilityLabel: work.title)
-                            .remoteWorkContextMenu(work: work)
+                        NavigationLink(value: work) {
+                            AO3WorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .remoteWorkContextMenu(work: work)
                     }
                 }
             }

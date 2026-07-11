@@ -6,6 +6,7 @@ struct AuthorProfileView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var theme
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -22,6 +23,11 @@ struct AuthorProfileView: View {
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
     @State private var confirmingUnsubscribe = false
+    /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
+    @State private var showingLoginRequired = false
+    @State private var showingLogin = false
+    /// Resume after the login sheet succeeds (cleared on cancel / failed login).
+    @State private var pendingAuthAction: PendingAuthAction?
 
     init(route: AO3AuthorRoute) {
         _model = State(initialValue: AO3AuthorProfileModel(route: route))
@@ -52,10 +58,29 @@ struct AuthorProfileView: View {
             .sheet(isPresented: $showingAddToCollection) {
                 AddToCollectionView(works: resolvedCollectionWorks)
             }
+            .sheet(isPresented: $showingLogin, onDismiss: {
+                Task { await resumePendingAuthActionIfNeeded() }
+            }) {
+                AO3LoginView()
+            }
             .alert("AO3 Profile", isPresented: actionMessagePresented) {
                 Button("OK", role: .cancel) { model.clearActionMessage() }
             } message: {
                 Text(model.actionMessage ?? "")
+            }
+            .alert("Log in to AO3", isPresented: $showingLoginRequired) {
+                Button("Cancel", role: .cancel) { pendingAuthAction = nil }
+                Button("Log In") {
+                    // Present the login sheet after the alert finishes dismissing.
+                    // Simultaneous alert-dismiss + sheet-present can drop the sheet
+                    // on some iOS versions before the user ever submits credentials.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        showingLogin = true
+                    }
+                }
+            } message: {
+                Text("This action requires an AO3 account, log in first.")
             }
             .alert("Action Failed", isPresented: batchErrorPresented) {
                 Button("OK", role: .cancel) { batchActionError = nil }
@@ -74,6 +99,27 @@ struct AuthorProfileView: View {
             } message: {
                 Text("AO3 subscriptions apply to the underlying user account, not only this pseud.")
             }
+            // Centered alert (same style as "Log in to AO3"), not an action sheet.
+            .alert(
+                model.pendingModerationForm?.title ?? "Confirm",
+                isPresented: moderationConfirmPresented
+            ) {
+                Button(
+                    model.pendingModerationForm?.submitLabel ?? "Confirm",
+                    role: (model.pendingModerationForm?.kind.isUndo ?? false) ? nil : .destructive
+                ) {
+                    // Snapshot is held on the model — alert dismiss clears `pending`
+                    // before this Task runs.
+                    Task { await model.confirmPendingModeration(auth: auth) }
+                }
+                Button(model.pendingModerationForm?.cancelLabel ?? "Cancel", role: .cancel) {
+                    model.cancelPendingModeration()
+                }
+            } message: {
+                if let form = model.pendingModerationForm {
+                    Text(form.message)
+                }
+            }
             .onChange(of: authenticationScope, initial: true) { _, _ in
                 exitSelectMode()
                 model.activate(auth: auth)
@@ -83,6 +129,12 @@ struct AuthorProfileView: View {
                 batchTask?.cancel()
             }
     }
+}
+
+/// Profile write action to continue after a successful login from the signed-out prompt.
+private enum PendingAuthAction: Equatable {
+    case subscribe
+    case moderation(AO3AuthorWebAction.Kind)
 }
 
 private extension AuthorProfileView {
@@ -100,7 +152,11 @@ private extension AuthorProfileView {
                         profileTitle: model.about?.profileTitle ?? "",
                         isOwnProfile: isOwnProfile,
                         isPerformingSubscription: model.isPerformingSubscription,
-                        onSubscription: subscriptionTapped
+                        isPerformingModeration: model.isPerformingModeration,
+                        muteAction: muteAction,
+                        blockAction: blockAction,
+                        onSubscription: subscriptionTapped,
+                        onModerationAction: moderationTapped
                     )
                     .cardRow()
                 }
@@ -507,12 +563,68 @@ private extension AuthorProfileView {
     }
 
     private func subscriptionTapped() {
+        guard auth.isLoggedIn else {
+            pendingAuthAction = .subscribe
+            showingLoginRequired = true
+            return
+        }
         guard let form = model.header?.subscriptionForm else { return }
         if form.isSubscribed {
             confirmingUnsubscribe = true
         } else {
             Task { await model.toggleSubscription(auth: auth) }
         }
+    }
+
+    private func moderationTapped(_ action: AO3AuthorWebAction) {
+        guard auth.isLoggedIn else {
+            pendingAuthAction = .moderation(action.kind)
+            showingLoginRequired = true
+            return
+        }
+        Task { await model.beginModeration(action: action, auth: auth) }
+    }
+
+    /// After the login sheet closes: if the user signed in, refresh the profile
+    /// (signed-in forms/actions) and continue Mute / Block / Subscribe.
+    ///
+    /// The login sheet can disappear while automatic sign-in is still running
+    /// (SwiftUI presentation glitches). Wait briefly for that attempt so we
+    /// don't drop a Mute/Block/Subscribe that the user already asked for.
+    private func resumePendingAuthActionIfNeeded() async {
+        guard let pending = pendingAuthAction else { return }
+        if auth.status == .signingIn {
+            for _ in 0..<100 where auth.status == .signingIn {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        guard auth.isLoggedIn else {
+            pendingAuthAction = nil
+            return
+        }
+        pendingAuthAction = nil
+        // Header was loaded signed-out; pull signed-in subscription form + action URLs.
+        await model.refresh(auth: auth)
+        switch pending {
+        case .subscribe:
+            guard let form = model.header?.subscriptionForm else { return }
+            if form.isSubscribed {
+                confirmingUnsubscribe = true
+            } else {
+                await model.toggleSubscription(auth: auth)
+            }
+        case let .moderation(kind):
+            let actions = (model.header?.actions ?? []) + (model.about?.actions ?? [])
+            guard let action = actions.first(where: { $0.kind == kind }) else { return }
+            await model.beginModeration(action: action, auth: auth)
+        }
+    }
+
+    private var moderationConfirmPresented: Binding<Bool> {
+        Binding(
+            get: { model.pendingModerationForm != nil },
+            set: { if !$0 { model.cancelPendingModeration() } }
+        )
     }
 
     private var unavailableView: some View {
@@ -602,15 +714,30 @@ private extension AuthorProfileView {
         .accessibilityLabel("Author actions")
     }
 
+    /// Own-profile management links only — Mute/Block live next to Subscribe in the hero.
     private var visibleWebActions: [AO3AuthorWebAction] {
+        guard isOwnProfile else { return [] }
         let values = (model.header?.actions ?? []) + (model.about?.actions ?? [])
-        let allowed: Set<AO3AuthorWebAction.Kind> = isOwnProfile
-            ? [.profile, .pseuds, .works, .preferences, .dashboard]
-            : [.block, .mute]
+        let allowed: Set<AO3AuthorWebAction.Kind> = [
+            .profile, .pseuds, .works, .preferences, .dashboard
+        ]
         var seen = Set<String>()
         return values.filter {
             allowed.contains($0.kind) && seen.insert($0.url.absoluteString).inserted
         }
+    }
+
+    private var muteAction: AO3AuthorWebAction? {
+        firstWebAction(kind: .mute)
+    }
+
+    private var blockAction: AO3AuthorWebAction? {
+        firstWebAction(kind: .block)
+    }
+
+    private func firstWebAction(kind: AO3AuthorWebAction.Kind) -> AO3AuthorWebAction? {
+        let values = (model.header?.actions ?? []) + (model.about?.actions ?? [])
+        return values.first { $0.kind == kind }
     }
 
     private func actionSymbol(_ kind: AO3AuthorWebAction.Kind) -> String {

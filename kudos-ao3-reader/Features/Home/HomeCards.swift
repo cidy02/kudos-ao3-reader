@@ -18,17 +18,8 @@ struct WorkCoverCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !work.author.isEmpty {
-                    HStack(alignment: .top, spacing: 4) {
-                        Image(systemName: "person")
-                            .foregroundStyle(.tint)
-                        AO3AuthorBylineView(
-                            displayText: work.author,
-                            identities: work.verifiedAuthorIdentities,
-                            includesBy: false,
-                            font: .caption,
-                            compact: true
-                        )
-                    }
+                    CardMetaLabel(text: work.author, symbol: "person")
+                        .font(.caption)
                 }
 
                 if let fandom = work.workFandoms.first, !fandom.isEmpty {
@@ -152,18 +143,9 @@ struct AO3WorkCoverCard: View {
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !work.authors.isEmpty {
-                    HStack(alignment: .top, spacing: 4) {
-                        Image(systemName: "person")
-                            .foregroundStyle(.tint)
-                        AO3AuthorBylineView(
-                            names: work.authors,
-                            identities: work.authorIdentities,
-                            includesBy: false,
-                            font: .caption,
-                            compact: true
-                        )
-                    }
+                if let author = work.authors.first, !author.isEmpty {
+                    CardMetaLabel(text: author, symbol: "person")
+                        .font(.caption)
                 }
 
                 if let fandom = work.fandoms.first, !fandom.isEmpty {

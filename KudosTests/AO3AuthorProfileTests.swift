@@ -140,6 +140,59 @@ struct AO3AuthorProfileParserTests {
         })
     }
 
+    @Test func parsesBlockAndUnmuteConfirmFormsFromAO3Pages() throws {
+        let referer = URL(string: "https://archiveofourown.org/users/Avery_Archive/blocked/confirm")!
+        // Same contract as subscription forms: CSRF + action + fields + labels.
+        let block = try AO3Client.parseAuthorModerationForm(
+            try fixture("ao3_author_confirm_block"),
+            referer: referer,
+            webKind: .block,
+            targetUsername: "Avery_Archive"
+        )
+        #expect(block.kind == .block)
+        #expect(block.title == "Block Avery_Archive")
+        #expect(block.submitLabel == "Yes, Block User")
+        #expect(block.cancelLabel == "Cancel")
+        #expect(block.csrfToken == "moderation-csrf-token")
+        #expect(block.actionURL.path == "/users/me/blocked/users")
+        #expect(block.fields.contains { $0.name == "blocked_id" && $0.value == "Avery_Archive" })
+        #expect(!block.kind.isUndo)
+        // Full AO3 copy, structured for an alert (paragraphs + bullet lines).
+        #expect(block.message.contains("commenting or leaving kudos"))
+        #expect(block.message.contains("• commenting or leaving kudos on your works"))
+        #expect(block.message.contains("• hide their works or bookmarks from you"))
+        #expect(block.message.contains("Muted Users"))
+        #expect(block.message.contains("\n\n"))
+
+        let unmute = try AO3Client.parseAuthorModerationForm(
+            try fixture("ao3_author_confirm_unmute"),
+            referer: referer,
+            webKind: .mute,
+            targetUsername: "Avery_Archive"
+        )
+        #expect(unmute.kind == .unmute)
+        #expect(unmute.title == "Unmute Avery_Archive")
+        #expect(unmute.submitLabel == "Yes, Unmute User")
+        #expect(unmute.actionURL.path == "/users/me/muted/users/99")
+        #expect(unmute.fields.contains { $0.name == "_method" && $0.value == "delete" })
+        #expect(unmute.kind.isUndo)
+        #expect(unmute.kind.successMessage == "Unmuted.")
+        #expect(unmute.message.contains("• seeing their works, series, bookmarks, and comments"))
+    }
+
+    @Test func moderationConfirmPageFlashErrorsAreSurfaced() throws {
+        let referer = URL(string: "https://archiveofourown.org/users/Avery_Archive/blocked/confirm")!
+        let html = try fixture("ao3_author_confirm_block_rejected")
+        #expect(throws: AO3WriteError.self) {
+            try AO3Client.parseAuthorModerationForm(
+                html,
+                referer: referer,
+                webKind: .block,
+                targetUsername: "Avery_Archive"
+            )
+        }
+    }
+
     @Test func parsesPseudDashboardWithoutInventingAvatarOrAuthActions() throws {
         let route = try #require(AO3AuthorRoute(
             username: "Avery_Archive",

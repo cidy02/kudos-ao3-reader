@@ -300,6 +300,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
                 && language.isEmpty && wordCount == 0)
             // Backfill the newer card stats for works saved before they existed.
             || chapters.isEmpty
+            // Author profile links are AO3-verified enrichment added after many works
+            // already had tags fetched — re-hit AO3 once so bylines become tappable.
+            // Pure local/user EPUBs (no AO3 id/URL) stay non-tappable by design.
+            || (authorIdentitiesJSON.isEmpty && hasAO3SourceForAuthorEnrichment)
+    }
+
+    /// True when this work can be matched to an AO3 work page for byline enrichment.
+    private var hasAO3SourceForAuthorEnrichment: Bool {
+        if ao3WorkID != nil { return true }
+        let url = sourceURL.lowercased()
+        return url.contains("archiveofourown.org") || url.contains("ao3.org")
     }
 
     /// The user's own organizational tags (User Tags), shared across works.

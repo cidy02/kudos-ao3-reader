@@ -348,12 +348,11 @@ struct ReadingQueueDetailView: View {
                 context: context
             ))
         } else {
-            SensitiveWorkCoverCard(work: work)
-                .cardNavigation(
-                    to: LocalWorkDestination.reader(work),
-                    accessibilityLabel: work.title
-                )
-                .localWorkContextMenu(work: work)
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                SensitiveWorkCoverCard(work: work)
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work)
         }
     }
 

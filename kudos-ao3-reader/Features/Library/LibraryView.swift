@@ -291,8 +291,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     localCarouselCard(work: work, footer: nil, progress: nil)
                 }
                 ForEach(mfl.prefix(12)) { work in
-                    AO3WorkCoverCard(work: work)
-                        .cardNavigation(to: work, accessibilityLabel: work.title)
+                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                        .buttonStyle(.plain)
                 }
             }
         } emptyState: {
@@ -665,20 +665,18 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             )
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         } else {
-            SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
-                .cardNavigation(
-                    to: LocalWorkDestination.reader(work),
-                    accessibilityLabel: work.title
-                )
-                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
         #else
-        SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
-            .cardNavigation(
-                to: LocalWorkDestination.reader(work),
-                accessibilityLabel: work.title
-            )
-            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+        NavigationLink(value: LocalWorkDestination.reader(work)) {
+            SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
+        }
+        .buttonStyle(.plain)
+        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         #endif
     }
 

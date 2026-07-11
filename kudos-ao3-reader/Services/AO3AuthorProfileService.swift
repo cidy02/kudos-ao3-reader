@@ -96,6 +96,12 @@ final class AO3AuthorProfileModel {
     private(set) var loadMoreError: String?
     private(set) var isShowingStaleCache = false
     private(set) var isPerformingSubscription = false
+    private(set) var isPerformingModeration = false
+    /// Set after a successful confirm-page fetch; the UI presents a native dialog.
+    private(set) var pendingModerationForm: AO3AuthorModerationForm?
+    /// Snapshot for submit — SwiftUI alert dismiss can clear `pendingModerationForm`
+    /// before the confirm button's `Task` runs, which previously no-op'd the POST.
+    private var moderationFormForSubmit: AO3AuthorModerationForm?
     private(set) var actionMessage: String?
 
     private var worksPage = 0
@@ -274,6 +280,88 @@ final class AO3AuthorProfileModel {
                 == actionAuthenticationScope else { return }
             actionMessage = Self.message(for: error)
         }
+    }
+
+    /// Fetches AO3's block/mute confirm page, parses the form, and stages it for a
+    /// native confirmation screen — never opens the in-app browser. Signed-out taps
+    /// set `actionMessage` to "Log in to AO3 first." (same alert as Subscribe).
+    func beginModeration(action: AO3AuthorWebAction, auth: AO3AuthService) async {
+        guard action.kind == .block || action.kind == .mute,
+              !isPerformingModeration else { return }
+        guard auth.isLoggedIn else {
+            actionMessage = AO3WriteError.notSignedIn.localizedDescription
+            return
+        }
+        let actionRoute = route
+        let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        isPerformingModeration = true
+        actionMessage = nil
+        pendingModerationForm = nil
+        moderationFormForSubmit = nil
+        defer { isPerformingModeration = false }
+        do {
+            let page = try await pageLoader(action.url, auth, true)
+            let form = try AO3Client.parseAuthorModerationForm(
+                page.html,
+                referer: action.url,
+                webKind: action.kind,
+                targetUsername: actionRoute.username
+            )
+            guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
+                    == .orderedSame,
+                  AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                    == actionAuthenticationScope else { return }
+            // Keep a submit snapshot; the alert binding may clear `pending` on dismiss.
+            moderationFormForSubmit = form
+            pendingModerationForm = form
+        } catch AO3Error.authenticationRequired {
+            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                == actionAuthenticationScope else { return }
+            await auth.sessionDidExpire()
+        } catch {
+            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                == actionAuthenticationScope else { return }
+            actionMessage = Self.message(for: error)
+        }
+    }
+
+    func confirmPendingModeration(auth: AO3AuthService) async {
+        // Prefer the snapshot — alert dismiss often nils `pendingModerationForm` first.
+        guard let form = moderationFormForSubmit ?? pendingModerationForm,
+              !isPerformingModeration else { return }
+        let actionRoute = route
+        let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        isPerformingModeration = true
+        actionMessage = nil
+        pendingModerationForm = nil
+        moderationFormForSubmit = nil
+        defer { isPerformingModeration = false }
+        do {
+            let message = try await auth.submitAuthorModeration(form)
+            await AO3AuthorProfileFetcher.invalidateAuthorDashboards(
+                username: actionRoute.username,
+                authenticationScope: actionAuthenticationScope
+            )
+            guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
+                    == .orderedSame,
+                  AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                    == actionAuthenticationScope else { return }
+            actionMessage = message
+            await loadHeader(auth: auth, bypassCache: true)
+        } catch AO3Error.authenticationRequired {
+            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                == actionAuthenticationScope else { return }
+            await auth.sessionDidExpire()
+        } catch {
+            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                == actionAuthenticationScope else { return }
+            actionMessage = Self.message(for: error)
+        }
+    }
+
+    func cancelPendingModeration() {
+        pendingModerationForm = nil
+        moderationFormForSubmit = nil
     }
 
     func clearActionMessage() {
@@ -595,24 +683,66 @@ extension AO3AuthService {
     /// endpoint, hidden fields, method override, and CSRF token all come from that
     /// fetched page; no action is synthesized and the POST remains single-shot.
     func submitAuthorSubscription(_ form: AO3AuthorSubscriptionForm) async throws -> String {
+        try await submitScrapedHTMLForm(
+            actionURL: form.actionURL,
+            fields: form.fields,
+            csrfToken: form.csrfToken,
+            referer: form.referer,
+            successMessage: form.isSubscribed ? "Unsubscribed." : "Subscribed.",
+            failureFallback: "AO3 didn't accept the subscription change."
+        )
+    }
+
+    /// Submits the exact block/mute (or undo) form from AO3's confirm page —
+    /// same `writeRequest` / `submitWrite` path as subscription.
+    func submitAuthorModeration(_ form: AO3AuthorModerationForm) async throws -> String {
+        try await submitScrapedHTMLForm(
+            actionURL: form.actionURL,
+            fields: form.fields,
+            csrfToken: form.csrfToken,
+            referer: form.referer,
+            successMessage: form.kind.successMessage,
+            failureFallback: "AO3 didn't accept the \(form.kind.rawValue) action."
+        )
+    }
+
+    /// Shared single-shot POST for scraped AO3 forms (subscribe, block/mute, …).
+    /// Reuses `writeRequest`, `formEncoded`, `submitWrite`, and `writeErrorMessage`.
+    private func submitScrapedHTMLForm(
+        actionURL: URL,
+        fields: [AO3FormField],
+        csrfToken: String,
+        referer: URL,
+        successMessage: String,
+        failureFallback: String
+    ) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
-        var fields = form.fields.map { ($0.name, $0.value) }
-        if !fields.contains(where: { $0.0 == "authenticity_token" }) {
-            fields.append(("authenticity_token", form.csrfToken))
+        var pairs = fields.map { ($0.name, $0.value) }
+        if !pairs.contains(where: { $0.0 == "authenticity_token" }) {
+            pairs.append(("authenticity_token", csrfToken))
+        }
+        // Rails may put ids only on the form action query string (block/mute).
+        if let items = URLComponents(url: actionURL, resolvingAgainstBaseURL: false)?.queryItems {
+            for item in items {
+                guard let value = item.value,
+                      !pairs.contains(where: { $0.0 == item.name }) else { continue }
+                pairs.append((item.name, value))
+            }
         }
         let request = try writeRequest(
-            to: form.actionURL,
-            body: Self.formEncoded(fields),
-            csrf: form.csrfToken,
-            referer: form.referer,
+            to: actionURL,
+            body: Self.formEncoded(pairs),
+            csrf: csrfToken,
+            referer: referer,
             ajax: false
         )
         let (status, body) = try await AO3Client.shared.submitWrite(request)
-        guard (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: body) == nil else {
-            throw AO3WriteError.rejected(
-                AO3Client.writeErrorMessage(in: body) ?? "AO3 didn't accept the subscription change."
-            )
+        if let error = AO3Client.writeErrorMessage(in: body) {
+            throw AO3WriteError.rejected(error)
         }
-        return form.isSubscribed ? "Unsubscribed." : "Subscribed."
+        guard (200 ... 399).contains(status) else {
+            throw AO3WriteError.rejected(failureFallback)
+        }
+        return successMessage
     }
 }

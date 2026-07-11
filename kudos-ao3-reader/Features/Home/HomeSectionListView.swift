@@ -210,15 +210,14 @@ struct HomeSectionListView: View {
                         )
                         .localWorkContextMenu(work: work)
                     } else {
-                        SensitiveWorkCoverCard(work: work)
-                            .cardNavigation(
-                                to: LocalWorkDestination.reader(work),
-                                accessibilityLabel: work.title
-                            )
-                            .localWorkContextMenu(
-                                work: work,
-                                onSelect: { isSelecting = true; selection = [work.id] }
-                            )
+                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            SensitiveWorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .localWorkContextMenu(
+                            work: work,
+                            onSelect: { isSelecting = true; selection = [work.id] }
+                        )
                     }
                 }
             }

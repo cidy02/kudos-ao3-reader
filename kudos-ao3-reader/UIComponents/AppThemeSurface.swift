@@ -240,25 +240,25 @@ extension View {
     /// `>` clutters the rounded work cards. The List still makes the whole card
     /// tappable, and inner controls (tag / fandom / expand buttons) keep their own
     /// taps because the link sits behind the content rather than wrapping it.
+    /// Disabled while `AppRouter.cardNavigationSuppressed` so an author byline tap
+    /// does not also open the work/reader underneath the profile.
     func cardNavigation(to value: some Hashable) -> some View {
-        background {
+        modifier(CardNavigationModifier(value: value))
+    }
+}
+
+/// Background `NavigationLink` for work cards — observes author-navigation suppress
+/// so the same-touch row activation can be disabled after a byline tap.
+private struct CardNavigationModifier<Value: Hashable>: ViewModifier {
+    let value: Value
+    @Environment(AppRouter.self) private var router
+
+    func body(content: Content) -> some View {
+        content.background {
             NavigationLink(value: value) { EmptyView() }
                 .opacity(0)
-        }
-    }
-
-    /// The same behind-content navigation for cards outside a `List`. A clear label
-    /// fills the card's proposed size and supplies the work title to VoiceOver while
-    /// foreground controls such as author links keep priority.
-    func cardNavigation(to value: some Hashable, accessibilityLabel: String) -> some View {
-        background {
-            NavigationLink(value: value) {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .accessibilityLabel(accessibilityLabel)
-                    .accessibilityHint("Open work")
-            }
-            .buttonStyle(.plain)
+                .disabled(router.cardNavigationSuppressed)
+                .allowsHitTesting(!router.cardNavigationSuppressed)
         }
     }
 }

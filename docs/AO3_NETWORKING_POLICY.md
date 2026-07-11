@@ -19,7 +19,7 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 | Batch behavior | Strictly sequential: `DownloadQueue` one at a time; series preservation sleeps 2s/work (`preservationRequestPauseNanos`), cancellable; Browse bulk actions resolve one-by-one and cancel on view exit. |
 | Local-first | Every enrichment path checks local state first; the search index is built from local data only; `existingWork` pre-checks avoid re-downloads. |
 | Cancellation | `Task.sleep`/URLSession propagate `CancellationError`; coordinator wakes cancelled waiters; batch loops stop (never count cancellations as failures). |
-| Author profiles | Fetch only after an explicit byline/profile tap. Dashboard + selected Works tab load first; Series/Bookmarks/About and later pages load on demand. `AO3AuthorPageCache` is capped at 128 entries, uses a 5-minute TTL keyed by full URL and authentication scope, and keeps at most 24 hours of same-scope stale fallback; stale data never crosses accounts or hides session expiry. Scope/tab changes cancel superseded loads. |
+| Author profiles | Fetch only after an explicit byline/profile tap. Dashboard + selected Works tab load first; Series/Bookmarks/About and later pages load on demand. `AO3AuthorPageCache` is capped at 128 entries, uses a 5-minute TTL keyed by full URL and authentication scope, and keeps at most 24 hours of same-scope stale fallback; stale data never crosses accounts or hides session expiry. Scope/tab changes cancel superseded loads. Block/mute: GET AO3's confirm page once, native confirm dialog, single-shot POST of that form (never open the web form, never retry writes). |
 
 ## Parser fragility assumptions
 

@@ -527,8 +527,10 @@ struct CommentsView: View {
             // frame around the (compact) button, not inside the label.
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .padding(.bottom, 6)
+            // Sit tight to the home-indicator safe area — only a hair of top
+            // padding so the pill doesn't collide with the last comment.
+            .padding(.top, 2)
+            .padding(.bottom, 0)
             .accessibilityLabel(auth.isLoggedIn ? "Write a comment" : "Log in to comment")
         }
     }

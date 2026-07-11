@@ -23,9 +23,30 @@ struct AppRouterTests {
         router.openAO3Link(URL(string: "https://archiveofourown.org/users/someone")!)
 
         #expect(router.pendingAuthorProfile == AO3AuthorRoute(username: "someone"))
+        #expect(router.authorProfileNavigationEpoch == 1)
         #expect(router.pendingTagWorks == nil)
         #expect(router.pendingURL == nil)
         #expect(router.selection == .home)
+    }
+
+    @Test func openAuthorProfileBumpsEpochEvenForSameRoute() throws {
+        let router = AppRouter()
+        let route = try #require(AO3AuthorRoute(username: "someone"))
+
+        router.openAuthorProfile(route)
+        #expect(router.authorProfileNavigationEpoch == 1)
+        #expect(router.pendingAuthorProfile == route)
+        #expect(router.cardNavigationSuppressed)
+        #expect(router.shouldSuppressCardNavigation)
+
+        // Same route again — Optional equality would skip onChange; epoch must advance.
+        router.openAuthorProfile(route)
+        #expect(router.authorProfileNavigationEpoch == 2)
+        #expect(router.pendingAuthorProfile == route)
+
+        #expect(router.consumePendingAuthorProfile() == route)
+        #expect(router.pendingAuthorProfile == nil)
+        #expect(router.consumePendingAuthorProfile() == nil)
     }
 
     @Test func percentEncodedPseudLinkRoutesToExactNativePseud() throws {

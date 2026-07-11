@@ -6,7 +6,25 @@ struct AO3AuthorHero: View {
     let profileTitle: String
     let isOwnProfile: Bool
     let isPerformingSubscription: Bool
+    var isPerformingModeration: Bool = false
+    /// Icon-only Mute / Block (or Unmute / Unblock) from AO3's profile actions.
+    var muteAction: AO3AuthorWebAction?
+    var blockAction: AO3AuthorWebAction?
     let onSubscription: () -> Void
+    var onModerationAction: (AO3AuthorWebAction) -> Void = { _ in }
+
+    private var showsAccountActions: Bool {
+        !isOwnProfile && !route.isOrphanAccount
+    }
+
+    private var showsActionRow: Bool {
+        guard showsAccountActions else { return false }
+        return header.subscriptionForm != nil || muteAction != nil || blockAction != nil
+    }
+
+    private var actionsBusy: Bool {
+        isPerformingSubscription || isPerformingModeration
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -19,7 +37,7 @@ struct AO3AuthorHero: View {
                     .minimumScaleFactor(0.75)
                     .accessibilityAddTraits(.isHeader)
 
-                if let pseud = route.pseud {
+                if route.pseud != nil {
                     Text("Pseud of \(route.username)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -37,21 +55,39 @@ struct AO3AuthorHero: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if let form = header.subscriptionForm,
-                   !isOwnProfile,
-                   !route.isOrphanAccount {
-                    Button(action: onSubscription) {
-                        Label(
-                            form.isSubscribed ? "Unsubscribe" : "Subscribe",
-                            systemImage: form.isSubscribed ? "bell.slash" : "bell"
-                        )
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(isPerformingSubscription)
-                    .overlay {
-                        if isPerformingSubscription {
-                            ProgressView().controlSize(.small)
+                if showsActionRow {
+                    // Subscribe keeps a text label; Mute/Block are icon-only beside it
+                    // (AO3's full label is the accessibility string).
+                    HStack(spacing: 8) {
+                        if let form = header.subscriptionForm {
+                            // Explicit HStack (not Label): Label + .borderedProminent +
+                            // .small often misaligns the glyph vs title.
+                            Button(action: onSubscription) {
+                                HStack(spacing: 5) {
+                                    if isPerformingSubscription {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
+                                    }
+                                    Text(form.isSubscribed ? "Unsubscribe" : "Subscribe")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(actionsBusy)
+                        }
+
+                        if let muteAction {
+                            moderationIconButton(muteAction, webKind: .mute)
+                        }
+                        if let blockAction {
+                            moderationIconButton(blockAction, webKind: .block)
+                        }
+
+                        if isPerformingModeration {
+                            ProgressView()
+                                .controlSize(.small)
                         }
                     }
                     .padding(.top, 3)
@@ -61,6 +97,24 @@ struct AO3AuthorHero: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
+    }
+
+    private func moderationIconButton(
+        _ action: AO3AuthorWebAction,
+        webKind: AO3AuthorWebAction.Kind
+    ) -> some View {
+        let isUndo = action.label.localizedCaseInsensitiveContains("un")
+        let kind = AO3AuthorModerationKind(webAction: webKind, isUndo: isUndo)
+        return Button {
+            onModerationAction(action)
+        } label: {
+            Image(systemName: kind?.systemImage
+                ?? (webKind == .mute ? "speaker.slash" : "hand.raised"))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(actionsBusy)
+        .accessibilityLabel(action.label)
     }
 }
 

@@ -397,6 +397,8 @@ private struct SpinePostRow: View {
     /// commenters only); guests and unresolvable bylines render as plain text
     /// via the same component's own fallback.
     private var authorIdentity: some View {
+        // Byline defaults to maxWidth: .infinity; role chips must not share that
+        // flexible slot or they collapse to a tint/gray capsule with no label.
         HStack(spacing: 6) {
             AO3AuthorBylineView(
                 names: [comment.author],
@@ -407,7 +409,6 @@ private struct SpinePostRow: View {
                 emphasized: true,
                 onOpenRoute: handlers.onOpenAuthor
             )
-            .layoutPriority(1)
             if isByWorkAuthor {
                 Text("Author")
                     .font(.caption2.weight(.semibold))
@@ -415,6 +416,9 @@ private struct SpinePostRow: View {
                     .padding(.vertical, 2)
                     .background(.tint, in: Capsule())
                     .foregroundStyle(.white)
+                    .fixedSize()
+                    .layoutPriority(1)
+                    .accessibilityLabel("Work author")
             } else if comment.isGuest {
                 Text("Guest")
                     .font(.caption2)
@@ -422,6 +426,8 @@ private struct SpinePostRow: View {
                     .padding(.vertical, 2)
                     .background(.quaternary, in: Capsule())
                     .foregroundStyle(.secondary)
+                    .fixedSize()
+                    .layoutPriority(1)
             }
         }
     }
@@ -431,11 +437,16 @@ private struct SpinePostRow: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
     private var chapterBadge: some View {
-        if showChapterBadge, let chapter = comment.chapterLabel {
+        // Empty/whitespace labels still pass `let chapter =` and used to paint a
+        // hollow gray capsule on the trailing byline edge (the "gray blob").
+        if showChapterBadge,
+           let chapter = comment.chapterLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !chapter.isEmpty {
             Text(chapter)
                 .font(.caption2)
                 .padding(.horizontal, 7)
@@ -443,6 +454,8 @@ private struct SpinePostRow: View {
                 .background(.quaternary, in: Capsule())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(1)
         }
     }
 
@@ -460,14 +473,19 @@ private struct SpinePostRow: View {
     private var actionsRow: some View {
         HStack(alignment: .center, spacing: 4) {
             if comment.canReply && auth.isLoggedIn {
+                // Match the overflow chip: quaternary capsule so Reply reads as
+                // the same class of control rather than faint borderless text.
                 Button { handlers.onReply(comment) } label: {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
-                        .font(.caption.weight(.medium))
-                        .padding(.vertical, 4)
-                        .padding(.trailing, 4)
-                        .contentShape(Rectangle())
+                        .font(.caption.weight(.semibold))
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.quaternary, in: Capsule())
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.borderless)
+                .foregroundStyle(.primary)
                 .accessibilityLabel("Reply to \(comment.author)")
             }
             Spacer(minLength: 0)
@@ -505,11 +523,15 @@ private struct SpinePostRow: View {
                     }
                 }
             } label: {
+                // Same chip language as Author/Guest: quaternary capsule, bold
+                // primary ellipsis (A/B vs the circular treatment).
                 Image(systemName: "ellipsis")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(6)
-                    .contentShape(Rectangle())
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.quaternary, in: Capsule())
+                    .contentShape(Capsule())
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("More actions for \(comment.author)'s comment")

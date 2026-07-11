@@ -14,13 +14,33 @@ enum LocalWorkRowOpenMode {
 struct LocalWorkDestinationView: View {
     let destination: LocalWorkDestination
     var onReaderOpen: (SavedWork) -> Void = { _ in }
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
-        switch destination {
-        case let .reader(work):
-            LocalWorkReaderDestination(work: work, onOpen: onReaderOpen)
-        case let .detail(work):
-            WorkDetailView(work: work)
+        Group {
+            switch destination {
+            case let .reader(work):
+                LocalWorkReaderDestination(work: work, onOpen: onReaderOpen)
+            case let .detail(work):
+                WorkDetailView(work: work)
+            }
+        }
+        // Author byline taps can also activate the row NavigationLink. Dismiss must
+        // be async — SwiftUI often ignores dismiss() inside the same navigation
+        // transaction as the push (profile stayed buried until the user pressed Back).
+        .onAppear { dismissIfAuthorBylineConflict() }
+        .onChange(of: router.cardNavigationSuppressed) { _, suppressed in
+            if suppressed { dismissIfAuthorBylineConflict() }
+        }
+    }
+
+    private func dismissIfAuthorBylineConflict() {
+        guard router.shouldSuppressCardNavigation else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard router.shouldSuppressCardNavigation else { return }
+            dismiss()
         }
     }
 }

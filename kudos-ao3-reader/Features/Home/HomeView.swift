@@ -199,15 +199,14 @@ struct HomeView: View {
                     )
                     .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                 } else {
-                    SensitiveWorkCoverCard(
-                        work: work,
-                        footer: footer(kind, work),
-                        progress: progress(kind, work)
-                    )
-                    .cardNavigation(
-                        to: LocalWorkDestination.reader(work),
-                        accessibilityLabel: work.title
-                    )
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        SensitiveWorkCoverCard(
+                            work: work,
+                            footer: footer(kind, work),
+                            progress: progress(kind, work)
+                        )
+                    }
+                    .buttonStyle(.plain)
                     .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                 }
             }

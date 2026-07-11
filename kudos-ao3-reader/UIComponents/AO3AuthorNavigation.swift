@@ -104,7 +104,14 @@ struct AO3AuthorBylineView: View {
     }
 
     var body: some View {
-        FlowLayout(spacing: 0, rowSpacing: 0) {
+        // HStack + firstTextBaseline keeps "by" and names on one line. Avoid:
+        // (1) minHeight on only the name (dropped it below "by"),
+        // (2) negative-padding hit expansion (zeroed the button hit rect in List
+        //     rows so taps fell through to card NavigationLink),
+        // (3) FlowLayout for this byline (custom Layout hit-testing is less reliable
+        //     for nested borderless Buttons inside List + background NavigationLink).
+        // Coauthors almost always fit one line; rare overflow truncates at the end.
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             if includesBy {
                 Text("by ")
                     .foregroundStyle(.secondary)
@@ -112,32 +119,40 @@ struct AO3AuthorBylineView: View {
             ForEach(tokens) { token in
                 let text = token.name + (token.id == tokens.count - 1 ? "" : ", ")
                 if let route = token.route, navigationEnabled {
-                    Button {
-                        if let onOpenRoute {
-                            onOpenRoute(route)
-                        } else {
-                            router.openAuthorProfile(route)
-                        }
-                    } label: {
-                        Text(text)
-                            .fontWeight(emphasized ? .semibold : .regular)
-                            .frame(minHeight: compact ? 30 : 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.tint)
-                    .accessibilityLabel(token.name)
-                    .accessibilityHint("Open AO3 author profile")
+                    // highPriorityGesture (not a nested Button): List rows that use
+                    // background `cardNavigation` NavigationLinks still activate on
+                    // borderless Button taps, stacking the work/reader on top of the
+                    // author profile — profile only appeared after Back. Priority
+                    // gesture claims the touch so the row link does not fire.
+                    Text(text)
+                        .fontWeight(emphasized ? .semibold : .regular)
+                        .foregroundStyle(.tint)
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(TapGesture().onEnded {
+                            if let onOpenRoute {
+                                onOpenRoute(route)
+                            } else {
+                                router.openAuthorProfile(route)
+                            }
+                        })
+                        .accessibilityLabel(token.name)
+                        .accessibilityHint("Open AO3 author profile")
+                        .accessibilityAddTraits(.isButton)
                 } else {
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
                         .foregroundStyle(.secondary)
-                        .frame(minHeight: compact ? 30 : 44)
                 }
             }
         }
         .font(font)
-        .fixedSize(horizontal: false, vertical: true)
+        .lineLimit(compact ? 1 : 2)
+        // Compact (comment bylines) hugs the name so sibling Author/Guest chips
+        // aren't pushed to zero width. Full-width remains for work-row bylines.
+        .frame(
+            maxWidth: compact ? nil : .infinity,
+            alignment: .leading
+        )
         .accessibilityElement(children: .contain)
     }
 
@@ -163,10 +178,22 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
             .navigationDestination(for: AO3SeriesSummary.self) { series in
                 AO3SeriesDetailView(series: series)
             }
-            .onChange(of: router.pendingAuthorProfile, initial: true) { _, route in
-                guard router.selection == tab, let route else { return }
-                path.append(route)
-                router.pendingAuthorProfile = nil
+            // Observe the epoch (not the Optional route): @Observable + Optional
+            // equality skips same-route re-taps. Epoch always changes; only the
+            // selected tab consumes.
+            .onChange(of: router.authorProfileNavigationEpoch, initial: true) { _, epoch in
+                guard epoch > 0, router.selection == tab,
+                      let route = router.consumePendingAuthorProfile() else { return }
+                // Wait out the same-touch row NavigationLink (and its deferred
+                // dismiss). Then push author so it ends up on top of the stack —
+                // not under reader/detail, and not lost if dismiss races path.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(100))
+                    guard router.selection == tab else { return }
+                    var next = path
+                    next.append(route)
+                    path = next
+                }
             }
     }
 }

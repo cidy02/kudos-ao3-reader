@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-token" content="moderation-csrf-token">
+  <title>Unmute Avery_Archive</title>
+</head>
+<body class="logged-in">
+  <div id="main" role="main">
+    <h2 class="heading">Unmute Avery_Archive</h2>
+    <form action="/users/me/muted/users/99" method="post">
+      <input type="hidden" name="_method" value="delete">
+      <input type="hidden" name="authenticity_token" value="moderation-csrf-token" autocomplete="off">
+      <div class="caution notice">
+        <p>
+          Are you sure you want to <strong>unmute</strong> Avery_Archive?
+          Unmuting a user means that you will resume:
+        </p>
+        <ul>
+          <li>seeing their works, series, bookmarks, and comments</li>
+        </ul>
+      </div>
+      <p class="actions">
+        <a href="/users/me/muted/users">Cancel</a>
+        <input type="submit" name="commit" value="Yes, Unmute User">
+      </p>
+    </form>
+  </div>
+</body>
+</html>

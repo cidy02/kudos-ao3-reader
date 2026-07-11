@@ -87,6 +87,13 @@ final class AppRouter {
     /// navigation stack. Every root stack consumes this through the shared author
     /// navigation modifier, so reader/comment/byline links use one route.
     var pendingAuthorProfile: AO3AuthorRoute?
+    /// Bumps on every `openAuthorProfile` so tab stacks always observe a change —
+    /// including re-tapping the same author (Optional equality would skip `onChange`).
+    private(set) var authorProfileNavigationEpoch: UInt = 0
+    /// While true, work-card `cardNavigation` links are disabled and any work/reader
+    /// push that still lands from the same touch should dismiss itself so the author
+    /// profile is not buried under it.
+    private(set) var cardNavigationSuppressed = false
 
     /// The one right-hand inspector panel open anywhere in the app. Routing every
     /// panel (Settings, Search filters, Reader chapters/display) through a single
@@ -126,7 +133,31 @@ final class AppRouter {
     /// stack means a byline tap returns to the exact work, comment, or reader entry
     /// point on Back.
     func openAuthorProfile(_ route: AO3AuthorRoute) {
+        // Suppress first so the same-touch row NavigationLink can still be disabled /
+        // auto-dismissed before we hand the route to the active tab stack.
+        cardNavigationSuppressed = true
         pendingAuthorProfile = route
+        authorProfileNavigationEpoch &+= 1
+        Task { @MainActor in
+            // Long enough for List to commit + for deferred dismiss of a spurious
+            // work push; short enough not to block intentional card taps after.
+            try? await Task.sleep(for: .milliseconds(700))
+            cardNavigationSuppressed = false
+        }
+    }
+
+    /// Active tab stack takes the pending route (if any) and clears it.
+    func consumePendingAuthorProfile() -> AO3AuthorRoute? {
+        let route = pendingAuthorProfile
+        pendingAuthorProfile = nil
+        return route
+    }
+
+    /// True while an author byline navigation is settling — work/reader destinations
+    /// opened by the same List row touch should `dismiss()` (async, not in the
+    /// same navigation transaction as the push).
+    var shouldSuppressCardNavigation: Bool {
+        cardNavigationSuppressed
     }
 
     static func authorRoute(for url: URL) -> AO3AuthorRoute? {

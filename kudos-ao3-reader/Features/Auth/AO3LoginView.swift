@@ -11,36 +11,63 @@ struct AO3LoginView: View {
 
     @State private var username = ""
     @State private var password = ""
+    /// True only when the user tapped Cancel (or left via Create Account / Forgot
+    /// Password). Distinguishes intentional abandonment from SwiftUI tearing the
+    /// sheet down mid-login — the latter must not cancel an in-flight attempt.
+    @State private var userInitiatedClose = false
 
     private static let signUpURL = URL(string: "https://archiveofourown.org/users/new")!
     private static let passwordResetURL = URL(string: "https://archiveofourown.org/users/password/new")!
 
+    /// Automatic submit or visible AO3 hand-off — swipe-to-dismiss would abandon
+    /// credentials mid-flight and surface as "popup closed, still signed out".
+    private var blocksInteractiveDismiss: Bool {
+        switch auth.status {
+        case .signingIn, .usingFallback: true
+        default: false
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Keep the automatic-login WebView mounted (but invisible) during the
-                // native phase so it has a window: an off-screen WKWebView can have its
-                // web-content process throttled or suspended, which would make the
-                // hidden login time out and drop to the fallback for no real reason.
-                // When the fallback takes over it shows the same WebView full-size.
-                if !auth.isUsingFallback {
-                    WebView(webView: auth.loginWebView)
-                        .frame(width: 1, height: 1)
-                        .opacity(0)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+            VStack(spacing: 0) {
+                if auth.isUsingFallback {
+                    fallbackChrome
+                    Divider()
                 }
 
-                if auth.isUsingFallback {
-                    fallbackContent
-                } else {
-                    nativeContent
+                // One host for the login WKWebView for the whole sheet lifetime.
+                // Remounting it when switching native → fallback (old dual-host
+                // layout) can interrupt a live navigation and cancel the attempt.
+                // Hidden 1×1 keeps a window during the automatic phase so WebKit
+                // doesn't throttle an off-screen content process.
+                ZStack(alignment: .topLeading) {
+                    WebView(webView: auth.loginWebView)
+                        // Fixed 1×1 while automatic; expands when the visible fallback
+                        // takes over — same representable identity either way.
+                        .frame(
+                            width: auth.isUsingFallback ? nil : 1,
+                            height: auth.isUsingFallback ? nil : 1
+                        )
+                        .frame(
+                            maxWidth: auth.isUsingFallback ? .infinity : nil,
+                            maxHeight: auth.isUsingFallback ? .infinity : nil
+                        )
+                        .opacity(auth.isUsingFallback ? 1 : 0)
+                        .allowsHitTesting(auth.isUsingFallback)
+                        .accessibilityHidden(!auth.isUsingFallback)
+
+                    if !auth.isUsingFallback {
+                        nativeContent
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("Log In to AO3")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        userInitiatedClose = true
                         auth.cancelLogin()
                         dismiss()
                     }
@@ -49,6 +76,7 @@ struct AO3LoginView: View {
         }
         .frame(minWidth: 360, minHeight: 440)
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(blocksInteractiveDismiss)
         .onChange(of: auth.isLoggedIn) { _, loggedIn in
             if loggedIn {
                 password = ""
@@ -60,7 +88,20 @@ struct AO3LoginView: View {
         }
         .onDisappear {
             password = ""
-            if !auth.isLoggedIn {
+            // Explicit Cancel / help-link leave already cancelled (or never started).
+            // Do not cancel `.signingIn` here: sheet content can disappear while the
+            // automatic submit is still running (nested sheet races, parent re-render,
+            // presentation glitches). Canceling that attempt is the main way users
+            // see the popup vanish and remain signed out after entering a password.
+            // `.usingFallback` is cancelled only on intentional close — swipe is
+            // disabled while the visible AO3 page is up.
+            if userInitiatedClose {
+                return
+            }
+            switch auth.status {
+            case .signingIn, .usingFallback, .signedIn:
+                break
+            case .signedOut, .restoring:
                 auth.cancelLogin()
             }
         }
@@ -138,34 +179,35 @@ struct AO3LoginView: View {
         .appThemedScroll()
     }
 
-    private var fallbackContent: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Using alternative login method…", systemImage: "safari")
-                    .font(.headline)
-                Text(auth.fallbackMessage ?? "Complete login on AO3 below.")
+    /// Banner above the always-mounted WebView during the visible fallback.
+    private var fallbackChrome: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Using alternative login method…", systemImage: "safari")
+                .font(.headline)
+            Text(auth.fallbackMessage ?? "Complete login on AO3 below.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if let error = auth.errorMessage {
+                Text(error)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
-                if let error = auth.errorMessage {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
+                    .foregroundStyle(.red)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-
-            Divider()
-            WebView(webView: auth.loginWebView)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
         .background(themeManager.appTheme.backgroundColor)
     }
 
     private func submit() {
         guard auth.status != .signingIn else { return }
+        let submittedPassword = password
         Task {
-            await auth.login(username: username, password: password)
-            password = ""
+            await auth.login(username: username, password: submittedPassword)
+            // Keep the password on failure so a typo fix is one edit, not a retype.
+            // Success clears via the isLoggedIn onChange (and dismisses the sheet).
+            if auth.isLoggedIn {
+                password = ""
+            }
         }
     }
 
@@ -174,6 +216,8 @@ struct AO3LoginView: View {
     /// signs in. AO3 uses Devise, so these are its standard registration / reset
     /// routes; either way AO3's own page shows the current invitation/reset flow.
     private func openOnAO3(_ url: URL) {
+        userInitiatedClose = true
+        auth.cancelLogin()
         dismiss()
         router.open(url)
     }

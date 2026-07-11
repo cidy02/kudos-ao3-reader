@@ -174,6 +174,33 @@ struct AO3AuthServiceTests {
         #expect(!performer.didBeginManualLogin)
     }
 
+    /// Explicit Cancel must abort an in-flight automatic login. Sheet teardown
+    /// without Cancel must *not* call this (see AO3LoginView) — covered here by
+    /// proving cancelLogin is the path that flips status back to signedOut.
+    @Test func cancelLoginAbortsInFlightAutomaticLogin() async {
+        let performer = CancellableMockAO3LoginPerformer()
+        let service = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: MockAO3SessionValidator(result: .expired),
+            loginPerformer: performer,
+            cookieManager: MockAO3CookieManager()
+        )
+
+        let loginTask = Task { await service.login(username: "reader", password: "password") }
+        for _ in 0..<50 where !performer.isSuspended {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(performer.isSuspended)
+        #expect(service.status == .signingIn)
+
+        service.cancelLogin()
+        await loginTask.value
+
+        #expect(service.status == .signedOut)
+        #expect(performer.cancelCount == 1)
+        #expect(!service.isLoggedIn)
+    }
+
     @Test func expiredRestoredSessionIsClearedGracefully() async {
         let vault = MemoryAO3SessionVault(session: testSession)
         let cookies = MockAO3CookieManager()
@@ -499,4 +526,36 @@ private final class MockAO3LoginPerformer: AO3LoginPerforming {
 
     func applyVisibleTheme(_ theme: ReaderTheme) {}
     func cancel() {}
+}
+
+/// Stays suspended in `login` until `cancel()` resumes with `CancellationError`,
+/// mirroring the real coordinator's continuation + cancel path.
+@MainActor
+private final class CancellableMockAO3LoginPerformer: AO3LoginPerforming {
+    lazy var webView = WKWebView()
+    private(set) var cancelCount = 0
+    private var continuation: CheckedContinuation<AO3Session, Error>?
+    var isSuspended: Bool { continuation != nil }
+
+    func login(username: String, password: String) async throws -> AO3Session {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func beginManualLogin(
+        expectedUsername: String,
+        onAuthenticated: @escaping (AO3Session) -> Void,
+        onError: @escaping (String) -> Void
+    ) {}
+
+    func applyVisibleTheme(_ theme: ReaderTheme) {}
+
+    func cancel() {
+        cancelCount += 1
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(throwing: CancellationError())
+        }
+    }
 }

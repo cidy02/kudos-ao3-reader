@@ -33,6 +33,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(DownloadQueue.self) private var downloadQueue
@@ -79,6 +80,15 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         refreshedRemote ?? sourceRemote
     }
 
+    private func dismissIfAuthorBylineConflict() {
+        guard router.shouldSuppressCardNavigation else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard router.shouldSuppressCardNavigation else { return }
+            dismiss()
+        }
+    }
+
     var body: some View {
         Form {
             // Group so .appThemedRows() reaches every section's rows (it doesn't
@@ -100,6 +110,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .formStyle(.grouped)
         .appThemedScroll()
         .refreshable { await refreshDetails() }
+        // Same-touch author byline on a List card can also activate the row's work
+        // NavigationLink. Dismiss async — in-transaction dismiss() is often ignored.
+        .onAppear { dismissIfAuthorBylineConflict() }
+        .onChange(of: router.cardNavigationSuppressed) { _, suppressed in
+            if suppressed { dismissIfAuthorBylineConflict() }
+        }
         .task {
             // Resolve an existing library record once (so a browsed work already in the
             // library shows its real saved state), then run the same Work Tags refresh
