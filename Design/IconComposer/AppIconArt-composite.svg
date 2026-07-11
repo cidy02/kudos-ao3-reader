@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Flat Welcome / AppIconArt stand-in matching Icon Composer layout (light appearance) -->
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <!-- Soft contact shadow under the mark -->
+  <ellipse cx="512" cy="900" rx="220" ry="36" fill="#000000" opacity="0.08"/>
+  <g transform="translate(-277.8956301208592,472.1030828500418) translate(512,512) scale(0.85) translate(-512,-512)">
+<path fill="#080808" d="M656 122H720c8 0 14 6 14 14v278l-46-37-46 37V136c0-8 6-14 14-14z"/>
+  </g>
+  <g transform="translate(0,0) translate(512,512) scale(0.85) translate(-512,-512)">
+<rect x="220" y="140" width="584" height="744" rx="84" fill="#A40303"/>
+  <rect x="246" y="182" width="28" height="660" rx="14" fill="#5C0000" opacity="0.24"/>
+  </g>
+  <g transform="translate(0,68.25) translate(512,512) scale(0.75) translate(-512,-512)">
+<defs>
+    <linearGradient id="heartWhite" x1="392" y1="290" x2="632" y2="558" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.62" stop-color="#FFFDF9"/>
+      <stop offset="1" stop-color="#EFE8DD"/>
+    </linearGradient>
+  </defs>
+  <!-- Optional layer: use above the cover if you want a solid white heart instead of pure transparent cutout -->
+  <path d="M512 566 C496 552 364 448 356 374 C350 317 394 276 447 276 C478 276 501 289 512 312 C523 289 546 276 577 276 C630 276 674 317 668 374 C660 448 528 552 512 566 Z" fill="url(#heartWhite)"/>
+  </g>
+</svg>

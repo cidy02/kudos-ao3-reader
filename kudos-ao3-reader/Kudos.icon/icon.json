@@ -1,0 +1,155 @@
+{
+  "fill" : {
+    "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "blend-mode-specializations" : [
+            {
+              "value" : "lighten"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "lighten"
+            }
+          ],
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.99150,1.00000,0.98609,1.00000",
+                  "display-p3:0.41724,0.15613,0.25684,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 1.2399531118061404,
+                    "y" : 0.08363441149828466
+                  },
+                  "stop" : {
+                    "x" : -0.30246551797403964,
+                    "y" : 1.4636045642451612
+                  }
+                }
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "display-p3:0.99150,1.00000,0.98431,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "image-name" : "05_optional_white_heart_insert.svg",
+          "name" : "05_optional_white_heart_insert",
+          "position" : {
+            "scale" : 0.75,
+            "translation-in-points" : [
+              0,
+              68.24999999999994
+            ]
+          }
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "solid" : "display-p3:0.64314,0.01176,0.01176,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "kudos_book_red 2.svg",
+          "name" : "kudos_book_red 2",
+          "position" : {
+            "scale" : 0.85,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "blend-mode" : "hard-light",
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.03137,0.03137,0.03137,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-gray:0.50000,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "image-name" : "kudos_bookmark_black 2.svg",
+          "name" : "kudos_bookmark_black 2",
+          "position" : {
+            "scale" : 0.85,
+            "translation-in-points" : [
+              -277.8956301208592,
+              472.1030828500418
+            ]
+          }
+        }
+      ],
+      "name" : "Kudos_Icon_Composer_SVGs_Revised",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

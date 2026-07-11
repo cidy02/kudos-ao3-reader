@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="heartWhite" x1="392" y1="290" x2="632" y2="558" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.62" stop-color="#FFFDF9"/>
+      <stop offset="1" stop-color="#EFE8DD"/>
+    </linearGradient>
+  </defs>
+  <!-- Optional layer: use above the cover if you want a solid white heart instead of pure transparent cutout -->
+  <path d="M512 566 C496 552 364 448 356 374 C350 317 394 276 447 276 C478 276 501 289 512 312 C523 289 546 276 577 276 C630 276 674 317 668 374 C660 448 528 552 512 566 Z" fill="url(#heartWhite)"/>
+</svg>

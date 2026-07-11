@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Kudos Red Book</title>
+  <desc>Standalone red book shape for Apple Icon Composer layering.</desc>
+  <g fill="#B22222">
+    <!-- back cover -->
+    <path d="M290 180C262 180 240 202 240 230V794c0 28 22 50 50 50h420c28 0 50-22 50-50V230c0-28-22-50-50-50H290z"/>
+    <!-- front cover with slight perspective -->
+    <path d="M330 150h355c55 0 99 44 99 99v492c0 55-44 99-99 99H330c-50 0-90-40-90-90V240c0-50 40-90 90-90z"/>
+    <!-- page stack hint -->
+    <path d="M738 210c18 12 30 33 30 56v480c0 39-31 70-70 70H332c-17 0-33-5-46-14h407c47 0 85-38 85-85V210z" opacity="0.22"/>
+    <!-- spine -->
+    <rect x="286" y="150" width="42" height="690" rx="18" ry="18" opacity="0.32"/>
+  </g>
+</svg>
