@@ -38,9 +38,6 @@ enum CommentThreadGeometry {
     static let autoExpandedMaxReplies = 8
     /// Collapsed body height before "Read more".
     static let collapsedBodyLineLimit = 5
-    /// The focus tint is painted inside the card's own padding, so it is
-    /// deliberately not the card's radius (it never touches the card's corners).
-    static let highlightCornerRadius: CGFloat = 12
 
     /// Depth-first list of every reply under a root (root itself excluded),
     /// each becoming its own nested card.
@@ -146,6 +143,7 @@ struct CommentThreadRow: View {
             cornerRadius: CommentThreadGeometry.cardCornerRadius,
             style: .continuous
         )
+        let isHighlighted = highlightedCommentID == comment.id
 
         return VStack(alignment: .leading, spacing: 0) {
             // Root post — spine continues under the avatar when replies show.
@@ -156,7 +154,6 @@ struct CommentThreadRow: View {
                 drawsSpineBelow: !replies.isEmpty && showsReplies
             )
             .id(comment.id)
-            .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
             // Puts the root avatar on the same rail column as the reply avatars,
             // which sit inside their own cards' padding.
             .padding(.leading, CommentThreadGeometry.railInset)
@@ -194,6 +191,7 @@ struct CommentThreadRow: View {
         .padding(CommentThreadGeometry.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.appTheme.cardSurface, in: shape)
+        .highlightOverlay(shape, isHighlighted: isHighlighted)
         .overlay {
             shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
         }
@@ -240,6 +238,7 @@ private struct NestedReplyCard: View {
             cornerRadius: CommentThreadGeometry.nestedCardCornerRadius,
             style: .continuous
         )
+        let isHighlighted = highlightedCommentID == comment.id
 
         SpinePostRow(
             comment: comment,
@@ -248,7 +247,6 @@ private struct NestedReplyCard: View {
             drawsSpineBelow: false
         )
         .id(comment.id)
-        .highlightChrome(isHighlighted: highlightedCommentID == comment.id)
         // Equal inset on every side so the avatar isn’t pushed down relative
         // to the leading edge (top used to be 8 while leading was 0).
         .padding(CommentThreadGeometry.nestedCardPadding)
@@ -256,6 +254,7 @@ private struct NestedReplyCard: View {
         // Dark reads the nesting off the surface (cards stay flat there); Light and
         // Sepia keep `cardSurface` and lift with the same shadow every card uses.
         .background(theme.appTheme.nestedCardSurface, in: shape)
+        .highlightOverlay(shape, isHighlighted: isHighlighted)
         .overlay {
             shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
         }
@@ -584,18 +583,18 @@ private struct ThreadSpineSegment: View {
 // MARK: - Shared chrome helpers
 
 private extension View {
+    /// "Thread"/"Parent Thread" focus tint, sized to the CARD's own shape (not
+    /// its content) so the flash reads as the whole card lighting up, edge to
+    /// edge, rather than a smaller fill inset behind the row content. Painted
+    /// between the card's background fill and its border stroke, so the border
+    /// stays crisp on top.
     @ViewBuilder
-    func highlightChrome(isHighlighted: Bool) -> some View {
-        // No extra layout padding — card insets already provide even margins;
-        // only paint a highlight fill when focused.
+    func highlightOverlay(_ shape: RoundedRectangle, isHighlighted: Bool) -> some View {
         self
-            .background {
+            .overlay {
                 if isHighlighted {
-                    RoundedRectangle(
-                        cornerRadius: CommentThreadGeometry.highlightCornerRadius,
-                        style: .continuous
-                    )
-                    .fill(Color.accentColor.opacity(0.12))
+                    shape.fill(Color.accentColor.opacity(0.12))
+                        .allowsHitTesting(false)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: isHighlighted)

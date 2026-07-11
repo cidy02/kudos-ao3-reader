@@ -58,6 +58,7 @@ struct CommentsView: View {
                 infoSection
                 scopeSection
                 chapterSection
+                sortSection
                 contentSections(scrollProxy: proxy)
                 if case .loaded = model.phase {
                     // The safe-area inset reserves the floating CTA's footprint; this
@@ -261,61 +262,77 @@ struct CommentsView: View {
         .cardRow()
     }
 
-    // MARK: Scope + sort
+    // MARK: Scope
 
-    /// All/By Chapter plus the (local-only — AO3 has no server sort) order menu.
-    /// Its own card, separate from the info card above and the chapter selector
-    /// below, matching the mockup's three distinct control cards.
+    /// All/By Chapter. Its own card, separate from the info card above and the
+    /// chapter selector below, matching the mockup's distinct control cards.
     private var scopeSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 10) {
-                // The native segmented style — matches Reader Settings' own
-                // Scrolled/Paged control exactly, rather than a bespoke capsule.
-                Picker("Scope", selection: $model.scope) {
-                    ForEach(CommentsModel.Scope.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityLabel("Comment scope")
-
-                // One quiet secondary line — the sort is a small menu, not a
-                // bright control that dominates the card.
-                HStack(spacing: 4) {
-                    Menu {
-                        Button {
-                            model.newestFirst = false
-                        } label: {
-                            if !model.newestFirst {
-                                Label("Oldest First", systemImage: "checkmark")
-                            } else {
-                                Text("Oldest First")
-                            }
-                        }
-                        Button {
-                            model.newestFirst = true
-                        } label: {
-                            if model.newestFirst {
-                                Label("Newest First", systemImage: "checkmark")
-                            } else {
-                                Text("Newest First")
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Text(model.newestFirst ? "Newest First" : "Oldest First")
-                            Image(systemName: "chevron.down")
-                                .font(.caption2.weight(.semibold))
-                        }
-                    }
-                    .accessibilityLabel("Sort comments")
-                    .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
-                    Spacer()
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .tint(.secondary)
+            // The native segmented style — matches Reader Settings' own
+            // Scrolled/Paged control exactly, rather than a bespoke capsule.
+            Picker("Scope", selection: $model.scope) {
+                ForEach(CommentsModel.Scope.allCases) { Text($0.rawValue).tag($0) }
             }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Comment scope")
         }
         .cardRow()
+    }
+
+    // MARK: Sort
+
+    /// Local-only order menu (AO3 has no server sort). A quiet utility row, not
+    /// a card — it floats directly on the backdrop, right above the comments it
+    /// orders, rather than sharing a card with Scope (which answers a different
+    /// question: "which comments am I viewing").
+    private var sortSection: some View {
+        Section {
+            HStack(spacing: 4) {
+                Menu {
+                    Button {
+                        model.newestFirst = false
+                    } label: {
+                        if !model.newestFirst {
+                            Label("Oldest First", systemImage: "checkmark")
+                        } else {
+                            Text("Oldest First")
+                        }
+                    }
+                    Button {
+                        model.newestFirst = true
+                    } label: {
+                        if model.newestFirst {
+                            Label("Newest First", systemImage: "checkmark")
+                        } else {
+                            Text("Newest First")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(model.newestFirst ? "Newest First" : "Oldest First")
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                }
+                .accessibilityLabel("Sort comments")
+                .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
+                Spacer()
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .tint(.secondary)
+        }
+        // Aligned with card CONTENT (not card edges) — the same inset `.cardRow()`
+        // gives the text inside the cards above/below — so this reads as part of
+        // the same column rather than a stray indent.
+        .listRowInsets(EdgeInsets(
+            top: 2,
+            leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
+            bottom: 10,
+            trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
+        ))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     // MARK: Chapter selector
@@ -341,7 +358,6 @@ struct CommentsView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .frame(minHeight: 44)
                 .accessibilityLabel("Browse comments by chapter")
                 .accessibilityValue(model.selectedChapter?.displayName ?? "No chapter selected")
             }
@@ -475,8 +491,8 @@ struct CommentsView: View {
                     systemImage: auth.isLoggedIn ? "pencil" : "person.crop.circle.badge.questionmark"
                 )
                 .font(.headline)
-                .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+                .padding(.horizontal, 6)
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
@@ -487,6 +503,11 @@ struct CommentsView: View {
                 color: theme.appTheme == .dark ? .clear : .black.opacity(0.2),
                 radius: 10, y: 3
             )
+            // The pill hugs its own label instead of stretching edge to edge —
+            // full-width left the capsule's rounded ends reading as dead space
+            // around a short, centered label. Centering happens here, on the
+            // frame around the (compact) button, not inside the label.
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 6)
