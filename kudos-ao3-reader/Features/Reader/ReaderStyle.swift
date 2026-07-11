@@ -25,7 +25,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 
 /// A reading color theme applied to the EPUB content.
 enum ReaderTheme: String, CaseIterable, Identifiable {
-    case light, sepia, dark
+    case light, sepia, dark, oled
     var id: String {
         rawValue
     }
@@ -35,6 +35,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         case .light: "Light"
         case .sepia: "Sepia"
         case .dark: "Dark"
+        case .oled: "OLED"
         }
     }
 
@@ -43,6 +44,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         case .light: "sun.max"
         case .sepia: "book.closed"
         case .dark: "moon"
+        case .oled: "moon.stars.fill"
         }
     }
 
@@ -52,6 +54,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         case .light: "#FFFFFF"
         case .sepia: "#FBF0D9"
         case .dark: "#16161A"
+        case .oled: "#000000"
         }
     }
 
@@ -60,7 +63,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         switch self {
         case .light: "#1E1E1E"
         case .sepia: "#5B4636"
-        case .dark: "#CFCFD4"
+        case .dark, .oled: "#CFCFD4"
         }
     }
 
@@ -69,16 +72,20 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         switch self {
         case .light: "#0B66C2"
         case .sepia: "#8A5A2B"
-        case .dark: "#7FB0E8"
+        case .dark, .oled: "#7FB0E8"
         }
     }
 
     /// SwiftUI color matching `backgroundHex`, for the area around the web content.
+    /// The app shell's `appBaseBackground` reuses this exact token for Dark/OLED
+    /// rather than restating the RGB values, so the app and the reader can never
+    /// drift apart into two different "dark backgrounds".
     var backgroundColor: Color {
         switch self {
         case .light: Color(white: 1.0)
         case .sepia: Color(red: 0.984, green: 0.941, blue: 0.851)
         case .dark: Color(red: 0.086, green: 0.086, blue: 0.105)
+        case .oled: .black
         }
     }
 
@@ -87,33 +94,52 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         switch self {
         case .light: Color(red: 0.118, green: 0.118, blue: 0.118)
         case .sepia: Color(red: 0.357, green: 0.275, blue: 0.212)
-        case .dark: Color(red: 0.812, green: 0.812, blue: 0.831)
+        case .dark, .oled: Color(red: 0.812, green: 0.812, blue: 0.831)
         }
     }
 
     /// The system color scheme this theme maps to, so SwiftUI chrome (sheets, Liquid
-    /// Glass, navigation bars) adapts with the theme. Sepia is a warm light scheme.
+    /// Glass, navigation bars) adapts with the theme. Sepia is a warm light scheme;
+    /// OLED is still a `.dark` scheme (just with its own true-black surfaces below).
     var colorScheme: ColorScheme {
         switch self {
         case .light, .sepia: .light
-        case .dark: .dark
+        case .dark, .oled: .dark
         }
     }
 
-    // MARK: App-wide surface colours (Sepia only)
+    // MARK: App-wide surface colours
 
-    // Warm surfaces used to theme the whole app for Sepia. Light and Dark return
-    // `nil` so they keep the native system surfaces (which already look right);
-    // only Sepia substitutes its own colours, since the system has no sepia scheme.
+    // Every non-Light theme substitutes its own app-wide surfaces here — this is the
+    // one place that decides them, so every List/Form/scene background in the app
+    // (via `.appThemedScroll()`/`.appThemedRows()`/`.cardList()`, or a direct
+    // `appBaseBackground ?? …` fallback) reads them instead of scattering its own
+    // per-theme checks. Sepia warms the system's neutral surfaces since the system
+    // has no sepia scheme; Dark swaps the system's near-black default for the exact
+    // `backgroundColor` above so the app shell and the reader never disagree; OLED
+    // goes to true black. Light alone keeps the native system surfaces (`nil`).
 
-    /// The recessed base behind grouped content (≈ `systemGroupedBackground`).
+    /// The recessed base behind grouped content (≈ `systemGroupedBackground`) — the
+    /// screen's main background.
     var appBaseBackground: Color? {
-        self == .sepia ? Color(red: 0.925, green: 0.871, blue: 0.757) : nil
+        switch self {
+        case .light: nil
+        case .sepia: Color(red: 0.925, green: 0.871, blue: 0.757)
+        case .dark: backgroundColor
+        case .oled: .black
+        }
     }
 
     /// Raised surfaces — list/form cells, bars, popovers (≈ `secondarySystemGroupedBackground`).
+    /// Kept a visible step above `appBaseBackground` in both Dark and OLED so cards
+    /// stay readable against their (very dark, or true-black) backdrop.
     var appElevatedBackground: Color? {
-        self == .sepia ? Color(red: 0.984, green: 0.941, blue: 0.851) : nil
+        switch self {
+        case .light: nil
+        case .sepia: Color(red: 0.984, green: 0.941, blue: 0.851)
+        case .dark: Color(red: 0.133, green: 0.133, blue: 0.157)
+        case .oled: Color(red: 0.110, green: 0.110, blue: 0.118)
+        }
     }
 
     /// Accent/tint for controls, links, and selection.

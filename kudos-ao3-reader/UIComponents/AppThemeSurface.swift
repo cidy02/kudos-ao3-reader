@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// App-wide surface theming for the Sepia theme. Light and Dark use the native
-/// system surfaces unchanged; Sepia (which the system has no scheme for) swaps in
-/// warm backgrounds so pages, lists, and forms match the reader's sepia paper.
+/// App-wide surface theming, driven entirely by `ReaderTheme.appBaseBackground` /
+/// `appElevatedBackground`. Light keeps the native system surfaces unchanged;
+/// Sepia (which the system has no scheme for) swaps in warm paper backgrounds;
+/// Dark and OLED swap in their own dark/true-black surfaces so the app shell
+/// matches the reader instead of the system's default near-black.
 ///
-/// Apply `.appThemedScroll()` to a List/Form to warm its background, and
-/// `.appThemedRows()` to its rows/sections to warm the cells. Both are no-ops in
-/// Light and Dark.
+/// Apply `.appThemedScroll()` to a List/Form to theme its background, and
+/// `.appThemedRows()` to its rows/sections to theme the cells. Both are no-ops
+/// only where the theme's tokens are `nil` (currently just Light).
 private struct AppThemedScroll: ViewModifier {
     @Environment(ThemeManager.self) private var theme
 
@@ -56,9 +58,10 @@ struct CardShadow {
     let y: CGFloat
 }
 
-/// Theme-aware surfaces for the modern card-based list treatment. Sepia reuses the
-/// reader's warm paper colors; Light/Dark fall back to the system grouped surfaces,
-/// so cards read the same as the grouped style did — just rounded on all four sides.
+/// Theme-aware surfaces for the modern card-based list treatment, so cards read the
+/// same as the grouped style did — just rounded on all four sides. Sepia/Dark/OLED
+/// pull from `appBaseBackground`/`appElevatedBackground`; Light falls back to the
+/// system grouped surfaces (the only theme where those tokens are `nil`).
 /// Internal (not private) so feature-specific card treatments (e.g. the comments
 /// thread cards) build on the SAME surfaces instead of inventing near-misses that
 /// drift from the Library baseline.
@@ -82,12 +85,13 @@ extension ReaderTheme {
     }
 
     /// Soft elevation under each card. Light/Sepia get a subtle shadow for depth so
-    /// cards lift off the flatter backdrops; Dark stays flat (shadows muddy the dark
-    /// surfaces, and the high card↔backdrop contrast there already reads well).
+    /// cards lift off the flatter backdrops; Dark and OLED stay flat (a shadow can't
+    /// read against a near-black or true-black backdrop — the high card↔backdrop
+    /// contrast there already reads well on its own).
     /// Kept small enough to sit within the inter-card gap so it isn't clipped.
     var cardShadow: CardShadow {
         switch self {
-        case .dark: CardShadow(color: .clear, radius: 0, y: 0)
+        case .dark, .oled: CardShadow(color: .clear, radius: 0, y: 0)
         case .light: CardShadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
         // Warm brown shadow rather than neutral grey, so it reads as paper depth.
         case .sepia:
@@ -100,25 +104,31 @@ extension ReaderTheme {
     }
 
     /// A hairline edge that crisps the card against the flatter Light/Sepia
-    /// backdrops (does the bulk of the separation; never clips). None in Dark.
+    /// backdrops (does the bulk of the separation; never clips). None in Dark/OLED,
+    /// where the card↔backdrop tonal contrast already does that job.
     var cardBorder: Color {
         switch self {
-        case .dark: .clear
+        case .dark, .oled: .clear
         case .light: Color.black.opacity(0.06)
         case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.15)
         }
     }
 
     /// Fill for a card nested INSIDE a `cardSurface` card (the comment thread's
-    /// reply cards). Dark separates by *surface* — one step up the grouped scale —
-    /// because the app's cards never cast shadows in Dark (see `cardShadow`).
+    /// reply cards). Dark/OLED separate by *surface* — one step up the grouped
+    /// scale — because the app's cards never cast shadows there (see `cardShadow`).
     /// Light/Sepia stay on `cardSurface` and separate by elevation instead, so a
     /// reply card lifts exactly the way a Library card lifts off its backdrop.
+    /// `.tertiarySystemGroupedBackground` is a system-dynamic color keyed off
+    /// `colorScheme`, not our custom `appElevatedBackground` token — and OLED
+    /// shares Dark's `.dark` `colorScheme` (see `ReaderTheme.colorScheme`), so this
+    /// single system-token body already renders correctly for both without a
+    /// bespoke third tone.
     var nestedCardSurface: Color {
         switch self {
         case .light, .sepia:
             return cardSurface
-        case .dark:
+        case .dark, .oled:
             #if os(iOS)
             return Color(uiColor: .tertiarySystemGroupedBackground)
             #else
@@ -129,9 +139,11 @@ extension ReaderTheme {
 
     /// The comment thread's avatar rail. Sepia takes the same warm brown as
     /// `cardBorder`/`cardShadow` rather than falling back to a neutral grey.
+    /// `Color.primary` is itself `colorScheme`-dynamic, so Dark and OLED (which
+    /// share `.dark` `colorScheme`) render identically from one case.
     var threadSpine: Color {
         switch self {
-        case .dark: Color.primary.opacity(0.28)
+        case .dark, .oled: Color.primary.opacity(0.28)
         case .light: Color.primary.opacity(0.16)
         case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.30)
         }

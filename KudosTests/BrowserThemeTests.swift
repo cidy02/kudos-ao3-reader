@@ -17,4 +17,12 @@ struct BrowserThemeTests {
         #expect(BrowserThemeStyle.css(for: .dark)?.contains("#16161A") == true)
         #expect(BrowserThemeStyle.css(for: .dark)?.contains("color-scheme: dark") == true)
     }
+
+    @Test func oledInjectsATrueBlackPalette() {
+        let css = BrowserThemeStyle.css(for: .oled)
+        #expect(css?.contains("#000000") == true)
+        #expect(css?.contains("color-scheme: dark") == true)
+        // Distinct from Dark's palette background, even though both are "dark".
+        #expect(css != BrowserThemeStyle.css(for: .dark))
+    }
 }

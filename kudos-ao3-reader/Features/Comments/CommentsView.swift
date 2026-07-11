@@ -512,10 +512,13 @@ struct CommentsView: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .disabled(model.isOffline)
-            // Match the theme's card-shadow language: Dark is shadow-free (the
-            // red capsule already pops there); Light/Sepia get the soft lift.
+            // Match the theme's card-shadow language: Dark/OLED are shadow-free
+            // (the red capsule already pops there, and a shadow can't read against
+            // a near-black or true-black backdrop anyway); Light/Sepia get the
+            // soft lift.
             .shadow(
-                color: theme.appTheme == .dark ? .clear : .black.opacity(0.2),
+                color: theme.appTheme == .dark || theme.appTheme == .oled
+                    ? .clear : .black.opacity(0.2),
                 radius: 10, y: 3
             )
             // The pill hugs its own label instead of stretching edge to edge —

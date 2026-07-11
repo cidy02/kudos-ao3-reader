@@ -911,12 +911,16 @@ private struct ReaderInteractiveDismissStyle: ViewModifier {
 // MARK: - Theme mapping
 
 extension ReaderTheme {
-    /// The matching Readium navigator theme.
+    /// The matching Readium navigator theme. Readium has no OLED case of its own —
+    /// `.dark` gives the navigator's chrome (e.g. its own default selection color)
+    /// the right dark-mode behavior, while `backgroundColor`/`textColor` above are
+    /// passed through `EPUBPreferences` explicitly, so the true-black page and text
+    /// colors are unaffected by this mapping.
     var readiumTheme: ReadiumNavigator.Theme {
         switch self {
         case .light: .light
         case .sepia: .sepia
-        case .dark: .dark
+        case .dark, .oled: .dark
         }
     }
 }

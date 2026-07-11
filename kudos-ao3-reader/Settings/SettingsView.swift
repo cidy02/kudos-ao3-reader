@@ -108,7 +108,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         Binding(get: { themeManager.accentColor }, set: { themeManager.setAccent($0) })
     }
 
-    /// A segmented Light/Sepia/Dark picker bound to the given selection.
+    /// A segmented Light/Sepia/Dark/OLED picker bound to the given selection.
     private func themePicker(_ title: String, selection: Binding<ReaderTheme>) -> some View {
         Picker(title, selection: selection) {
             ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
@@ -179,9 +179,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         Text("Theme")
                     } footer: {
                         Text((themeManager.matchAppAndReader
-                              ? "Light, Sepia, or Dark across the whole app. The reader uses the same theme."
+                              ? "Light, Sepia, Dark, or OLED across the whole app. The reader uses the same theme."
                               : "The app and reader use separate themes.")
-                            + " The accent colour applies in Light and Dark; Sepia keeps its warm tint.")
+                            + " The accent colour applies in Light, Dark, and OLED; Sepia keeps its warm tint.")
                     }
                 }
 
