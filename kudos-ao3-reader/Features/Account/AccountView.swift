@@ -11,8 +11,6 @@ struct AccountView: View {
 
     @State private var path = NavigationPath()
     @State private var showingLogin = false
-    @State private var showingAbout = false
-    @State private var showingBugReport = false
 
     /// Pushable Account destinations (the AO3 lists, local lists, and Settings).
     enum Route: Hashable {
@@ -30,8 +28,6 @@ struct AccountView: View {
                     myAO3Section
                     ao3WebsiteSection
                     localSection
-                    appSection
-                    helpSection
                 }
                 .appThemedRows()
             }
@@ -54,8 +50,6 @@ struct AccountView: View {
                     }
                 }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
-                .sheet(isPresented: $showingAbout) { NavigationStack { AboutView() } }
-                .sheet(isPresented: $showingBugReport) { BugReportView() }
         }
     }
 
@@ -205,32 +199,11 @@ struct AccountView: View {
         }
     }
 
-    private var appSection: some View {
-        // Settings moved to a toolbar button (top-right bubble) — see .toolbar
-        // above. Kept as its own Section/header even with one row, so an
-        // upcoming redesign can grow it without restructuring this part.
-        Section("App") {
-            NavigationLink(value: Route.privacy) {
-                Label("Privacy & Local Data", systemImage: "hand.raised")
-            }
-        }
-    }
-
-    private var helpSection: some View {
-        Section("Help & Project") {
-            Button { showingAbout = true } label: {
-                Label("About Kudos", systemImage: "info.circle")
-            }
-            Button { showingBugReport = true } label: {
-                Label("Report a Bug", systemImage: "ladybug")
-            }
-            if let url = URL(string: AppLinks.repository) {
-                Link(destination: url) {
-                    Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-            }
-        }
-    }
+    // Both the old "App" (Privacy & Local Data) and "Help & Project" sections
+    // moved into Settings — see ReaderOptionsForm's Privacy and Help & Project
+    // sections in Settings/SettingsView.swift. Settings is itself reached from
+    // the toolbar gear bubble above, so this list stays focused on AO3/local
+    // work surfaces.
 
     // MARK: Helpers
 

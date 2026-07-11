@@ -48,6 +48,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var showCustomize = false
     @State private var showAO3Login = false
     @State private var showAbout = false
+    @State private var showingBugReport = false
     @State private var exportingBackup = false
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
@@ -351,6 +352,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
                             Toggle("Require Face ID to reveal", isOn: $requireBiometric)
                         }
+                        NavigationLink(value: AccountView.Route.privacy) {
+                            Label("Privacy & Local Data", systemImage: "hand.raised")
+                        }
                     } header: {
                         Text("Privacy")
                     } footer: {
@@ -363,11 +367,23 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                             : "Mature and Explicit works are shown normally.")
                     }
 
-                    Section {
+                    // Moved from Account's own "Help & Project" section as part of
+                    // folding Account's App/Help rows into Settings.
+                    Section("Help & Project") {
                         Button {
                             showAbout = true
                         } label: {
                             Label("About Kudos", systemImage: "info.circle")
+                        }
+                        Button {
+                            showingBugReport = true
+                        } label: {
+                            Label("Report a Bug", systemImage: "ladybug")
+                        }
+                        if let url = URL(string: AppLinks.repository) {
+                            Link(destination: url) {
+                                Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                            }
                         }
                     }
                 }
@@ -491,6 +507,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         .sheet(isPresented: $showAbout) {
             NavigationStack { AboutView() }
+        }
+        .sheet(isPresented: $showingBugReport) {
+            BugReportView()
         }
         .sheet(isPresented: $showingSyncDetails) {
             NavigationStack {

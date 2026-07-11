@@ -1,9 +1,10 @@
 import SwiftData
 import SwiftUI
 
-/// Account → App → Privacy & Local Data (Part 9). Makes the app's privacy promise
-/// concrete: explains what's stored on-device, and gives controls to clear caches,
-/// remove the AO3 session, and clear local reading history. No analytics or tracking.
+/// Account → Settings → Privacy → Privacy & Local Data (Part 9). Makes the app's
+/// privacy promise concrete: explains what's stored on-device, and gives controls
+/// to clear caches, remove the AO3 session, and clear local reading history. No
+/// analytics or tracking.
 struct PrivacyDataView: View {
     @Environment(\.modelContext) private var context
     @Environment(AO3AuthService.self) private var auth
