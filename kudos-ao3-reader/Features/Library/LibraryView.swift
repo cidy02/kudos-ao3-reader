@@ -484,41 +484,59 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             #endif
         } else {
-            // A single item holding a tight HStack — separate ToolbarItems (and even
-            // a ToolbarItemGroup) get the system's wide spacing, which squeezes the
-            // large "Library" title. Icon-only so they read as a compact cluster.
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 2) {
-                    if PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature) {
-                        MatureRevealToggle()
-                    }
-                    // Filter sits directly visible, right after Privacy — everything
-                    // else (Reading Insights, Select) lives behind the "..." menu.
-                    if !works.isEmpty {
-                        FilterButton(filtersActive: filters.hasActiveFilters,
-                                     showingFilters: router.isShowing(.libraryFilters),
-                                     onClearFilters: { filters = LibraryFilters() })
-                    }
-                    WorkListMoreMenu {
-                        if !statisticsWorks.isEmpty {
-                            NavigationLink {
-                                ReadingStatisticsView(works: statisticsWorks)
-                            } label: {
-                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                            }
+            let showsMature = PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature)
+            let showsStatistics = !statisticsWorks.isEmpty
+            #if os(iOS)
+            let showsSelect = !works.isEmpty
+            #else
+            let showsSelect = false
+            #endif
+            let showsMoreMenu = showsStatistics || showsSelect
+            // Gated as a whole, not just its inner pieces — an empty HStack (or a
+            // WorkListMoreMenu with no items) still reserves an (empty-looking)
+            // toolbar slot, which is exactly what showed a blank "..." button when
+            // the Library was empty.
+            if showsMature || !works.isEmpty || showsMoreMenu {
+                // A single item holding a tight HStack — separate ToolbarItems (and
+                // even a ToolbarItemGroup) get the system's wide spacing, which
+                // squeezes the large "Library" title. Icon-only so they read as a
+                // compact cluster.
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 2) {
+                        if showsMature {
+                            MatureRevealToggle()
                         }
-                        #if os(iOS)
+                        // Filter sits directly visible, right after Privacy —
+                        // everything else (Reading Insights, Select) lives behind
+                        // the "..." menu.
                         if !works.isEmpty {
-                            Button {
-                                enterSelectMode()
-                            } label: {
-                                Label("Select", systemImage: "checklist")
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: router.isShowing(.libraryFilters),
+                                         onClearFilters: { filters = LibraryFilters() })
+                        }
+                        if showsMoreMenu {
+                            WorkListMoreMenu {
+                                if showsStatistics {
+                                    NavigationLink {
+                                        ReadingStatisticsView(works: statisticsWorks)
+                                    } label: {
+                                        Label("Reading Insights", systemImage: "chart.bar.xaxis")
+                                    }
+                                }
+                                #if os(iOS)
+                                if showsSelect {
+                                    Button {
+                                        enterSelectMode()
+                                    } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                }
+                                #endif
                             }
                         }
-                        #endif
                     }
+                    .labelStyle(.iconOnly)
                 }
-                .labelStyle(.iconOnly)
             }
         }
     }
