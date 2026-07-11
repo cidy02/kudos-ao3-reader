@@ -46,6 +46,13 @@ struct AccountView: View {
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .ao3AuthorNavigation(path: $path, tab: .account)
+                .toolbar {
+                    ToolbarItem {
+                        NavigationLink(value: Route.settings) {
+                            Label("Settings", systemImage: "gearshape")
+                        }
+                    }
+                }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
                 .sheet(isPresented: $showingAbout) { NavigationStack { AboutView() } }
                 .sheet(isPresented: $showingBugReport) { BugReportView() }
@@ -199,10 +206,10 @@ struct AccountView: View {
     }
 
     private var appSection: some View {
+        // Settings moved to a toolbar button (top-right bubble) — see .toolbar
+        // above. Kept as its own Section/header even with one row, so an
+        // upcoming redesign can grow it without restructuring this part.
         Section("App") {
-            NavigationLink(value: Route.settings) {
-                Label("Settings", systemImage: "gearshape")
-            }
             NavigationLink(value: Route.privacy) {
                 Label("Privacy & Local Data", systemImage: "hand.raised")
             }
