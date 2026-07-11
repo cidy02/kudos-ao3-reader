@@ -445,13 +445,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private var detailsSection: some View {
         Section("Details") {
             if !displayAuthor.isEmpty {
-                // Not LabeledContent("Author") { AO3AuthorBylineView(...) } — that
-                // form doesn't push custom view content to the trailing edge the
-                // way LabeledContent(_:value:) pushes a plain string (verified on
-                // device: a trailing .frame() on the content had no effect, so this
-                // isn't FlowLayout's sizing, it's LabeledContent's own layout for
-                // the closure-based initializer). An explicit HStack + Spacer
-                // matches Rating/Category's trailing-value look reliably.
+                // Not LabeledContent("Author") { AO3AuthorBylineView(...) } —
+                // verified on device that the closure-based initializer doesn't
+                // get LabeledContent(_:value:)'s native trailing-value push.
+                // An explicit HStack + Spacer matches Rating/Category's look —
+                // but AO3AuthorBylineView's FlowLayout needs its OWN .fixedSize()
+                // too: without it, the HStack's flexibility ranking treats it as
+                // similarly flexible to Spacer (rather than sizing to its actual
+                // content), so it competes with Spacer for the leftover space
+                // instead of yielding it — the byline ends up hugging "Author"
+                // instead of trailing-aligned. Confirmed both fixes are required
+                // together by testing each in isolation on device.
                 HStack {
                     Text("Author")
                     Spacer()
@@ -461,7 +465,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         includesBy: false,
                         font: .body
                     )
+                    .fixedSize()
                 }
+                .frame(maxWidth: .infinity)
             }
             if !displayRating.isEmpty { LabeledContent("Rating", value: displayRating) }
             if !displayCategories.isEmpty {
