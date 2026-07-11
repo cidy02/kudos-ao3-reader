@@ -445,7 +445,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private var detailsSection: some View {
         Section("Details") {
             if !displayAuthor.isEmpty {
-                LabeledContent("Author") {
+                // Not LabeledContent("Author") { AO3AuthorBylineView(...) } — that
+                // form doesn't push custom view content to the trailing edge the
+                // way LabeledContent(_:value:) pushes a plain string (verified on
+                // device: a trailing .frame() on the content had no effect, so this
+                // isn't FlowLayout's sizing, it's LabeledContent's own layout for
+                // the closure-based initializer). An explicit HStack + Spacer
+                // matches Rating/Category's trailing-value look reliably.
+                HStack {
+                    Text("Author")
+                    Spacer()
                     AO3AuthorBylineView(
                         names: displayAuthorList,
                         identities: displayAuthorIdentities,
