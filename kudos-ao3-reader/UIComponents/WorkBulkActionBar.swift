@@ -154,7 +154,10 @@ struct WorkBulkActionBar: View {
         for work in selectedWorks {
             if shouldSave {
                 guard !work.isInSavedForLaterQueue else { continue }
-                Task { await ReadingQueueService.addToSavedForLater(work, in: context) }
+                // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
+                Task { @MainActor in
+                    _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+                }
             } else {
                 guard work.isInSavedForLaterQueue else { continue }
                 ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(

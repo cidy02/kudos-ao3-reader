@@ -238,14 +238,15 @@ struct AccountView: View {
     private var showsExpandControl: Bool {
         guard auth.isLoggedIn else { return false }
         switch selectedTab {
-        case .overview, .writing where writingTab == .drafts:
+        case .overview:
             return false
+        case .writing:
+            // Drafts has no expandable card chrome; Works does.
+            return writingTab == .works
         case .reading:
             return readingTab == .later
                 || readingTab == .subscriptions
                 || readingTab == .bookmarks
-        case .writing:
-            return writingTab == .works
         case .activity:
             return activityTab == .history
         }

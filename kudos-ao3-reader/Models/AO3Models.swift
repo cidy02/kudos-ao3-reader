@@ -6,7 +6,7 @@ import Foundation
 // form; see `AO3Client` for the porting/verification notes.
 
 /// A work as summarized on an AO3 search/listing page ("blurb").
-struct AO3WorkSummary: Identifiable, Hashable {
+nonisolated struct AO3WorkSummary: Identifiable, Hashable, Sendable {
     let id: Int
     var title: String
     var authors: [String]
@@ -67,7 +67,7 @@ struct AO3WorkSummary: Identifiable, Hashable {
 
 /// One page of search results, with the current page and total page count
 /// (parsed from AO3's pagination control) so the UI can show page navigation.
-struct AO3SearchPage {
+nonisolated struct AO3SearchPage: Sendable {
     var works: [AO3WorkSummary]
     var currentPage: Int
     var totalPages: Int
@@ -75,7 +75,7 @@ struct AO3SearchPage {
 
 /// A bounded look at a series page. Used before automatic series preservation so
 /// Kudos can avoid crawling an unknown large series merely to decide whether to ask.
-struct AO3SeriesPreview: Equatable {
+nonisolated struct AO3SeriesPreview: Equatable, Sendable {
     var works: [AO3WorkSummary]
     var currentPage: Int
     var totalPages: Int
@@ -89,7 +89,7 @@ struct AO3SeriesPreview: Equatable {
 /// query parameters; the ids/values are taken from AO3's own search form. Covers
 /// the same filters as AO3's faceted sidebar, minus the live per-fandom counts
 /// (those come from a different browse endpoint — here you type tag names).
-struct AO3SearchFilters: Equatable, Codable {
+nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     var query: String = ""
     // Tag fields (comma-separated names).
     var fandom: String = ""
@@ -469,13 +469,13 @@ struct AO3SearchFilters: Equatable, Codable {
 }
 
 private extension String {
-    var isBlank: Bool {
+    nonisolated var isBlank: Bool {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
 /// An error surfaced from the AO3 client, with a user-facing description.
-enum AO3Error: LocalizedError {
+nonisolated enum AO3Error: LocalizedError, Sendable {
     /// HTTP 429. `retryAfter` is the server's `Retry-After` hint in seconds, if given.
     case rateLimited(retryAfter: TimeInterval?)
     case notFound
@@ -510,7 +510,7 @@ enum AO3Error: LocalizedError {
 
 /// The AO3 tag-autocomplete categories used by the filter tag pickers. `tag` is the
 /// "any tag" endpoint, used for the Exclude field.
-enum AO3TagKind: String {
+nonisolated enum AO3TagKind: String, Sendable {
     case fandom, character, relationship, freeform, tag
 }
 
@@ -647,7 +647,7 @@ nonisolated struct AO3WorkMetadata {
 /// A fandom as listed on AO3's media page; its `name` is the canonical AO3 tag,
 /// which drops straight into a fandom search. `workCount` is the number of works
 /// tagged with the fandom, shown on the fandom list when available.
-struct AO3Fandom: Identifiable, Hashable, Codable {
+nonisolated struct AO3Fandom: Identifiable, Hashable, Codable, Sendable {
     var name: String
     var workCount: Int?
     var id: String {
@@ -658,7 +658,7 @@ struct AO3Fandom: Identifiable, Hashable, Codable {
 /// An AO3 collection (a named shelf), as listed on a user's collections page. `name`
 /// is the URL slug (`/collections/<name>`); `title` is the display name; `byline` is
 /// the maintainers line when shown.
-struct AO3Collection: Identifiable, Hashable {
+nonisolated struct AO3Collection: Identifiable, Hashable, Sendable {
     var name: String
     var title: String
     var byline: String = ""
@@ -676,7 +676,7 @@ struct AO3Collection: Identifiable, Hashable {
 /// One of AO3's media categories (e.g. "TV Shows") with its featured fandoms,
 /// scraped from `/media`. `fandomsURL` points at the category's full fandom index
 /// (`/media/<name>/fandoms`), loaded on demand by the fandom detail page.
-struct AO3MediaCategory: Identifiable, Hashable {
+nonisolated struct AO3MediaCategory: Identifiable, Hashable, Sendable {
     var name: String
     var fandoms: [AO3Fandom]
     var fandomsURL: String = ""

@@ -5,8 +5,10 @@ import Foundation
 /// re-scraped every time the user opens Browse. Stored as a single JSON file in the
 /// evictable metadata cache directory; each entry carries its fetch date so stale
 /// ones can be refreshed in the background while the cached copy shows immediately.
-struct FandomCatalogCache {
-    struct Entry: Codable {
+/// Disk-backed fandom list cache. Marked nonisolated so `Task.detached` load/save
+/// paths in `FandomCatalog` can run off the main actor under default MainActor isolation.
+nonisolated struct FandomCatalogCache: Sendable {
+    struct Entry: Codable, Sendable {
         var fandoms: [AO3Fandom]
         var fetchedAt: Date
     }

@@ -6,7 +6,7 @@ import Foundation
 /// Detail's card omits it too, so this reuses that pattern rather than adding a
 /// new one. Convenience inits mirror WorkDetailView's local-vs-remote sourcing
 /// so every call site can build one from whatever it already has on hand.
-struct AO3CommentsWorkContext: Equatable, Sendable {
+nonisolated struct AO3CommentsWorkContext: Equatable, Sendable {
     var title: String
     var authors: [String]
     var authorIdentities: [AO3AuthorIdentity]
@@ -60,7 +60,7 @@ struct AO3CommentsWorkContext: Equatable, Sendable {
 /// `ol.thread` lists; see `docs/ai/COMMENTS_HANDOFF.md` for the observed markup).
 /// Value type — the comments UI is read-mostly and pages are re-fetched, not
 /// mutated in place.
-struct AO3Comment: Identifiable, Equatable, Sendable {
+nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
     let id: Int
     var author: String
     var isGuest: Bool
@@ -194,7 +194,7 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
 }
 
 /// One fetched page of a work's (or chapter's) comments.
-struct AO3CommentsPage: Equatable, Sendable {
+nonisolated struct AO3CommentsPage: Equatable, Sendable {
     var comments: [AO3Comment] = []
     var currentPage = 1
     var totalPages = 1
@@ -209,7 +209,7 @@ struct AO3CommentsPage: Equatable, Sendable {
 
 /// One chapter from a work's `/navigate` index — the AO3 chapter id is what the
 /// per-chapter comments URL needs (EPUB TOCs don't carry it).
-struct AO3ChapterRef: Identifiable, Equatable, Sendable {
+nonisolated struct AO3ChapterRef: Identifiable, Equatable, Sendable {
     /// AO3's chapter id (`/works/<wid>/chapters/<id>`).
     let id: Int
     /// 1-based position in the work.
@@ -228,7 +228,7 @@ struct AO3ChapterRef: Identifiable, Equatable, Sendable {
 /// Where a comment is being written: which work, optionally which chapter, and
 /// (for replies) which parent comment. This is the identity the duplicate-post
 /// guard keys on, alongside the normalized body.
-struct AO3CommentContext: Equatable, Hashable, Sendable {
+nonisolated struct AO3CommentContext: Equatable, Hashable, Sendable {
     var workID: Int
     var chapterID: Int?
     var parentCommentID: Int?

@@ -460,7 +460,7 @@ extension AO3Client {
 }
 
 /// Minimal CSS.escape for id selectors used in label[for=…].
-private enum CSS {
+private nonisolated enum CSS {
     static func escape(_ value: String) -> String {
         if value.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || $0 == "_" }) {
             return value
@@ -479,7 +479,7 @@ private enum CSS {
 }
 
 private extension String {
-    var nilIfBlank: String? {
+    nonisolated var nilIfBlank: String? {
         let t = trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
     }

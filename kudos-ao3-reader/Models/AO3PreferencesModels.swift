@@ -1,7 +1,7 @@
 import Foundation
 
 /// Reference to an AO3 help page (the `?` modal next to a preferences heading or field).
-struct AO3PreferenceHelpRef: Equatable, Hashable, Identifiable {
+nonisolated struct AO3PreferenceHelpRef: Equatable, Hashable, Identifiable, Sendable {
     /// Accessibility / sheet title (from `aria-label` or heading).
     let title: String
     let url: URL
@@ -10,7 +10,7 @@ struct AO3PreferenceHelpRef: Equatable, Hashable, Identifiable {
 }
 
 /// One topic inside an AO3 preference help page (`dt` + `dd` pair).
-struct AO3PreferenceHelpEntry: Equatable, Identifiable, Hashable {
+nonisolated struct AO3PreferenceHelpEntry: Equatable, Identifiable, Hashable, Sendable {
     let heading: String
     let body: String
 
@@ -18,7 +18,7 @@ struct AO3PreferenceHelpEntry: Equatable, Identifiable, Hashable {
 }
 
 /// Fetched contents of an AO3 `/help/…` page for in-app display.
-struct AO3PreferenceHelpContent: Equatable, Identifiable {
+nonisolated struct AO3PreferenceHelpContent: Equatable, Identifiable, Sendable {
     let title: String
     /// Definition-list topics, each rendered as its own card.
     let entries: [AO3PreferenceHelpEntry]
@@ -41,7 +41,7 @@ struct AO3PreferenceHelpContent: Equatable, Identifiable {
 }
 
 /// One boolean preference from AO3's Preferences form (`preference[key]`).
-struct AO3PreferenceToggle: Identifiable, Equatable, Hashable {
+nonisolated struct AO3PreferenceToggle: Identifiable, Equatable, Hashable, Sendable {
     /// Full form field name, e.g. `preference[adult]`.
     let name: String
     let label: String
@@ -59,7 +59,7 @@ struct AO3PreferenceToggle: Identifiable, Equatable, Hashable {
 }
 
 /// A `<select>` preference (site skin, time zone, optional locale).
-struct AO3PreferenceSelect: Identifiable, Equatable, Hashable {
+nonisolated struct AO3PreferenceSelect: Identifiable, Equatable, Hashable, Sendable {
     let name: String
     let label: String
     var selectedValue: String
@@ -81,7 +81,7 @@ struct AO3PreferenceSelect: Identifiable, Equatable, Hashable {
 }
 
 /// A free-text preference (currently browser page title format).
-struct AO3PreferenceTextField: Identifiable, Equatable, Hashable {
+nonisolated struct AO3PreferenceTextField: Identifiable, Equatable, Hashable, Sendable {
     let name: String
     let label: String
     var value: String
@@ -96,7 +96,7 @@ struct AO3PreferenceTextField: Identifiable, Equatable, Hashable {
 }
 
 /// One fieldset on AO3's Preferences page (Privacy, Display, Comments, …).
-struct AO3PreferenceSection: Identifiable, Equatable, Hashable {
+nonisolated struct AO3PreferenceSection: Identifiable, Equatable, Hashable, Sendable {
     let title: String
     /// Section-level help from the heading's `?` control.
     let help: AO3PreferenceHelpRef?
@@ -107,20 +107,20 @@ struct AO3PreferenceSection: Identifiable, Equatable, Hashable {
 
 /// Account-management links AO3 shows above the preferences form (profile, password, …).
 /// These stay web-only for now — different forms/flows from the preference POST.
-struct AO3PreferenceWebLink: Identifiable, Equatable, Hashable {
+nonisolated struct AO3PreferenceWebLink: Identifiable, Equatable, Hashable, Sendable {
     let title: String
     let url: URL
     var id: String { url.absoluteString }
 }
 
 /// Hidden `preference[...]` input carried through from the live form.
-struct AO3PreferenceHiddenField: Equatable, Hashable {
+nonisolated struct AO3PreferenceHiddenField: Equatable, Hashable, Sendable {
     let name: String
     let value: String
 }
 
 /// Parsed snapshot of `/users/:login/preferences` for native edit + save.
-struct AO3PreferencesSnapshot: Equatable {
+nonisolated struct AO3PreferencesSnapshot: Equatable, Sendable {
     /// Absolute URL of the form `action` (usually `/users/:login/preference`).
     let actionURL: URL
     /// Rails `_method` value when present (`put` / `patch`); defaults to POST body only.

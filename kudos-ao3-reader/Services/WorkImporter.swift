@@ -441,11 +441,11 @@ private func assign(
     }
 }
 
-private func firstNonEmpty(_ first: String, _ second: String) -> String {
+private nonisolated func firstNonEmpty(_ first: String, _ second: String) -> String {
     first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? second : first
 }
 
-private func merged(_ existing: [String], _ incoming: [String]) -> [String] {
+private nonisolated func merged(_ existing: [String], _ incoming: [String]) -> [String] {
     var seen = Set<String>()
     var result: [String] = []
     for value in existing + incoming {
@@ -456,19 +456,19 @@ private func merged(_ existing: [String], _ incoming: [String]) -> [String] {
     return result
 }
 
-private func normalizedKey(_ value: String) -> String {
+private nonisolated func normalizedKey(_ value: String) -> String {
     value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 }
 
-private func isArchiveWarning(_ tag: String) -> Bool {
+private nonisolated func isArchiveWarning(_ tag: String) -> Bool {
     archiveWarningKeys.contains(normalizedKey(tag))
 }
 
-private func isCategory(_ tag: String) -> Bool {
+private nonisolated func isCategory(_ tag: String) -> Bool {
     categoryKeys.contains(normalizedKey(tag))
 }
 
-private let archiveWarningKeys: Set<String> = [
+private nonisolated let archiveWarningKeys: Set<String> = [
     "creator chose not to use archive warnings",
     "graphic depictions of violence",
     "major character death",
@@ -477,7 +477,7 @@ private let archiveWarningKeys: Set<String> = [
     "underage"
 ]
 
-private let categoryKeys: Set<String> = [
+private nonisolated let categoryKeys: Set<String> = [
     "f/f", "f/m", "gen", "m/m", "multi", "other"
 ]
 
@@ -787,7 +787,7 @@ private nonisolated enum AO3EPUBMetadataScanner {
 }
 
 private extension ExtractedAO3EPUBMetadata {
-    func deduplicated() -> Self {
+    nonisolated func deduplicated() -> Self {
         var copy = self
         let categorized = groups.fandoms + groups.relationships + groups.characters
             + groups.warnings + groups.categories + [rating]

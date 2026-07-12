@@ -115,13 +115,16 @@ nonisolated struct KudosBackupContents {
     // file. A custom formatter with fractional seconds fixes that; the decoder falls
     // back to the plain formatter so older `.kudosbackup` files (encoded without
     // fractional seconds) still decode correctly.
-    nonisolated private static let fractionalSecondsISO8601Formatter: ISO8601DateFormatter = {
+    // ISO8601DateFormatter is not Sendable; formatters are configured once and
+    // only read afterwards (thread-safe for that usage). nonisolated(unsafe)
+    // keeps encode/decode helpers callable from nonisolated backup paths.
+    nonisolated(unsafe) private static let fractionalSecondsISO8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    nonisolated private static let wholeSecondISO8601Formatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let wholeSecondISO8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter

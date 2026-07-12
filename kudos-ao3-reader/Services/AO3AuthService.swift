@@ -192,7 +192,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
     }
 }
 
-enum AO3RequestDefaults {
+nonisolated enum AO3RequestDefaults {
     /// The one User-Agent every AO3-facing request sends (AO3Client's session default,
     /// authenticated per-request headers, and the session validator all use this):
     /// browser-like base + an honest product token with a contact URL, so AO3 admins

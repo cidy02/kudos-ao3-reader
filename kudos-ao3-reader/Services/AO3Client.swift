@@ -354,8 +354,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
 
         let key = (request.url?.absoluteString ?? "") + "|" + (request.value(forHTTPHeaderField: "Cookie") ?? "")
+        // Capture a let so the coalescer closure does not close over the mutable `var request`.
+        let fetchRequest = request
         let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
-            try await performAuthenticatedFetch(for: request)
+            try await performAuthenticatedFetch(for: fetchRequest)
         }
         if let path = responsePath, path.contains("/users/login") {
             throw AO3Error.authenticationRequired

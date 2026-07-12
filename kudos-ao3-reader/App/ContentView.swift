@@ -386,14 +386,10 @@ private struct WebKitPrewarmView: View {
             guard !Task.isCancelled, webView == nil else { return }
             let configuration = WKWebViewConfiguration()
             // Matches AO3WebLoginCoordinator's configuration so this also warms
-            // the .default() datastore's on-disk cookie-store initialization,
-            // not just the WebContent rendering process.
+            // the .default() datastore's on-disk cookie-store initialization.
+            // (WKProcessPool sharing is a no-op on modern iOS — pools are shared
+            // automatically — so we only pin the data store here.)
             configuration.websiteDataStore = .default()
-            // The critical piece: without an explicitly shared pool, this
-            // throwaway webview warms an isolated WebContent process that the
-            // real login/Browse webviews (on their own default pools) never
-            // reuse — silently defeating the whole prewarm. See WKProcessPool.shared.
-            configuration.processPool = .shared
             let created = WKWebView(frame: .zero, configuration: configuration)
             webView = created
             created.load(URLRequest(url: URL(string: "about:blank")!))

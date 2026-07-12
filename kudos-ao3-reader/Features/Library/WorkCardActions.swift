@@ -282,7 +282,10 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 in: context
             )
         } else {
-            Task { await ReadingQueueService.addToSavedForLater(work, in: context) }
+            // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
+            Task { @MainActor in
+                _ = await ReadingQueueService.addToSavedForLater(work, in: context)
+            }
         }
     }
 }

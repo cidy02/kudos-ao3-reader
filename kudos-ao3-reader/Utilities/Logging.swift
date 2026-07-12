@@ -8,7 +8,9 @@ import OSLog
 /// OSLog redacts interpolated strings/objects by default; technical values
 /// (URLs, error text, counts) are marked `privacy: .public` at the call site,
 /// while user content (e.g. work titles) is left to default redaction.
-enum Log {
+/// Loggers are process-wide constants; keep them nonisolated so actors and
+/// detached work (AO3Client, importers) can log without hopping to MainActor.
+nonisolated enum Log {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "Kudos"
 
     /// EPUB parsing and reader rendering.

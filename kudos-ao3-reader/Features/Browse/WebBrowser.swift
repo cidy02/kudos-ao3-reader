@@ -230,10 +230,8 @@ final class BrowserModel: NSObject {
     override init() {
         let configuration = WKWebViewConfiguration()
         // Default data store persists cookies, so the user's AO3 login sticks.
+        // Process pools are shared by WebKit automatically on modern iOS.
         configuration.websiteDataStore = .default()
-        // Shares the WebContent process with the login webview and the launch-time
-        // prewarm — see WKProcessPool.shared.
-        configuration.processPool = .shared
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         webView.navigationDelegate = self

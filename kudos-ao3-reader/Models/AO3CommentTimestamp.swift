@@ -3,7 +3,7 @@ import Foundation
 /// Parses AO3's comment timestamp text once and presents it in the user's
 /// current calendar/time zone. All methods accept explicit clock/locale inputs
 /// so calendar-boundary behavior stays deterministic in tests.
-enum AO3CommentTimestamp {
+nonisolated enum AO3CommentTimestamp {
     nonisolated private static let parseFormats = [
         "EEE dd MMM yyyy hh:mma zzz",
         "EEE dd MMM yyyy h:mma zzz",
@@ -20,7 +20,10 @@ enum AO3CommentTimestamp {
     /// falls back to `parse` on every render for any comment whose timestamp didn't
     /// parse at scrape time. Configured here and only read afterwards, which is the
     /// documented thread-safe use of `DateFormatter`.
-    nonisolated(unsafe) private static let parseFormatters: [DateFormatter] = parseFormats.map {
+    // Configured once and only read afterwards (thread-safe DateFormatter usage).
+    // Under approachable concurrency the array is treated as Sendable enough for
+    // a nonisolated constant; avoid nonisolated(unsafe) so the compiler stays quiet.
+    nonisolated private static let parseFormatters: [DateFormatter] = parseFormats.map {
         format in
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
