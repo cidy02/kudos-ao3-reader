@@ -352,7 +352,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
                             Toggle("Require Face ID to reveal", isOn: $requireBiometric)
                         }
-                        NavigationLink(value: AccountView.Route.privacy) {
+                        NavigationLink(value: SettingsRoute.privacy) {
                             Label("Privacy & Local Data", systemImage: "hand.raised")
                         }
                     } header: {
