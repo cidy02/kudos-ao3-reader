@@ -183,24 +183,27 @@ private struct CardRow: ViewModifier {
     /// hairline — the selection outline for a row, at its true outer edge (the row's
     /// own background), rather than an inset overlay drawn on the row's content.
     var isSelected: Bool
+    var cornerRadius: CGFloat
+    var verticalPadding: CGFloat
+    var interCardSpacing: CGFloat
 
     func body(content: Content) -> some View {
-        let half = CardListMetrics.interCardSpacing / 2
+        let half = interCardSpacing / 2
         content
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(
-                top: half + CardListMetrics.innerVertical,
+                top: half + verticalPadding,
                 leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
-                bottom: half + CardListMetrics.innerVertical,
+                bottom: half + verticalPadding,
                 trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
             ))
             .listRowBackground(
-                RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(theme.appTheme.cardSurface)
                     // Hairline edge for crisp separation on flat Light/Sepia backdrops —
                     // or the accent-color selection outline, at the same true card edge.
                     .overlay(
-                        RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(
                                 isSelected ? Color.accentColor : theme.appTheme.cardBorder,
                                 lineWidth: isSelected ? 2 : 0.5
@@ -232,8 +235,18 @@ extension View {
     /// `isSelected` draws the card's own border in accent color instead of the
     /// default hairline — pass this per-row (inside the `ForEach` content, not on
     /// the `ForEach` itself) wherever rows are individually selectable.
-    func cardRow(isSelected: Bool = false) -> some View {
-        modifier(CardRow(isSelected: isSelected))
+    func cardRow(
+        isSelected: Bool = false,
+        cornerRadius: CGFloat = CardListMetrics.cornerRadius,
+        verticalPadding: CGFloat = CardListMetrics.innerVertical,
+        interCardSpacing: CGFloat = CardListMetrics.interCardSpacing
+    ) -> some View {
+        modifier(CardRow(
+            isSelected: isSelected,
+            cornerRadius: cornerRadius,
+            verticalPadding: verticalPadding,
+            interCardSpacing: interCardSpacing
+        ))
     }
 
     /// Value-based row navigation **without** the trailing disclosure chevron — the

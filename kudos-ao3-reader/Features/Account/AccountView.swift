@@ -520,7 +520,7 @@ struct AccountView: View {
                 onViewProfile: openOwnProfile,
                 onLogin: { showingLogin = true }
             )
-            .cardRow()
+            .accountControlCardRow()
         } footer: {
             if let notice = auth.noticeMessage {
                 Text(notice)
@@ -545,7 +545,7 @@ struct AccountView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .cardRow()
+            .accountControlCardRow()
         }
     }
 
@@ -662,7 +662,7 @@ struct AccountView: View {
                 systemImage: \.systemImage,
                 selection: $readingTab
             )
-            .cardRow()
+            .accountControlCardRow()
         }
 
         switch readingTab {
@@ -716,7 +716,7 @@ struct AccountView: View {
                 systemImage: \.systemImage,
                 selection: $writingTab
             )
-            .cardRow()
+            .accountControlCardRow()
         }
 
         switch writingTab {
@@ -753,7 +753,7 @@ struct AccountView: View {
                 systemImage: \.systemImage,
                 selection: $activityTab
             )
-            .cardRow()
+            .accountControlCardRow()
         }
 
         switch activityTab {
@@ -948,7 +948,7 @@ struct AccountView: View {
             AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
         }
         .buttonStyle(.plain)
-        .cardRow()
+        .accountControlCardRow()
     }
 
     private func externalNavCard(
@@ -965,7 +965,7 @@ struct AccountView: View {
         }
         .buttonStyle(.plain)
         .disabled(auth.username == nil)
-        .cardRow()
+        .accountControlCardRow()
     }
 
     private func openUserPath(_ suffix: String) {

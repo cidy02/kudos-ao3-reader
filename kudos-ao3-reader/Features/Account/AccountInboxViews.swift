@@ -141,7 +141,7 @@ struct AccountInboxRows: View {
                 actionTitle: "Try Again",
                 action: { model.retry(auth: auth) }
             )
-            .cardRow()
+            .accountControlCardRow()
         case .loaded where model.items.isEmpty:
             AO3ProfileMessageRow(
                 title: "No comments yet",
@@ -149,7 +149,7 @@ struct AccountInboxRows: View {
                 message: "Comments on your works, and replies to comments you've "
                     + "posted, show up here from your AO3 inbox."
             )
-            .cardRow()
+            .accountControlCardRow()
         case .loaded:
             itemRows
         }
@@ -177,11 +177,11 @@ struct AccountInboxRows: View {
             Label("Showing cached AO3 data", systemImage: "wifi.slash")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .cardRow()
+                .accountControlCardRow()
         }
         ForEach(visibleItems) { item in
             AccountInboxItemRow(item: item) { onOpen(item) }
-                .cardRow()
+                .accountControlCardRow()
         }
         if let onSeeAll, !model.items.isEmpty {
             Button(action: onSeeAll) {
@@ -201,7 +201,7 @@ struct AccountInboxRows: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .cardRow()
+            .accountControlCardRow()
         }
         if limit == nil, model.totalPages > 1 {
             SearchPaginationBar(
@@ -210,7 +210,7 @@ struct AccountInboxRows: View {
             ) { page in
                 model.goToPage(page, auth: auth)
             }
-            .cardRow()
+            .accountControlCardRow()
         }
     }
 

@@ -95,7 +95,7 @@ struct AccountMoreOnAO3View: View {
         }
         .buttonStyle(.plain)
         .disabled(auth.username == nil)
-        .cardRow()
+        .accountControlCardRow()
     }
 
     private func openUserPath(_ suffix: String) {

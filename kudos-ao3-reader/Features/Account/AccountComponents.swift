@@ -117,6 +117,9 @@ struct AccountProfileCard: View {
             .font(.subheadline)
             .foregroundStyle(.tint)
         }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
+        .controlSize(.small)
         .accessibilityLabel("Posting as")
         .accessibilityValue(postingPseudName ?? "Account Default")
     }
@@ -237,6 +240,7 @@ struct AccountProfileCard: View {
             Image(systemName: "ellipsis")
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
         .controlSize(.small)
         .accessibilityLabel("Account actions")
     }
@@ -261,6 +265,7 @@ struct AccountProfileCard: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
                 .controlSize(.small)
                 .disabled(auth.status == .signingIn)
                 .padding(.top, 3)
@@ -328,13 +333,13 @@ struct AccountScrollChromeCard<Content: View>: View {
     var body: some View {
         content()
             .padding(.horizontal, CardListMetrics.innerHorizontal)
-            .padding(.vertical, CardListMetrics.innerVertical)
+            .padding(.vertical, AccountControlMetrics.verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: AccountControlMetrics.cornerRadius, style: .continuous)
                     .fill(theme.appTheme.cardSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: AccountControlMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
                     )
             )
@@ -649,7 +654,9 @@ struct AccountWorksInlineSection: View {
                     .font(.footnote)
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
+            .controlSize(.small)
         }
     }
 
