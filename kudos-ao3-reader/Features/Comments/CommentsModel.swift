@@ -52,10 +52,11 @@ final class CommentsModel {
     /// they'd otherwise stack on the single load `loadInitial` already performs.
     private(set) var isApplyingInitialContext = false
     /// Local rendering order — AO3 itself has no comment sort; newest-first
-    /// starts from the last page and reverses within each page.
-    var newestFirst = false {
-        didSet { rebuildDisplayThreads() }
-    }
+    /// starts from the last page and reverses within each page. Changing this
+    /// always re-fetches the correct target page (the view's `onChange` resets
+    /// and reloads) rather than reversing whatever page happens to be cached —
+    /// on a multi-page thread, the current page usually isn't the target page.
+    var newestFirst = false
 
     // Composer
     var composerContext: AO3CommentContext?
@@ -300,12 +301,21 @@ final class CommentsModel {
         composerEditTarget = nil
         composerContext = context
         composerText = drafts.draft(for: context)
-        submissionGuard.reset()
+        // Only clear the guard when reopening for a DIFFERENT target. Reopening
+        // on the same context after an unresolved ambiguous attempt must keep
+        // that state (and its "Check Again" banner) — resetting it here would
+        // silently unblock a duplicate resubmission of the same comment.
+        if submissionGuard.pendingKey?.context != context {
+            submissionGuard.reset()
+        }
     }
 
     /// Opens the composer to edit an existing own comment. Prefills the rendered
     /// text — AO3 comments are usually plain text; heavy formatting is better
-    /// edited on AO3 itself (documented limitation).
+    /// edited on AO3 itself (documented limitation). Edits never enter the
+    /// `.ambiguous` phase (they're safe to retry explicitly, see `submit()`), so
+    /// an unconditional reset here can't unblock a duplicate the way a reply's
+    /// could — unlike `startComposer`, this doesn't need the same guard.
     func startEditing(_ comment: AO3Comment) {
         composerParent = nil
         composerEditTarget = comment
@@ -380,7 +390,12 @@ final class CommentsModel {
         auth: AO3AuthService, context: AO3CommentContext, body: String
     ) async {
         submissionGuard.beginVerifying()
-        let verification = await auth.verifyCommentPosted(context: context, body: body)
+        // For a reply, this is the exact page (in the context's chapter scope)
+        // the parent comment was rendered on when the user tapped Reply — no
+        // other load runs while the composer is up, so it's still accurate now.
+        let verification = await auth.verifyCommentPosted(
+            context: context, body: body, knownPage: currentPageNumber
+        )
         submissionGuard.resolveAmbiguity(verification)
         if case .found = verification { drafts.clear(for: context) }
     }

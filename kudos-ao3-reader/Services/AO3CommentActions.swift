@@ -100,29 +100,48 @@ extension AO3AuthService {
     }
 
     /// After an ambiguous POST result (e.g. timeout once the request was already
-    /// on the wire), checks whether the comment actually landed: a fetch of the
-    /// work's **newest** comments page, matched by this account's name + the
-    /// normalized body. Work-level regardless of the composer's chapter scope —
-    /// `postComment` posts to the work, and the work-level list contains replies
-    /// too. Conservative by design — reads only, never a re-POST.
+    /// on the wire), checks whether the comment actually landed. Conservative by
+    /// design — reads only, never a re-POST.
+    ///
+    /// A fresh **top-level** comment always lands on the work's LAST page (AO3
+    /// orders oldest-first), work-level regardless of the composer's chapter
+    /// scope — `postComment` posts to the work, and the work-level list contains
+    /// replies too.
+    ///
+    /// A **reply**'s parent thread renders wherever it already was — not
+    /// necessarily the last page — so guessing between page 1 and the last page
+    /// would false-negative on any multi-page work and unblock a real duplicate
+    /// POST. `knownPage` is the page (and, via `context.chapterID`, the chapter
+    /// scope) the caller was actually viewing when the parent comment was on
+    /// screen; re-fetching exactly that page is known-correct rather than a guess.
     func verifyCommentPosted(
-        context: AO3CommentContext, body: String
+        context: AO3CommentContext, body: String, knownPage: Int? = nil
     ) async -> CommentVerification {
         guard let username else { return .unknown }
         let normalized = CommentSubmissionKey.normalize(body)
         do {
-            let request = try? authenticatedRequest(
-                for: AO3Client.commentsPageURL(workID: context.workID)
-            )
-            // A fresh comment lands on the LAST page (AO3 orders oldest-first).
-            let first = try await AO3Client.shared.commentsPage(
-                workID: context.workID, page: 1, request: request
-            )
-            let page = first.totalPages > 1
-                ? try await AO3Client.shared.commentsPage(
-                    workID: context.workID, page: first.totalPages, request: request
+            let page: AO3CommentsPage
+            if context.parentCommentID != nil {
+                let request = try? authenticatedRequest(
+                    for: AO3Client.commentsPageURL(workID: context.workID, chapterID: context.chapterID)
                 )
-                : first
+                page = try await AO3Client.shared.commentsPage(
+                    workID: context.workID, chapterID: context.chapterID,
+                    page: knownPage ?? 1, request: request
+                )
+            } else {
+                let request = try? authenticatedRequest(
+                    for: AO3Client.commentsPageURL(workID: context.workID)
+                )
+                let first = try await AO3Client.shared.commentsPage(
+                    workID: context.workID, page: 1, request: request
+                )
+                page = first.totalPages > 1
+                    ? try await AO3Client.shared.commentsPage(
+                        workID: context.workID, page: first.totalPages, request: request
+                    )
+                    : first
+            }
             let found = Self.containsComment(
                 in: page, author: username, normalizedBody: normalized,
                 parentID: context.parentCommentID

@@ -33,9 +33,11 @@ struct AccountView: View {
     @State private var postingPseudName: String?
     /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
     @State private var listReloadToken = 0
-
-    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
-    private var localWorks: [SavedWork]
+    /// Supplied by the child list that is currently on screen. This must never
+    /// use the library-wide query: an unrelated adult work must not enable an
+    /// inert Mature-reveal button on another Account list.
+    @State private var currentListHasAdultContent = false
+    @State private var adultContentScope: String?
 
     enum Route: Hashable {
         case myCollections
@@ -44,8 +46,6 @@ struct AccountView: View {
         case settings
         /// Native AO3 own-user dashboard (sidebar destinations).
         case dashboard
-        /// Full inbox feed (Dashboard + deep links).
-        case inbox
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -166,28 +166,15 @@ struct AccountView: View {
     /// Matches LibrarySectionListView compact: `ScrollView` + two-up `NavigationLink` cards.
     private var libraryStyleCompactRoot: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                AccountProfileCard(
-                    profileModel: profileModel,
-                    postingPseudName: $postingPseudName,
-                    onViewProfile: openOwnProfile,
-                    onLogin: { showingLogin = true }
-                )
-                .padding(EdgeInsets(
-                    top: CardListMetrics.innerVertical,
-                    leading: CardListMetrics.innerHorizontal,
-                    bottom: CardListMetrics.innerVertical,
-                    trailing: CardListMetrics.innerHorizontal
-                ))
-                .background(
-                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                        .fill(theme.appTheme.cardSurface)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                        )
-                )
-                .padding(.horizontal, CardListMetrics.sideMargin)
+            VStack(alignment: .leading, spacing: AccountControlMetrics.compactSpacing) {
+                AccountScrollChromeCard {
+                    AccountProfileCard(
+                        profileModel: profileModel,
+                        postingPseudName: $postingPseudName,
+                        onViewProfile: openOwnProfile,
+                        onLogin: { showingLogin = true }
+                    )
+                }
 
                 if let notice = auth.noticeMessage {
                     Text(notice)
@@ -207,6 +194,7 @@ struct AccountView: View {
                     .labelsHidden()
                 }
 
+                compactOverviewLink
                 compactScopeChrome
                 compactWorksContent
             }
@@ -214,6 +202,29 @@ struct AccountView: View {
         }
         .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
         .refreshable { await refreshCurrentTab() }
+    }
+
+    private var compactOverviewLink: some View {
+        AccountScrollChromeCard {
+            Button {
+                selectedTab = .overview
+            } label: {
+                HStack(spacing: 10) {
+                    Label("Overview", systemImage: "square.grid.2x2")
+                    Spacer()
+                    Text("Shortcuts & Preferences")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows Account shortcuts and preferences")
+        }
     }
 
     @ViewBuilder
@@ -261,6 +272,9 @@ struct AccountView: View {
                     displayMode: .compact,
                     layout: .scroll,
                     reloadToken: listReloadToken,
+                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                        for: matureContentScope
+                    ),
                     onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
                 )
             case .subscriptions:
@@ -270,6 +284,9 @@ struct AccountView: View {
                     displayMode: .compact,
                     layout: .scroll,
                     reloadToken: listReloadToken,
+                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                        for: matureContentScope
+                    ),
                     onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
                 )
             case .bookmarks:
@@ -286,7 +303,10 @@ struct AccountView: View {
                 profileContentSections(
                     profileTab: .works,
                     sectionTitle: "Works",
-                    layout: .scroll
+                    layout: .scroll,
+                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                        for: matureContentScope
+                    )
                 )
             }
         case .activity:
@@ -297,6 +317,9 @@ struct AccountView: View {
                     displayMode: .compact,
                     layout: .scroll,
                     reloadToken: listReloadToken,
+                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                        for: matureContentScope
+                    ),
                     onRefine: { path.append(AO3AccountWorksList.Kind.history) }
                 )
             }
@@ -411,7 +434,6 @@ struct AccountView: View {
         case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
         case .dashboard: AO3DashboardView()
-        case .inbox: AccountInboxListView()
         }
     }
 
@@ -460,10 +482,32 @@ struct AccountView: View {
     }
 
     /// Eye toggle when Hide Mature is on and the library has adult works that
-    /// can appear on Account lists (paired local rows / cover cards).
+    /// can appear in the currently rendered Account list.
     private var showsMatureRevealControl: Bool {
         showsWorkListControls
-            && PrivacyGate.hasVisibleMatureWorks(in: localWorks, hideMature: hideMature)
+            && adultContentScope == matureContentScope
+            && PrivacyGate.shouldShowMatureReveal(
+                hideMature: hideMature,
+                hasVisibleMatureWorks: currentListHasAdultContent
+            )
+    }
+
+    private var matureContentScope: String {
+        [
+            auth.username ?? "",
+            selectedTab.rawValue,
+            readingTab.rawValue,
+            writingTab.rawValue,
+            activityTab.rawValue
+        ].joined(separator: "|")
+    }
+
+    private func adultContentVisibilityHandler(for scope: String) -> (Bool) -> Void {
+        { hasAdultContent in
+            guard scope == matureContentScope else { return }
+            adultContentScope = scope
+            currentListHasAdultContent = hasAdultContent
+        }
     }
 
     // MARK: Profile card
@@ -628,6 +672,9 @@ struct AccountView: View {
                 expandAll: expandAll,
                 displayMode: displayMode,
                 reloadToken: listReloadToken,
+                onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                    for: matureContentScope
+                ),
                 onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
             )
         case .subscriptions:
@@ -636,6 +683,9 @@ struct AccountView: View {
                 expandAll: expandAll,
                 displayMode: displayMode,
                 reloadToken: listReloadToken,
+                onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                    for: matureContentScope
+                ),
                 onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
             )
         case .bookmarks:
@@ -671,7 +721,13 @@ struct AccountView: View {
 
         switch writingTab {
         case .works:
-            profileContentSections(profileTab: .works, sectionTitle: "Works")
+            profileContentSections(
+                profileTab: .works,
+                sectionTitle: "Works",
+                onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                    for: matureContentScope
+                )
+            )
         case .series:
             profileSeriesSections
         case .drafts:
@@ -707,6 +763,9 @@ struct AccountView: View {
                 expandAll: expandAll,
                 displayMode: displayMode,
                 reloadToken: listReloadToken,
+                onAdultContentVisibilityChange: adultContentVisibilityHandler(
+                    for: matureContentScope
+                ),
                 onRefine: { path.append(AO3AccountWorksList.Kind.history) }
             )
         case .inbox:
@@ -730,7 +789,8 @@ struct AccountView: View {
     private func profileContentSections(
         profileTab: AO3AuthorProfileTab,
         sectionTitle: String,
-        layout: AccountWorksLayout = .list
+        layout: AccountWorksLayout = .list,
+        onAdultContentVisibilityChange: @escaping (Bool) -> Void = { _ in }
     ) -> some View {
         if let model = profileModel {
             switch model.headerPhase {
@@ -780,7 +840,8 @@ struct AccountView: View {
                         model: model,
                         expandAll: expandAll,
                         displayMode: displayMode,
-                        layout: layout
+                        layout: layout,
+                        onAdultContentVisibilityChange: onAdultContentVisibilityChange
                     )
                 } else {
                     AO3AuthorBookmarksSection(

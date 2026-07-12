@@ -151,7 +151,7 @@ struct AccountProfileCard: View {
         } label: {
             sessionStatusIcon
                 .font(.body)
-                .frame(minWidth: 28, minHeight: 28)
+                .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -517,6 +517,35 @@ enum AccountWorksLayout: Equatable {
     case scroll
 }
 
+/// Cross-remount snapshot of one `AccountWorksInlineSection`'s pagination
+/// state, keyed by list kind + session. `AccountWorksInlineSection` is plain
+/// `@State`, which SwiftUI discards whenever Account swaps between its List
+/// (Detailed) and ScrollView (Compact) roots, or between any two branches that
+/// re-instantiate it — without this, toggling display mode (or just tapping to
+/// a different subsection and back) silently snapped the list back to page 1
+/// and lost its scroll position. Session-scoped, in-memory only, matching the
+/// pattern of `AO3AccountListCountsCache`/`AO3AuthorPageCache` elsewhere.
+@MainActor
+private final class AccountWorksInlineSectionCache {
+    static let shared = AccountWorksInlineSectionCache()
+
+    struct Key: Hashable {
+        let kind: AO3AccountWorksList.Kind
+        let sessionUsername: String
+    }
+
+    struct Snapshot {
+        var works: [AO3WorkSummary]
+        var currentPage: Int
+        var totalPages: Int
+    }
+
+    private var snapshots: [Key: Snapshot] = [:]
+
+    func snapshot(for key: Key) -> Snapshot? { snapshots[key] }
+    func store(_ snapshot: Snapshot, for key: Key) { snapshots[key] = snapshot }
+}
+
 /// An account works list (AO3 History / Marked for Later) embeddable as rows in
 /// the Account page's own List — the Activity tab's inline counterpart of the
 /// pushed `AO3AccountWorksList` screen. Fetches through the same TTL'd page
@@ -529,6 +558,9 @@ struct AccountWorksInlineSection: View {
     var layout: AccountWorksLayout = .list
     /// Bumped by the host's pull-to-refresh; a change forces a cache bypass.
     var reloadToken: Int
+    /// Reports whether this page's rendered canonical entries include a local
+    /// Mature/Explicit work before Hide mode omits it.
+    var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
     /// Pushes the full `AO3AccountWorksList(kind:)` screen — this inline section
     /// is a lightweight preview with no refine-filter panel or Mature-content
     /// reveal toggle of its own, so those stay reachable one tap away.
@@ -555,10 +587,20 @@ struct AccountWorksInlineSection: View {
     }
 
     private var entries: [CanonicalWork] {
-        CanonicalWorkMerge.remoteLed(
-            remote: works,
-            localLibrary: localWorks.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        canonicalEntries(
+            localLibrary: localWorks.filter {
+                !gate.isHidden($0, enabled: hideMature, mode: matureMode)
+            }
         )
+    }
+
+    private var hasVisibleAdultContent: Bool {
+        canonicalEntries(localLibrary: localWorks)
+            .contains { $0.local?.isAdult == true }
+    }
+
+    private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
+        CanonicalWorkMerge.remoteLed(remote: works, localLibrary: localLibrary)
     }
 
     private var loadTaskID: String {
@@ -574,6 +616,9 @@ struct AccountWorksInlineSection: View {
             }
         }
         .task(id: loadTaskID) { await runLoadTask() }
+        .onChange(of: hasVisibleAdultContent, initial: true) { _, hasVisibleAdultContent in
+            onAdultContentVisibilityChange(hasVisibleAdultContent)
+        }
     }
 
     private var listBody: some View {
@@ -644,12 +689,29 @@ struct AccountWorksInlineSection: View {
         }
     }
 
+    private var cacheKey: AccountWorksInlineSectionCache.Key {
+        .init(kind: kind, sessionUsername: auth.username ?? "")
+    }
+
     private func runLoadTask() async {
         let bypass = handledReloadToken != nil && handledReloadToken != reloadToken
         handledReloadToken = reloadToken
         guard auth.isLoggedIn else {
             works = []
             phase = .idle
+            return
+        }
+        if phase == .idle, !bypass,
+           let cached = AccountWorksInlineSectionCache.shared.snapshot(for: cacheKey),
+           !cached.works.isEmpty {
+            // This is a freshly (re)constructed instance — e.g. Account just
+            // swapped between its Detailed (List) and Compact (ScrollView) roots,
+            // or the user switched subsections and back. Restore the page it was
+            // on instead of silently snapping back to page 1.
+            works = cached.works
+            currentPage = cached.currentPage
+            totalPages = cached.totalPages
+            phase = .loaded
             return
         }
         if phase == .idle || bypass {
@@ -713,6 +775,10 @@ struct AccountWorksInlineSection: View {
             currentPage = result.currentPage
             totalPages = result.totalPages
             phase = .loaded
+            AccountWorksInlineSectionCache.shared.store(
+                .init(works: works, currentPage: currentPage, totalPages: totalPages),
+                for: cacheKey
+            )
             if let countsKind = kind.countsKind {
                 AO3AccountListCountsCache.shared.record(
                     page: result,

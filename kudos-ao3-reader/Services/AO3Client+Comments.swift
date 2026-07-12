@@ -132,8 +132,10 @@ extension AO3Client {
         return comments
     }
 
-    /// One `li.comment`. Returns nil when the `li` carries no parseable id, so
-    /// future markup drift degrades to "skipped", never to a crash.
+    /// One `li.comment`. Degrades to a tombstone (never drops the node) when the
+    /// `li` carries no parseable id, so future markup drift can't crash — and,
+    /// same as the deleted-comment case below, can't silently graft this
+    /// comment's replies onto an unrelated preceding sibling either.
     ///
     /// A deleted comment whose replies survive keeps its id but renders ONLY
     /// `<p>(Previous comment deleted.)</p>` — no byline, body, or actions
@@ -144,7 +146,15 @@ extension AO3Client {
     private static func parseComment(_ li: Element) throws -> AO3Comment? {
         let idAttr = li.id() // "comment_1252794206"
         guard idAttr.hasPrefix("comment_"), let id = Int(idAttr.dropFirst("comment_".count)) else {
-            return nil
+            // Same "keep the node" reasoning as the missing-byline tombstone
+            // below, just for a different trigger: an id AO3 markup drift made
+            // unparseable. A stable, clearly-non-AO3 sentinel id (negative —
+            // real AO3 ids are always positive) keeps this comment addressable
+            // without colliding with a real one.
+            var placeholder = AO3Comment(id: unparseableCommentID(idAttr), author: "", isGuest: false)
+            placeholder.isDeleted = true
+            placeholder.bodyText = "(This comment couldn't be read.)"
+            return placeholder
         }
         var comment = AO3Comment(id: id, author: "", isGuest: false)
 
@@ -212,6 +222,23 @@ extension AO3Client {
         }
 
         return comment
+    }
+
+    /// A stable negative id for a comment `li` whose id attribute didn't match
+    /// AO3's `comment_<digits>` shape. Negative so it can never collide with a
+    /// real (always-positive) AO3 comment id.
+    private static func unparseableCommentID(_ idAttr: String) -> Int {
+        // Swift's `hashValue` has a random seed per process, so it cannot back a
+        // stable SwiftUI identity across a reload. FNV-1a is deterministic and
+        // the positive range conversion avoids both `Int.min` negation and real
+        // (positive) AO3 ids.
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in idAttr.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        let magnitude = Int(truncatingIfNeeded: hash & UInt64(Int.max))
+        return -max(1, magnitude)
     }
 
     private static func applyAction(label: String, href: String, to comment: inout AO3Comment) {

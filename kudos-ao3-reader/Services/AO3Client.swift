@@ -73,6 +73,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return Self.htmlString(from: data)
     }
 
+    /// Fetches an AO3-hosted image through the same paced, coalesced GET pipeline
+    /// as HTML. Comment avatars use this rather than creating unpaced `AsyncImage`
+    /// requests outside the app's AO3 networking policy.
+    func imageData(at url: URL) async throws -> Data {
+        try await fetchData(from: url)
+    }
+
     private static func htmlString(from data: Data) -> String {
         // Preserve the existing lossy UTF-8 behavior for AO3 HTML with bad bytes.
         // swiftlint:disable:next optional_data_string_conversion

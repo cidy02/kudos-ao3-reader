@@ -180,6 +180,8 @@ struct AO3AuthorWorksSection: View {
     var isSelecting: Bool = false
     var selection: Set<Int> = []
     var onToggleSelection: (AO3WorkSummary) -> Void = { _ in }
+    /// Lets an embedding surface scope its Mature-reveal control to these rows.
+    var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
 
     @Environment(PrivacyGate.self) private var gate
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
@@ -187,10 +189,15 @@ struct AO3AuthorWorksSection: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
-        if layout == .scroll, displayMode == .compact, !isSelecting {
-            scrollCompactBody
-        } else {
-            listBody
+        Group {
+            if layout == .scroll, displayMode == .compact, !isSelecting {
+                scrollCompactBody
+            } else {
+                listBody
+            }
+        }
+        .onChange(of: hasVisibleAdultContent, initial: true) { _, hasVisibleAdultContent in
+            onAdultContentVisibilityChange(hasVisibleAdultContent)
         }
     }
 
@@ -265,12 +272,20 @@ struct AO3AuthorWorksSection: View {
     }
 
     private var workEntries: [CanonicalWork] {
-        CanonicalWorkMerge.remoteLed(
-            remote: model.works,
+        canonicalEntries(
             localLibrary: localWorks.filter {
                 !gate.isHidden($0, enabled: hideMature, mode: matureMode)
             }
         )
+    }
+
+    private var hasVisibleAdultContent: Bool {
+        canonicalEntries(localLibrary: localWorks)
+            .contains { $0.local?.isAdult == true }
+    }
+
+    private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
+        CanonicalWorkMerge.remoteLed(remote: model.works, localLibrary: localLibrary)
     }
 
     private func selectableWorkRow(_ work: AO3WorkSummary) -> some View {

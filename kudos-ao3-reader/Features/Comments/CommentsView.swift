@@ -39,6 +39,10 @@ struct CommentsView: View {
     /// stack can't hide the comment being scrolled to.
     @State private var forceExpandedRootIDs: Set<Int> = []
     @State private var focusScrollTask: Task<Void, Never>?
+    /// Guards the deferred dismiss-then-push in `openAuthor` — without it, two
+    /// fast taps on an avatar/byline each schedule their own 350ms push, landing
+    /// the same profile twice on the nav stack.
+    @State private var isOpeningModalAuthorProfile = false
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -92,6 +96,16 @@ struct CommentsView: View {
                     if scope == .byChapter {
                         await model.loadChaptersIfNeeded(auth: auth)
                         guard !Task.isCancelled else { return }
+                        if model.chaptersFailed {
+                            // The chapter index genuinely failed to load (offline/
+                            // timeout) — don't silently fall through to a whole-work
+                            // fetch while the UI still reads "By Chapter" with no
+                            // per-comment chapter badges to show it's mislabeled.
+                            // Surface the real failure via the chapter picker's own
+                            // error state instead.
+                            showingChapterPicker = true
+                            return
+                        }
                         if model.selectedChapter == nil, let first = model.chapters.first {
                             // Assigning the chapter triggers the selectedChapter
                             // onChange, which loads — don't also load here (double GET).
@@ -110,6 +124,10 @@ struct CommentsView: View {
             }
             .onChange(of: model.newestFirst) { _, _ in
                 contextLoadTask?.cancel()
+                // Reset first: the currently-cached page belongs to the OLD order's
+                // target page, not the new one — showing it (even briefly, reversed)
+                // would render the wrong page's content under the new sort label.
+                model.resetForContextChange()
                 contextLoadTask = Task { await model.load(auth: auth) }
             }
             .onDisappear {
@@ -118,7 +136,10 @@ struct CommentsView: View {
                 focusScrollTask?.cancel()
             }
             .sheet(isPresented: composerBinding) {
-                CommentComposerSheet(model: model)
+                CommentComposerSheet(
+                    model: model, isModal: isModal,
+                    dismissCommentsView: isModal ? dismiss : nil
+                )
             }
             .sheet(isPresented: $showingChapterPicker) {
                 chapterPicker
@@ -434,11 +455,16 @@ struct CommentsView: View {
 
     private func openAuthor(_ route: AO3AuthorRoute) {
         if isModal {
+            // A second tap while the first is still mid-dismiss must not schedule
+            // its own push — that's how the same profile lands twice on the stack.
+            guard !isOpeningModalAuthorProfile else { return }
+            isOpeningModalAuthorProfile = true
             // Let the comments sheet finish dismissing before pushing profile.
             dismiss()
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(350))
                 router.openAuthorProfile(route)
+                isOpeningModalAuthorProfile = false
             }
         } else {
             router.openAuthorProfile(route)
@@ -776,12 +802,20 @@ extension View {
 /// submission flow (single POST, verify-on-ambiguity — `CommentSubmissionGuard`).
 struct CommentComposerSheet: View {
     @Bindable var model: CommentsModel
+    /// Whether the presenting `CommentsView` is itself modal — when true, opening
+    /// the parent-quote author must dismiss that outer sheet too, or the profile
+    /// push lands silently behind it.
+    var isModal = false
+    /// The outer `CommentsView`'s own dismiss action, captured by its caller
+    /// before this sheet's `\.dismiss` environment value shadows it.
+    var dismissCommentsView: DismissAction?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var draftSaveTask: Task<Void, Never>?
+    @State private var isOpeningParentAuthor = false
     @FocusState private var editorFocused: Bool
 
     private var isReply: Bool { model.composerParent != nil }
@@ -957,13 +991,20 @@ struct CommentComposerSheet: View {
     }
 
     private func openParentAuthor(_ route: AO3AuthorRoute) {
-        // Dismiss the composer first, then open the profile after the sheet
-        // finishes tearing down — simultaneous dismiss + push can drop the
-        // profile on some iOS versions (same scar tissue as nested login sheets).
+        guard !isOpeningParentAuthor else { return }
+        isOpeningParentAuthor = true
+        // Dismiss the composer — and, when Comments itself is presented modally,
+        // the whole modal chain — before opening the profile after the sheets
+        // finish tearing down. Dismissing only the composer would leave the
+        // profile pushed onto the tab stack silently behind a still-open
+        // Comments sheet; simultaneous dismiss + push can also drop the profile
+        // on some iOS versions (same scar tissue as nested login sheets).
         dismiss()
+        dismissCommentsView?()
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
             router.openAuthorProfile(route)
+            isOpeningParentAuthor = false
         }
     }
 

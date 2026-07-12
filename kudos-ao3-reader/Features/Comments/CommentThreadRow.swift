@@ -1,5 +1,11 @@
 import SwiftUI
 
+#if os(iOS)
+    import UIKit
+#elseif os(macOS)
+    import AppKit
+#endif
+
 /// Geometry for comment threads.
 ///
 /// **Two card shells only** (no matryoshka):
@@ -36,6 +42,10 @@ enum CommentThreadGeometry {
     /// thread — the whole depth-first stack is what expanding actually renders —
     /// not just the root's direct children.
     static let autoExpandedMaxReplies = 8
+    /// Once expanded, reveal this many replies at a time. A 200-reply thread
+    /// then builds (and fires avatar `AsyncImage` requests for) one chunk per
+    /// "Show more" tap instead of all 200 at once.
+    static let repliesChunkSize = 20
     /// Collapsed body height before "Read more".
     static let collapsedBodyLineLimit = 5
 
@@ -131,6 +141,11 @@ struct CommentThreadRow: View {
     @Environment(\.commentHighlightID) private var highlightedCommentID
 
     @State private var forceExpandReplies = false
+    /// How many of the (already-expanded) replies are currently rendered. Caps a
+    /// single "Show replies" tap on a huge thread to one chunk instead of
+    /// bursting every `NestedReplyCard` — and every avatar's `AsyncImage`
+    /// request — at once.
+    @State private var visibleReplyCount = CommentThreadGeometry.repliesChunkSize
 
     private var replyItems: [FlattenedReply] {
         CommentThreadGeometry.flattenedReplies(from: comment)
@@ -143,9 +158,19 @@ struct CommentThreadRow: View {
             || replyItems.count <= CommentThreadGeometry.autoExpandedMaxReplies
     }
 
+    /// The replies actually rendered this pass. A "Thread"/"Parent Thread" jump
+    /// (`startsExpanded`) must show the whole stack — `scrollTo` can't reach an
+    /// id that chunking hasn't materialized yet — so only the casual "Show
+    /// replies" path chunks.
+    private func visibleReplies(from replies: [FlattenedReply]) -> [FlattenedReply] {
+        guard !startsExpanded else { return replies }
+        return Array(replies.prefix(max(visibleReplyCount, CommentThreadGeometry.autoExpandedMaxReplies)))
+    }
+
     var body: some View {
         let elevation = theme.appTheme.cardShadow
         let replies = replyItems
+        let shown = visibleReplies(from: replies)
         let shape = RoundedRectangle(
             cornerRadius: CommentThreadGeometry.cardCornerRadius,
             style: .continuous
@@ -167,22 +192,37 @@ struct CommentThreadRow: View {
 
             if !replies.isEmpty {
                 if showsReplies {
-                    // Root post owns the only in-card spine (down to the first
-                    // reply). Nested reply cards have no internal rail — only
-                    // the bridges between them.
+                    // Root post's spine ends right where this VStack begins, so
+                    // every reply card connects the incoming rail through its own
+                    // top padding into its avatar, and — except the last one
+                    // rendered — back out through its bottom padding into the
+                    // bridge to the next card.
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(replies.enumerated()), id: \.element.id) { index, item in
+                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
                                 spineBridge(height: CommentThreadGeometry.nestedCardSpacing)
                             }
                             NestedReplyCard(
                                 comment: item.comment,
-                                workAuthors: workAuthors
+                                workAuthors: workAuthors,
+                                connectsToNext: index < shown.count - 1
                             )
                         }
                     }
+                    if shown.count < replies.count {
+                        expandRepliesButton(count: replies.count - shown.count, verb: "more") {
+                            visibleReplyCount += CommentThreadGeometry.repliesChunkSize
+                        }
+                        .padding(.top, CommentThreadGeometry.postSpacing)
+                        .padding(
+                            .leading,
+                            CommentThreadGeometry.railInset
+                                + CommentThreadGeometry.avatarColumnWidth
+                                + CommentThreadGeometry.avatarContentSpacing
+                        )
+                    }
                 } else {
-                    expandRepliesButton(count: replies.count) {
+                    expandRepliesButton(count: replies.count, verb: nil) {
                         forceExpandReplies = true
                     }
                     .padding(.top, CommentThreadGeometry.postSpacing)
@@ -230,11 +270,17 @@ struct CommentThreadRow: View {
 
 // MARK: - Nested reply card (one reply = one card)
 
-/// A single reply enclosed in its own card. No internal spine — the rail lives
-/// only on the root post and in the gaps between these cards.
+/// A single reply enclosed in its own card. The rail arrives through this
+/// card's own top padding (from the root post or the previous bridge) and, when
+/// another reply follows, exits through the bottom padding into the next
+/// bridge — so the spine reaches every avatar instead of floating disconnected
+/// in the gaps between cards.
 private struct NestedReplyCard: View {
     let comment: AO3Comment
     let workAuthors: [String]
+    /// True when another reply card follows in the (possibly chunked) visible
+    /// stack. The last rendered card is a dead end: no rail below it.
+    let connectsToNext: Bool
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentHighlightID) private var highlightedCommentID
@@ -251,7 +297,7 @@ private struct NestedReplyCard: View {
             comment: comment,
             workAuthors: workAuthors,
             showChapterBadge: false,
-            drawsSpineBelow: false
+            drawsSpineBelow: connectsToNext
         )
         .id(comment.id)
         // Equal inset on every side so the avatar isn’t pushed down relative
@@ -261,6 +307,14 @@ private struct NestedReplyCard: View {
         // Dark reads the nesting off the surface (cards stay flat there); Light and
         // Sepia keep `cardSurface` and lift with the same shadow every card uses.
         .background(theme.appTheme.nestedCardSurface, in: shape)
+        // Fills this card's own top/bottom padding with rail so the incoming
+        // line (root spine or previous bridge) reaches this avatar, and — when
+        // another reply follows — continues out toward the next bridge, instead
+        // of leaving that padding as a disconnected gap.
+        .overlay(alignment: .top) { railStub }
+        .overlay(alignment: .bottom) {
+            if connectsToNext { railStub }
+        }
         .highlightOverlay(shape, isHighlighted: isHighlighted)
         .overlay {
             shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
@@ -271,6 +325,19 @@ private struct NestedReplyCard: View {
             x: 0,
             y: elevation.y
         )
+    }
+
+    private var railStub: some View {
+        HStack(spacing: 0) {
+            ThreadSpineSegment()
+                .frame(
+                    width: CommentThreadGeometry.avatarColumnWidth,
+                    height: CommentThreadGeometry.nestedCardPadding
+                )
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, CommentThreadGeometry.nestedCardPadding)
+        .accessibilityHidden(true)
     }
 }
 
@@ -477,8 +544,10 @@ private struct SpinePostRow: View {
     }
 
     /// Compact bottom strip: Reply bottom-leading, overflow bottom-trailing.
-    /// Visual height stays tight so card padding reads even; hit targets use
-    /// contentShape rather than a 44pt layout frame that inflated the strip.
+    /// The capsule itself stays visually tight; each button reserves a 44pt
+    /// minimum hit area around it (same convention as `expandRepliesButton`/
+    /// `CommentAuthorAvatarButton` elsewhere in this file) so the small capsule
+    /// doesn't fall below the app's own tap-target minimum.
     private var actionsRow: some View {
         HStack(alignment: .center, spacing: 4) {
             if comment.canReply && auth.isLoggedIn {
@@ -491,7 +560,8 @@ private struct SpinePostRow: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(.quaternary, in: Capsule())
-                        .contentShape(Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.primary)
@@ -540,7 +610,8 @@ private struct SpinePostRow: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(.quaternary, in: Capsule())
-                    .contentShape(Capsule())
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
@@ -658,12 +729,15 @@ private extension View {
     }
 }
 
-private func expandRepliesButton(count: Int, action: @escaping () -> Void) -> some View {
+/// `verb` distinguishes the initial collapse ("Show 12 replies", nil) from
+/// revealing another chunk of an already-expanded stack ("Show 20 more
+/// replies").
+private func expandRepliesButton(count: Int, verb: String?, action: @escaping () -> Void) -> some View {
     Button {
         withAnimation(.easeInOut(duration: 0.2), action)
     } label: {
         Label(
-            "Show \(count) replies",
+            verb.map { "Show \(count) \($0) replies" } ?? "Show \(count) replies",
             systemImage: "bubble.left.and.bubble.right"
         )
         .font(.caption.weight(.medium))
@@ -672,7 +746,9 @@ private func expandRepliesButton(count: Int, action: @escaping () -> Void) -> so
         .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
-    .accessibilityHint("Expands nested replies for this comment")
+    .accessibilityHint(
+        verb == nil ? "Expands nested replies for this comment" : "Reveals more replies for this comment"
+    )
 }
 
 // MARK: - Avatar
@@ -735,23 +811,18 @@ struct CommentAvatar: View {
     let comment: AO3Comment
     var size: CGFloat = 40
 
+    @State private var loadedImage: Image?
+
+    private var imageURL: URL? {
+        comment.isGuest ? nil : comment.avatarURL
+    }
+
     var body: some View {
         Group {
-            if let url = comment.isGuest ? nil : comment.avatarURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .empty:
-                        placeholder
-                    case .failure:
-                        placeholder
-                    @unknown default:
-                        placeholder
-                    }
-                }
+            if let loadedImage {
+                loadedImage
+                    .resizable()
+                    .scaledToFill()
             } else {
                 placeholder
             }
@@ -766,6 +837,33 @@ struct CommentAvatar: View {
         // Hidden when decorative; parent Button supplies the profile label when
         // the avatar is a tappable entry point.
         .accessibilityHidden(true)
+        .task(id: imageURL) { await loadImage() }
+    }
+
+    private func loadImage() async {
+        loadedImage = nil
+        guard let imageURL else { return }
+        do {
+            let data = try await AO3Client.shared.imageData(at: imageURL)
+            try Task.checkCancellation()
+            loadedImage = Self.image(from: data)
+        } catch is CancellationError {
+            return
+        } catch {
+            // The generic avatar is intentionally the fallback: an icon request
+            // must never add a visible error or cause an independent retry loop.
+            return
+        }
+    }
+
+    private static func image(from data: Data) -> Image? {
+        #if os(iOS)
+            UIImage(data: data).map(Image.init(uiImage:))
+        #elseif os(macOS)
+            NSImage(data: data).map(Image.init(nsImage:))
+        #else
+            nil
+        #endif
     }
 
     private var placeholder: some View {

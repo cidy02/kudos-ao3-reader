@@ -197,7 +197,7 @@ struct AO3PreferencesView: View {
             Image(systemName: "questionmark.circle")
                 .font(.body)
                 .foregroundStyle(.secondary)
-                .frame(minWidth: 28, minHeight: 28)
+                .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
