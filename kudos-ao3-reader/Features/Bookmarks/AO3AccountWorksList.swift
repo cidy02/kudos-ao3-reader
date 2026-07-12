@@ -117,6 +117,7 @@ struct AO3AccountWorksList: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var theme
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -128,6 +129,8 @@ struct AO3AccountWorksList: View {
     @State private var phase: Phase = .idle
     @State private var showLogin = false
     @State private var expandAll = false
+    /// Matches Account tab's layout preference so Refine screens stay consistent.
+    @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
     /// Client-side refine of the loaded page — narrows the works on screen in place,
     /// contextual to this account list rather than a fresh AO3 search.
     @State private var filters = AO3SearchFilters()
@@ -187,7 +190,10 @@ struct AO3AccountWorksList: View {
                                              showingFilters: $showingFilters,
                                              onClearFilters: { filters = AO3SearchFilters() })
                                 WorkListMoreMenu {
-                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
                                 }
                             }
                         }
@@ -243,26 +249,45 @@ struct AO3AccountWorksList: View {
         }
     }
 
+    @ViewBuilder
     private var worksList: some View {
-        List {
-            if showPagination {
-                Section { paginationRow }
-            }
-            Section {
-                ForEach(visibleEntries) { entry in
-                    if let work = entry.local {
-                        SensitiveWorkRow(work: work, expandAll: expandAll)
-                    } else if let remote = entry.remote {
-                        AO3WorkRow(work: remote, expandAll: expandAll).cardNavigation(to: remote)
+        // Compact: Library-style root ScrollView + NavigationLink grid.
+        // Detailed: card List with one NavigationLink/cardNavigation per row.
+        Group {
+            if displayMode == .compact {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if showPagination { paginationBar }
+                        AccountWorksCompactGrid(entries: visibleEntries)
+                        if showPagination { paginationBar }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+            } else {
+                List {
+                    if showPagination {
+                        Section { paginationRow }
+                    }
+                    Section {
+                        ForEach(visibleEntries) { entry in
+                            if let work = entry.local {
+                                SensitiveWorkRow(work: work, expandAll: expandAll)
+                                    .cardNavigation(to: work)
+                            } else if let remote = entry.remote {
+                                AO3WorkRow(work: remote, expandAll: expandAll)
+                                    .cardNavigation(to: remote)
+                            }
+                        }
+                        .cardRow()
+                    }
+                    if showPagination {
+                        Section { paginationRow }
                     }
                 }
-                .cardRow()
-            }
-            if showPagination {
-                Section { paginationRow }
+                .cardList()
             }
         }
-        .cardList()
         .overlay {
             if phase == .loading {
                 ProgressView().controlSize(.large)
@@ -278,6 +303,13 @@ struct AO3AccountWorksList: View {
             }
         }
         .refreshable { await load(page: currentPage) }
+    }
+
+    private var paginationBar: some View {
+        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+            Task { await load(page: page) }
+        }
+        .padding(.horizontal, CardListMetrics.sideMargin)
     }
 
     private var showPagination: Bool {

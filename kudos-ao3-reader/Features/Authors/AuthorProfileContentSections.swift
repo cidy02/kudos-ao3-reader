@@ -105,6 +105,9 @@ struct AO3AuthorFandomFilterSection: View {
     var model: AO3AuthorProfileModel
     /// Runs before a chip changes the filter (hosts use it to exit select mode).
     var onWillChange: () -> Void = {}
+    /// `.list` → List `Section` + `.cardRow()` (detailed Account / author profile).
+    /// `.scroll` → same card chrome as compact Account scope menu (aligned insets).
+    var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
 
@@ -112,38 +115,54 @@ struct AO3AuthorFandomFilterSection: View {
         if model.selectedTab == .works,
            let fandoms = model.header?.fandoms,
            !fandoms.isEmpty {
-            Section("Fandom") {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        Button {
-                            onWillChange()
-                            model.selectFandom(nil, auth: auth)
-                        } label: {
-                            TagChip(text: "All", tinted: model.selectedFandom == nil)
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44)
-
-                        ForEach(fandoms) { fandom in
-                            Button {
-                                onWillChange()
-                                model.selectFandom(fandom, auth: auth)
-                            } label: {
-                                let count = fandom.workCount.map { " (\($0.formatted()))" } ?? ""
-                                TagChip(
-                                    text: fandom.name + count,
-                                    tinted: model.selectedFandom == fandom
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .frame(minHeight: 44)
-                        }
+            if layout == .scroll {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Fandom")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
+                    AccountScrollChromeCard {
+                        chipStrip(fandoms: fandoms)
                     }
                 }
-                .scrollIndicators(.hidden)
-                .cardRow()
+            } else {
+                Section("Fandom") {
+                    chipStrip(fandoms: fandoms)
+                        .cardRow()
+                }
             }
         }
+    }
+
+    private func chipStrip(fandoms: [AO3AuthorFandom]) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                Button {
+                    onWillChange()
+                    model.selectFandom(nil, auth: auth)
+                } label: {
+                    TagChip(text: "All", tinted: model.selectedFandom == nil)
+                }
+                .buttonStyle(.plain)
+                .frame(minHeight: 44)
+
+                ForEach(fandoms) { fandom in
+                    Button {
+                        onWillChange()
+                        model.selectFandom(fandom, auth: auth)
+                    } label: {
+                        let count = fandom.workCount.map { " (\($0.formatted()))" } ?? ""
+                        TagChip(
+                            text: fandom.name + count,
+                            tinted: model.selectedFandom == fandom
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -153,6 +172,11 @@ struct AO3AuthorFandomFilterSection: View {
 struct AO3AuthorWorksSection: View {
     var model: AO3AuthorProfileModel
     var expandAll: Bool
+    /// Account (and other hosts) can switch to a two-up cover grid; author
+    /// profile keeps the default detailed list.
+    var displayMode: WorkListDisplayMode = .detailed
+    /// `.scroll` hosts compact grids the Library way (outside a List).
+    var layout: AccountWorksLayout = .list
     var isSelecting: Bool = false
     var selection: Set<Int> = []
     var onToggleSelection: (AO3WorkSummary) -> Void = { _ in }
@@ -163,6 +187,46 @@ struct AO3AuthorWorksSection: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
+        if layout == .scroll, displayMode == .compact, !isSelecting {
+            scrollCompactBody
+        } else {
+            listBody
+        }
+    }
+
+    private var scrollCompactBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Works")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
+            if model.contentPhase == .loading, model.works.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            } else if model.works.isEmpty {
+                AccountScrollChromeCard {
+                    AO3AuthorContentMessage(
+                        model: model,
+                        emptyTitle: "No works",
+                        emptyMessage: "AO3 has no visible works for this author scope.",
+                        emptySymbol: "books.vertical"
+                    )
+                }
+            } else {
+                if case let .failed(message) = model.contentPhase {
+                    AccountScrollChromeCard {
+                        AO3AuthorInlineErrorRow(message: message)
+                    }
+                }
+                AccountWorksCompactGrid(entries: workEntries)
+                AO3AuthorPaginationRows(model: model)
+                    .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
+            }
+        }
+    }
+
+    private var listBody: some View {
         Section("Works") {
             if model.contentPhase == .loading, model.works.isEmpty {
                 AO3AuthorLoadingRows()
@@ -262,8 +326,50 @@ struct AO3AuthorSeriesSection: View {
 struct AO3AuthorBookmarksSection: View {
     var model: AO3AuthorProfileModel
     var expandAll: Bool
+    var displayMode: WorkListDisplayMode = .detailed
+    var layout: AccountWorksLayout = .list
 
     var body: some View {
+        if layout == .scroll, displayMode == .compact {
+            scrollCompactBody
+        } else {
+            listBody
+        }
+    }
+
+    private var scrollCompactBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Bookmarks")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
+            if model.contentPhase == .loading, model.bookmarks.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            } else if model.bookmarks.isEmpty {
+                AccountScrollChromeCard {
+                    AO3AuthorContentMessage(
+                        model: model,
+                        emptyTitle: "No visible bookmarks",
+                        emptyMessage: "AO3 has no bookmarks visible to this session for this author scope.",
+                        emptySymbol: "bookmark"
+                    )
+                }
+            } else {
+                if case let .failed(message) = model.contentPhase {
+                    AccountScrollChromeCard {
+                        AO3AuthorInlineErrorRow(message: message)
+                    }
+                }
+                AccountBookmarksCompactGrid(bookmarks: model.bookmarks)
+                AO3AuthorPaginationRows(model: model)
+                    .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
+            }
+        }
+    }
+
+    private var listBody: some View {
         Section("Bookmarks") {
             if model.contentPhase == .loading, model.bookmarks.isEmpty {
                 AO3AuthorLoadingRows()

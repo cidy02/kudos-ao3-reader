@@ -24,9 +24,13 @@ struct AuthorProfileView: View {
     @State private var showingLogin = false
     /// Resume after the login sheet succeeds (cleared on cancel / failed login).
     @State private var pendingAuthAction: PendingAuthAction?
+    /// Nav bar title. Account's **My Dashboard** reuses this surface for the
+    /// signed-in user's home (`/users/:login`) under the title "Dashboard".
+    private let navigationTitle: String
 
-    init(route: AO3AuthorRoute) {
+    init(route: AO3AuthorRoute, navigationTitle: String = "Author") {
         _model = State(initialValue: AO3AuthorProfileModel(route: route))
+        self.navigationTitle = navigationTitle
     }
 
     var body: some View {
@@ -42,7 +46,7 @@ struct AuthorProfileView: View {
                 profileList
             }
         }
-        .navigationTitle("Author")
+        .navigationTitle(navigationTitle)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif

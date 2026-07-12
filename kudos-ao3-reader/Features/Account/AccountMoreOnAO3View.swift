@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Long-tail AO3 dashboard destinations that stay on the website until they
-/// earn a native surface. Grouped by job so Overview stays dense.
+/// Long-tail AO3 destinations that open in Browse. These are the sidebar
+/// destinations that sit *beside* Dashboard on the website (not the dashboard
+/// home itself — that is `AO3DashboardView` / your author profile).
 struct AccountMoreOnAO3View: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -13,6 +14,11 @@ struct AccountMoreOnAO3View: View {
                     title: "Drafts",
                     systemImage: "doc.badge.clock",
                     pathSuffix: "works/drafts"
+                )
+                externalCard(
+                    title: "Pseuds",
+                    systemImage: "person.2",
+                    pathSuffix: "pseuds"
                 )
                 externalCard(
                     title: "Skins",
@@ -27,13 +33,20 @@ struct AccountMoreOnAO3View: View {
             } header: {
                 Text("Creator tools")
             } footer: {
-                Text("These open your AO3 pages in Browse. Native versions can land later.")
+                Text("These open your AO3 pages in Browse. Native versions can land later. "
+                    + "Works, series, bookmarks, history, and inbox live under Account's "
+                    + "Reading, Writing, and Activity tabs.")
             }
 
             Section("Challenges & gifts") {
                 externalCard(
-                    title: "Sign-ups",
+                    title: "Co-Creator Requests",
                     systemImage: "person.badge.plus",
+                    pathSuffix: "creatorships"
+                )
+                externalCard(
+                    title: "Sign-ups",
+                    systemImage: "pencil.and.list.clipboard",
                     pathSuffix: "signups"
                 )
                 externalCard(
@@ -57,18 +70,6 @@ struct AccountMoreOnAO3View: View {
                     pathSuffix: "gifts"
                 )
             }
-
-            Section {
-                externalCard(
-                    title: "Dashboard",
-                    systemImage: "square.grid.2x2",
-                    pathSuffix: nil
-                )
-            } header: {
-                Text("On AO3")
-            } footer: {
-                Text("Your full AO3 control panel on the website.")
-            }
         }
         .cardList()
         .navigationTitle("More on AO3")
@@ -77,12 +78,11 @@ struct AccountMoreOnAO3View: View {
         #endif
     }
 
-    /// `pathSuffix` nil → user root dashboard (`/users/:login`).
     @ViewBuilder
     private func externalCard(
         title: String,
         systemImage: String,
-        pathSuffix: String?
+        pathSuffix: String
     ) -> some View {
         Button {
             openUserPath(pathSuffix)
@@ -98,16 +98,11 @@ struct AccountMoreOnAO3View: View {
         .cardRow()
     }
 
-    private func openUserPath(_ suffix: String?) {
+    private func openUserPath(_ suffix: String) {
         guard let username = auth.username else { return }
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
             ?? username
-        let path: String
-        if let suffix, !suffix.isEmpty {
-            path = "/users/\(encoded)/\(suffix)"
-        } else {
-            path = "/users/\(encoded)"
-        }
+        let path = "/users/\(encoded)/\(suffix)"
         guard let url = URL(string: "https://archiveofourown.org\(path)") else { return }
         router.open(url)
     }

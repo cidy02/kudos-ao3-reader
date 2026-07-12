@@ -272,12 +272,15 @@ struct AccountProfileCard: View {
 }
 
 /// Secondary scope control for Account (Reading / Writing / Activity lists).
-/// Uses a menu dropdown so it never competes visually with the primary
-/// segmented tabs (Overview · Reading · Writing · Activity).
+/// Visual design matches Comments' chapter dropdown: leading `Label` (icon +
+/// current value), trailing single `chevron.down`, full-width hit target in a card.
+/// The leading icon always reflects the **selected subsection**, not the parent tab.
 struct AccountScopeMenu<Tab: Hashable & RawRepresentable & CaseIterable & Identifiable>: View
 where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
-    /// Quiet leading label (“Show”, “List”, …).
+    /// Accessibility name for the control (“Show”, “List”, …).
     var prompt: String = "Show"
+    /// SF Symbol for each subsection option (and the closed label).
+    var systemImage: (Tab) -> String
     @Binding var selection: Tab
 
     var body: some View {
@@ -286,24 +289,23 @@ where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
                 Button {
                     selection = tab
                 } label: {
+                    // Icon per option so the open menu matches the closed control.
                     if tab == selection {
                         Label(tab.rawValue, systemImage: "checkmark")
                     } else {
-                        Text(tab.rawValue)
+                        Label(tab.rawValue, systemImage: systemImage(tab))
                     }
                 }
             }
         } label: {
-            HStack(spacing: 8) {
-                Text(prompt)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Text(selection.rawValue)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2.weight(.semibold))
+            // Same structure as `CommentsView.chapterSection` — icon + title, then
+            // a quiet down-chevron (not the up/down pair, not a trailing value).
+            HStack {
+                Label(selection.rawValue, systemImage: systemImage(selection))
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             .frame(minHeight: 44)
@@ -313,6 +315,30 @@ where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
         .accessibilityLabel(prompt)
         .accessibilityValue(selection.rawValue)
         .accessibilityHint("Chooses which list to show")
+    }
+}
+
+/// Card chrome matching `.cardRow()` when content lives outside a `List`
+/// (Account compact ScrollView shell). Same side margin, inner padding, radius,
+/// and surface as detailed-mode list cards so scope/fandom controls align.
+struct AccountScrollChromeCard<Content: View>: View {
+    @Environment(ThemeManager.self) private var theme
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(.horizontal, CardListMetrics.innerHorizontal)
+            .padding(.vertical, CardListMetrics.innerVertical)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                    .fill(theme.appTheme.cardSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                    )
+            )
+            .padding(.horizontal, CardListMetrics.sideMargin)
     }
 }
 
@@ -350,6 +376,147 @@ struct AccountNavCardLabel: View {
     }
 }
 
+/// One free-standing shortcut icon for Overview's 3×2 grid. Each tile owns its
+/// own card chrome so the six destinations read as separate controls, not one
+/// shared panel of symbols.
+struct AccountShortcutGridTile: View {
+    @Environment(ThemeManager.self) private var theme
+
+    let title: String
+    let systemImage: String
+    var count: String?
+    var opensExternally: Bool = false
+
+    private let cornerRadius: CGFloat = 14
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: systemImage)
+                    .font(.title2.weight(.medium))
+                    .foregroundStyle(.tint)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.12))
+                    )
+                if opensExternally {
+                    Image(systemName: "arrow.up.forward")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .padding(3)
+                        .background(Circle().fill(theme.appTheme.cardSurface))
+                        .offset(x: 6, y: -4)
+                }
+            }
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+            if let count {
+                Text(count)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 88)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(theme.appTheme.cardSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                )
+                .shadow(
+                    color: theme.appTheme.cardShadow.color,
+                    radius: theme.appTheme.cardShadow.radius,
+                    x: 0,
+                    y: theme.appTheme.cardShadow.y
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(opensExternally ? "Opens on AO3 in Browse" : "Opens in Account")
+    }
+}
+
+/// Apple Books-style two-up cover grid for Account work lists — same pattern as
+/// Library/Home compact mode (`ScrollView` + `NavigationLink` label, not a stack
+/// of background `cardNavigation` links inside one List row).
+///
+/// **Host in a `ScrollView` (or other non-List container).** Embedding many
+/// `NavigationLink`s in a single List cell re-breaks tap targeting.
+struct AccountWorksCompactGrid: View {
+    let entries: [CanonicalWork]
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(entries) { entry in
+                compactCard(for: entry)
+            }
+        }
+        .padding(16)
+    }
+
+    @ViewBuilder
+    private func compactCard(for entry: CanonicalWork) -> some View {
+        if let work = entry.local {
+            // Account destinations use `SavedWork` → WorkDetailView (not LocalWorkDestination).
+            NavigationLink(value: work) {
+                SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work)
+        } else if let remote = entry.remote {
+            NavigationLink(value: remote) {
+                AO3WorkCoverCard(work: remote)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+/// Compact two-up grid for bookmark lists — Library-style `NavigationLink` labels.
+struct AccountBookmarksCompactGrid: View {
+    let bookmarks: [AO3AuthorBookmark]
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(bookmarks) { bookmark in
+                NavigationLink(value: bookmark.work) {
+                    AO3WorkCoverCard(work: bookmark.work)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+    }
+}
+
+/// How Account hosts this section.
+enum AccountWorksLayout: Equatable {
+    /// Inside Account's `List` (detailed rows only for work cards).
+    case list
+    /// Library-style `ScrollView` host — required for compact `NavigationLink` grids.
+    case scroll
+}
+
 /// An account works list (AO3 History / Marked for Later) embeddable as rows in
 /// the Account page's own List — the Activity tab's inline counterpart of the
 /// pushed `AO3AccountWorksList` screen. Fetches through the same TTL'd page
@@ -358,6 +525,8 @@ struct AccountNavCardLabel: View {
 struct AccountWorksInlineSection: View {
     let kind: AO3AccountWorksList.Kind
     var expandAll: Bool
+    var displayMode: WorkListDisplayMode = .detailed
+    var layout: AccountWorksLayout = .list
     /// Bumped by the host's pull-to-refresh; a change forces a cache bypass.
     var reloadToken: Int
     /// Pushes the full `AO3AccountWorksList(kind:)` screen — this inline section
@@ -392,60 +561,99 @@ struct AccountWorksInlineSection: View {
         )
     }
 
+    private var loadTaskID: String {
+        "\(auth.username ?? "")|\(reloadToken)"
+    }
+
     var body: some View {
+        Group {
+            if layout == .scroll {
+                scrollBody
+            } else {
+                listBody
+            }
+        }
+        .task(id: loadTaskID) { await runLoadTask() }
+    }
+
+    private var listBody: some View {
         Section {
-            switch phase {
-            case .idle, .loading:
-                if works.isEmpty {
+            phaseContent(useCardRow: true)
+        } header: {
+            sectionHeader
+        }
+    }
+
+    private var scrollBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Match detailed List section header + card row alignment.
+            sectionHeader
+                .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
+            phaseContent(useCardRow: false)
+        }
+    }
+
+    private var sectionHeader: some View {
+        HStack {
+            Text(kind.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button(action: onRefine) {
+                Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.footnote)
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func phaseContent(useCardRow: Bool) -> some View {
+        switch phase {
+        case .idle, .loading:
+            if works.isEmpty {
+                if useCardRow {
                     AO3AuthorLoadingRows()
                 } else {
-                    rows
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding()
                 }
-            case let .failed(message):
-                AO3ProfileMessageRow(
-                    title: "Couldn't load your list",
-                    systemImage: "exclamationmark.triangle",
-                    message: message,
-                    actionTitle: "Try Again",
-                    action: { launch(page: currentPage, bypassCache: true) }
-                )
-                .cardRow()
-            case .loaded where works.isEmpty:
-                AO3ProfileMessageRow(
-                    title: kind.emptyTitle,
-                    systemImage: "bookmark",
-                    message: kind.emptyMessage
-                )
-                .cardRow()
-            case .loaded:
-                rows
+            } else {
+                rows(useCardRow: useCardRow)
             }
-        } header: {
-            // The load trigger lives on the header (one stable view) rather than
-            // the Section — modifiers on a Section re-apply to every row, which
-            // would spawn one task per row.
-            HStack {
-                Text(kind.title)
-                Spacer()
-                Button(action: onRefine) {
-                    Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
-                        .font(.footnote)
-                        .labelStyle(.titleAndIcon)
-                }
-                .buttonStyle(.plain)
-            }
-            .task(id: "\(auth.username ?? "")|\(reloadToken)") {
-                let bypass = handledReloadToken != nil && handledReloadToken != reloadToken
-                handledReloadToken = reloadToken
-                guard auth.isLoggedIn else {
-                    works = []
-                    phase = .idle
-                    return
-                }
-                if phase == .idle || bypass {
-                    await load(page: bypass ? currentPage : 1, bypassCache: bypass)
-                }
-            }
+        case let .failed(message):
+            AO3ProfileMessageRow(
+                title: "Couldn't load your list",
+                systemImage: "exclamationmark.triangle",
+                message: message,
+                actionTitle: "Try Again",
+                action: { launch(page: currentPage, bypassCache: true) }
+            )
+            .modifier(OptionalCardRow(enabled: useCardRow))
+        case .loaded where works.isEmpty:
+            AO3ProfileMessageRow(
+                title: kind.emptyTitle,
+                systemImage: "bookmark",
+                message: kind.emptyMessage
+            )
+            .modifier(OptionalCardRow(enabled: useCardRow))
+        case .loaded:
+            rows(useCardRow: useCardRow)
+        }
+    }
+
+    private func runLoadTask() async {
+        let bypass = handledReloadToken != nil && handledReloadToken != reloadToken
+        handledReloadToken = reloadToken
+        guard auth.isLoggedIn else {
+            works = []
+            phase = .idle
+            return
+        }
+        if phase == .idle || bypass {
+            await load(page: bypass ? currentPage : 1, bypassCache: bypass)
         }
     }
 
@@ -456,23 +664,33 @@ struct AccountWorksInlineSection: View {
     }
 
     @ViewBuilder
-    private var rows: some View {
-        ForEach(entries) { entry in
-            if let work = entry.local {
-                SensitiveWorkRow(work: work, expandAll: expandAll)
-                    .cardNavigation(to: work)
-                    .cardRow()
-            } else if let remote = entry.remote {
-                AO3WorkRow(work: remote, expandAll: expandAll)
-                    .cardNavigation(to: remote)
-                    .cardRow()
+    private func rows(useCardRow: Bool) -> some View {
+        if displayMode == .compact {
+            AccountWorksCompactGrid(entries: entries)
+            if totalPages > 1 {
+                SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+                    launch(page: page)
+                }
+                .padding(.horizontal, CardListMetrics.sideMargin)
             }
-        }
-        if totalPages > 1 {
-            SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
-                launch(page: page)
+        } else {
+            ForEach(entries) { entry in
+                if let work = entry.local {
+                    SensitiveWorkRow(work: work, expandAll: expandAll)
+                        .cardNavigation(to: work)
+                        .modifier(OptionalCardRow(enabled: useCardRow))
+                } else if let remote = entry.remote {
+                    AO3WorkRow(work: remote, expandAll: expandAll)
+                        .cardNavigation(to: remote)
+                        .modifier(OptionalCardRow(enabled: useCardRow))
+                }
             }
-            .cardRow()
+            if totalPages > 1 {
+                SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+                    launch(page: page)
+                }
+                .modifier(OptionalCardRow(enabled: useCardRow))
+            }
         }
     }
 
@@ -529,6 +747,20 @@ struct AccountWorksInlineSection: View {
             try AO3Client.parseSubscriptionsPage(html, page: page)
         case .markedForLater, .history, .myWorks, .collection:
             try AO3Client.parseSearchPage(html, page: page)
+        }
+    }
+}
+
+/// Applies `.cardRow()` only when embedding in Account's List.
+private struct OptionalCardRow: ViewModifier {
+    var enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.cardRow()
+        } else {
+            content
+                .padding(.horizontal, CardListMetrics.sideMargin)
         }
     }
 }

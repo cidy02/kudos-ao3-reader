@@ -4,7 +4,7 @@ import SwiftUI
 /// The Account tab: signed-in user's native AO3 profile hub with
 /// Overview / Reading / Writing / Activity.
 ///
-/// - **Overview** — identity hub: shortcuts, Preferences, More on AO3
+/// - **Overview** — AO3 dashboard shortcuts, Preferences, More on AO3
 /// - **Reading** — Later / Subscriptions / Bookmarks / Collections
 /// - **Writing** — Works / Series / Drafts (drafts open AO3 for now)
 /// - **Activity** — History / Inbox
@@ -13,6 +13,7 @@ import SwiftUI
 struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
+    @Environment(ThemeManager.self) private var theme
 
     @State private var path = NavigationPath()
     @State private var showingLogin = false
@@ -25,15 +26,26 @@ struct AccountView: View {
     /// Activity › Inbox feed state.
     @State private var inboxModel = AO3InboxModel()
     @State private var expandAll = false
+    /// Detailed list rows vs compact two-up cover cards — shared across Account
+    /// work lists (Reading / Writing / Activity) and persisted like Home/Library.
+    @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
+    @AppStorage("hideMatureContent") private var hideMature = true
     @State private var postingPseudName: String?
     /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
     @State private var listReloadToken = 0
+
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var localWorks: [SavedWork]
 
     enum Route: Hashable {
         case myCollections
         case preferences
         case moreOnAO3
         case settings
+        /// Native AO3 own-user dashboard (sidebar destinations).
+        case dashboard
+        /// Full inbox feed (Dashboard + deep links).
+        case inbox
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -52,6 +64,16 @@ struct AccountView: View {
         case collections = "Collections"
 
         var id: String { rawValue }
+
+        /// Matches Overview shortcut / list chrome icons for this subsection.
+        var systemImage: String {
+            switch self {
+            case .later: "clock.badge"
+            case .subscriptions: "bell"
+            case .bookmarks: "bookmark"
+            case .collections: "square.stack"
+            }
+        }
     }
 
     enum AccountWritingTab: String, CaseIterable, Identifiable {
@@ -60,6 +82,14 @@ struct AccountView: View {
         case drafts = "Drafts"
 
         var id: String { rawValue }
+
+        var systemImage: String {
+            switch self {
+            case .works: "doc.text"
+            case .series: "square.stack.3d.up"
+            case .drafts: "doc.badge.clock"
+            }
+        }
     }
 
     enum AccountActivityTab: String, CaseIterable, Identifiable {
@@ -67,20 +97,30 @@ struct AccountView: View {
         case inbox = "Inbox"
 
         var id: String { rawValue }
+
+        var systemImage: String {
+            switch self {
+            case .history: "clock"
+            case .inbox: "tray"
+            }
+        }
+    }
+
+    /// Compact work lists use Library/Home's root `ScrollView` + `NavigationLink`
+    /// pattern. Stacking many links inside one List row breaks tap targets.
+    private var usesLibraryStyleCompactLayout: Bool {
+        auth.isLoggedIn && displayMode == .compact && showsWorkListControls
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                profileCardSection
-
-                if auth.isLoggedIn {
-                    tabPickerSection
-                    tabSections
+            Group {
+                if usesLibraryStyleCompactLayout {
+                    libraryStyleCompactRoot
+                } else {
+                    standardListRoot
                 }
             }
-            .cardList()
-            .refreshable { await refreshCurrentTab() }
             .navigationTitle("Account")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
@@ -107,6 +147,161 @@ struct AccountView: View {
                 .onChange(of: auth.username, initial: true) { _, username in
                     syncProfileModel(username: username)
                 }
+        }
+    }
+
+    private var standardListRoot: some View {
+        List {
+            profileCardSection
+
+            if auth.isLoggedIn {
+                tabPickerSection
+                tabSections
+            }
+        }
+        .cardList()
+        .refreshable { await refreshCurrentTab() }
+    }
+
+    /// Matches LibrarySectionListView compact: `ScrollView` + two-up `NavigationLink` cards.
+    private var libraryStyleCompactRoot: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                AccountProfileCard(
+                    profileModel: profileModel,
+                    postingPseudName: $postingPseudName,
+                    onViewProfile: openOwnProfile,
+                    onLogin: { showingLogin = true }
+                )
+                .padding(EdgeInsets(
+                    top: CardListMetrics.innerVertical,
+                    leading: CardListMetrics.innerHorizontal,
+                    bottom: CardListMetrics.innerVertical,
+                    trailing: CardListMetrics.innerHorizontal
+                ))
+                .background(
+                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                        .fill(theme.appTheme.cardSurface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                        )
+                )
+                .padding(.horizontal, CardListMetrics.sideMargin)
+
+                if let notice = auth.noticeMessage {
+                    Text(notice)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, CardListMetrics.sideMargin)
+                }
+
+                // Same card chrome as detailed List `tabPickerSection` + `.cardRow()`.
+                AccountScrollChromeCard {
+                    Picker("Account Content", selection: $selectedTab) {
+                        ForEach(AccountTab.allCases) { tab in
+                            Text(tab.rawValue).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+
+                compactScopeChrome
+                compactWorksContent
+            }
+            .padding(.vertical, 12)
+        }
+        .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+        .refreshable { await refreshCurrentTab() }
+    }
+
+    @ViewBuilder
+    private var compactScopeChrome: some View {
+        // Same card chrome as detailed List `.cardRow()` so Show / Works lines up.
+        switch selectedTab {
+        case .reading:
+            AccountScrollChromeCard {
+                AccountScopeMenu(
+                    prompt: "Show",
+                    systemImage: \.systemImage,
+                    selection: $readingTab
+                )
+            }
+        case .writing:
+            AccountScrollChromeCard {
+                AccountScopeMenu(
+                    prompt: "Show",
+                    systemImage: \.systemImage,
+                    selection: $writingTab
+                )
+            }
+        case .activity:
+            AccountScrollChromeCard {
+                AccountScopeMenu(
+                    prompt: "Show",
+                    systemImage: \.systemImage,
+                    selection: $activityTab
+                )
+            }
+        case .overview:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var compactWorksContent: some View {
+        switch selectedTab {
+        case .reading:
+            switch readingTab {
+            case .later:
+                AccountWorksInlineSection(
+                    kind: .markedForLater,
+                    expandAll: expandAll,
+                    displayMode: .compact,
+                    layout: .scroll,
+                    reloadToken: listReloadToken,
+                    onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
+                )
+            case .subscriptions:
+                AccountWorksInlineSection(
+                    kind: .subscriptions,
+                    expandAll: expandAll,
+                    displayMode: .compact,
+                    layout: .scroll,
+                    reloadToken: listReloadToken,
+                    onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
+                )
+            case .bookmarks:
+                profileContentSections(
+                    profileTab: .bookmarks,
+                    sectionTitle: "Bookmarks",
+                    layout: .scroll
+                )
+            case .collections:
+                EmptyView()
+            }
+        case .writing:
+            if writingTab == .works {
+                profileContentSections(
+                    profileTab: .works,
+                    sectionTitle: "Works",
+                    layout: .scroll
+                )
+            }
+        case .activity:
+            if activityTab == .history {
+                AccountWorksInlineSection(
+                    kind: .history,
+                    expandAll: expandAll,
+                    displayMode: .compact,
+                    layout: .scroll,
+                    reloadToken: listReloadToken,
+                    onRefine: { path.append(AO3AccountWorksList.Kind.history) }
+                )
+            }
+        case .overview:
+            EmptyView()
         }
     }
 
@@ -215,16 +410,27 @@ struct AccountView: View {
         case .preferences: AO3PreferencesView()
         case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
+        case .dashboard: AO3DashboardView()
+        case .inbox: AccountInboxListView()
         }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // One tight HStack — matches Library/Home so privacy + overflow don't
+        // get wide system spacing between icons.
         ToolbarItem(placement: .primaryAction) {
             HStack(spacing: 2) {
-                if showsExpandControl {
+                if showsMatureRevealControl {
+                    MatureRevealToggle()
+                }
+                if showsWorkListControls {
                     WorkListMoreMenu {
-                        ExpandAllMenuItem(expandAll: $expandAll)
+                        DisplayModeMenuPicker(mode: $displayMode)
+                        // Compact cover cards don't expand/collapse.
+                        if displayMode == .detailed {
+                            ExpandAllMenuItem(expandAll: $expandAll)
+                        }
                     }
                 }
                 NavigationLink(value: Route.settings) {
@@ -235,13 +441,14 @@ struct AccountView: View {
         }
     }
 
-    private var showsExpandControl: Bool {
+    /// Work-list chrome (Detailed/Compact + Expand) for Account segments that
+    /// show work cards. Series / Drafts / Inbox / Overview skip it.
+    private var showsWorkListControls: Bool {
         guard auth.isLoggedIn else { return false }
         switch selectedTab {
         case .overview:
             return false
         case .writing:
-            // Drafts has no expandable card chrome; Works does.
             return writingTab == .works
         case .reading:
             return readingTab == .later
@@ -250,6 +457,13 @@ struct AccountView: View {
         case .activity:
             return activityTab == .history
         }
+    }
+
+    /// Eye toggle when Hide Mature is on and the library has adult works that
+    /// can appear on Account lists (paired local rows / cover cards).
+    private var showsMatureRevealControl: Bool {
+        showsWorkListControls
+            && PrivacyGate.hasVisibleMatureWorks(in: localWorks, hideMature: hideMature)
     }
 
     // MARK: Profile card
@@ -307,38 +521,73 @@ struct AccountView: View {
 
     // MARK: Overview — identity hub
 
+    private static let shortcutGridColumns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10)
+    ]
+
     @ViewBuilder
     private var overviewSections: some View {
         Section {
-            shortcutCard(
-                title: "Marked for Later",
-                systemImage: "clock.badge",
-                count: cachedCount(.markedForLater)
-            ) {
-                readingTab = .later
-                selectedTab = .reading
+            // 3×2 of individual icon cards (not one shared panel).
+            LazyVGrid(columns: Self.shortcutGridColumns, spacing: 10) {
+                shortcutGridButton(
+                    title: "My Dashboard",
+                    systemImage: "square.grid.2x2"
+                ) {
+                    path.append(Route.dashboard)
+                }
+                shortcutGridButton(
+                    title: "My Subscriptions",
+                    systemImage: "bell",
+                    count: cachedCount(.subscriptions)
+                ) {
+                    readingTab = .subscriptions
+                    selectedTab = .reading
+                }
+                shortcutGridButton(
+                    title: "My Works",
+                    systemImage: "doc.text",
+                    count: cachedCount(.myWorks)
+                ) {
+                    writingTab = .works
+                    selectedTab = .writing
+                }
+                shortcutGridButton(
+                    title: "My Bookmarks",
+                    systemImage: "bookmark",
+                    count: cachedCount(.bookmarks)
+                ) {
+                    readingTab = .bookmarks
+                    selectedTab = .reading
+                }
+                shortcutGridButton(
+                    title: "My Collections",
+                    systemImage: "square.stack",
+                    count: cachedCount(.collections)
+                ) {
+                    path.append(Route.myCollections)
+                }
+                shortcutGridButton(
+                    title: "My History",
+                    systemImage: "clock",
+                    count: cachedCount(.history)
+                ) {
+                    activityTab = .history
+                    selectedTab = .activity
+                }
             }
-            shortcutCard(
-                title: "Inbox",
-                systemImage: "tray",
-                count: nil
-            ) {
-                activityTab = .inbox
-                selectedTab = .activity
-            }
-            shortcutCard(
-                title: "Works",
-                systemImage: "doc.text",
-                count: cachedCount(.myWorks)
-            ) {
-                writingTab = .works
-                selectedTab = .writing
-            }
+            .listRowInsets(EdgeInsets(
+                top: 6,
+                leading: CardListMetrics.sideMargin,
+                bottom: 6,
+                trailing: CardListMetrics.sideMargin
+            ))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         } header: {
             Text("Shortcuts")
-        } footer: {
-            Text("Jump into the lists you open most. Full Reading, Writing, and Activity "
-                + "tabs are above.")
         }
 
         Section {
@@ -356,9 +605,6 @@ struct AccountView: View {
             )
         } header: {
             Text("Account")
-        } footer: {
-            Text("Native preferences in the app. Drafts, challenges, gifts, skins, and "
-                + "the full dashboard open from More on AO3.")
         }
     }
 
@@ -367,8 +613,12 @@ struct AccountView: View {
     @ViewBuilder
     private var readingSections: some View {
         Section {
-            AccountScopeMenu(prompt: "Show", selection: $readingTab)
-                .cardRow()
+            AccountScopeMenu(
+                prompt: "Show",
+                systemImage: \.systemImage,
+                selection: $readingTab
+            )
+            .cardRow()
         }
 
         switch readingTab {
@@ -376,6 +626,7 @@ struct AccountView: View {
             AccountWorksInlineSection(
                 kind: .markedForLater,
                 expandAll: expandAll,
+                displayMode: displayMode,
                 reloadToken: listReloadToken,
                 onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
             )
@@ -383,6 +634,7 @@ struct AccountView: View {
             AccountWorksInlineSection(
                 kind: .subscriptions,
                 expandAll: expandAll,
+                displayMode: displayMode,
                 reloadToken: listReloadToken,
                 onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
             )
@@ -409,8 +661,12 @@ struct AccountView: View {
     @ViewBuilder
     private var writingSections: some View {
         Section {
-            AccountScopeMenu(prompt: "Show", selection: $writingTab)
-                .cardRow()
+            AccountScopeMenu(
+                prompt: "Show",
+                systemImage: \.systemImage,
+                selection: $writingTab
+            )
+            .cardRow()
         }
 
         switch writingTab {
@@ -436,8 +692,12 @@ struct AccountView: View {
     @ViewBuilder
     private var activitySections: some View {
         Section {
-            AccountScopeMenu(prompt: "Show", selection: $activityTab)
-                .cardRow()
+            AccountScopeMenu(
+                prompt: "Show",
+                systemImage: \.systemImage,
+                selection: $activityTab
+            )
+            .cardRow()
         }
 
         switch activityTab {
@@ -445,6 +705,7 @@ struct AccountView: View {
             AccountWorksInlineSection(
                 kind: .history,
                 expandAll: expandAll,
+                displayMode: displayMode,
                 reloadToken: listReloadToken,
                 onRefine: { path.append(AO3AccountWorksList.Kind.history) }
             )
@@ -468,48 +729,91 @@ struct AccountView: View {
     @ViewBuilder
     private func profileContentSections(
         profileTab: AO3AuthorProfileTab,
-        sectionTitle: String
+        sectionTitle: String,
+        layout: AccountWorksLayout = .list
     ) -> some View {
         if let model = profileModel {
             switch model.headerPhase {
             case .idle, .loading:
-                Section(sectionTitle) { AO3AuthorLoadingRows() }
+                if layout == .list {
+                    Section(sectionTitle) { AO3AuthorLoadingRows() }
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
             case .unavailable:
-                Section {
-                    AO3ProfileMessageRow(
-                        title: "Profile unavailable",
-                        systemImage: "person.slash",
-                        message: "AO3 could not load your profile. It may be temporarily unavailable."
-                    )
-                    .cardRow()
-                }
+                profileMessage(
+                    title: "Profile unavailable",
+                    systemImage: "person.slash",
+                    message: "AO3 could not load your profile. It may be temporarily unavailable.",
+                    layout: layout
+                )
             case let .failed(message):
-                Section {
-                    AO3ProfileMessageRow(
-                        title: "Couldn't load your profile",
-                        systemImage: "exclamationmark.triangle",
-                        message: message,
-                        actionTitle: "Try Again",
-                        action: { model.retry(auth: auth) }
-                    )
-                    .cardRow()
-                }
+                profileMessage(
+                    title: "Couldn't load your profile",
+                    systemImage: "exclamationmark.triangle",
+                    message: message,
+                    layout: layout,
+                    actionTitle: "Try Again",
+                    action: { model.retry(auth: auth) }
+                )
             case .loaded:
                 if model.isShowingStaleCache {
-                    Section {
+                    if layout == .list {
+                        Section {
+                            Label("Showing cached AO3 data", systemImage: "wifi.slash")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .cardRow()
+                        }
+                    } else {
                         Label("Showing cached AO3 data", systemImage: "wifi.slash")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .cardRow()
+                            .padding(.horizontal, CardListMetrics.sideMargin)
                     }
                 }
                 if profileTab == .works {
-                    AO3AuthorFandomFilterSection(model: model)
-                    AO3AuthorWorksSection(model: model, expandAll: expandAll)
+                    AO3AuthorFandomFilterSection(model: model, layout: layout)
+                    AO3AuthorWorksSection(
+                        model: model,
+                        expandAll: expandAll,
+                        displayMode: displayMode,
+                        layout: layout
+                    )
                 } else {
-                    AO3AuthorBookmarksSection(model: model, expandAll: expandAll)
+                    AO3AuthorBookmarksSection(
+                        model: model,
+                        expandAll: expandAll,
+                        displayMode: displayMode,
+                        layout: layout
+                    )
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func profileMessage(
+        title: String,
+        systemImage: String,
+        message: String,
+        layout: AccountWorksLayout,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        let row = AO3ProfileMessageRow(
+            title: title,
+            systemImage: systemImage,
+            message: message,
+            actionTitle: actionTitle,
+            action: action
+        )
+        if layout == .list {
+            Section { row.cardRow() }
+        } else {
+            row.padding(.horizontal, CardListMetrics.sideMargin)
         }
     }
 
@@ -555,17 +859,23 @@ struct AccountView: View {
 
     // MARK: Nav helpers
 
-    private func shortcutCard(
+    private func shortcutGridButton(
         title: String,
         systemImage: String,
-        count: String?,
+        count: String? = nil,
+        opensExternally: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
+            AccountShortcutGridTile(
+                title: title,
+                systemImage: systemImage,
+                count: count,
+                opensExternally: opensExternally
+            )
         }
         .buttonStyle(.plain)
-        .cardRow()
+        .disabled(opensExternally && auth.username == nil)
     }
 
     private func navCard(

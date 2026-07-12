@@ -7,9 +7,11 @@ import SwiftUI
 // state AO3 exposes. Read-only v1: no mark-read/delete from the app.
 
 /// Pushes a work's full comments experience from an inbox entry.
-nonisolated struct AccountInboxThreadDestination: Hashable {
+nonisolated struct AccountInboxThreadDestination: Hashable, Identifiable {
     let workID: Int
     let title: String
+
+    var id: Int { workID }
 }
 
 /// One inbox notification card.
