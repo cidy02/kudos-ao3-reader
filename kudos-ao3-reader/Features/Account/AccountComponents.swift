@@ -17,6 +17,7 @@ struct AccountProfileCard: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
+    @State private var showSessionDetail = false
 
     var body: some View {
         switch auth.status {
@@ -45,35 +46,37 @@ struct AccountProfileCard: View {
 
     private func signedInCard(username: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            AO3AuthorAvatar(
-                url: profileModel?.header?.identity.avatarURL,
-                name: username
-            )
+            Button(action: onViewProfile) {
+                AO3AuthorAvatar(
+                    url: profileModel?.header?.identity.avatarURL,
+                    name: username
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View Profile")
+            .accessibilityHint("Opens your AO3 author profile")
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(username)
-                    .font(.title2.weight(.semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .top, spacing: 8) {
+                    Text(username)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                        .accessibilityAddTraits(.isHeader)
 
-                postingAsMenu
+                    Spacer(minLength: 4)
 
-                sessionStatusLine
+                    sessionStatusButton
+                }
 
-                HStack(spacing: 8) {
-                    Button(action: onViewProfile) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "person.text.rectangle")
-                            Text("View Profile")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                HStack(alignment: .center, spacing: 8) {
+                    postingAsMenu
 
+                    Spacer(minLength: 4)
+
+                    // Trailing edge matches the session checkmark above.
                     accountMenu
                 }
-                .padding(.top, 3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -140,34 +143,65 @@ struct AccountProfileCard: View {
         auth.setPreferredPostingPseudName(name)
     }
 
-    /// One compact line for signed-in state + the last session check, so session
-    /// management stays visible without dominating the page.
+    /// Compact session indicator pinned top-trailing next to the username.
+    /// Detail text lives in a popover so the card stays dense.
+    private var sessionStatusButton: some View {
+        Button {
+            showSessionDetail = true
+        } label: {
+            sessionStatusIcon
+                .font(.body)
+                .frame(minWidth: 28, minHeight: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(sessionStatusDetailText)
+        .accessibilityHint("Shows session verification details")
+        .popover(isPresented: $showSessionDetail, arrowEdge: .bottom) {
+            Text(sessionStatusDetailText)
+                .font(.subheadline)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(minWidth: 180, alignment: .leading)
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
     @ViewBuilder
-    private var sessionStatusLine: some View {
+    private var sessionStatusIcon: some View {
+        // Same SF Symbols as the former inline sessionStatusLine.
         switch auth.sessionHealth {
         case .unknown:
-            Label("Signed in", systemImage: "checkmark.circle.fill")
-                .font(.caption)
+            Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .verifying:
-            Label("Checking session…", systemImage: "arrow.triangle.2.circlepath")
-                .font(.caption)
+            Image(systemName: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.secondary)
-        case let .healthy(at):
-            Label(
-                "Signed in · verified \(at.formatted(.relative(presentation: .named)))",
-                systemImage: "checkmark.seal.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(.green)
+        case .healthy:
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(.green)
         case .expired:
-            Label("Session expired", systemImage: "xmark.seal.fill")
-                .font(.caption)
+            Image(systemName: "xmark.seal.fill")
                 .foregroundStyle(.red)
         case .unreachable:
-            Label("Signed in · couldn't verify", systemImage: "wifi.exclamationmark")
-                .font(.caption)
+            Image(systemName: "wifi.exclamationmark")
                 .foregroundStyle(.orange)
+        }
+    }
+
+    private var sessionStatusDetailText: String {
+        switch auth.sessionHealth {
+        case .unknown:
+            "Signed in"
+        case .verifying:
+            "Checking session…"
+        case let .healthy(at):
+            "Signed in · verified \(at.formatted(.relative(presentation: .named)))"
+        case .expired:
+            "Session expired"
+        case .unreachable:
+            "Signed in · couldn't verify"
         }
     }
 
@@ -237,23 +271,67 @@ struct AccountProfileCard: View {
     }
 }
 
-/// One Overview "My AO3" navigation card row: tinted icon tile, title, and the
-/// cached list size when one is already known (never fetched for the card).
+/// Secondary scope control for Account (Reading / Writing / Activity lists).
+/// Uses a menu dropdown so it never competes visually with the primary
+/// segmented tabs (Overview · Reading · Writing · Activity).
+struct AccountScopeMenu<Tab: Hashable & RawRepresentable & CaseIterable & Identifiable>: View
+where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
+    /// Quiet leading label (“Show”, “List”, …).
+    var prompt: String = "Show"
+    @Binding var selection: Tab
+
+    var body: some View {
+        Menu {
+            ForEach(Array(Tab.allCases)) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    if tab == selection {
+                        Label(tab.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(tab.rawValue)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(prompt)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(selection.rawValue)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(prompt)
+        .accessibilityValue(selection.rawValue)
+        .accessibilityHint("Chooses which list to show")
+    }
+}
+
+/// One Overview navigation card row: tinted leading icon, title, optional
+/// cached list size, and a trailing chevron (in-app) or external-open glyph
+/// (AO3 website destinations).
 struct AccountNavCardLabel: View {
     let title: String
     let systemImage: String
     var count: String?
+    /// When true, shows the "open outside" glyph instead of a disclosure chevron.
+    var opensExternally: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.body.weight(.medium))
                 .foregroundStyle(.tint)
-                .frame(width: 34, height: 34)
-                .background(
-                    Color.accentColor.opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
+                .frame(width: 22, alignment: .center)
             Text(title)
                 .font(.body.weight(.medium))
                 .foregroundStyle(.primary)
@@ -263,8 +341,8 @@ struct AccountNavCardLabel: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+            Image(systemName: opensExternally ? "arrow.up.forward.square" : "chevron.right")
+                .font(opensExternally ? .body : .caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
         .frame(minHeight: 44)

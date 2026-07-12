@@ -110,10 +110,26 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         }
 
         let html = String(bytes: data, encoding: .utf8) ?? ""
+        // Cloudflare / empty / non-AO3 responses must not be treated as "session
+        // expired" — that path wipes the stored cookies and forces a re-login
+        // after every flaky validation (very visible on Simulator reinstalls).
+        guard Self.looksLikeAO3Page(html: html) else {
+            throw URLError(.cannotParseResponse)
+        }
         guard Self.isLoggedIn(html: html) else { return .expired }
         let username = Self.username(in: html) ?? storedSession.username
         let refreshed = Self.responseCookies(from: http, url: url)
         return .valid(Self.merging(refreshed, into: storedSession, username: username))
+    }
+
+    /// True when the HTML looks like a real AO3 document (logged-in or out).
+    /// Challenge walls and empty error pages return false.
+    static func looksLikeAO3Page(html: String) -> Bool {
+        guard let document = try? SwiftSoup.parse(html) else { return false }
+        if let body = document.body() {
+            if body.hasClass("logged-in") || body.hasClass("logged-out") { return true }
+        }
+        return (try? document.select("#header, #footer, #main, #outer").first()) != nil
     }
 
     /// NOTE: This logged-in / username detection mirrors the JavaScript in
@@ -243,7 +259,10 @@ final class AO3AuthService {
         sessionHintStore: AO3SessionHintPersisting? = nil,
         postingPseudStore: AO3PostingPseudPersisting? = nil
     ) {
-        self.vault = vault ?? KeychainAO3SessionVault()
+        // Cascading vault: Keychain when available, plus an app-container file so
+        // Simulator / unsigned builds still restore after relaunch (WebKit cookie
+        // capture alone is not reliable enough across process death).
+        self.vault = vault ?? CascadingAO3SessionVault()
         self.validator = validator ?? LiveAO3SessionValidator()
         self.loginPerformer = loginPerformer ?? AO3WebLoginCoordinator()
         self.cookieManager = cookieManager ?? LiveAO3CookieManager()
@@ -308,11 +327,18 @@ final class AO3AuthService {
         status = .restoring
 
         do {
-            guard let saved = try vault.load(), saved.hasSessionCookie else {
-                status = .signedOut
+            if let saved = try vault.load(), saved.hasSessionCookie {
+                await restore(saved, source: .keychain)
                 return
             }
-            await restore(saved, source: .keychain)
+            // Unsigned/simulator builds often can't *write* Keychain
+            // (`errSecMissingEntitlement` on save) while `load` still returns nil
+            // cleanly. Login then lives only in WebKit + the username hint — so
+            // an empty Keychain must fall through to that store, not force
+            // signed-out. Same path when Keychain is missing the entitlement on
+            // load (handled in `catch` below).
+            Log.auth.notice("No Keychain AO3 session; checking WebKit's persistent store")
+            await restoreWebSession()
         } catch {
             if isMissingKeychainEntitlement(error) {
                 Log.auth.notice("Keychain is unavailable; checking WebKit's persistent AO3 session")
@@ -523,9 +549,11 @@ final class AO3AuthService {
             try vault.save(session)
         } catch {
             if isMissingKeychainEntitlement(error) {
+                // Production uses CascadingAO3SessionVault (file fallback), so
+                // this path is mainly for tests that inject a Keychain-only vault.
                 await finishAccepting(session)
                 Log.auth.notice(
-                    "Keychain is unavailable; retained the AO3 session in WebKit's persistent store"
+                    "Keychain is unavailable; retained the AO3 session without Keychain"
                 )
                 return
             }

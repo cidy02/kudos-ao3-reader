@@ -224,6 +224,38 @@ struct AO3AuthorWorksSection: View {
     }
 }
 
+/// Series rows of an author profile (title, work count, navigation into series
+/// detail). Extracted so Account › Writing can embed the same list for the
+/// signed-in user.
+struct AO3AuthorSeriesSection: View {
+    var model: AO3AuthorProfileModel
+
+    var body: some View {
+        Section("Series") {
+            if model.contentPhase == .loading, model.series.isEmpty {
+                AO3AuthorLoadingRows()
+            } else if model.series.isEmpty {
+                AO3AuthorContentMessage(
+                    model: model,
+                    emptyTitle: "No series",
+                    emptyMessage: "AO3 has no visible series for this author scope.",
+                    emptySymbol: "square.stack"
+                )
+            } else {
+                if case let .failed(message) = model.contentPhase {
+                    AO3AuthorInlineErrorRow(message: message)
+                }
+                ForEach(model.series) { series in
+                    AO3SeriesRow(series: series)
+                        .cardNavigation(to: series)
+                        .cardRow()
+                }
+                AO3AuthorPaginationRows(model: model)
+            }
+        }
+    }
+}
+
 /// The Bookmarks rows of an author profile — the rich bookmark cards
 /// (notes/tags/private/recommendation) with pagination. Extracted verbatim from
 /// `AuthorProfileView.bookmarkRows`.

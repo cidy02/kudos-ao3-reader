@@ -1,14 +1,15 @@
 import SwiftData
 import SwiftUI
 
-/// The Account tab, redesigned as the signed-in user's own native profile hub:
-/// a profile identity card over Overview / Works / Bookmarks / Activity segments,
-/// matching the visual language of Author Profiles and Comments. Works and
-/// Bookmarks embed the same `AO3AuthorProfileModel`-backed rows Author Profiles
-/// use, scoped to the signed-in user; Activity surfaces AO3 History, Marked for
-/// Later, and the AO3 Inbox. AO3-account functionality only — app settings live
-/// behind the toolbar gear (`ReaderOptionsForm`), local History/Favorites moved
-/// to the Library tab.
+/// The Account tab: signed-in user's native AO3 profile hub with
+/// Overview / Reading / Writing / Activity.
+///
+/// - **Overview** — identity hub: shortcuts, Preferences, More on AO3
+/// - **Reading** — Later / Subscriptions / Bookmarks / Collections
+/// - **Writing** — Works / Series / Drafts (drafts open AO3 for now)
+/// - **Activity** — History / Inbox
+///
+/// App settings stay behind the toolbar gear.
 struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -16,39 +17,54 @@ struct AccountView: View {
     @State private var path = NavigationPath()
     @State private var showingLogin = false
     @State private var selectedTab: AccountTab = .overview
+    @State private var readingTab: AccountReadingTab = .later
+    @State private var writingTab: AccountWritingTab = .works
     @State private var activityTab: AccountActivityTab = .history
-    /// The signed-in user's own profile content (Works / Bookmarks), self-scoped.
-    /// nil while signed out. Loaded lazily — only once the user opens the tab.
+    /// The signed-in user's own profile content (Works / Series / Bookmarks).
     @State private var profileModel: AO3AuthorProfileModel?
-    /// Shared by Overview's Recent Comments preview and Activity › Comments.
+    /// Activity › Inbox feed state.
     @State private var inboxModel = AO3InboxModel()
     @State private var expandAll = false
-    /// UI mirror of the persisted "Posting As" choice (nil = AO3 default).
     @State private var postingPseudName: String?
-    /// Bumped by pull-to-refresh on Activity › History/Later to force a reload.
-    @State private var activityReloadToken = 0
+    /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
+    @State private var listReloadToken = 0
 
-    /// Pushable Account destinations that aren't already value-routed types.
     enum Route: Hashable {
         case myCollections
+        case preferences
+        case moreOnAO3
         case settings
     }
 
-    /// The page's primary segments.
     enum AccountTab: String, CaseIterable, Identifiable {
         case overview = "Overview"
-        case works = "Works"
-        case bookmarks = "Bookmarks"
+        case reading = "Reading"
+        case writing = "Writing"
         case activity = "Activity"
 
         var id: String { rawValue }
     }
 
-    /// Activity's secondary segments.
+    enum AccountReadingTab: String, CaseIterable, Identifiable {
+        case later = "Later"
+        case subscriptions = "Subscriptions"
+        case bookmarks = "Bookmarks"
+        case collections = "Collections"
+
+        var id: String { rawValue }
+    }
+
+    enum AccountWritingTab: String, CaseIterable, Identifiable {
+        case works = "Works"
+        case series = "Series"
+        case drafts = "Drafts"
+
+        var id: String { rawValue }
+    }
+
     enum AccountActivityTab: String, CaseIterable, Identifiable {
         case history = "History"
-        case later = "Later"
-        case comments = "Comments"
+        case inbox = "Inbox"
 
         var id: String { rawValue }
     }
@@ -96,15 +112,13 @@ struct AccountView: View {
 
     // MARK: Activation
 
-    /// Re-runs activation whenever what's on screen changes: tab into Account,
-    /// login/logout, or a segment switch. Content loads only when its surface is
-    /// actually visible — the Account tab stays mounted (but idle) inside the
-    /// root TabView, and no request should fire for a hidden screen.
     private var activationKey: String {
         [
             auth.username ?? "",
             String(router.selection == .account),
             selectedTab.rawValue,
+            readingTab.rawValue,
+            writingTab.rawValue,
             activityTab.rawValue
         ].joined(separator: "|")
     }
@@ -113,20 +127,30 @@ struct AccountView: View {
         guard router.selection == .account, auth.isLoggedIn else { return }
         switch selectedTab {
         case .overview:
-            // The profile header feeds the Profile Card (avatar, pseud list) —
-            // same open-behavior as tapping into an author profile.
             profileModel?.activate(auth: auth)
+            // Prefetch inbox so the Overview shortcut can show an unread hint.
             inboxModel.activate(auth: auth)
-        case .works:
-            syncProfileTab(.works)
-        case .bookmarks:
-            syncProfileTab(.bookmarks)
+        case .reading:
+            switch readingTab {
+            case .bookmarks:
+                syncProfileTab(.bookmarks)
+            case .later, .subscriptions, .collections:
+                profileModel?.activate(auth: auth)
+            }
+        case .writing:
+            switch writingTab {
+            case .works:
+                syncProfileTab(.works)
+            case .series:
+                syncProfileTab(.series)
+            case .drafts:
+                profileModel?.activate(auth: auth)
+            }
         case .activity:
             profileModel?.activate(auth: auth)
-            if activityTab == .comments {
+            if activityTab == .inbox {
                 inboxModel.activate(auth: auth)
             }
-            // History / Later load themselves via AccountWorksInlineSection.
         }
     }
 
@@ -140,9 +164,6 @@ struct AccountView: View {
             selectedTab = .overview
         }
         postingPseudName = auth.preferredPostingPseudName
-        // The activation task can fire before this onChange creates the model
-        // (initial-appearance ordering is undefined) — re-activate now that it
-        // exists; activation is idempotent and self-gates on tab visibility.
         activateVisibleContent()
     }
 
@@ -156,14 +177,28 @@ struct AccountView: View {
         guard auth.isLoggedIn else { return }
         switch selectedTab {
         case .overview:
-            await inboxModel.refresh(auth: auth)
-        case .works, .bookmarks:
             if let model = profileModel { await model.refresh(auth: auth) }
+        case .reading:
+            switch readingTab {
+            case .bookmarks:
+                if let model = profileModel { await model.refresh(auth: auth) }
+            case .later, .subscriptions:
+                listReloadToken += 1
+            case .collections:
+                listReloadToken += 1
+            }
+        case .writing:
+            switch writingTab {
+            case .works, .series:
+                if let model = profileModel { await model.refresh(auth: auth) }
+            case .drafts:
+                break
+            }
         case .activity:
             switch activityTab {
-            case .history, .later:
-                activityReloadToken += 1
-            case .comments:
+            case .history:
+                listReloadToken += 1
+            case .inbox:
                 await inboxModel.refresh(auth: auth)
             }
         }
@@ -175,6 +210,8 @@ struct AccountView: View {
     private func destination(for route: Route) -> some View {
         switch route {
         case .myCollections: AO3CollectionsList()
+        case .preferences: AO3PreferencesView()
+        case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
         }
     }
@@ -196,13 +233,19 @@ struct AccountView: View {
         }
     }
 
-    /// Expand-all applies to the tabs that render work cards.
     private var showsExpandControl: Bool {
         guard auth.isLoggedIn else { return false }
         switch selectedTab {
-        case .overview: return false
-        case .works, .bookmarks: return true
-        case .activity: return activityTab != .comments
+        case .overview, .writing where writingTab == .drafts:
+            return false
+        case .reading:
+            return readingTab == .later
+                || readingTab == .subscriptions
+                || readingTab == .bookmarks
+        case .writing:
+            return writingTab == .works
+        case .activity:
+            return activityTab == .history
         }
     }
 
@@ -230,7 +273,7 @@ struct AccountView: View {
         path.append(route)
     }
 
-    // MARK: Segments
+    // MARK: Primary segments
 
     private var tabPickerSection: some View {
         Section {
@@ -250,113 +293,184 @@ struct AccountView: View {
         switch selectedTab {
         case .overview:
             overviewSections
-        case .works:
-            profileContentSections(tab: .works)
-        case .bookmarks:
-            profileContentSections(tab: .bookmarks)
+        case .reading:
+            readingSections
+        case .writing:
+            writingSections
         case .activity:
             activitySections
         }
     }
 
-    // MARK: Overview
+    // MARK: Overview — identity hub
 
     @ViewBuilder
     private var overviewSections: some View {
-        Section("My AO3") {
-            Button {
-                selectedTab = .works
-            } label: {
-                AccountNavCardLabel(
-                    title: "My Works",
-                    systemImage: "doc.text",
-                    count: cachedCount(.myWorks)
-                )
+        Section {
+            shortcutCard(
+                title: "Marked for Later",
+                systemImage: "clock.badge",
+                count: cachedCount(.markedForLater)
+            ) {
+                readingTab = .later
+                selectedTab = .reading
             }
-            .buttonStyle(.plain)
-            .cardRow()
-
-            navCard(
-                title: "My Collections", systemImage: "square.stack",
-                count: cachedCount(.collections), value: Route.myCollections
-            )
-            navCard(
-                title: "My Subscriptions", systemImage: "bell",
-                count: cachedCount(.subscriptions), value: AO3AccountWorksList.Kind.subscriptions
-            )
-            navCard(
-                title: "Marked for Later", systemImage: "clock.badge",
-                count: cachedCount(.markedForLater), value: AO3AccountWorksList.Kind.markedForLater
-            )
-        }
-
-        Section {
-            AccountInboxRows(
-                model: inboxModel,
-                limit: 3,
-                onOpen: openInboxItem,
-                onSeeAll: {
-                    activityTab = .comments
-                    selectedTab = .activity
-                }
-            )
+            shortcutCard(
+                title: "Inbox",
+                systemImage: "tray",
+                count: inboxModel.unreadCount.map { $0 > 0 ? $0.formatted() : nil } ?? nil
+            ) {
+                activityTab = .inbox
+                selectedTab = .activity
+            }
+            shortcutCard(
+                title: "Works",
+                systemImage: "doc.text",
+                count: cachedCount(.myWorks)
+            ) {
+                writingTab = .works
+                selectedTab = .writing
+            }
         } header: {
-            Text("Recent Comments")
-        }
-
-        Section {
-            webLink("My Preferences", systemImage: "slider.horizontal.3", path: "/preferences")
-                .cardRow()
-        } header: {
-            Text("On AO3")
+            Text("Shortcuts")
         } footer: {
-            Text("Opens your AO3 settings on the website.")
+            Text("Jump into the lists you open most. Full Reading, Writing, and Activity "
+                + "tabs are above.")
+        }
+
+        Section {
+            navCard(
+                title: "Preferences",
+                systemImage: "slider.horizontal.3",
+                count: nil,
+                value: Route.preferences
+            )
+            navCard(
+                title: "More on AO3",
+                systemImage: "ellipsis.circle",
+                count: nil,
+                value: Route.moreOnAO3
+            )
+        } header: {
+            Text("Account")
+        } footer: {
+            Text("Native preferences in the app. Drafts, challenges, gifts, skins, and "
+                + "the full dashboard open from More on AO3.")
         }
     }
 
-    /// A rich navigation card that pushes `value` (kept as a Button + manual
-    /// chevron so all four Overview cards read identically, including the
-    /// tab-switching My Works card).
-    private func navCard(
-        title: String, systemImage: String, count: String?, value: some Hashable
-    ) -> some View {
-        Button {
-            path.append(value)
-        } label: {
-            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
-        }
-        .buttonStyle(.plain)
-        .cardRow()
-    }
-
-    private func cachedCount(_ kind: AO3AccountListKind) -> String? {
-        AO3AccountListCountsCache.shared.count(
-            for: kind,
-            authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        )?.displayText
-    }
-
-    private func openInboxItem(_ item: AO3InboxItem) {
-        if let workID = item.workID {
-            path.append(AccountInboxThreadDestination(
-                workID: workID,
-                title: item.subjectTitle
-            ))
-        } else if let url = item.subjectURL {
-            // Tag / admin-post comments have no native thread screen — honest
-            // web fallback.
-            router.open(url)
-        }
-    }
-
-    // MARK: Works / Bookmarks (shared author-profile rows, scoped to self)
+    // MARK: Reading — Later | Subscriptions | Bookmarks | Collections
 
     @ViewBuilder
-    private func profileContentSections(tab: AO3AuthorProfileTab) -> some View {
+    private var readingSections: some View {
+        Section {
+            AccountScopeMenu(prompt: "Show", selection: $readingTab)
+                .cardRow()
+        }
+
+        switch readingTab {
+        case .later:
+            AccountWorksInlineSection(
+                kind: .markedForLater,
+                expandAll: expandAll,
+                reloadToken: listReloadToken,
+                onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
+            )
+        case .subscriptions:
+            AccountWorksInlineSection(
+                kind: .subscriptions,
+                expandAll: expandAll,
+                reloadToken: listReloadToken,
+                onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
+            )
+        case .bookmarks:
+            profileContentSections(profileTab: .bookmarks, sectionTitle: "Bookmarks")
+        case .collections:
+            // Full collections browser (own List) is a pushed screen so we don't
+            // nest lists inside Account's card List.
+            Section {
+                navCard(
+                    title: "Browse Collections",
+                    systemImage: "square.stack",
+                    count: cachedCount(.collections),
+                    value: Route.myCollections
+                )
+            } footer: {
+                Text("Collections you create or maintain on AO3.")
+            }
+        }
+    }
+
+    // MARK: Writing — Works | Series | Drafts
+
+    @ViewBuilder
+    private var writingSections: some View {
+        Section {
+            AccountScopeMenu(prompt: "Show", selection: $writingTab)
+                .cardRow()
+        }
+
+        switch writingTab {
+        case .works:
+            profileContentSections(profileTab: .works, sectionTitle: "Works")
+        case .series:
+            profileSeriesSections
+        case .drafts:
+            Section {
+                externalNavCard(
+                    title: "Open Drafts on AO3",
+                    systemImage: "doc.badge.clock",
+                    pathSuffix: "works/drafts"
+                )
+            } footer: {
+                Text("Drafts still open on the Archive until a native editor ships.")
+            }
+        }
+    }
+
+    // MARK: Activity — History | Inbox
+
+    @ViewBuilder
+    private var activitySections: some View {
+        Section {
+            AccountScopeMenu(prompt: "Show", selection: $activityTab)
+                .cardRow()
+        }
+
+        switch activityTab {
+        case .history:
+            AccountWorksInlineSection(
+                kind: .history,
+                expandAll: expandAll,
+                reloadToken: listReloadToken,
+                onRefine: { path.append(AO3AccountWorksList.Kind.history) }
+            )
+        case .inbox:
+            Section {
+                AccountInboxRows(model: inboxModel, limit: nil, onOpen: openInboxItem)
+            } header: {
+                Text("Inbox")
+            } footer: {
+                if let total = inboxModel.totalComments {
+                    let unread = inboxModel.unreadCount ?? 0
+                    Text("\(total) comments in your AO3 inbox, \(unread) unread. "
+                        + "Manage read state on the AO3 website.")
+                }
+            }
+        }
+    }
+
+    // MARK: Shared profile content
+
+    @ViewBuilder
+    private func profileContentSections(
+        profileTab: AO3AuthorProfileTab,
+        sectionTitle: String
+    ) -> some View {
         if let model = profileModel {
             switch model.headerPhase {
             case .idle, .loading:
-                Section(tab.rawValue) { AO3AuthorLoadingRows() }
+                Section(sectionTitle) { AO3AuthorLoadingRows() }
             case .unavailable:
                 Section {
                     AO3ProfileMessageRow(
@@ -386,7 +500,7 @@ struct AccountView: View {
                             .cardRow()
                     }
                 }
-                if tab == .works {
+                if profileTab == .works {
                     AO3AuthorFandomFilterSection(model: model)
                     AO3AuthorWorksSection(model: model, expandAll: expandAll)
                 } else {
@@ -396,66 +510,116 @@ struct AccountView: View {
         }
     }
 
-    // MARK: Activity
-
     @ViewBuilder
-    private var activitySections: some View {
-        Section {
-            Picker("Activity", selection: $activityTab) {
-                ForEach(AccountActivityTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+    private var profileSeriesSections: some View {
+        if let model = profileModel {
+            switch model.headerPhase {
+            case .idle, .loading:
+                Section("Series") { AO3AuthorLoadingRows() }
+            case .unavailable:
+                Section {
+                    AO3ProfileMessageRow(
+                        title: "Profile unavailable",
+                        systemImage: "person.slash",
+                        message: "AO3 could not load your profile. It may be temporarily unavailable."
+                    )
+                    .cardRow()
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .cardRow()
-        }
-
-        switch activityTab {
-        case .history:
-            AccountWorksInlineSection(
-                kind: .history, expandAll: expandAll, reloadToken: activityReloadToken,
-                onRefine: { path.append(AO3AccountWorksList.Kind.history) }
-            )
-        case .later:
-            AccountWorksInlineSection(
-                kind: .markedForLater, expandAll: expandAll, reloadToken: activityReloadToken,
-                onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
-            )
-        case .comments:
-            Section {
-                AccountInboxRows(model: inboxModel, limit: nil, onOpen: openInboxItem)
-            } header: {
-                Text("Comments")
-            } footer: {
-                if let total = inboxModel.totalComments {
-                    let unread = inboxModel.unreadCount ?? 0
-                    Text("\(total) comments in your AO3 inbox, \(unread) unread. "
-                        + "Manage read state on the AO3 website.")
+            case let .failed(message):
+                Section {
+                    AO3ProfileMessageRow(
+                        title: "Couldn't load your profile",
+                        systemImage: "exclamationmark.triangle",
+                        message: message,
+                        actionTitle: "Try Again",
+                        action: { model.retry(auth: auth) }
+                    )
+                    .cardRow()
                 }
+            case .loaded:
+                if model.isShowingStaleCache {
+                    Section {
+                        Label("Showing cached AO3 data", systemImage: "wifi.slash")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .cardRow()
+                    }
+                }
+                AO3AuthorSeriesSection(model: model)
             }
         }
     }
 
-    // MARK: Helpers
+    // MARK: Nav helpers
 
-    /// A row that opens an AO3 path on the website (via the in-app browser).
-    /// Disabled (with a hint) for account-specific paths when signed out.
-    @ViewBuilder
-    private func webLink(_ title: String, systemImage: String, path: String) -> some View {
-        let needsAccount = path.contains("/users/")
-        Button {
-            if let url = URL(string: "https://archiveofourown.org\(path)") { router.open(url) }
-        } label: {
-            HStack {
-                Label(title, systemImage: systemImage)
-                Spacer()
-                Image(systemName: "arrow.up.forward.square").foregroundStyle(.secondary)
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
+    private func shortcutCard(
+        title: String,
+        systemImage: String,
+        count: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
         }
         .buttonStyle(.plain)
-        .disabled(needsAccount && auth.username == nil)
+        .cardRow()
+    }
+
+    private func navCard(
+        title: String, systemImage: String, count: String?, value: some Hashable
+    ) -> some View {
+        Button {
+            path.append(value)
+        } label: {
+            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
+        }
+        .buttonStyle(.plain)
+        .cardRow()
+    }
+
+    private func externalNavCard(
+        title: String, systemImage: String, pathSuffix: String
+    ) -> some View {
+        Button {
+            openUserPath(pathSuffix)
+        } label: {
+            AccountNavCardLabel(
+                title: title,
+                systemImage: systemImage,
+                opensExternally: true
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(auth.username == nil)
+        .cardRow()
+    }
+
+    private func openUserPath(_ suffix: String) {
+        guard let username = auth.username else { return }
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? username
+        let path = suffix.isEmpty
+            ? "/users/\(encoded)"
+            : "/users/\(encoded)/\(suffix)"
+        guard let url = URL(string: "https://archiveofourown.org\(path)") else { return }
+        router.open(url)
+    }
+
+    private func cachedCount(_ kind: AO3AccountListKind) -> String? {
+        AO3AccountListCountsCache.shared.count(
+            for: kind,
+            authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        )?.displayText
+    }
+
+    private func openInboxItem(_ item: AO3InboxItem) {
+        if let workID = item.workID {
+            path.append(AccountInboxThreadDestination(
+                workID: workID,
+                title: item.subjectTitle
+            ))
+        } else if let url = item.subjectURL {
+            router.open(url)
+        }
     }
 }

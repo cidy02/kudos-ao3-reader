@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="csrf-token-abc123==">
+  <title>My Preferences</title>
+</head>
+<body class="logged-in">
+<div id="main" class="preferences">
+  <h2 class="heading">My Preferences</h2>
+  <h3 class="landmark heading">Navigation</h3>
+  <ul class="navigation actions">
+    <li><a href="/users/ExampleUser/profile/edit">Edit My Profile</a></li>
+    <li><a href="/users/ExampleUser/pseuds">Manage My Pseuds</a></li>
+    <li><a href="/users/ExampleUser/blocked">Blocked Users</a></li>
+    <li><a href="/users/ExampleUser/muted">Muted Users</a></li>
+    <li><a href="/users/ExampleUser/change_username">Change Username</a></li>
+    <li><a href="/users/ExampleUser/change_password">Change Password</a></li>
+    <li><a href="/users/ExampleUser/change_email">Change Email</a></li>
+  </ul>
+
+  <form action="/users/ExampleUser/preference" accept-charset="UTF-8" method="post">
+    <input type="hidden" name="_method" value="put">
+    <input type="hidden" name="authenticity_token" value="csrf-token-abc123==">
+
+    <fieldset>
+      <legend>Privacy</legend>
+      <h4 class="heading">Privacy <a href="/help/preferences_privacy" class="help symbol question modal" aria-label="Privacy Preferences"><span class="symbol question"><span>?</span></span></a></h4>
+      <ul>
+        <li>
+          <input name="preference[minimize_search_engines]" type="hidden" value="0">
+          <input type="checkbox" value="1" name="preference[minimize_search_engines]" id="preference_minimize_search_engines">
+          <label for="preference_minimize_search_engines">Hide my work from search engines when possible.</label>
+        </li>
+        <li>
+          <input name="preference[disable_share_links]" type="hidden" value="0">
+          <input type="checkbox" value="1" checked="checked" name="preference[disable_share_links]" id="preference_disable_share_links">
+          <label for="preference_disable_share_links">Hide the share buttons on my work.</label>
+        </li>
+        <li>
+          <input name="preference[allow_cocreator]" type="hidden" value="0">
+          <input type="checkbox" value="1" checked="checked" name="preference[allow_cocreator]" id="preference_allow_cocreator">
+          <label for="preference_allow_cocreator">Allow others to invite me to be a co-creator.</label>
+        </li>
+      </ul>
+    </fieldset>
+
+    <fieldset>
+      <legend>Display</legend>
+      <h4 class="heading">Display <a href="/help/preferences_display" class="help symbol question modal" aria-label="Display Preferences"><span class="symbol question"><span>?</span></span></a></h4>
+      <ul>
+        <li>
+          <input name="preference[adult]" type="hidden" value="0">
+          <input type="checkbox" value="1" checked="checked" name="preference[adult]" id="preference_adult">
+          <label for="preference_adult">Show me adult content without checking.</label>
+        </li>
+        <li>
+          <input name="preference[view_full_works]" type="hidden" value="0">
+          <input type="checkbox" value="1" name="preference[view_full_works]" id="preference_view_full_works">
+          <label for="preference_view_full_works">Show the whole work by default.</label>
+        </li>
+        <li>
+          <input name="preference[hide_warnings]" type="hidden" value="0">
+          <input type="checkbox" value="1" name="preference[hide_warnings]" id="preference_hide_warnings">
+          <label for="preference_hide_warnings">Hide warnings.</label>
+        </li>
+      </ul>
+    </fieldset>
+
+    <fieldset>
+      <dl>
+        <dt><label for="preference_skin_id">Your site skin</label></dt>
+        <dd>
+          <select name="preference[skin_id]" id="preference_skin_id">
+            <option value="1">Default</option>
+            <option selected="selected" value="42">Reversi</option>
+          </select>
+        </dd>
+        <dt><label for="preference_time_zone">Your time zone</label></dt>
+        <dd>
+          <select name="preference[time_zone]" id="preference_time_zone">
+            <option value="UTC">UTC</option>
+            <option selected="selected" value="America/New_York">(GMT-05:00) Eastern Time (US &amp; Canada)</option>
+          </select>
+        </dd>
+        <dt><label for="preference_work_title_format">Browser page title format</label> <a href="/help/preferences_work_title_format" class="help symbol question modal" aria-label="Work Title Format"><span class="symbol question"><span>?</span></span></a></dt>
+        <dd><input type="text" value="TITLE - AUTHOR" name="preference[work_title_format]" id="preference_work_title_format"></dd>
+      </dl>
+    </fieldset>
+
+    <fieldset>
+      <legend>Comments</legend>
+      <h4 class="heading">Comments</h4>
+      <ul>
+        <li>
+          <input name="preference[comment_emails_off]" type="hidden" value="0">
+          <input type="checkbox" value="1" name="preference[comment_emails_off]" id="preference_comment_emails_off">
+          <label for="preference_comment_emails_off">Turn off emails about comments.</label>
+        </li>
+        <li>
+          <input name="preference[kudos_emails_off]" type="hidden" value="0">
+          <input type="checkbox" value="1" checked="checked" name="preference[kudos_emails_off]" id="preference_kudos_emails_off">
+          <label for="preference_kudos_emails_off">Turn off emails about kudos.</label>
+        </li>
+      </ul>
+    </fieldset>
+
+    <p class="submit actions"><input type="submit" name="commit" value="Update"></p>
+  </form>
+</div>
+</body>
+</html>

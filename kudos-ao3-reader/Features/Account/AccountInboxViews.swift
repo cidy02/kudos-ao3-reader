@@ -1,7 +1,7 @@
 import SwiftUI
 
 // The AO3 Inbox surfaces of the Account tab: a capped "Recent Comments" preview
-// on Overview and the full feed under Activity › Comments. Inbox entries are
+// on Overview and the full feed under Activity › Inbox. Inbox entries are
 // flat notification summaries (not threads), so each renders as one simple card
 // — commenter, subject, excerpt, time — honoring the read/unread and replied
 // state AO3 exposes. Read-only v1: no mark-read/delete from the app.

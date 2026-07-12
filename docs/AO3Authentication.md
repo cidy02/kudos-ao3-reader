@@ -16,22 +16,21 @@ website session, and never stores the user's password.
 - `AO3Session` and `AO3StoredCookie` are serializable session values. Cookies are
   scoped by AO3 domain, path, expiry, and secure transport when requests are
   built.
-- `KeychainAO3SessionVault` stores the session as a device-only Keychain item
-  using `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
+- `CascadingAO3SessionVault` (default) stores the session in Keychain first and
+  always mirrors it to an app-container file (`Application Support/KudosAuth/
+  ao3-session.json` via `FileAO3SessionVault`). Keychain alone is preferred on
+  signed device builds; the file keeps Simulator / unsigned overwrite-installs
+  signed-in when Keychain is missing its entitlement or is wiped independently
+  of the container. Both are cleared on logout / true uninstall.
+- `KeychainAO3SessionVault` is the device-only Keychain item using
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
 - `AO3CookieBridge` keeps the saved session, WebKit cookie store, and shared HTTP
   cookie store in agreement.
-- If Keychain is unavailable because a development or unsigned build lacks its
-  application entitlement, `AO3AuthService` retains the session in WebKit's
-  persistent, app-scoped website data store. Preferences contain only a
-  non-secret username hint so an authenticated session can be recognized
-  offline; cookie values are not copied there.
-  - **This WebKit-store path is a dev/Simulator safety net, not the intended
-    production store.** `errSecMissingEntitlement` is primarily a Simulator /
-    unsigned-build condition; on a properly signed device build a generic-password
-    item uses the app's default keychain access group and Keychain is the store of
-    record. The fallback store is data-protected and app-scoped but is a weaker
-    guarantee than the device-only Keychain item, so **verify Keychain persistence
-    on a signed device build** and treat WebKit recovery as the backstop.
+- Preferences still hold only a non-secret username hint.
+- If both Keychain and the file are empty, restore falls back to capturing
+  cookies from WebKit's persistent store (dev safety net).
+  - **Verify Keychain persistence on a signed device build** — the file + WebKit
+    paths are the Simulator/unsigned backstops, not the long-term product store.
 - `LiveAO3SessionValidator` checks a restored session against AO3 without logging
   the user out merely because the network is unavailable.
 

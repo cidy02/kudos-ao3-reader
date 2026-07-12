@@ -44,6 +44,59 @@ struct AO3SessionTests {
         #expect(restored == original)
     }
 
+    @Test func looksLikeAO3PageRejectsChallengeWalls() {
+        #expect(LiveAO3SessionValidator.looksLikeAO3Page(html: """
+        <html><body class="logged-in"><div id="header"></div></body></html>
+        """))
+        #expect(LiveAO3SessionValidator.looksLikeAO3Page(html: """
+        <html><body class="logged-out"><div id="main"></div></body></html>
+        """))
+        #expect(!LiveAO3SessionValidator.looksLikeAO3Page(html: """
+        <html><body>Just a moment... Cloudflare</body></html>
+        """))
+        #expect(!LiveAO3SessionValidator.looksLikeAO3Page(html: ""))
+    }
+
+    @Test func fileSessionVaultRoundTripsAndDeletes() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kudos-ao3-session-test-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let vault = FileAO3SessionVault(fileURL: url)
+        let session = AO3Session(
+            username: "reader",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "session")]
+        )
+        #expect(try vault.load() == nil)
+        try vault.save(session)
+        #expect(try vault.load() == session)
+        try vault.delete()
+        #expect(try vault.load() == nil)
+    }
+
+    @Test func cascadingVaultFallsBackToFileWhenKeychainEmpty() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kudos-ao3-cascade-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // Use a unique Keychain service so we never collide with a real app item;
+        // empty load → file. On Simulator, Keychain often throws
+        // errSecMissingEntitlement (-34018); the cascade must still round-trip
+        // via the file vault.
+        let vault = CascadingAO3SessionVault(
+            keychain: KeychainAO3SessionVault(service: "KudosTests.cascade.\(UUID().uuidString)"),
+            file: FileAO3SessionVault(fileURL: url)
+        )
+        let session = AO3Session(
+            username: "reader",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "session")]
+        )
+        try vault.save(session)
+        let restored = try vault.load()
+        #expect(restored?.username == "reader")
+        #expect(restored?.hasSessionCookie == true)
+        try vault.delete()
+        #expect(try vault.load() == nil)
+    }
+
     @Test func loggedInHTMLAndUsernameAreRecognized() {
         let html = """
         <html><body class="logged-in">
@@ -290,6 +343,28 @@ struct AO3AuthServiceTests {
             loadError: .keychain(errSecMissingEntitlement),
             saveError: .keychain(errSecMissingEntitlement)
         )
+        let cookies = MockAO3CookieManager(capturedCookies: session.cookies)
+        let hints = MemoryAO3SessionHintStore(username: session.username)
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: cookies,
+            sessionHintStore: hints
+        )
+
+        await service.restoreSession()
+
+        #expect(service.status == .signedIn(username: "reader"))
+        #expect(service.errorMessage == nil)
+        #expect(cookies.installed == session)
+    }
+
+    /// Simulator/unsigned: Keychain `load` returns nil (not found) while login
+    /// cookies still live in WebKit — must not treat empty Keychain as signed-out.
+    @Test func restoreFallsThroughToWebKitWhenKeychainIsEmpty() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: nil)
         let cookies = MockAO3CookieManager(capturedCookies: session.cookies)
         let hints = MemoryAO3SessionHintStore(username: session.username)
         let service = AO3AuthService(

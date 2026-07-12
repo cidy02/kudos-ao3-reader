@@ -125,6 +125,140 @@ struct KeychainAO3SessionVault: AO3SessionPersisting {
     }
 }
 
+/// App-container session file used when Keychain can't hold the session
+/// (unsigned / Simulator `errSecMissingEntitlement` builds) and as a durable
+/// backup that survives process death better than relying on WebKit cookie
+/// capture alone. Wiped with the app; never migrates via iCloud backup of the
+/// Keychain item.
+struct FileAO3SessionVault: AO3SessionPersisting {
+    private let fileURL: URL
+
+    init(fileURL: URL? = nil) {
+        if let fileURL {
+            self.fileURL = fileURL
+            return
+        }
+        let support = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first
+            ?? FileManager.default.temporaryDirectory
+        let directory = support.appendingPathComponent("KudosAuth", isDirectory: true)
+        self.fileURL = directory.appendingPathComponent("ao3-session.json")
+    }
+
+    func load() throws -> AO3Session? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            throw AO3SessionVaultError.invalidData
+        }
+        do {
+            return try JSONDecoder().decode(AO3Session.self, from: data)
+        } catch {
+            throw AO3SessionVaultError.invalidData
+        }
+    }
+
+    func save(_ session: AO3Session) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(session)
+        #if os(iOS)
+        try data.write(
+            to: fileURL,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
+        #else
+        try data.write(to: fileURL, options: [.atomic])
+        #endif
+    }
+
+    func delete() throws {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        try FileManager.default.removeItem(at: fileURL)
+    }
+}
+
+/// Keychain-first session vault with an Application Support file fallback so
+/// Simulator / unsigned builds (and any process where WebKit cookies alone are
+/// insufficient) can still restore across relaunch and overwrite-installs.
+struct CascadingAO3SessionVault: AO3SessionPersisting {
+    private let keychain: KeychainAO3SessionVault
+    private let file: FileAO3SessionVault
+
+    init(
+        keychain: KeychainAO3SessionVault = KeychainAO3SessionVault(),
+        file: FileAO3SessionVault = FileAO3SessionVault()
+    ) {
+        self.keychain = keychain
+        self.file = file
+    }
+
+    func load() throws -> AO3Session? {
+        do {
+            if let session = try keychain.load(), session.hasSessionCookie {
+                return session
+            }
+        } catch {
+            // Missing entitlement / transient Keychain errors: fall through to file.
+            if !Self.isMissingEntitlement(error) {
+                // Still try the file before surfacing a hard failure — an
+                // overwrite install can leave Keychain unreadable while the
+                // container file is intact.
+                if let session = try? file.load(), session.hasSessionCookie {
+                    return session
+                }
+                throw error
+            }
+        }
+        return try file.load()
+    }
+
+    func save(_ session: AO3Session) throws {
+        var keychainSaved = false
+        do {
+            try keychain.save(session)
+            keychainSaved = true
+        } catch {
+            if !Self.isMissingEntitlement(error) {
+                // Prefer reporting a real Keychain failure only if the file
+                // backup also cannot be written.
+                do {
+                    try file.save(session)
+                    return
+                } catch {
+                    throw error
+                }
+            }
+        }
+        // Always keep the container file in sync so unsigned-sim reinstalls
+        // and Keychain entitlement gaps still restore.
+        try file.save(session)
+        _ = keychainSaved
+    }
+
+    func delete() throws {
+        // Missing-entitlement Keychain failures are expected on unsigned /
+        // Simulator builds — the file vault is what actually has the session.
+        do {
+            try keychain.delete()
+        } catch {
+            if !Self.isMissingEntitlement(error) { throw error }
+        }
+        try file.delete()
+    }
+
+    private static func isMissingEntitlement(_ error: Error) -> Bool {
+        (error as? AO3SessionVaultError)?.isMissingEntitlement == true
+    }
+}
+
 /// Keeps WebKit, URLSession, and the Keychain model in agreement. Browser and
 /// fallback login views both use the default WebKit data store, so installing or
 /// clearing cookies here updates every AO3 WebView in the app.

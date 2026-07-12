@@ -258,37 +258,11 @@ private extension AuthorProfileView {
                 onToggleSelection: toggleSelection
             )
         case .series:
-            seriesRows
+            AO3AuthorSeriesSection(model: model)
         case .bookmarks:
             AO3AuthorBookmarksSection(model: model, expandAll: expandAll)
         case .about:
             aboutRows
-        }
-    }
-
-    @ViewBuilder
-    private var seriesRows: some View {
-        Section("Series") {
-            if model.contentPhase == .loading, model.series.isEmpty {
-                AO3AuthorLoadingRows()
-            } else if model.series.isEmpty {
-                AO3AuthorContentMessage(
-                    model: model,
-                    emptyTitle: "No series",
-                    emptyMessage: "AO3 has no visible series for this author scope.",
-                    emptySymbol: "square.stack"
-                )
-            } else {
-                if case let .failed(message) = model.contentPhase {
-                    AO3AuthorInlineErrorRow(message: message)
-                }
-                ForEach(model.series) { series in
-                    AO3SeriesRow(series: series)
-                        .cardNavigation(to: series)
-                        .cardRow()
-                }
-                AO3AuthorPaginationRows(model: model)
-            }
         }
     }
 
