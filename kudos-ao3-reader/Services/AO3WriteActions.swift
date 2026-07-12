@@ -145,7 +145,8 @@ extension AO3AuthService {
         var isRec = false
     }
 
-    /// Creates a bookmark on the work under the user's default pseud.
+    /// Creates a bookmark on the work under the chosen "Posting As" pseud when
+    /// this form offers it, else the form's own default (see resolvedPostingPseudID).
     func createBookmark(workID: Int, input: BookmarkInput) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
@@ -161,7 +162,7 @@ extension AO3AuthService {
             ("bookmark[private]", input.isPrivate ? "1" : "0"),
             ("bookmark[rec]", input.isRec ? "1" : "0")
         ]
-        if let pseud = AO3Client.parseDefaultPseudID(from: html, field: "bookmark[pseud_id]") {
+        if let pseud = resolvedPostingPseudID(from: html, field: "bookmark[pseud_id]") {
             params.append(("bookmark[pseud_id]", pseud))
         }
         let request = try writeRequest(

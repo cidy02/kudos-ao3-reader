@@ -39,6 +39,16 @@ nonisolated struct AO3AccountListCount: Equatable, Sendable {
     init(exact: Int) {
         self.exact = exact
     }
+
+    /// True when this count is at least as informative as `other` — an exact
+    /// count beats any lower bound, and among lower bounds a larger one is
+    /// closer to the true size. Used to stop a later, weaker page (e.g. a short
+    /// final page) from downgrading an already-cached stronger estimate.
+    func isAtLeastAsStrong(as other: AO3AccountListCount) -> Bool {
+        if exact != nil { return true }
+        if other.exact != nil { return false }
+        return (lowerBound ?? 0) >= (other.lowerBound ?? 0)
+    }
 }
 
 /// In-session cache of account-list sizes, so the Account tab's Overview cards can
@@ -87,10 +97,13 @@ final class AO3AccountListCountsCache {
         now: Date = Date()
     ) {
         entries = entries.filter { $0.value.expiresAt > now }
-        entries[Key(kind: kind, authenticationScope: authenticationScope)] = Entry(
-            count: count,
-            expiresAt: now.addingTimeInterval(ttl)
-        )
+        let key = Key(kind: kind, authenticationScope: authenticationScope)
+        // A later fetch may land on a short/partial page (e.g. the last page of
+        // results) and derive a weaker lower bound than one already cached —
+        // keep whichever estimate is stronger, just refreshing its TTL.
+        let toStore = entries[key].map { $0.count.isAtLeastAsStrong(as: count) ? $0.count : count }
+            ?? count
+        entries[key] = Entry(count: toStore, expiresAt: now.addingTimeInterval(ttl))
     }
 
     /// Records a just-fetched works-list page (the common case).

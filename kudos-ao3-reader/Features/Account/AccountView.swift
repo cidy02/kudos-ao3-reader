@@ -414,11 +414,13 @@ struct AccountView: View {
         switch activityTab {
         case .history:
             AccountWorksInlineSection(
-                kind: .history, expandAll: expandAll, reloadToken: activityReloadToken
+                kind: .history, expandAll: expandAll, reloadToken: activityReloadToken,
+                onRefine: { path.append(AO3AccountWorksList.Kind.history) }
             )
         case .later:
             AccountWorksInlineSection(
-                kind: .markedForLater, expandAll: expandAll, reloadToken: activityReloadToken
+                kind: .markedForLater, expandAll: expandAll, reloadToken: activityReloadToken,
+                onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
             )
         case .comments:
             Section {

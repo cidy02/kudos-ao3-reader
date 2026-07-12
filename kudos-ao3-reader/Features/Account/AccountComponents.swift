@@ -282,6 +282,10 @@ struct AccountWorksInlineSection: View {
     var expandAll: Bool
     /// Bumped by the host's pull-to-refresh; a change forces a cache bypass.
     var reloadToken: Int
+    /// Pushes the full `AO3AccountWorksList(kind:)` screen — this inline section
+    /// is a lightweight preview with no refine-filter panel or Mature-content
+    /// reveal toggle of its own, so those stay reachable one tap away.
+    var onRefine: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -294,6 +298,10 @@ struct AccountWorksInlineSection: View {
     @State private var totalPages = 1
     @State private var phase: Phase = .idle
     @State private var handledReloadToken: Int?
+    /// Cancelled and replaced on every load so a fast double-tap (retry, or two
+    /// pagination taps in a row) can't race two `load()` calls against the same
+    /// @State — mirrors the `launch()` pattern in AO3InboxModel/AO3AuthorProfileModel.
+    @State private var activeTask: Task<Void, Never>?
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -321,7 +329,7 @@ struct AccountWorksInlineSection: View {
                     systemImage: "exclamationmark.triangle",
                     message: message,
                     actionTitle: "Try Again",
-                    action: { Task { await load(page: currentPage, bypassCache: true) } }
+                    action: { launch(page: currentPage, bypassCache: true) }
                 )
                 .cardRow()
             case .loaded where works.isEmpty:
@@ -338,20 +346,35 @@ struct AccountWorksInlineSection: View {
             // The load trigger lives on the header (one stable view) rather than
             // the Section — modifiers on a Section re-apply to every row, which
             // would spawn one task per row.
-            Text(kind.title)
-                .task(id: "\(auth.username ?? "")|\(reloadToken)") {
-                    let bypass = handledReloadToken != nil && handledReloadToken != reloadToken
-                    handledReloadToken = reloadToken
-                    guard auth.isLoggedIn else {
-                        works = []
-                        phase = .idle
-                        return
-                    }
-                    if phase == .idle || bypass {
-                        await load(page: bypass ? currentPage : 1, bypassCache: bypass)
-                    }
+            HStack {
+                Text(kind.title)
+                Spacer()
+                Button(action: onRefine) {
+                    Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
+                        .font(.footnote)
+                        .labelStyle(.titleAndIcon)
                 }
+                .buttonStyle(.plain)
+            }
+            .task(id: "\(auth.username ?? "")|\(reloadToken)") {
+                let bypass = handledReloadToken != nil && handledReloadToken != reloadToken
+                handledReloadToken = reloadToken
+                guard auth.isLoggedIn else {
+                    works = []
+                    phase = .idle
+                    return
+                }
+                if phase == .idle || bypass {
+                    await load(page: bypass ? currentPage : 1, bypassCache: bypass)
+                }
+            }
         }
+    }
+
+    /// Cancels any in-flight load before starting a new one — see `activeTask`.
+    private func launch(page: Int, bypassCache: Bool = false) {
+        activeTask?.cancel()
+        activeTask = Task { await load(page: page, bypassCache: bypassCache) }
     }
 
     @ViewBuilder
@@ -369,7 +392,7 @@ struct AccountWorksInlineSection: View {
         }
         if totalPages > 1 {
             SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
-                Task { await load(page: page) }
+                launch(page: page)
             }
             .cardRow()
         }

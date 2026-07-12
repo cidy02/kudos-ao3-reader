@@ -70,4 +70,53 @@ struct AO3AccountListCountsTests {
         #expect(stored?.lowerBound == 40)
         #expect(stored?.displayText == "40+")
     }
+
+    @Test func laterWeakerPageDoesNotDowngradeAStrongerCachedEstimate() {
+        // Page 1 of 5 (20/page) records "80+". Paginating on to the short final
+        // page (6 items) must not overwrite that with a weaker "6+".
+        let cache = AO3AccountListCountsCache()
+        let firstPage = AO3SearchPage(
+            works: (1...20).map { AO3WorkSummary.subscription(id: $0, title: "W\($0)", authors: []) },
+            currentPage: 1,
+            totalPages: 5
+        )
+        cache.record(page: firstPage, kind: .markedForLater, authenticationScope: "signed-in:alice")
+        let lastPage = AO3SearchPage(
+            works: (1...6).map { AO3WorkSummary.subscription(id: $0, title: "W\($0)", authors: []) },
+            currentPage: 5,
+            totalPages: 5
+        )
+        cache.record(page: lastPage, kind: .markedForLater, authenticationScope: "signed-in:alice")
+        let stored = cache.count(for: .markedForLater, authenticationScope: "signed-in:alice")
+        #expect(stored?.lowerBound == 80)
+        #expect(stored?.displayText == "80+")
+    }
+
+    @Test func strongerLaterPageStillUpdatesAWeakerCachedEstimate() {
+        let cache = AO3AccountListCountsCache()
+        cache.record(
+            AO3AccountListCount(itemsOnPage: 20, totalPages: 2),
+            kind: .history,
+            authenticationScope: "signed-in:alice"
+        )
+        cache.record(
+            AO3AccountListCount(itemsOnPage: 20, totalPages: 12),
+            kind: .history,
+            authenticationScope: "signed-in:alice"
+        )
+        let stored = cache.count(for: .history, authenticationScope: "signed-in:alice")
+        #expect(stored?.lowerBound == 220)
+    }
+
+    @Test func exactCountIsNeverDowngradedByALowerBound() {
+        let cache = AO3AccountListCountsCache()
+        cache.record(AO3AccountListCount(exact: 3), kind: .collections, authenticationScope: "signed-in:alice")
+        cache.record(
+            AO3AccountListCount(itemsOnPage: 1, totalPages: 2),
+            kind: .collections,
+            authenticationScope: "signed-in:alice"
+        )
+        let stored = cache.count(for: .collections, authenticationScope: "signed-in:alice")
+        #expect(stored?.exact == 3)
+    }
 }
