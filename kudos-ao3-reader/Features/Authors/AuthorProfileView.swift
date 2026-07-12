@@ -5,11 +5,7 @@ struct AuthorProfileView: View {
     @Environment(\.modelContext) private var context
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
-    @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var theme
-    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
-    @AppStorage("hideMatureContent") private var hideMature = true
-    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @State private var model: AO3AuthorProfileModel
     @State private var expandAll = false
@@ -189,11 +185,7 @@ private extension AuthorProfileView {
                 }
             }
 
-            if model.selectedTab == .works,
-               let fandoms = model.header?.fandoms,
-               !fandoms.isEmpty {
-                fandomFilter(fandoms)
-            }
+            AO3AuthorFandomFilterSection(model: model, onWillChange: exitSelectMode)
 
             contentRows
         }
@@ -254,88 +246,23 @@ private extension AuthorProfileView {
         }
     }
 
-    private func fandomFilter(_ fandoms: [AO3AuthorFandom]) -> some View {
-        Section("Fandom") {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    Button {
-                        exitSelectMode()
-                        model.selectFandom(nil, auth: auth)
-                    } label: {
-                        TagChip(text: "All", tinted: model.selectedFandom == nil)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(minHeight: 44)
-
-                    ForEach(fandoms) { fandom in
-                        Button {
-                            exitSelectMode()
-                            model.selectFandom(fandom, auth: auth)
-                        } label: {
-                            let count = fandom.workCount.map { " (\($0.formatted()))" } ?? ""
-                            TagChip(
-                                text: fandom.name + count,
-                                tinted: model.selectedFandom == fandom
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44)
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-            .cardRow()
-        }
-    }
-
     @ViewBuilder
     private var contentRows: some View {
         switch model.selectedTab {
         case .works:
-            worksRows
+            AO3AuthorWorksSection(
+                model: model,
+                expandAll: expandAll,
+                isSelecting: isSelecting,
+                selection: selection,
+                onToggleSelection: toggleSelection
+            )
         case .series:
             seriesRows
         case .bookmarks:
-            bookmarkRows
+            AO3AuthorBookmarksSection(model: model, expandAll: expandAll)
         case .about:
             aboutRows
-        }
-    }
-
-    @ViewBuilder
-    private var worksRows: some View {
-        Section("Works") {
-            if model.contentPhase == .loading, model.works.isEmpty {
-                loadingRows
-            } else if model.works.isEmpty {
-                contentMessage(
-                    emptyTitle: "No works",
-                    emptyMessage: "AO3 has no visible works for this author scope."
-                )
-            } else {
-                if case let .failed(message) = model.contentPhase {
-                    inlineError(message)
-                }
-                if isSelecting {
-                    ForEach(model.works) { work in
-                        selectableWorkRow(work)
-                            .cardRow(isSelected: selection.contains(work.id))
-                    }
-                } else {
-                    ForEach(workEntries) { entry in
-                        if let work = entry.local {
-                            SensitiveWorkRow(work: work, expandAll: expandAll)
-                                .cardNavigation(to: work)
-                                .cardRow()
-                        } else if let remote = entry.remote {
-                            AO3WorkRow(work: remote, expandAll: expandAll)
-                                .cardNavigation(to: remote)
-                                .cardRow()
-                        }
-                    }
-                }
-                paginationRows
-            }
         }
     }
 
@@ -343,46 +270,24 @@ private extension AuthorProfileView {
     private var seriesRows: some View {
         Section("Series") {
             if model.contentPhase == .loading, model.series.isEmpty {
-                loadingRows
+                AO3AuthorLoadingRows()
             } else if model.series.isEmpty {
-                contentMessage(
+                AO3AuthorContentMessage(
+                    model: model,
                     emptyTitle: "No series",
-                    emptyMessage: "AO3 has no visible series for this author scope."
+                    emptyMessage: "AO3 has no visible series for this author scope.",
+                    emptySymbol: "square.stack"
                 )
             } else {
                 if case let .failed(message) = model.contentPhase {
-                    inlineError(message)
+                    AO3AuthorInlineErrorRow(message: message)
                 }
                 ForEach(model.series) { series in
                     AO3SeriesRow(series: series)
                         .cardNavigation(to: series)
                         .cardRow()
                 }
-                paginationRows
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var bookmarkRows: some View {
-        Section("Bookmarks") {
-            if model.contentPhase == .loading, model.bookmarks.isEmpty {
-                loadingRows
-            } else if model.bookmarks.isEmpty {
-                contentMessage(
-                    emptyTitle: "No visible bookmarks",
-                    emptyMessage: "AO3 has no bookmarks visible to this session for this author scope."
-                )
-            } else {
-                if case let .failed(message) = model.contentPhase {
-                    inlineError(message)
-                }
-                ForEach(model.bookmarks) { bookmark in
-                    AO3AuthorBookmarkRow(bookmark: bookmark, expandAll: expandAll)
-                        .cardNavigation(to: bookmark.work)
-                        .cardRow()
-                }
-                paginationRows
+                AO3AuthorPaginationRows(model: model)
             }
         }
     }
@@ -390,7 +295,7 @@ private extension AuthorProfileView {
     @ViewBuilder
     private var aboutRows: some View {
         if model.contentPhase == .loading, model.about == nil {
-            Section("About") { loadingRows }
+            Section("About") { AO3AuthorLoadingRows() }
         } else if let about = model.about {
             Section("Bio") {
                 if about.bio.isEmpty {
@@ -439,9 +344,11 @@ private extension AuthorProfileView {
             }
         } else {
             Section("About") {
-                contentMessage(
+                AO3AuthorContentMessage(
+                    model: model,
                     emptyTitle: "Profile details unavailable",
-                    emptyMessage: "Kudos could not read this AO3 profile page."
+                    emptyMessage: "Kudos could not read this AO3 profile page.",
+                    emptySymbol: "person.text.rectangle"
                 )
             }
         }
@@ -449,95 +356,6 @@ private extension AuthorProfileView {
 }
 
 private extension AuthorProfileView {
-    @ViewBuilder
-    private var loadingRows: some View {
-        ForEach(0..<4, id: \.self) { _ in
-            AO3WorkRowSkeleton().cardRow()
-        }
-    }
-
-    @ViewBuilder
-    private func contentMessage(emptyTitle: String, emptyMessage: String) -> some View {
-        if case let .failed(message) = model.contentPhase {
-            AO3ProfileMessageRow(
-                title: "Couldn't load \(model.selectedTab.rawValue.lowercased())",
-                systemImage: "exclamationmark.triangle",
-                message: message,
-                actionTitle: "Try Again",
-                action: { model.retry(auth: auth) }
-            )
-            .cardRow()
-        } else {
-            AO3ProfileMessageRow(
-                title: emptyTitle,
-                systemImage: emptySymbol,
-                message: emptyMessage
-            )
-            .cardRow()
-        }
-    }
-
-    private func inlineError(_ message: String) -> some View {
-        Label(message, systemImage: "exclamationmark.triangle")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .cardRow()
-    }
-
-    @ViewBuilder
-    private var paginationRows: some View {
-        if let error = model.loadMoreError {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button("Try Loading More") { model.loadMore(auth: auth) }
-                    .frame(minHeight: 44)
-            }
-            .cardRow()
-        } else if model.hasMore || model.isLoadingMore {
-            Button {
-                model.loadMore(auth: auth)
-            } label: {
-                HStack {
-                    if model.isLoadingMore { ProgressView().controlSize(.small) }
-                    Text(model.isLoadingMore ? "Loading…" : "Load More")
-                    Spacer()
-                    Text("Page \(max(1, model.currentPage)) of \(model.totalPages)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(minHeight: 44)
-            }
-            .disabled(model.isLoadingMore)
-            .cardRow()
-        }
-    }
-
-    private var workEntries: [CanonicalWork] {
-        CanonicalWorkMerge.remoteLed(
-            remote: model.works,
-            localLibrary: localWorks.filter {
-                !gate.isHidden($0, enabled: hideMature, mode: matureMode)
-            }
-        )
-    }
-
-    private func selectableWorkRow(_ work: AO3WorkSummary) -> some View {
-        Button { toggleSelection(work) } label: {
-            AO3WorkRow(
-                work: work,
-                expandAll: expandAll,
-                isSelecting: true,
-                isSelected: selection.contains(work.id)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(work.title)
-        .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-    }
-
     private func toggleSelection(_ work: AO3WorkSummary) {
         if selection.contains(work.id) {
             selection.remove(work.id)
@@ -552,15 +370,6 @@ private extension AuthorProfileView {
 
     private var isOwnProfile: Bool {
         auth.username?.localizedCaseInsensitiveCompare(model.route.username) == .orderedSame
-    }
-
-    private var emptySymbol: String {
-        switch model.selectedTab {
-        case .works: "books.vertical"
-        case .series: "square.stack"
-        case .bookmarks: "bookmark"
-        case .about: "person.text.rectangle"
-        }
     }
 
     private func subscriptionTapped() {
