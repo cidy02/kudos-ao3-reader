@@ -113,6 +113,12 @@ struct AO3PreferenceWebLink: Identifiable, Equatable, Hashable {
     var id: String { url.absoluteString }
 }
 
+/// Hidden `preference[...]` input carried through from the live form.
+struct AO3PreferenceHiddenField: Equatable, Hashable {
+    let name: String
+    let value: String
+}
+
 /// Parsed snapshot of `/users/:login/preferences` for native edit + save.
 struct AO3PreferencesSnapshot: Equatable {
     /// Absolute URL of the form `action` (usually `/users/:login/preference`).
@@ -123,6 +129,9 @@ struct AO3PreferencesSnapshot: Equatable {
     var sections: [AO3PreferenceSection]
     var selects: [AO3PreferenceSelect]
     var textFields: [AO3PreferenceTextField]
+    /// Hidden `preference[...]` inputs from the live form (ids, server defaults).
+    /// Included on save unless a toggle/select/text field overrides the same name.
+    let hiddenFields: [AO3PreferenceHiddenField]
     let webLinks: [AO3PreferenceWebLink]
 
     /// Flat mutable toggles for lookups.
@@ -133,17 +142,24 @@ struct AO3PreferencesSnapshot: Equatable {
     /// Form-encoded preference fields (without CSRF / `_method`).
     func preferenceParameters() -> [(String, String)] {
         var params: [(String, String)] = []
+        var overridden = Set<String>()
         for section in sections {
             for toggle in section.toggles {
                 // Rails checkboxes: "1" when on, "0" when off (hidden field pattern).
                 params.append((toggle.name, toggle.isOn ? "1" : "0"))
+                overridden.insert(toggle.name)
             }
         }
         for select in selects {
             params.append((select.name, select.selectedValue))
+            overridden.insert(select.name)
         }
         for field in textFields {
             params.append((field.name, field.value))
+            overridden.insert(field.name)
+        }
+        for hidden in hiddenFields where !overridden.contains(hidden.name) {
+            params.append((hidden.name, hidden.value))
         }
         return params
     }

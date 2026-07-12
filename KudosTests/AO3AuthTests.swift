@@ -54,6 +54,11 @@ struct AO3SessionTests {
         #expect(!LiveAO3SessionValidator.looksLikeAO3Page(html: """
         <html><body>Just a moment... Cloudflare</body></html>
         """))
+        // Generic #main without logged-in/out body class is not enough — that
+        // pattern appears on interstitials and must not wipe the session.
+        #expect(!LiveAO3SessionValidator.looksLikeAO3Page(html: """
+        <html><body><div id="main">Almost AO3</div></body></html>
+        """))
         #expect(!LiveAO3SessionValidator.looksLikeAO3Page(html: ""))
     }
 

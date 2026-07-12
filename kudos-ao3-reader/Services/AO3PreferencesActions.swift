@@ -47,21 +47,28 @@ extension AO3AuthService {
         if let error = AO3Client.writeErrorMessage(in: responseBody) {
             throw AO3WriteError.rejected(error)
         }
-        // Success is typically a 302 to the user dashboard with a flash notice,
-        // or a re-rendered preferences page without error lists.
-        if (200 ... 399).contains(status) {
-            if let notice = Self.flashNotice(in: responseBody) {
-                return notice
-            }
+        // Do not claim success without a positive signal — a bare 200 can be a
+        // login page or a soft failure without an error list.
+        if let notice = Self.flashNotice(in: responseBody) {
+            return notice
+        }
+        if responseBody.localizedCaseInsensitiveContains("successfully updated") {
+            return "Your preferences were successfully updated."
+        }
+        if (300 ... 399).contains(status) {
+            // Redirect away from the form (URLSession may surface this before follow).
             return "Preferences updated."
         }
-        throw AO3WriteError.rejected("AO3 didn't accept the preference changes.")
+        throw AO3WriteError.rejected(
+            "AO3 didn't confirm the preference changes. Try again."
+        )
     }
 
-    /// AO3 flash notice (`.flash.notice` / `.notice`) when present after save.
+    /// AO3 flash notice (`.flash.notice`) when present after save.
     private static func flashNotice(in html: String) -> String? {
         guard let doc = try? SwiftSoup.parse(html) else { return nil }
-        let text = try? doc.select(".flash.notice, .notice, #main .flash").first()?.text()
+        // Prefer the success flash only — `.notice` alone can match unrelated copy.
+        let text = try? doc.select(".flash.notice, #main .flash.notice").first()?.text()
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }

@@ -127,9 +127,9 @@ struct AccountView: View {
         guard router.selection == .account, auth.isLoggedIn else { return }
         switch selectedTab {
         case .overview:
+            // Profile header only — do not prefetch Inbox here (that would hit
+            // AO3 on every Account open for a badge the user may never use).
             profileModel?.activate(auth: auth)
-            // Prefetch inbox so the Overview shortcut can show an unread hint.
-            inboxModel.activate(auth: auth)
         case .reading:
             switch readingTab {
             case .bookmarks:
@@ -185,7 +185,9 @@ struct AccountView: View {
             case .later, .subscriptions:
                 listReloadToken += 1
             case .collections:
-                listReloadToken += 1
+                // Collections is a push-only card (full list is `AO3CollectionsList`);
+                // nothing inline observes `listReloadToken`.
+                break
             }
         case .writing:
             switch writingTab {
@@ -318,7 +320,7 @@ struct AccountView: View {
             shortcutCard(
                 title: "Inbox",
                 systemImage: "tray",
-                count: inboxModel.unreadCount.map { $0 > 0 ? $0.formatted() : nil } ?? nil
+                count: nil
             ) {
                 activityTab = .inbox
                 selectedTab = .activity

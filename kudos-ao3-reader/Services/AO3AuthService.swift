@@ -111,25 +111,27 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
 
         let html = String(bytes: data, encoding: .utf8) ?? ""
         // Cloudflare / empty / non-AO3 responses must not be treated as "session
-        // expired" — that path wipes the stored cookies and forces a re-login
-        // after every flaky validation (very visible on Simulator reinstalls).
+        // expired" — that path wipes the stored cookies and forces a re-login.
+        // Only `body.logged-in` / `body.logged-out` count as a real AO3 page;
+        // generic `#main` shells are too common on interstitials.
         guard Self.looksLikeAO3Page(html: html) else {
             throw URLError(.cannotParseResponse)
         }
+        // Logged-out AO3 markup is the only definitive expiry signal here.
         guard Self.isLoggedIn(html: html) else { return .expired }
         let username = Self.username(in: html) ?? storedSession.username
         let refreshed = Self.responseCookies(from: http, url: url)
         return .valid(Self.merging(refreshed, into: storedSession, username: username))
     }
 
-    /// True when the HTML looks like a real AO3 document (logged-in or out).
-    /// Challenge walls and empty error pages return false.
+    /// True when the HTML is a real AO3 document (logged-in or logged-out body).
+    /// Challenge walls, empty error pages, and pages that merely share `#main`
+    /// return false so callers keep the session instead of wiping it.
     static func looksLikeAO3Page(html: String) -> Bool {
-        guard let document = try? SwiftSoup.parse(html) else { return false }
-        if let body = document.body() {
-            if body.hasClass("logged-in") || body.hasClass("logged-out") { return true }
-        }
-        return (try? document.select("#header, #footer, #main, #outer").first()) != nil
+        guard let document = try? SwiftSoup.parse(html),
+              let body = document.body()
+        else { return false }
+        return body.hasClass("logged-in") || body.hasClass("logged-out")
     }
 
     /// NOTE: This logged-in / username detection mirrors the JavaScript in

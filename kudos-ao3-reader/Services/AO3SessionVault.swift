@@ -185,9 +185,9 @@ struct FileAO3SessionVault: AO3SessionPersisting {
     }
 }
 
-/// Keychain-first session vault with an Application Support file fallback so
-/// Simulator / unsigned builds (and any process where WebKit cookies alone are
-/// insufficient) can still restore across relaunch and overwrite-installs.
+/// Keychain-first session vault. On signed builds only Keychain is written.
+/// When Keychain returns `errSecMissingEntitlement` (Simulator / unsigned),
+/// falls back to an Application Support file so relaunch still restores.
 struct CascadingAO3SessionVault: AO3SessionPersisting {
     private let keychain: KeychainAO3SessionVault
     private let file: FileAO3SessionVault
@@ -221,26 +221,19 @@ struct CascadingAO3SessionVault: AO3SessionPersisting {
     }
 
     func save(_ session: AO3Session) throws {
-        var keychainSaved = false
         do {
             try keychain.save(session)
-            keychainSaved = true
+            // Keychain is the production store of record — do not dual-write
+            // session cookies into Application Support on signed builds.
+            try? file.delete()
+            return
         } catch {
-            if !Self.isMissingEntitlement(error) {
-                // Prefer reporting a real Keychain failure only if the file
-                // backup also cannot be written.
-                do {
-                    try file.save(session)
-                    return
-                } catch {
-                    throw error
-                }
-            }
+            // Simulator / unsigned builds: Keychain often returns
+            // errSecMissingEntitlement. Only then persist to the app-container
+            // file (cleared on logout / uninstall with the rest of the vault).
+            guard Self.isMissingEntitlement(error) else { throw error }
+            try file.save(session)
         }
-        // Always keep the container file in sync so unsigned-sim reinstalls
-        // and Keychain entitlement gaps still restore.
-        try file.save(session)
-        _ = keychainSaved
     }
 
     func delete() throws {

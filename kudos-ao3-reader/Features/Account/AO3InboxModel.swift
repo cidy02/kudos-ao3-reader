@@ -1,9 +1,7 @@
 import Foundation
 
-/// State for the signed-in user's AO3 Inbox feed — shared by the Account tab's
-/// Overview "Recent Comments" preview and the Activity tab's full Inbox list,
-/// so the two surfaces never fetch the same page twice. Read-only v1: no
-/// mark-read/delete/reply-from-inbox writes. Fetches go through
+/// State for the signed-in user's AO3 Inbox feed (Account › Activity › Inbox).
+/// Read-only v1: no mark-read/delete/reply-from-inbox writes. Fetches go through
 /// `AO3AuthorProfileFetcher` for the same TTL cache, coordinator slot, pacing,
 /// and stale-fallback discipline as author pages (the cache is keyed by full URL
 /// + authentication scope, so inbox HTML can never leak across accounts).

@@ -60,6 +60,9 @@ struct AO3PreferencesParseTests {
         #expect(params["preference[minimize_search_engines]"] == "0")
         #expect(params["preference[skin_id]"] == "42")
         #expect(params["preference[work_title_format]"] == "TITLE - AUTHOR")
+        // Server hidden fields (not checkbox companions) ride along on save.
+        #expect(params["preference[id]"] == "99")
+        #expect(form.hiddenFields.contains(where: { $0.name == "preference[id]" && $0.value == "99" }))
     }
 
     @Test func parsesHelpPageBodyFromDefinitionList() throws {

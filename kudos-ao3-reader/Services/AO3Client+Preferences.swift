@@ -85,6 +85,7 @@ extension AO3Client {
 
         let selects = try parsePreferenceSelects(in: form, document: doc)
         let textFields = try parsePreferenceTextFields(in: form, document: doc)
+        let hiddenFields = try parsePreferenceHiddenFields(in: form)
         let webLinks = parsePreferenceWebLinks(in: doc)
 
         guard !sections.isEmpty || !selects.isEmpty || !textFields.isEmpty else {
@@ -98,6 +99,7 @@ extension AO3Client {
             sections: sections,
             selects: selects,
             textFields: textFields,
+            hiddenFields: hiddenFields,
             webLinks: webLinks
         )
     }
@@ -185,6 +187,29 @@ extension AO3Client {
     }
 
     // MARK: - Field parsers
+
+    /// Hidden `preference[...]` inputs (server ids / defaults). Rails checkbox
+    /// companions (`value="0"`) share names with real checkboxes and are skipped
+    /// here — toggles already emit 0/1 on save.
+    private static func parsePreferenceHiddenFields(
+        in form: Element
+    ) throws -> [AO3PreferenceHiddenField] {
+        var results: [AO3PreferenceHiddenField] = []
+        var seen = Set<String>()
+        let inputs = try form.select("input[type=hidden][name^=preference]").array()
+        for input in inputs {
+            let name = (try? input.attr("name")) ?? ""
+            guard !name.isEmpty, !seen.contains(name) else { continue }
+            // Skip the unchecked-checkbox companions; the toggle path owns those keys.
+            if (try? form.select("input[type=checkbox][name=\"\(CSS.escapeAttr(name))\"]").first()) != nil {
+                continue
+            }
+            seen.insert(name)
+            let value = (try? input.attr("value")) ?? ""
+            results.append(AO3PreferenceHiddenField(name: name, value: value))
+        }
+        return results
+    }
 
     private static func parsePreferenceToggles(in root: Element) throws -> [AO3PreferenceToggle] {
         var results: [AO3PreferenceToggle] = []
@@ -443,6 +468,13 @@ private enum CSS {
         let escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
+    }
+
+    /// Escape a value for use inside a double-quoted CSS attribute selector.
+    static func escapeAttr(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
 

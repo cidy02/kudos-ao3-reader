@@ -16,21 +16,20 @@ website session, and never stores the user's password.
 - `AO3Session` and `AO3StoredCookie` are serializable session values. Cookies are
   scoped by AO3 domain, path, expiry, and secure transport when requests are
   built.
-- `CascadingAO3SessionVault` (default) stores the session in Keychain first and
-  always mirrors it to an app-container file (`Application Support/KudosAuth/
-  ao3-session.json` via `FileAO3SessionVault`). Keychain alone is preferred on
-  signed device builds; the file keeps Simulator / unsigned overwrite-installs
-  signed-in when Keychain is missing its entitlement or is wiped independently
-  of the container. Both are cleared on logout / true uninstall.
-- `KeychainAO3SessionVault` is the device-only Keychain item using
-  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
+- `CascadingAO3SessionVault` (default) stores the session in **Keychain first**
+  (`KeychainAO3SessionVault`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`).
+  On success it does **not** dual-write cookies elsewhere. Only when Keychain
+  returns `errSecMissingEntitlement` (typical Simulator / unsigned builds) does
+  it fall back to an app-container file
+  (`Application Support/KudosAuth/ao3-session.json` via `FileAO3SessionVault`).
+  That file is cleared on logout and with the app container on uninstall.
 - `AO3CookieBridge` keeps the saved session, WebKit cookie store, and shared HTTP
   cookie store in agreement.
 - Preferences still hold only a non-secret username hint.
-- If both Keychain and the file are empty, restore falls back to capturing
+- If Keychain and the file are both empty, restore falls back to capturing
   cookies from WebKit's persistent store (dev safety net).
   - **Verify Keychain persistence on a signed device build** — the file + WebKit
-    paths are the Simulator/unsigned backstops, not the long-term product store.
+    paths are backstops, not the long-term product store.
 - `LiveAO3SessionValidator` checks a restored session against AO3 without logging
   the user out merely because the network is unavailable.
 
@@ -113,6 +112,6 @@ update both and refresh the `KudosTests/Fixtures/ao3_logged_*.html` fixtures.
 - Authenticated requests are rejected for non-HTTPS or non-AO3 URLs.
 - Login success is checked only on a secure AO3 page.
 - The session is device-only and does not migrate through Keychain backups.
-- No custom plaintext cookie file or preferences value is used as a fallback;
-  only WebKit's OS-managed website data store retains cookies when Keychain is
-  unavailable.
+- On signed builds, session cookies live in Keychain (and WebKit after install),
+  not in UserDefaults. The Application Support session file exists **only** as
+  the `errSecMissingEntitlement` fallback (see `CascadingAO3SessionVault` above).
