@@ -140,6 +140,10 @@ struct AccountView: View {
             selectedTab = .overview
         }
         postingPseudName = auth.preferredPostingPseudName
+        // The activation task can fire before this onChange creates the model
+        // (initial-appearance ordering is undefined) — re-activate now that it
+        // exists; activation is idempotent and self-gates on tab visibility.
+        activateVisibleContent()
     }
 
     private func syncProfileTab(_ tab: AO3AuthorProfileTab) {

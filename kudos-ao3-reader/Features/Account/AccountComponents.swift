@@ -402,6 +402,10 @@ struct AccountWorksInlineSection: View {
                 )
             }
         } catch is CancellationError {
+            // The header task cancels if it scrolls away mid-load; drop back to
+            // .idle so its next appearance actually reloads instead of leaving
+            // permanent skeletons behind the stale .loading phase.
+            if works.isEmpty { phase = .idle }
             return
         } catch AO3Error.authenticationRequired {
             await auth.sessionDidExpire()
