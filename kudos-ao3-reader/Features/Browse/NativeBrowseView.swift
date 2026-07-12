@@ -9,7 +9,6 @@ struct BrowseView: View {
     @Environment(AppRouter.self) private var router
 
     @State private var path = NavigationPath()
-    @State private var showingWebsite = false
 
     /// A pushed fandom → its native work results.
     private struct FandomRoute: Hashable { let name: String }
@@ -36,15 +35,11 @@ struct BrowseView: View {
                 .ao3AuthorNavigation(path: $path, tab: .browse)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
-                        Button { showingWebsite = true } label: {
+                        // Root-hosted sheet (ContentView) — stays on Browse when Done.
+                        Button { router.openWebsite() } label: {
                             Label("Open AO3 Website", systemImage: "safari")
                         }
                     }
-                }
-                .sheet(isPresented: $showingWebsite) { AO3WebBrowserView() }
-                // Something asked to open an AO3 URL — surface the website fallback.
-                .onChange(of: router.pendingURL, initial: true) { _, url in
-                    if url != nil { showingWebsite = true }
                 }
                 // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
                 .onChange(of: router.pendingTagWorks, initial: true) { _, request in

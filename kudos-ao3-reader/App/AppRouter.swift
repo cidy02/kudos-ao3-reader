@@ -72,8 +72,12 @@ final class AppRouter {
 
     /// The tab the focused Search mode returns to when its Back button is tapped.
     var lastNonSearchTab: AppTab = .library
-    /// A URL the Browse tab should load on its next appearance.
+    /// A URL the AO3 website sheet should load (set by `open`).
     var pendingURL: URL?
+    /// Root-presented AO3 website sheet. Hosted on `ContentView` so `open`
+    /// does not switch the user into the Browse tab — Done returns them to
+    /// whatever tab/subpage they came from.
+    var isPresentingWebBrowser = false
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
     var pendingLibraryTag: LibraryTagFilter?
@@ -105,10 +109,18 @@ final class AppRouter {
         case none, settings, searchFilters, libraryFilters, readerChapters, readerDisplay
     }
 
-    /// Opens a URL in the Browse tab.
+    /// Opens a URL in the in-app AO3 website sheet without changing tabs.
     func open(_ url: URL) {
         pendingURL = url
-        selection = .browse
+        isPresentingWebBrowser = true
+    }
+
+    /// Presents the AO3 website sheet at its home page (Browse toolbar entry).
+    /// Does not change the selected tab.
+    func openWebsite() {
+        // Leave pendingURL alone if something just queued a deep link; otherwise
+        // the sheet opens on AO3 home (BrowserModel's default load).
+        isPresentingWebBrowser = true
     }
 
     /// Routes an AO3 link (e.g. tapped in a work's preface) to the matching native

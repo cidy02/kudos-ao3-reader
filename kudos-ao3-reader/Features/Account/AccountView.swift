@@ -46,7 +46,7 @@ struct AccountView: View {
     }
 
     enum AccountReadingTab: String, CaseIterable, Identifiable {
-        case later = "Later"
+        case later = "Marked for Later"
         case subscriptions = "Subscriptions"
         case bookmarks = "Bookmarks"
         case collections = "Collections"

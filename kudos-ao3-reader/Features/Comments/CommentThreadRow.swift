@@ -306,11 +306,9 @@ private struct SpinePostRow: View {
 
         return HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
             VStack(spacing: 0) {
-                CommentAvatar(comment: comment, size: CommentThreadGeometry.avatarSize)
-                    .frame(
-                        width: CommentThreadGeometry.avatarColumnWidth,
-                        height: CommentThreadGeometry.avatarSize
-                    )
+                // Avatar is the same profile entry point as the byline name when
+                // AO3 gave us a resolvable /users/... route (not guests).
+                authorAvatarControl
 
                 if drawsSpineBelow {
                     ThreadSpineSegment()
@@ -390,6 +388,17 @@ private struct SpinePostRow: View {
             Spacer(minLength: 4)
             chapterBadge
         }
+    }
+
+    /// Avatar control: same profile entry as the byline name when the route is
+    /// resolvable. Guests, deleted tombstones, and missing handlers stay inert.
+    private var authorAvatarControl: some View {
+        CommentAuthorAvatarButton(
+            comment: comment,
+            size: CommentThreadGeometry.avatarSize,
+            columnWidth: CommentThreadGeometry.avatarColumnWidth,
+            onOpenAuthor: handlers.onOpenAuthor
+        )
     }
 
     /// Tappable, pseud-correct author name — routes to the native profile when
@@ -668,6 +677,60 @@ private func expandRepliesButton(count: Int, action: @escaping () -> Void) -> so
 
 // MARK: - Avatar
 
+/// Tappable author avatar for comments — uses `AO3Comment.profileRoute` (same
+/// gate as byline / composer). Guests, deleted comments, and missing open
+/// handlers stay decorative.
+///
+/// Prefer this over a bare `Button` + `CommentAvatar` in List rows: comment
+/// cards do not use `cardNavigation` today, so a plain Button is fine. If a
+/// future change puts these rows behind a NavigationLink, switch the open
+/// gesture to `highPriorityGesture` (see `AO3AuthorBylineView`) so the row
+/// link does not stack on top of the profile.
+struct CommentAuthorAvatarButton: View {
+    let comment: AO3Comment
+    var size: CGFloat = 40
+    /// Layout width of the rail column (defaults to `size`). Keeps the spine
+    /// geometry stable even when the hit target is larger than the circle.
+    var columnWidth: CGFloat?
+    var onOpenAuthor: ((AO3AuthorRoute) -> Void)?
+
+    /// Minimum touch target (HIG); visual avatar may be smaller.
+    private let minimumHit: CGFloat = 44
+
+    var body: some View {
+        let width = columnWidth ?? size
+        let visual = CommentAvatar(comment: comment, size: size)
+        let hit = max(minimumHit, size)
+
+        // Layout footprint stays `width × size` for the reply rail. The tappable
+        // control is overlaid at ≥44×44 and is allowed to extend slightly into
+        // neighboring space (no clip) so hit testing is not clamped by the rail.
+        ZStack(alignment: .top) {
+            Color.clear
+                .frame(width: width, height: size)
+
+            if let route = comment.profileRoute, let open = onOpenAuthor {
+                Button {
+                    open(route)
+                } label: {
+                    visual
+                        .frame(width: size, height: size)
+                        .frame(width: hit, height: hit)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View \(comment.author)'s profile")
+                .accessibilityHint("Opens author profile")
+            } else {
+                visual
+                    .frame(width: width, height: size, alignment: .top)
+            }
+        }
+        .frame(width: width, height: size, alignment: .top)
+        // Do not `.clipped()` — overflow is intentional for the expanded hit box.
+    }
+}
+
 struct CommentAvatar: View {
     let comment: AO3Comment
     var size: CGFloat = 40
@@ -700,6 +763,8 @@ struct CommentAvatar: View {
             Circle()
                 .strokeBorder(.quaternary, lineWidth: 0.5)
         }
+        // Hidden when decorative; parent Button supplies the profile label when
+        // the avatar is a tappable entry point.
         .accessibilityHidden(true)
     }
 

@@ -107,6 +107,17 @@ struct AO3Comment: Identifiable, Equatable, Sendable {
         URL(string: "https://archiveofourown.org/comments/\(id)")
     }
 
+    /// Native profile route for this comment's author when navigable — registered
+    /// (or orphan) account with a resolvable `userPath`, not a guest, and not a
+    /// deleted tombstone. Single source of truth for avatar + byline entry points.
+    var profileRoute: AO3AuthorRoute? {
+        guard !isDeleted, !isGuest,
+              let path = userPath,
+              let identity = AO3AuthorIdentity(displayName: author, href: path)
+        else { return nil }
+        return identity.route
+    }
+
     var threadActionURL: URL? { Self.ao3URL(for: threadPath) }
     var parentThreadURL: URL? { Self.ao3URL(for: parentThreadPath) }
 

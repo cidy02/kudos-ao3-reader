@@ -62,14 +62,24 @@ struct AppRouterTests {
         #expect(route.pseud == "Avery Writes")
     }
 
-    @Test func nonAuthorUserPageFallsBackToWeb() {
+    @Test func nonAuthorUserPageFallsBackToWebWithoutChangingTabs() {
         let router = AppRouter()
         let url = URL(string: "https://archiveofourown.org/users/someone/readings")!
         router.openAO3Link(url)
 
         #expect(router.pendingAuthorProfile == nil)
         #expect(router.pendingURL == url)
-        #expect(router.selection == .browse)
+        // Website sheet is root-hosted — do not steal focus into Browse.
+        #expect(router.isPresentingWebBrowser)
+        #expect(router.selection == .home)
+    }
+
+    @Test func openWebsitePresentsSheetWithoutRequiringPendingURL() {
+        let router = AppRouter()
+        router.openWebsite()
+        #expect(router.isPresentingWebBrowser)
+        #expect(router.pendingURL == nil)
+        #expect(router.selection == .home)
     }
 
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {

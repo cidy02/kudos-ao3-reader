@@ -433,8 +433,16 @@ struct CommentsView: View {
     }
 
     private func openAuthor(_ route: AO3AuthorRoute) {
-        if isModal { dismiss() }
-        router.openAuthorProfile(route)
+        if isModal {
+            // Let the comments sheet finish dismissing before pushing profile.
+            dismiss()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                router.openAuthorProfile(route)
+            }
+        } else {
+            router.openAuthorProfile(route)
+        }
     }
 
     private var staleBanner: some View {
@@ -770,6 +778,7 @@ struct CommentComposerSheet: View {
     @Bindable var model: CommentsModel
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var draftSaveTask: Task<Void, Never>?
@@ -892,11 +901,14 @@ struct CommentComposerSheet: View {
 
     private func parentQuote(_ parent: AO3Comment) -> some View {
         HStack(alignment: .top, spacing: 9) {
-            CommentAvatar(comment: parent, size: 32)
+            // Same profile entry as thread avatars / bylines when resolvable.
+            CommentAuthorAvatarButton(
+                comment: parent,
+                size: 32,
+                onOpenAuthor: openParentAuthor
+            )
             VStack(alignment: .leading, spacing: 4) {
-                Text(replyContext(for: parent))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                replyContextLabel(for: parent)
                 Text(parent.bodyText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -906,6 +918,53 @@ struct CommentComposerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// "Replying to {author}" — name opens the profile when the parent has a route.
+    @ViewBuilder
+    private func replyContextLabel(for parent: AO3Comment) -> some View {
+        let chapterSuffix: String = {
+            if let chapter = parent.chapterLabel, !chapter.isEmpty {
+                return " · \(chapter)"
+            }
+            return ""
+        }()
+        if let route = parent.profileRoute {
+            HStack(spacing: 0) {
+                Text("Replying to ")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Button {
+                    openParentAuthor(route)
+                } label: {
+                    Text(parent.author)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View \(parent.author)'s profile")
+                if !chapterSuffix.isEmpty {
+                    Text(chapterSuffix)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Text(replyContext(for: parent))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func openParentAuthor(_ route: AO3AuthorRoute) {
+        // Dismiss the composer first, then open the profile after the sheet
+        // finishes tearing down — simultaneous dismiss + push can drop the
+        // profile on some iOS versions (same scar tissue as nested login sheets).
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            router.openAuthorProfile(route)
+        }
     }
 
     private func replyContext(for parent: AO3Comment) -> String {

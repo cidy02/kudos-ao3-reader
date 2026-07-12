@@ -50,6 +50,7 @@ struct ContentView: View {
     #endif
 
     var body: some View {
+        @Bindable var router = router
         content
             // Warms WebKit at launch instead of on first real use (the AO3 login
             // sheet, or Browse) — see WebKitPrewarmView.
@@ -57,6 +58,11 @@ struct ContentView: View {
             // Overlay first so the environments below wrap it too — otherwise the
             // banner sits outside the .environment scope and can't find the queue.
             .overlay(alignment: .bottom) { DownloadQueueBanner() }
+            // AO3 website sheet is root-hosted so `router.open` never switches the
+            // user into Browse — Done returns them to the tab they left.
+            .sheet(isPresented: $router.isPresentingWebBrowser) {
+                AO3WebBrowserView()
+            }
             .environment(router)
             .environment(privacyGate)
             .environment(theme)
