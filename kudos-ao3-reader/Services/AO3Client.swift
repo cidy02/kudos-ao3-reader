@@ -424,6 +424,36 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return (first?.isEmpty == false) ? first : nil
     }
 
+    /// Every pseud AO3 rendered as an authorized choice in a form's pseud
+    /// `<select>` (same fields as `parseDefaultPseudID`). The default flag follows
+    /// that method's precedence: the explicitly-selected option, else the first.
+    /// Empty when the form has no pseud select (single-pseud accounts get a hidden
+    /// input instead — AO3 then posts under the account default regardless).
+    static func parsePostingPseudOptions(
+        from html: String,
+        field: String = "comment[pseud_id]"
+    ) -> [AO3PostingPseudOption] {
+        guard let doc = try? SwiftSoup.parse(html),
+              let select = try? doc.select("select[name=\"\(field)\"]").first(),
+              let options = try? select.select("option").array()
+        else { return [] }
+        var results: [AO3PostingPseudOption] = []
+        var sawSelected = false
+        for option in options {
+            let id = (try? option.attr("value")) ?? ""
+            let name = ((try? option.text()) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty, !name.isEmpty else { continue }
+            let isSelected = option.hasAttr("selected")
+            results.append(AO3PostingPseudOption(id: id, name: name, isDefault: isSelected))
+            if isSelected { sawSelected = true }
+        }
+        if !sawSelected, let first = results.first {
+            results[0] = AO3PostingPseudOption(id: first.id, name: first.name, isDefault: true)
+        }
+        return results
+    }
+
     /// Whether the user is currently subscribed to the work, read from the work page's
     /// subscribe/unsubscribe form. When subscribed, AO3 renders a delete form whose
     /// action is the unsubscribe path (`/users/X/subscriptions/<id>`); that path is

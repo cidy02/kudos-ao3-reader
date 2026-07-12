@@ -378,7 +378,9 @@ struct LibrarySectionListView: View {
 
     private func loadMarkedForLater() async {
         do {
-            markedForLater = try await auth.accountWorks(from: AO3Client.markedForLaterURL)
+            markedForLater = try await auth.accountWorks(
+                from: AO3Client.markedForLaterURL, recordAs: .markedForLater
+            )
         } catch {
             // A refresh failure (network, rate limit, expired session) must not wipe
             // out a previously successful fetch — keep showing what's already there.

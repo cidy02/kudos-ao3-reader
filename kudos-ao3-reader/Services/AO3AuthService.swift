@@ -231,6 +231,7 @@ final class AO3AuthService {
     private let loginPerformer: AO3LoginPerforming
     private let cookieManager: AO3CookieManaging
     private let sessionHintStore: AO3SessionHintPersisting
+    private let postingPseudStore: AO3PostingPseudPersisting
     private var currentSession: AO3Session?
     private var didRestore = false
 
@@ -239,13 +240,63 @@ final class AO3AuthService {
         validator: AO3SessionValidating? = nil,
         loginPerformer: AO3LoginPerforming? = nil,
         cookieManager: AO3CookieManaging? = nil,
-        sessionHintStore: AO3SessionHintPersisting? = nil
+        sessionHintStore: AO3SessionHintPersisting? = nil,
+        postingPseudStore: AO3PostingPseudPersisting? = nil
     ) {
         self.vault = vault ?? KeychainAO3SessionVault()
         self.validator = validator ?? LiveAO3SessionValidator()
         self.loginPerformer = loginPerformer ?? AO3WebLoginCoordinator()
         self.cookieManager = cookieManager ?? LiveAO3CookieManager()
         self.sessionHintStore = sessionHintStore ?? UserDefaultsAO3SessionHintStore()
+        self.postingPseudStore = postingPseudStore ?? UserDefaultsAO3PostingPseudStore()
+    }
+
+    // MARK: Posting pseud ("Posting As")
+
+    /// The pseud name the signed-in user chose to post comments as, persisted
+    /// per-account (non-secret). nil means AO3's own default pseud.
+    var preferredPostingPseudName: String? {
+        username.flatMap { postingPseudStore.pseudName(for: $0) }
+    }
+
+    /// Sets (or, with nil, clears back to AO3's default) the posting pseud for
+    /// the signed-in account. No-op when signed out.
+    func setPreferredPostingPseudName(_ name: String?) {
+        guard let username else { return }
+        postingPseudStore.setPseudName(name, for: username)
+    }
+
+    /// The pseud id a comment form should submit, resolved from that exact form's
+    /// pseud `<select>`: the stored preference when one of the form's own options
+    /// matches it by name, else the form's pre-selected default. The id is always
+    /// scraped from the fetched form, never synthesized, so AO3 authorizes it.
+    func resolvedPostingPseudID(
+        from html: String,
+        field: String = "comment[pseud_id]"
+    ) -> String? {
+        Self.resolvePostingPseudID(
+            in: html,
+            preferredName: preferredPostingPseudName,
+            field: field
+        )
+    }
+
+    /// Pure resolution (unit-tested): preferred-name match wins, else the form's
+    /// own pre-selected/first default.
+    static func resolvePostingPseudID(
+        in html: String,
+        preferredName: String?,
+        field: String = "comment[pseud_id]"
+    ) -> String? {
+        if let preferredName {
+            let options = AO3Client.parsePostingPseudOptions(from: html, field: field)
+            if let match = options.first(where: {
+                $0.name.localizedCaseInsensitiveCompare(preferredName) == .orderedSame
+            }) {
+                return match.id
+            }
+        }
+        return AO3Client.parseDefaultPseudID(from: html, field: field)
     }
 
     func restoreSession() async {
@@ -414,11 +465,20 @@ final class AO3AuthService {
     /// result. `makeURL` is a `AO3Client` URL builder such as `AO3Client.subscriptionsURL`.
     func accountWorks(
         from makeURL: (_ username: String, _ page: Int) -> URL?,
-        page: Int = 1
+        page: Int = 1,
+        recordAs countsKind: AO3AccountListKind? = nil
     ) async throws -> [AO3WorkSummary] {
         guard isLoggedIn, let username, let url = makeURL(username, page) else { return [] }
         let request = try authenticatedRequest(for: url)
-        return try await AO3Client.shared.worksPage(for: request, page: page).works
+        let result = try await AO3Client.shared.worksPage(for: request, page: page)
+        if let countsKind {
+            AO3AccountListCountsCache.shared.record(
+                page: result,
+                kind: countsKind,
+                authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: self)
+            )
+        }
+        return result.works
     }
 
     /// One page of the signed-in user's *work* subscriptions. Separate from
@@ -429,7 +489,13 @@ final class AO3AuthService {
         guard isLoggedIn, let username,
               let url = AO3Client.subscriptionsURL(username: username, page: page) else { return [] }
         let request = try authenticatedRequest(for: url)
-        return try await AO3Client.shared.subscriptionsPage(for: request, page: page).works
+        let result = try await AO3Client.shared.subscriptionsPage(for: request, page: page)
+        AO3AccountListCountsCache.shared.record(
+            page: result,
+            kind: .subscriptions,
+            authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: self)
+        )
+        return result.works
     }
 
     func applyFallbackTheme(_ theme: ReaderTheme) {

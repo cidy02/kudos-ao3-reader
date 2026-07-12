@@ -97,6 +97,20 @@ struct AO3AccountWorksList: View {
                 try await AO3Client.shared.subscriptionsPage(for: request, page: page)
             }
         }
+
+        /// Where a fetched page's size lands in the account-list counts cache
+        /// (nil for per-collection pages — only the whole-account lists get a
+        /// count on the Account tab's Overview cards).
+        var countsKind: AO3AccountListKind? {
+            switch self {
+            case .markedForLater: .markedForLater
+            case .bookmarks: .bookmarks
+            case .history: .history
+            case .subscriptions: .subscriptions
+            case .myWorks: .myWorks
+            case .collection: nil
+            }
+        }
     }
 
     let kind: Kind
@@ -306,6 +320,13 @@ struct AO3AccountWorksList: View {
             currentPage = result.currentPage
             totalPages = result.totalPages
             phase = .loaded
+            if let countsKind = kind.countsKind {
+                AO3AccountListCountsCache.shared.record(
+                    page: result,
+                    kind: countsKind,
+                    authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                )
+            }
         } catch AO3Error.authenticationRequired {
             await auth.sessionDidExpire()
             works = []

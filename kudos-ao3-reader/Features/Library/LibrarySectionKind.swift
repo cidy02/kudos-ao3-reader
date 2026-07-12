@@ -2,17 +2,20 @@ import Foundation
 
 /// The local (library-backed) sections of the Library dashboard, mirroring the Home
 /// dashboard's `HomeSectionKind`. Order matches the layout spec: Reading Now, Saved
-/// for Later, Finished, Collections, Downloaded. `works(from:visible:)` is the single
-/// source of each section's filter + ordering, so the carousel and the full "See all"
-/// list never drift. (Saved for Later also merges in the user's AO3 "Marked for
-/// Later" list; Collections is a placeholder with no backing model yet — both are
-/// handled in the views.)
+/// for Later, Finished, Collections, Downloaded, History, Favorites.
+/// `works(from:visible:)` is the single source of each section's filter + ordering,
+/// so the carousel and the full "See all" list never drift. (Saved for Later also
+/// merges in the user's AO3 "Marked for Later" list; Collections is a placeholder
+/// with no backing model yet — both are handled in the views. History and Favorites
+/// moved here from the Account tab as part of the Account redesign.)
 enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     case readingNow
     case savedForLater
     case finished
     case collections
     case downloaded
+    case history
+    case favorites
 
     var id: String {
         rawValue
@@ -30,6 +33,8 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .finished: "Finished"
         case .collections: "Collections"
         case .downloaded: "Downloaded"
+        case .history: "Reading History"
+        case .favorites: "Favorites"
         }
     }
 
@@ -46,6 +51,11 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
             "Collections are coming soon — a place to group your works into shelves."
         case .downloaded:
             "No downloads yet. Download a work as EPUB to read it offline."
+        case .history:
+            "Works you finish without saving land here. Their files are freed, "
+                + "but you can re-download and revisit them anytime."
+        case .favorites:
+            "Swipe a work in your Library, or tap the star on its page, to favorite it."
         }
     }
 
@@ -56,6 +66,8 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .finished: "checkmark.circle"
         case .collections: "square.stack"
         case .downloaded: "arrow.down.circle"
+        case .history: "clock.arrow.circlepath"
+        case .favorites: "star"
         }
     }
 
@@ -86,6 +98,18 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
             // Everything with its EPUB on disk — the full offline shelf, newest first.
             works
                 .filter { $0.hasEPUB && !$0.isQueueOnlyWork && visible($0) }
+                .sorted { $0.dateAdded > $1.dateAdded }
+        case .history:
+            // Works whose EPUB was freed after finishing (revisitable by
+            // re-downloading). Queued works whose preservation is pending/failed also
+            // have hasEPUB == false but are protected — keep them out, matching the
+            // partition the old Account-tab Local Reading History list used.
+            works
+                .filter { !$0.hasEPUB && !$0.isQueuedForLater && visible($0) }
+                .sorted { $0.dateAdded > $1.dateAdded }
+        case .favorites:
+            works
+                .filter { $0.isFavorite && visible($0) }
                 .sorted { $0.dateAdded > $1.dateAdded }
         }
     }

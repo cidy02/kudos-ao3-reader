@@ -94,6 +94,11 @@ struct AO3CollectionsList: View {
             let request = try auth.authenticatedRequest(for: url)
             collections = try await AO3Client.shared.collectionsPage(for: request)
             phase = .loaded
+            AO3AccountListCountsCache.shared.record(
+                AO3AccountListCount(exact: collections.count),
+                kind: .collections,
+                authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+            )
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {

@@ -214,6 +214,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 readingQueuesCarousel
                 collectionsCarousel
                 localCarousel(.downloaded)
+                localCarousel(.history)
+                localCarousel(.favorites)
                 if recentlyDeletedCount > 0 {
                     recentlyDeletedRow
                 }
@@ -571,7 +573,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
         isLoadingMarkedForLater = true
         do {
-            markedForLater = try await auth.accountWorks(from: AO3Client.markedForLaterURL)
+            markedForLater = try await auth.accountWorks(
+                from: AO3Client.markedForLaterURL, recordAs: .markedForLater
+            )
         } catch {
             // A refresh failure (network, rate limit, expired session) must not wipe
             // out a previously successful fetch — keep showing what's already there.

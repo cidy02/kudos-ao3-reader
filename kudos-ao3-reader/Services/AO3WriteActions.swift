@@ -57,7 +57,9 @@ extension AO3AuthService {
             ("authenticity_token", token),
             ("comment[comment_content]", text)
         ]
-        if let pseud = AO3Client.parseDefaultPseudID(from: html) {
+        // The chosen "Posting As" pseud when this form offers it, else the form's
+        // own default (see resolvedPostingPseudID).
+        if let pseud = resolvedPostingPseudID(from: html) {
             params.append(("comment[pseud_id]", pseud))
         }
         let request = try writeRequest(
