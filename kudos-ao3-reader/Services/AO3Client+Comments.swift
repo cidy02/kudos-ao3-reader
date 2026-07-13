@@ -41,6 +41,13 @@ extension AO3Client {
         URL(string: "https://archiveofourown.org/works/\(workID)/navigate")!
     }
 
+    /// AO3's standalone view for one comment and its descendants. Replies expose
+    /// AO3's own Parent Thread link here, which lets Inbox resolve the correct
+    /// root without scanning work/chapter pagination.
+    static func commentThreadURL(commentID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/comments/\(commentID)")!
+    }
+
     // MARK: Fetchers
 
     /// One page of comments. Pass an authenticated `request` (built by
@@ -74,6 +81,23 @@ extension AO3Client {
         return try Self.parseChapterIndex(html)
     }
 
+    /// One explicit, paced standalone-thread GET. Inbox may follow this with one
+    /// Parent Thread GET when AO3 says the notification is a reply; it never
+    /// walks comment pagination or fans out across a work.
+    func commentThreadPage(
+        commentID: Int, request: URLRequest? = nil
+    ) async throws -> AO3CommentsPage {
+        let url = Self.commentThreadURL(commentID: commentID)
+        let html: String
+        if var request {
+            request.url = url
+            html = try await authenticatedPageHTML(for: request)
+        } else {
+            html = try await getHTML(url)
+        }
+        return try Self.parseStandaloneCommentThread(html)
+    }
+
     // MARK: Parsers
 
     /// Parses a `show_comments=true` page: the thread list inside
@@ -82,6 +106,8 @@ extension AO3Client {
     static func parseCommentsPage(_ html: String, page: Int) throws -> AO3CommentsPage {
         let doc = try SwiftSoup.parse(html)
         var result = AO3CommentsPage(currentPage: page, totalPages: page)
+        result.workAuthorIdentities = try parseCommentsWorkAuthors(doc)
+        result.workAuthors = result.workAuthorIdentities.map(\.displayName)
 
         guard let placeholder = try doc.select("#comments_placeholder").first() else {
             // Not an error: works with zero comments render no placeholder threads,
@@ -107,6 +133,40 @@ extension AO3Client {
 
         result.totalComments = try? parseTotalComments(doc)
         return result
+    }
+
+    /// Work and chapter comment pages retain the canonical work preface above
+    /// `#comments_placeholder`. Read only that h3 byline so comment-author links
+    /// (h4) and unrelated blurbs cannot be mistaken for work creators.
+    private static func parseCommentsWorkAuthors(
+        _ doc: Document
+    ) throws -> [AO3AuthorIdentity] {
+        let selectors = [
+            "#workskin > .preface h3.byline",
+            "#workskin .preface h3.byline",
+            "#main > .preface h3.byline",
+            "h3.byline.heading"
+        ]
+        for selector in selectors {
+            guard let byline = try doc.select(selector).first() else { continue }
+            let identities = try byline.select("a[rel=author]").array().compactMap { link in
+                try AO3AuthorIdentity(displayName: link.text(), href: link.attr("href"))
+            }
+            if !identities.isEmpty { return identities }
+        }
+        return []
+    }
+
+    /// Parses `/comments/<id>`, whose top-level `ol.thread` is not wrapped in
+    /// `#comments_placeholder` like a work/chapter comments page. Fail closed if
+    /// AO3 no longer renders a real thread so Inbox cannot claim it focused one.
+    static func parseStandaloneCommentThread(_ html: String) throws -> AO3CommentsPage {
+        let doc = try SwiftSoup.parse(html)
+        guard let topThread = try doc.select("#main > ol.thread, main > ol.thread, ol.thread").first()
+        else { throw AO3Error.parse }
+        let comments = try parseThread(topThread)
+        guard !comments.isEmpty else { throw AO3Error.parse }
+        return AO3CommentsPage(comments: comments, currentPage: 1, totalPages: 1)
     }
 
     /// The work-level comment total from the page's stats (`dl.stats dd.comments`).
@@ -170,12 +230,21 @@ extension AO3Client {
             comment.author = try userLink.text()
             comment.userPath = try userLink.attr("href")
         } else {
-            // Guest byline: `<span>Name</span><span class="role"> (Guest)</span>`.
-            comment.isGuest = true
-            comment.author = try byline.children().array()
-                .first(where: { $0.tagName() == "span" && !$0.hasClass("role")
-                    && !$0.hasClass("parent") && !$0.hasClass("posted") })
-                .map { try $0.text() } ?? "Guest"
+            let role = (try? byline.select("span.role").first()?.text()) ?? ""
+            comment.isGuest = role.localizedCaseInsensitiveContains("guest")
+            let fullByline = try byline.text()
+            if !comment.isGuest,
+               fullByline.localizedCaseInsensitiveContains("anonymous creator") {
+                comment.author = "Anonymous Creator"
+                comment.isAnonymousCreator = true
+            } else {
+                // Guest byline: `<span>Name</span><span class="role"> (Guest)</span>`.
+                comment.isGuest = true
+                comment.author = try byline.children().array()
+                    .first(where: { $0.tagName() == "span" && !$0.hasClass("role")
+                        && !$0.hasClass("parent") && !$0.hasClass("posted") })
+                    .map { try $0.text() } ?? "Guest"
+            }
         }
         if let chapterLink = try byline.select("span.parent a[href*=/chapters/]").first() {
             comment.chapterLabel = try chapterLink.text()

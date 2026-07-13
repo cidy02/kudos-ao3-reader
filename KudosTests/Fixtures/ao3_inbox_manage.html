@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="csrf-inbox-123==">
+  <title>My Inbox</title>
+</head>
+<body class="logged-in">
+  <div id="main" class="inbox">
+    <h2 class="heading">My Inbox (12 comments, 3 unread)</h2>
+
+    <form id="inbox-form" class="inbox manage"
+          action="/users/tester/inbox?page=2&amp;filters%5Bread%5D=false&amp;filters%5Breplied_to%5D=all&amp;filters%5Bdate%5D=desc"
+          method="post">
+      <input type="hidden" name="_method" value="put">
+      <input type="hidden" name="authenticity_token" value="csrf-inbox-123==">
+      <input type="hidden" name="source" value="inbox">
+
+      <ul class="actions">
+        <li><input type="submit" name="read" value="Mark Read"></li>
+        <li><input type="submit" name="unread" value="Mark Unread"></li>
+        <li><input type="submit" name="delete" value="Delete From Inbox"></li>
+      </ul>
+
+      <ol class="comment index group">
+        <li class="unread comment group even" role="article" id="feedback_comment_9001">
+          <h4 class="heading byline">
+            <a href="/users/reader1/pseuds/ReaderOne">ReaderOne</a> on
+            <a href="/works/123456/comments/9001">Chapter 3 of My Great Fic</a>
+            <span class="posted datetime">3 days ago</span>
+          </h4>
+          <div class="icon">
+            <a href="/users/reader1/pseuds/ReaderOne"><img alt="" class="icon"
+              src="https://example.com/icons/1/standard.png"></a>
+          </div>
+          <blockquote class="userstuff"><p>Loved this chapter so much!</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="unread">Unread</span></li>
+            <li><a href="/comments/9001/reply">Reply</a></li>
+            <li><label for="inbox_comments_501"><input type="checkbox" name="inbox_comments[]" value="501" id="inbox_comments_501">Select</label></li>
+          </ul>
+        </li>
+        <li class="read comment group odd" role="article" id="feedback_comment_9002">
+          <h4 class="heading byline">
+            <span>Driveby Guest</span><span class="role"> (Guest)</span> on
+            <a href="/works/123456/comments/9002">My Great Fic</a>
+            <span class="posted datetime">5 days ago</span>
+          </h4>
+          <div class="icon"><span class="visitor icon"></span></div>
+          <blockquote class="userstuff"><p>Nice one.</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><span class="replied" title="replied to">&#10004;</span></li>
+            <li><label for="inbox_comments_502"><input type="checkbox" name="inbox_comments[]" value="502" id="inbox_comments_502">Select</label></li>
+          </ul>
+        </li>
+        <li class="read comment group even" role="article" id="feedback_comment_9003">
+          <h4 class="heading byline">
+            <a href="/users/tagfan/pseuds/tagfan">tagfan</a> on
+            <a href="/tags/Some%20Tag/comments/9003">Some Tag</a>
+            <span class="posted datetime">2 weeks ago</span>
+          </h4>
+          <div class="icon"></div>
+          <blockquote class="userstuff"><p>Tag comment body</p></blockquote>
+          <ul class="actions" role="menu">
+            <li><label for="inbox_comments_503"><input type="checkbox" name="inbox_comments[]" value="503" id="inbox_comments_503">Select</label></li>
+          </ul>
+        </li>
+      </ol>
+    </form>
+
+    <form class="narrow-hidden filters" id="inbox-filters" action="/users/tester/inbox" method="get">
+      <input type="hidden" name="locale" value="en">
+      <fieldset>
+        <h4>Filter by read</h4>
+        <label for="filters_read_all"><input type="radio" name="filters[read]" value="all" id="filters_read_all">Show all</label>
+        <label for="filters_read_false"><input type="radio" name="filters[read]" value="false" id="filters_read_false" checked="checked">Show unread</label>
+        <label for="filters_read_true"><input type="radio" name="filters[read]" value="true" id="filters_read_true">Show read</label>
+        <h4>Filter by replied to</h4>
+        <label for="filters_replied_to_all"><input type="radio" name="filters[replied_to]" value="all" id="filters_replied_to_all" checked="checked">Show all</label>
+        <label for="filters_replied_to_false"><input type="radio" name="filters[replied_to]" value="false" id="filters_replied_to_false">Show without replies</label>
+        <label for="filters_replied_to_true"><input type="radio" name="filters[replied_to]" value="true" id="filters_replied_to_true">Show replied to</label>
+        <h4>Sort by date</h4>
+        <label for="filters_date_desc"><input type="radio" name="filters[date]" value="desc" id="filters_date_desc" checked="checked">Newest first</label>
+        <label for="filters_date_asc"><input type="radio" name="filters[date]" value="asc" id="filters_date_asc">Oldest first</label>
+      </fieldset>
+      <input type="submit" name="commit" value="Filter">
+    </form>
+
+    <ol class="pagination actions">
+      <li>1</li><li><a href="?page=2">2</a></li><li><a href="?page=2">Next</a></li>
+    </ol>
+  </div>
+</body>
+</html>

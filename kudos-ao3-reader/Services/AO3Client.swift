@@ -604,11 +604,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// Fetches a work's refreshable metadata from its AO3 page. Callers must treat
     /// any thrown error as a non-destructive refresh failure; only this successful,
     /// fully parsed value should be merged into local `SavedWork` records.
-    func workMetadata(workID: Int) async throws -> AO3WorkMetadata {
+    func workMetadata(
+        workID: Int, request: URLRequest? = nil
+    ) async throws -> AO3WorkMetadata {
         guard let url = URL(string: "\(base)/works/\(workID)?view_adult=true") else {
             throw AO3Error.network("Bad work URL.")
         }
-        let html = try await getHTML(url)
+        let html: String
+        if var request {
+            request.url = url
+            html = try await authenticatedPageHTML(for: request)
+        } else {
+            html = try await getHTML(url)
+        }
         return try Self.parseWorkMetadata(from: html, workID: workID)
     }
 

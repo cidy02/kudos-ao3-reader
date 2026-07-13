@@ -58,6 +58,185 @@ struct AO3CommentsParseTests {
         #expect(page.totalComments == 47)
     }
 
+    @Test func parsesCanonicalWorkAuthorsForRoleBadges() throws {
+        let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_page"), page: 1)
+        #expect(page.workAuthors == ["Calytrix", "Second Pseud"])
+        #expect(page.workAuthorIdentities.map(\.username) == ["Calytrix", "CoAuthor"])
+        #expect(AO3CommentParticipantRole.resolve(
+            name: "A Different Posting Pseud",
+            isGuest: false,
+            commenterUsername: "CoAuthor",
+            currentUsername: "viewer",
+            workAuthors: page.workAuthors,
+            workAuthorUsernames: page.workAuthorIdentities.compactMap(\.username)
+        ) == .author)
+    }
+
+    @Test func ownAccountRoleOverridesWorkAuthorAndUsesUsernameNotPseud() {
+        #expect(AO3CommentParticipantRole.resolve(
+            name: "My Posting Pseud",
+            isGuest: false,
+            commenterUsername: "AccountName",
+            currentUsername: "accountname",
+            workAuthors: ["My Posting Pseud"]
+        ) == .me)
+        #expect(AO3CommentParticipantRole.resolve(
+            name: "My Posting Pseud",
+            isGuest: false,
+            commenterUsername: "DifferentAccount",
+            currentUsername: "AccountName",
+            workAuthors: ["My Posting Pseud"],
+            workAuthorUsernames: ["ActualCreator"]
+        ) == .user)
+        #expect(AO3CommentParticipantRole.resolve(
+            name: "My Posting Pseud",
+            isGuest: true,
+            workAuthors: ["My Posting Pseud"]
+        ) == .guest)
+    }
+
+    @Test func workMetadataBuildsAndNonDestructivelyEnrichesCommentsContext() throws {
+        let creator = try #require(AO3AuthorIdentity(
+            displayName: "Posting Pseud",
+            href: "/users/CreatorAccount/pseuds/Posting%20Pseud"
+        ))
+        let metadata = AO3WorkMetadata(
+            id: 42,
+            title: "Canonical Title",
+            authors: ["Posting Pseud"],
+            authorIdentities: [creator],
+            rating: "Teen And Up Audiences",
+            fandoms: ["Example Fandom"],
+            chapters: "3/5"
+        )
+        let sparse = AO3CommentsWorkContext(title: "Inbox Title", authors: [])
+        let enriched = sparse.merging(AO3CommentsWorkContext(metadata: metadata))
+
+        #expect(enriched.title == "Canonical Title")
+        #expect(enriched.authors == ["Posting Pseud"])
+        #expect(enriched.authorIdentities == [creator])
+        #expect(enriched.fandoms == ["Example Fandom"])
+        #expect(enriched.rating == "Teen And Up Audiences")
+        #expect(enriched.chapters == "3/5")
+        #expect(!enriched.needsSummaryEnrichment)
+
+        let sparseResponse = AO3CommentsWorkContext(
+            title: "", authors: [], fandoms: [], rating: "", chapters: ""
+        )
+        #expect(enriched.merging(sparseResponse) == enriched)
+
+        let anonymous = AO3CommentsWorkContext(
+            title: "Anonymous Work",
+            authors: [],
+            authorIdentities: [.nonNavigable("Anonymous", kind: .anonymous)],
+            fandoms: ["Example Fandom"],
+            rating: "Not Rated",
+            chapters: "1/1"
+        )
+        #expect(!anonymous.needsSummaryEnrichment)
+    }
+
+    @Test func parsesExplicitAnonymousCreatorWithoutTrustingGuestDisplayText() throws {
+        let page = try AO3Client.parseCommentsPage("""
+        <div id="comments_placeholder"><ol class="thread">
+          <li class="comment group" id="comment_7001">
+            <h4 class="heading byline">Anonymous Creator
+              <span class="posted datetime">12 Jul 2026</span>
+            </h4>
+            <blockquote class="userstuff"><p>Creator reply</p></blockquote>
+          </li>
+          <li class="comment group" id="comment_7002">
+            <h4 class="heading byline"><span>Anonymous Creator</span>
+              <span class="role"> (Guest)</span>
+            </h4>
+            <blockquote class="userstuff"><p>Guest reply</p></blockquote>
+          </li>
+        </ol></div>
+        """, page: 1)
+        #expect(page.comments[0].isAnonymousCreator)
+        #expect(!page.comments[0].isGuest)
+        #expect(page.comments[1].isGuest)
+        #expect(!page.comments[1].isAnonymousCreator)
+    }
+
+    @Test func standaloneThreadResolvesInboxParentOrSelfAndExactChapter() throws {
+        // `/comments/<id>` renders its thread directly under #main — there is no
+        // work-page `#comments_placeholder` wrapper.
+        let replyPage = try AO3Client.parseStandaloneCommentThread("""
+        <html><body><main id="main">
+          <h3 class="heading">Comment on <a href="/works/424242">A Work</a></h3>
+          <ol class="thread">
+            <li class="comment group" id="comment_1002">
+              <h4 class="heading byline"><a href="/users/R/pseuds/R">R</a></h4>
+              <blockquote class="userstuff"><p>A reply</p></blockquote>
+              <ul class="actions" id="navigation_for_comment_1002">
+                <li><a href="/comments/1001">Parent Thread</a></li>
+                <li><a href="/comments/1002">Thread</a></li>
+              </ul>
+            </li>
+          </ol>
+        </main></body></html>
+        """)
+        let rootPage = try AO3Client.parseStandaloneCommentThread("""
+        <html><body><main id="main">
+          <h3 class="heading">Comment on <a href="/works/424242">A Work</a></h3>
+          <ol class="thread">
+            <li class="comment group" id="comment_1001">
+              <h4 class="heading byline">
+                <span>Guest Root</span><span class="role"> (Guest)</span>
+                <span class="parent">on <a href="/works/424242/chapters/9003">Chapter 3</a></span>
+              </h4>
+              <blockquote class="userstuff"><p>Root</p></blockquote>
+              <ul class="actions"><li><a href="/comments/1001">Thread</a></li></ul>
+            </li>
+            <li><ol class="thread">
+              <li class="comment group" id="comment_1002">
+                <h4 class="heading byline"><a href="/users/R/pseuds/R">R</a></h4>
+                <blockquote class="userstuff"><p>A reply</p></blockquote>
+              </li>
+            </ol></li>
+          </ol>
+        </main></body></html>
+        """)
+        #expect(CommentsModel.focusedRootID(
+            notificationCommentID: 1001, in: rootPage
+        ) == 1001)
+        #expect(CommentsModel.focusedRootID(
+            notificationCommentID: 1002, in: replyPage
+        ) == 1001)
+        #expect(CommentsModel.focusedRootID(
+            notificationCommentID: 999_999, in: replyPage
+        ) == nil)
+
+        let chapter = try #require(CommentsModel.chapterRef(in: rootPage))
+        #expect(chapter.id == 9003)
+        #expect(chapter.position == 3)
+
+        var chapterPage = AO3CommentsPage(
+            comments: [AO3Comment(id: 5000, author: "Other", isGuest: false)],
+            currentPage: 1,
+            totalPages: 4,
+            totalComments: 30
+        )
+        chapterPage = CommentsModel.chapterPage(
+            chapterPage, including: rootPage, focusedRootID: 1001
+        )
+        #expect(chapterPage.comments.map(\.id) == [1001, 5000])
+        #expect(chapterPage.totalPages == 4)
+        #expect(chapterPage.totalComments == 30)
+
+        let withoutDuplicate = CommentsModel.chapterPage(
+            chapterPage, including: rootPage, focusedRootID: 1001
+        )
+        #expect(withoutDuplicate.comments.map(\.id) == [1001, 5000])
+    }
+
+    @Test func standaloneThreadParserFailsClosedWithoutAThread() {
+        #expect(throws: AO3Error.self) {
+            _ = try AO3Client.parseStandaloneCommentThread("<html><body>Unavailable</body></html>")
+        }
+    }
+
     /// Edit/Delete come straight from AO3's per-session markup — present on the
     /// session's own comment, absent everywhere else. The UI is gated on these.
     @Test func exposesOnlyActionsAO3Rendered() throws {

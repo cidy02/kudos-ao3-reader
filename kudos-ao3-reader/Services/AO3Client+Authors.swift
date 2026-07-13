@@ -624,6 +624,15 @@ actor AO3AuthorPageCache {
         entries.removeValue(forKey: key)
     }
 
+    /// Removes every query/page variant for one auth-scoped endpoint path. Inbox
+    /// writes change totals and row state across filters, so invalidating only the
+    /// currently visible URL can resurrect stale notifications on navigation.
+    func removePages(path: String, authenticationScope: String) {
+        entries = entries.filter { key, _ in
+            key.authenticationScope != authenticationScope || key.url.path != path
+        }
+    }
+
     func removeAuthorDashboards(username: String, authenticationScope: String) {
         entries = entries.filter { key, _ in
             guard key.authenticationScope == authenticationScope,

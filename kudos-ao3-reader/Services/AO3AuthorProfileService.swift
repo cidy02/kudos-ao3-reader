@@ -63,6 +63,19 @@ enum AO3AuthorProfileFetcher {
             authenticationScope: authenticationScope
         )
     }
+
+    static func invalidateInbox(
+        username: String,
+        authenticationScope: String
+    ) async {
+        guard let inboxPath = AO3Client.inboxURL(username: username, page: 1)?.path else {
+            return
+        }
+        await AO3AuthorPageCache.shared.removePages(
+            path: inboxPath,
+            authenticationScope: authenticationScope
+        )
+    }
 }
 
 @MainActor

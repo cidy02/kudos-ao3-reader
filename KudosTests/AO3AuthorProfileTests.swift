@@ -553,5 +553,29 @@ struct AO3AuthorProfileStateTests {
         #expect(await dashboardCache.value(for: signedDashboard, now: now) == nil)
         #expect(await dashboardCache.value(for: signedPseudDashboard, now: now) == nil)
         #expect(await dashboardCache.value(for: signedWorks, now: now) == "works")
+
+        let inboxCache = AO3AuthorPageCache(ttl: 60, staleTTL: 120, maxEntries: 8)
+        let inboxPageOne = AO3AuthorPageCache.Key(
+            url: try #require(AO3Client.inboxURL(username: "Avery_Archive", page: 1)),
+            authenticationScope: "signed-in:Avery_Archive"
+        )
+        let inboxPageTwo = AO3AuthorPageCache.Key(
+            url: try #require(AO3Client.inboxURL(username: "Avery_Archive", page: 2)),
+            authenticationScope: "signed-in:Avery_Archive"
+        )
+        let otherScopeInbox = AO3AuthorPageCache.Key(
+            url: inboxPageOne.url,
+            authenticationScope: "signed-in:Someone_Else"
+        )
+        await inboxCache.insert("page one", for: inboxPageOne, now: now)
+        await inboxCache.insert("page two", for: inboxPageTwo, now: now)
+        await inboxCache.insert("other account", for: otherScopeInbox, now: now)
+        await inboxCache.removePages(
+            path: inboxPageOne.url.path,
+            authenticationScope: "signed-in:Avery_Archive"
+        )
+        #expect(await inboxCache.value(for: inboxPageOne, now: now) == nil)
+        #expect(await inboxCache.value(for: inboxPageTwo, now: now) == nil)
+        #expect(await inboxCache.value(for: otherScopeInbox, now: now) == "other account")
     }
 }

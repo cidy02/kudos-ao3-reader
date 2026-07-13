@@ -19,6 +19,9 @@ struct CommentsView: View {
     /// to a `fullScreenCover` (see `commentsSheet(...)` below) — for long threads
     /// or composing, where the pop-up card feels cramped.
     var onRequestExpand: (() -> Void)?
+    /// Inbox can retain canonical work metadata learned by this navigation, so
+    /// returning to the feed corrects sibling badges and summary cards together.
+    var onResolveWorkContext: ((AO3CommentsWorkContext) -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -39,6 +42,7 @@ struct CommentsView: View {
     /// stack can't hide the comment being scrolled to.
     @State private var forceExpandedRootIDs: Set<Int> = []
     @State private var focusScrollTask: Task<Void, Never>?
+    @State private var didApplyInitialFocus = false
     /// Guards the deferred dismiss-then-push in `openAuthor` — without it, two
     /// fast taps on an avatar/byline each schedule their own 350ms push, landing
     /// the same profile twice on the nav stack.
@@ -46,14 +50,23 @@ struct CommentsView: View {
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
-        isModal: Bool = false, onRequestExpand: (() -> Void)? = nil
+        initialCommentID: Int? = nil, initialFocusesChapter: Bool = false,
+        initialReplyCommentID: Int? = nil,
+        isModal: Bool = false, onRequestExpand: (() -> Void)? = nil,
+        onResolveWorkContext: ((AO3CommentsWorkContext) -> Void)? = nil
     ) {
         self.workID = workID
         self.workContext = context
         self.isModal = isModal
         self.onRequestExpand = onRequestExpand
+        self.onResolveWorkContext = onResolveWorkContext
         _model = State(initialValue: CommentsModel(
-            workID: workID, workAuthors: context.authors, initialChapterPosition: initialChapterPosition
+            workID: workID,
+            workContext: context,
+            initialChapterPosition: initialChapterPosition,
+            initialCommentID: initialCommentID,
+            initialFocusesChapter: initialFocusesChapter,
+            initialReplyCommentID: initialReplyCommentID
         ))
     }
 
@@ -85,7 +98,16 @@ struct CommentsView: View {
             .hidesFloatingTabBar()
             .safeAreaInset(edge: .bottom) { writeCommentBar }
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
-            .task { await model.loadInitial(auth: auth) }
+            .task {
+                await model.loadInitial(auth: auth)
+                reportResolvedWorkContext()
+                await applyInitialFocusIfNeeded(proxy: proxy)
+            }
+            .onChange(of: model.workContext) { _, context in
+                if !context.authors.isEmpty || !context.authorIdentities.isEmpty {
+                    reportResolvedWorkContext()
+                }
+            }
             .onChange(of: model.scope) { _, scope in
                 // loadInitial sets scope/chapter itself and does the one load; skip
                 // the redundant reload its programmatic changes would otherwise trigger.
@@ -186,6 +208,11 @@ struct CommentsView: View {
         }
     }
 
+    private func reportResolvedWorkContext() {
+        guard !model.workAuthors.isEmpty || !model.workAuthorIdentities.isEmpty else { return }
+        onResolveWorkContext?(model.workContext)
+    }
+
     /// Scrolls to and briefly highlights `commentID` within the currently-loaded
     /// list ("Thread"/"Parent Thread" — the native equivalent of AO3's own
     /// isolated-thread page, no extra request since the target is always already
@@ -226,6 +253,17 @@ struct CommentsView: View {
         }
     }
 
+    /// The focused Inbox response changes the List from skeletons to a real
+    /// thread in the same update. Wait one short layout pass before scrolling so
+    /// `ScrollViewReader` can resolve the newly inserted root id reliably.
+    private func applyInitialFocusIfNeeded(proxy: ScrollViewProxy) async {
+        guard !didApplyInitialFocus, let commentID = model.initialFocusCommentID else { return }
+        didApplyInitialFocus = true
+        try? await Task.sleep(for: .milliseconds(80))
+        guard !Task.isCancelled else { return }
+        focusThread(commentID, proxy: proxy)
+    }
+
     private func threadHandlers(scrollProxy: ScrollViewProxy) -> CommentThreadHandlers {
         CommentThreadHandlers(
             onReply: { model.startComposer(replyingTo: $0) },
@@ -247,19 +285,19 @@ struct CommentsView: View {
     private var infoSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
-                Text(workContext.title)
+                Text(model.workContext.title)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !workContext.authors.isEmpty {
+                if !model.workAuthors.isEmpty {
                     // A real Label (not a hand-rolled HStack) so the icon lines up
                     // with the Fandoms Label right below it — a raw HStack can't
                     // reproduce Label's exact icon size/gap/baseline alignment.
                     Label {
                         AO3AuthorBylineView(
-                            names: workContext.authors,
-                            identities: workContext.authorIdentities,
+                            names: model.workAuthors,
+                            identities: model.workAuthorIdentities,
                             includesBy: false,
                             font: .subheadline,
                             onOpenRoute: openAuthor
@@ -270,19 +308,22 @@ struct CommentsView: View {
                     }
                 }
 
-                if !workContext.fandoms.isEmpty {
-                    Label(workContext.fandoms.joined(separator: ", "), systemImage: "books.vertical")
+                if !model.workContext.fandoms.isEmpty {
+                    Label(
+                        model.workContext.fandoms.joined(separator: ", "),
+                        systemImage: "books.vertical"
+                    )
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
 
                 FlowLayout(spacing: 10, rowSpacing: 6) {
-                    if !workContext.rating.isEmpty {
-                        WorkStatLabel(text: workContext.rating, symbol: "checkmark.shield")
+                    if !model.workContext.rating.isEmpty {
+                        WorkStatLabel(text: model.workContext.rating, symbol: "checkmark.shield")
                     }
-                    if !workContext.chapters.isEmpty {
-                        WorkStatLabel(text: workContext.chapters, symbol: "book")
+                    if !model.workContext.chapters.isEmpty {
+                        WorkStatLabel(text: model.workContext.chapters, symbol: "book")
                     }
                     if let total = model.page?.totalComments {
                         WorkStatLabel(text: total.formatted(), symbol: "bubble.left")
@@ -416,7 +457,12 @@ struct CommentsView: View {
                 } description: {
                     Text(message)
                 } actions: {
-                    Button("Try Again") { Task { await model.load(auth: auth, forceRefresh: true) } }
+                    Button("Try Again") {
+                        Task {
+                            await model.retryInitialLoad(auth: auth)
+                            await applyInitialFocusIfNeeded(proxy: scrollProxy)
+                        }
+                    }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -438,7 +484,8 @@ struct CommentsView: View {
                 ForEach(model.displayThreads) { comment in
                     CommentThreadRow(
                         comment: comment,
-                        workAuthors: workContext.authors,
+                        workAuthors: model.workAuthors,
+                        workAuthorIdentities: model.workAuthorIdentities,
                         showChapterBadge: model.scope == .all,
                         startsExpanded: forceExpandedRootIDs.contains(comment.id)
                     )

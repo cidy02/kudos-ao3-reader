@@ -1,12 +1,70 @@
 import Foundation
 
+/// The role chip shown beside a commenter's name across Comments and Inbox.
+/// "Author" means the creator of the work being discussed; "User" is any
+/// other registered AO3 account, and "Guest" is an unregistered commenter.
+nonisolated enum AO3CommentParticipantRole: String, Equatable, Sendable {
+    case me = "Me"
+    case author = "Author"
+    case user = "User"
+    case guest = "Guest"
+
+    static func resolve(
+        name: String,
+        isGuest: Bool,
+        isAnonymousCreator: Bool = false,
+        commenterUsername: String? = nil,
+        currentUsername: String? = nil,
+        workAuthors: [String],
+        workAuthorUsernames: [String] = []
+    ) -> AO3CommentParticipantRole {
+        // Compare AO3 account usernames, not display pseud names: a user may
+        // comment under any of their pseuds. "Me" intentionally wins over
+        // "Author" when the signed-in creator is viewing their own comment.
+        if let commenterUsername = normalized(commenterUsername),
+           let currentUsername = normalized(currentUsername),
+           commenterUsername.localizedCaseInsensitiveCompare(currentUsername) == .orderedSame {
+            return .me
+        }
+        // AO3 only emits this state when the work creator commented
+        // anonymously, so it remains an author even though no profile resolves.
+        if isAnonymousCreator { return .author }
+        // Guest display names and registered pseud names are not globally
+        // unique. A guest can never become Author via name-only fallback.
+        if isGuest { return .guest }
+        // When both sides expose canonical account identities, they are
+        // authoritative: two different accounts may use the same pseud name.
+        if let commenterUsername = normalized(commenterUsername),
+           !workAuthorUsernames.isEmpty {
+            return workAuthorUsernames.contains(where: {
+                $0.localizedCaseInsensitiveCompare(commenterUsername) == .orderedSame
+            }) ? .author : .user
+        }
+        if workAuthors.contains(where: {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .localizedCaseInsensitiveCompare(
+                        name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ) == .orderedSame
+            }) {
+            return .author
+        }
+        return .user
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
+    }
+}
+
 /// The AO3 work context shown atop the Comments screen: title, author, fandom,
 /// rating, chapters — the same fields Work Detail's own overview card shows.
 /// Deliberately no cover thumbnail: most AO3 works don't have one, and Work
 /// Detail's card omits it too, so this reuses that pattern rather than adding a
 /// new one. Convenience inits mirror WorkDetailView's local-vs-remote sourcing
 /// so every call site can build one from whatever it already has on hand.
-nonisolated struct AO3CommentsWorkContext: Equatable, Sendable {
+nonisolated struct AO3CommentsWorkContext: Hashable, Sendable {
     var title: String
     var authors: [String]
     var authorIdentities: [AO3AuthorIdentity]
@@ -54,6 +112,42 @@ nonisolated struct AO3CommentsWorkContext: Equatable, Sendable {
             fandoms: remote.fandoms, rating: remote.rating, chapters: remote.chapters
         )
     }
+
+    init(metadata: AO3WorkMetadata) {
+        self.init(
+            title: metadata.title,
+            authors: metadata.authors.isEmpty
+                ? metadata.authorIdentities.map(\.displayName) : metadata.authors,
+            authorIdentities: metadata.authorIdentities,
+            fandoms: metadata.fandoms,
+            rating: metadata.rating,
+            chapters: metadata.chapters
+        )
+    }
+
+    /// Keeps already-known fields when an authenticated work response is sparse
+    /// (for example a restricted work AO3 no longer exposes to this session).
+    /// Creator identity follows the same rule as the visible summary fields so a
+    /// failed optional enrichment can never make an existing Author badge worse.
+    func merging(_ newer: AO3CommentsWorkContext) -> AO3CommentsWorkContext {
+        AO3CommentsWorkContext(
+            title: newer.title.isEmpty ? title : newer.title,
+            authors: newer.authors.isEmpty ? authors : newer.authors,
+            authorIdentities: newer.authorIdentities.isEmpty
+                ? authorIdentities : newer.authorIdentities,
+            fandoms: newer.fandoms.isEmpty ? fandoms : newer.fandoms,
+            rating: newer.rating.isEmpty ? rating : newer.rating,
+            chapters: newer.chapters.isEmpty ? chapters : newer.chapters
+        )
+    }
+
+    /// The work-summary card's canonical fields. Creator-only cache entries are
+    /// useful for badges but still need one work-page enrichment before the card
+    /// can accurately show the same rating/fandom/chapter metadata as Work Detail.
+    var needsSummaryEnrichment: Bool {
+        let hasCreator = !authors.isEmpty || !authorIdentities.isEmpty
+        return title.isEmpty || !hasCreator || fandoms.isEmpty || rating.isEmpty || chapters.isEmpty
+    }
 }
 
 /// One AO3 comment, with its replies nested (AO3 renders threads as nested
@@ -64,6 +158,9 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
     let id: Int
     var author: String
     var isGuest: Bool
+    /// AO3 explicitly rendered its protected anonymous-creator identity. This
+    /// must not be inferred from a guest choosing the same display string.
+    var isAnonymousCreator = false
     /// Site-relative profile path (`/users/<name>/pseuds/<pseud>`) for registered
     /// commenters; nil for guests.
     var userPath: String?
@@ -201,6 +298,10 @@ nonisolated struct AO3CommentsPage: Equatable, Sendable {
     /// The work-level total from the page's stats, when present. Opportunistic —
     /// used to label chapters/counts without extra requests.
     var totalComments: Int?
+    /// Canonical work creators parsed from the work/chapter page surrounding the
+    /// comments. Standalone `/comments/<id>` pages omit this byline.
+    var workAuthors: [String] = []
+    var workAuthorIdentities: [AO3AuthorIdentity] = []
     /// When this page was fetched (drives the cache TTL + offline staleness label).
     var fetchedAt = Date()
 

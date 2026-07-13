@@ -78,6 +78,56 @@ struct FlattenedReply: Identifiable, Equatable {
     let depth: Int
 }
 
+/// Shared role chip for native Comments and Inbox notification cards.
+struct CommentParticipantBadge: View {
+    let role: AO3CommentParticipantRole
+
+    private var isEmphasized: Bool { role == .author || role == .me }
+
+    var body: some View {
+        Text(role.rawValue)
+            .font(.caption2.weight(isEmphasized ? .semibold : .regular))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(isEmphasized ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Capsule())
+            .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .fixedSize()
+            .layoutPriority(1)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        switch role {
+        case .me: "Your comment"
+        case .author: "Work author"
+        case .user, .guest: role.rawValue
+        }
+    }
+}
+
+/// The compact comment action used wherever a native Reply entry point appears.
+/// Its visible capsule stays tight while the control keeps a 44pt hit target.
+struct CommentReplyButton: View {
+    var accessibilityLabel = "Reply"
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Reply", systemImage: "arrowshape.turn.up.left")
+                .font(.caption.weight(.semibold))
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.quaternary, in: Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.primary)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
 // MARK: - Thread environment (highlight + actions)
 
 struct CommentThreadHandlers {
@@ -132,6 +182,7 @@ extension EnvironmentValues {
 struct CommentThreadRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
+    var workAuthorIdentities: [AO3AuthorIdentity] = []
     let showChapterBadge: Bool
     /// Forced open by "Thread"/"Parent Thread" focus, so a collapsed thread can
     /// never swallow the comment being scrolled to.
@@ -182,6 +233,7 @@ struct CommentThreadRow: View {
             SpinePostRow(
                 comment: comment,
                 workAuthors: workAuthors,
+                workAuthorIdentities: workAuthorIdentities,
                 showChapterBadge: showChapterBadge,
                 drawsSpineBelow: !replies.isEmpty && showsReplies
             )
@@ -205,6 +257,7 @@ struct CommentThreadRow: View {
                             NestedReplyCard(
                                 comment: item.comment,
                                 workAuthors: workAuthors,
+                                workAuthorIdentities: workAuthorIdentities,
                                 connectsToNext: index < shown.count - 1
                             )
                         }
@@ -278,6 +331,7 @@ struct CommentThreadRow: View {
 private struct NestedReplyCard: View {
     let comment: AO3Comment
     let workAuthors: [String]
+    let workAuthorIdentities: [AO3AuthorIdentity]
     /// True when another reply card follows in the (possibly chunked) visible
     /// stack. The last rendered card is a dead end: no rail below it.
     let connectsToNext: Bool
@@ -296,6 +350,7 @@ private struct NestedReplyCard: View {
         SpinePostRow(
             comment: comment,
             workAuthors: workAuthors,
+            workAuthorIdentities: workAuthorIdentities,
             showChapterBadge: false,
             drawsSpineBelow: connectsToNext
         )
@@ -349,6 +404,7 @@ private struct NestedReplyCard: View {
 private struct SpinePostRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
+    let workAuthorIdentities: [AO3AuthorIdentity]
     let showChapterBadge: Bool
     /// Also reserves `postSpacing` under the body and fills it with rail, so the
     /// next avatar sits on a continuous line.
@@ -358,8 +414,16 @@ private struct SpinePostRow: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentThreadHandlers) private var handlers
 
-    private var isByWorkAuthor: Bool {
-        workAuthors.contains { $0.caseInsensitiveCompare(comment.author) == .orderedSame }
+    private var participantRole: AO3CommentParticipantRole {
+        .resolve(
+            name: comment.author,
+            isGuest: comment.isGuest,
+            isAnonymousCreator: comment.isAnonymousCreator,
+            commenterUsername: commentIdentity?.username,
+            currentUsername: auth.username,
+            workAuthors: workAuthors,
+            workAuthorUsernames: workAuthorIdentities.compactMap(\.username)
+        )
     }
 
     var body: some View {
@@ -485,26 +549,7 @@ private struct SpinePostRow: View {
                 emphasized: true,
                 onOpenRoute: handlers.onOpenAuthor
             )
-            if isByWorkAuthor {
-                Text("Author")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(.tint, in: Capsule())
-                    .foregroundStyle(.white)
-                    .fixedSize()
-                    .layoutPriority(1)
-                    .accessibilityLabel("Work author")
-            } else if comment.isGuest {
-                Text("Guest")
-                    .font(.caption2)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-                    .layoutPriority(1)
-            }
+            CommentParticipantBadge(role: participantRole)
         }
     }
 
@@ -553,19 +598,10 @@ private struct SpinePostRow: View {
             if comment.canReply && auth.isLoggedIn {
                 // Match the overflow chip: quaternary capsule so Reply reads as
                 // the same class of control rather than faint borderless text.
-                Button { handlers.onReply(comment) } label: {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left")
-                        .font(.caption.weight(.semibold))
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.quaternary, in: Capsule())
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.primary)
-                .accessibilityLabel("Reply to \(comment.author)")
+                CommentReplyButton(
+                    accessibilityLabel: "Reply to \(comment.author)",
+                    action: { handlers.onReply(comment) }
+                )
             }
             Spacer(minLength: 0)
             Menu {
@@ -602,20 +638,26 @@ private struct SpinePostRow: View {
                     }
                 }
             } label: {
-                // Same chip language as Author/Guest: quaternary capsule, bold
-                // primary ellipsis (A/B vs the circular treatment).
-                Image(systemName: "ellipsis")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
+                CommentOverflowButtonLabel()
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
         }
+    }
+}
+
+/// Shared visual language for per-comment overflow actions in Comments and
+/// Inbox. The visible capsule stays compact while its hit target remains 44pt.
+struct CommentOverflowButtonLabel: View {
+    var body: some View {
+        Image(systemName: "ellipsis")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.quaternary, in: Capsule())
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
     }
 }
 
@@ -808,13 +850,26 @@ struct CommentAuthorAvatarButton: View {
 }
 
 struct CommentAvatar: View {
-    let comment: AO3Comment
+    private let isGuest: Bool
+    private let avatarURL: URL?
     var size: CGFloat = 40
 
     @State private var loadedImage: Image?
 
     private var imageURL: URL? {
-        comment.isGuest ? nil : comment.avatarURL
+        isGuest ? nil : avatarURL
+    }
+
+    init(comment: AO3Comment, size: CGFloat = 40) {
+        isGuest = comment.isGuest
+        avatarURL = comment.avatarURL
+        self.size = size
+    }
+
+    init(isGuest: Bool, avatarURL: URL?, size: CGFloat = 40) {
+        self.isGuest = isGuest
+        self.avatarURL = avatarURL
+        self.size = size
     }
 
     var body: some View {

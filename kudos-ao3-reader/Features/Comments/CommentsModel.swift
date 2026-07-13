@@ -24,8 +24,13 @@ final class CommentsModel {
     }
 
     let workID: Int
-    /// The work's author names, for the "Author" badge on their comments.
-    let workAuthors: [String]
+    /// Mutable because Inbox starts with a sparse notification summary and then
+    /// enriches it from the canonical work page. Keeping one value prevents the
+    /// Author badges and the work-summary card from observing different caches.
+    private(set) var workContext: AO3CommentsWorkContext
+
+    var workAuthors: [String] { workContext.authors }
+    var workAuthorIdentities: [AO3AuthorIdentity] { workContext.authorIdentities }
 
     private(set) var phase: Phase = .idle
     private(set) var page: AO3CommentsPage?
@@ -47,6 +52,15 @@ final class CommentsModel {
     /// A 1-based AO3 story-chapter to open on (from the reader's chapter-aware
     /// Comments button), applied once by `loadInitial`. nil = open on All.
     private var pendingInitialChapterPosition: Int?
+    /// A notification comment whose standalone AO3 thread should be loaded on
+    /// first open. This bounded lookup avoids scanning paginated work comments.
+    private var pendingInitialCommentID: Int?
+    private var pendingInitialFocusesChapter = false
+    /// Inbox's Reply control uses the same focused-thread load, then opens the
+    /// existing composer against this exact notification comment.
+    private var pendingInitialReplyCommentID: Int?
+    /// Consumed by `CommentsView` after the focused thread has materialized.
+    private(set) var initialFocusCommentID: Int?
     /// True only while `loadInitial` is programmatically setting scope/chapter, so
     /// the view's scope/selectedChapter `onChange` handlers skip the redundant loads
     /// they'd otherwise stack on the single load `loadInitial` already performs.
@@ -71,10 +85,20 @@ final class CommentsModel {
     /// Session-wide page cache; 5-minute TTL.
     private static let cache = CommentsPageCache()
 
-    init(workID: Int, workAuthors: [String], initialChapterPosition: Int? = nil) {
+    init(
+        workID: Int,
+        workContext: AO3CommentsWorkContext,
+        initialChapterPosition: Int? = nil,
+        initialCommentID: Int? = nil,
+        initialFocusesChapter: Bool = false,
+        initialReplyCommentID: Int? = nil
+    ) {
         self.workID = workID
-        self.workAuthors = workAuthors
+        self.workContext = workContext
         self.pendingInitialChapterPosition = initialChapterPosition
+        self.pendingInitialCommentID = initialCommentID
+        self.pendingInitialFocusesChapter = initialFocusesChapter
+        self.pendingInitialReplyCommentID = initialReplyCommentID
     }
 
     var chapterForRequests: Int? {
@@ -99,6 +123,11 @@ final class CommentsModel {
     /// (plus the small chapter index) — the `isApplyingInitialContext` flag keeps the
     /// view's onChange handlers from firing extra loads while scope/chapter are set.
     func loadInitial(auth: AO3AuthService) async {
+        if let commentID = pendingInitialCommentID {
+            await loadFocusedThread(commentID: commentID, auth: auth)
+            if phase == .loaded { pendingInitialCommentID = nil }
+            return
+        }
         guard let target = pendingInitialChapterPosition else {
             await load(auth: auth)
             return
@@ -117,6 +146,189 @@ final class CommentsModel {
         scope = .byChapter
         selectedChapter = ref
         await load(auth: auth)
+    }
+
+    /// Loads the exact Inbox notification thread. AO3's standalone comment page
+    /// tells us whether this is a reply via its rendered Parent Thread action; a
+    /// reply then costs one additional explicit GET for that root. This remains
+    /// bounded at two comment requests and never crawls work/chapter pages.
+    private func loadFocusedThread(commentID: Int, auth: AO3AuthService) async {
+        let requestedChapterPosition = pendingInitialChapterPosition
+        pendingInitialChapterPosition = nil
+        isApplyingInitialContext = true
+        defer { isApplyingInitialContext = false }
+
+        phase = .loading
+        do {
+            let targetPage = try await fetchStandaloneThread(commentID: commentID, auth: auth)
+            guard let rootID = Self.focusedRootID(
+                notificationCommentID: commentID, in: targetPage
+            ) else { throw AO3Error.parse }
+            let focusedPage: AO3CommentsPage
+            if rootID == commentID {
+                focusedPage = targetPage
+            } else {
+                focusedPage = try await fetchStandaloneThread(commentID: rootID, auth: auth)
+            }
+            guard focusedPage.comments.contains(where: { $0.contains(commentID: rootID) }) else {
+                throw AO3Error.parse
+            }
+
+            var presentedPage = focusedPage
+            if pendingInitialFocusesChapter {
+                var chapter = Self.chapterRef(in: focusedPage)
+                if chapter == nil, let requestedChapterPosition {
+                    await loadChaptersIfNeeded(auth: auth)
+                    chapter = chapterRef(forStoryPosition: requestedChapterPosition)
+                }
+                guard let chapter else { throw AO3Error.parse }
+                scope = .byChapter
+                selectedChapter = chapter
+
+                // The Chapter control promises the chapter's comments, not a
+                // mislabeled isolated-thread screen. Fetch its real first page,
+                // then include the explicitly requested root if it lives on a
+                // later AO3 page so focus remains deterministic without crawling.
+                guard let chapterPage = await fetchPage(
+                    1, auth: auth, forceRefresh: false
+                ) else { return }
+                presentedPage = Self.chapterPage(
+                    chapterPage,
+                    including: focusedPage,
+                    focusedRootID: rootID
+                )
+            }
+
+            absorbWorkAuthors(from: presentedPage)
+            // Standalone and chapter comment pages can supply creator identities,
+            // but not rating/fandom/chapter totals. This explicit Inbox navigation
+            // resolves any missing summary fields with at most one work request.
+            if workContext.needsSummaryEnrichment {
+                await enrichWorkContextIfNeeded(auth: auth)
+            }
+            if let replyID = pendingInitialReplyCommentID,
+               !presentedPage.comments.contains(where: { $0.contains(commentID: replyID) }) {
+                throw AO3Error.parse
+            }
+
+            page = presentedPage
+            rebuildDisplayThreads()
+            currentPageNumber = 1
+            initialFocusCommentID = rootID
+            isOffline = false
+            isFromCache = false
+            phase = .loaded
+            if let replyID = pendingInitialReplyCommentID,
+               let target = presentedPage.comments
+                   .flatMap(\.flattened)
+                   .first(where: { $0.id == replyID }) {
+                pendingInitialReplyCommentID = nil
+                startComposer(replyingTo: target)
+            }
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
+        } catch {
+            isOffline = Self.isOfflineError(error)
+            phase = .failed(Self.message(for: error))
+        }
+    }
+
+    /// Retry the screen's original intent. A focused Inbox failure must not turn
+    /// the Try Again button into an ordinary work-comments load.
+    func retryInitialLoad(auth: AO3AuthService) async {
+        if pendingInitialCommentID != nil {
+            await loadInitial(auth: auth)
+        } else {
+            await load(auth: auth, forceRefresh: true)
+        }
+    }
+
+    private func fetchStandaloneThread(
+        commentID: Int, auth: AO3AuthService
+    ) async throws -> AO3CommentsPage {
+        let url = AO3Client.commentThreadURL(commentID: commentID)
+        let request = try? auth.authenticatedRequest(for: url)
+        return try await AO3Client.shared.commentThreadPage(
+            commentID: commentID, request: request
+        )
+    }
+
+    private func enrichWorkContextIfNeeded(auth: AO3AuthService) async {
+        guard workContext.needsSummaryEnrichment,
+              let url = URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")
+        else { return }
+        do {
+            let request = try? auth.authenticatedRequest(for: url)
+            let metadata = try await AO3Client.shared.workMetadata(
+                workID: workID, request: request
+            )
+            workContext = workContext.merging(AO3CommentsWorkContext(metadata: metadata))
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
+        } catch {
+            // The comment thread itself is already loaded. Keep registered
+            // commenters as User instead of turning optional badge enrichment
+            // into a navigation failure.
+        }
+    }
+
+    private func absorbWorkAuthors(from page: AO3CommentsPage) {
+        guard !page.workAuthors.isEmpty else { return }
+        workContext = workContext.merging(AO3CommentsWorkContext(
+            title: "",
+            authors: page.workAuthors,
+            authorIdentities: page.workAuthorIdentities
+        ))
+    }
+
+    /// A standalone root comment on a multichapter work carries the exact AO3
+    /// chapter id in its byline, so the Chapter tap can enter By Chapter without
+    /// a separate `/navigate` lookup in the normal case.
+    nonisolated static func chapterRef(in page: AO3CommentsPage) -> AO3ChapterRef? {
+        guard let comment = page.comments
+            .flatMap(\.flattened)
+            .first(where: { $0.chapterID != nil }),
+              let chapterID = comment.chapterID
+        else { return nil }
+        let position = comment.chapterLabel?
+            .split(whereSeparator: { !$0.isNumber })
+            .compactMap { Int($0) }
+            .first ?? 1
+        return AO3ChapterRef(id: chapterID, position: position, title: "")
+    }
+
+    /// AO3's standalone reply renders a Parent Thread action pointing at the
+    /// owning root; top-level comments omit it and focus themselves.
+    nonisolated static func focusedRootID(
+        notificationCommentID: Int, in page: AO3CommentsPage
+    ) -> Int? {
+        guard let comment = page.comments
+            .flatMap(\.flattened)
+            .first(where: { $0.id == notificationCommentID })
+        else { return nil }
+        return comment.parentCommentID ?? comment.id
+    }
+
+    /// Preserves AO3's real chapter-page pagination while making the explicitly
+    /// requested thread visible. No insertion occurs when that root is already
+    /// present, so page-one content never duplicates it.
+    nonisolated static func chapterPage(
+        _ chapterPage: AO3CommentsPage,
+        including focusedPage: AO3CommentsPage,
+        focusedRootID: Int
+    ) -> AO3CommentsPage {
+        guard !chapterPage.comments.contains(where: { $0.contains(commentID: focusedRootID) }),
+              let root = focusedPage.comments.first(where: {
+                  $0.contains(commentID: focusedRootID)
+              })
+        else { return chapterPage }
+        var result = chapterPage
+        result.comments.insert(root, at: 0)
+        return result
     }
 
     /// Maps a 1-based AO3 story-chapter number (already normalized by the reader
@@ -159,6 +371,7 @@ final class CommentsModel {
         guard let fetched = await fetchPage(number, auth: auth, forceRefresh: forceRefresh) else {
             return
         }
+        absorbWorkAuthors(from: fetched)
         page = fetched
         rebuildDisplayThreads()
         currentPageNumber = fetched.currentPage
