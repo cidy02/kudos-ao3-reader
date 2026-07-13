@@ -64,4 +64,42 @@ struct AO3ClientPolicyTests {
         #expect(step.wait <= 0)
         #expect(step.nextAllowed == now.addingTimeInterval(0.6))
     }
+
+    // MARK: - Cookie isolation policy (A5-F1)
+
+    /// The anonymous session must be structurally unable to read or write cookies —
+    /// not merely start with an empty jar. `httpCookieStorage == nil` is what stops
+    /// a signed-in session's cookie (mirrored into `HTTPCookieStorage.shared` by
+    /// `AO3CookieBridge` for WebKit's benefit) from silently riding along on a
+    /// nominally anonymous search/browse/tag request.
+    @Test func anonymousSessionConfigurationDisablesCookieHandling() {
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        #expect(config.httpCookieStorage == nil)
+        #expect(config.httpShouldSetCookies == false)
+        #expect(config.httpCookieAcceptPolicy == .never)
+    }
+
+    /// The authenticated coalescer's key must differ per account (and between an
+    /// anonymous and an authenticated request to the same URL), so a mid-flight
+    /// account switch or logout/login can never hand one session's in-flight
+    /// response to another.
+    @Test func authCoalescingKeyDiffersAcrossAccountsAndAnonymousScope() {
+        let url = URL(string: "https://archiveofourown.org/works/1")!
+        let anonymous = AO3Client.authCoalescingKey(url: url, cookieHeader: nil)
+        let accountA = AO3Client.authCoalescingKey(url: url, cookieHeader: "_otwarchive_session=aaa")
+        let accountB = AO3Client.authCoalescingKey(url: url, cookieHeader: "_otwarchive_session=bbb")
+        #expect(anonymous != accountA)
+        #expect(anonymous != accountB)
+        #expect(accountA != accountB)
+    }
+
+    @Test func authCoalescingKeyDiffersAcrossURLsForTheSameAccount() {
+        let cookieHeader = "_otwarchive_session=aaa"
+        let workURL = URL(string: "https://archiveofourown.org/works/1")!
+        let bookmarksURL = URL(string: "https://archiveofourown.org/users/reader/bookmarks")!
+        #expect(
+            AO3Client.authCoalescingKey(url: workURL, cookieHeader: cookieHeader)
+                != AO3Client.authCoalescingKey(url: bookmarksURL, cookieHeader: cookieHeader)
+        )
+    }
 }

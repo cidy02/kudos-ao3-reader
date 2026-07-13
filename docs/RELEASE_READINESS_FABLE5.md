@@ -595,6 +595,82 @@ test: a synthetic cookie in the shared store must not appear on an anonymous
 request, while `authenticatedRequest` still carries it; a URL-only in-flight
 read must never bridge two auth scopes. Blocks release: **YES**.
 
+**Resolution (2026-07-13):** `AO3Client`'s session now runs with cookie
+handling disabled outright — `httpCookieStorage = nil`, `httpShouldSetCookies
+= false`, `httpCookieAcceptPolicy = .never` (extracted into
+`AO3Client.makeAnonymousSessionConfiguration()`, `AO3Client.swift:23-49`) —
+instead of the previous `URLSessionConfiguration.default`, whose default
+cookie storage is the same `HTTPCookieStorage.shared` jar `AO3CookieBridge`
+mirrored a signed-in session's cookies into. `AO3CookieBridge.install`/
+`clearAO3Cookies` (`AO3SessionVault.swift:295-321`) no longer touch
+`HTTPCookieStorage.shared` at all — only WebKit's own cookie store, which
+login/browse WebViews still need — since no isolated consumer of the shared
+jar remains. The authenticated coalescer's key (URL + Cookie header, now
+`AO3Client.authCoalescingKey(url:cookieHeader:)`, `AO3Client.swift:390-397`)
+already differed per account and is structurally separate from the anonymous
+URL-only coalescer, so once the ambient-cookie leak is closed neither
+coalescer can hand one account's response to another or to an anonymous
+caller. Regression coverage: `AO3ClientPolicyTests.
+anonymousSessionConfigurationDisablesCookieHandling` (session config proof),
+`authCoalescingKeyDiffersAcrossAccountsAndAnonymousScope` /
+`authCoalescingKeyDiffersAcrossURLsForTheSameAccount` (per-account/per-URL key
+uniqueness), and `AO3CookieBridgeTests.
+installNeverWritesToTheSharedHTTPCookieStorage` (a session cookie installed
+via the bridge never appears in `HTTPCookieStorage.shared`). `Scripts/
+verify.sh` invariants/lint green; full iOS suite (382 tests / 44 suites) and
+macOS build green. A5-F1 is closed. Not covered by this fix (unchanged,
+pre-existing incidental behavior): `AO3Client.downloadEPUB` has no
+authenticated variant, so any "registered users only" restricted work's EPUB
+download — which previously could succeed only by riding the same ambient
+cookie this fix removes — now behaves like any other anonymous request
+(likely fails/redirects) rather than silently succeeding; adding an explicit
+authenticated download path is a separate feature change outside this
+finding's file scope.
+
+**Follow-up fix (2026-07-13, same day, review-caught upgrade gap):** the
+initial resolution above removed both the write *and* the delete of
+`HTTPCookieStorage.shared` from `AO3CookieBridge`, but never cleaned up what
+a pre-fix build already wrote there. Repro of the gap: the pre-fix bridge
+mirrored every valid session cookie into that shared store while the hidden
+login always force-checks "remember me" (`AO3WebLoginCoordinator.swift:324`),
+so a device that was ever signed in before this fix landed had a
+long-lived, disk-persisted AO3 cookie sitting in `HTTPCookieStorage.shared`
+with nothing left in the app that would ever delete it. That cookie remained
+live-reachable: `AO3AuthorAvatar` (author-profile headers and the Account
+profile card) fetches via SwiftUI `AsyncImage`, which uses `URLSession.shared`
+— same default cookie storage — against guaranteed AO3-host URLs
+(`AO3Client+Authors.swift`'s `absoluteAO3URL` requires `AO3AuthorRoute.
+isAO3URL`), so the leaked cookie would keep authenticating those nominally
+anonymous avatar requests indefinitely, not just across the upgrade but for
+as long as the user stayed signed in and never hit an explicit logout.
+Correction: new `AO3CookieBridge.purgeLegacySharedCookieJar()`
+(`AO3SessionVault.swift`) sweeps any AO3-domain cookie out of
+`HTTPCookieStorage.shared`, regardless of sign-in state. Regression tests:
+`AO3CookieBridgeTests.purgeLegacySharedCookieJarRemovesOnlyAO3Cookies` (an
+AO3-domain cookie is purged, an unrelated-domain cookie is left alone).
+`Scripts/verify.sh` invariants/lint green; full iOS suite (384 tests / 44
+suites) and macOS build green.
+
+**Second follow-up (2026-07-13, review-caught ordering race):** the purge
+above was initially called from the top of `AO3AuthService.restoreSession()`
+(`AO3AuthService.swift:326-333`), which only ever runs from the root view's
+`.task`. SwiftUI gives no ordering guarantee between sibling `.task`s, so on
+the very first launch after upgrading from a pre-fix, signed-in build, a
+sibling avatar view's own `AsyncImage` fetch could in principle win the race
+against the root view's `restoreSession()` task and carry the still-present
+legacy cookie once before the purge ran. Correction: the call moved into
+`AO3AuthService.init()` instead — `auth` is constructed as the owning view's
+`@State` initializer (`ContentView.swift:23`), which SwiftUI always evaluates
+before that view's `body`, and therefore before any `.task` anywhere in the
+tree, can run; construction is strictly earlier than every `.task`, closing
+the race structurally rather than by scheduling luck. Regression test renamed
+and strengthened: `AO3AuthServiceTests.
+initPurgesLegacyCookieFromTheSharedHTTPCookieStorageBeforeAnyTaskCanRace` now
+asserts the legacy cookie is already gone immediately after construction —
+before `restoreSession()` is ever called — with a second assertion after
+`restoreSession()` for regression safety. `Scripts/verify.sh` invariants/lint
+green; full iOS suite (384 tests / 44 suites) and macOS build green.
+
 **A5-F2 — P1 Must Fix — MiniZip trusts archive-controlled paths and sizes,
 allowing sandbox path traversal plus malformed-archive crashes/exhaustion.**
 Files: `kudos-ao3-reader/Reading/MiniZip.swift:21-51, 65-107`, reached by
@@ -749,6 +825,40 @@ while it remains; surface a retryable error and clear the marker only after all
 stores are purged. Regression tests: a throwing delete must not produce the
 success notice or permit later restore, and the file-vault delete must still be
 attempted when Keychain deletion throws. Blocks release: **YES**.
+
+**Resolution (2026-07-13):** `CascadingAO3SessionVault.delete()`
+(`AO3SessionVault.swift:218-292`) now always attempts both the Keychain and
+file deletes — the old control flow re-threw a real Keychain failure before
+ever calling `file.delete()`; both are protocol-typed (`AO3SessionPersisting`)
+so tests can inject a throwing double for either store. `AO3AuthService`
+gained a non-secret `AO3SessionRemovalTracking` flag
+(`UserDefaultsAO3SessionRemovalTracker`, `AO3SessionVault.swift:39-64`):
+`logout()` (`AO3AuthService.swift:414-441`) always clears the soft/live state
+(in-memory session, WebKit/HTTP cookies, username hint) regardless of the
+durable delete's outcome, but only reports "Logged out of AO3." and clears
+the pending flag when `vault.delete()` actually succeeds; on failure it marks
+removal pending and surfaces a retryable failure notice instead
+(`PrivacyDataView.swift` now shows `auth.noticeMessage` under the AO3-session
+footer so the failure is visible where the user tapped Remove AO3 Session).
+`restoreSession()` (`AO3AuthService.swift:326-367`) checks the pending flag
+before ever calling `vault.load()`: while pending it retries the delete and
+unconditionally reports `.signedOut` either way, so a still-present session
+can never be restored on relaunch no matter what it contains. The same
+truthful-removal semantics (no `try?` suppression) now apply to
+`clearStoredSession()`'s expiration-cleanup path
+(`AO3AuthService.swift:682-701`), and a fresh successful login/save clears
+any stale pending flag (`accept(_:)`, `AO3AuthService.swift:574-593`).
+Regression coverage: `CascadingAO3SessionVaultTests` (file delete still
+attempted when Keychain throws, missing-entitlement ignored, either-store
+failure surfaced) and new `AO3AuthServiceTests` cases —
+`logoutSurfacesRetryableFailureInsteadOfClaimingSuccess`,
+`pendingRemovalRefusesToRestoreStaleSessionOnRelaunch`,
+`pendingRemovalRetrySucceedsAndClearsPendingState` — plus the existing
+`logoutClearsPersistedAndWebSessions` unchanged. `Scripts/verify.sh`
+invariants/lint green; full iOS suite (382 tests / 44 suites) and macOS build
+green. A5-F4 is closed. Signed-device Keychain verification (a locked/
+unavailable real Keychain producing a genuine non-missing-entitlement
+failure) remains a manual gate, as instructed.
 
 **A5-F5 — P2 Should Fix — Production logs explicitly publish reading/search
 identifiers and local paths.**
@@ -1925,14 +2035,15 @@ before a READY verdict.
 
 **NOT READY**
 
-There are **0 open P0, 8 open P1, 30 open P2, and 7 open P3 findings**. The
+There are **0 open P0, 6 open P1, 30 open P2, and 7 open P3 findings**. The
 frozen candidate builds, tests, archives unsigned, and launches as a Release
 simulator app, but it has reachable data-loss/cross-account/privacy/security,
 reader-progress, duplicate-write, and license-compliance blockers. Required
 signed-device, live-write, accessibility, sync-recovery, upgrade, and critical
-reader gates are also incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag
-merge), A5-F2 (MiniZip hardening), and A5-F3 (backup EPUB validation) are
-resolved P1s and are not included in the open count.
+reader gates are also incomplete. A1-F1 (unfrozen candidate), A2-F1
+(stale-tag merge), A5-F1 (cookie isolation), A5-F2 (MiniZip hardening), A5-F3
+(backup EPUB validation), and A5-F4 (truthful session removal) are resolved
+P1s and are not included in the open count.
 
 ## Area Summary
 
@@ -1942,7 +2053,7 @@ resolved P1s and are not included in the open count.
 | 2. Persistence/sync | COMPLETE | 1 resolved P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | EPUB overwrite test debt (A2-F2, P3) |
 | 3. Networking/parser | COMPLETE | 1 partially-remediated P2; T-91 parser findings cross-reference Area 4/6 | Policy/parser tests and entry-point enumeration | Minimal final live-AO3 matrix NOT RUN | Author-profile avatar still bypasses paced image pipeline; parser drift remains fixture-dependent |
 | 4. Concurrency/lifecycle | COMPLETE | 3 cross-cutting T-91 P1 | Static task/state trace; normal suite green | Navigation/logout race exercise NOT RUN | Duplicate reply and cross-account state races |
-| 5. Auth/security/privacy | COMPLETE | 2 resolved P1; 2 P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Cookie isolation (A5-F1), session removal (A5-F4), logging/host trust |
+| 5. Auth/security/privacy | COMPLETE | 4 resolved P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Logging/host trust (A5-F5/A5-F7, both P2) |
 | 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
 | 7. Reader/EPUB | COMPLETE | 2 P1; 6 P2; 2 P3 | 82 focused reader/EPUB tests plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | EPUB deletion at 99%, macOS position loss, active-content/path/TOC defects |
 | 8. Performance | COMPLETE | 3 P2 | Synthetic 256 MiB memory probe; algorithm/cache inspection | Large-store Instruments/device thermal NOT RUN | Whole-store recomputation, all-EPUB backup memory, unbounded Comments cache |
@@ -1953,27 +2064,28 @@ resolved P1s and are not included in the open count.
 
 ### Release blockers (P1 Must Fix)
 
-1. **A5-F1:** nominally anonymous AO3 reads inherit shared authenticated cookies.
-2. **A5-F4:** failed Keychain deletion is suppressed while UI reports logout and
-   the old session can return after relaunch.
-3. **A7-F1:** iOS treats 99% as finished and frees the EPUB before true completion.
-4. **A7-F2:** macOS neither records nor restores intra-chapter reading position.
-5. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
+1. **A7-F1:** iOS treats 99% as finished and frees the EPUB before true completion.
+2. **A7-F2:** macOS neither records nor restores intra-chapter reading position.
+3. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
    duplicate reply when the real parent thread is on another comments page.
-6. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
+4. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
    guard and permits the same ambiguous reply again.
-7. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
+5. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
    overwrite the new account screen with prior-account private Inbox data.
-8. **A10-F1:** standalone app distributions omit required GPL and dependency
+6. **A10-F1:** standalone app distributions omit required GPL and dependency
    license notices.
 
 **Resolved blockers:** A1-F1 was closed by freezing T-91 as `c1bf211` and
 re-running the canonical suite. A2-F1 (stale-archive tag clobber), A5-F2
 (MiniZip archive-input hardening), and A5-F3 (backup EPUB validation) were
-closed together (2026-07-12) by the backup/archive-integrity hardening pass —
-see the resolution notes under each finding above for files, tests, and
-verification evidence. None should be reopened without a code or baseline
-change that reintroduces the underlying gap.
+closed together (2026-07-12) by the backup/archive-integrity hardening pass.
+A5-F1 (ambient anonymous-session cookies) and A5-F4 (untruthful
+Keychain-deletion logout) were closed together (2026-07-13) by the
+auth-isolation-and-logout hardening pass. Both passes were developed as
+sibling branches from the same pre-fix baseline and are combined in this
+merge — see the resolution notes under each finding above for files, tests,
+and verification evidence. None should be reopened without a code or
+baseline change that reintroduces the underlying gap.
 
 ### Open P2 Should Fix findings
 

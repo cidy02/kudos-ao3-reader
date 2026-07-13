@@ -250,6 +250,7 @@ final class AO3AuthService {
     private let cookieManager: AO3CookieManaging
     private let sessionHintStore: AO3SessionHintPersisting
     private let postingPseudStore: AO3PostingPseudPersisting
+    private let removalTracker: AO3SessionRemovalTracking
     private var currentSession: AO3Session?
     private var didRestore = false
 
@@ -259,7 +260,8 @@ final class AO3AuthService {
         loginPerformer: AO3LoginPerforming? = nil,
         cookieManager: AO3CookieManaging? = nil,
         sessionHintStore: AO3SessionHintPersisting? = nil,
-        postingPseudStore: AO3PostingPseudPersisting? = nil
+        postingPseudStore: AO3PostingPseudPersisting? = nil,
+        removalTracker: AO3SessionRemovalTracking? = nil
     ) {
         // Cascading vault: Keychain when available, plus an app-container file so
         // Simulator / unsigned builds still restore after relaunch (WebKit cookie
@@ -270,6 +272,19 @@ final class AO3AuthService {
         self.cookieManager = cookieManager ?? LiveAO3CookieManager()
         self.sessionHintStore = sessionHintStore ?? UserDefaultsAO3SessionHintStore()
         self.postingPseudStore = postingPseudStore ?? UserDefaultsAO3PostingPseudStore()
+        self.removalTracker = removalTracker ?? UserDefaultsAO3SessionRemovalTracker()
+
+        // Legacy-jar cleanup (A5-F1 upgrade gap), deliberately here and not in
+        // `restoreSession()`: that method only runs from the root view's `.task`,
+        // and SwiftUI gives no ordering guarantee between sibling `.task`s — an
+        // avatar view's own `AsyncImage` fetch (same default `URLSession.shared`
+        // cookie jar) could otherwise win the race and carry a pre-fix build's
+        // leftover AO3 cookie once, on the very first launch after upgrading. This
+        // service is constructed as the owning view's `@State` initializer, which
+        // SwiftUI always evaluates before that view's `body` — and therefore before
+        // any `.task` anywhere in the tree — can run, so purging here is strictly
+        // earlier than any request that could use the leak.
+        AO3CookieBridge.purgeLegacySharedCookieJar()
     }
 
     // MARK: Posting pseud ("Posting As")
@@ -327,6 +342,16 @@ final class AO3AuthService {
         guard !didRestore else { return }
         didRestore = true
         status = .restoring
+
+        if removalTracker.isRemovalPending {
+            // A previous logout/expiry couldn't fully clear the durable store (A5-F4).
+            // Retry it now, but refuse to restore anything this launch either way —
+            // the saved session must never come back from the dead just because it's
+            // still readable. Cookies/hint were already cleared when this was marked.
+            await retryPendingRemoval()
+            status = .signedOut
+            return
+        }
 
         do {
             if let saved = try vault.load(), saved.hasSessionCookie {
@@ -402,17 +427,29 @@ final class AO3AuthService {
         currentSession = nil
         errorMessage = nil
         fallbackMessage = nil
-        do {
-            try vault.delete()
-        } catch {
-            Log.auth.error("Could not delete the saved AO3 session: \(error.localizedDescription, privacy: .public)")
-        }
+        // Soft/live state is always cleared, regardless of whether the durable delete
+        // below succeeds: no in-memory session, no WebKit cookie, no username hint
+        // survives a logout tap, so nothing in this running instance can act
+        // authenticated even if the Keychain/file blob itself proves undeletable.
         sessionHintStore.deleteUsername()
         await cookieManager.clear()
         status = .signedOut
         sessionHealth = .unknown
-        noticeMessage = "Logged out of AO3."
-        Log.auth.info("Cleared the local AO3 session")
+
+        do {
+            try vault.delete()
+            removalTracker.clearRemovalPending()
+            noticeMessage = "Logged out of AO3."
+            Log.auth.info("Cleared the local AO3 session")
+        } catch {
+            // A5-F4: never report success while a durable store might still hold a
+            // reusable session. Mark it pending so a relaunch refuses to restore it
+            // instead of silently signing the user back in.
+            removalTracker.markRemovalPending()
+            noticeMessage = "Signed out here, but this device couldn't fully remove the saved AO3 " +
+                "session. It won't be restored automatically — we'll keep retrying."
+            Log.auth.error("Could not delete the saved AO3 session: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Called by future authenticated feature clients when AO3 redirects to its
@@ -549,10 +586,15 @@ final class AO3AuthService {
     private func accept(_ session: AO3Session) async {
         do {
             try vault.save(session)
+            // A fresh, successful save is the durable store's new source of truth —
+            // any removal that had been left pending from an earlier failed
+            // logout/expiry no longer describes what's on disk.
+            removalTracker.clearRemovalPending()
         } catch {
             if isMissingKeychainEntitlement(error) {
                 // Production uses CascadingAO3SessionVault (file fallback), so
                 // this path is mainly for tests that inject a Keychain-only vault.
+                removalTracker.clearRemovalPending()
                 await finishAccepting(session)
                 Log.auth.notice(
                     "Keychain is unavailable; retained the AO3 session without Keychain"
@@ -652,12 +694,45 @@ final class AO3AuthService {
 
     private func clearStoredSession() async {
         currentSession = nil
-        try? vault.delete()
+        do {
+            try vault.delete()
+            removalTracker.clearRemovalPending()
+        } catch {
+            // Same truthful-removal semantics as logout() (A5-F4): a failed delete
+            // here must not be silently swallowed either, or the expired session's
+            // durable copy could restore itself on the next launch.
+            removalTracker.markRemovalPending()
+            Log.auth.error(
+                "Could not delete the expired AO3 session: \(error.localizedDescription, privacy: .public)"
+            )
+        }
         sessionHintStore.deleteUsername()
         await cookieManager.clear()
         status = .signedOut
         // Bare cleared state is "signed out / unknown"; callers meaning "expired"
         // set that explicitly right after this returns.
         sessionHealth = .unknown
+    }
+
+    /// Retries a durable-store deletion that a previous logout/expiry couldn't
+    /// complete. Called once at the top of `restoreSession()` (A5-F4): while pending,
+    /// the saved session must never be loaded, no matter what it contains — even if
+    /// this retry fails again, the vault is left untouched for the rest of this
+    /// launch and normal restore is skipped rather than risking a stale sign-in.
+    @discardableResult
+    private func retryPendingRemoval() async -> Bool {
+        do {
+            try vault.delete()
+            removalTracker.clearRemovalPending()
+            Log.auth.info("Retried and cleared a pending AO3 session removal")
+            return true
+        } catch {
+            Log.auth.error(
+                "AO3 session removal is still pending: \(error.localizedDescription, privacy: .public)"
+            )
+            noticeMessage = "Couldn't finish removing a previous AO3 session from this device. " +
+                "We'll keep retrying; you are not signed in."
+            return false
+        }
     }
 }
