@@ -374,13 +374,23 @@ enum ReaderStylesheet {
     /// given mode. In paged mode it builds CSS columns (`columns` per screen) and
     /// exposes `readerStep`/`readerLast` so the host can turn pages and detect
     /// chapter boundaries.
+    ///
+    /// The script also maintains `window.__fraction` — the normalized semantic
+    /// position (content fraction at the viewport's leading edge) shared by
+    /// both modes — reports it to the host (rAF-throttled in scrolled mode),
+    /// re-derives the layout from it on mode switches and resizes so the
+    /// reading spot survives reflow, and exposes `readerRestore(fraction)` for
+    /// the host to restore a persisted position once layout is ready. Every
+    /// message posted to the host carries `generation` so stale callbacks from
+    /// an old chapter can be dropped (`ReaderBridgeMessage`).
     static func layoutScript( // swiftlint:disable:this function_body_length
         css: String,
         mode: ReadingMode,
         columns: Int,
         margin: Int = 28,
         safeTop: Int = 0,
-        safeBottom: Int = 0
+        safeBottom: Int = 0,
+        generation: Int = 0
     ) -> String {
         let base64 = Data(css.utf8).base64EncodedString()
         let modeJS = mode == .paged ? "paged" : "scroll"
@@ -423,7 +433,7 @@ enum ReaderStylesheet {
                 }
             })();
 
-            var MODE = '\(modeJS)', COLS = \(columns), M = \(margin);
+            var MODE = '\(modeJS)', COLS = \(columns), M = \(margin), GEN = \(generation);
             // Fixed device safe-area insets (notch / home indicator), passed from the
             // host. Constant regardless of the chrome, so the content never shifts when
             // the nav bar or chapter pill toggle (unlike CSS env(), which grows with
@@ -442,14 +452,17 @@ enum ReaderStylesheet {
             function count() { return Math.max(1, Math.round(b.scrollWidth / window.innerWidth)); }
             function post() {
                 var info = (MODE === 'paged')
-                    ? { mode: 'paged', page: (window.__page || 0) + 1, total: count() }
-                    : { mode: 'scroll' };
+                    ? { mode: 'paged', page: (window.__page || 0) + 1, total: count(), gen: GEN }
+                    : { mode: 'scroll', gen: GEN };
                 try { window.webkit.messageHandlers.reader.postMessage(info); } catch (e) {}
             }
             function relayout(animate) {
                 var W = window.innerWidth, total = count();
                 if (window.__page > total - 1) window.__page = total - 1;
                 if (window.__page < 0) window.__page = 0;
+                // Keep the semantic position in step with the page so mode
+                // switches / reflows can re-derive the layout from it.
+                window.__fraction = (window.__page || 0) / total;
                 // Page by scrolling the column container, NOT by translating it.
                 // A `translateX(-page*W)` on a body whose scrollWidth grows with the
                 // chapter length builds an enormous compositing layer; past a certain
@@ -492,7 +505,10 @@ enum ReaderStylesheet {
                 b.style.columnWidth = ((W - 2 * M * COLS) / COLS) + 'px';
                 b.style.columnFill = 'auto';
                 b.style.overflow = 'hidden';
-                if (typeof window.__page !== 'number') window.__page = 0;
+                // Re-derive the page from the semantic fraction so mode
+                // switches, style reflows, and resizes keep the reading spot
+                // instead of resetting (or drifting) it.
+                window.__page = pageForFraction(window.__fraction || 0, count());
                 relayout(false);
             }
             function applyScroll() {
@@ -507,10 +523,38 @@ enum ReaderStylesheet {
                 // content doesn't shift when the chrome toggles.
                 b.style.paddingTop = 'calc(1.4em + ' + ST + 'px)';
                 b.style.paddingBottom = 'calc(7em + ' + SB + 'px)';
+                // Restore the semantic fraction as a scroll offset, so mode
+                // switches and resizes land on the same content.
+                scrollToFraction(window.__fraction || 0);
                 post();
+            }
+            // Mirrors ReaderProgressBridge.pageIndex — keep the formulas identical.
+            // Floors so a restore lands at or before the saved spot; the 1e-9
+            // epsilon only absorbs float error in page/total round-trips.
+            function pageForFraction(f, total) {
+                f = Math.max(0, Math.min(1, f));
+                return Math.min(total - 1, Math.max(0, Math.floor(f * total + 1e-9)));
+            }
+            function scrollToFraction(f) {
+                var sh = de.scrollHeight;
+                if (sh <= 0) return;
+                f = Math.max(0, Math.min(1, f));
+                window.scrollTo(0, Math.max(0, Math.min(f * sh, sh - window.innerHeight)));
             }
 
             window.readerApply = function() { if (MODE === 'paged') applyPaged(); else applyScroll(); };
+            // Host-driven restore of a persisted position, run after layout is
+            // ready (post-inject on chapter load).
+            window.readerRestore = function(f) {
+                f = Math.max(0, Math.min(1, f || 0));
+                window.__fraction = f;
+                if (MODE === 'paged') {
+                    window.__page = pageForFraction(f, count());
+                    relayout(false);
+                } else {
+                    scrollToFraction(f);
+                }
+            };
             window.readerStep = function(d) {
                 if (MODE !== 'paged') return 'na';
                 var total = count(), p = (window.__page || 0) + d;
@@ -522,19 +566,38 @@ enum ReaderStylesheet {
 
             if (!window.__readerResize) {
                 window.__readerResize = true;
-                window.addEventListener('resize', function() {
-                    if (window.__mode === 'paged') window.readerApply();
-                });
+                // Reapply in both modes: the layout re-derives the page /
+                // scroll offset from the semantic fraction, so a resize or
+                // reflow preserves the reading spot instead of drifting.
+                window.addEventListener('resize', function() { window.readerApply(); });
             }
             if (!window.__readerScroll) {
                 window.__readerScroll = true;
                 window.addEventListener('scroll', function() {
                     if (window.__mode !== 'scroll') return;
                     var doc = document.documentElement;
+                    // Track + report the semantic position (rAF-throttled, like
+                    // the scroll event stream itself). The host debounces its
+                    // own persistence, so this only needs to be current.
+                    if (doc.scrollHeight > 0) {
+                        window.__fraction = Math.max(0, Math.min(1, window.scrollY / doc.scrollHeight));
+                        if (!window.__progressTick) {
+                            window.__progressTick = true;
+                            window.requestAnimationFrame(function() {
+                                window.__progressTick = false;
+                                try {
+                                    window.webkit.messageHandlers.reader.postMessage(
+                                        { event: 'progress', fraction: window.__fraction, gen: GEN });
+                                } catch (e) {}
+                            });
+                        }
+                    }
                     var atBottom = (window.innerHeight + window.scrollY) >= (doc.scrollHeight - 4);
                     if (atBottom && !window.__atBottom) {
                         window.__atBottom = true;
-                        try { window.webkit.messageHandlers.reader.postMessage({ event: 'bottom' }); } catch (e) {}
+                        try {
+                            window.webkit.messageHandlers.reader.postMessage({ event: 'bottom', gen: GEN });
+                        } catch (e) {}
                     } else if (!atBottom) {
                         window.__atBottom = false;
                     }
@@ -546,7 +609,7 @@ enum ReaderStylesheet {
                     if (window.__mode !== 'paged') return;
                     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === ' ') {
                         e.preventDefault();
-                        try { window.webkit.messageHandlers.reader.postMessage({ key: e.key }); } catch (_) {}
+                        try { window.webkit.messageHandlers.reader.postMessage({ key: e.key, gen: GEN }); } catch (_) {}
                     }
                 });
             }

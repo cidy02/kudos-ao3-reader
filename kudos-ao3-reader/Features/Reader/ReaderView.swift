@@ -37,6 +37,9 @@ struct ReaderView: View {
     @AppStorage("readerJustify") private var justifyText = false
 
     @State private var controller = ReaderController()
+    /// Native half of the intra-chapter position bridge: current/remembered
+    /// fractions per chapter plus the SwiftData write debounce (A7-F2).
+    @State private var progressBridge = ReaderProgressBridge()
     @State private var document: EPUBDocument?
     /// `document?.chapters` reconciled against the full spine into AO3-aware
     /// sections (Preface/Summary/Chapter/Afterword). Built once per `load()`
@@ -242,16 +245,31 @@ struct ReaderView: View {
             .task(id: work.id) { await load() }
             .onAppear(perform: wireController)
             .onDisappear {
+                // Flush the exact final position so resume lands precisely, even if
+                // the last scroll's debounce window hadn't elapsed before we left.
+                flushProgress()
+                try? modelContext.save()
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 // Leaving the reader closes its panel so it doesn't linger as state.
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
                     router.panel = .none
                 }
             }
+            // `onDisappear` doesn't run when the whole app quits with the reader
+            // open — flush on termination so that close path can't lose position.
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSApplication.willTerminateNotification)) { _ in
+                flushProgress()
+                try? modelContext.save()
+            }
             .onChange(of: currentIndex) { _, _ in
                 if !isLoading { loadCurrentChapter() }
             }
             .onChange(of: renderToken) { _, _ in
+                // Mode/style/theme reflow: persist the position first; the layout
+                // script then re-derives the page / scroll offset from the same
+                // fraction, so the reading spot survives the transition.
+                flushProgress()
                 configureController()
             }
     }
@@ -474,7 +492,10 @@ struct ReaderView: View {
     private func jump(to index: Int) {
         landNextChapterOnLastPage = false
         if index == currentIndex {
-            loadCurrentChapter() // same chapter: reset to first page
+            // Same chapter: an explicit re-pick means "back to the start", so
+            // drop its remembered position before reloading.
+            progressBridge.forget(spine: index)
+            loadCurrentChapter()
         } else {
             currentIndex = index // triggers load via onChange
         }
@@ -517,6 +538,13 @@ struct ReaderView: View {
         // native screen where one exists; everything else opens the AO3 web view.
         controller.onOpenExternalURL = { url in
             router.openAO3Link(url)
+        }
+        // Intra-chapter position stream (already stale-gated by the controller):
+        // track it in memory on every report, write it through only on the
+        // bridge's debounce so scrolling doesn't hammer SwiftData.
+        controller.onProgressFraction = { fraction in
+            progressBridge.recordProgress(fraction)
+            persistProgressIfDue()
         }
         #if os(iOS)
         controller.onTap = { toggleChrome() }
@@ -562,6 +590,9 @@ struct ReaderView: View {
             )
             readRoot = directory
             currentIndex = min(max(work.lastSpineIndex, 0), parsed.spineURLs.count - 1)
+            // Seed the persisted intra-chapter position so reopening restores
+            // the exact saved spot in the saved chapter.
+            progressBridge.seed(spine: currentIndex, fraction: work.lastScrollFraction)
             Log.epub.info("Opened EPUB: \(parsed.chapters.count) chapters")
         } catch {
             document = nil
@@ -574,16 +605,48 @@ struct ReaderView: View {
         loadCurrentChapter()
     }
 
-    private func loadCurrentChapter() {
+}
+
+// MARK: Intra-chapter position persistence
+
+private extension ReaderView {
+    func loadCurrentChapter() {
         guard let document, let readRoot, document.spineURLs.indices.contains(currentIndex) else { return }
+        // Revisits restore the chapter's remembered position; first visits (and
+        // explicit same-chapter re-picks) start at the top. Backward paging
+        // (`landOnLast`) keeps its last-page landing for spatial continuity.
+        let restore = progressBridge.beginChapter(spine: currentIndex)
         controller.load(
             document.spineURLs[currentIndex],
             readAccess: readRoot,
-            landOnLast: landNextChapterOnLastPage
+            landOnLast: landNextChapterOnLastPage,
+            restoreFraction: restore > 0 ? restore : nil
         )
+        // Chapter transitions persist the position pair together, so the saved
+        // spine + fraction always describe the same chapter.
         work.lastSpineIndex = currentIndex
+        work.lastScrollFraction = restore
         work.markProgressModified()
+        progressBridge.markPersisted(restore)
         landNextChapterOnLastPage = false
+    }
+
+    /// Ordinary streamed update: writes only when the bridge's debounce allows,
+    /// keeping SwiftData writes rare while the user scrolls.
+    func persistProgressIfDue() {
+        guard let fraction = progressBridge.fractionForDebouncedWrite() else { return }
+        work.lastScrollFraction = fraction
+        work.markProgressModified()
+        progressBridge.markPersisted(fraction)
+    }
+
+    /// Flush point (dismissal, mode/layout transition, app termination): always
+    /// writes the latest position, bypassing the debounce window.
+    func flushProgress() {
+        guard let fraction = progressBridge.fractionForFlush() else { return }
+        work.lastScrollFraction = fraction
+        work.markProgressModified()
+        progressBridge.markPersisted(fraction)
     }
 }
 

@@ -145,6 +145,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Chapter/Afterword), one per spine item. See `ReaderSection`.
     private(set) var sections: [ReaderSection] = []
     private(set) var currentLocator: Locator?
+    /// The visible portion of the publication, from Readium's viewport
+    /// observer. Drives the true-end completion check (`isAtPublicationEnd`).
+    private(set) var currentViewport: NavigatorViewport?
+    /// Whether the viewport's trailing edge rests at the very end of the final
+    /// reading-order resource — the only state that may auto-finish a work.
+    /// See `ReadiumReaderCompletion`.
+    private(set) var isAtPublicationEnd = false
     private(set) var navigator: EPUBNavigatorViewController?
     /// Readium's static position list grouped by reading-order item (chapter).
     /// Drives the progress pill's "Ch. x/x · Pg. x/x" without any extra requests.
@@ -153,7 +160,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     var chromeHidden = false
 
     /// Fires on every position change — used to persist reading progress.
+    /// Ordinary progress only; completion is signaled separately by
+    /// `onReachedPublicationEnd`.
     var onLocatorChange: ((Locator) -> Void)?
+    /// Fires once each time the viewport newly reaches the publication's true
+    /// end (`ReadiumReaderCompletion.isAtEnd`) — used to auto-finish completed
+    /// works. Never fired for intermediate progressions such as 0.99/0.999.
+    var onReachedPublicationEnd: (() -> Void)?
     /// Hands web links in EPUB content to the app's in-app Browse tab.
     var onOpenExternalURL: ((URL) -> Void)?
 
@@ -278,6 +291,19 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func navigator(_: Navigator, locationDidChange locator: Locator) {
         currentLocator = locator
         onLocatorChange?(locator)
+    }
+
+    /// Tracks the visible viewport for the true-end completion check. Readium
+    /// updates `viewport` together with `currentLocation`, so this stays in
+    /// step with `locationDidChange`. Rising-edge only: the callback fires when
+    /// the end state is newly reached, not on every update while resting there.
+    func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
+        let wasAtEnd = isAtPublicationEnd
+        currentViewport = viewport
+        isAtPublicationEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
+        if isAtPublicationEnd, !wasAtEnd {
+            onReachedPublicationEnd?()
+        }
     }
 
     /// The only delegate method without a default implementation.
@@ -857,15 +883,18 @@ struct ReadiumReaderView: View {
         let context = modelContext
         let router = router
         book.onLocatorChange = { locator in
-            let now = Date()
             work.readiumLocator = locator.persistenceString ?? work.readiumLocator
-            work.markProgressModified(now) // drives the Library's Continue Reading shelf
-            // Finish a completed work once the user reaches the end (WIPs are manual).
-            if let progress = locator.locations.totalProgression, progress >= 0.99,
-               work.isComplete, !work.isFinished {
-                work.isFinished = true
-                work.markModified(now)
-            }
+            work.markProgressModified(Date()) // drives the Library's Continue Reading shelf
+            try? context.save()
+        }
+        // Finish a completed work only at the navigator's true end state — the
+        // final resource visible with its trailing edge at 1.0 — never from a
+        // progression threshold (A7-F1). WIPs stay manual, so an ongoing read
+        // is never marked finished (and later freed) out from under the user.
+        book.onReachedPublicationEnd = {
+            guard work.isComplete, !work.isFinished else { return }
+            work.isFinished = true
+            work.markModified(Date())
             try? context.save()
         }
         book.onOpenExternalURL = { url in

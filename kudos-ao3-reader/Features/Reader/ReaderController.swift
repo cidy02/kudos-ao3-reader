@@ -27,6 +27,11 @@ final class ReaderController: NSObject {
     /// e.g. an AO3 work/author/tag reference. The host routes it to the Browse tab
     /// instead of letting it navigate away inside the reader's web view.
     var onOpenExternalURL: ((URL) -> Void)?
+    /// Called with the normalized intra-chapter position (0…1) reported by the
+    /// layout script — the fraction of the chapter's content above the
+    /// viewport's leading edge, in both scrolled and paged modes. Already gated
+    /// against stale loads; see `ReaderBridgeMessage`.
+    var onProgressFraction: ((Double) -> Void)?
 
     #if os(iOS)
     /// Called when the reading area is tapped (toggles the chrome).
@@ -41,6 +46,12 @@ final class ReaderController: NSObject {
     private let proxy = ReaderScriptProxy()
     private var loadedURL: URL?
     private var landOnLast = false
+    /// Normalized position (0…1) to restore once the chapter's layout is ready.
+    private var pendingRestoreFraction: Double?
+    /// Monotonic id for the current chapter load. The layout script echoes it
+    /// in every message; `ReaderBridgeMessage.parse` drops mismatches so a late
+    /// callback from an old chapter's document can't overwrite current state.
+    private var generation = 0
     private var css = ""
     private var mode: ReadingMode = .scroll
     private var columns = 1
@@ -121,8 +132,13 @@ final class ReaderController: NSObject {
         if loadedURL != nil { inject() }
     }
 
-    func load(_ url: URL, readAccess: URL, landOnLast: Bool) {
+    /// Loads a chapter. `landOnLast` (backward paging) wins over
+    /// `restoreFraction` (a remembered/persisted position); both apply after
+    /// the page's layout script has run, so the layout they target exists.
+    func load(_ url: URL, readAccess: URL, landOnLast: Bool, restoreFraction: Double? = nil) {
         self.landOnLast = landOnLast
+        pendingRestoreFraction = landOnLast ? nil : restoreFraction
+        generation += 1
         loadedURL = url
         page = 1
         pageTotal = 1
@@ -142,25 +158,28 @@ final class ReaderController: NSObject {
     }
 
     fileprivate func handleMessage(_ body: Any) {
-        guard let dict = body as? [String: Any] else { return }
-        if let key = dict["key"] as? String {
+        guard let message = ReaderBridgeMessage.parse(body, currentGeneration: generation) else { return }
+        switch message {
+        case let .key(key):
             if key == "ArrowLeft" { prevPage() } else { nextPage() }
-            return
-        }
-        if dict["event"] as? String == "bottom" {
+        case .reachedScrollBottom:
             onReachedScrollBottom?()
-            return
-        }
-        if dict["mode"] as? String == "paged" {
-            page = dict["page"] as? Int ?? 1
-            pageTotal = dict["total"] as? Int ?? 1
+        case let .pagePosition(newPage, newTotal):
+            page = newPage
+            pageTotal = newTotal
+            // The paged fraction is derived here rather than posted separately:
+            // the page's leading edge sits page-1 pages into total pages.
+            onProgressFraction?(Double(newPage - 1) / Double(newTotal))
+        case let .progress(fraction):
+            onProgressFraction?(fraction)
         }
     }
 
     private func inject() {
         webView.evaluateJavaScript(
             ReaderStylesheet.layoutScript(css: css, mode: mode, columns: columns, margin: margin,
-                                          safeTop: safeTop, safeBottom: safeBottom)
+                                          safeTop: safeTop, safeBottom: safeBottom,
+                                          generation: generation)
         )
     }
 }
@@ -171,6 +190,11 @@ extension ReaderController: WKNavigationDelegate {
         if landOnLast {
             landOnLast = false
             webView.evaluateJavaScript("window.readerLast && window.readerLast();")
+        } else if let fraction = pendingRestoreFraction {
+            // Restore after inject() has applied the layout, so the scroll
+            // height / page count the fraction maps onto actually exists.
+            pendingRestoreFraction = nil
+            webView.evaluateJavaScript("window.readerRestore && window.readerRestore(\(fraction));")
         }
     }
 

@@ -97,7 +97,7 @@ scheduling; signed-device Keychain persistence.
 | 4 | Concurrency and lifecycle correctness | COMPLETE | Original Area-4 result retained. T-91 addendum adds 3×P1: ambiguous Inbox reply verification checks synthetic page 1 (RF1), unresolved guards are lost across target/screen transitions (RF2), and a post-write reload can cross an account switch (RF3). |
 | 5 | Authentication, security, privacy | COMPLETE | Original 4×P1/3×P2/1×P3 retained. T-91 addendum adds RF3 (cross-account post-write overwrite, P1) and RF5 (same-username session/cache reuse, P2). Existing A5 blockers still apply. |
 | 6 | Core functional regression matrix | COMPLETE | Original 4×P2/1×P3 retained. T-91 addendum adds Inbox identity hydration, parser-empty, filter, pagination, response, accessibility, and chapter-retry findings RF4–RF11. |
-| 7 | Reader and EPUB behavior | COMPLETE | 2×P1 (iOS auto-finishes/frees EPUB at 99%; macOS loses every intra-chapter position), 6×P2 (macOS WKWebView retention, active-content boundary, cross-spine state desync, encoded-href blank chapters, stale extraction overlay; iOS nested-TOC loss), 2×P3 (duplicate-basename TOC collision; malformed-spine compact-index drift). Two new release blockers. |
+| 7 | Reader and EPUB behavior | COMPLETE | 2×P1 both RESOLVED 2026-07-13 (iOS auto-finish now requires the navigator's true last-resource end state; macOS persists/restores a normalized intra-chapter position with stale-callback gating and debounced writes), 6×P2 (macOS WKWebView retention, active-content boundary, cross-spine state desync, encoded-href blank chapters, stale extraction overlay; iOS nested-TOC loss), 2×P3 (duplicate-basename TOC collision; malformed-spine compact-index drift). |
 | 8 | Performance and scalability | COMPLETE | 3×P2 (root whole-store observation/recomputation; package backup/restore peak memory scales with all EPUB bytes; unbounded Comments page cache), no P0/P1. Inbox visible-page hydration is bounded/sequential/cached but can take ~12s for 20 uncached works by policy. Manual device thermal/battery and large-store Instruments gates remain. |
 | 9 | Accessibility, UI integrity, platform behavior | COMPLETE | 4×P2 (shared pagination controls are undersized and gesture-only; compact queue reorder is drag-only; arbitrary accents can erase fixed-white labels; author links are not keyboard-focusable). T-91 RF10 remains an additional Inbox-specific P2. Human VoiceOver/Dynamic Type/theme/device matrix is NOT RUN. |
 | 10 | Documentation, packaging, final assessment | COMPLETE | Final verdict **NOT READY**. 1×P1: binary distributions omit required GPL/third-party license notices. 1×P2: README/operational docs materially drift from the current branch, import, and authenticated-feature implementation. Existing Release simulator app installed/launched; signed-device and human gates remain incomplete. |
@@ -1204,6 +1204,31 @@ verified transition. Regression test: locators at 0.99 and 0.999 must not finish
 or free; only the actual end may, with protected works still retained. Blocks
 release: **YES**.
 
+**Resolution (2026-07-13):** the `>= 0.99` shortcut is removed from
+`ReadiumReaderView.openBook`'s locator callback; ordinary progress persistence
+and completion are now separate signals. Completion uses the navigator's own
+end state via Readium 3.9.0's `ViewportObservingNavigator`: new
+`ReadiumReaderCompletion.isAtEnd` (Features/ReaderReadium/
+ReadiumReaderCompletion.swift) requires the publication's final reading-order
+resource to be visible with its intra-resource trailing edge at exactly `1.0`
+— the value Readium clamps to at a resource's end and compares `== 1.0`
+against in its own position calculator — so no floating-point tolerance
+exists to re-admit the defect. `Locator.locations.totalProgression` is
+deliberately not consulted (it is the viewport's leading edge and its
+interpolation is not exact). `ReadiumBook` tracks
+`navigator(_:viewportDidChange:)` and fires a rising-edge
+`onReachedPublicationEnd`; the view finishes only complete works there (WIPs
+stay manual), and `.onDisappear`'s `freeEPUBIfFinished` remains gated on that
+verified `isFinished` plus the unchanged `isProtected` rule. Regression
+coverage: `ReadiumReaderTests` gained 7 completion cases (trailing edge 0.99
+and 0.999 do not complete, mid-final-resource does not, true end does,
+end-of-non-final-resource does not, two-resource spread, nil/empty guards);
+new `WorkLifecycleCompletionTests` proves unfinished works at 0.99/0.999 keep
+their EPUB through the reader-close hook (offline reopen intact), protected
+finished works keep theirs, and unprotected finished works still free.
+`Scripts/verify.sh` ALL GREEN (428 tests / 47 suites); iOS + macOS Release
+builds green. A7-F1 is closed.
+
 **A7-F2 — P1 Must Fix — The macOS reader never records or restores any
 intra-chapter position.**
 Files: `kudos-ao3-reader/Features/Reader/ReaderView.swift:244-250, 545-587`,
@@ -1222,6 +1247,41 @@ the spine, restore it after layout, and flush/explicitly save on disappearance.
 Regression test: a synthetic multi-page chapter reopens near its midpoint and
 retains the same semantic location across scrolled↔paged and resize transitions.
 Blocks release: **YES**.
+
+**Resolution (2026-07-13):** the layout script (`ReaderStylesheet.layoutScript`)
+now maintains one normalized semantic position for both modes —
+`window.__fraction`, the content fraction at the viewport's leading edge
+(`scrollY/scrollHeight` scrolled, `page/total` paged) — reports it to the host
+rAF-throttled with the existing `reader` message handler, re-derives the page /
+scroll offset from it inside `applyPaged`/`applyScroll` (mode switches, style
+reflows, and a now-both-modes resize handler all preserve the spot), and
+exposes `readerRestore(fraction)` which the host invokes after `didFinish` +
+layout injection. Every script message now carries a per-load `gen`;
+`ReaderController` increments it per `load` and the new platform-neutral
+`ReaderBridgeMessage.parse` (Features/Reader/ReaderProgressBridge.swift) drops
+stale-generation messages, so an old chapter's late callbacks can never
+overwrite the current chapter's position (this also newly gates the paged
+page/total and scroll-bottom events). Persistence reuses the existing pair —
+`lastSpineIndex` + the previously reader-unused `lastScrollFraction`, both
+already carried by backups and folder sync — written through the new
+`ReaderProgressBridge` debounce (≥2 s between streamed writes, 0.001 noise
+floor) with guaranteed flushes on dismissal (`onDisappear` + explicit save),
+chapter transitions (spine + fraction written as one pair), mode/style
+transitions (`renderToken` change), and app termination
+(`NSApplication.willTerminateNotification`). Chapter revisits restore a
+per-session remembered fraction (A → B → A lands back at A's spot); an
+explicit same-chapter re-pick still resets to the top; backward paging keeps
+its last-page landing. `WorkReaderPreparation.restoreReadableEPUB` clears the
+fraction alongside the spine so a re-downloaded copy can't restore a stale
+mid-chapter position. Regression coverage: new `ReaderProgressBridgeTests`
+(14 cases) covers stale-generation gating, every message shape, exact
+paged round-trips (including totals 3/7/313), scrolled→paged containing-page
+mapping, proportional reflow remap, mode-switch fixed-point stability, A→B→A
+memory, seeded midpoint reopen (scrolled and paged share the one fraction),
+same-chapter reset, debounce/noise behavior, and flush-bypasses-debounce.
+`Scripts/verify.sh` ALL GREEN (428 tests / 47 suites); iOS + macOS Release
+builds green. The WKWebView-dependent halves (actual scroll geometry) remain
+under the existing manual read-through gate. A7-F2 is closed.
 
 **A7-F3 — P2 Should Fix — macOS reader callbacks retain their controller and
 WKWebView after dismissal.**
@@ -2035,15 +2095,16 @@ before a READY verdict.
 
 **NOT READY**
 
-There are **0 open P0, 6 open P1, 30 open P2, and 7 open P3 findings**. The
+There are **0 open P0, 4 open P1, 30 open P2, and 7 open P3 findings**. The
 frozen candidate builds, tests, archives unsigned, and launches as a Release
-simulator app, but it has reachable data-loss/cross-account/privacy/security,
-reader-progress, duplicate-write, and license-compliance blockers. Required
-signed-device, live-write, accessibility, sync-recovery, upgrade, and critical
-reader gates are also incomplete. A1-F1 (unfrozen candidate), A2-F1
-(stale-tag merge), A5-F1 (cookie isolation), A5-F2 (MiniZip hardening), A5-F3
-(backup EPUB validation), and A5-F4 (truthful session removal) are resolved
-P1s and are not included in the open count.
+simulator app, but it has reachable cross-account, duplicate-write, and
+license-compliance blockers. Required signed-device, live-write,
+accessibility, sync-recovery, upgrade, and reader read-through gates are also
+incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag merge), A5-F1
+(cookie isolation), A5-F2 (MiniZip hardening), A5-F3 (backup EPUB
+validation), A5-F4 (truthful session removal), A7-F1 (premature 99%
+completion/EPUB free), and A7-F2 (macOS intra-chapter position loss) are
+resolved P1s and are not included in the open count.
 
 ## Area Summary
 
@@ -2055,7 +2116,7 @@ P1s and are not included in the open count.
 | 4. Concurrency/lifecycle | COMPLETE | 3 cross-cutting T-91 P1 | Static task/state trace; normal suite green | Navigation/logout race exercise NOT RUN | Duplicate reply and cross-account state races |
 | 5. Auth/security/privacy | COMPLETE | 4 resolved P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Logging/host trust (A5-F5/A5-F7, both P2) |
 | 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
-| 7. Reader/EPUB | COMPLETE | 2 P1; 6 P2; 2 P3 | 82 focused reader/EPUB tests plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | EPUB deletion at 99%, macOS position loss, active-content/path/TOC defects |
+| 7. Reader/EPUB | COMPLETE | 2 resolved P1; 6 P2; 2 P3 | 107 focused reader/EPUB tests (25 completion / position-bridge / lifecycle-retention cases added 2026-07-13) plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | Active-content/path/TOC defects; manual read-through still owed |
 | 8. Performance | COMPLETE | 3 P2 | Synthetic 256 MiB memory probe; algorithm/cache inspection | Large-store Instruments/device thermal NOT RUN | Whole-store recomputation, all-EPUB backup memory, unbounded Comments cache |
 | 9. Accessibility/UI/platform | COMPLETE | 4 P2 plus T91-RF10 | Static semantic/layout/platform trace; theme unit tests; builds | Owner-tested Inbox configuration PASS; full matrix NOT RUN | Hit targets, keyboard paths, accent contrast, VoiceOver/Dynamic Type unknowns |
 | 10. Docs/packaging | COMPLETE | 1 P1; 1 P2 | Bundle/license inspection; Release simulator install/launch | Signed distribution/legal review NOT RUN | Missing license notices and material documentation drift |
@@ -2064,15 +2125,13 @@ P1s and are not included in the open count.
 
 ### Release blockers (P1 Must Fix)
 
-1. **A7-F1:** iOS treats 99% as finished and frees the EPUB before true completion.
-2. **A7-F2:** macOS neither records nor restores intra-chapter reading position.
-3. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
+1. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
    duplicate reply when the real parent thread is on another comments page.
-4. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
+2. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
    guard and permits the same ambiguous reply again.
-5. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
+3. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
    overwrite the new account screen with prior-account private Inbox data.
-6. **A10-F1:** standalone app distributions omit required GPL and dependency
+4. **A10-F1:** standalone app distributions omit required GPL and dependency
    license notices.
 
 **Resolved blockers:** A1-F1 was closed by freezing T-91 as `c1bf211` and
@@ -2083,9 +2142,12 @@ A5-F1 (ambient anonymous-session cookies) and A5-F4 (untruthful
 Keychain-deletion logout) were closed together (2026-07-13) by the
 auth-isolation-and-logout hardening pass. Both passes were developed as
 sibling branches from the same pre-fix baseline and are combined in this
-merge — see the resolution notes under each finding above for files, tests,
-and verification evidence. None should be reopened without a code or
-baseline change that reintroduces the underlying gap.
+merge. A7-F1 (iOS 99% auto-finish/EPUB free) and A7-F2 (macOS intra-chapter
+position loss) were closed together (2026-07-13) by the reader
+completion-and-progress pass on `release-fixes`. See the resolution notes
+under each finding above for files, tests, and verification evidence. None
+should be reopened without a code or baseline change that reintroduces the
+underlying gap.
 
 ### Open P2 Should Fix findings
 

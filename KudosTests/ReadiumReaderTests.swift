@@ -117,5 +117,72 @@ struct ReadiumReaderTests {
 
         #expect(!book.routeWebURLToBrowse(url))
     }
+
+    // MARK: - True-end completion (A7-F1)
+
+    // The completion rule: only the final reading-order resource, visible with
+    // its trailing edge at exactly 1.0 (Readium's clamped end state), may
+    // finish a work. Progression thresholds like 0.99/0.999 never may.
+
+    private static let readingOrder: [ReadiumShared.Link] = [
+        ReadiumShared.Link(href: "OEBPS/preface.xhtml"),
+        ReadiumShared.Link(href: "OEBPS/chapter1.xhtml"),
+        ReadiumShared.Link(href: "OEBPS/chapter2.xhtml")
+    ]
+
+    /// A viewport whose visible resources are built through the same
+    /// `Link.url()` normalization the navigator uses.
+    private static func viewport(
+        _ resources: [(link: ReadiumShared.Link, visible: ClosedRange<Double>)],
+        total: ClosedRange<Double>
+    ) -> NavigatorViewport {
+        NavigatorViewport(
+            resources: resources.map {
+                NavigatorViewport.Resource(href: $0.link.url(), progression: $0.visible)
+            },
+            progression: total
+        )
+    }
+
+    @Test func trailingEdgeAt99PercentDoesNotComplete() {
+        // 0.99 through the final resource — the last 1% is real unread content.
+        let viewport = Self.viewport([(Self.readingOrder[2], 0.93 ... 0.99)], total: 0.97 ... 0.996)
+        #expect(!ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: Self.readingOrder))
+    }
+
+    @Test func trailingEdgeAt999PermilleDoesNotComplete() {
+        let viewport = Self.viewport([(Self.readingOrder[2], 0.94 ... 0.999)], total: 0.98 ... 0.9997)
+        #expect(!ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: Self.readingOrder))
+    }
+
+    @Test func midFinalResourceDoesNotComplete() {
+        let viewport = Self.viewport([(Self.readingOrder[2], 0.4 ... 0.6)], total: 0.75 ... 0.85)
+        #expect(!ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: Self.readingOrder))
+    }
+
+    @Test func trueEndOfTheFinalResourceCompletes() {
+        let viewport = Self.viewport([(Self.readingOrder[2], 0.93 ... 1.0)], total: 0.97 ... 1.0)
+        #expect(ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: Self.readingOrder))
+    }
+
+    @Test func endOfANonFinalResourceDoesNotComplete() {
+        // Trailing edge 1.0, but of chapter 1 — the publication continues.
+        let viewport = Self.viewport([(Self.readingOrder[1], 0.9 ... 1.0)], total: 0.55 ... 0.66)
+        #expect(!ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: Self.readingOrder))
+    }
+
+    @Test func trueEndIsRecognizedInATwoResourceSpread() {
+        let viewport = Self.viewport(
+            [(Self.readingOrder[1], 0.9 ... 1.0), (Self.readingOrder[2], 0.0 ... 1.0)],
+            total: 0.6 ... 1.0
+        )
+        #expect(ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: Self.readingOrder))
+    }
+
+    @Test func missingViewportOrReadingOrderNeverCompletes() {
+        #expect(!ReadiumReaderCompletion.isAtEnd(viewport: nil, readingOrder: Self.readingOrder))
+        let viewport = Self.viewport([(Self.readingOrder[2], 0.0 ... 1.0)], total: 0.0 ... 1.0)
+        #expect(!ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: []))
+    }
 }
 #endif
