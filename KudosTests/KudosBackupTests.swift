@@ -131,7 +131,7 @@ struct KudosBackupTests {
         archivedWork.lastSpineIndex = 4
         archivedWork.tags = [Tag(name: "Re-read")]
         archivedWork.markProgressModified(newerArchiveDate)
-        let epub = Data("restored-epub".utf8)
+        let epub = try Data(contentsOf: EPUBTests.sampleEPUB)
         try epub.write(to: archivedWork.fileURL)
 
         let archivedBookmark = Bookmark(
@@ -212,7 +212,8 @@ struct KudosBackupTests {
         work.hasEPUB = true
         work.ao3WorkID = 789
         sourceContext.insert(work)
-        try Data("queued-epub".utf8).write(to: work.fileURL)
+        let queuedEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try queuedEPUB.write(to: work.fileURL)
         let queue = ReadingQueueService.ensureSavedForLaterQueue(in: sourceContext)
         ReadingQueueService.add(work, to: queue, in: sourceContext)
         work.epubPreservationStatus = .preserved
@@ -244,7 +245,7 @@ struct KudosBackupTests {
         #expect(restored.isInSavedForLaterQueue)
         #expect(restored.epubPreservationStatus == .preserved)
         #expect(restoredQueue.memberships.count == 1)
-        #expect(try Data(contentsOf: restored.fileURL) == Data("queued-epub".utf8))
+        #expect(try Data(contentsOf: restored.fileURL) == queuedEPUB)
 
         try? FileManager.default.removeItem(at: restored.fileURL)
     }
@@ -477,6 +478,196 @@ struct KudosBackupTests {
         #expect(throws: KudosBackupError.self) {
             _ = try KudosBackupContents(fileWrapper: wrapper)
         }
+    }
+
+    // MARK: - A2-F1: stale-archive tag-merge safety
+
+    /// A2-F1 regression: a stale archive (older than the local tag) must never remove
+    /// a tag the user added since. There's no per-tag tombstone, so the only safe
+    /// policy is to never infer removal from absence.
+    @Test func staleArchiveWithoutTagsDoesNotRemoveNewerLocalTag() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let olderArchiveDate = Date(timeIntervalSince1970: 100)
+        let newerLocalDate = Date(timeIntervalSince1970: 200)
+        let workID = UUID()
+
+        let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let sourceContainer = try ModelContainer(for: schema, configurations: [sourceConfiguration])
+        let sourceContext = ModelContext(sourceContainer)
+        let staleWork = SavedWork(id: workID, title: "Tagged Work", author: "Writer")
+        staleWork.markModified(olderArchiveDate)
+        sourceContext.insert(staleWork)
+        try sourceContext.save()
+        let staleDocument = try KudosBackupService.makeDocument(
+            works: [staleWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let localWork = SavedWork(id: workID, title: "Tagged Work", author: "Writer")
+        localWork.tags = [Tag(name: "fluff")]
+        localWork.markModified(newerLocalDate)
+        context.insert(localWork)
+        try context.save()
+
+        _ = try KudosBackupService.restore(
+            staleDocument.contents,
+            into: context,
+            defaults: try testDefaults()
+        )
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.tags.map(\.name) == ["fluff"])
+    }
+
+    /// A2-F1: restoring the same archive twice must not duplicate the tags it adds.
+    @Test func repeatedRestoreOfArchiveTagsIsIdempotent() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let archivedWork = SavedWork(title: "Idempotent Work", author: "Writer")
+        archivedWork.tags = [Tag(name: "found family")]
+        let document = try KudosBackupService.makeDocument(
+            works: [archivedWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        _ = try KudosBackupService.restore(document.contents, into: context, defaults: try testDefaults())
+        _ = try KudosBackupService.restore(document.contents, into: context, defaults: try testDefaults())
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.tags.map(\.name) == ["found family"])
+        #expect(try context.fetch(FetchDescriptor<Kudos.Tag>()).count == 1)
+    }
+
+    // MARK: - A5-F3: backup EPUB validation before replacement
+
+    /// A5-F3 regression: corrupt/untrusted incoming EPUB bytes must be preflighted
+    /// through the hardened validator and skipped without touching the existing
+    /// valid file, `hasEPUB`, or preservation state.
+    @Test func invalidBackupEPUBLeavesValidLocalEPUBUnchanged() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let workID = UUID()
+        let olderArchiveDate = Date(timeIntervalSince1970: 100)
+        let newerLocalDate = Date(timeIntervalSince1970: 200)
+
+        let sourceWork = SavedWork(id: workID, title: "Corrupted Restore", author: "Writer")
+        sourceWork.markModified(olderArchiveDate)
+        let baseDocument = try KudosBackupService.makeDocument(
+            works: [sourceWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let corruptContents = KudosBackupContents(
+            manifest: baseDocument.contents.manifest,
+            epubFiles: [workID: Data("not-an-epub".utf8)],
+            fontFiles: [:]
+        )
+
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let localWork = SavedWork(id: workID, title: "Corrupted Restore", author: "Writer")
+        localWork.hasEPUB = true
+        localWork.markModified(newerLocalDate)
+        context.insert(localWork)
+        let validEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try validEPUB.write(to: localWork.fileURL)
+        // Preservation status is only meaningful alongside a queue membership
+        // (ReadingQueueService.normalize resets un-queued works to .notPreserved,
+        // called as part of every restore) — queue it (after the file exists, so
+        // normalize's own file check doesn't downgrade it) so this assertion
+        // reflects a real, stable state rather than one the app's own
+        // normalization pass would immediately correct regardless of the
+        // backup-validation fix under test.
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        ReadingQueueService.add(localWork, to: queue, in: context)
+        localWork.epubPreservationStatus = .preserved
+        try context.save()
+        defer { try? FileManager.default.removeItem(at: localWork.fileURL) }
+
+        let summary = try KudosBackupService.restore(
+            corruptContents,
+            into: context,
+            defaults: try testDefaults()
+        )
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.hasEPUB)
+        #expect(restored.epubPreservationStatus == .preserved)
+        #expect(try Data(contentsOf: restored.fileURL) == validEPUB)
+        #expect(summary.skippedInvalidEPUBs == 1)
+    }
+
+    /// A5-F3: a tombstone-suppressed (explicitly deleted) work must never write its
+    /// archived EPUB blob to disk, even when the archive carries valid bytes.
+    @Test func tombstoneSuppressedWorkDoesNotWriteEPUBBlob() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let workID = UUID()
+        let olderArchiveDate = Date(timeIntervalSince1970: 100)
+        let deletionDate = Date(timeIntervalSince1970: 200)
+        // No real bytes are ever written to `workID`'s on-disk path during setup
+        // (the archive's EPUB is injected directly into the manifest below), so
+        // the "never written" assertion at the end only reflects what restore()
+        // itself did — not test setup.
+        let staleWork = SavedWork(id: workID, title: "Deleted Work", author: "Writer")
+        staleWork.markModified(olderArchiveDate)
+        let baseDocument = try KudosBackupService.makeDocument(
+            works: [staleWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let staleContents = KudosBackupContents(
+            manifest: baseDocument.contents.manifest,
+            epubFiles: [workID: try Data(contentsOf: EPUBTests.sampleEPUB)],
+            fontFiles: [:]
+        )
+
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        context.insert(SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            createdAt: deletionDate
+        ))
+        try context.save()
+
+        _ = try KudosBackupService.restore(
+            staleContents,
+            into: context,
+            defaults: try testDefaults()
+        )
+
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+        let neverWrittenPath = SavedWork(id: workID, title: "x", author: "y").fileURL.path
+        #expect(!FileManager.default.fileExists(atPath: neverWrittenPath))
     }
 
     private func testDefaults() throws -> UserDefaults {

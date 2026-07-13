@@ -219,7 +219,7 @@ nonisolated struct EPUBDocument {
     /// Convenience: unzip an EPUB file then parse it. Throws `EPUBError` on failure.
     static func open(epubURL: URL, into directory: URL) throws -> EPUBDocument {
         guard let data = try? Data(contentsOf: epubURL) else { throw EPUBError.unreadableFile }
-        guard let zip = MiniZip(data: data) else { throw EPUBError.notAnEPUB }
+        guard let zip = try? MiniZip(data: data) else { throw EPUBError.notAnEPUB }
         do { try zip.unzip(to: directory) } catch { throw EPUBError.extractionFailed }
         return try EPUBDocument(unzippedAt: directory)
     }
@@ -234,7 +234,7 @@ nonisolated struct EPUBDocument {
     /// content, without extracting arbitrary publisher files to disk.
     static func inspectPackage(ofEPUBAt url: URL) throws -> EPUBPackageInspection {
         guard let data = try? Data(contentsOf: url) else { throw EPUBError.unreadableFile }
-        guard let zip = MiniZip(data: data) else { throw EPUBError.notAnEPUB }
+        guard let zip = try? MiniZip(data: data) else { throw EPUBError.notAnEPUB }
         guard let containerData = zip.data(named: "META-INF/container.xml") else { throw EPUBError.missingContainer }
         guard let opfPath = rootfilePath(from: containerData) else { throw EPUBError.missingContainer }
         guard let opfData = zip.data(named: opfPath) else { throw EPUBError.missingPackage }

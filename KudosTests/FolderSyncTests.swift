@@ -71,6 +71,49 @@ struct FolderSyncTests {
         #expect(restoredCollection.works.map(\.id) == [seed.workID])
     }
 
+    /// A5-F3: folder sync's restore path is the same `KudosBackupService.restore`
+    /// used by manual backup import, so a corrupt synced EPUB must be rejected the
+    /// same way — never overwriting a valid local copy.
+    @Test func syncDownRejectsInvalidEPUBWithoutOverwritingLocalCopy() async throws {
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let sourceDefaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: sourceDefaults) }
+
+        let workID = UUID()
+        let sourceWork = SavedWork(id: workID, title: "Corrupt Sync Work", author: "Writer")
+        sourceWork.hasEPUB = true
+        sourceContext.insert(sourceWork)
+        try Data("not-an-epub".utf8).write(to: sourceWork.fileURL)
+        try sourceContext.save()
+        defer { try? FileManager.default.removeItem(at: sourceWork.fileURL) }
+
+        try FolderSyncService.connect(to: folder, defaults: sourceDefaults)
+        _ = try await FolderSyncService.syncUp(in: sourceContext, defaults: sourceDefaults)
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let targetWork = SavedWork(id: workID, title: "Corrupt Sync Work", author: "Writer")
+        targetWork.hasEPUB = true
+        targetContext.insert(targetWork)
+        let validEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try validEPUB.write(to: targetWork.fileURL)
+        try targetContext.save()
+        defer { try? FileManager.default.removeItem(at: targetWork.fileURL) }
+
+        _ = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.hasEPUB)
+        #expect(try Data(contentsOf: restored.fileURL) == validEPUB)
+    }
+
     @Test func syncUpThenSyncDownConvergesWithoutDuplicates() async throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

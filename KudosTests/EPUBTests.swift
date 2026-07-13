@@ -22,7 +22,7 @@ struct EPUBTests {
 
     @Test func miniZipReadsAndExtractsEntries() throws {
         let data = try Data(contentsOf: try Self.sampleEPUB)
-        let zip = try #require(MiniZip(data: data))
+        let zip = try MiniZip(data: data)
         #expect(zip.names.contains("mimetype"))
         #expect(zip.names.contains("OEBPS/content.opf"))
         let mimetype = try #require(zip.data(named: "mimetype"))
@@ -30,7 +30,9 @@ struct EPUBTests {
     }
 
     @Test func miniZipRejectsNonZipData() {
-        #expect(MiniZip(data: Data("not a zip".utf8)) == nil)
+        #expect(throws: MiniZipError.malformedArchive) {
+            _ = try MiniZip(data: Data("not a zip".utf8))
+        }
     }
 
     @Test func metadataExtraction() throws {

@@ -872,9 +872,14 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var suppressedCollections: Int = 0
     var revivedCollections: Int = 0
     var ambiguousCollectionConflicts: Int = 0
+    var skippedInvalidEPUBs: Int = 0
 
     var conflictMessage: String {
         var parts: [String] = []
+        if skippedInvalidEPUBs > 0 {
+            parts.append("Skipped \(skippedInvalidEPUBs) invalid EPUB file"
+                + "\(skippedInvalidEPUBs == 1 ? "" : "s") to protect your existing copy.")
+        }
         if revivedQueues > 0 {
             parts.append("Restored \(revivedQueues) queue\(revivedQueues == 1 ? "" : "s") "
                 + "with newer changes than a previous deletion.")
@@ -975,6 +980,7 @@ enum KudosBackupService {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
         var workIndex = WorkRestoreIndex(existingWorks)
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
+        var skippedInvalidEPUBs = 0
 
         // Adopt the source device's deletion history so a fresh install/reinstall
         // restoring this backup inherits the same tombstone protection the source
@@ -1034,20 +1040,49 @@ enum KudosBackupService {
             // works are searchable immediately, not only after the next launch sweep.
             WorkSearchIndex.reindex(work)
 
-            var seenTags = Set<String>()
-            work.tags = archived.userTags.compactMap { name in
+            // Union-only: a stale archive must never remove a tag the user added locally
+            // after the snapshot was taken (A2-F1). There is no per-tag tombstone, so the
+            // only safe removal policy is "never infer deletion from absence" — this only
+            // ever adds a missing archived tag, matching exact `Tag.name` identity (the
+            // model's `@Attribute(.unique)` constraint is case-sensitive), never drops one.
+            var existingTagNames = Set(work.tags.map(\.name))
+            for name in archived.userTags {
                 let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, seenTags.insert(trimmed).inserted else { return nil }
-                if let tag = tagsByName[trimmed] { return tag }
-                let tag = Tag(name: trimmed)
-                context.insert(tag)
-                tagsByName[trimmed] = tag
-                return tag
+                guard !trimmed.isEmpty, existingTagNames.insert(trimmed).inserted else { continue }
+                let tag: Tag
+                if let existingTag = tagsByName[trimmed] {
+                    tag = existingTag
+                } else {
+                    tag = Tag(name: trimmed)
+                    context.insert(tag)
+                    tagsByName[trimmed] = tag
+                }
+                work.tags.append(tag)
             }
 
             if let epub = contents.epubFiles[archived.id] {
-                try epub.write(to: work.fileURL, options: .atomic)
-                work.hasEPUB = true
+                // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.
+                // Stage to a scratch file and preflight through the same hardened
+                // validator (`EPUBDocument.inspectPackage`, backed by the hardened
+                // MiniZip) that `ReadingQueueService.replaceEPUB` already uses for
+                // AO3-download/user-import replacement, then reuse that exact
+                // validate-then-atomic-replace helper so backup/folder-sync restore
+                // shares the one safe path. An invalid asset is skipped — recorded and
+                // logged — without touching the existing file, hasEPUB, or preservation
+                // state; the rest of the restore transaction still completes.
+                let staged = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("\(UUID().uuidString).epub")
+                do {
+                    try epub.write(to: staged, options: .atomic)
+                    try ReadingQueueService.replaceEPUB(for: work, with: staged)
+                    work.hasEPUB = true
+                } catch {
+                    try? FileManager.default.removeItem(at: staged)
+                    skippedInvalidEPUBs += 1
+                    Log.library.notice(
+                        "Skipped an invalid backup EPUB: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
             } else if !FileManager.default.fileExists(atPath: work.fileURL.path) {
                 work.hasEPUB = false
                 if work.epubPreservationStatus == .preserved {
@@ -1386,7 +1421,8 @@ enum KudosBackupService {
             ambiguousQueueConflicts: ambiguousQueueConflicts,
             suppressedCollections: suppressedCollections,
             revivedCollections: revivedCollections,
-            ambiguousCollectionConflicts: ambiguousCollectionConflicts
+            ambiguousCollectionConflicts: ambiguousCollectionConflicts,
+            skippedInvalidEPUBs: skippedInvalidEPUBs
         )
     }
 

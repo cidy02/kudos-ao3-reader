@@ -283,6 +283,19 @@ tombstone). Regression test: newer local work with tag + stale archive without
 it → association survives; archive-only tags still get added. Blocks release:
 **YES** (data-loss class on the "Never lose" list).
 
+**Resolution (2026-07-12):** `KudosBackup.swift`'s per-work tag merge
+(`KudosBackupService.restore`) no longer replaces `work.tags`; it unions in
+only the archived tag names missing from the current local set, matching
+exact `Tag.name` identity, and never removes a tag absent from the archive —
+there is no per-tag tombstone, so removal is never inferred from absence.
+Regression coverage added to `KudosBackupTests.swift`:
+`staleArchiveWithoutTagsDoesNotRemoveNewerLocalTag` (newer local tag survives
+a stale archive without it), `repeatedRestoreOfArchiveTagsIsIdempotent`
+(archive-only tag added once, no duplicate `Tag` records on repeated
+restore), plus the existing `restoreMergesRecordsTagsAssetsAndSettings`
+covering archive-only-tag addition. `Scripts/verify.sh` invariants/lint green;
+full iOS suite (387 tests / 43 suites) and macOS build green. A2-F1 is closed.
+
 **A2-F2 — P3 Follow-up — Unconditional EPUB blob overwrite on restore.**
 File: `KudosBackup.swift:1048-1050`. Restoring any package containing a blob
 for a matched work replaces the local file regardless of timestamps or
@@ -610,6 +623,35 @@ truncated-name and oversized-output records must fail before subdata/allocation.
 Blocks release: **YES** (macOS arbitrary-write path; the crash boundary should
 land in the same hardening change).
 
+**Resolution (2026-07-12):** `MiniZip.swift` was rewritten around a throwing
+`init(data:) throws` (was a failable `init?`) that validates every
+central-directory entry — checked-arithmetic bounds on name/extra/comment
+ranges and the local-header record, signature checks, stored-vs-declared
+size consistency, an allow-list of method 0 (stored) / 8 (deflate) with the
+encrypted-flag bit rejected, and per-entry (200 MB) / cumulative (500 MB) /
+compression-ratio (1100:1) limits — all enforced before any `subdata`
+extraction or `Data(count:)` allocation, so a malformed or hostile archive
+now fails with a typed `MiniZipError` instead of trapping or exhausting
+memory. `unzip(to:)` normalizes and rejects unsafe entry names (absolute
+paths, `..`, backslash traversal, drive/scheme-like prefixes) and separately
+proves every standardized destination stays under a **fresh staging
+directory**; the real destination's contents are replaced only after every
+entry has validated and extracted successfully, so a hostile archive can
+never leave partial output behind (`directory` is only touched by the final
+atomic move). `EPUB.swift` and `WorkImporter.swift` updated for the new
+throwing initializer (`try?` at both call sites — no behavior change for
+valid EPUBs). New `KudosTests/MiniZipHostileTests.swift` hand-assembles raw
+ZIP byte sequences covering all seven required hostile shapes: `../../../`
+traversal (outside sentinel proven unchanged), absolute and backslash
+traversal, a central record whose declared name length runs past the buffer,
+a declared-oversized `uncompressedSize` rejected before allocation, an
+implausible compression ratio, cumulative size across multiple entries
+exceeding the limit, an encrypted-flag entry, an unsupported compression
+method, and a valid minimal EPUB (`KudosTests/Fixtures/sample.epub`) still
+opening/extracting correctly end to end. `Scripts/verify.sh`
+invariants/lint green; full iOS suite (387 tests / 43 suites, including all
+11 `MiniZipHostileTests`) and macOS build green. A5-F2 is closed.
+
 **A5-F3 — P1 Must Fix — Backup restore accepts arbitrary bytes as an EPUB and
 atomically overwrites a valid local asset.**
 Files: `kudos-ao3-reader/Services/KudosBackup.swift:53-83, 1048-1050`.
@@ -632,6 +674,30 @@ skip a corrupt asset without touching an existing file. Regression test:
 invalid incoming bytes matched to a work with a valid EPUB must leave the
 original bytes/state unchanged; update positive backup tests to use a real
 minimal EPUB. Blocks release: **YES**.
+
+**Resolution (2026-07-12):** `KudosBackupService.restore` now stages every
+incoming EPUB blob to a scratch file and preflights it through the same
+hardened validator backup-uses everywhere else — `ReadingQueueService.
+replaceEPUB` (`EPUBDocument.inspectPackage`, backed by the now-hardened
+`MiniZip`) — reusing its existing validate-then-atomic-replace path instead
+of a raw `Data.write`, so backup restore and folder-sync restore (which both
+funnel through this one function) share the identical safe path. Policy
+chosen: **skip the invalid asset with a clear recoverable result** rather
+than failing the whole transaction — an invalid EPUB is logged and counted
+in a new `KudosBackupRestoreSummary.skippedInvalidEPUBs` field (surfaced in
+`conflictMessage`), while the existing file, `hasEPUB`, and preservation
+state are left untouched and the rest of the restore still completes.
+Regression coverage: `KudosBackupTests.invalidBackupEPUBLeavesValidLocalEPUBUnchanged`
+(invalid incoming bytes leave a valid local EPUB, `hasEPUB`, and preservation
+status unchanged; `skippedInvalidEPUBs == 1`), `tombstoneSuppressedWorkDoesNotWriteEPUBBlob`
+(a suppressed/tombstoned work's archived EPUB blob is never written to disk),
+and `FolderSyncTests.syncDownRejectsInvalidEPUBWithoutOverwritingLocalCopy`
+(the folder-sync path end-to-end, proving the shared validation). The two
+prior positive tests that used arbitrary strings (`"restored-epub"`,
+`"queued-epub"`) as EPUB bytes were replaced with the real minimal
+`KudosTests/Fixtures/sample.epub` fixture. `Scripts/verify.sh`
+invariants/lint green; full iOS suite (387 tests / 43 suites) and macOS
+build green. A5-F3 is closed.
 
 **A5-F4 — P1 Must Fix — Keychain deletion failures are suppressed while the UI
 claims the AO3 session was removed.**
@@ -1832,23 +1898,24 @@ before a READY verdict.
 
 **NOT READY**
 
-There are **0 open P0, 11 open P1, 30 open P2, and 7 open P3 findings**. The
+There are **0 open P0, 8 open P1, 30 open P2, and 7 open P3 findings**. The
 frozen candidate builds, tests, archives unsigned, and launches as a Release
 simulator app, but it has reachable data-loss/cross-account/privacy/security,
 reader-progress, duplicate-write, and license-compliance blockers. Required
 signed-device, live-write, accessibility, sync-recovery, upgrade, and critical
-reader gates are also incomplete. A1-F1 (unfrozen candidate) is the sole resolved
-P1 and is not included in the open count.
+reader gates are also incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag
+merge), A5-F2 (MiniZip hardening), and A5-F3 (backup EPUB validation) are
+resolved P1s and are not included in the open count.
 
 ## Area Summary
 
 | Area | Status | Findings | Automated evidence | Manual evidence | Remaining risk |
 |---|---|---|---|---|---|
 | 1. Baseline/build | COMPLETE | 1 resolved P1; 1 P2; 1 P3 | 371/371; iOS+macOS Debug/Release; unsigned archive; clean-checkout resolution | Release simulator launch now PASS | Signing/team/target drift; signed artifact NOT RUN |
-| 2. Persistence/sync | COMPLETE | 1 P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | Stale archive can clobber user tags; EPUB overwrite test debt |
+| 2. Persistence/sync | COMPLETE | 1 resolved P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | EPUB overwrite test debt (A2-F2, P3) |
 | 3. Networking/parser | COMPLETE | 1 partially-remediated P2; T-91 parser findings cross-reference Area 4/6 | Policy/parser tests and entry-point enumeration | Minimal final live-AO3 matrix NOT RUN | Author-profile avatar still bypasses paced image pipeline; parser drift remains fixture-dependent |
 | 4. Concurrency/lifecycle | COMPLETE | 3 cross-cutting T-91 P1 | Static task/state trace; normal suite green | Navigation/logout race exercise NOT RUN | Duplicate reply and cross-account state races |
-| 5. Auth/security/privacy | COMPLETE | 4 P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Cookie isolation, archive input, session removal, logging/host trust |
+| 5. Auth/security/privacy | COMPLETE | 2 resolved P1; 2 P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Cookie isolation (A5-F1), session removal (A5-F4), logging/host trust |
 | 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
 | 7. Reader/EPUB | COMPLETE | 2 P1; 6 P2; 2 P3 | 82 focused reader/EPUB tests plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | EPUB deletion at 99%, macOS position loss, active-content/path/TOC defects |
 | 8. Performance | COMPLETE | 3 P2 | Synthetic 256 MiB memory probe; algorithm/cache inspection | Large-store Instruments/device thermal NOT RUN | Whole-store recomputation, all-EPUB backup memory, unbounded Comments cache |
@@ -1859,26 +1926,27 @@ P1 and is not included in the open count.
 
 ### Release blockers (P1 Must Fix)
 
-1. **A2-F1:** stale backup restore can replace newer local user-tag associations.
-2. **A5-F1:** nominally anonymous AO3 reads inherit shared authenticated cookies.
-3. **A5-F2:** MiniZip trusts archive paths/sizes, enabling traversal, oversized
-   extraction, crash, and macOS arbitrary writes.
-4. **A5-F3:** backup/sync restore can replace a valid EPUB with arbitrary bytes.
-5. **A5-F4:** failed Keychain deletion is suppressed while UI reports logout and
+1. **A5-F1:** nominally anonymous AO3 reads inherit shared authenticated cookies.
+2. **A5-F4:** failed Keychain deletion is suppressed while UI reports logout and
    the old session can return after relaunch.
-6. **A7-F1:** iOS treats 99% as finished and frees the EPUB before true completion.
-7. **A7-F2:** macOS neither records nor restores intra-chapter reading position.
-8. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
+3. **A7-F1:** iOS treats 99% as finished and frees the EPUB before true completion.
+4. **A7-F2:** macOS neither records nor restores intra-chapter reading position.
+5. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
    duplicate reply when the real parent thread is on another comments page.
-9. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
+6. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
    guard and permits the same ambiguous reply again.
-10. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
-    overwrite the new account screen with prior-account private Inbox data.
-11. **A10-F1:** standalone app distributions omit required GPL and dependency
-    license notices.
+7. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
+   overwrite the new account screen with prior-account private Inbox data.
+8. **A10-F1:** standalone app distributions omit required GPL and dependency
+   license notices.
 
-**Resolved blocker:** A1-F1 was closed by freezing T-91 as `c1bf211` and
-re-running the canonical suite; it must not be reopened without a baseline change.
+**Resolved blockers:** A1-F1 was closed by freezing T-91 as `c1bf211` and
+re-running the canonical suite. A2-F1 (stale-archive tag clobber), A5-F2
+(MiniZip archive-input hardening), and A5-F3 (backup EPUB validation) were
+closed together (2026-07-12) by the backup/archive-integrity hardening pass —
+see the resolution notes under each finding above for files, tests, and
+verification evidence. None should be reopened without a code or baseline
+change that reintroduces the underlying gap.
 
 ### Open P2 Should Fix findings
 

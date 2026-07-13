@@ -602,7 +602,7 @@ private nonisolated enum AO3EPUBMetadataScanner {
 
     static func scan(_ url: URL) -> ExtractedAO3EPUBMetadata {
         guard let data = try? Data(contentsOf: url),
-              let zip = MiniZip(data: data)
+              let zip = try? MiniZip(data: data)
         else { return .empty }
 
         var result = ExtractedAO3EPUBMetadata()
