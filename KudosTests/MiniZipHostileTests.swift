@@ -7,100 +7,15 @@ import Testing
 /// entries must all fail with a typed `MiniZipError` before any unsafe allocation
 /// or filesystem write, while a real minimal EPUB keeps opening normally.
 ///
-/// Fixtures are hand-assembled raw ZIP byte sequences (not real compressed data)
-/// so each hostile shape — truncated name length, declared-vs-actual size
-/// mismatch, oversized ratio — can be constructed precisely and independently of
-/// the DEFLATE codec.
+/// Fixtures are hand-assembled raw ZIP byte sequences (`HostileZipFixture`, not
+/// real compressed data) so each hostile shape — truncated name length,
+/// declared-vs-actual size mismatch, oversized ratio — can be constructed
+/// precisely and independently of the DEFLATE codec.
 struct MiniZipHostileTests {
-    private struct RawEntry {
-        var name: String
-        var method: UInt16 = 0
-        var flags: UInt16 = 0
-        var payload: Data = Data()
-        var declaredCompressedSize: Int?
-        var declaredUncompressedSize: Int?
-        var declaredNameLength: Int?
-    }
+    private typealias RawEntry = HostileZipFixture.Entry
 
-    /// Assembles a minimal ZIP (local headers + central directory + EOCD) from raw
-    /// entry specs, allowing declared sizes/name-lengths to lie about the actual
-    /// bytes present — exactly the shape a hostile archive would exploit.
     private func buildArchive(_ entries: [RawEntry]) -> Data {
-        var body = Data()
-        var centralRecords: [Data] = []
-        var offsets: [Int] = []
-
-        for entry in entries {
-            offsets.append(body.count)
-            let nameBytes = Data(entry.name.utf8)
-            let declaredNameLen = entry.declaredNameLength ?? nameBytes.count
-            let compressedSize = entry.declaredCompressedSize ?? entry.payload.count
-            let uncompressedSize = entry.declaredUncompressedSize ?? entry.payload.count
-
-            var local = Data()
-            local.append(le32(0x0403_4B50))
-            local.append(le16(20))
-            local.append(le16(entry.flags))
-            local.append(le16(entry.method))
-            local.append(le16(0))
-            local.append(le16(0))
-            local.append(le32(0))
-            local.append(le32(UInt32(truncatingIfNeeded: compressedSize)))
-            local.append(le32(UInt32(truncatingIfNeeded: uncompressedSize)))
-            local.append(le16(UInt16(truncatingIfNeeded: declaredNameLen)))
-            local.append(le16(0))
-            local.append(nameBytes)
-            local.append(entry.payload)
-            body.append(local)
-
-            var central = Data()
-            central.append(le32(0x0201_4B50))
-            central.append(le16(20))
-            central.append(le16(20))
-            central.append(le16(entry.flags))
-            central.append(le16(entry.method))
-            central.append(le16(0))
-            central.append(le16(0))
-            central.append(le32(0))
-            central.append(le32(UInt32(truncatingIfNeeded: compressedSize)))
-            central.append(le32(UInt32(truncatingIfNeeded: uncompressedSize)))
-            central.append(le16(UInt16(truncatingIfNeeded: declaredNameLen)))
-            central.append(le16(0))
-            central.append(le16(0))
-            central.append(le16(0))
-            central.append(le16(0))
-            central.append(le32(0))
-            central.append(le32(UInt32(truncatingIfNeeded: offsets.last!)))
-            central.append(nameBytes)
-            centralRecords.append(central)
-        }
-
-        let centralStart = body.count
-        for record in centralRecords { body.append(record) }
-        let centralSize = body.count - centralStart
-
-        var eocd = Data()
-        eocd.append(le32(0x0605_4B50))
-        eocd.append(le16(0))
-        eocd.append(le16(0))
-        eocd.append(le16(UInt16(entries.count)))
-        eocd.append(le16(UInt16(entries.count)))
-        eocd.append(le32(UInt32(centralSize)))
-        eocd.append(le32(UInt32(centralStart)))
-        eocd.append(le16(0))
-        body.append(eocd)
-        return body
-    }
-
-    private func le16(_ value: UInt16) -> Data {
-        Data([UInt8(value & 0xFF), UInt8((value >> 8) & 0xFF)])
-    }
-
-    private func le32(_ value: UInt32) -> Data {
-        Data([
-            UInt8(value & 0xFF), UInt8((value >> 8) & 0xFF),
-            UInt8((value >> 16) & 0xFF), UInt8((value >> 24) & 0xFF)
-        ])
+        HostileZipFixture.build(entries)
     }
 
     private func freshTempDir() -> URL {
@@ -113,7 +28,6 @@ struct MiniZipHostileTests {
         let archive = buildArchive([
             RawEntry(name: "../../../outside.txt", payload: Data("hostile".utf8))
         ])
-        let zip = try MiniZip(data: archive)
 
         let cachesRoot = freshTempDir()
         defer { try? FileManager.default.removeItem(at: cachesRoot) }
@@ -122,8 +36,10 @@ struct MiniZipHostileTests {
         try Data("known-good".utf8).write(to: sentinelPath)
         let readerDir = cachesRoot.appendingPathComponent("Reader/\(UUID().uuidString)")
 
+        // The unsafe name is rejected at construction, before a MiniZip even
+        // exists to call `unzip` on — extraction is never attempted at all.
         #expect(throws: MiniZipError.pathTraversal) {
-            try zip.unzip(to: readerDir)
+            _ = try MiniZip(data: archive)
         }
         #expect(try Data(contentsOf: sentinelPath) == Data("known-good".utf8))
         #expect(!FileManager.default.fileExists(atPath: readerDir.path))
@@ -131,33 +47,30 @@ struct MiniZipHostileTests {
 
     // MARK: - 2. Absolute and backslash traversal
 
-    @Test func absolutePathIsRejected() throws {
+    @Test func absolutePathIsRejected() {
         let archive = buildArchive([
             RawEntry(name: "/etc/passwd", payload: Data("hostile".utf8))
         ])
-        let zip = try MiniZip(data: archive)
         #expect(throws: MiniZipError.pathTraversal) {
-            try zip.unzip(to: freshTempDir())
+            _ = try MiniZip(data: archive)
         }
     }
 
-    @Test func backslashTraversalIsRejected() throws {
+    @Test func backslashTraversalIsRejected() {
         let archive = buildArchive([
             RawEntry(name: "..\\..\\outside.txt", payload: Data("hostile".utf8))
         ])
-        let zip = try MiniZip(data: archive)
         #expect(throws: MiniZipError.pathTraversal) {
-            try zip.unzip(to: freshTempDir())
+            _ = try MiniZip(data: archive)
         }
     }
 
-    @Test func driveLetterPathIsRejected() throws {
+    @Test func driveLetterPathIsRejected() {
         let archive = buildArchive([
             RawEntry(name: "C:evil.txt", payload: Data("hostile".utf8))
         ])
-        let zip = try MiniZip(data: archive)
         #expect(throws: MiniZipError.pathTraversal) {
-            try zip.unzip(to: freshTempDir())
+            _ = try MiniZip(data: archive)
         }
     }
 
@@ -260,5 +173,55 @@ struct MiniZipHostileTests {
 
         let doc = try EPUBDocument.open(epubURL: try EPUBTests.sampleEPUB, into: freshTempDir())
         #expect(doc.spineURLs.count == 2)
+    }
+
+    // MARK: - 8. An unreferenced hostile entry still fails validation, not just extraction
+
+    /// A backup EPUB can be structurally valid — readable container/OPF/spine —
+    /// while carrying one extra entry, unsafely named, that the OPF never
+    /// references. `EPUBDocument.inspectPackage` (the A5-F3 backup-restore
+    /// preflight) only reads container.xml/OPF/spine by exact name; if entry
+    /// names were only checked during `unzip`, this archive would pass
+    /// preflight and only fail later, at real extraction/open time — after a
+    /// valid local EPUB had already been overwritten. Name validation now runs
+    /// for every entry while `MiniZip` parses the central directory, so the
+    /// whole archive is rejected regardless of which entries a caller reads.
+    @Test func structurallyValidEPUBWithUnreferencedHostileEntryIsRejected() throws {
+        // Sanity check first: the base fixture alone is genuinely readable
+        // through the full package-inspection pipeline, so the rejection
+        // below is caused specifically by the added entry, not by some
+        // incidental invalidity in the minimal OPF/container.
+        let validArchive = buildArchive(HostileZipFixture.minimalValidEPUBEntries)
+        let validURL = freshTempDir().appendingPathComponent("valid.epub")
+        try FileManager.default.createDirectory(
+            at: validURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try validArchive.write(to: validURL)
+        defer { try? FileManager.default.removeItem(at: validURL.deletingLastPathComponent()) }
+        #expect(try EPUBDocument.inspectPackage(ofEPUBAt: validURL).readableItemCount == 1)
+
+        let hostileArchive = buildArchive(HostileZipFixture.minimalValidEPUBEntries + [
+            RawEntry(name: "../evil.txt", payload: Data("hostile".utf8))
+        ])
+        #expect(throws: MiniZipError.pathTraversal) {
+            _ = try MiniZip(data: hostileArchive)
+        }
+    }
+
+    // MARK: - 9. Duplicate entry names
+
+    /// Two entries sharing one name would otherwise let `data(named:)` (first
+    /// match) and `unzip` (last entry wins on disk) disagree about which
+    /// bytes a given name actually resolves to. Rejected as inconsistent
+    /// metadata rather than left ambiguous.
+    @Test func duplicateEntryNameIsRejected() {
+        let archive = buildArchive([
+            RawEntry(name: "dupe.txt", payload: Data("first".utf8)),
+            RawEntry(name: "dupe.txt", payload: Data("second".utf8))
+        ])
+        #expect(throws: MiniZipError.malformedArchive) {
+            _ = try MiniZip(data: archive)
+        }
     }
 }

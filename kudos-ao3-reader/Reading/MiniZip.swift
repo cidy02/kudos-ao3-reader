@@ -43,8 +43,10 @@ private struct ZipEntry {
 
 /// A tiny, dependency-free ZIP reader good enough for EPUB files (stored or
 /// DEFLATE-compressed entries; no ZIP64, no encryption). Every entry is fully
-/// validated — signature, bounds, method, and size/ratio limits — while parsing
-/// the central directory, before any name is trusted or any byte is allocated.
+/// validated — signature, bounds, method, size/ratio limits, uniqueness, and
+/// path safety — while parsing the central directory, so a caller that only
+/// inspects specific named entries (rather than extracting every one) sees
+/// exactly the same pass/fail verdict as full extraction would.
 nonisolated struct MiniZip {
     /// Conservative limits sized for EPUBs (small, text-and-image documents),
     /// not general-purpose archives — comfortably above anything a real EPUB
@@ -74,6 +76,7 @@ nonisolated struct MiniZip {
         var parsed: [ZipEntry] = []
         parsed.reserveCapacity(count)
         var totalUncompressed = 0
+        var seenNames = Set<String>()
 
         for _ in 0 ..< count {
             guard let signature = data.safeU32(offset), signature == 0x0201_4B50 else {
@@ -110,6 +113,15 @@ nonisolated struct MiniZip {
             else { throw MiniZipError.truncatedRecord }
 
             let name = String(data: data.subdata(in: nameStart ..< nameEnd), encoding: .utf8) ?? ""
+            // Validated here — at construction, not just at `unzip` time — so a
+            // hostile entry name fails the archive before any preflight caller
+            // (`EPUBDocument.inspectPackage`, used by the backup-restore EPUB
+            // validator) can treat the archive as safe just because it never
+            // happened to read that specific entry by name.
+            guard seenNames.insert(name).inserted else { throw MiniZipError.malformedArchive }
+            if !name.hasSuffix("/") {
+                _ = try MiniZip.validatedRelativePath(name)
+            }
             parsed.append(ZipEntry(
                 name: name,
                 method: method,

@@ -620,6 +620,67 @@ struct KudosBackupTests {
         #expect(summary.skippedInvalidEPUBs == 1)
     }
 
+    /// Validator/extractor-asymmetry regression: a backup EPUB can be
+    /// structurally valid — readable container/OPF/spine — while carrying one
+    /// extra entry, unsafely named, that the OPF never references.
+    /// `EPUBDocument.inspectPackage` (the A5-F3 preflight) only reads
+    /// container/OPF/spine by exact name, so if entry-name safety were only
+    /// checked during real extraction/`unzip`, this archive would pass
+    /// preflight, overwrite the valid local EPUB, and only fail later when the
+    /// reader actually opened it — after the original, possibly
+    /// non-redownloadable EPUB was already gone. `MiniZip` now validates every
+    /// entry's name while parsing the central directory (not just at `unzip`
+    /// time), so this whole archive is rejected at preflight and the local
+    /// EPUB is left untouched.
+    @Test func backupEPUBWithUnreferencedHostileEntryLeavesValidLocalEPUBUnchanged() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+        ])
+        let workID = UUID()
+
+        let sourceWork = SavedWork(id: workID, title: "Hostile Blob", author: "Writer")
+        let baseDocument = try KudosBackupService.makeDocument(
+            works: [sourceWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let hostileEPUB = HostileZipFixture.build(
+            HostileZipFixture.minimalValidEPUBEntries + [
+                HostileZipFixture.Entry(name: "../evil.txt", payload: Data("hostile".utf8))
+            ]
+        )
+        let hostileContents = KudosBackupContents(
+            manifest: baseDocument.contents.manifest,
+            epubFiles: [workID: hostileEPUB],
+            fontFiles: [:]
+        )
+
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let localWork = SavedWork(id: workID, title: "Hostile Blob", author: "Writer")
+        localWork.hasEPUB = true
+        context.insert(localWork)
+        let validEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try validEPUB.write(to: localWork.fileURL)
+        try context.save()
+        defer { try? FileManager.default.removeItem(at: localWork.fileURL) }
+
+        let summary = try KudosBackupService.restore(
+            hostileContents,
+            into: context,
+            defaults: try testDefaults()
+        )
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.hasEPUB)
+        #expect(try Data(contentsOf: restored.fileURL) == validEPUB)
+        #expect(summary.skippedInvalidEPUBs == 1)
+    }
+
     /// A5-F3: a tombstone-suppressed (explicitly deleted) work must never write its
     /// archived EPUB blob to disk, even when the archive carries valid bytes.
     @Test func tombstoneSuppressedWorkDoesNotWriteEPUBBlob() throws {

@@ -652,6 +652,33 @@ opening/extracting correctly end to end. `Scripts/verify.sh`
 invariants/lint green; full iOS suite (387 tests / 43 suites, including all
 11 `MiniZipHostileTests`) and macOS build green. A5-F2 is closed.
 
+**Follow-up (2026-07-13):** review after the fix above found a validator/
+extractor asymmetry: entry-name safety was checked only inside `unzip`
+(extraction time), not `init` (validation time). A backup EPUB could be
+structurally valid — readable container.xml/OPF/spine — while carrying one
+extra entry, unsafely named, that the OPF never referenced;
+`EPUBDocument.inspectPackage` (the A5-F3 preflight) only reads specific
+entries by exact name and never enumerated the rest, so it would pass such
+an archive. `replaceEPUB` would then overwrite a valid local EPUB with it;
+the corruption would only surface later, at real `unzip`/open time, on the
+macOS legacy reader (Readium likely still opens it, since the hostile entry
+is unreferenced) — after the original file was already gone. Fixed by
+validating every entry's name (via the same `validatedRelativePath` `unzip`
+already used) while `MiniZip.init` parses the central directory, so
+`inspectPackage`/preflight now sees the identical pass/fail verdict full
+extraction would. Bundled in the same pass: duplicate entry names (which let
+`data(named:)`'s first-match and `unzip`'s last-write-wins silently diverge)
+are now rejected as inconsistent metadata. New coverage: `MiniZipHostileTests
+.structurallyValidEPUBWithUnreferencedHostileEntryIsRejected` (asserts the
+base fixture is independently readable via `inspectPackage`, then that
+adding one unreferenced traversal-named entry causes the whole archive to be
+rejected) and `.duplicateEntryNameIsRejected`; `KudosBackupTests.
+backupEPUBWithUnreferencedHostileEntryLeavesValidLocalEPUBUnchanged` proves
+the same scenario end-to-end through the real A5-F3 preflight
+(`KudosBackupService.restore`), leaving a valid local EPUB byte-for-byte
+unchanged. `Scripts/verify.sh` invariants/lint green; full iOS suite (390
+tests / 43 suites) and macOS build green (both independently re-run).
+
 **A5-F3 — P1 Must Fix — Backup restore accepts arbitrary bytes as an EPUB and
 atomically overwrites a valid local asset.**
 Files: `kudos-ao3-reader/Services/KudosBackup.swift:53-83, 1048-1050`.
