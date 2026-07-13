@@ -93,10 +93,10 @@ scheduling; signed-device Keychain persistence.
 |---|---|---|---|
 | 1 | Baseline, build, and release configuration | COMPLETE | Original P1 unfrozen-RC process finding resolved by `c1bf211`; 1×P2 (team-ID leak), 1×P3 (target drift) remain. Canonical recheck: verify.sh ALL GREEN (371/371). Earlier iOS+macOS Release builds + unsigned archive SUCCEEDED against the same now-frozen Inbox diff. |
 | 2 | Persistence, migration, backup, sync safety | COMPLETE | 1×P1 (user-tag clobber on stale-archive restore), 1×P3 (ungated EPUB blob overwrite), test-gap notes. Direct inspection + 1 bounded subagent (validated); no destructive error paths found anywhere. |
-| 3 | AO3 networking and parser safety | COMPLETE | 1×P2 (AsyncImage avatar requests bypass pacing/UA in 2 surfaces); core pacing/write/parser behavior verified. Area 5's A5-F1 supersedes the anonymous/auth-isolation conclusion. |
-| 4 | Concurrency and lifecycle correctness | COMPLETE | 0 new findings. Continuations, detached tasks, gate, reader lifecycle, refresh-cancel, single-flight guards all verified; default-MainActor isolation confirmed in build settings. Residual: macOS ReaderController depth, Instruments leak pass (manual). |
-| 5 | Authentication, security, privacy | COMPLETE | 4×P1 (anonymous client inherits auth cookies; MiniZip traversal/unsafe bounds; unchecked backup EPUB replacement; failed session deletion reports success), 3×P2 (public sensitive logs; biometric fail-open; lookalike AO3 host), 1×P3 (tracked machine-specific handoff). Four release blockers. |
-| 6 | Core functional regression matrix | COMPLETE | 4×P2 (broken queue reorder; untracked local bulk preservation; racing Account pagination/destructive refresh presentation; cancelled all-local remote batches still mutate), 1×P3 (newest-first comment refresh can miss a newly-created last page). No new release blocker; Areas 2/5 blockers still govern affected journeys. |
+| 3 | AO3 networking and parser safety | COMPLETE | Original Area-3 result retained. T-91 addendum adds parser/form findings RF6/RF7/RF9; avatar requests are now paced through `AO3Client`. Area 5's A5-F1 still governs anonymous/auth isolation. |
+| 4 | Concurrency and lifecycle correctness | COMPLETE | Original Area-4 result retained. T-91 addendum adds 3×P1: ambiguous Inbox reply verification checks synthetic page 1 (RF1), unresolved guards are lost across target/screen transitions (RF2), and a post-write reload can cross an account switch (RF3). |
+| 5 | Authentication, security, privacy | COMPLETE | Original 4×P1/3×P2/1×P3 retained. T-91 addendum adds RF3 (cross-account post-write overwrite, P1) and RF5 (same-username session/cache reuse, P2). Existing A5 blockers still apply. |
+| 6 | Core functional regression matrix | COMPLETE | Original 4×P2/1×P3 retained. T-91 addendum adds Inbox identity hydration, parser-empty, filter, pagination, response, accessibility, and chapter-retry findings RF4–RF11. |
 | 7 | Reader and EPUB behavior | COMPLETE | 2×P1 (iOS auto-finishes/frees EPUB at 99%; macOS loses every intra-chapter position), 6×P2 (macOS WKWebView retention, active-content boundary, cross-spine state desync, encoded-href blank chapters, stale extraction overlay; iOS nested-TOC loss), 2×P3 (duplicate-basename TOC collision; malformed-spine compact-index drift). Two new release blockers. |
 | 8 | Performance and scalability | COMPLETE | 3×P2 (root whole-store observation/recomputation; package backup/restore peak memory scales with all EPUB bytes; unbounded Comments page cache), no P0/P1. Inbox visible-page hydration is bounded/sequential/cached but can take ~12s for 20 uncached works by policy. Manual device thermal/battery and large-store Instruments gates remain. |
 | 9 | Accessibility, UI integrity, platform behavior | NOT STARTED | |
@@ -1298,3 +1298,285 @@ recent auth-scoped page remains. Blocks release: no.
 - Battery/thermal pass for prolonged reading, large-library scrolling, Inbox
   hydration, and background folder sync: **NOT RUN** and remains a human device
   release gate.
+
+---
+
+## T-91 Inbox Refinement — Cross-Cutting Release-Review Addendum
+
+Status: **COMPLETE** (2026-07-12). Reviewed after the feature was frozen at
+`c1bf211`, before starting Area 9. This addendum supplements Areas 3–6 and
+pre-identifies accessibility work for Area 9; it does not reopen or renumber the
+ten sequential prompts. No production source was modified during this review.
+
+### Scope and evidence
+
+- Inspected all 22 paths changed by `c1bf211`, including Inbox parsing/forms,
+  state and pagination, native writes, visible-page metadata hydration, Account
+  navigation, focused Comments loading, comment-submission safety, shared role/
+  Reply/overflow components, author-page cache invalidation, and the new tests.
+- Traced authenticated requests, cache keys, cancellation boundaries, account
+  changes, single-write behavior, redirect/error parsing, and every async yield
+  between a successful write and its forced reload.
+- Cross-checked the parser and response assumptions against the current primary
+  AO3 source:
+  [`inbox/show.html.erb`](https://github.com/otwcode/otwarchive/blob/master/app/views/inbox/show.html.erb),
+  [`inbox/_inbox_comment_contents.html.erb`](https://github.com/otwcode/otwarchive/blob/master/app/views/inbox/_inbox_comment_contents.html.erb),
+  [`inbox/_reply_button.html.erb`](https://github.com/otwcode/otwarchive/blob/master/app/views/inbox/_reply_button.html.erb),
+  and [`inbox_controller.rb`](https://github.com/otwcode/otwarchive/blob/master/app/controllers/inbox_controller.rb).
+- Reproduced RF2 against the committed `CommentSubmissionGuard` in a standalone
+  compile probe: the same unresolved key was rejected while `.ambiguous`, then
+  accepted after visiting a different reply target; a fresh guard created by
+  rebuilding the pushed Comments screen also accepted it.
+- The frozen product baseline remains build/test green: `Scripts/verify.sh`
+  passed **371/371 tests**, macOS Debug build, invariants, lint gate, and
+  whitespace. Those tests do not exercise the state/lifecycle failures below.
+
+### Findings
+
+**T91-RF1 — P1 Must Fix — An ambiguous reply opened from Inbox verifies against
+synthetic work-comment page 1, recreating the real duplicate-post path on any
+parent thread stored later in pagination.**
+Files: `Features/Comments/CommentsModel.swift:214-217, 602-611` and
+`Services/AO3CommentActions.swift:117-150`. Repro: open an Inbox reply whose
+parent thread lives on work-comments page 2+, submit a reply, and make the POST
+time out after reaching AO3. Expected: verification checks the exact parent
+thread and keeps reposting blocked unless absence is proven. Actual: focused
+standalone threads always assign `currentPageNumber = 1`; the composer passes
+that as `knownPage`, and `verifyCommentPosted` fetches work-level page 1. It does
+not find the parent/new reply, returns `.absent`, and unlocks another POST.
+Impact: a user following the recovery UI can create a real duplicate AO3 reply.
+Smallest safe correction: verify replies through the standalone
+`/comments/<parentCommentID>` thread (already parsed/fetched elsewhere), not a
+work pagination guess; match the direct reply there. Regression: an Inbox reply
+whose work parent is modeled as page 5 must remain blocked when page 1 lacks it,
+and standalone-parent verification must find the posted body. Blocks release:
+**YES**.
+
+**T91-RF2 — P1 Must Fix — The unresolved duplicate-post guard is neither
+multi-context nor screen-durable; changing targets or leaving the pushed thread
+silently unlocks the original ambiguous submission.**
+Files: `Features/Comments/CommentsModel.swift:507-544`,
+`Features/Comments/CommentsView.swift:625-633, 932-974`, and
+`Services/CommentSubmission.swift:60-65, 78-94, 141-144`. Two independent
+repros survive: (1) ambiguous reply A → Cancel → open reply B → Cancel → reopen
+A; `startComposer` calls `reset()` for B, which changes `.ambiguous` to `.idle`
+without resolving/removing A, and `begin(A)` now returns true; (2) ambiguous A →
+Cancel → Back to Inbox → reopen A; the pushed `CommentsView` and its model-local
+guard were destroyed, while the saved draft survives in `UserDefaults`, so a
+fresh guard accepts the same key. Expected: the same unresolved key remains
+blocked throughout navigation until read-only verification resolves it. Impact:
+real duplicate comments despite the documented invariant. Smallest safe
+correction: make unresolved submissions an auth-scoped set/store above an
+individual `CommentsModel` (persist enough state across view recreation), and
+never let switching to another context collapse or overwrite an unresolved key.
+Regression: both target-hop and pop/reopen flows must reject A while still
+allowing a genuinely different resolved submission. Blocks release: **YES**.
+
+**T91-RF3 — P1 Must Fix — A successful Inbox write can race an account switch
+and let the old account's forced reload overwrite the new account's model.**
+File: `Features/Account/AO3InboxModel.swift:241-283, 315-354`. Repro: account A
+starts Mark Read/Delete; after `submitWrite` returns and the scope guard at
+268–270 passes, switch to account B while cache invalidation or the forced
+`load` is suspended. Expected: every post-write continuation remains bound to A
+and becomes inert as soon as scope changes. Actual: the write task is deliberately
+separate from `activeTask`; the one scope guard occurs before multiple awaits,
+and `reset()` cannot cancel that write task. If the old reload already built A's
+URL/request, it can complete after B's reset/load and assign A's private Inbox
+HTML into a model whose `authenticationScope` is B. Impact: cross-account
+private-content exposure and wrong action forms on a shared device. Smallest
+safe correction: carry an immutable expected scope/session generation into
+`load`, re-check after every await and immediately before every mutation, and
+prevent post-write reload from running after a mismatch. Regression: suspend A's
+reload, activate B, then resume A; B's rows/forms must remain unchanged. Blocks
+release: **YES**.
+
+**T91-RF4 — P2 Should Fix — A metadata-complete older `SavedWork` with no
+verified creator identities suppresses the exact hydration required for Author
+badges.**
+Files: `Models/AO3CommentModels.swift:88-103, 144-150`,
+`Models/Models.swift:301-306`, and `Features/Account/AO3InboxModel.swift:105-120`.
+Repro: use a pre-identity saved AO3 work with title/fandom/rating/chapters and
+plain author text populated but `authorIdentitiesJSON == ""`; receive a comment
+from its creator under an alternate pseud. Expected: the visible-page metadata
+pass fetches canonical account identities and marks the commenter Author. Actual:
+`needsSummaryEnrichment` treats plain author names as a complete creator, so the
+Inbox skips the request; identity resolution cannot match the alternate pseud
+and displays User indefinitely. The `SavedWork` model itself correctly recognizes
+missing identities as enrichment-needed, demonstrating the contract mismatch.
+Smallest correction: distinguish display-author completeness from canonical
+identity completeness and attempt the bounded metadata load when an AO3-backed
+context lacks identities (with an explicit completed-anonymous state to avoid
+per-refresh retries). Regression: complete legacy metadata + empty identity JSON
+must still hydrate once and resolve an alternate-pseud creator as Author. Blocks
+release: no.
+
+**T91-RF5 — P2 Should Fix — Logging out and back into the same AO3 username can
+reuse stale Inbox rows and a CSRF form from the previous session.**
+Files: `Services/AO3AuthorProfileService.swift:10-22`,
+`Services/AO3Client+Authors.swift:563-620`,
+`Features/Account/AO3InboxModel.swift:153-166`, and
+`Features/Account/AccountView.swift:364-417`. Repro: load Inbox, log out, then
+create/restore a new AO3 session for the same username and return to Inbox within
+the cache window. Expected: a session boundary invalidates private HTML/forms
+even when the username matches. Actual: auth scope is only
+`signed-in:<username>`; signed-out activation returns before resetting Inbox,
+and same-name activation sees the old scope plus a non-idle phase and performs no
+load. Even if forced, the shared cache uses the same key. Impact: stale read/
+delete state and session-bound CSRF fields; writes can fail until a manual fresh
+reload. Smallest correction: include a non-secret session generation in private
+cache/model scope and explicitly reset/invalidate Inbox on logout/session
+replacement. Regression: logout→same-user login must cold-load new HTML and form
+tokens. Blocks release: no.
+
+**T91-RF6 — P2 Should Fix — Valid AO3 Inbox entries without a normal byline are
+silently dropped, and an all-unavailable page is reported as “No comments yet.”**
+Files: `Services/AO3Client+Inbox.swift:30-49, 81-84` and
+`Features/Account/AccountInboxViews.swift:401-427`. AO3's current upstream
+template deliberately renders an admin-hidden comment as a `<li
+id="feedback_comment_…">` containing only an unavailable message, followed by
+its actions/checkbox—no `h4.heading.byline`. Expected: retain a visible
+unavailable tombstone or fail the page honestly. Actual: `parseInboxItem` throws,
+the page `compactMap` discards it, and the recognized-page guard only checked
+whether raw `<li>` elements existed. If every row has this shape, parsing returns
+`.loaded` with `items.isEmpty` and the UI fabricates a genuinely empty Inbox.
+Impact: users cannot see or manage real notifications and receive false state.
+Smallest correction: parse unavailable rows as explicit tombstones using the
+feedback and InboxComment ids, and fail rather than fabricate empty if raw rows
+exist but none can be represented. Regression: the upstream hidden-row shape
+must remain visible/selectable (or produce a parser error), never “No comments.”
+Blocks release: no.
+
+**T91-RF7 — P2 Should Fix — Native filter parsing claims fail-closed behavior
+but accepts any nonempty partial set of groups/options and invents a selection
+when AO3 checked none.**
+Files: `Services/AO3Client+Inbox.swift:236-285` and
+`Models/AO3InboxModels.swift:149-197`. Repro: remove the date radio group, one
+read option, or every `checked` attribute from the fixture. Expected: native
+filters disable because the form contract is incomplete. Actual: group/option
+construction uses `compactMap`, the only final guard is `!fields.isEmpty`, and
+`selectedValue` falls back to the first option. The UI remains enabled and emits
+a query assembled from a partial/unselected form. Impact: silent filter/sort
+changes after AO3 markup drift, contrary to the documented safety boundary.
+Smallest correction: validate the current stable names and complete allowed
+value sets (`filters[read]`, `filters[replied_to]`, `filters[date]`) with exactly
+one checked value per group; otherwise return nil. Regression: every missing/
+duplicate/unchecked variant disables native filters. Blocks release: no.
+
+**T91-RF8 — P2 Should Fix — A failed pagination request hides retained Inbox
+content and Retry targets the previous page instead of the page that failed.**
+Files: `Features/Account/AO3InboxModel.swift:169-182, 315-354` and
+`Features/Account/AccountInboxViews.swift:401-427, 500-509`. Repro: from page 1,
+tap page 2 and make that request fail. Expected: page 1 remains visible with a
+page-2 error/retry, or Retry repeats page 2. Actual: `currentPage` changes only
+after a successful parse, failure changes the global phase to `.failed` (hiding
+the retained items/pagination), and `retry()` reloads `currentPage`—still 1.
+Impact: normal offline/server failures eject the user from the feed and make the
+requested page impossible to retry directly. Smallest correction: track the
+requested page independently and use a non-destructive pagination error state.
+Regression: failed page 2 preserves page 1 and retries 2. Blocks release: no.
+
+**T91-RF9 — P2 Should Fix — AO3's normal stale-selection failure response is
+classified as a successful Inbox write.**
+Files: `Services/AO3InboxActions.swift:32-42` and
+`Services/AO3Client.swift:483-489`; upstream behavior in
+`InboxController#update`. Repro: load a notification, remove it in another
+session so the submitted InboxComment id is stale, then perform a native action
+(or include it in a multi-selection). AO3 rescues `InboxComment.find`, sets a
+`flash[:caution]` “must select item” response, and redirects with HTTP 200; no
+selected item is updated. Expected: surface the server failure. Actual:
+`writeErrorMessage` recognizes error lists/`.flash.error` but not AO3's
+`.caution`/`.notice.caution`; the 200 response is accepted as success. Impact:
+valid selected rows in the same batch can remain unchanged with no explanation.
+Smallest correction: recognize AO3 caution flashes for write failures or require
+the expected success notice/state before claiming success. Regression: a 200
+Inbox page containing `div.caution` must throw, while the real success notice
+passes. Blocks release: no.
+
+**T91-RF10 — P2 Should Fix (accessibility) — Inbox cards expose several
+redundant VoiceOver “open thread” controls, while select/filter state is conveyed
+only by hidden checkmarks.**
+File: `Features/Account/AccountInboxViews.swift:122-207, 211-240, 530-559`.
+Repro: navigate a populated Inbox with VoiceOver, then enter Select and open
+Filters. Expected: one primary card action plus distinct Reply/Chapter/More
+actions; selected/not-selected and current filter values are announced. Actual:
+the same row has an accessible full-card background Button plus separate avatar,
+byline, excerpt, and subject Buttons that all open the same thread. In select
+mode the only selected-state icon is `accessibilityHidden(true)` and the Button
+has no selected trait/value; filter checkmarks are likewise hidden without an
+equivalent selected announcement. Impact: excessive swipes and no reliable
+state feedback for assistive-technology users, violating the project's
+accessibility-non-optional standard. Smallest correction: consolidate the card's
+primary accessibility element/custom actions and add `.isSelected`/explicit
+values to selection and filter rows. Regression/manual gate: Accessibility
+Inspector hierarchy plus VoiceOver page/select/filter walkthrough. Blocks
+release: no, but must be included in Area 9.
+
+**T91-RF11 — P3 Follow-up — Chapter-focus retry consumes its only fallback
+position before success and ignores an already-resolved selected chapter.**
+File: `Features/Comments/CommentsModel.swift:155-199, 238-245`. Repro: use an
+Inbox Chapter destination whose standalone thread lacks a chapter link, let the
+first attempt resolve `requestedChapterPosition` through `/navigate`, then fail
+the chapter-page fetch and retry. Expected: retry reuses the resolved chapter or
+the original position. Actual: `pendingInitialChapterPosition` is set to nil at
+the start of the first attempt; retry has neither that local value nor a fallback
+to `selectedChapter`, so it can degrade into `AO3Error.parse` even after the
+network recovers. Smallest correction: consume initial context only after
+success and seed the retry with `selectedChapter`. Regression: failed chapter
+page followed by a successful retry retains the exact chapter and focused root.
+Blocks release: no.
+
+### Lower-severity observations (not additional findings)
+
+- The filter sheet applies one radio choice and dismisses immediately, so changing
+  Read + Replied + Sort requires opening it three times; the visible Done button
+  never commits a local set. Functional, but Area 9 should judge the interaction.
+- The bulk Delete confirmation is attached to the trailing Done control rather
+  than the Delete button; on popover-style platforms its visual anchor can point
+  to the wrong action. Include in the iPad/macOS manual pass.
+- An internally-launched first-page Inbox request can finish after the user leaves
+  the Inbox tab. It is one bounded request (not polling/prefetch) and does not
+  independently meet the material-finding threshold, but a view-owned task would
+  make the documented lifecycle clearer.
+- A fresh visual screenshot was not obtained in this addendum: the available
+  booted simulator session was signed out and on Home. The owner's earlier Inbox
+  visual acceptance covers the tested configuration only; Light/Dark/Sepia/OLED,
+  accessibility sizes, iPad, and macOS remain Area-9 gates.
+
+### Verified strengths
+
+- Inbox page and metadata requests remain paced; metadata hydration is sequential,
+  distinct-work-only, current-page-only, cancellation-aware, auth-checked after
+  response, stopped on systemic failure, and capped at 128 stored contexts.
+- Inbox writes use the exact parsed checkbox/action values and one `submitWrite`
+  call—no retry/coalescing loop. All current filter/page cache variants are
+  invalidated after a confirmed same-scope success.
+- Work/non-work routing, Parent Thread-or-self resolution, exact chapter insertion,
+  Reply capability gating, Guest/User/Author/Me precedence, Anonymous Creator
+  provenance, paced avatars, the dedicated Reply capsule, trailing green Replied
+  marker, and nonredundant overflow actions are structurally correct in the normal
+  fixture/live-markup path.
+- The current upstream Inbox form still uses PUT-via-POST, the three stable action
+  names, the three documented filter groups, and distinct feedback-comment versus
+  InboxComment ids; the normal fixture matches those contracts.
+
+### Test and release gates
+
+The added tests cover parser happy paths, recognized-empty versus wholly
+unrecognized markup, form-body construction, cache invalidation breadth, role
+resolution, standalone-thread projection, and pure metadata merging. There is
+**no instantiated `AO3InboxModel` test** and no injected page/write loader, so
+activation, same-user relogin, page/filter failure, account-switch races,
+post-write response handling, metadata cancellation/failure, and selection
+lifecycle are review-only today. Before release:
+
+1. Fix and regression-test RF1–RF3; all three are release blockers.
+2. Add an injected Inbox page/write seam and model-state suite covering RF4–RF9.
+3. Run owner live Mark Read/Unread/Delete against AO3, including a stale row from
+   another browser/session; agents must not manufacture a live write.
+4. Complete Area 9's VoiceOver, Dynamic Type, theme, iPhone/iPad, and macOS pass,
+   explicitly including RF10 and the two UI observations above.
+5. Retain the standing release blockers from Areas 2, 5, and 7; this addendum does
+   not supersede A5-F1/F4 or the reader/persistence blockers.
+
+Release conclusion for T-91 at this point: **NOT READY — 3 P1 blockers, 7 P2
+findings, 1 P3 follow-up.**
