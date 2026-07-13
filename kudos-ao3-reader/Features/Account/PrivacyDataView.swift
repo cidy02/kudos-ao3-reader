@@ -48,7 +48,12 @@ struct PrivacyDataView: View {
                 } header: {
                     Text("AO3 Session")
                 } footer: {
-                    Text("Your AO3 session is stored only on this device and is never shared.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Your AO3 session is stored only on this device and is never shared.")
+                        if let notice = auth.noticeMessage {
+                            Text(notice)
+                        }
+                    }
                 }
 
                 Section {

@@ -129,6 +129,86 @@ struct AO3SessionTests {
     }
 }
 
+/// A5-F4: `CascadingAO3SessionVault.delete()` must always attempt both underlying
+/// stores, even when one throws, and must surface a failure rather than silently
+/// dropping the second attempt. Uses throwing/spying doubles instead of the real
+/// Keychain so a genuine (non-missing-entitlement) failure is reproducible at all.
+struct CascadingAO3SessionVaultTests {
+    private final class SpyingSessionVault: AO3SessionPersisting {
+        private(set) var deleteCallCount = 0
+        var deleteError: Error?
+
+        func load() throws -> AO3Session? { nil }
+        func save(_ session: AO3Session) throws {}
+        func delete() throws {
+            deleteCallCount += 1
+            if let deleteError { throw deleteError }
+        }
+    }
+
+    @Test func attemptsFileDeleteEvenWhenKeychainThrows() {
+        let keychain = SpyingSessionVault()
+        keychain.deleteError = AO3SessionVaultError.keychain(errSecInteractionNotAllowed)
+        let file = SpyingSessionVault()
+        let vault = CascadingAO3SessionVault(keychain: keychain, file: file)
+
+        #expect(throws: AO3SessionVaultError.self) { try vault.delete() }
+        #expect(keychain.deleteCallCount == 1)
+        #expect(file.deleteCallCount == 1)
+    }
+
+    @Test func deleteSucceedsOnlyWhenBothStoresSucceed() throws {
+        let keychain = SpyingSessionVault()
+        let file = SpyingSessionVault()
+        let vault = CascadingAO3SessionVault(keychain: keychain, file: file)
+
+        try vault.delete()
+        #expect(keychain.deleteCallCount == 1)
+        #expect(file.deleteCallCount == 1)
+    }
+
+    @Test func missingEntitlementIsIgnoredButFileIsStillDeleted() throws {
+        let keychain = SpyingSessionVault()
+        keychain.deleteError = AO3SessionVaultError.keychain(errSecMissingEntitlement)
+        let file = SpyingSessionVault()
+        let vault = CascadingAO3SessionVault(keychain: keychain, file: file)
+
+        try vault.delete() // missing entitlement is expected on Simulator/unsigned builds
+        #expect(keychain.deleteCallCount == 1)
+        #expect(file.deleteCallCount == 1)
+    }
+
+    @Test func fileFailureAloneIsStillSurfaced() {
+        let keychain = SpyingSessionVault()
+        let file = SpyingSessionVault()
+        file.deleteError = AO3SessionVaultError.invalidData
+        let vault = CascadingAO3SessionVault(keychain: keychain, file: file)
+
+        #expect(throws: AO3SessionVaultError.self) { try vault.delete() }
+        #expect(keychain.deleteCallCount == 1)
+        #expect(file.deleteCallCount == 1)
+    }
+}
+
+/// A5-F1: the cookie bridge must only ever mirror a session into WebKit's own cookie
+/// store — never into `HTTPCookieStorage.shared`, which `AO3Client`'s "anonymous"
+/// session used to read from automatically, silently authenticating requests that
+/// were supposed to be anonymous.
+@MainActor
+struct AO3CookieBridgeTests {
+    @Test func installNeverWritesToTheSharedHTTPCookieStorage() async {
+        let marker = "kudos-test-marker-\(UUID().uuidString)"
+        let session = AO3Session(
+            username: "reader",
+            cookies: [AO3StoredCookie(name: marker, value: "leak-check")]
+        )
+
+        await AO3CookieBridge.install(session)
+        #expect(HTTPCookieStorage.shared.cookies?.contains { $0.name == marker } != true)
+        await AO3CookieBridge.clearAO3Cookies()
+    }
+}
+
 /// Guards the Swift session parser against AO3 markup drift using representative
 /// page fixtures. The hidden-login JS in `AO3WebLoginCoordinator` reads the same
 /// structure, so a failure here is an early warning that the live-page checks need
@@ -167,7 +247,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: performer,
-            cookieManager: cookies
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.login(username: "reader", password: "password")
@@ -197,7 +278,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: MockAO3SessionValidator(result: .expired),
             loginPerformer: performer,
-            cookieManager: MockAO3CookieManager()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.login(username: "reader", password: "password")
@@ -222,7 +304,8 @@ struct AO3AuthServiceTests {
             vault: MemoryAO3SessionVault(),
             validator: MockAO3SessionValidator(result: .expired),
             loginPerformer: performer,
-            cookieManager: MockAO3CookieManager()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.login(username: "reader", password: "bad")
@@ -241,7 +324,8 @@ struct AO3AuthServiceTests {
             vault: MemoryAO3SessionVault(),
             validator: MockAO3SessionValidator(result: .expired),
             loginPerformer: performer,
-            cookieManager: MockAO3CookieManager()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         let loginTask = Task { await service.login(username: "reader", password: "password") }
@@ -266,7 +350,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: MockAO3SessionValidator(result: .expired),
             loginPerformer: MockAO3LoginPerformer(result: .success(testSession)),
-            cookieManager: cookies
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -284,7 +369,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: MockAO3SessionValidator(result: .valid(testSession)),
             loginPerformer: MockAO3LoginPerformer(result: .success(testSession)),
-            cookieManager: cookies
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -302,12 +388,14 @@ struct AO3AuthServiceTests {
         let vault = MemoryAO3SessionVault(session: session)
         let cookies = MockAO3CookieManager()
         let hints = MemoryAO3SessionHintStore(username: session.username)
+        let tracker = MemoryAO3SessionRemovalTracker()
         let service = AO3AuthService(
             vault: vault,
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
             cookieManager: cookies,
-            sessionHintStore: hints
+            sessionHintStore: hints,
+            removalTracker: tracker
         )
 
         await service.restoreSession()
@@ -318,6 +406,83 @@ struct AO3AuthServiceTests {
         #expect(vault.session == nil)
         #expect(cookies.clearCount == 1)
         #expect(hints.username == nil)
+        #expect(!tracker.isRemovalPending)
+    }
+
+    /// A5-F4: a Keychain/file delete that throws must not be reported as a clean
+    /// logout, and the failure must be tracked so a relaunch refuses to restore.
+    @Test func logoutSurfacesRetryableFailureInsteadOfClaimingSuccess() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: session, deleteError: .keychain(errSecInteractionNotAllowed))
+        let cookies = MockAO3CookieManager()
+        let hints = MemoryAO3SessionHintStore(username: session.username)
+        let tracker = MemoryAO3SessionRemovalTracker()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: cookies,
+            sessionHintStore: hints,
+            removalTracker: tracker
+        )
+
+        await service.restoreSession()
+        await service.logout()
+
+        #expect(service.status == .signedOut)
+        #expect(service.noticeMessage != "Logged out of AO3.")
+        #expect(service.noticeMessage?.isEmpty == false)
+        #expect(tracker.isRemovalPending)
+        // Soft/live state is still cleared even though the durable delete failed.
+        #expect(cookies.clearCount == 1)
+        #expect(hints.username == nil)
+        #expect(!service.isLoggedIn)
+    }
+
+    /// A5-F4: while removal is pending, a relaunch must refuse to restore the
+    /// still-present session, no matter what the vault holds.
+    @Test func pendingRemovalRefusesToRestoreStaleSessionOnRelaunch() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: session, deleteError: .keychain(errSecInteractionNotAllowed))
+        let tracker = MemoryAO3SessionRemovalTracker()
+        tracker.markRemovalPending() // simulates a prior failed logout
+
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: tracker
+        )
+
+        await service.restoreSession()
+
+        #expect(service.status == .signedOut)
+        #expect(!service.isLoggedIn)
+        #expect(tracker.isRemovalPending) // the relaunch retry also failed; still pending
+    }
+
+    /// A5-F4: once the durable store is actually clearable, the automatic relaunch
+    /// retry succeeds and the pending marker clears.
+    @Test func pendingRemovalRetrySucceedsAndClearsPendingState() async {
+        let session = testSession
+        let vault = MemoryAO3SessionVault(session: session) // no deleteError: this retry succeeds
+        let tracker = MemoryAO3SessionRemovalTracker()
+        tracker.markRemovalPending()
+
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(session)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(session)),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: tracker
+        )
+
+        await service.restoreSession()
+
+        #expect(service.status == .signedOut)
+        #expect(!tracker.isRemovalPending)
+        #expect(vault.deleteAttempts == 1)
     }
 
     @Test func loginSurvivesMissingKeychainEntitlement() async {
@@ -330,7 +495,8 @@ struct AO3AuthServiceTests {
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
             cookieManager: cookies,
-            sessionHintStore: hints
+            sessionHintStore: hints,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.login(username: "reader", password: "password")
@@ -355,7 +521,8 @@ struct AO3AuthServiceTests {
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
             cookieManager: cookies,
-            sessionHintStore: hints
+            sessionHintStore: hints,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -377,7 +544,8 @@ struct AO3AuthServiceTests {
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
             cookieManager: cookies,
-            sessionHintStore: hints
+            sessionHintStore: hints,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -397,7 +565,8 @@ struct AO3AuthServiceTests {
             validator: MockAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
             cookieManager: cookies,
-            sessionHintStore: hints
+            sessionHintStore: hints,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.login(username: "reader", password: "password")
@@ -420,7 +589,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: validator,
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
-            cookieManager: MockAO3CookieManager()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -443,7 +613,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: validator,
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
-            cookieManager: cookies
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -463,7 +634,8 @@ struct AO3AuthServiceTests {
             vault: vault,
             validator: validator,
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
-            cookieManager: MockAO3CookieManager()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.restoreSession()
@@ -481,7 +653,8 @@ struct AO3AuthServiceTests {
             vault: MemoryAO3SessionVault(),
             validator: ConfigurableAO3SessionValidator(result: .valid(session)),
             loginPerformer: MockAO3LoginPerformer(result: .success(session)),
-            cookieManager: MockAO3CookieManager()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
 
         await service.verifySession()
@@ -502,15 +675,21 @@ private final class MemoryAO3SessionVault: AO3SessionPersisting {
     var session: AO3Session?
     let loadError: AO3SessionVaultError?
     let saveError: AO3SessionVaultError?
+    /// Mutable (not `let`) so a test can simulate "fails once, then a later retry
+    /// succeeds" by clearing this between calls — mirrors `ConfigurableAO3SessionValidator`.
+    var deleteError: AO3SessionVaultError?
+    private(set) var deleteAttempts = 0
 
     init(
         session: AO3Session? = nil,
         loadError: AO3SessionVaultError? = nil,
-        saveError: AO3SessionVaultError? = nil
+        saveError: AO3SessionVaultError? = nil,
+        deleteError: AO3SessionVaultError? = nil
     ) {
         self.session = session
         self.loadError = loadError
         self.saveError = saveError
+        self.deleteError = deleteError
     }
 
     func load() throws -> AO3Session? {
@@ -523,7 +702,31 @@ private final class MemoryAO3SessionVault: AO3SessionPersisting {
         self.session = session
     }
 
-    func delete() throws { session = nil }
+    func delete() throws {
+        deleteAttempts += 1
+        if let deleteError { throw deleteError }
+        session = nil
+    }
+}
+
+/// Fresh, isolated stand-in for the real UserDefaults-backed removal tracker — every
+/// test that constructs `AO3AuthService` injects its own instance so pending state
+/// from one test can never leak into another via `UserDefaults.standard`.
+@MainActor
+private final class MemoryAO3SessionRemovalTracker: AO3SessionRemovalTracking {
+    private(set) var isRemovalPending = false
+    private(set) var markCount = 0
+    private(set) var clearCount = 0
+
+    func markRemovalPending() {
+        isRemovalPending = true
+        markCount += 1
+    }
+
+    func clearRemovalPending() {
+        isRemovalPending = false
+        clearCount += 1
+    }
 }
 
 @MainActor

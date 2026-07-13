@@ -21,13 +21,31 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private let session: URLSession
 
     init() {
+        session = URLSession(configuration: Self.makeAnonymousSessionConfiguration())
+    }
+
+    /// The configuration for this client's one session. This client is supposed to be
+    /// anonymous everywhere except the explicit, per-request `Cookie` header set by
+    /// `authenticatedHTML`/`submitWrite` — so cookie handling is disabled outright
+    /// (`httpCookieStorage = nil`), not merely left at the shared jar. Previously this
+    /// used `URLSessionConfiguration.default`, whose default cookie storage is
+    /// `HTTPCookieStorage.shared` — the same store `AO3CookieBridge` used to mirror a
+    /// signed-in session's cookies into, so a "read-only" search/browse/tag request
+    /// silently rode along with the account's cookie (A5-F1), and two identical
+    /// URL-only reads under different accounts could coalesce a response that was
+    /// secretly authenticated. Internal (not private) so the isolation guarantee is
+    /// unit-testable without a network call.
+    static func makeAnonymousSessionConfiguration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.default
         // The shared app identity (browser-like base + product token + contact URL) —
         // single-sourced in AO3RequestDefaults because authenticated requests set the
         // same header per-request, which would silently override a diverging default.
         config.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         config.timeoutIntervalForRequest = 30
-        session = URLSession(configuration: config)
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.httpCookieAcceptPolicy = .never
+        return config
     }
 
     // MARK: Pacing
@@ -360,7 +378,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         request.httpShouldHandleCookies = false
         Log.network.debug("GET (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
 
-        let key = (request.url?.absoluteString ?? "") + "|" + (request.value(forHTTPHeaderField: "Cookie") ?? "")
+        let key = Self.authCoalescingKey(
+            url: request.url,
+            cookieHeader: request.value(forHTTPHeaderField: "Cookie")
+        )
         // Capture a let so the coalescer closure does not close over the mutable `var request`.
         let fetchRequest = request
         let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
@@ -370,6 +391,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             throw AO3Error.authenticationRequired
         }
         return Self.htmlString(from: data)
+    }
+
+    /// The `authCoalescer` key: URL *and* Cookie header, so a mid-flight account
+    /// switch can never share an in-flight result with another account (A5-F1) — two
+    /// different sessions requesting the same URL always produce different keys, and
+    /// this coalescer is never touched by the anonymous `coalescer` pipeline at all.
+    /// Internal + static so the scoping rule is unit-testable without a network call.
+    static func authCoalescingKey(url: URL?, cookieHeader: String?) -> String {
+        (url?.absoluteString ?? "") + "|" + (cookieHeader ?? "")
     }
 
     private func performAuthenticatedFetch(for request: URLRequest) async throws -> (Data, String?) {

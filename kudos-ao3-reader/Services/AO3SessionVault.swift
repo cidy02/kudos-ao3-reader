@@ -36,6 +36,33 @@ protocol AO3SessionHintPersisting {
     func deleteUsername()
 }
 
+/// Tracks whether a durable-store session deletion is known to be incomplete (e.g. a
+/// Keychain delete failed). Non-secret — a bare flag, never session data. While set,
+/// a saved session must never be restored (A5-F4): the durable store may still hold
+/// reusable credentials even though the UI already reported the session removed.
+protocol AO3SessionRemovalTracking {
+    var isRemovalPending: Bool { get }
+    func markRemovalPending()
+    func clearRemovalPending()
+}
+
+struct UserDefaultsAO3SessionRemovalTracker: AO3SessionRemovalTracking {
+    private let defaults: UserDefaults
+    private let key: String
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "AO3SessionRemovalPending"
+    ) {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    var isRemovalPending: Bool { defaults.bool(forKey: key) }
+    func markRemovalPending() { defaults.set(true, forKey: key) }
+    func clearRemovalPending() { defaults.removeObject(forKey: key) }
+}
+
 /// Stores only a non-secret username hint. Authentication cookies remain in
 /// Keychain or WebKit's app-scoped data store and are never written here.
 struct UserDefaultsAO3SessionHintStore: AO3SessionHintPersisting {
@@ -189,12 +216,15 @@ struct FileAO3SessionVault: AO3SessionPersisting {
 /// When Keychain returns `errSecMissingEntitlement` (Simulator / unsigned),
 /// falls back to an Application Support file so relaunch still restores.
 struct CascadingAO3SessionVault: AO3SessionPersisting {
-    private let keychain: KeychainAO3SessionVault
-    private let file: FileAO3SessionVault
+    // Protocol-typed (not the concrete Keychain/File structs) so tests can inject a
+    // throwing double for either store without touching the real Keychain — needed
+    // to prove `delete()` always attempts both stores (A5-F4).
+    private let keychain: AO3SessionPersisting
+    private let file: AO3SessionPersisting
 
     init(
-        keychain: KeychainAO3SessionVault = KeychainAO3SessionVault(),
-        file: FileAO3SessionVault = FileAO3SessionVault()
+        keychain: AO3SessionPersisting = KeychainAO3SessionVault(),
+        file: AO3SessionPersisting = FileAO3SessionVault()
     ) {
         self.keychain = keychain
         self.file = file
@@ -237,14 +267,24 @@ struct CascadingAO3SessionVault: AO3SessionPersisting {
     }
 
     func delete() throws {
-        // Missing-entitlement Keychain failures are expected on unsigned /
-        // Simulator builds — the file vault is what actually has the session.
+        // Both stores are always attempted, even if one throws (A5-F4): the old
+        // control flow re-threw a real Keychain failure before ever calling
+        // `file.delete()`, leaving a durable file-vault copy behind while the caller
+        // believed removal had been attempted end-to-end. Missing-entitlement
+        // Keychain failures are expected on unsigned/Simulator builds and ignored —
+        // the file vault is what actually has the session there.
+        var pendingFailure: Error?
         do {
             try keychain.delete()
         } catch {
-            if !Self.isMissingEntitlement(error) { throw error }
+            if !Self.isMissingEntitlement(error) { pendingFailure = error }
         }
-        try file.delete()
+        do {
+            try file.delete()
+        } catch {
+            if pendingFailure == nil { pendingFailure = error }
+        }
+        if let pendingFailure { throw pendingFailure }
     }
 
     private static func isMissingEntitlement(_ error: Error) -> Bool {
@@ -252,16 +292,23 @@ struct CascadingAO3SessionVault: AO3SessionPersisting {
     }
 }
 
-/// Keeps WebKit, URLSession, and the Keychain model in agreement. Browser and
-/// fallback login views both use the default WebKit data store, so installing or
-/// clearing cookies here updates every AO3 WebView in the app.
+/// Keeps WebKit and the Keychain model in agreement. Browser and fallback login views
+/// both use the default WebKit data store, so installing or clearing cookies here
+/// updates every AO3 WebView in the app.
+///
+/// Deliberately does **not** touch `HTTPCookieStorage.shared` (it used to, mirroring
+/// every cookie into that shared jar). `AO3Client`'s "anonymous" session used
+/// `URLSessionConfiguration.default`, whose default cookie storage is that same
+/// shared jar — so a signed-in session's cookie rode along on every nominally
+/// anonymous search/browse/tag request (A5-F1). `AO3Client` now runs with cookie
+/// handling disabled outright, so there is no isolated consumer left for this bridge
+/// to serve; only WebKit's own store needs to reflect the session.
 @MainActor
 enum AO3CookieBridge {
     static func install(_ session: AO3Session) async {
         for stored in session.validCookies {
             guard let cookie = stored.httpCookie else { continue }
             await set(cookie, in: WKWebsiteDataStore.default().httpCookieStore)
-            HTTPCookieStorage.shared.setCookie(cookie)
         }
     }
 
@@ -270,11 +317,6 @@ enum AO3CookieBridge {
         let webCookies = await allCookies(in: store)
         for cookie in webCookies where AO3StoredCookie.isAO3Domain(cookie.domain) {
             await delete(cookie, from: store)
-        }
-
-        for cookie in HTTPCookieStorage.shared.cookies ?? []
-            where AO3StoredCookie.isAO3Domain(cookie.domain) {
-            HTTPCookieStorage.shared.deleteCookie(cookie)
         }
     }
 
