@@ -266,7 +266,7 @@ struct CommentsView: View {
 
     private func threadHandlers(scrollProxy: ScrollViewProxy) -> CommentThreadHandlers {
         CommentThreadHandlers(
-            onReply: { model.startComposer(replyingTo: $0) },
+            onReply: { model.startComposer(replyingTo: $0, auth: auth) },
             onEdit: { model.startEditing($0) },
             onDelete: { pendingDelete = $0 },
             onCopyLink: { copyLink($0) },
@@ -581,7 +581,7 @@ struct CommentsView: View {
             // instead of composing — it must never be a dead end.
             Button {
                 if auth.isLoggedIn {
-                    model.startComposer()
+                    model.startComposer(auth: auth)
                 } else {
                     showingLogin = true
                 }

@@ -47,21 +47,105 @@ struct CommentSubmissionKey: Hashable {
     }
 }
 
-/// Single-flight + recent-success guard for comment POSTs.
+/// Auth-scoped record of comment submissions left unresolved by an ambiguous
+/// POST outcome. `CommentSubmissionGuard` is created fresh with every
+/// `CommentsModel` — a new Comments screen, a switched Reply target, or a
+/// popped-and-reopened Inbox thread all recreate it — so a guard's own
+/// in-memory state cannot be what keeps a duplicate POST blocked. This store
+/// is the durable source of truth every guard instance reads through and
+/// writes through to.
+///
+/// Keyed by the full `CommentSubmissionKey` (context + normalized body +
+/// identity) and partitioned by `identity`, so a distinct submission (a
+/// different target, or genuinely different text to the same target) can
+/// proceed without disturbing an unresolved one, and one AO3 account's
+/// unresolved state is neither visible to nor cleared by another's.
+///
+/// In-memory only, process-lifetime (same tradeoff as `CommentsModel`'s own
+/// `CommentsPageCache`): comment text and submission timing are live session
+/// state, not something to persist to disk, and nothing stored here is a
+/// credential (no cookies/CSRF/HTML). `maxAge` bounds retention so a missed
+/// resolution can't accumulate forever.
+@MainActor
+final class UnresolvedCommentSubmissionStore {
+    struct Entry: Equatable {
+        let message: String
+        /// When the POST attempt that produced this entry was made — the
+        /// timing anchor `verifyCommentPosted` matches candidate replies
+        /// against. Re-recording the same key (e.g. a "Check Again" retry
+        /// that finds it still ambiguous) keeps this original value rather
+        /// than resetting it.
+        let submittedAt: Date
+    }
+
+    /// The process-lifetime store production code shares across every
+    /// `CommentsModel`/`CommentSubmissionGuard` and that `AO3AuthService`
+    /// clears on logout/session loss. Tests construct their own instance
+    /// (`CommentSubmissionGuard`'s default) so runs never share state.
+    static let shared = UnresolvedCommentSubmissionStore()
+
+    private var entriesByIdentity: [String: [CommentSubmissionKey: Entry]] = [:]
+    private let maxAge: TimeInterval
+    private let now: () -> Date
+
+    // Default-constructible from a non-isolated context (e.g. as another
+    // MainActor type's default parameter value) — every other member stays
+    // actor-isolated, so this only defers, never bypasses, the isolation check.
+    nonisolated init(maxAge: TimeInterval = 3600, now: @escaping () -> Date = Date.init) {
+        self.maxAge = maxAge
+        self.now = now
+    }
+
+    /// The unresolved entry for `key`, or nil if there isn't one or it aged out.
+    func entry(for key: CommentSubmissionKey) -> Entry? {
+        guard let stored = entriesByIdentity[key.identity]?[key] else { return nil }
+        guard now().timeIntervalSince(stored.submittedAt) < maxAge else {
+            entriesByIdentity[key.identity]?.removeValue(forKey: key)
+            return nil
+        }
+        return stored
+    }
+
+    /// Records (or re-records) `key` as unresolved.
+    func markAmbiguous(_ key: CommentSubmissionKey, message: String, submittedAt: Date) {
+        let anchoredAt = entriesByIdentity[key.identity]?[key]?.submittedAt ?? submittedAt
+        entriesByIdentity[key.identity, default: [:]][key] = Entry(message: message, submittedAt: anchoredAt)
+    }
+
+    /// Authoritative resolution (verified success, or a definitive failure that
+    /// proves nothing was posted): the block on `key` is lifted.
+    func resolve(_ key: CommentSubmissionKey) {
+        entriesByIdentity[key.identity]?.removeValue(forKey: key)
+    }
+
+    /// Logout / account change: `identity`'s unresolved state must not leak
+    /// into, or keep blocking, whatever session follows.
+    func clear(identity: String) {
+        entriesByIdentity.removeValue(forKey: identity)
+    }
+}
+
+/// Single-flight + recent-success guard for comment POSTs. Displays state for
+/// whatever key its owning composer currently targets; the durable
+/// `UnresolvedCommentSubmissionStore` (not this instance) is what actually
+/// keeps an unresolved submission blocked across navigation.
 ///
 /// Rules enforced:
 /// - `begin` fails while any submission is in flight (`submitting`/`verifying`).
 /// - `begin` fails for a key that already succeeded within `duplicateWindow` —
 ///   a re-tap after success can't re-post the same text to the same place.
-/// - After an ambiguous outcome, `begin` fails for that key until
-///   `resolveAmbiguity` runs (verification), keeping "retry" explicit and safe.
+/// - After an ambiguous outcome, `begin` fails for that key — even from a
+///   brand-new guard instance — until `resolveAmbiguity` runs (verification),
+///   keeping "retry" explicit and safe.
 @MainActor
 @Observable
 final class CommentSubmissionGuard {
     private(set) var phase: CommentSubmissionPhase = .idle
-    /// Keys that completed with a verified success, with when.
+    /// Keys that completed with a verified success, with when. Instance-local
+    /// (not durable) — this dedup window is a courtesy against a fast re-tap,
+    /// not a correctness invariant like the unresolved-submission block.
     private var recentSuccesses: [CommentSubmissionKey: Date] = [:]
-    /// The key whose outcome is unresolved (in flight or ambiguous).
+    /// The key this guard instance is currently displaying status for.
     private(set) var pendingKey: CommentSubmissionKey?
 
     /// How long an identical submission stays blocked after a success. Long
@@ -69,19 +153,49 @@ final class CommentSubmissionGuard {
     /// genuinely repeated (identical) comment later on purpose.
     let duplicateWindow: TimeInterval
     private let now: () -> Date
+    private let store: UnresolvedCommentSubmissionStore
 
-    init(duplicateWindow: TimeInterval = 300, now: @escaping () -> Date = Date.init) {
+    init(
+        duplicateWindow: TimeInterval = 300,
+        now: @escaping () -> Date = Date.init,
+        store: UnresolvedCommentSubmissionStore = UnresolvedCommentSubmissionStore()
+    ) {
         self.duplicateWindow = duplicateWindow
         self.now = now
+        self.store = store
+    }
+
+    /// The durable-store timestamp of the POST attempt behind `pendingKey`
+    /// (nil once resolved/idle) — the timing evidence verification anchors to.
+    var pendingSubmittedAt: Date? {
+        guard let pendingKey else { return nil }
+        return store.entry(for: pendingKey)?.submittedAt
+    }
+
+    /// Re-syncs `phase`/`pendingKey` for `key` against the durable store.
+    /// Call whenever the composer opens or switches targets, so a key already
+    /// unresolved — from an earlier attempt, possibly by a since-recreated
+    /// guard — shows its true blocked state instead of a fresh idle one.
+    func adopt(_ key: CommentSubmissionKey) {
+        guard !phase.isBusy else { return }
+        if let entry = store.entry(for: key) {
+            pendingKey = key
+            phase = .ambiguous(entry.message)
+        } else {
+            pendingKey = nil
+            phase = .idle
+        }
     }
 
     /// Claims the right to POST `key`. Returns false (and sets a user-readable
     /// phase) when posting must not proceed.
     func begin(_ key: CommentSubmissionKey) -> Bool {
         if phase.isBusy { return false }
-        if let pendingKey, pendingKey == key, case .ambiguous = phase {
+        if let entry = store.entry(for: key) {
             // Unresolved earlier attempt for this exact comment — verification,
             // not a second POST, is the only way forward.
+            pendingKey = key
+            phase = .ambiguous(entry.message)
             return false
         }
         if let succeededAt = recentSuccesses[key],
@@ -96,7 +210,10 @@ final class CommentSubmissionGuard {
 
     /// The POST returned a definitive success (or verification found the comment).
     func succeed() {
-        if let pendingKey { recentSuccesses[pendingKey] = now() }
+        if let pendingKey {
+            recentSuccesses[pendingKey] = now()
+            store.resolve(pendingKey)
+        }
         pendingKey = nil
         phase = .succeeded
     }
@@ -104,13 +221,17 @@ final class CommentSubmissionGuard {
     /// The POST failed before anything could have been recorded server-side
     /// (rejected by AO3, no connection, signed out). Safe to retry explicitly.
     func fail(_ message: String) {
+        if let pendingKey { store.resolve(pendingKey) }
         pendingKey = nil
         phase = .failed(message)
     }
 
     /// The POST's outcome is unknown (e.g. timeout after the request was sent).
-    /// Keeps the key pending; `begin` for it stays blocked.
+    /// Keeps the key pending in the durable store; `begin` for it stays
+    /// blocked for every guard instance, not just this one.
     func markAmbiguous(_ message: String) {
+        guard let pendingKey else { return }
+        store.markAmbiguous(pendingKey, message: message, submittedAt: now())
         phase = .ambiguous(message)
     }
 
@@ -131,16 +252,23 @@ final class CommentSubmissionGuard {
         case .absent:
             fail("The comment didn't reach AO3. You can try posting again.")
         case .unknown:
-            phase = .ambiguous(
-                "We couldn't confirm whether this posted — AO3 wasn't reachable. "
+            guard let pendingKey else { return }
+            let message = "We couldn't confirm whether this posted — AO3 wasn't reachable. "
                 + "Your draft is saved. Check again before re-posting."
-            )
+            store.markAmbiguous(pendingKey, message: message, submittedAt: now())
+            phase = .ambiguous(message)
         }
     }
 
-    /// Back to rest (e.g. composer dismissed after success/failure was seen).
+    /// Back to rest for this guard's own display (e.g. composer dismissed
+    /// after success/failure was seen, or switching to a distinct target). An
+    /// unresolved store entry for `pendingKey` is untouched — `adopt` restores
+    /// this or any other guard's phase from it the next time something targets
+    /// that key again — so this can never silently unblock a duplicate.
     func reset() {
-        if !phase.isBusy { phase = .idle }
+        guard !phase.isBusy else { return }
+        pendingKey = nil
+        phase = .idle
     }
 }
 

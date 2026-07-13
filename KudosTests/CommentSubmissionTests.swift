@@ -124,6 +124,200 @@ struct CommentSubmissionTests {
         #expect(guardrail.begin(key()))
     }
 
+    // MARK: Durable unresolved-submission store (T91-RF2)
+    //
+    // `CommentSubmissionGuard.begin`/`markAmbiguous`/etc. above exercise one
+    // long-lived guard instance. In the app, `CommentsModel` — and the guard
+    // it owns — is recreated on target switches, popping back to Inbox and
+    // reopening, and Comments-screen recreation in general; only a store that
+    // outlives any one guard instance can keep an unresolved submission
+    // blocked through that. These tests construct a fresh guard per "screen"
+    // the way `CommentsModel` would, sharing one store the way the app shares
+    // `UnresolvedCommentSubmissionStore.shared`.
+
+    @Test func distinctTargetProceedsWithoutErasingAnUnresolvedOne() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keyA = key(parent: 5)
+        let keyB = key(parent: 6)
+
+        let guardA = CommentSubmissionGuard(store: store)
+        #expect(guardA.begin(keyA))
+        guardA.markAmbiguous("Connection dropped.")
+
+        // A distinct target (different parent → different key) proceeds and
+        // resolves normally without touching A's entry.
+        let guardB = CommentSubmissionGuard(store: store)
+        guardB.adopt(keyB)
+        #expect(guardB.phase == .idle)
+        #expect(guardB.begin(keyB))
+        guardB.succeed()
+        #expect(guardB.phase == .succeeded)
+
+        // A → B → A: reopening on A (even via a brand-new guard, as a popped
+        // and reopened Comments screen would produce) still shows it blocked.
+        let guardA2 = CommentSubmissionGuard(store: store)
+        guardA2.adopt(keyA)
+        #expect(guardA2.phase == .ambiguous("Connection dropped."))
+        #expect(!guardA2.begin(keyA))
+    }
+
+    @Test func ambiguousAPopAndReopenStaysBlocked() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keyA = key()
+
+        let firstScreen = CommentSubmissionGuard(store: store)
+        #expect(firstScreen.begin(keyA))
+        firstScreen.markAmbiguous("Connection dropped.")
+        // Popping back to Inbox discards this guard instance entirely — no
+        // `reset()`/`succeed()`/`fail()` call, just abandonment.
+
+        // Reopening the same reply target creates a brand-new CommentsModel
+        // (and guard) — as if the pushed CommentsView had been destroyed.
+        let reopenedScreen = CommentSubmissionGuard(store: store)
+        reopenedScreen.adopt(keyA)
+        #expect(reopenedScreen.phase == .ambiguous("Connection dropped."))
+        #expect(!reopenedScreen.begin(keyA))
+    }
+
+    @Test func modelRecreationRetainsTheGuardWhereRequired() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keyA = key()
+
+        let original = CommentSubmissionGuard(store: store)
+        #expect(original.begin(keyA))
+        original.markAmbiguous("Connection dropped.")
+
+        // A brand-new guard for the same key (simulating `CommentsModel`
+        // reconstruction) must adopt the block immediately, and `begin` must
+        // reject it even without an explicit `adopt` call first.
+        let recreated = CommentSubmissionGuard(store: store)
+        #expect(!recreated.begin(keyA))
+        if case .ambiguous = recreated.phase {} else {
+            Issue.record("expected .ambiguous, got \(String(describing: recreated.phase))")
+        }
+    }
+
+    @Test func resolvingOneUnresolvedKeyDoesNotAffectAnother() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keyA = key(parent: 5)
+        let keyB = key(parent: 6)
+
+        let guardA = CommentSubmissionGuard(store: store)
+        #expect(guardA.begin(keyA))
+        guardA.markAmbiguous("Connection dropped.")
+
+        let guardB = CommentSubmissionGuard(store: store)
+        #expect(guardB.begin(keyB))
+        guardB.markAmbiguous("Connection dropped.")
+
+        // Verification proves A never posted — A resolves to a definitive
+        // failure (explicit retry becomes possible for A only).
+        guardA.resolveAmbiguity(.absent)
+        #expect(guardA.begin(keyA))
+
+        // B's entry is untouched: a fresh guard for B is still blocked.
+        let guardB2 = CommentSubmissionGuard(store: store)
+        #expect(!guardB2.begin(keyB))
+    }
+
+    @Test func oneAccountsUnresolvedStateIsUnavailableToAnother() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keyAccountA = key(identity: "accountA")
+        let keyAccountB = key(identity: "accountB")
+
+        let guardA = CommentSubmissionGuard(store: store)
+        #expect(guardA.begin(keyAccountA))
+        guardA.markAmbiguous("Connection dropped.")
+
+        // Same context/body, different signed-in identity: B's key is simply
+        // a different key, structurally invisible to A's entry.
+        let guardB = CommentSubmissionGuard(store: store)
+        #expect(guardB.begin(keyAccountB))
+    }
+
+    @Test func logoutInvalidatesTheLoggedOutAccountsUnresolvedState() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keyA = key(identity: "accountA")
+
+        let guardA = CommentSubmissionGuard(store: store)
+        #expect(guardA.begin(keyA))
+        guardA.markAmbiguous("Connection dropped.")
+        #expect(store.entry(for: keyA) != nil)
+
+        // What AO3AuthService.logout()/clearStoredSession() do on sign-out.
+        store.clear(identity: "accountA")
+        #expect(store.entry(for: keyA) == nil)
+
+        // A fresh guard (as a reopened composer would use) is no longer blocked.
+        let afterLogout = CommentSubmissionGuard(store: store)
+        #expect(afterLogout.begin(keyA))
+    }
+
+    @Test func multipleUnresolvedKeysDoNotOverwriteEachOther() {
+        let store = UnresolvedCommentSubmissionStore()
+        let keys = (0 ..< 3).map { key(body: "Reply #\($0)", parent: $0) }
+
+        for (index, aKey) in keys.enumerated() {
+            let guardForKey = CommentSubmissionGuard(store: store)
+            #expect(guardForKey.begin(aKey))
+            guardForKey.markAmbiguous("Ambiguous #\(index)")
+        }
+
+        // Every key is still independently retrievable and blocking.
+        for (index, aKey) in keys.enumerated() {
+            #expect(store.entry(for: aKey)?.message == "Ambiguous #\(index)")
+            let guardForKey = CommentSubmissionGuard(store: store)
+            #expect(!guardForKey.begin(aKey))
+        }
+    }
+
+    @Test func storeMarkAmbiguousAnchorsTheOriginalSubmissionTime() {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let store = UnresolvedCommentSubmissionStore(now: { now })
+        let aKey = key()
+
+        store.markAmbiguous(aKey, message: "First check.", submittedAt: now)
+        now = now.addingTimeInterval(120)
+        // A later "Check Again" re-records the same key — the timing anchor
+        // for verification must stay the ORIGINAL attempt, not this retry.
+        store.markAmbiguous(aKey, message: "Still checking.", submittedAt: now)
+
+        #expect(store.entry(for: aKey)?.submittedAt == Date(timeIntervalSince1970: 1_000))
+        #expect(store.entry(for: aKey)?.message == "Still checking.")
+    }
+
+    @Test func storeEntriesExpireAfterMaxAge() {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let store = UnresolvedCommentSubmissionStore(maxAge: 60, now: { now })
+        let aKey = key()
+
+        store.markAmbiguous(aKey, message: "Ambiguous.", submittedAt: now)
+        #expect(store.entry(for: aKey) != nil)
+
+        now = now.addingTimeInterval(61)
+        #expect(store.entry(for: aKey) == nil)
+    }
+
+    @Test func guardAdoptShowsIdleForAKeyTheStoreHasNoEntryFor() {
+        let store = UnresolvedCommentSubmissionStore()
+        let guardrail = CommentSubmissionGuard(store: store)
+        guardrail.adopt(key())
+        #expect(guardrail.phase == .idle)
+        #expect(guardrail.pendingKey == nil)
+    }
+
+    @Test func guardAdoptNeverClobbersAnInFlightSubmission() {
+        let store = UnresolvedCommentSubmissionStore()
+        let guardrail = CommentSubmissionGuard(store: store)
+        #expect(guardrail.begin(key()))
+        #expect(guardrail.phase == .submitting)
+
+        // Some other key becoming unresolved in the store must not interrupt
+        // this guard's own in-flight POST.
+        guardrail.adopt(key(body: "A different target's text", parent: 9))
+        #expect(guardrail.phase == .submitting)
+    }
+
     // MARK: Ambiguity classification
 
     @Test func onlyPossiblySentErrorsCountAsAmbiguous() {

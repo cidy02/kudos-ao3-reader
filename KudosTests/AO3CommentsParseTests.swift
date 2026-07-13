@@ -749,4 +749,113 @@ struct AO3CommentsParseTests {
             in: page, author: "Reader", normalizedBody: "Yes, exactly!", parentID: 6
         ))
     }
+
+    // MARK: T91-RF1 — exact reply verification endpoint
+
+    /// A reply's verification plan must always be the exact parent thread,
+    /// never a work-comments page number — regardless of which page the
+    /// parent happens to be modeled/rendered on.
+    @Test func replyVerificationPlanIsAlwaysTheStandaloneParentThread() {
+        // Parent modeled as living on work-comments page 5: the plan must
+        // still resolve to the standalone thread, not a page guess.
+        let onPageFive = AO3CommentContext(workID: 42, chapterID: nil, parentCommentID: 555)
+        #expect(
+            AO3AuthService.verificationPlan(for: onPageFive)
+                == .standaloneThread(parentCommentID: 555)
+        )
+
+        // Chapter-scoped replies are no exception — the parent thread endpoint
+        // doesn't take a chapter or page parameter at all.
+        let chapterScoped = AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 9)
+        #expect(
+            AO3AuthService.verificationPlan(for: chapterScoped)
+                == .standaloneThread(parentCommentID: 9)
+        )
+    }
+
+    @Test func topLevelVerificationPlanIsWorkComments() {
+        let topLevel = AO3CommentContext(workID: 42, chapterID: nil, parentCommentID: nil)
+        #expect(AO3AuthService.verificationPlan(for: topLevel) == .workComments(workID: 42))
+    }
+
+    /// Regression for the exact repro in the finding: a reply's parent thread
+    /// lives on work-comments page 5 and would be absent from page 1. Proves
+    /// (via the plan) that verification never consults a work-comments page
+    /// for a reply, so this scenario cannot false-negative into `.absent`.
+    @Test func pageOneLackingTheReplyCannotBeConsultedForAReplyVerification() {
+        let context = AO3CommentContext(workID: 42, chapterID: nil, parentCommentID: 555)
+        guard case .standaloneThread = AO3AuthService.verificationPlan(for: context) else {
+            Issue.record("reply verification must never plan a work-comments page fetch")
+            return
+        }
+    }
+
+    /// The standalone thread response — one root comment (the parent) with its
+    /// direct replies — must find a reply actually present there, exactly the
+    /// shape `AO3Client.commentThreadPage`/`parseStandaloneCommentThread` return.
+    @Test func standaloneThreadContainingTheReplyIsFound() {
+        var reply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        reply.bodyText = "Made it!"
+        var parent = AO3Comment(id: 555, author: "Other", isGuest: false)
+        parent.replies = [reply]
+        let standaloneThreadPage = AO3CommentsPage(comments: [parent], currentPage: 1, totalPages: 1)
+
+        #expect(AO3AuthService.containsComment(
+            in: standaloneThreadPage, author: "Reader", normalizedBody: "Made it!", parentID: 555
+        ))
+    }
+
+    // MARK: T91-RF1 — timing evidence
+
+    @Test func timingToleranceAcceptsAGenuineMatchDespiteClockSkew() throws {
+        var reply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        reply.bodyText = "Made it!"
+        reply.postedAt = try #require(
+            AO3CommentTimestamp.parse("Mon 13 Jul 2026 12:00PM UTC")
+        )
+        var parent = AO3Comment(id: 555, author: "Other", isGuest: false)
+        parent.replies = [reply]
+        let page = pageWith([parent])
+
+        // The POST attempt started a couple of minutes "after" the (minute-
+        // granularity, clock-skewed) posted time AO3 reports — must still match.
+        let submittedAt = reply.postedAt!.addingTimeInterval(120)
+        #expect(AO3AuthService.containsComment(
+            in: page, author: "Reader", normalizedBody: "Made it!", parentID: 555,
+            postedAfter: submittedAt
+        ))
+    }
+
+    @Test func timingToleranceRejectsAPreExistingUnrelatedReply() throws {
+        var oldReply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        oldReply.bodyText = "Made it!"
+        oldReply.postedAt = try #require(
+            AO3CommentTimestamp.parse("Mon 01 Jun 2026 12:00PM UTC")
+        )
+        var parent = AO3Comment(id: 555, author: "Other", isGuest: false)
+        parent.replies = [oldReply]
+        let page = pageWith([parent])
+
+        // This attempt started weeks after that old reply — an identical
+        // author/parent/body match that old cannot be proof THIS one landed.
+        let submittedAt = Date(timeIntervalSince1970: 1_784_000_000) // 2026-07-13ish
+        #expect(!AO3AuthService.containsComment(
+            in: page, author: "Reader", normalizedBody: "Made it!", parentID: 555,
+            postedAfter: submittedAt
+        ))
+    }
+
+    @Test func timingCheckIsSkippedWhenPostedAtDidNotParse() {
+        var reply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        reply.bodyText = "Made it!"
+        reply.postedAt = nil // unparseable timestamp on this comment
+        var parent = AO3Comment(id: 555, author: "Other", isGuest: false)
+        parent.replies = [reply]
+        let page = pageWith([parent])
+
+        #expect(AO3AuthService.containsComment(
+            in: page, author: "Reader", normalizedBody: "Made it!", parentID: 555,
+            postedAfter: Date()
+        ))
+    }
 }

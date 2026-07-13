@@ -424,6 +424,7 @@ final class AO3AuthService {
 
     func logout() async {
         loginPerformer.cancel()
+        let loggedOutUsername = currentSession?.username
         currentSession = nil
         errorMessage = nil
         fallbackMessage = nil
@@ -435,6 +436,13 @@ final class AO3AuthService {
         await cookieManager.clear()
         status = .signedOut
         sessionHealth = .unknown
+        // This account's unresolved comment-submission guards must not survive
+        // the account they were made under (T91-RF2): they'd otherwise either
+        // leak into whoever logs in next or resurface confusingly if the same
+        // user logs back in.
+        if let loggedOutUsername {
+            UnresolvedCommentSubmissionStore.shared.clear(identity: loggedOutUsername)
+        }
 
         do {
             try vault.delete()
@@ -693,6 +701,7 @@ final class AO3AuthService {
     }
 
     private func clearStoredSession() async {
+        let clearedUsername = currentSession?.username
         currentSession = nil
         do {
             try vault.delete()
@@ -712,6 +721,11 @@ final class AO3AuthService {
         // Bare cleared state is "signed out / unknown"; callers meaning "expired"
         // set that explicitly right after this returns.
         sessionHealth = .unknown
+        // Same isolation reasoning as logout() (T91-RF2): a lost/expired
+        // session ends that identity's unresolved comment-submission guards too.
+        if let clearedUsername, !clearedUsername.isEmpty {
+            UnresolvedCommentSubmissionStore.shared.clear(identity: clearedUsername)
+        }
     }
 
     /// Retries a durable-store deletion that a previous logout/expiry couldn't

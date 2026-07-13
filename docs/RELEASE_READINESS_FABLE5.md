@@ -1615,6 +1615,36 @@ whose work parent is modeled as page 5 must remain blocked when page 1 lacks it,
 and standalone-parent verification must find the posted body. Blocks release:
 **YES**.
 
+**Resolution (2026-07-13):** `AO3AuthService.verifyCommentPosted`
+(`Services/AO3CommentActions.swift`) now selects its fetch through a pure,
+unit-tested `verificationPlan(for:)`: a reply always resolves to
+`.standaloneThread(parentCommentID:)` — fetched via the already-existing
+`AO3Client.commentThreadPage(commentID:)` against `/comments/<parentCommentID>`
+— never a work-comments page. The removed `knownPage` parameter was the whole
+defect: `loadFocusedThread` unconditionally set `currentPageNumber = 1` for a
+standalone-thread load, and the composer passed that straight through as a
+work-comments page number, so any parent thread not actually on page 1 (a
+5-page-deep repro case) produced a false `.absent` and released the guard for
+a real duplicate POST. Top-level comments keep their original page-1/last-page
+plan (AO3 orders oldest-first; unaffected by this fix). `containsComment`
+gained an optional `postedAfter` timing check — a candidate reply must be
+posted no earlier than the original attempt (minus a 10-minute clock-skew/
+rounding tolerance for AO3's minute-granularity timestamps) to count as proof,
+so a coincidental pre-existing reply with the same author/parent/body cannot
+be mistaken for this attempt landing; a candidate whose timestamp didn't parse
+is still eligible (the check is skipped, not treated as a mismatch), so a rare
+parser edge case can't manufacture a false `.absent` either. **Tests:**
+`AO3CommentsParseTests` gained `replyVerificationPlanIsAlwaysTheStandaloneParentThread`
+(a parent modeled as living on work-comments page 5 still resolves to the
+standalone thread), `topLevelVerificationPlanIsWorkComments`,
+`pageOneLackingTheReplyCannotBeConsultedForAReplyVerification` (proves a
+work-comments page can never be the plan for a reply, so an absent page 1
+cannot produce `.absent`), `standaloneThreadContainingTheReplyIsFound`, plus
+three timing-tolerance cases (clock-skew match accepted, pre-existing
+unrelated reply rejected, unparseable timestamp doesn't block a real match).
+`Scripts/verify.sh` ALL GREEN (446 tests / 47 suites); iOS + macOS Debug and
+Release builds green. T91-RF1 is closed.
+
 **T91-RF2 — P1 Must Fix — The unresolved duplicate-post guard is neither
 multi-context nor screen-durable; changing targets or leaving the pushed thread
 silently unlocks the original ambiguous submission.**
@@ -1634,6 +1664,45 @@ individual `CommentsModel` (persist enough state across view recreation), and
 never let switching to another context collapse or overwrite an unresolved key.
 Regression: both target-hop and pop/reopen flows must reject A while still
 allowing a genuinely different resolved submission. Blocks release: **YES**.
+
+**Resolution (2026-07-13):** new `UnresolvedCommentSubmissionStore`
+(`Services/CommentSubmission.swift`) is a process-lifetime, in-memory,
+identity-partitioned store keyed by the full `CommentSubmissionKey` (context +
+normalized body + identity) that every `CommentSubmissionGuard` reads and
+writes through, replacing the single instance-local `pendingKey` slot that
+could only ever track one unresolved submission at a time.
+`CommentsModel.submissionGuard` shares the process-lifetime
+`UnresolvedCommentSubmissionStore.shared` (the same durability pattern as its
+existing `CommentsPageCache`), so a guard recreated by target switching,
+popping to Inbox and reopening, or Comments-screen recreation in general
+re-derives its true blocked state from the store rather than resetting to
+idle. `startComposer` (now `auth`-scoped) calls the new `adopt(_:)` instead of
+the old unconditional `reset()`: it shows `.ambiguous` immediately when the
+store still holds an entry for the composer's exact context+draft-text+
+identity key, and never disturbs any other key's entry — closing repro (1)
+(target-hop no longer collapses A to `.idle`) — while `begin(_:)` itself
+independently consults the store before allowing any POST, so even a
+brand-new guard with no prior `adopt` call is blocked — closing repro (2)
+(pop/reopen). A genuinely distinct submission (different target, or edited
+text) is a different key and proceeds untouched, satisfying the "don't
+collapse a different resolved submission" regression requirement.
+`AO3AuthService.logout()` and `clearStoredSession()` (the shared expiry path)
+each capture the outgoing `currentSession?.username` before clearing it and
+call `store.clear(identity:)`, so one account's unresolved entries can never
+block or leak into whichever session follows; entries also expire after one
+hour if a resolution is somehow missed. Nothing new is written to disk (no
+cookies/CSRF/HTML/persisted text) — the store is in-memory only, same
+tradeoff as the existing comments page cache. **Tests:** `CommentSubmissionTests`
+gained 11 cases covering exactly the two repros plus the store's own
+contract: A→B→A (distinct target proceeds, A stays blocked including from a
+brand-new guard instance), ambiguous-A-pop-reopen, model-recreation-retains-
+the-guard, resolving one key leaves another untouched, cross-account key
+isolation, logout clears the logged-out account's entries, three concurrent
+unresolved keys never collide, `submittedAt` stays anchored to the original
+attempt across a later re-mark (feeds T91-RF1's timing check), `maxAge`
+eviction, and `adopt`'s idle/no-clobber-while-busy behavior. `Scripts/verify.sh`
+ALL GREEN (446 tests / 47 suites); iOS + macOS Debug and Release builds green.
+T91-RF2 is closed.
 
 **T91-RF3 — P1 Must Fix — A successful Inbox write can race an account switch
 and let the old account's forced reload overwrite the new account's model.**
@@ -2095,16 +2164,17 @@ before a READY verdict.
 
 **NOT READY**
 
-There are **0 open P0, 4 open P1, 30 open P2, and 7 open P3 findings**. The
+There are **0 open P0, 2 open P1, 30 open P2, and 7 open P3 findings**. The
 frozen candidate builds, tests, archives unsigned, and launches as a Release
-simulator app, but it has reachable cross-account, duplicate-write, and
-license-compliance blockers. Required signed-device, live-write,
+simulator app, but it has a reachable cross-account write race and a
+license-compliance blocker. Required signed-device, live-write,
 accessibility, sync-recovery, upgrade, and reader read-through gates are also
 incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag merge), A5-F1
 (cookie isolation), A5-F2 (MiniZip hardening), A5-F3 (backup EPUB
 validation), A5-F4 (truthful session removal), A7-F1 (premature 99%
-completion/EPUB free), and A7-F2 (macOS intra-chapter position loss) are
-resolved P1s and are not included in the open count.
+completion/EPUB free), A7-F2 (macOS intra-chapter position loss), T91-RF1
+(guessed reply-verification page), and T91-RF2 (non-durable duplicate-post
+guard) are resolved P1s and are not included in the open count.
 
 ## Area Summary
 
@@ -2113,7 +2183,7 @@ resolved P1s and are not included in the open count.
 | 1. Baseline/build | COMPLETE | 1 resolved P1; 1 P2; 1 P3 | 371/371; iOS+macOS Debug/Release; unsigned archive; clean-checkout resolution | Release simulator launch now PASS | Signing/team/target drift; signed artifact NOT RUN |
 | 2. Persistence/sync | COMPLETE | 1 resolved P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | EPUB overwrite test debt (A2-F2, P3) |
 | 3. Networking/parser | COMPLETE | 1 partially-remediated P2; T-91 parser findings cross-reference Area 4/6 | Policy/parser tests and entry-point enumeration | Minimal final live-AO3 matrix NOT RUN | Author-profile avatar still bypasses paced image pipeline; parser drift remains fixture-dependent |
-| 4. Concurrency/lifecycle | COMPLETE | 3 cross-cutting T-91 P1 | Static task/state trace; normal suite green | Navigation/logout race exercise NOT RUN | Duplicate reply and cross-account state races |
+| 4. Concurrency/lifecycle | COMPLETE | 2 resolved T-91 P1; 1 open cross-cutting T-91 P1 | Static task/state trace; full suite green (446 tests / 47 suites) | Navigation/logout race exercise NOT RUN | Cross-account state race (T91-RF3) |
 | 5. Auth/security/privacy | COMPLETE | 4 resolved P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Logging/host trust (A5-F5/A5-F7, both P2) |
 | 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
 | 7. Reader/EPUB | COMPLETE | 2 resolved P1; 6 P2; 2 P3 | 107 focused reader/EPUB tests (25 completion / position-bridge / lifecycle-retention cases added 2026-07-13) plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | Active-content/path/TOC defects; manual read-through still owed |
@@ -2125,13 +2195,9 @@ resolved P1s and are not included in the open count.
 
 ### Release blockers (P1 Must Fix)
 
-1. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
-   duplicate reply when the real parent thread is on another comments page.
-2. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
-   guard and permits the same ambiguous reply again.
-3. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
+1. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
    overwrite the new account screen with prior-account private Inbox data.
-4. **A10-F1:** standalone app distributions omit required GPL and dependency
+2. **A10-F1:** standalone app distributions omit required GPL and dependency
    license notices.
 
 **Resolved blockers:** A1-F1 was closed by freezing T-91 as `c1bf211` and
@@ -2144,10 +2210,12 @@ auth-isolation-and-logout hardening pass. Both passes were developed as
 sibling branches from the same pre-fix baseline and are combined in this
 merge. A7-F1 (iOS 99% auto-finish/EPUB free) and A7-F2 (macOS intra-chapter
 position loss) were closed together (2026-07-13) by the reader
-completion-and-progress pass on `release-fixes`. See the resolution notes
-under each finding above for files, tests, and verification evidence. None
-should be reopened without a code or baseline change that reintroduces the
-underlying gap.
+completion-and-progress pass on `release-fixes`. T91-RF1 (guessed reply-
+verification page) and T91-RF2 (non-durable duplicate-post guard) were closed
+together (2026-07-13) by the Inbox reply-verification-and-duplicate-guards
+pass on `release-fixes`. See the resolution notes under each finding above
+for files, tests, and verification evidence. None should be reopened without
+a code or baseline change that reintroduces the underlying gap.
 
 ### Open P2 Should Fix findings
 

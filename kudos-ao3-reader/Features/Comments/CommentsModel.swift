@@ -79,7 +79,11 @@ final class CommentsModel {
     /// When set, the composer is editing this existing comment (PUT, not POST).
     var composerEditTarget: AO3Comment?
     var composerText = ""
-    let submissionGuard = CommentSubmissionGuard()
+    // Shares the process-lifetime unresolved-submission store across every
+    // CommentsModel instance (a fresh one is created whenever the Comments
+    // screen or its Reply target changes), so an ambiguous submission stays
+    // blocked across that recreation instead of resetting with it.
+    let submissionGuard = CommentSubmissionGuard(store: .shared)
     private let drafts = CommentDraftStore()
 
     /// Session-wide page cache; 5-minute TTL.
@@ -223,7 +227,7 @@ final class CommentsModel {
                    .flatMap(\.flattened)
                    .first(where: { $0.id == replyID }) {
                 pendingInitialReplyCommentID = nil
-                startComposer(replyingTo: target)
+                startComposer(replyingTo: target, auth: auth)
             }
         } catch is CancellationError {
             return
@@ -504,7 +508,7 @@ final class CommentsModel {
 
     // MARK: Composer
 
-    func startComposer(replyingTo parent: AO3Comment? = nil) {
+    func startComposer(replyingTo parent: AO3Comment? = nil, auth: AO3AuthService) {
         let context = AO3CommentContext(
             workID: workID,
             chapterID: chapterForRequests,
@@ -514,13 +518,14 @@ final class CommentsModel {
         composerEditTarget = nil
         composerContext = context
         composerText = drafts.draft(for: context)
-        // Only clear the guard when reopening for a DIFFERENT target. Reopening
-        // on the same context after an unresolved ambiguous attempt must keep
-        // that state (and its "Check Again" banner) — resetting it here would
-        // silently unblock a duplicate resubmission of the same comment.
-        if submissionGuard.pendingKey?.context != context {
-            submissionGuard.reset()
-        }
+        // Rehydrates from the durable store: an unresolved earlier attempt for
+        // this exact draft (context + text + identity) shows blocked again —
+        // even from a brand-new guard — instead of resetting to idle. A
+        // genuinely different target or edited text adopts as idle without
+        // disturbing that other key's own unresolved entry.
+        submissionGuard.adopt(CommentSubmissionKey(
+            context: context, body: composerText, identity: Self.identity(auth: auth, editTarget: nil)
+        ))
     }
 
     /// Opens the composer to edit an existing own comment. Prefills the rendered
@@ -556,11 +561,10 @@ final class CommentsModel {
     func submit(auth: AO3AuthService) async {
         guard let context = composerContext else { return }
         let body = composerText
-        // Edits carry the target id in the identity so re-editing the same text
-        // into a different comment is never mistaken for a duplicate.
-        let identity = composerEditTarget.map { "\(auth.username ?? "")#edit\($0.id)" }
-            ?? (auth.username ?? "")
-        let key = CommentSubmissionKey(context: context, body: body, identity: identity)
+        let key = CommentSubmissionKey(
+            context: context, body: body,
+            identity: Self.identity(auth: auth, editTarget: composerEditTarget)
+        )
         guard submissionGuard.begin(key) else { return }
 
         do {
@@ -603,11 +607,11 @@ final class CommentsModel {
         auth: AO3AuthService, context: AO3CommentContext, body: String
     ) async {
         submissionGuard.beginVerifying()
-        // For a reply, this is the exact page (in the context's chapter scope)
-        // the parent comment was rendered on when the user tapped Reply — no
-        // other load runs while the composer is up, so it's still accurate now.
+        // A reply verifies against its own parent thread (the exact
+        // authoritative endpoint), not a page number, so no "which page was
+        // showing" state is needed here — see `AO3AuthService.verifyCommentPosted`.
         let verification = await auth.verifyCommentPosted(
-            context: context, body: body, knownPage: currentPageNumber
+            context: context, body: body, submittedAt: submissionGuard.pendingSubmittedAt
         )
         submissionGuard.resolveAmbiguity(verification)
         if case .found = verification { drafts.clear(for: context) }
@@ -619,6 +623,14 @@ final class CommentsModel {
         composerText = ""
         // One refresh so the new/updated comment is visible (bypasses cache).
         await load(auth: auth, forceRefresh: true)
+    }
+
+    /// The signed-in identity a submission key is scoped to. Edits carry the
+    /// target id so re-editing the same text into a different comment is
+    /// never mistaken for a duplicate; edits never enter the ambiguous store
+    /// (see `submit`), so this suffix never needs to match a stored key.
+    private static func identity(auth: AO3AuthService, editTarget: AO3Comment?) -> String {
+        editTarget.map { "\(auth.username ?? "")#edit\($0.id)" } ?? (auth.username ?? "")
     }
 
     // MARK: Error classification
