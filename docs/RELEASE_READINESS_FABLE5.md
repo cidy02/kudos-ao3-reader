@@ -99,8 +99,8 @@ scheduling; signed-device Keychain persistence.
 | 6 | Core functional regression matrix | COMPLETE | Original 4×P2/1×P3 retained. T-91 addendum adds Inbox identity hydration, parser-empty, filter, pagination, response, accessibility, and chapter-retry findings RF4–RF11. |
 | 7 | Reader and EPUB behavior | COMPLETE | 2×P1 (iOS auto-finishes/frees EPUB at 99%; macOS loses every intra-chapter position), 6×P2 (macOS WKWebView retention, active-content boundary, cross-spine state desync, encoded-href blank chapters, stale extraction overlay; iOS nested-TOC loss), 2×P3 (duplicate-basename TOC collision; malformed-spine compact-index drift). Two new release blockers. |
 | 8 | Performance and scalability | COMPLETE | 3×P2 (root whole-store observation/recomputation; package backup/restore peak memory scales with all EPUB bytes; unbounded Comments page cache), no P0/P1. Inbox visible-page hydration is bounded/sequential/cached but can take ~12s for 20 uncached works by policy. Manual device thermal/battery and large-store Instruments gates remain. |
-| 9 | Accessibility, UI integrity, platform behavior | NOT STARTED | |
-| 10 | Documentation, packaging, final assessment | NOT STARTED | |
+| 9 | Accessibility, UI integrity, platform behavior | COMPLETE | 4×P2 (shared pagination controls are undersized and gesture-only; compact queue reorder is drag-only; arbitrary accents can erase fixed-white labels; author links are not keyboard-focusable). T-91 RF10 remains an additional Inbox-specific P2. Human VoiceOver/Dynamic Type/theme/device matrix is NOT RUN. |
+| 10 | Documentation, packaging, final assessment | COMPLETE | Final verdict **NOT READY**. 1×P1: binary distributions omit required GPL/third-party license notices. 1×P2: README/operational docs materially drift from the current branch, import, and authenticated-feature implementation. Existing Release simulator app installed/launched; signed-device and human gates remain incomplete. |
 
 ---
 
@@ -1580,3 +1580,389 @@ lifecycle are review-only today. Before release:
 
 Release conclusion for T-91 at this point: **NOT READY — 3 P1 blockers, 7 P2
 findings, 1 P3 follow-up.**
+
+---
+
+## Area 9 — Accessibility, UI Integrity, and Platform Behavior
+
+Status: **COMPLETE** (2026-07-12). Product baseline remains `c1bf211`; no
+production source changed during this area.
+
+### Verification performed
+
+- Traced the shared pagination component through Search, two Browse lists,
+  Account inline works, Inbox, pushed Account works, and Author/Profile content;
+  inspected its pointer, keyboard, VoiceOver, selected-state, and hit-target
+  implementation.
+- Traced both detailed and compact Reading Queue reorder paths. The detailed
+  `List` uses native `.onMove`; the compact grid substitutes a manual drag/drop
+  source and has no move action other than dragging its corner handle.
+- Traced the user accent from the unrestricted Settings `ColorPicker`, through
+  `ThemeManager.effectiveTint`, to custom accent-filled selected chips, comment
+  participant badges, pagination, and selection indicators. Inspected semantic
+  destructive/success uses separately; those remain intentionally red/green.
+- Inspected shared author-link semantics, privacy-gate placement, selection-card
+  accessibility state, flattened Comments depth, theme surfaces, Reduce Motion
+  handling, conditional iOS/macOS code, fixed frames, tap gestures, and existing
+  accessibility tests. Reader theme tests establish that Dark and OLED surfaces
+  remain distinct; Skeleton loading and both reader implementations explicitly
+  honor Reduce Motion.
+- A booted iPhone 17 and iPad (A16) were available, but the current app session was
+  signed out. The captured iPad Home screen (`/tmp/inbox-release-review.png`) was
+  useful only as a basic launch/layout sanity check and does not establish Inbox,
+  Dynamic Type, VoiceOver, theme, split-view, or macOS visual approval. Those are
+  listed as human gates, not inferred from static inspection.
+
+### Findings
+
+**A9-F1 — P2 Should Fix — The shared pagination control is below the minimum
+touch target, and its primary previous/next controls are gesture-backed images
+rather than keyboard-focusable controls.**
+Files/symbols: `Features/Search/SearchPaginationBar.swift:50-94,115-145`;
+call sites in Search, Browse, Account works, Inbox, and Author/Profile content.
+Affected feature/platform: every paginated native list; iPhone/iPad touch and
+iPad/macOS keyboard. Reproduction: open any multi-page result, try to tap a page
+or arrow near its edge, then attempt to Tab/focus and activate Previous/Next with
+a hardware keyboard. Expected: each action has at least a 44×44 interaction
+region and is a native focusable control. Actual: arrow and page targets are
+31×31; the arrows are `Image + gesture` with an accessibility button trait,
+not `Button`s, so they do not enter normal keyboard focus/activation. VoiceOver
+does receive explicit default and end-page actions, which limits but does not
+remove the failure. Impact: motor-accessibility misses and a blocked keyboard
+pagination path across eight mounted surfaces. Supporting evidence: explicit
+frames at lines 64 and 131, exclusive gesture at 72-83, and no focus/key action.
+Smallest safe correction: preserve the 31-point visual treatment inside a
+44-point `Button` hit region and expose first/last as menus, accessibility
+actions, or keyboard commands. Regression: an accessibility/layout test asserts
+44-point control bounds, plus iPad/macOS UI coverage that focuses and activates
+both directions. Blocks release: no.
+
+**A9-F2 — P2 Should Fix — Compact Reading Queue reordering is a 28-point,
+drag-only interaction with no VoiceOver or keyboard move alternative.**
+Files/symbols: `UIComponents/ReorderHandle.swift:8-16` and
+`Features/Library/ReadingQueues.swift:329-369`. Affected feature/platform:
+compact queue grids on iOS/iPadOS/macOS. Reproduction: choose Compact, enter
+Reorder, then operate using VoiceOver, Switch Control, or only a keyboard.
+Expected: the work exposes Move Up/Down (or an equivalent accessible reorder
+action) and a sufficiently large pointer/touch target. Actual: the card body is
+disabled, the only source is `.onDrag` on a visually 28×28 handle (40×40 after
+its six-point padding), and its sole accessibility metadata is the label
+"Reorder"; there are no adjustable/custom move actions or keyboard commands.
+Impact: users unable to perform precision drag cannot reorder compact queues,
+and even touch users receive a sub-44-point target. Supporting evidence: direct
+branch trace above; the detailed list's native `.onMove` does not apply to the
+compact grid. Smallest safe correction: make the hit region at least 44 points
+and add named Move Earlier/Move Later actions that call the same reorder service.
+Regression: UI/accessibility coverage reorders the middle item without a drag on
+iOS and macOS. Blocks release: no.
+
+**A9-F3 — P2 Should Fix — An unrestricted user accent can make custom selected
+labels and badges unreadable because they always draw white over the accent.**
+Files/symbols: `Settings/SettingsView:175`, `App/ThemeManager.swift:52-65`,
+`Features/Search/SearchPaginationBar.swift:129-134`,
+`UIComponents/TagChip.swift:15-18`, and
+`Features/Comments/CommentThreadRow.swift:87-94`. Affected feature/platform:
+all platforms/themes except Sepia's fixed tint; pagination, selected chips, and
+Comments/Inbox Author/Me badges. Reproduction: choose a near-white or bright
+yellow Accent Color, then view a current page, selected fandom/filter chip, or
+Author/Me participant badge. Expected: foreground/background contrast adapts or
+the picker rejects accents that cannot meet the supported contrast target.
+Actual: Settings accepts the color, while these components hard-code `.white`
+over `.accentColor`/`.tint`; a white accent yields approximately 1:1 contrast.
+Impact: selected state and participant identity can disappear, including with
+Increase Contrast enabled, because there is no contrast-aware foreground.
+Supporting evidence: the unrestricted `ColorPicker`, direct hex persistence,
+and fixed-white foregrounds listed above. Smallest safe correction: centralize
+an accent-contrast foreground token (or constrain the palette) and use it on
+every accent-filled custom surface. Regression: render representative light,
+dark, and bright accents and assert the chosen foreground meets the project's
+contrast threshold. Blocks release: no.
+
+**A9-F4 — P2 Should Fix — Shared author-profile links advertise a button trait
+but cannot be reached or activated through normal keyboard focus.**
+File/symbol: `UIComponents/AO3AuthorNavigation.swift:119-140`. Affected
+feature/platform: author bylines throughout native cards/comments; iPad/macOS
+hardware keyboard and Full Keyboard Access. Reproduction: Tab through a work or
+comment card containing a verified author link and attempt to open the profile.
+Expected: the author action participates in focus order and activates with
+Space/Return. Actual: the author name is `Text` with `highPriorityGesture` and an
+accessibility button trait, but it is neither a `Button` nor explicitly focusable
+and has no key handler. Impact: the app's common author-profile route is
+pointer/touch/VoiceOver-oriented and unavailable to keyboard-only navigation.
+Supporting evidence: direct shared-component trace; the gesture was introduced
+to prevent a nested row `NavigationLink` from also firing, but does not supply
+keyboard semantics. Smallest safe correction: provide a focusable semantic
+control whose activation still suppresses the parent row route. Regression:
+iPad/macOS UI coverage focuses the author name and opens exactly one profile with
+Space/Return. Blocks release: no.
+
+### Incorporated prior finding
+
+**T91-RF10 remains open (P2):** Inbox cards duplicate unread semantics, expose
+noninteractive selection checkboxes as "button, selected", and omit selected
+traits on filter choices. It is not renumbered or double-counted above; see the
+T-91 addendum for the complete execution paths and corrections.
+
+### Verified strengths and non-findings
+
+- Selection-mode work cards generally expose selected/not-selected values and
+  hints on their full-card buttons; the 28-point corner bubble is decorative and
+  does not define the hit target.
+- Mature-content reveal controls inspected in Home, Library, pushed lists, and
+  current Account list paths are scoped to visible/selected work sets. Inbox's
+  reveal toggle is directly gated by the displayed notification's mature flag.
+- Comments flatten arbitrary logical depth iteratively and reveal replies in
+  bounded chunks rather than recursively nesting SwiftUI cards.
+- Destructive/error red and Inbox's green replied indicator are semantic status
+  colors, not accidental hard-coded replacements for the app accent.
+- No new iOS-only API leakage was found in the macOS build paths; Area 1's macOS
+  Debug/Release builds remain the authoritative compile evidence.
+
+### Human-only checks remaining
+
+The following were **NOT RUN** for Area 9 and cannot be replaced by source
+inspection: VoiceOver reading/focus order; Accessibility Inspector hit regions;
+AX3/AX5 Dynamic Type; Increase Contrast; Reduce Transparency; Full Keyboard
+Access and pointer interaction; long localized strings; compact/large iPhone;
+iPad portrait/landscape/split view; macOS window resizing; and all four app
+themes with several accents. Human approval of critical Account, Inbox,
+Comments, Home, Library, privacy, and reader journeys remains a release gate.
+
+Area-9 release conclusion: **no new P0/P1 blocker; 4 new P2 findings plus the
+open Inbox-specific T91-RF10 P2. Automated build evidence is green, but the
+required accessibility/device/theme matrix is NOT RUN.**
+
+---
+
+## Area 10 — Documentation, Packaging, and Final Release Assessment
+
+Status: **COMPLETE** (2026-07-12). Product baseline remains `c1bf211`; only this
+audit ledger changed after that product commit.
+
+### Verification performed
+
+- Reconciled `README.md`, `AGENTS.md`, `TASKS.md`, authentication/EPUB/sync
+  operational docs, About, the tracked GPL license, package pins, version/build
+  settings, and every Area 1–9 finding against the frozen product.
+- Reconfirmed `Package.resolved` has nine pins and inspected each resolved
+  package's license. Inspected the Release app for bundled license/notice files
+  and found none; About contains only short labels/links for SwiftSoup and
+  Readium plus the app's GPL summary.
+- Reused Area 1's clean-checkout dependency resolution, 371/371 frozen-candidate
+  test pass, iOS/macOS Debug builds, iOS/macOS Release builds, unsigned generic
+  iOS archive, resource-bundle inspection, and consistent version `1.0 (1)`.
+- Installed the existing `Release-iphonesimulator/Kudos.app` on the booted iPhone
+  17 simulator and launched `com.cidy02.Kudos` successfully (PID 22442). The Home
+  screen rendered in the existing OLED/dark configuration; evidence screenshot:
+  `/tmp/kudos-release-launch.png`. This proves simulator install/launch only, not
+  signed-device or macOS distribution.
+- `git ls-files` contains no IPA, app, dSYM, archive, build directory, secret, or
+  user Xcode state. Local ignored build/IPAs/notes and the separate untracked
+  Android product do not enter `git archive`; root `.idea/` and Android build
+  state remain untracked local residue and were not altered.
+
+### Findings
+
+**A10-F1 — P1 Must Fix — A standalone binary distribution omits the GPL text
+and required third-party copyright/license notices.**
+Files/symbols: `LICENSE`; `Settings/AboutView.swift:30-51`;
+`AO3_App_OpenSource.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`;
+built `Kudos.app`. Affected feature/platform: iOS/iPadOS/macOS release packaging.
+Reproduction: build the Release app, inspect its bundle and About, then compare
+against the nine pinned packages. Expected: the distribution accompanies the
+GPL terms and reproduces applicable dependency notices/conditions/disclaimers.
+Actual: the repository has the app's GPL file, but the app bundle contains no
+license/notice file; About summarizes GPL and names only SwiftSoup/Readium (plus
+the `ao3_api` reference), without their notice text and without CryptoSwift,
+DifferenceKit, Fuzi, GCDWebServer, SQLite.swift, Zip, or ZIPFoundation. The
+resolved licenses explicitly require retained acknowledgements/notices in
+source or binary distribution (including CryptoSwift's product acknowledgement,
+MIT notice retention, Apache-2.0 terms, and BSD binary notice reproduction).
+Impact: a distributed IPA/app is not accompanied by the license material its
+own and bundled dependencies require; this is a release-compliance blocker.
+Supporting evidence: direct bundle search found zero `LICENSE`, `COPYING`, or
+`NOTICE` files while five transitive resource bundles are present; all nine
+checkout license files were inspected. Smallest safe correction: generate a
+tracked third-party notices artifact from the pinned revisions, bundle it with
+the full GPL text, and make the complete terms reachable from About on both
+platforms. Regression: a packaging invariant opens the built app/archive and
+asserts the GPL plus one notice keyed to every `Package.resolved` identity.
+Blocks release: **YES**.
+
+**A10-F2 — P2 Should Fix — Public and operational documentation has drifted
+from the actual release workflow and implementation.**
+Files: `README.md:14-29`, `docs/EPUBParsing.md:140-142`, and
+`docs/AO3Authentication.md:79-89`. Affected feature/platform: contributor/release
+workflow, backup/import expectations, iOS import, and authenticated AO3 features.
+Reproduction: follow README's "Single branch: main" instruction or compare its
+"imports merge safely" claim and the two architecture docs to the current tree.
+Expected: public guidance matches the gated `main`/`merge-test` workflow and
+describes current, verified behavior without promising unresolved safety.
+Actual: AGENTS mandates gated `main`, an integration branch, and feature branches;
+README still says one branch. README presents safe merge as an unconditional
+feature despite A2-F1/A5-F3. EPUBParsing says iOS import metadata comes from
+Readium although both current import paths still use legacy `EPUBMetadata` (the
+unused mapper is Area 7's recorded drift). AO3Authentication describes account
+writes as future work although bookmarks, kudos, comments, preferences, and
+Inbox actions now ship. Impact: contributors can target the wrong branch and
+users/reviewers receive false assurances or a stale architecture model.
+Supporting evidence: direct doc-to-source and doc-to-AGENTS comparison; this is
+not a wording preference. Smallest safe correction: update branch/install/release
+instructions and describe the actual import/auth paths, while qualifying safety
+claims until the referenced blockers are fixed. Regression: add a release-doc
+checklist/invariant that rejects the retired "Single branch" statement and
+requires feature-owning docs to be reviewed in the same commit as behavior
+changes. Blocks release: no independently, but accurate docs remain required
+before a READY verdict.
+
+### Packaging and documentation strengths
+
+- The source repository carries GPL-3.0, accurate AO3/OTW non-affiliation and
+  no-official-API language in both README and About, and a visible repository
+  link. No tracking/analytics SDK or secret was found.
+- Dependency versions are pinned; clean-checkout resolution and both platform
+  builds succeeded. iOS Release resources and background keys are present;
+  version/build/bundle id agree across inspected products.
+- README's basic Xcode and simulator build commands remain valid, and the more
+  complete contributor verification path is documented in AGENTS/onboarding.
+- Product artifacts and user IDE state are not tracked. The Android directory is
+  a separate product line and deliberately excluded from this candidate.
+
+## Executive Verdict
+
+**NOT READY**
+
+There are **0 open P0, 11 open P1, 30 open P2, and 7 open P3 findings**. The
+frozen candidate builds, tests, archives unsigned, and launches as a Release
+simulator app, but it has reachable data-loss/cross-account/privacy/security,
+reader-progress, duplicate-write, and license-compliance blockers. Required
+signed-device, live-write, accessibility, sync-recovery, upgrade, and critical
+reader gates are also incomplete. A1-F1 (unfrozen candidate) is the sole resolved
+P1 and is not included in the open count.
+
+## Area Summary
+
+| Area | Status | Findings | Automated evidence | Manual evidence | Remaining risk |
+|---|---|---|---|---|---|
+| 1. Baseline/build | COMPLETE | 1 resolved P1; 1 P2; 1 P3 | 371/371; iOS+macOS Debug/Release; unsigned archive; clean-checkout resolution | Release simulator launch now PASS | Signing/team/target drift; signed artifact NOT RUN |
+| 2. Persistence/sync | COMPLETE | 1 P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | Stale archive can clobber user tags; EPUB overwrite test debt |
+| 3. Networking/parser | COMPLETE | 1 partially-remediated P2; T-91 parser findings cross-reference Area 4/6 | Policy/parser tests and entry-point enumeration | Minimal final live-AO3 matrix NOT RUN | Author-profile avatar still bypasses paced image pipeline; parser drift remains fixture-dependent |
+| 4. Concurrency/lifecycle | COMPLETE | 3 cross-cutting T-91 P1 | Static task/state trace; normal suite green | Navigation/logout race exercise NOT RUN | Duplicate reply and cross-account state races |
+| 5. Auth/security/privacy | COMPLETE | 4 P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Cookie isolation, archive input, session removal, logging/host trust |
+| 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
+| 7. Reader/EPUB | COMPLETE | 2 P1; 6 P2; 2 P3 | 82 focused reader/EPUB tests plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | EPUB deletion at 99%, macOS position loss, active-content/path/TOC defects |
+| 8. Performance | COMPLETE | 3 P2 | Synthetic 256 MiB memory probe; algorithm/cache inspection | Large-store Instruments/device thermal NOT RUN | Whole-store recomputation, all-EPUB backup memory, unbounded Comments cache |
+| 9. Accessibility/UI/platform | COMPLETE | 4 P2 plus T91-RF10 | Static semantic/layout/platform trace; theme unit tests; builds | Owner-tested Inbox configuration PASS; full matrix NOT RUN | Hit targets, keyboard paths, accent contrast, VoiceOver/Dynamic Type unknowns |
+| 10. Docs/packaging | COMPLETE | 1 P1; 1 P2 | Bundle/license inspection; Release simulator install/launch | Signed distribution/legal review NOT RUN | Missing license notices and material documentation drift |
+
+## Open Findings
+
+### Release blockers (P1 Must Fix)
+
+1. **A2-F1:** stale backup restore can replace newer local user-tag associations.
+2. **A5-F1:** nominally anonymous AO3 reads inherit shared authenticated cookies.
+3. **A5-F2:** MiniZip trusts archive paths/sizes, enabling traversal, oversized
+   extraction, crash, and macOS arbitrary writes.
+4. **A5-F3:** backup/sync restore can replace a valid EPUB with arbitrary bytes.
+5. **A5-F4:** failed Keychain deletion is suppressed while UI reports logout and
+   the old session can return after relaunch.
+6. **A7-F1:** iOS treats 99% as finished and frees the EPUB before true completion.
+7. **A7-F2:** macOS neither records nor restores intra-chapter reading position.
+8. **T91-RF1:** ambiguous Inbox replies verify synthetic page 1, permitting a
+   duplicate reply when the real parent thread is on another comments page.
+9. **T91-RF2:** leaving/reopening a target loses the unresolved duplicate-post
+   guard and permits the same ambiguous reply again.
+10. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
+    overwrite the new account screen with prior-account private Inbox data.
+11. **A10-F1:** standalone app distributions omit required GPL and dependency
+    license notices.
+
+**Resolved blocker:** A1-F1 was closed by freezing T-91 as `c1bf211` and
+re-running the canonical suite; it must not be reopened without a baseline change.
+
+### Open P2 Should Fix findings
+
+- **Build/network/privacy:** A1-F2 (public team id), A3-F1 (remaining paced-avatar
+  bypass), A5-F5 (public production logs), A5-F6 (biometric fail-open), A5-F7
+  (lookalike-host trust).
+- **Functional:** A6-F1 (queue reorder persistence failure hidden), A6-F2 (bulk
+  Save-for-Later fan-out survives cancellation), A6-F3 (racing Account pagination
+  and hidden retained-data failure), A6-F4 (remote-batch cancellation continues
+  local mutation).
+- **Reader:** A7-F3 (macOS controller/WebView retention), A7-F4 (macOS publisher
+  active content), A7-F5 (cross-spine state desync), A7-F6 (encoded href failure),
+  A7-F7 (stale extraction overlay), A7-F8 (nested iOS TOC loss).
+- **Performance:** A8-F1 (whole-store observation/recompute), A8-F2 (all-EPUB
+  package memory), A8-F3 (unbounded Comments cache).
+- **Inbox:** T91-RF4 (identity hydration skips metadata-complete older works),
+  RF5 (same-user relogin reuses stale session state), RF6 (valid no-byline rows
+  dropped), RF7 (filters not fail-closed), RF8 (pagination retry targets wrong
+  page), RF9 (AO3 caution response treated as success), RF10 (incorrect/duplicate
+  accessibility semantics).
+- **Accessibility/UI:** A9-F1 (pagination hit targets/keyboard), A9-F2 (compact
+  drag-only reorder), A9-F3 (arbitrary accent contrast), A9-F4 (gesture-only
+  author keyboard path).
+- **Documentation:** A10-F2 (branch, safety, import, and auth docs drift).
+
+### Open P3 Follow-up findings
+
+- A1-F3 (deployment-target drift); A2-F2 (ungated EPUB blob overwrite on restore);
+  A5-F8 (personal absolute path in tracked handoff); A6-F5 (newest-first post can
+  miss a refresh); A7-F9 (duplicate-basename TOC collision); A7-F10 (malformed
+  spine compact-index drift); T91-RF11 (chapter retry loses initial context).
+
+## Accepted Known Limitations
+
+- CI is lint-only until hosted runners provide the required SDK; local canonical
+  verification is the current build gate.
+- The audited Release evidence uses the beta toolchain. A stable-toolchain rebuild
+  is required if the chosen distribution channel requires it.
+- iOS/iPadOS intentionally use Readium while macOS intentionally retains the
+  legacy WKWebView reader. That platform split is accepted; A7's concrete defects
+  are not.
+- Library Sync Folder intentionally avoids CloudKit entitlements and uses a
+  user-selected folder/security-scoped access.
+- The app is currently English-only; no localization promise is made. Long-string
+  layout remains a manual gate.
+- Account work subscriptions intentionally exclude series/author subscription
+  types. This scope is documented in the feature registry.
+- Inbox metadata hydration is intentionally current-page-only, sequential, paced,
+  and capped; a cold 20-work page can take roughly 12 seconds. Correctness and AO3
+  respect take priority over speculative parallelism.
+- The separate Android product and ignored local build artifacts are outside this
+  iOS/macOS release candidate.
+
+## Required Human and Device Gates
+
+| Gate | Status | Evidence / requirement |
+|---|---|---|
+| Release iPhone-simulator install and launch | PASS | Existing Release product installed/launched on iPhone 17; Home rendered (`/tmp/kudos-release-launch.png`). |
+| Owner visual acceptance of the tested Inbox configuration | PASS | Owner iteratively tested the T-91 UI/metadata changes and approved the final tested configuration before `c1bf211`. |
+| Signed iPhone install/launch and stable-toolchain archive | NOT RUN | Requires signing identity/device and final distribution toolchain. |
+| Signed iPad install/launch, portrait/landscape/split view | NOT RUN | No final-candidate device pass. |
+| macOS Release app launch, resize, keyboard, and reader journey | NOT RUN | Release build passed; interactive app journey not performed. |
+| Upgrade without deleting app; preserve library/progress/tags/queues | NOT RUN | Additive schema/static tests only. |
+| Representative backup export/import and interrupted recovery | NOT RUN | Synthetic tests pass; real-device/user-library-safe walkthrough absent. |
+| Folder-sync conflict, interruption, background scheduling, and recovery | NOT RUN | Requires real selected folder/cloud provider and hardware BGTask behavior. |
+| Signed-device Keychain persist, expire, logout, and Remove Session | NOT RUN | Simulator/fallback tests do not establish signed behavior. |
+| Face ID gate success/failure/cancel/unavailable on hardware | NOT RUN | No injectable-authenticator or device evidence. |
+| Minimal respectful final-candidate live AO3 read smoke | NOT RUN | Prior live screens exist, but not a complete frozen-candidate release matrix. |
+| Live AO3 writes: kudos, comment/reply, bookmark, preferences, Inbox actions | NOT RUN | Fixture/request tests only; must be owner-operated and single-shot. |
+| iOS/iPadOS Readium and macOS legacy reader critical journeys | NOT RUN | Include long/complete EPUB, 99–100%, relaunch/resume, modes, TOC/links, malformed/encoded paths. |
+| VoiceOver, AX Dynamic Type, contrast/transparency/motion, keyboard/pointer | NOT RUN | Full Area-9 matrix outstanding. |
+| Light, Dark, Sepia, OLED and several accents across critical screens | NOT RUN | Tested owner configuration only. |
+| Large-library/large-backup Instruments, memory, thermal, and battery | NOT RUN | Synthetic probe found known P2 risks; device characterization absent. |
+| GPL and third-party notices included in standalone distribution | FAIL | A10-F1: built app contains no license/notice artifact. |
+
+## Exact Release Recommendation
+
+**Do not merge this candidate into the human-approved release line or distribute
+an app binary yet.** First fix and regression-test all 11 P1 findings: the three
+persistence/archive blockers, two auth/privacy blockers, two reader blockers,
+three Inbox reply/account-lifecycle blockers, and license packaging. Then correct
+A10-F2, explicitly fix or owner-accept each P2/P3, freeze a new SHA, and rerun
+`Scripts/verify.sh`, both Release builds, archive inspection, and Release launch.
+Finally complete every NOT RUN gate above—especially signed session removal,
+upgrade/backup/sync recovery, live single-shot AO3 writes, both readers, and the
+accessibility/theme/device matrix—and obtain human approval before changing the
+verdict to READY.
