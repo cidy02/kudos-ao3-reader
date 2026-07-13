@@ -632,15 +632,31 @@ anonymous avatar requests indefinitely, not just across the upgrade but for
 as long as the user stayed signed in and never hit an explicit logout.
 Correction: new `AO3CookieBridge.purgeLegacySharedCookieJar()`
 (`AO3SessionVault.swift`) sweeps any AO3-domain cookie out of
-`HTTPCookieStorage.shared`; called unconditionally, once per launch, from the
-top of `AO3AuthService.restoreSession()` (`AO3AuthService.swift:326-333`),
-regardless of sign-in state. Regression tests:
+`HTTPCookieStorage.shared`, regardless of sign-in state. Regression tests:
 `AO3CookieBridgeTests.purgeLegacySharedCookieJarRemovesOnlyAO3Cookies` (an
-AO3-domain cookie is purged, an unrelated-domain cookie is left alone) and
-`AO3AuthServiceTests.restoreSessionPurgesLegacyCookieFromTheSharedHTTPCookieStorage`
-(a legacy cookie seeded before calling `restoreSession()` is gone after).
+AO3-domain cookie is purged, an unrelated-domain cookie is left alone).
 `Scripts/verify.sh` invariants/lint green; full iOS suite (384 tests / 44
 suites) and macOS build green.
+
+**Second follow-up (2026-07-13, review-caught ordering race):** the purge
+above was initially called from the top of `AO3AuthService.restoreSession()`
+(`AO3AuthService.swift:326-333`), which only ever runs from the root view's
+`.task`. SwiftUI gives no ordering guarantee between sibling `.task`s, so on
+the very first launch after upgrading from a pre-fix, signed-in build, a
+sibling avatar view's own `AsyncImage` fetch could in principle win the race
+against the root view's `restoreSession()` task and carry the still-present
+legacy cookie once before the purge ran. Correction: the call moved into
+`AO3AuthService.init()` instead — `auth` is constructed as the owning view's
+`@State` initializer (`ContentView.swift:23`), which SwiftUI always evaluates
+before that view's `body`, and therefore before any `.task` anywhere in the
+tree, can run; construction is strictly earlier than every `.task`, closing
+the race structurally rather than by scheduling luck. Regression test renamed
+and strengthened: `AO3AuthServiceTests.
+initPurgesLegacyCookieFromTheSharedHTTPCookieStorageBeforeAnyTaskCanRace` now
+asserts the legacy cookie is already gone immediately after construction —
+before `restoreSession()` is ever called — with a second assertion after
+`restoreSession()` for regression safety. `Scripts/verify.sh` invariants/lint
+green; full iOS suite (384 tests / 44 suites) and macOS build green.
 
 **A5-F2 — P1 Must Fix — MiniZip trusts archive-controlled paths and sizes,
 allowing sandbox path traversal plus malformed-archive crashes/exhaustion.**

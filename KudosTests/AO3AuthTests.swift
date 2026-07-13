@@ -694,12 +694,17 @@ struct AO3AuthServiceTests {
         #expect(service.sessionHealth == .unknown)
     }
 
-    /// A5-F1 upgrade gap: `restoreSession()` must sweep any AO3 cookie a pre-fix
-    /// build left in `HTTPCookieStorage.shared`, regardless of whether this launch
-    /// ends up signed in, signed out, or removal-pending — that shared jar is no
-    /// longer written or read by this app but is still live for anything (e.g.
-    /// AsyncImage) that defaults to it.
-    @Test func restoreSessionPurgesLegacyCookieFromTheSharedHTTPCookieStorage() async throws {
+    /// A5-F1 upgrade gap: the purge must happen at construction, not inside
+    /// `restoreSession()` — that method only ever runs from the root view's
+    /// `.task`, and SwiftUI gives no ordering guarantee between sibling `.task`s,
+    /// so a sibling avatar view's own `AsyncImage` fetch (same default
+    /// `URLSession.shared` cookie jar) could otherwise win the race and carry a
+    /// pre-fix build's leftover AO3 cookie once, on the very first launch after
+    /// upgrading. Construction (the owning view's `@State` initializer) always
+    /// precedes every `.task` in the tree, so asserting the cookie is already gone
+    /// immediately after `init` — before `restoreSession()` ever runs — is the
+    /// actual regression this guards.
+    @Test func initPurgesLegacyCookieFromTheSharedHTTPCookieStorageBeforeAnyTaskCanRace() async throws {
         let marker = "kudos-test-legacy-restore-\(UUID().uuidString)"
         let legacyCookie = try #require(HTTPCookie(properties: [
             .name: marker,
@@ -717,6 +722,9 @@ struct AO3AuthServiceTests {
             cookieManager: MockAO3CookieManager(),
             removalTracker: MemoryAO3SessionRemovalTracker()
         )
+
+        // Gone immediately — before `restoreSession()` (or any `.task`) has run.
+        #expect(HTTPCookieStorage.shared.cookies?.contains { $0.name == marker } != true)
 
         await service.restoreSession()
 

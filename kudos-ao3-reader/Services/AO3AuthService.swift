@@ -273,6 +273,18 @@ final class AO3AuthService {
         self.sessionHintStore = sessionHintStore ?? UserDefaultsAO3SessionHintStore()
         self.postingPseudStore = postingPseudStore ?? UserDefaultsAO3PostingPseudStore()
         self.removalTracker = removalTracker ?? UserDefaultsAO3SessionRemovalTracker()
+
+        // Legacy-jar cleanup (A5-F1 upgrade gap), deliberately here and not in
+        // `restoreSession()`: that method only runs from the root view's `.task`,
+        // and SwiftUI gives no ordering guarantee between sibling `.task`s — an
+        // avatar view's own `AsyncImage` fetch (same default `URLSession.shared`
+        // cookie jar) could otherwise win the race and carry a pre-fix build's
+        // leftover AO3 cookie once, on the very first launch after upgrading. This
+        // service is constructed as the owning view's `@State` initializer, which
+        // SwiftUI always evaluates before that view's `body` — and therefore before
+        // any `.task` anywhere in the tree — can run, so purging here is strictly
+        // earlier than any request that could use the leak.
+        AO3CookieBridge.purgeLegacySharedCookieJar()
     }
 
     // MARK: Posting pseud ("Posting As")
@@ -330,13 +342,6 @@ final class AO3AuthService {
         guard !didRestore else { return }
         didRestore = true
         status = .restoring
-
-        // Legacy-jar cleanup (A5-F1 upgrade gap): a pre-fix build could have left a
-        // persistent AO3 cookie in `HTTPCookieStorage.shared`, which this app no
-        // longer writes or deletes but which still authenticates anything defaulting
-        // to that shared jar (e.g. AsyncImage avatar fetches). Runs unconditionally,
-        // once per launch, regardless of sign-in state.
-        AO3CookieBridge.purgeLegacySharedCookieJar()
 
         if removalTracker.isRemovalPending {
             // A previous logout/expiry couldn't fully clear the durable store (A5-F4).
