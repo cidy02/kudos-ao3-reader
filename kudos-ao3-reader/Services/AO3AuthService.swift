@@ -331,6 +331,13 @@ final class AO3AuthService {
         didRestore = true
         status = .restoring
 
+        // Legacy-jar cleanup (A5-F1 upgrade gap): a pre-fix build could have left a
+        // persistent AO3 cookie in `HTTPCookieStorage.shared`, which this app no
+        // longer writes or deletes but which still authenticates anything defaulting
+        // to that shared jar (e.g. AsyncImage avatar fetches). Runs unconditionally,
+        // once per launch, regardless of sign-in state.
+        AO3CookieBridge.purgeLegacySharedCookieJar()
+
         if removalTracker.isRemovalPending {
             // A previous logout/expiry couldn't fully clear the durable store (A5-F4).
             // Retry it now, but refuse to restore anything this launch either way —

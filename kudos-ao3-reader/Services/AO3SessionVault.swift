@@ -320,6 +320,23 @@ enum AO3CookieBridge {
         }
     }
 
+    /// One-time (per launch) sweep of any AO3-domain cookie left over in
+    /// `HTTPCookieStorage.shared` from before this bridge stopped writing there. A
+    /// pre-fix build mirrored a "remember me" (long-lived) session cookie into that
+    /// store, which persists to disk independently of this app's own Keychain/file
+    /// vault — so on any device that was signed in before this fix, the leaked
+    /// cookie survives relaunch/update with nothing left to delete it, and silently
+    /// re-authenticates any request that still defaults to that shared jar (e.g.
+    /// `AsyncImage`'s `URLSession.shared` fetching an AO3-host avatar). Idempotent
+    /// and cheap when there is nothing to purge; called unconditionally from
+    /// `AO3AuthService.restoreSession()` regardless of sign-in state.
+    static func purgeLegacySharedCookieJar() {
+        for cookie in HTTPCookieStorage.shared.cookies ?? []
+            where AO3StoredCookie.isAO3Domain(cookie.domain) {
+            HTTPCookieStorage.shared.deleteCookie(cookie)
+        }
+    }
+
     static func captureAO3Cookies() async -> [AO3StoredCookie] {
         let cookies = await allCookies(in: WKWebsiteDataStore.default().httpCookieStore)
         return cookies

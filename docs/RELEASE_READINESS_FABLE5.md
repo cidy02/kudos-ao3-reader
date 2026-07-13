@@ -614,6 +614,34 @@ cookie this fix removes — now behaves like any other anonymous request
 authenticated download path is a separate feature change outside this
 finding's file scope.
 
+**Follow-up fix (2026-07-13, same day, review-caught upgrade gap):** the
+initial resolution above removed both the write *and* the delete of
+`HTTPCookieStorage.shared` from `AO3CookieBridge`, but never cleaned up what
+a pre-fix build already wrote there. Repro of the gap: the pre-fix bridge
+mirrored every valid session cookie into that shared store while the hidden
+login always force-checks "remember me" (`AO3WebLoginCoordinator.swift:324`),
+so a device that was ever signed in before this fix landed had a
+long-lived, disk-persisted AO3 cookie sitting in `HTTPCookieStorage.shared`
+with nothing left in the app that would ever delete it. That cookie remained
+live-reachable: `AO3AuthorAvatar` (author-profile headers and the Account
+profile card) fetches via SwiftUI `AsyncImage`, which uses `URLSession.shared`
+— same default cookie storage — against guaranteed AO3-host URLs
+(`AO3Client+Authors.swift`'s `absoluteAO3URL` requires `AO3AuthorRoute.
+isAO3URL`), so the leaked cookie would keep authenticating those nominally
+anonymous avatar requests indefinitely, not just across the upgrade but for
+as long as the user stayed signed in and never hit an explicit logout.
+Correction: new `AO3CookieBridge.purgeLegacySharedCookieJar()`
+(`AO3SessionVault.swift`) sweeps any AO3-domain cookie out of
+`HTTPCookieStorage.shared`; called unconditionally, once per launch, from the
+top of `AO3AuthService.restoreSession()` (`AO3AuthService.swift:326-333`),
+regardless of sign-in state. Regression tests:
+`AO3CookieBridgeTests.purgeLegacySharedCookieJarRemovesOnlyAO3Cookies` (an
+AO3-domain cookie is purged, an unrelated-domain cookie is left alone) and
+`AO3AuthServiceTests.restoreSessionPurgesLegacyCookieFromTheSharedHTTPCookieStorage`
+(a legacy cookie seeded before calling `restoreSession()` is gone after).
+`Scripts/verify.sh` invariants/lint green; full iOS suite (384 tests / 44
+suites) and macOS build green.
+
 **A5-F2 — P1 Must Fix — MiniZip trusts archive-controlled paths and sizes,
 allowing sandbox path traversal plus malformed-archive crashes/exhaustion.**
 Files: `kudos-ao3-reader/Reading/MiniZip.swift:21-51, 65-107`, reached by

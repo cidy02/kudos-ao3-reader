@@ -207,6 +207,38 @@ struct AO3CookieBridgeTests {
         #expect(HTTPCookieStorage.shared.cookies?.contains { $0.name == marker } != true)
         await AO3CookieBridge.clearAO3Cookies()
     }
+
+    /// A5-F1 upgrade gap: a pre-fix build wrote AO3 cookies into
+    /// `HTTPCookieStorage.shared` and nothing ever deleted them once this bridge
+    /// stopped touching that store. `purgeLegacySharedCookieJar()` must sweep any
+    /// such leftover regardless of domain casing/leading-dot formatting, and must
+    /// leave a non-AO3 cookie alone.
+    @Test func purgeLegacySharedCookieJarRemovesOnlyAO3Cookies() throws {
+        let marker = "kudos-test-legacy-\(UUID().uuidString)"
+        let legacyAO3Cookie = try #require(HTTPCookie(properties: [
+            .name: marker,
+            .value: "leaked-before-the-fix",
+            .domain: ".archiveofourown.org",
+            .path: "/",
+            .secure: "TRUE"
+        ]))
+        let unrelatedCookie = try #require(HTTPCookie(properties: [
+            .name: marker,
+            .value: "unrelated-site",
+            .domain: "example.com",
+            .path: "/",
+            .secure: "TRUE"
+        ]))
+        HTTPCookieStorage.shared.setCookie(legacyAO3Cookie)
+        HTTPCookieStorage.shared.setCookie(unrelatedCookie)
+        #expect(HTTPCookieStorage.shared.cookies?.contains { $0.domain == ".archiveofourown.org" && $0.name == marker } == true)
+
+        AO3CookieBridge.purgeLegacySharedCookieJar()
+
+        #expect(HTTPCookieStorage.shared.cookies?.contains { $0.domain == ".archiveofourown.org" && $0.name == marker } != true)
+        #expect(HTTPCookieStorage.shared.cookies?.contains { $0.domain == "example.com" && $0.name == marker } == true)
+        HTTPCookieStorage.shared.deleteCookie(unrelatedCookie)
+    }
 }
 
 /// Guards the Swift session parser against AO3 markup drift using representative
@@ -660,6 +692,35 @@ struct AO3AuthServiceTests {
         await service.verifySession()
 
         #expect(service.sessionHealth == .unknown)
+    }
+
+    /// A5-F1 upgrade gap: `restoreSession()` must sweep any AO3 cookie a pre-fix
+    /// build left in `HTTPCookieStorage.shared`, regardless of whether this launch
+    /// ends up signed in, signed out, or removal-pending — that shared jar is no
+    /// longer written or read by this app but is still live for anything (e.g.
+    /// AsyncImage) that defaults to it.
+    @Test func restoreSessionPurgesLegacyCookieFromTheSharedHTTPCookieStorage() async throws {
+        let marker = "kudos-test-legacy-restore-\(UUID().uuidString)"
+        let legacyCookie = try #require(HTTPCookie(properties: [
+            .name: marker,
+            .value: "leaked-before-the-fix",
+            .domain: ".archiveofourown.org",
+            .path: "/",
+            .secure: "TRUE"
+        ]))
+        HTTPCookieStorage.shared.setCookie(legacyCookie)
+
+        let service = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: MockAO3SessionValidator(result: .expired),
+            loginPerformer: MockAO3LoginPerformer(result: .success(testSession)),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+
+        await service.restoreSession()
+
+        #expect(HTTPCookieStorage.shared.cookies?.contains { $0.name == marker } != true)
     }
 
     private var testSession: AO3Session {
