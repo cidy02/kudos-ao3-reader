@@ -1,5 +1,8 @@
+import Foundation
 import Testing
 @testable import Kudos
+
+private final class InboxBundleAnchor {}
 
 /// Verifies the AO3 Inbox parser against the page's real structure (otwarchive
 /// `inbox/show.html.erb`): `li#feedback_comment_<id>` entries classed
@@ -61,6 +64,18 @@ struct AO3InboxParseTests {
     </body></html>
     """
 
+    private func fixture(_ name: String) throws -> String {
+        let url = try #require(
+            Bundle(for: InboxBundleAnchor.self).url(forResource: name, withExtension: "html")
+        )
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    @Test func visibleWorkMetadataDeduplicatesInScreenOrder() {
+        #expect(AO3InboxModel.uniqueWorkIDs([123, 456, 123, 789, 456]) == [123, 456, 789])
+        #expect(AO3InboxModel.uniqueWorkIDs([]).isEmpty)
+    }
+
     @Test func parsesEntriesWithIdentityWorkAndState() throws {
         let page = try AO3Client.parseInboxPage(html, page: 1)
         #expect(page.items.count == 3)
@@ -78,6 +93,23 @@ struct AO3InboxParseTests {
         #expect(first.postedAgo == "3 days ago")
         #expect(first.isUnread)
         #expect(!first.isReplied)
+        #expect(first.canReply)
+        #expect(first.chapterPosition == 3)
+        #expect(first.chapterIndicatorTitle == "Chapter 3")
+        #expect(first.workTitle == "My Great Fic")
+        #expect(first.participantRole(workAuthors: ["ReaderOne"]) == .author)
+        #expect(first.participantRole(workAuthors: []) == .user)
+        #expect(first.participantRole(
+            workAuthors: ["ReaderOne"], currentUsername: "reader1"
+        ) == .me)
+        let creator = try #require(AO3AuthorIdentity(
+            displayName: "Work Pseud", href: "/users/reader1/pseuds/Work%20Pseud"
+        ))
+        #expect(first.participantRole(
+            workAuthors: ["Work Pseud"],
+            workAuthorIdentities: [creator],
+            currentUsername: "someoneElse"
+        ) == .author)
     }
 
     @Test func parsesGuestCommentAndRepliedState() throws {
@@ -91,6 +123,10 @@ struct AO3InboxParseTests {
         #expect(guest.workID == 123456)
         #expect(!guest.isUnread)
         #expect(guest.isReplied)
+        #expect(!guest.canReply)
+        #expect(guest.chapterPosition == nil)
+        #expect(guest.workTitle == "My Great Fic")
+        #expect(guest.participantRole(workAuthors: ["Someone Else"]) == .guest)
     }
 
     @Test func tagCommentHasNoWorkButKeepsWebLink() throws {
@@ -101,12 +137,82 @@ struct AO3InboxParseTests {
         #expect(tag.subjectURL?.path.contains("/tags/") == true)
     }
 
+    @Test func anonymousCreatorAlwaysResolvesToAuthorRole() {
+        #expect(AO3CommentParticipantRole.resolve(
+            name: "Anonymous Creator",
+            isGuest: false,
+            isAnonymousCreator: true,
+            workAuthors: []
+        ) == .author)
+        #expect(AO3CommentParticipantRole.resolve(
+            name: "Anonymous Creator", isGuest: true, workAuthors: []
+        ) == .guest)
+    }
+
     @Test func readsHeadingTotalsAndPagination() throws {
         let page = try AO3Client.parseInboxPage(html, page: 1)
         #expect(page.totalComments == 12)
         #expect(page.unreadCount == 3)
         #expect(page.currentPage == 1)
         #expect(page.totalPages == 2)
+    }
+
+    @Test func parsesFixtureDerivedBulkFormAndDistinctInboxRowIDs() throws {
+        let page = try AO3Client.parseInboxPage(try fixture("ao3_inbox_manage"), page: 1)
+        let form = try #require(page.bulkForm)
+
+        #expect(form.actionURL.path == "/users/tester/inbox")
+        #expect(form.htmlMethod == "post")
+        #expect(form.httpMethodOverride == "put")
+        #expect(form.csrfToken == "csrf-inbox-123==")
+        #expect(form.hiddenFields.contains(AO3FormField(name: "source", value: "inbox")))
+        #expect(form.checkboxFieldName == "inbox_comments[]")
+        #expect(form.actionFields[.markRead] == AO3FormField(name: "read", value: "Mark Read"))
+        #expect(form.actionFields[.markUnread] == AO3FormField(name: "unread", value: "Mark Unread"))
+        #expect(form.actionFields[.delete] == AO3FormField(name: "delete", value: "Delete From Inbox"))
+        #expect(page.items.map(\.id) == [9001, 9002, 9003])
+        #expect(page.items.compactMap(\.bulkSelectionField?.value) == ["501", "502", "503"])
+    }
+
+    @Test func parsesFixtureDerivedFiltersAndBuildsTheirGETURL() throws {
+        let page = try AO3Client.parseInboxPage(try fixture("ao3_inbox_manage"), page: 1)
+        let filters = try #require(page.filterForm)
+        let read = try #require(filters.fields.first(where: { $0.name == "filters[read]" }))
+        let replied = try #require(filters.fields.first(where: { $0.name == "filters[replied_to]" }))
+        let date = try #require(filters.fields.first(where: { $0.name == "filters[date]" }))
+
+        #expect(read.title == "Read")
+        #expect(read.options.map(\.value) == ["all", "false", "true"])
+        #expect(read.selectedValue == "false")
+        #expect(replied.title == "Replied To")
+        #expect(replied.selectedValue == "all")
+        #expect(date.title == "Sort by Date")
+        #expect(date.selectedValue == "desc")
+
+        let url = try #require(filters.url(values: [
+            read.name: "true",
+            replied.name: "false",
+            date.name: "asc"
+        ], page: 2))
+        let values = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.compactMap { item in item.value.map { (item.name, $0) } } ?? [])
+        #expect(values["locale"] == "en")
+        #expect(values["filters[read]"] == "true")
+        #expect(values["filters[replied_to]"] == "false")
+        #expect(values["filters[date]"] == "asc")
+        #expect(values["page"] == "2")
+    }
+
+    @MainActor
+    @Test func buildsFixtureDerivedBulkRequestBody() throws {
+        let page = try AO3Client.parseInboxPage(try fixture("ao3_inbox_manage"), page: 1)
+        let form = try #require(page.bulkForm)
+        let body = AO3AuthService.formEncoded(try #require(
+            form.parameters(for: Array(page.items.prefix(2)), action: .markRead)
+        ))
+        #expect(String(decoding: body, as: UTF8.self) ==
+            "_method=put&authenticity_token=csrf-inbox-123%3D%3D&source=inbox"
+                + "&inbox_comments%5B%5D=501&inbox_comments%5B%5D=502&read=Mark%20Read")
     }
 
     @Test func recognizedEmptyInboxParsesAsEmpty() throws {

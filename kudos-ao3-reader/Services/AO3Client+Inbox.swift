@@ -3,8 +3,7 @@ import SwiftSoup
 
 // The signed-in user's AO3 Inbox (`/users/<name>/inbox`) — AO3's own feed of
 // comment notifications (new comments on the user's works, replies to comments
-// they posted). Read-only for v1: AO3's mark-read / delete / reply-from-inbox
-// forms are deliberately not implemented. Selectors mirror otwarchive's
+// they posted). Selectors mirror otwarchive's
 // `app/views/inbox/show.html.erb` + `_inbox_comment_contents.html.erb`:
 // items are `li#feedback_comment_<id>` (classed read/unread) inside
 // `ol.comment.index.group`, each with an `h4.heading.byline` (commenter link +
@@ -44,6 +43,10 @@ extension AO3Client {
         // Skip a malformed entry rather than failing the page (same convention as
         // the works-list parsers).
         let items = itemElements.compactMap { try? Self.parseInboxItem($0) }
+        // The display page is still useful if AO3 changes an optional management
+        // form, but native controls must fail closed rather than inventing fields.
+        let bulkForm = Self.parseInboxBulkForm(in: doc, items: items)
+        let filterForm = Self.parseInboxFilterForm(in: doc)
 
         var totalPages = page
         for li in try doc.select("ol.pagination li").array() {
@@ -69,7 +72,9 @@ extension AO3Client {
             currentPage: page,
             totalPages: totalPages,
             totalComments: totalComments,
-            unreadCount: unreadCount
+            unreadCount: unreadCount,
+            bulkForm: bulkForm,
+            filterForm: filterForm
         )
     }
 
@@ -104,6 +109,7 @@ extension AO3Client {
         // Guest comments render the name as a plain span with a "(Guest)" role
         // suffix; anonymous-creator entries have no commenter link either.
         var isGuest = false
+        var isAnonymousCreator = false
         if commenterIdentity == nil {
             let role = (try? byline.select("span.role").first()?.text()) ?? ""
             isGuest = role.localizedCaseInsensitiveContains("guest")
@@ -124,6 +130,7 @@ extension AO3Client {
                 let full = try byline.text()
                 if full.localizedCaseInsensitiveContains("anonymous creator") {
                     commenterName = "Anonymous Creator"
+                    isAnonymousCreator = true
                 }
             }
         }
@@ -141,11 +148,25 @@ extension AO3Client {
 
         let isUnread = li.hasClass("unread")
         let isReplied = (try? li.select("ul.actions span.replied").first()) != nil
+        let canReply = ((try? li.select("ul.actions a").array()) ?? []).contains { link in
+            let label = ((try? link.text()) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return label.localizedCaseInsensitiveCompare("Reply") == .orderedSame
+        }
+        let bulkSelectionField: AO3FormField?
+        if let checkbox = try li.select("input[type=checkbox][name][value]").first(),
+           let name = try? checkbox.attr("name"), !name.isEmpty,
+           let value = try? checkbox.attr("value"), !value.isEmpty {
+            bulkSelectionField = AO3FormField(name: name, value: value)
+        } else {
+            bulkSelectionField = nil
+        }
 
         return AO3InboxItem(
             id: id,
             commenterName: commenterName,
             isGuest: isGuest,
+            isAnonymousCreator: isAnonymousCreator,
             commenterIdentity: commenterIdentity,
             avatarURL: avatarURL,
             subjectTitle: subjectTitle,
@@ -154,8 +175,142 @@ extension AO3Client {
             excerpt: excerpt,
             postedAgo: postedAgo,
             isUnread: isUnread,
-            isReplied: isReplied
+            isReplied: isReplied,
+            canReply: canReply,
+            bulkSelectionField: bulkSelectionField
         )
+    }
+
+    /// Parses AO3's mass-edit form exactly as rendered. A partial/malformed form
+    /// returns nil so the UI stays read-only instead of guessing a write request.
+    private static func parseInboxBulkForm(
+        in doc: Document,
+        items: [AO3InboxItem]
+    ) -> AO3InboxBulkForm? {
+        guard let form = try? doc.select("form#inbox-form").first(),
+              let action = try? form.attr("action"),
+              let actionURL = inboxAbsoluteURL(action)
+        else { return nil }
+
+        let htmlMethod = ((try? form.attr("method")) ?? "").lowercased()
+        guard htmlMethod == "post" else { return nil }
+
+        let hiddenFields = inboxHiddenFields(in: form)
+        guard let csrfToken = hiddenFields.first(where: { $0.name == "authenticity_token" })?.value,
+              !csrfToken.isEmpty,
+              let checkboxFieldName = items.compactMap(\.bulkSelectionField).first?.name,
+              !checkboxFieldName.isEmpty
+        else { return nil }
+
+        var actionFields: [AO3InboxBulkAction: AO3FormField] = [:]
+        for input in (try? form.select("input[type=submit][name][value]").array()) ?? [] {
+            guard let name = try? input.attr("name"), !name.isEmpty,
+                  let value = try? input.attr("value"), !value.isEmpty
+            else { continue }
+            let action: AO3InboxBulkAction?
+            switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "mark read": action = .markRead
+            case "mark unread": action = .markUnread
+            case "delete from inbox": action = .delete
+            default: action = nil
+            }
+            if let action, actionFields[action] == nil {
+                actionFields[action] = AO3FormField(name: name, value: value)
+            }
+        }
+        guard AO3InboxBulkAction.allCases.allSatisfy({ actionFields[$0] != nil }) else {
+            return nil
+        }
+
+        return AO3InboxBulkForm(
+            actionURL: actionURL,
+            htmlMethod: htmlMethod,
+            httpMethodOverride: hiddenFields.first(where: { $0.name == "_method" })?.value,
+            csrfToken: csrfToken,
+            hiddenFields: hiddenFields,
+            checkboxFieldName: checkboxFieldName,
+            actionFields: actionFields
+        )
+    }
+
+    /// Parses AO3's GET filter form into its actual field names, values, and
+    /// checked state. Unknown radio groups remain present with a neutral title,
+    /// keeping the parser forward-compatible without fabricating a request.
+    private static func parseInboxFilterForm(in doc: Document) -> AO3InboxFilterForm? {
+        guard let form = try? doc.select("form#inbox-filters").first(),
+              let action = try? form.attr("action"),
+              let actionURL = inboxAbsoluteURL(action)
+        else { return nil }
+
+        let method = ((try? form.attr("method")) ?? "get").lowercased()
+        guard method == "get" else { return nil }
+
+        var names: [String] = []
+        var inputsByName: [String: [Element]] = [:]
+        for input in (try? form.select("input[type=radio][name][value]").array()) ?? [] {
+            guard let name = try? input.attr("name"), !name.isEmpty else { continue }
+            if inputsByName[name] == nil { names.append(name) }
+            inputsByName[name, default: []].append(input)
+        }
+
+        let fields = names.compactMap { name -> AO3InboxFilterField? in
+            guard let inputs = inputsByName[name] else { return nil }
+            let options = inputs.compactMap { input -> AO3InboxFilterOption? in
+                guard let value = try? input.attr("value"), !value.isEmpty else { return nil }
+                let inputID = input.id()
+                let label = if !inputID.isEmpty {
+                    (try? form.select("label[for='\(inputID)']").first()?.text()) ?? value
+                } else {
+                    value
+                }
+                return AO3InboxFilterOption(
+                    value: value,
+                    label: label.trimmingCharacters(in: .whitespacesAndNewlines),
+                    isSelected: input.hasAttr("checked")
+                )
+            }
+            guard !options.isEmpty else { return nil }
+            return AO3InboxFilterField(
+                name: name,
+                title: inboxFilterTitle(for: options),
+                options: options
+            )
+        }
+        guard !fields.isEmpty else { return nil }
+
+        return AO3InboxFilterForm(
+            actionURL: actionURL,
+            hiddenFields: inboxHiddenFields(in: form),
+            fields: fields
+        )
+    }
+
+    private static func inboxHiddenFields(in form: Element) -> [AO3FormField] {
+        ((try? form.select("input[type=hidden][name]").array()) ?? []).compactMap { input in
+            guard let name = try? input.attr("name"), !name.isEmpty,
+                  let value = try? input.attr("value")
+            else { return nil }
+            return AO3FormField(name: name, value: value)
+        }
+    }
+
+    private static func inboxAbsoluteURL(_ value: String) -> URL? {
+        let base = URL(string: "https://archiveofourown.org")!
+        return URL(string: value, relativeTo: base)?.absoluteURL
+    }
+
+    private static func inboxFilterTitle(for options: [AO3InboxFilterOption]) -> String {
+        let labels = options.map { $0.label.lowercased() }
+        if labels.contains(where: { $0.contains("newest first") || $0.contains("oldest first") }) {
+            return "Sort by Date"
+        }
+        if labels.contains(where: { $0.contains("without replies") || $0.contains("replied") }) {
+            return "Replied To"
+        }
+        if labels.contains(where: { $0.contains("unread") || $0.contains("show read") }) {
+            return "Read"
+        }
+        return "Filter"
     }
 
     /// The numeric work id in a `/works/<id>/…` path, if any.

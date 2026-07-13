@@ -20,6 +20,7 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 | Local-first | Every enrichment path checks local state first; the search index is built from local data only; `existingWork` pre-checks avoid re-downloads. |
 | Cancellation | `Task.sleep`/URLSession propagate `CancellationError`; coordinator wakes cancelled waiters; batch loops stop (never count cancellations as failures). |
 | Author profiles | Fetch only after an explicit byline/profile tap. Dashboard + selected Works tab load first; Series/Bookmarks/About and later pages load on demand. `AO3AuthorPageCache` is capped at 128 entries, uses a 5-minute TTL keyed by full URL and authentication scope, and keeps at most 24 hours of same-scope stale fallback; stale data never crosses accounts or hides session expiry. Scope/tab changes cancel superseded loads. Block/mute: GET AO3's confirm page once, native confirm dialog, single-shot POST of that form (never open the web form, never retry writes). |
+| Inbox metadata | Only after the user visibly opens Activity › Inbox, hydrate the unique work ids on that rendered page so creator badges and the work-summary destination are accurate. Local/profile/auth-scoped cache data wins first; unresolved ids load strictly sequentially through `AO3RequestCoordinator` + `AO3Client` pacing. The view owns cancellation, the cache is auth-scoped/capped at 128, and a systemic error stops the batch. Never prefetch Inbox from Overview, follow pagination, or poll in the background. |
 
 ## Parser fragility assumptions
 
@@ -33,7 +34,7 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 - No parallel request fan-out outside `AO3RequestCoordinator.withSlot`; no bypassing `AO3Client` with raw `URLSession` calls to AO3 (the auth validator's single launch request is the one sanctioned exception).
 - No retry loops around writes; no auto-retry UI for kudos/comments.
 - No background polling beyond the existing BGTask folder-sync refresh; no periodic full-library metadata sweeps.
-- No background or bulk scraping of logged-in pages. Authenticated reads are limited to the user's own account lists and pages opened through explicit profile/work navigation; no crawling/archiving features.
+- No background or bulk scraping of logged-in pages. Authenticated reads are limited to the user's own account lists, pages opened through explicit profile/work navigation, and the bounded visible-page Inbox metadata hydration documented above; no crawling/archiving features.
 - No removal/weakening of: pacing, cooldowns, Retry-After honoring, or the contact UA.
 - Never delete/modify local works in any network error path (grep-audited invariant — keep it grep-clean: no `softDelete`/`hardDelete` reachable from a `catch`).
 

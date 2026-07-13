@@ -14,6 +14,7 @@ struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Query private var localWorks: [SavedWork]
 
     @State private var path = NavigationPath()
     @State private var showingLogin = false
@@ -25,6 +26,7 @@ struct AccountView: View {
     @State private var profileModel: AO3AuthorProfileModel?
     /// Activity › Inbox feed state.
     @State private var inboxModel = AO3InboxModel()
+    @State private var showingInboxFilters = false
     @State private var expandAll = false
     /// Detailed list rows vs compact two-up cover cards — shared across Account
     /// work lists (Reading / Writing / Activity) and persisted like Home/Library.
@@ -137,15 +139,44 @@ struct AccountView: View {
                 .navigationDestination(for: AccountInboxThreadDestination.self) { destination in
                     CommentsView(
                         workID: destination.workID,
-                        context: AO3CommentsWorkContext(title: destination.title, authors: [])
+                        context: destination.workContext,
+                        initialChapterPosition: destination.focus == .chapter
+                            ? destination.chapterPosition : nil,
+                        initialCommentID: destination.commentID,
+                        initialFocusesChapter: destination.focus == .chapter,
+                        initialReplyCommentID: destination.opensReplyComposer ? destination.commentID : nil,
+                        onResolveWorkContext: { context in
+                            inboxModel.cacheWorkContext(context, for: destination.workID)
+                        }
                     )
                 }
                 .ao3AuthorNavigation(path: $path, tab: .account)
-                .toolbar { toolbarContent }
+                .toolbar {
+                    AccountToolbarContent(
+                        isInboxVisible: isInboxVisible,
+                        model: inboxModel,
+                        showingInboxFilters: $showingInboxFilters,
+                        showsMatureRevealControl: showsMatureRevealControl,
+                        showsWorkListControls: showsWorkListControls,
+                        displayMode: $displayMode,
+                        expandAll: $expandAll
+                    )
+                }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
+                .sheet(isPresented: $showingInboxFilters) {
+                    AccountInboxFilterSheet(model: inboxModel)
+                }
+                .alert("Couldn't update Inbox", isPresented: showingInboxActionError) {
+                    Button("OK") { inboxModel.clearActionError() }
+                } message: {
+                    Text(inboxModel.actionError ?? "AO3 couldn't update your Inbox.")
+                }
                 .task(id: activationKey) { activateVisibleContent() }
                 .onChange(of: auth.username, initial: true) { _, username in
                     syncProfileModel(username: username)
+                }
+                .onChange(of: activityTab) { _, tab in
+                    if tab != .inbox { inboxModel.endSelection() }
                 }
         }
     }
@@ -437,30 +468,17 @@ struct AccountView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        // One tight HStack — matches Library/Home so privacy + overflow don't
-        // get wide system spacing between icons.
-        ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 2) {
-                if showsMatureRevealControl {
-                    MatureRevealToggle()
-                }
-                if showsWorkListControls {
-                    WorkListMoreMenu {
-                        DisplayModeMenuPicker(mode: $displayMode)
-                        // Compact cover cards don't expand/collapse.
-                        if displayMode == .detailed {
-                            ExpandAllMenuItem(expandAll: $expandAll)
-                        }
-                    }
-                }
-                NavigationLink(value: Route.settings) {
-                    Label("Settings", systemImage: "gearshape")
-                }
+    private var isInboxVisible: Bool {
+        auth.isLoggedIn && selectedTab == .activity && activityTab == .inbox
+    }
+
+    private var showingInboxActionError: Binding<Bool> {
+        Binding(
+            get: { inboxModel.actionError != nil },
+            set: { isPresented in
+                if !isPresented { inboxModel.clearActionError() }
             }
-            .labelStyle(.iconOnly)
-        }
+        )
     }
 
     /// Work-list chrome (Detailed/Compact + Expand) for Account segments that
@@ -770,16 +788,25 @@ struct AccountView: View {
             )
         case .inbox:
             Section {
-                AccountInboxRows(model: inboxModel, limit: nil, onOpen: openInboxItem)
+                AccountInboxRows(
+                    model: inboxModel,
+                    limit: nil,
+                    onOpen: openInboxItem,
+                    onReply: openInboxReply,
+                    onOpenChapter: openInboxChapter,
+                    workContext: { knownWorkContext(for: $0) }
+                )
             } header: {
                 Text("Inbox")
             } footer: {
                 if let total = inboxModel.totalComments {
                     let unread = inboxModel.unreadCount ?? 0
                     Text("\(total) comments in your AO3 inbox, \(unread) unread. "
-                        + "Manage read state on the AO3 website.")
+                        + "Use Select to manage read state or remove notifications; "
+                        + "Reply opens the native comments flow.")
                 }
             }
+            .task(id: inboxMetadataTaskID) { await enrichVisibleInboxWorkContexts() }
         }
     }
 
@@ -985,15 +1012,74 @@ struct AccountView: View {
             authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
         )?.displayText
     }
+}
+
+private extension AccountView {
+    private var inboxMetadataTaskID: String {
+        let scope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let ids = inboxModel.items.compactMap(\.workID).map(String.init).joined(separator: ",")
+        return "\(scope)|\(inboxModel.metadataRevision)|\(ids)"
+    }
+
+    private func enrichVisibleInboxWorkContexts() async {
+        guard case .loaded = inboxModel.phase else { return }
+        let items = inboxModel.items
+        var seeds: [Int: AO3CommentsWorkContext] = [:]
+        for item in items {
+            guard let workID = item.workID else { continue }
+            seeds[workID] = knownWorkContext(for: item)
+        }
+        await inboxModel.enrichVisibleWorkContexts(
+            workIDs: items.compactMap(\.workID),
+            seededContexts: seeds,
+            auth: auth
+        )
+    }
 
     private func openInboxItem(_ item: AO3InboxItem) {
+        openInboxItem(item, focus: .parentOrSelf)
+    }
+
+    private func openInboxChapter(_ item: AO3InboxItem) {
+        openInboxItem(item, focus: .chapter)
+    }
+
+    private func openInboxReply(_ item: AO3InboxItem) {
+        openInboxItem(item, focus: .parentOrSelf, opensReplyComposer: true)
+    }
+
+    private func openInboxItem(
+        _ item: AO3InboxItem,
+        focus: AccountInboxThreadFocus,
+        opensReplyComposer: Bool = false
+    ) {
         if let workID = item.workID {
             path.append(AccountInboxThreadDestination(
                 workID: workID,
-                title: item.subjectTitle
+                workContext: knownWorkContext(for: item),
+                commentID: item.id,
+                chapterPosition: item.chapterPosition,
+                focus: focus,
+                opensReplyComposer: opensReplyComposer
             ))
-        } else if let url = item.subjectURL {
-            router.open(url)
+        } else {
+            router.open(AO3Client.commentThreadURL(commentID: item.id))
         }
+    }
+
+    /// Local/profile metadata paints immediately; the Inbox model then fills any
+    /// missing canonical fields sequentially for distinct works on this page.
+    private func knownWorkContext(for item: AO3InboxItem) -> AO3CommentsWorkContext {
+        guard let workID = item.workID else {
+            return AO3CommentsWorkContext(title: item.workTitle, authors: [])
+        }
+        if let context = inboxModel.workContext(for: workID) { return context }
+        if let work = localWorks.first(where: { $0.ao3WorkID == workID }) {
+            return AO3CommentsWorkContext(savedWork: work)
+        }
+        if let work = profileModel?.works.first(where: { $0.id == workID }) {
+            return AO3CommentsWorkContext(remote: work)
+        }
+        return AO3CommentsWorkContext(title: item.workTitle, authors: [])
     }
 }
