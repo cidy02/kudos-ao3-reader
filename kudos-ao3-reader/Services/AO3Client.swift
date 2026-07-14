@@ -19,33 +19,83 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     private let base = "https://archiveofourown.org"
     private let session: URLSession
+    private let redirectCookieRelay = AO3RedirectCookieRelay()
 
     init() {
         session = URLSession(configuration: Self.makeAnonymousSessionConfiguration())
     }
 
-    /// The configuration for this client's one session. This client is supposed to be
-    /// anonymous everywhere except the explicit, per-request `Cookie` header set by
-    /// `authenticatedHTML`/`submitWrite` — so cookie handling is disabled outright
-    /// (`httpCookieStorage = nil`), not merely left at the shared jar. Previously this
-    /// used `URLSessionConfiguration.default`, whose default cookie storage is
-    /// `HTTPCookieStorage.shared` — the same store `AO3CookieBridge` used to mirror a
-    /// signed-in session's cookies into, so a "read-only" search/browse/tag request
-    /// silently rode along with the account's cookie (A5-F1), and two identical
-    /// URL-only reads under different accounts could coalesce a response that was
-    /// secretly authenticated. Internal (not private) so the isolation guarantee is
-    /// unit-testable without a network call.
+    /// The configuration for this client's one session (T-100). Cookie handling is
+    /// enabled into a **private, in-memory, per-process** jar (`.ephemeral` —
+    /// never `HTTPCookieStorage.shared`, never touched by another app or by
+    /// WebKit's own store) so AO3's Cloudflare front door recognizes repeat
+    /// requests instead of challenging every single one as a brand-new client
+    /// (T-93 disabled cookie handling outright, which fixed A5-F1's identity leak
+    /// but also discarded Cloudflare's own `cf_clearance`/`__cf_bm` — the regression
+    /// that started serving a CAPTCHA/managed challenge).
+    ///
+    /// This must not reopen A5-F1: the AO3 **auth** session cookie
+    /// (`AO3RequestDefaults.sessionCookieName`) is the only cookie capable of
+    /// carrying account identity, so it is explicitly purged from this jar after
+    /// every anonymous fetch (`purgeSessionCookie`, called from `performFetch`) —
+    /// it can only ever appear here transiently if AO3 sets one on a *signed-out*
+    /// response (a guest Rails session, never an authenticated one, since
+    /// anonymous requests never send a Cookie header in the first place).
+    /// Authenticated/write requests still build their `Cookie` header explicitly
+    /// from `AO3AuthService`'s own persisted, per-account `AO3Session` — never
+    /// from this ambient jar — so two accounts' authenticated requests can never
+    /// race over a single shared cookie value; they only ever *read* this jar's
+    /// Cloudflare cookies (`challengeCookieHeader`), a lookup that carries no
+    /// identity and is safe under any concurrency. Internal (not private) so the
+    /// isolation guarantee is unit-testable without a network call.
     static func makeAnonymousSessionConfiguration() -> URLSessionConfiguration {
-        let config = URLSessionConfiguration.default
+        let config = URLSessionConfiguration.ephemeral
         // The shared app identity (browser-like base + product token + contact URL) —
         // single-sourced in AO3RequestDefaults because authenticated requests set the
         // same header per-request, which would silently override a diverging default.
         config.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         config.timeoutIntervalForRequest = 30
-        config.httpCookieStorage = nil
-        config.httpShouldSetCookies = false
-        config.httpCookieAcceptPolicy = .never
+        config.httpShouldSetCookies = true
+        config.httpCookieAcceptPolicy = .always
         return config
+    }
+
+    /// Cloudflare's own bot-management cookies currently held for `url`, joined
+    /// as a `Cookie` header fragment — never the AO3 auth cookie, filtered out
+    /// defensively even though it cannot legitimately end up here (see
+    /// `makeAnonymousSessionConfiguration`). `session` is an immutable `Sendable`
+    /// value once constructed and `HTTPCookieStorage.cookies(for:)` is
+    /// thread-safe, so this reads off-actor without an `await` — callers building
+    /// an authenticated/write request (`AO3AuthService.authenticatedRequest`)
+    /// merge this into their own explicit `Cookie` header so those requests also
+    /// present a warm `cf_clearance`/`__cf_bm`, not just anonymous reads.
+    nonisolated func challengeCookieHeader(for url: URL) -> String? {
+        Self.challengeCookieHeader(from: session.configuration.httpCookieStorage?.cookies(for: url) ?? [])
+    }
+
+    /// Pure (unit-tested): joins every cookie except the AO3 auth cookie into a
+    /// `Cookie` header fragment. nil when nothing remains — either the jar is
+    /// empty, or (defensively; this must never legitimately happen — see
+    /// `makeAnonymousSessionConfiguration`) it holds only the auth cookie.
+    static func challengeCookieHeader(from cookies: [HTTPCookie]) -> String? {
+        let pairs = cookies
+            .filter { $0.name != AO3RequestDefaults.sessionCookieName }
+            .map { "\($0.name)=\($0.value)" }
+        return pairs.isEmpty ? nil : pairs.joined(separator: "; ")
+    }
+
+    /// Deletes any cookie named `AO3RequestDefaults.sessionCookieName` from
+    /// `storage`. Called after every anonymous fetch as a structural invariant —
+    /// the jar exists only to keep Cloudflare's own cookies warm, and must never
+    /// be able to carry AO3 account identity, even transiently. Internal (not
+    /// private) so the deletion itself is unit-testable against a real, isolated
+    /// `HTTPCookieStorage` instance.
+    static func purgeSessionCookie(from storage: HTTPCookieStorage?, url: URL) {
+        guard let storage else { return }
+        for cookie in storage.cookies(for: url) ?? []
+            where cookie.name == AO3RequestDefaults.sessionCookieName {
+            storage.deleteCookie(cookie)
+        }
     }
 
     // MARK: Pacing
@@ -129,6 +179,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             try await pace()
             let (data, response) = try await session.data(from: url)
             try Self.check(response)
+            Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url)
             return data
         }
     }
@@ -405,7 +456,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private func performAuthenticatedFetch(for request: URLRequest) async throws -> (Data, String?) {
         try await withRetry {
             try await pace()
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
             try Self.check(response)
             return (data, response.url?.path)
         }
@@ -427,7 +478,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         request.httpShouldHandleCookies = false
         Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
         try await pace()
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }

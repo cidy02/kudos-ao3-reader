@@ -269,6 +269,24 @@ struct AO3AuthHTMLFixtureTests {
 }
 
 @MainActor
+/// T-100: authenticated/write requests append `AO3Client`'s currently-held
+/// Cloudflare cookies after the account's own explicit cookie pairs.
+struct AO3AuthServiceCookieMergeTests {
+    @Test func appendsAChallengeHeaderWhenOneIsPresent() {
+        let merged = AO3AuthService.mergedCookieHeader(
+            auth: "_otwarchive_session=secret", challenge: "cf_clearance=abc123; __cf_bm=def456"
+        )
+        #expect(merged == "_otwarchive_session=secret; cf_clearance=abc123; __cf_bm=def456")
+    }
+
+    @Test func returnsTheAuthHeaderUnchangedWhenThereIsNoChallengeCookieYet() {
+        #expect(AO3AuthService.mergedCookieHeader(auth: "_otwarchive_session=secret", challenge: nil)
+            == "_otwarchive_session=secret")
+        #expect(AO3AuthService.mergedCookieHeader(auth: "_otwarchive_session=secret", challenge: "")
+            == "_otwarchive_session=secret")
+    }
+}
+
 struct AO3AuthServiceTests {
     @Test func hiddenSuccessPersistsSessionAndBuildsAuthenticatedRequest() async throws {
         let session = testSession
