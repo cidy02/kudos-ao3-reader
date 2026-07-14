@@ -22,8 +22,8 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Account (AO3 profile hub) | `Features/Account/AccountView.swift` — primary segments **Overview / Reading / Writing / Activity**; Overview hub + `AccountMoreOnAO3View`; Reading = Later/Subscriptions/Bookmarks/Collections; Writing = Works/Series/Drafts; Activity = History/Inbox. `AO3PreferencesView.swift`, `PrivacyDataView.swift`, `AO3AccountWorksList.swift`; preferences in `AO3Client+Preferences.swift` / `AO3PreferencesActions.swift` / `AO3PreferencesModels.swift` |
 | Native AO3 author profiles (pseud scope, Works/Series/Bookmarks/About, series detail) | `Features/Authors/AuthorProfileView.swift`, `AuthorProfileComponents.swift`, `AO3SeriesDetailView.swift`; shared tappable bylines in `UIComponents/AO3AuthorNavigation.swift` |
 | Settings (fonts, backup, folder sync, EPUB import, privacy prefs) | `Settings/SettingsView.swift` — ONE enum-driven `.fileImporter` (`FileImportKind`), see onboarding pitfalls |
-| Reader — iOS | `Features/ReaderReadium/ReadiumReaderView.swift` (progress saved per `locationDidChange` via `book.onLocatorChange` → `readiumLocator` + save) |
-| Reader — macOS (legacy) | `Features/Reader/ReaderView.swift` + `ReaderController.swift` (`#if os(macOS)`); progress = `lastSpineIndex`/`lastScrollFraction` *(inferred from Models fields; verify before editing)* |
+| Reader — iOS | `Features/ReaderReadium/ReadiumReaderView.swift` + `ReadiumProgressPersistence.swift` (locator stream is debounced ~2s / progression delta; flush on dismiss, disappear, scene background; mid-session writes use `applyDebouncedReadiumLocator` so shelf order / folder-sync dirty don't thrash on scroll) |
+| Reader — macOS (legacy) | `Features/Reader/ReaderView.swift` + `ReaderController.swift` (`#if os(macOS)`); progress = `lastSpineIndex`/`lastScrollFraction` via debounced `ReaderProgressBridge` |
 | Reader routing | `BookReaderView` (grep) routes per-platform |
 | Privacy (M/E) | `Features/Privacy/MatureContent.swift` — see below |
 

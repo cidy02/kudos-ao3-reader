@@ -212,6 +212,12 @@ struct ContentView: View {
         )
     }
 
+    /// Fingerprint of library content that should mark the sync folder dirty.
+    ///
+    /// Quantizes timestamps to whole seconds so high-frequency progress stamps
+    /// (if any path still advances `lastModifiedAt` mid-read) cannot reschedule
+    /// a full package `syncUp` many times per second. Debounced Readium writes
+    /// deliberately leave `lastModifiedAt` alone; this is a second line of defense.
     private var folderSyncChangeToken: String {
         [
             "\(folderSyncWorks.count):\(newestDate(folderSyncWorks.map(\.lastModifiedAt)))",
@@ -225,7 +231,9 @@ struct ContentView: View {
     }
 
     private func newestDate(_ dates: [Date]) -> TimeInterval {
-        dates.max()?.timeIntervalSince1970 ?? 0
+        // Floor to whole seconds: sub-second stamp churn is never a distinct
+        // sync-worthy event for the full-package uploader.
+        floor(dates.max()?.timeIntervalSince1970 ?? 0)
     }
 
     private func scheduleFolderSyncUp() {

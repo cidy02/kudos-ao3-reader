@@ -145,12 +145,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Chapter/Afterword), one per spine item. See `ReaderSection`.
     private(set) var sections: [ReaderSection] = []
     private(set) var currentLocator: Locator?
-    /// The visible portion of the publication, from Readium's viewport
-    /// observer. Drives the true-end completion check (`isAtPublicationEnd`).
-    private(set) var currentViewport: NavigatorViewport?
     /// Whether the viewport's trailing edge rests at the very end of the final
     /// reading-order resource — the only state that may auto-finish a work.
-    /// See `ReadiumReaderCompletion`.
+    /// See `ReadiumReaderCompletion`. Kept as a boolean (not the full viewport)
+    /// so scroll-driven viewport updates don't thrash `@Observable` dependents
+    /// on every settle.
     private(set) var isAtPublicationEnd = false
     private(set) var navigator: EPUBNavigatorViewController?
     /// Readium's static position list grouped by reading-order item (chapter).
@@ -159,9 +158,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Toggled by tapping the page; the view hides/shows its chrome on this.
     var chromeHidden = false
 
-    /// Fires on every position change — used to persist reading progress.
-    /// Ordinary progress only; completion is signaled separately by
-    /// `onReachedPublicationEnd`.
+    /// Fires on every position change. The view records this for the progress
+    /// pill and feeds a debounced persistence path — it must not force a
+    /// SwiftData save on every call (scrolled-mode hang). Completion is
+    /// signaled separately by `onReachedPublicationEnd`.
     var onLocatorChange: ((Locator) -> Void)?
     /// Fires once each time the viewport newly reaches the publication's true
     /// end (`ReadiumReaderCompletion.isAtEnd`) — used to auto-finish completed
@@ -293,15 +293,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         onLocatorChange?(locator)
     }
 
-    /// Tracks the visible viewport for the true-end completion check. Readium
-    /// updates `viewport` together with `currentLocation`, so this stays in
-    /// step with `locationDidChange`. Rising-edge only: the callback fires when
-    /// the end state is newly reached, not on every update while resting there.
+    /// True-end completion check only. Readium updates `viewport` with
+    /// `currentLocation`; we derive a boolean and only publish it when the
+    /// end state flips so scrolled settles don't invalidate SwiftUI for free.
+    /// Rising-edge only for `onReachedPublicationEnd`.
     func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
+        let atEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
         let wasAtEnd = isAtPublicationEnd
-        currentViewport = viewport
-        isAtPublicationEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
-        if isAtPublicationEnd, !wasAtEnd {
+        if atEnd != wasAtEnd {
+            isAtPublicationEnd = atEnd
+        }
+        if atEnd, !wasAtEnd {
             onReachedPublicationEnd?()
         }
     }
@@ -506,6 +508,7 @@ struct ReadiumReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -523,6 +526,9 @@ struct ReadiumReaderView: View {
     @AppStorage("readerJustify") private var justifyText = false
 
     @State private var book = ReadiumBook()
+    /// Debounces SwiftData writes for the Readium locator stream (see
+    /// `ReadiumProgressPersistence`). UI locator / progress pill stay live.
+    @State private var progressPersistence = ReadiumProgressPersistence()
     /// Native comments sheet over the reader (only for AO3-backed works).
     @State private var showingComments = false
 
@@ -663,10 +669,25 @@ struct ReadiumReaderView: View {
             .onChange(of: router.panel) { _, panel in
                 if panel == .none { book.submit(preferences) }
             }
+            .onChange(of: scenePhase) { _, phase in
+                // Force-quit safety: flush when leaving the foreground so a
+                // debounced window can't lose the last settle.
+                // - `.background`: full shelf stamp (Continue Reading).
+                // - `.inactive` (Control Center / app switcher): position only —
+                //   avoid rewriting lastReadDate on every transient inactive flip.
+                switch phase {
+                case .background:
+                    flushProgress(shelfStamp: true)
+                case .inactive:
+                    flushProgress(shelfStamp: false)
+                default:
+                    break
+                }
+            }
             .onDisappear {
                 // Flush the exact final position so resume lands precisely, even if the
-                // last scroll didn't emit a locator change before we left.
-                persistCurrentProgress()
+                // last scroll's debounce window hadn't elapsed before we left.
+                flushProgress(shelfStamp: true)
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 try? modelContext.save()
                 scheduleFolderSyncOnReaderClose()
@@ -706,7 +727,7 @@ struct ReadiumReaderView: View {
         guard !isDismissingByDrag else { return }
         if shouldDismiss {
             isDismissingByDrag = true
-            persistCurrentProgress()
+            flushProgress(shelfStamp: true)
             if reduceMotion {
                 dismissReader()
                 return
@@ -736,14 +757,40 @@ struct ReadiumReaderView: View {
     }
 
     private func dismissReader() {
-        persistCurrentProgress()
+        flushProgress(shelfStamp: true)
         dismiss()
     }
 
-    private func persistCurrentProgress() {
-        if let saved = book.currentLocator?.persistenceString {
-            let now = Date()
-            work.readiumLocator = saved
+    /// Flush point (dismiss / background / disappear): always persist the latest
+    /// locator when it differs from disk, and refresh Continue Reading order.
+    /// Bypasses the debounce window — a flush must never be dropped.
+    private func flushProgress(shelfStamp: Bool) {
+        progressPersistence.cancelTrailingWrite()
+        // Prefer the live navigator locator; fall back to the last noted string.
+        if let live = book.currentLocator?.persistenceString {
+            progressPersistence.record(
+                locatorString: live,
+                totalProgression: book.currentLocator?.locations.totalProgression
+            )
+        }
+        let now = Date()
+        if let toWrite = progressPersistence.locatorForFlush() {
+            work.readiumLocator = toWrite
+            if shelfStamp {
+                work.markProgressModified(now)
+            } else {
+                work.applyDebouncedReadiumLocator(toWrite, at: now)
+            }
+            progressPersistence.markPersisted(
+                locatorString: toWrite,
+                totalProgression: book.currentLocator?.locations.totalProgression
+                    ?? progressPersistence.latestTotalProgression,
+                at: now
+            )
+            try? modelContext.save()
+        } else if shelfStamp, progressPersistence.hasSessionPosition {
+            // Locator already on disk — still bump lastReadDate so the shelf
+            // reflects this reading session on a quick open/close.
             work.markProgressModified(now)
             try? modelContext.save()
         }
@@ -882,17 +929,45 @@ struct ReadiumReaderView: View {
         let work = work
         let context = modelContext
         let router = router
-        book.onLocatorChange = { locator in
-            work.readiumLocator = locator.persistenceString ?? work.readiumLocator
-            work.markProgressModified(Date()) // drives the Library's Continue Reading shelf
+        let progressPersistence = progressPersistence
+
+        // Baseline + one session-open shelf stamp (Continue Reading). Mid-session
+        // settles use the debounced path and do not rewrite lastReadDate.
+        progressPersistence.seed(
+            persistedLocatorString: work.readiumLocator.isEmpty ? nil : work.readiumLocator
+        )
+        work.markProgressModified(Date())
+        try? context.save()
+
+        progressPersistence.onDebouncedWrite = { locatorString in
+            work.applyDebouncedReadiumLocator(locatorString)
             try? context.save()
+        }
+        book.onLocatorChange = { locator in
+            guard let string = locator.persistenceString else { return }
+            // note() may call onDebouncedWrite immediately or schedule a trailing write.
+            progressPersistence.note(
+                locatorString: string,
+                totalProgression: locator.locations.totalProgression
+            )
         }
         // Finish a completed work only at the navigator's true end state — the
         // final resource visible with its trailing edge at 1.0 — never from a
         // progression threshold (A7-F1). WIPs stay manual, so an ongoing read
         // is never marked finished (and later freed) out from under the user.
         book.onReachedPublicationEnd = {
-            guard work.isComplete, !work.isFinished else { return }
+            // Flush position first so the finished mark and final locator land together.
+            if let string = book.currentLocator?.persistenceString {
+                work.readiumLocator = string
+                progressPersistence.markPersisted(
+                    locatorString: string,
+                    totalProgression: book.currentLocator?.locations.totalProgression
+                )
+            }
+            guard work.isComplete, !work.isFinished else {
+                try? context.save()
+                return
+            }
             work.isFinished = true
             work.markModified(Date())
             try? context.save()

@@ -477,10 +477,23 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         if syncStatus == .synced { syncStatus = .pending }
     }
 
+    /// Full progress stamp for session open / flush / legacy macOS writes: updates
+    /// Continue Reading order (`lastReadDate`), progress merge (`progressModifiedAt`),
+    /// and folder-sync dirty detection (`lastModifiedAt`).
     func markProgressModified(_ date: Date = Date()) {
         lastReadDate = date
         progressModifiedAt = date
         markModified(date)
+    }
+
+    /// Mid-session Readium locator write (debounced stream): durable resume position
+    /// and progress-merge timestamp only. Deliberately does **not** rewrite
+    /// `lastReadDate` (Home/Library shelf order) or `lastModifiedAt` (ContentView's
+    /// folder-sync change token), so scrolled-mode settles don't thrash still-mounted
+    /// `@Query` sorts or reschedule a full library sync on every tick.
+    func applyDebouncedReadiumLocator(_ locator: String, at date: Date = Date()) {
+        readiumLocator = locator
+        progressModifiedAt = date
     }
 }
 

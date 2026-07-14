@@ -1,9 +1,20 @@
 # Scrolled Reader Hang — Diagnosis
 
-**Branch:** `reader-scrolled-hang-diagnosis` (from local `release-fixes` @ `374aa29`)  
-**Scope:** Diagnostic only. No production behavior change; no speculative fix committed.  
-**Platform under study:** iOS/iPadOS Readium reader (`BookReaderView` → `ReadiumReaderView`). macOS uses the legacy WKWebView reader and is covered only as a contrast (it already debounces progress writes).  
-**Date:** 2026-07-14  
+**Branch:** `reader-scrolled-hang-diagnosis` (from local `release-fixes` @ `374aa29`)
+**Scope:** Diagnosis complete; **fix implemented on this branch only** (not merged to `release-fixes` / `main`).
+**Platform under study:** iOS/iPadOS Readium reader (`BookReaderView` → `ReadiumReaderView`). macOS uses the legacy WKWebView reader and is covered only as a contrast (it already debounces progress writes).
+**Date:** 2026-07-14
+
+### Fix status (implemented on this branch)
+
+| Change | Where |
+|---|---|
+| Debounced locator persistence (~2s, progression delta, trailing write) | `ReadiumProgressPersistence.swift` |
+| Reader wiring: open stamp, stream note, flush on dismiss/disappear/background | `ReadiumReaderView.swift` |
+| Mid-session stamp without shelf/sync thrash | `SavedWork.applyDebouncedReadiumLocator` |
+| Viewport end-state only on flip | `ReadiumBook.navigator(_:viewportDidChange:)` |
+| Folder-sync token second-line defense (whole-second quantize) | `ContentView.folderSyncChangeToken` |
+| Tests | `ReadiumProgressPersistenceTests.swift` |
 
 ---
 
@@ -81,7 +92,7 @@ Suggested temporary counters (pseudo):
 
 ### 4.1 Readium (swift-toolkit 3.9.0)
 
-Source (local checkout used for this diagnosis):  
+Source (local checkout used for this diagnosis):
 `build/DerivedData/SourcePackages/checkouts/swift-toolkit/Sources/Navigator/EPUB/`
 
 ```
@@ -170,7 +181,7 @@ Home still exists under the reader:
 
 Architecture map even documents the iOS policy:
 
-> Reader — iOS … progress saved per `locationDidChange`  
+> Reader — iOS … progress saved per `locationDidChange`
 > (`docs/ARCHITECTURE_MAP.md`, `docs/REGRESSION_TEST_MATRIX.md`)
 
 macOS contrast (healthy pattern):
@@ -423,7 +434,7 @@ Do **not** merge diagnostic logging into release without removal. Prefer Instrum
 
 ## 16. Bottom line
 
-**Most strongly supported root cause:**  
+**Most strongly supported root cause:**
 On iOS Scrolled mode, each Readium settle (`locationDidChange`, ~0.3 s after scroll activity) performs **unthrottled MainActor SwiftData mutation + `save()`**, which refreshes large still-mounted `@Query` graphs and folder-sync dirty tracking. That is a classic high-frequency callback → expensive synchronous work hang. macOS already avoids this; iOS should adopt the same debounce/flush pattern without waiting for a speculative Readium rewrite.
 
 **Next step for humans:** run Instruments Time Profiler on the repro matrix in §2 and confirm samples land in `ModelContext.save` / SwiftUI query updates; then approve the §10 fix for implementation on a dedicated branch.
