@@ -38,43 +38,43 @@ extension AO3AuthService {
         }
     }
 
-    /// Posts a comment on a work under the user's default pseud. The caller must have
-    /// confirmed the user's intent. Returns a success message; throws on failure.
+    /// Posts a comment on a work under the resolved posting pseud. The caller must
+    /// have confirmed the user's intent. Returns a success message; throws on failure.
     func postComment(workID: Int, content: String) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
 
-        let workURL = Self.workURL(workID)
-        // One GET serves both the CSRF token and the default pseud the form pre-selects.
-        let pageRequest = try authenticatedRequest(for: workURL)
+        // One GET serves the CSRF token and the pseud control. `view_adult=true`
+        // because the adult interstitial page still carries the CSRF meta but not
+        // the comment form — without it, an adult work's top-level comment would
+        // POST pseud-less and be rejected (CAA-1).
+        let formURL = Self.commentFormURL(workID: workID)
+        let pageRequest = try authenticatedRequest(for: formURL)
         let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
         guard let token = AO3Client.parseCSRFToken(from: html) else {
             throw AO3WriteError.noCSRFToken
         }
 
-        var params: [(String, String)] = [
+        let pseud = try requiredCommentPseudID(from: html)
+        let params: [(String, String)] = [
             ("authenticity_token", token),
-            ("comment[comment_content]", text)
+            ("comment[comment_content]", text),
+            ("comment[pseud_id]", pseud)
         ]
-        // The chosen "Posting As" pseud when this form offers it, else the form's
-        // own default (see resolvedPostingPseudID).
-        if let pseud = resolvedPostingPseudID(from: html) {
-            params.append(("comment[pseud_id]", pseud))
-        }
         let request = try writeRequest(
             to: Self.commentsEndpoint(workID: workID),
-            body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
+            body: Self.formEncoded(params), csrf: token, referer: formURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        // Success is a 2xx/3xx with no re-rendered error list (AO3 re-renders the form
-        // with an error list when a comment is rejected).
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
+        case .success:
             return "Comment posted."
+        case .unconfirmed:
+            throw AO3WriteError.unconfirmed
+        case let .rejected(reason):
+            throw AO3WriteError.rejected(reason ?? "AO3 couldn't post the comment.")
         }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "AO3 couldn't post the comment."
-        )
     }
 
     /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
@@ -221,6 +221,12 @@ extension AO3AuthService {
         URL(string: "https://archiveofourown.org/works/\(workID)/comments")!
     }
 
+    /// The page a top-level comment's CSRF + pseud are scraped from. `view_adult`
+    /// so an adult work renders the real comment form, not the interstitial.
+    static func commentFormURL(workID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")!
+    }
+
     static func subscriptionsEndpoint(username: String) -> URL {
         URL(string: "https://archiveofourown.org/users/\(username)/subscriptions")!
     }
@@ -259,6 +265,17 @@ enum AO3WriteError: LocalizedError, Equatable {
     case notSignedIn
     case noCSRFToken
     case emptyComment
+    /// The fetched page rendered no `comment[pseud_id]` control (hidden input or
+    /// select) for a signed-in comment flow — an interstitial, login bounce, or a
+    /// page where AO3 didn't offer the form. Thrown **before** any POST: a
+    /// pseud-less comment POST is guaranteed-rejected server-side (guest
+    /// validations), and the id is only ever scraped, never synthesized.
+    case noPseudControl
+    /// The write's final 2xx/3xx page carried neither a recognized error flash
+    /// nor a recognized success flash — the write may or may not have landed.
+    /// Posts/replies route this into the ambiguous-verification path; edit/
+    /// delete/Inbox surface it as an explicit "couldn't confirm".
+    case unconfirmed
     case rejected(String)
 
     var errorDescription: String? {
@@ -266,6 +283,12 @@ enum AO3WriteError: LocalizedError, Equatable {
         case .notSignedIn: "Log in to AO3 first."
         case .noCSRFToken: "Couldn't prepare the request. Try again, or open the work on AO3."
         case .emptyComment: "Write a comment first."
+        case .noPseudControl:
+            "AO3 didn't show a comment form here, so nothing was posted. "
+                + "The work may restrict comments — try opening it on AO3."
+        case .unconfirmed:
+            "AO3 replied but didn't confirm the change went through. "
+                + "Check on AO3 before trying again."
         case let .rejected(reason): reason
         }
     }

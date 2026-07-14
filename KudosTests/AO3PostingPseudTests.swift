@@ -63,6 +63,23 @@ struct AO3PostingPseudTests {
         )
     }
 
+    @Test func hiddenInputResolvesRegardlessOfPreferredName() {
+        // A hidden input means AO3 offered exactly one pseud (single-pseud
+        // account) — the "Posting As" preference only applies to a select's
+        // options and must never override or invent an id here.
+        let singlePseudHTML = """
+        <html><body>
+        <form action="/works/1/comments" method="post">
+          <input type="hidden" name="comment[pseud_id]" value="4242" id="comment_pseud_id_for_1">
+        </form>
+        </body></html>
+        """
+        #expect(AO3AuthService.resolvePostingPseudID(
+            in: singlePseudHTML, preferredName: "SomeOtherPseud") == "4242")
+        #expect(AO3AuthService.resolvePostingPseudID(
+            in: singlePseudHTML, preferredName: nil) == "4242")
+    }
+
     @Test func storePersistsPerAccountAndNormalizesUsernames() throws {
         let suiteName = "AO3PostingPseudTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

@@ -468,12 +468,26 @@ struct CommentSubmissionTests {
     @Test func onlyPossiblySentErrorsCountAsAmbiguous() {
         #expect(CommentsModel.isAmbiguousSubmitError(URLError(.timedOut)))
         #expect(CommentsModel.isAmbiguousSubmitError(URLError(.networkConnectionLost)))
+        // A final-200 page with neither error nor success flash: the POST reached
+        // AO3 but nothing confirms it was recorded (CAA-2).
+        #expect(CommentsModel.isAmbiguousSubmitError(AO3WriteError.unconfirmed))
         // Never reached the server → nothing could have been posted.
         #expect(!CommentsModel.isAmbiguousSubmitError(URLError(.notConnectedToInternet)))
         #expect(!CommentsModel.isAmbiguousSubmitError(URLError(.cannotConnectToHost)))
         // Definitive server answers are not ambiguous.
         #expect(!CommentsModel.isAmbiguousSubmitError(AO3Error.rateLimited(retryAfter: 10)))
         #expect(!CommentsModel.isAmbiguousSubmitError(AO3WriteError.rejected("nope")))
+        // Pre-POST refusals are definitive — nothing was ever sent.
+        #expect(!CommentsModel.isAmbiguousSubmitError(AO3WriteError.noPseudControl))
+        #expect(!CommentsModel.isAmbiguousSubmitError(AO3WriteError.noCSRFToken))
+    }
+
+    @Test func ambiguousBannerNamesTheRightAmbiguityShape() {
+        let unconfirmed = CommentsModel.ambiguousSubmitMessage(for: AO3WriteError.unconfirmed)
+        let dropped = CommentsModel.ambiguousSubmitMessage(for: URLError(.timedOut))
+        #expect(unconfirmed.contains("didn't confirm"))
+        #expect(dropped.contains("connection dropped"))
+        #expect(unconfirmed != dropped)
     }
 
     // MARK: Drafts

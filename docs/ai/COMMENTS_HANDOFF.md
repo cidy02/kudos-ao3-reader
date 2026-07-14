@@ -103,9 +103,11 @@ overflow menu). No fake hearts/likes added.
 | All comments, page N | `GET /works/<wid>?page=N&show_comments=true&view_full_work=true[&view_adult=true]#comments` | Multichapter needs `view_full_work=true` (else 302 → ch.1). Page includes fic text (heavy) — same as a browser; fetch on demand only, cache. |
 | Chapter comments, page N | `GET /works/<wid>/chapters/<cid>?page=N&show_comments=true[&view_adult=true]` | Shows only that chapter's comments. |
 | Chapter index | `GET /works/<wid>/navigate` | `ol.chapter.index.group > li > a[href=/works/<wid>/chapters/<cid>]` "N. Title" + `span.datetime`. Small page. No comment counts. |
-| Thread page | `GET /comments/<comment_id>` | Standalone thread; also no-JS reply form host via `?add_comment_reply_id=<id>`. |
-| Top-level post | `POST /works/<wid>/comments` | Already implemented (`AO3WriteActions.postComment`). Fields: `authenticity_token`, `comment[comment_content]`, `comment[pseud_id]` (logged in) / `comment[name]`+`comment[email]` (guest). |
-| Reply post | `POST /comments/<parent_id>/comments` | Verified via no-JS form `form#comment_for_<parent_id>`. Same fields as top-level. |
+| Thread page | `GET /comments/<comment_id>` | Standalone thread; renders **no** comment form. |
+| **Reply form host (CSRF+pseud GET)** | `GET /comments/<parent_id>?add_comment_reply_id=<parent_id>` | The **only** no-JS page that renders `form#comment_for_<parent_id>` (otwarchive `_comment_actions.html.erb` gates it on `focused_on_comment`). The plain thread page above has no form and no pseud control — so `postCommentReply` must GET *this* URL, not `/comments/<parent_id>` (T-99 / CAA-1). |
+| **Top-level form host (CSRF+pseud GET)** | `GET /works/<wid>?view_adult=true` | The interstitial hides the comment form (and its `comment[pseud_id]` control) without `view_adult=true`, though the CSRF meta is still present — so `postComment` must GET with it (T-99 / CAA-1). |
+| Top-level post | `POST /works/<wid>/comments` | `AO3WriteActions.postComment`. Fields: `authenticity_token`, `comment[comment_content]`, **`comment[pseud_id]` (always, for signed-in — hidden input for single-pseud accounts, select for multi)** / `comment[name]`+`comment[email]` (guest, unused — Kudos requires login). |
+| Reply post | `POST /comments/<parent_id>/comments` | `AO3CommentActions.postCommentReply`. Same fields as top-level. |
 | `comments/show_comments` partial | ✗ | 302 for plain HTML (JS-format only) — do not use. |
 
 Comment markup (inside `div#comments_placeholder`):

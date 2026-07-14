@@ -8,44 +8,51 @@ import Foundation
 extension AO3AuthService {
 
     /// Posts a reply to a comment (`POST /comments/<parent>/comments`, per AO3's
-    /// no-JS reply form). CSRF + default pseud come from the parent's thread page.
+    /// no-JS reply form). CSRF + pseud come from the **focused** thread page
+    /// (`?add_comment_reply_id=<parent>`) — the plain `/comments/<parent>` page
+    /// renders no reply form at all (otwarchive `_comment_actions.html.erb` only
+    /// renders `form#comment_for_<parent>` when `add_comment_reply_id` focuses
+    /// that comment), so it has no pseud control to scrape (CAA-1). Still exactly
+    /// one GET.
     func postCommentReply(parentCommentID: Int, content: String) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
 
-        let threadURL = Self.commentThreadURL(parentCommentID)
-        let pageRequest = try authenticatedRequest(for: threadURL)
+        let formURL = Self.commentReplyFormURL(parentCommentID: parentCommentID)
+        let pageRequest = try authenticatedRequest(for: formURL)
         let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
         guard let token = AO3Client.parseCSRFToken(from: html) else {
             throw AO3WriteError.noCSRFToken
         }
 
-        var params: [(String, String)] = [
+        let pseud = try requiredCommentPseudID(from: html)
+        let params: [(String, String)] = [
             ("authenticity_token", token),
-            ("comment[comment_content]", text)
+            ("comment[comment_content]", text),
+            ("comment[pseud_id]", pseud)
         ]
-        // The chosen "Posting As" pseud when this form offers it, else the form's
-        // own default (see resolvedPostingPseudID).
-        if let pseud = resolvedPostingPseudID(from: html) {
-            params.append(("comment[pseud_id]", pseud))
-        }
         let request = try writeRequest(
             to: Self.commentReplyEndpoint(parentCommentID: parentCommentID),
-            body: Self.formEncoded(params), csrf: token, referer: threadURL, ajax: false
+            body: Self.formEncoded(params), csrf: token, referer: formURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
+        case .success:
             return "Reply posted."
+        case .unconfirmed:
+            throw AO3WriteError.unconfirmed
+        case let .rejected(reason):
+            throw AO3WriteError.rejected(reason ?? "AO3 couldn't post the reply.")
         }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "AO3 couldn't post the reply."
-        )
     }
 
     /// Deletes one of the session's own comments. Only callable when AO3 itself
     /// rendered a Delete action for it (`AO3Comment.deletePath` parsed from the
-    /// page) — the app never synthesizes the capability.
+    /// page) — the app never synthesizes the capability. The response body is
+    /// scanned like every other write (CAA-2): otwarchive reports a failed delete
+    /// as `flash[:comment_error]` on a redirected 200, so a bare status check
+    /// would report success for a comment that's still there.
     func deleteComment(commentID: Int) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let threadURL = Self.commentThreadURL(commentID)
@@ -56,10 +63,14 @@ extension AO3AuthService {
             to: threadURL, body: body, csrf: token, referer: threadURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200 ... 399).contains(status) { return "Comment deleted." }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "AO3 couldn't delete the comment."
-        )
+        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
+        case .success:
+            return "Comment deleted."
+        case .unconfirmed:
+            throw AO3WriteError.unconfirmed
+        case let .rejected(reason):
+            throw AO3WriteError.rejected(reason ?? "AO3 couldn't delete the comment.")
+        }
     }
 
     /// Edits one of the session's own comments (`PUT /comments/<id>` via
@@ -81,12 +92,14 @@ extension AO3AuthService {
             body: body, csrf: token, referer: editURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
+        case .success:
             return "Comment updated."
+        case .unconfirmed:
+            throw AO3WriteError.unconfirmed
+        case let .rejected(reason):
+            throw AO3WriteError.rejected(reason ?? "AO3 couldn't update the comment.")
         }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "AO3 couldn't update the comment."
-        )
     }
 
     // MARK: Ambiguous-submit verification
@@ -224,6 +237,15 @@ extension AO3AuthService {
 
     static func commentThreadURL(_ commentID: Int) -> URL {
         URL(string: "https://archiveofourown.org/comments/\(commentID)")!
+    }
+
+    /// The thread page focused on `parentCommentID` — the only no-JS page
+    /// otwarchive renders the reply form (`form#comment_for_<parent>`, with its
+    /// pseud control) on.
+    static func commentReplyFormURL(parentCommentID: Int) -> URL {
+        URL(string:
+            "https://archiveofourown.org/comments/\(parentCommentID)?add_comment_reply_id=\(parentCommentID)"
+        )!
     }
 
     static func commentEditURL(_ commentID: Int) -> URL {
