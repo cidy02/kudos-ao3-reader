@@ -1781,7 +1781,8 @@ prevent post-write reload from running after a mismatch. Regression: suspend A's
 reload, activate B, then resume A; B's rows/forms must remain unchanged. Blocks
 release: **YES**.
 
-**Resolution (2026-07-13):** `AO3InboxModel` now captures one immutable
+**Resolution (2026-07-13; review follow-ups 2026-07-14):**
+`AO3InboxModel` now captures one immutable
 `AuthContext` (authentication scope + `AO3AuthService.sessionGeneration`) at
 each public read or write entry point. It re-checks that context after every
 suspension and before changing page, error, selection, metadata, or cache state;
@@ -1794,14 +1795,16 @@ forms. `AO3AuthService` advances the generation for login, restore, logout,
 expiry, and accepted cookie refreshes; it serializes WebKit cookie mutations and
 fences stale login, manual fallback, restore, verification, and expiry paths.
 `AO3AuthorProfileFetcher` checks an operation's context before cache reads,
-writes, and invalidation. **Tests:** 11 deterministic A→B/C Inbox races in
-`AO3InboxAccountTransitionTests`, a generation-qualified author-cache test, and
-four auth-transition race tests cover stale reload/error/enrichment/cache writes,
-post-write reload, queued taps, same-user relogin, logout, delayed cookie clear,
-failed replacement login, stale WebKit restore, and stale manual completion.
-**Verified:** `Scripts/verify.sh` ALL GREEN — invariants, lint gate (warnings
-only), full iOS suite **468 tests / 48 suites** on iPhone 17 / iOS 26.5, macOS
-Debug build, and whitespace clean.
+writes, and invalidation. Follow-ups `28f1f5ff` and `df8207cc` directly exercise
+the production fetcher gates, clear stale login errors on Cancel, and extend the
+generation-qualified scope to Account-list HTML, pagination snapshots, and
+counts. **Tests:** 22 task-specific transition/cache/auth regressions cover stale
+reload/error/enrichment/cache writes, post-write reload, queued taps, same-user
+relogin, logout, delayed cookie clear, failed replacement login, stale WebKit
+restore, stale manual completion, production fetcher wiring, and Account cache
+isolation. **Verified at `df8207cc`:** `Scripts/verify.sh` ALL GREEN — invariants,
+lint gate (warnings only), full iOS suite **474 tests / 48 suites** on iPhone 17 /
+iOS 26.5, macOS Debug build, and whitespace clean.
 **Live A→B check remaining (manual gate):** start a Mark Read/Delete on account
 A, switch to B mid-request, and confirm B never flashes A's rows or error while
 A's write lands at most once. T91-RF3 is closed.
@@ -2277,7 +2280,7 @@ are not included in the open count.
 | 1. Baseline/build | COMPLETE | 1 resolved P1; 1 P2; 1 P3 | 371/371; iOS+macOS Debug/Release; unsigned archive; clean-checkout resolution | Release simulator launch now PASS | Signing/team/target drift; signed artifact NOT RUN |
 | 2. Persistence/sync | COMPLETE | 1 resolved P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | EPUB overwrite test debt (A2-F2, P3) |
 | 3. Networking/parser | COMPLETE | 1 partially-remediated P2; T-91 parser findings cross-reference Area 4/6 | Policy/parser tests and entry-point enumeration | Minimal final live-AO3 matrix NOT RUN | Author-profile avatar still bypasses paced image pipeline; parser drift remains fixture-dependent |
-| 4. Concurrency/lifecycle | COMPLETE | 3 resolved T-91 P1; no open T-91 P1 | Static task/state trace; deterministic account-transition/auth-race suites; full suite 468 tests / 48 suites | Live A→B write/logout race exercise NOT RUN | Owner-operated write transition remains manual |
+| 4. Concurrency/lifecycle | COMPLETE | 3 resolved T-91 P1; no open T-91 P1 | Static task/state trace; deterministic account-transition/auth-race suites; full suite 474 tests / 48 suites at `df8207cc` | Live A→B write/logout race exercise NOT RUN | Owner-operated write transition remains manual |
 | 5. Auth/security/privacy | COMPLETE | 4 resolved P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Logging/host trust (A5-F5/A5-F7, both P2) |
 | 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
 | 7. Reader/EPUB | COMPLETE | 2 resolved P1; 6 P2; 2 P3 | 107 focused reader/EPUB tests (25 completion / position-bridge / lifecycle-retention cases added 2026-07-13) plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | Active-content/path/TOC defects; manual read-through still owed |
