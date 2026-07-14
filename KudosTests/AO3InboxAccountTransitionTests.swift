@@ -555,6 +555,47 @@ struct AO3InboxAccountTransitionTests {
         // *this* caller was rejected; a fresh, current-scope read still hits it.
         #expect(await AO3AuthorPageCache.shared.value(for: key) == Self.inboxHTML(total: 3))
     }
+
+    // MARK: T91-RF3/RF5 parity for the other account-list caches
+    //
+    // `AccountWorksInlineSection`/`AO3AccountListCountsCache`/`AO3AuthService.
+    // accountWorks(from:)`/`accountSubscriptions()` all key their private,
+    // per-session data through `AO3AuthorProfileFetcher.sessionScopedCacheScope(for:)`
+    // now, the same helper the Inbox-specific `AuthContext.cacheScope` above
+    // is built on. `AO3AccountListCountsTests.
+    // sameUsernameDifferentSessionGenerationDoesNotReuseAStaleCount` covers
+    // the cache class itself; this covers the shared helper those call sites
+    // actually depend on for correctness.
+
+    @Test func sessionScopedCacheScopeChangesOnASameUsernameRelogin() async throws {
+        let auth = Self.makeAuthService()
+        await auth.login(username: "alice", password: "password")
+        let first = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        #expect(first == "signed-in:alice#session-\(auth.sessionGeneration)")
+
+        // No intermediate `syncAuthenticationContext`/`activate` observes the
+        // transient signed-out state in between — isolates that the change
+        // below comes from `sessionGeneration`, not from any model-level
+        // bookkeeping noticing an "anonymous" scope in passing.
+        await auth.logout()
+        await auth.login(username: "alice", password: "password")
+        let second = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+
+        #expect(first != second)
+        #expect(second == "signed-in:alice#session-\(auth.sessionGeneration)")
+    }
+
+    @Test func sessionScopedCacheScopeDiffersFromTheBareAuthenticationScope() async throws {
+        let auth = Self.makeAuthService()
+        await auth.login(username: "alice", password: "password")
+
+        let bare = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let scoped = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+
+        #expect(bare == "signed-in:alice")
+        #expect(scoped == "signed-in:alice#session-\(auth.sessionGeneration)")
+        #expect(scoped != bare)
+    }
 }
 
 /// A one-shot async gate used to deterministically sequence a gated async

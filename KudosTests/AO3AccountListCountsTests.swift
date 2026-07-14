@@ -108,6 +108,26 @@ struct AO3AccountListCountsTests {
         #expect(stored?.lowerBound == 220)
     }
 
+    /// Every call site now scopes through `AO3AuthorProfileFetcher.
+    /// sessionScopedCacheScope(for:)`, which folds `AO3AuthService.
+    /// sessionGeneration` into the scope string — a same-username relogin
+    /// bumps that generation, so a lookup under the new session's scope must
+    /// not see a count recorded under the prior one (T91-RF3/RF5 parity).
+    /// The cache class itself just needs distinct strings to treat as
+    /// distinct keys, which this proves directly without touching auth.
+    @Test func sameUsernameDifferentSessionGenerationDoesNotReuseAStaleCount() {
+        let cache = AO3AccountListCountsCache()
+        cache.record(
+            AO3AccountListCount(exact: 41),
+            kind: .history,
+            authenticationScope: "signed-in:alice#session-1"
+        )
+        #expect(cache.count(for: .history, authenticationScope: "signed-in:alice#session-2") == nil)
+        #expect(
+            cache.count(for: .history, authenticationScope: "signed-in:alice#session-1")?.exact == 41
+        )
+    }
+
     @Test func exactCountIsNeverDowngradedByALowerBound() {
         let cache = AO3AccountListCountsCache()
         cache.record(AO3AccountListCount(exact: 3), kind: .collections, authenticationScope: "signed-in:alice")

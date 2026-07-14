@@ -358,7 +358,7 @@ struct AO3AccountWorksList: View {
                 AO3AccountListCountsCache.shared.record(
                     page: result,
                     kind: countsKind,
-                    authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                    authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
                 )
             }
         } catch AO3Error.authenticationRequired {

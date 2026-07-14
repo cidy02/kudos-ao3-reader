@@ -537,6 +537,10 @@ private final class AccountWorksInlineSectionCache {
     struct Key: Hashable {
         let kind: AO3AccountWorksList.Kind
         let sessionUsername: String
+        /// Splits two sessions of the same username (logout/relogin) so a
+        /// cross-remount restore can never hand this account a snapshot fetched
+        /// under a prior, since-replaced session (T91-RF3/RF5 parity).
+        let sessionGeneration: Int
     }
 
     struct Snapshot {
@@ -697,7 +701,11 @@ struct AccountWorksInlineSection: View {
     }
 
     private var cacheKey: AccountWorksInlineSectionCache.Key {
-        .init(kind: kind, sessionUsername: auth.username ?? "")
+        .init(
+            kind: kind,
+            sessionUsername: auth.username ?? "",
+            sessionGeneration: auth.sessionGeneration
+        )
     }
 
     private func runLoadTask() async {
@@ -775,7 +783,11 @@ struct AccountWorksInlineSection: View {
         phase = works.isEmpty ? .loading : .loaded
         do {
             let fetched = try await AO3AuthorProfileFetcher.page(
-                at: url, auth: auth, bypassCache: bypassCache
+                at: url,
+                auth: auth,
+                cacheScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth),
+                isCurrent: { auth.sessionGeneration == expectedSessionGeneration },
+                bypassCache: bypassCache
             )
             try Task.checkCancellation()
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
@@ -792,7 +804,7 @@ struct AccountWorksInlineSection: View {
                 AO3AccountListCountsCache.shared.record(
                     page: result,
                     kind: countsKind,
-                    authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                    authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
                 )
             }
         } catch is CancellationError {

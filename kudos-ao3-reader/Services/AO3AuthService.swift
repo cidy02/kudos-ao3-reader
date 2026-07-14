@@ -621,7 +621,7 @@ final class AO3AuthService {
             AO3AccountListCountsCache.shared.record(
                 page: result,
                 kind: countsKind,
-                authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: self)
+                authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: self)
             )
         }
         return result.works
@@ -639,7 +639,7 @@ final class AO3AuthService {
         AO3AccountListCountsCache.shared.record(
             page: result,
             kind: .subscriptions,
-            authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: self)
+            authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: self)
         )
         return result.works
     }

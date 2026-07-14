@@ -1013,7 +1013,7 @@ struct AccountView: View {
     private func cachedCount(_ kind: AO3AccountListKind) -> String? {
         AO3AccountListCountsCache.shared.count(
             for: kind,
-            authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+            authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
         )?.displayText
     }
 }

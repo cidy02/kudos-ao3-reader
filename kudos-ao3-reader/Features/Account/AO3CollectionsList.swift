@@ -97,7 +97,7 @@ struct AO3CollectionsList: View {
             AO3AccountListCountsCache.shared.record(
                 AO3AccountListCount(exact: collections.count),
                 kind: .collections,
-                authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
             )
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")

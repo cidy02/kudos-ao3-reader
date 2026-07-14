@@ -11,6 +11,19 @@ enum AO3AuthorProfileFetcher {
         auth.isLoggedIn ? "signed-in:\(auth.username ?? "unknown")" : "anonymous"
     }
 
+    /// A private-cache key that also splits two sessions of the *same* signed-in
+    /// username: `AO3AuthService.sessionGeneration` bumps on every login/restore/
+    /// logout/session-clear (and on a successful on-demand `verifySession()`), so
+    /// logging out and back in as the same user gets a fresh scope here even
+    /// though `authenticationScope(for:)`'s string alone is unchanged. Any private,
+    /// per-account cache (Inbox HTML/forms, account-list page HTML, cached list
+    /// counts, cross-remount pagination snapshots) should key on this rather than
+    /// on the bare scope string, so a same-username relogin can never resurface
+    /// the prior session's cached content (T91-RF3/RF5).
+    static func sessionScopedCacheScope(for auth: AO3AuthService) -> String {
+        "\(authenticationScope(for: auth))#session-\(auth.sessionGeneration)"
+    }
+
     static func page(
         at url: URL,
         auth: AO3AuthService,
