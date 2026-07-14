@@ -775,8 +775,8 @@ struct ReadiumReaderView: View {
         }
         let now = Date()
         if let toWrite = progressPersistence.locatorForFlush() {
-            work.readiumLocator = toWrite
             if shelfStamp {
+                work.readiumLocator = toWrite
                 work.markProgressModified(now)
             } else {
                 work.applyDebouncedReadiumLocator(toWrite, at: now)
@@ -788,6 +788,7 @@ struct ReadiumReaderView: View {
                 at: now
             )
             try? modelContext.save()
+            FolderSyncService.markDirty()
         } else if shelfStamp, progressPersistence.hasSessionPosition {
             // Locator already on disk — still bump lastReadDate so the shelf
             // reflects this reading session on a quick open/close.
@@ -942,6 +943,9 @@ struct ReadiumReaderView: View {
         progressPersistence.onDebouncedWrite = { locatorString in
             work.applyDebouncedReadiumLocator(locatorString)
             try? context.save()
+            // Durable dirty flag only — does not schedule an immediate package
+            // syncUp (that still waits for flush/close/background or launch).
+            FolderSyncService.markDirty()
         }
         book.onLocatorChange = { locator in
             guard let string = locator.persistenceString else { return }
@@ -956,20 +960,23 @@ struct ReadiumReaderView: View {
         // progression threshold (A7-F1). WIPs stay manual, so an ongoing read
         // is never marked finished (and later freed) out from under the user.
         book.onReachedPublicationEnd = {
-            // Flush position first so the finished mark and final locator land together.
+            // Keep locator + progressModifiedAt in sync for merge; full shelf stamp
+            // only when we actually auto-finish (below).
             if let string = book.currentLocator?.persistenceString {
-                work.readiumLocator = string
+                work.applyDebouncedReadiumLocator(string)
                 progressPersistence.markPersisted(
                     locatorString: string,
                     totalProgression: book.currentLocator?.locations.totalProgression
                 )
+                FolderSyncService.markDirty()
             }
             guard work.isComplete, !work.isFinished else {
                 try? context.save()
                 return
             }
             work.isFinished = true
-            work.markModified(Date())
+            // Full stamp: Continue Reading + lastModifiedAt for folder-sync dirty.
+            work.markProgressModified(Date())
             try? context.save()
         }
         book.onOpenExternalURL = { url in

@@ -78,7 +78,12 @@ final class ReadiumProgressPersistence {
             emitDebounced(ready, at: now)
             return
         }
-        scheduleTrailingWrite(from: now)
+        // Only arm a trailing write when there is a real pending change blocked by
+        // the interval. Noise-only notes must not cancel/reset an existing trailing
+        // task that is waiting to commit a meaningful earlier settle.
+        if isMeaningfullyChanged() {
+            scheduleTrailingWrite(from: now)
+        }
     }
 
     /// The locator string to write for an ordinary streamed update, or nil while
@@ -88,7 +93,7 @@ final class ReadiumProgressPersistence {
         if let lastAt = lastPersistAt, now.timeIntervalSince(lastAt) < Self.minPersistInterval {
             return nil
         }
-        if !isMeaningfullyChanged(fromPersisted: true) {
+        if !isMeaningfullyChanged() {
             return nil
         }
         return latest
@@ -130,10 +135,12 @@ final class ReadiumProgressPersistence {
 
     // MARK: Private
 
-    private func isMeaningfullyChanged(fromPersisted _: Bool) -> Bool {
+    private func isMeaningfullyChanged() -> Bool {
         guard let latest = latestLocatorString else { return false }
         // Prefer totalProgression delta when both sides have it: the locator JSON
         // changes on every settle, so string inequality alone would never filter noise.
+        // Delta is measured against the *last persisted* progression, so slow reading
+        // that accumulates past the threshold still commits (not per-event only).
         if let latestP = latestTotalProgression, let lastP = lastPersistedProgression {
             return abs(latestP - lastP) >= Self.minProgressionDelta
         }

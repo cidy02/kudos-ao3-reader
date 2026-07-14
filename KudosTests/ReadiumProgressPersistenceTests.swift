@@ -154,4 +154,36 @@ struct ReadiumProgressPersistenceTests {
         #expect(work.progressModifiedAt == t)
         #expect(work.lastModifiedAt == t)
     }
+
+    // MARK: Trailing-write gating
+
+    @Test func noiseDoesNotArmATrailingWrite() async {
+        // A noise-only note after a real persist must not schedule a trailing
+        // emit (and must leave the last-persisted baseline alone).
+        let bridge = persistence()
+        let start = Date(timeIntervalSinceReferenceDate: 6_000)
+        var writes: [String] = []
+        bridge.onDebouncedWrite = { writes.append($0) }
+        bridge.markPersisted(locatorString: locator(total: 0.5), totalProgression: 0.5, at: start)
+
+        bridge.note(locatorString: locator(total: 0.5004), totalProgression: 0.5004,
+                    at: start.addingTimeInterval(0.1))
+        // Wait past the debounce window; noise must still not emit.
+        try? await Task.sleep(nanoseconds: 2_200_000_000)
+        #expect(writes.isEmpty)
+    }
+
+    @Test func meaningfulChangeInsideWindowArmsTrailingWrite() async {
+        let bridge = persistence()
+        let start = Date(timeIntervalSinceReferenceDate: 7_000)
+        var writes: [String] = []
+        bridge.onDebouncedWrite = { writes.append($0) }
+        bridge.markPersisted(locatorString: locator(total: 0.1), totalProgression: 0.1, at: start)
+
+        let moved = locator(total: 0.35)
+        bridge.note(locatorString: moved, totalProgression: 0.35, at: start.addingTimeInterval(0.2))
+        #expect(writes.isEmpty) // still inside window
+        try? await Task.sleep(nanoseconds: 2_200_000_000)
+        #expect(writes == [moved])
+    }
 }
