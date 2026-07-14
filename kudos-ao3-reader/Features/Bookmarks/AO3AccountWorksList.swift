@@ -338,6 +338,7 @@ struct AO3AccountWorksList: View {
     // MARK: Loading
 
     private func load(page: Int) async {
+        let expectedSessionGeneration = auth.sessionGeneration
         guard let username = auth.username,
               let url = kind.url(username: username, page: page)
         else {
@@ -348,6 +349,7 @@ struct AO3AccountWorksList: View {
         do {
             let request = try auth.authenticatedRequest(for: url)
             let result = try await kind.fetch(for: request, page: page)
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             works = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
@@ -360,12 +362,14 @@ struct AO3AccountWorksList: View {
                 )
             }
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             works = []
             phase = .idle // back to the signed-out prompt
         } catch let error as AO3Error {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
     }

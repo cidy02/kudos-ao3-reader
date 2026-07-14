@@ -14,16 +14,24 @@ enum AO3AuthorProfileFetcher {
     static func page(
         at url: URL,
         auth: AO3AuthService,
+        cacheScope: String? = nil,
+        isCurrent: @escaping @MainActor () -> Bool = { true },
         bypassCache: Bool = false
     ) async throws -> Page {
         let key = AO3AuthorPageCache.Key(
             url: url,
-            authenticationScope: authenticationScope(for: auth)
+            authenticationScope: cacheScope ?? authenticationScope(for: auth)
         )
+        guard isCurrent() else { throw CancellationError() }
         if !bypassCache, let cached = await AO3AuthorPageCache.shared.value(for: key) {
+            guard isCurrent() else { throw CancellationError() }
             return Page(html: cached, isStale: false)
         }
 
+        // Capture the cookie-bearing request before another await. A later
+        // session change must never make an old cache key fetch/insert the new
+        // account's private HTML.
+        guard isCurrent() else { throw CancellationError() }
         let request = auth.isLoggedIn ? try auth.authenticatedRequest(for: url) : nil
         do {
             let html = try await AO3RequestCoordinator.shared.withSlot {
@@ -33,23 +41,36 @@ enum AO3AuthorProfileFetcher {
                     try await AO3Client.shared.getHTML(url)
                 }
             }
+            guard isCurrent() else { throw CancellationError() }
             await AO3AuthorPageCache.shared.insert(html, for: key)
+            guard isCurrent() else { throw CancellationError() }
             return Page(html: html, isStale: false)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch AO3Error.authenticationRequired {
             // Never hide an expired session behind cached authenticated markup.
+            guard isCurrent() else { throw CancellationError() }
             throw AO3Error.authenticationRequired
         } catch {
+            guard isCurrent() else { throw CancellationError() }
             if let stale = await AO3AuthorPageCache.shared.staleValue(for: key) {
+                guard isCurrent() else { throw CancellationError() }
                 return Page(html: stale, isStale: true)
             }
             throw error
         }
     }
 
-    static func invalidate(_ url: URL, auth: AO3AuthService) async {
+    static func invalidate(
+        _ url: URL,
+        auth: AO3AuthService,
+        cacheScope: String? = nil,
+        isCurrent: @escaping @MainActor () -> Bool = { true }
+    ) async {
+        guard isCurrent() else { return }
         let key = AO3AuthorPageCache.Key(
             url: url,
-            authenticationScope: authenticationScope(for: auth)
+            authenticationScope: cacheScope ?? authenticationScope(for: auth)
         )
         await AO3AuthorPageCache.shared.removeValue(for: key)
     }
@@ -66,14 +87,16 @@ enum AO3AuthorProfileFetcher {
 
     static func invalidateInbox(
         username: String,
-        authenticationScope: String
+        cacheScope: String,
+        isCurrent: @escaping @MainActor () -> Bool = { true }
     ) async {
+        guard isCurrent() else { return }
         guard let inboxPath = AO3Client.inboxURL(username: username, page: 1)?.path else {
             return
         }
         await AO3AuthorPageCache.shared.removePages(
             path: inboxPath,
-            authenticationScope: authenticationScope
+            authenticationScope: cacheScope
         )
     }
 }
@@ -269,6 +292,7 @@ final class AO3AuthorProfileModel {
         guard let form = header?.subscriptionForm, !isPerformingSubscription else { return }
         let actionRoute = route
         let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let actionSessionGeneration = auth.sessionGeneration
         isPerformingSubscription = true
         actionMessage = nil
         defer { isPerformingSubscription = false }
@@ -281,16 +305,21 @@ final class AO3AuthorProfileModel {
             guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
                     == .orderedSame,
                   AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                    == actionAuthenticationScope else { return }
+                    == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration else { return }
             actionMessage = message
             await reloadHeaderTracked(auth: auth)
         } catch AO3Error.authenticationRequired {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope else { return }
-            await auth.sessionDidExpire()
+                == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration
+            else { return }
+            await auth.sessionDidExpire(expectedGeneration: actionSessionGeneration)
         } catch {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope else { return }
+                == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration
+            else { return }
             actionMessage = Self.message(for: error)
         }
     }
@@ -307,6 +336,7 @@ final class AO3AuthorProfileModel {
         }
         let actionRoute = route
         let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let actionSessionGeneration = auth.sessionGeneration
         isPerformingModeration = true
         actionMessage = nil
         pendingModerationForm = nil
@@ -323,17 +353,22 @@ final class AO3AuthorProfileModel {
             guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
                     == .orderedSame,
                   AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                    == actionAuthenticationScope else { return }
+                    == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration else { return }
             // Keep a submit snapshot; the alert binding may clear `pending` on dismiss.
             moderationFormForSubmit = form
             pendingModerationForm = form
         } catch AO3Error.authenticationRequired {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope else { return }
-            await auth.sessionDidExpire()
+                == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration
+            else { return }
+            await auth.sessionDidExpire(expectedGeneration: actionSessionGeneration)
         } catch {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope else { return }
+                == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration
+            else { return }
             actionMessage = Self.message(for: error)
         }
     }
@@ -344,6 +379,7 @@ final class AO3AuthorProfileModel {
               !isPerformingModeration else { return }
         let actionRoute = route
         let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let actionSessionGeneration = auth.sessionGeneration
         isPerformingModeration = true
         actionMessage = nil
         pendingModerationForm = nil
@@ -358,16 +394,21 @@ final class AO3AuthorProfileModel {
             guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
                     == .orderedSame,
                   AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                    == actionAuthenticationScope else { return }
+                    == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration else { return }
             actionMessage = message
             await reloadHeaderTracked(auth: auth)
         } catch AO3Error.authenticationRequired {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope else { return }
-            await auth.sessionDidExpire()
+                == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration
+            else { return }
+            await auth.sessionDidExpire(expectedGeneration: actionSessionGeneration)
         } catch {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope else { return }
+                == actionAuthenticationScope,
+                  auth.sessionGeneration == actionSessionGeneration
+            else { return }
             actionMessage = Self.message(for: error)
         }
     }
@@ -415,6 +456,7 @@ final class AO3AuthorProfileModel {
         bypassCache: Bool = false
     ) async {
         let expectedRoute = route
+        let expectedSessionGeneration = auth.sessionGeneration
         headerPhase = header == nil ? .loading : .loaded
         do {
             let page = try await parsedPage(
@@ -424,7 +466,10 @@ final class AO3AuthorProfileModel {
             ) {
                 try AO3Client.parseAuthorDashboard($0, route: expectedRoute)
             }
-            guard !Task.isCancelled, route == expectedRoute else { return }
+            guard !Task.isCancelled,
+                  route == expectedRoute,
+                  auth.sessionGeneration == expectedSessionGeneration
+            else { return }
             header = page.value
             // A fresh dashboard parse doesn't repeat pseud aliases the About tab
             // already found (e.g. ones only listed on the profile page, not the
@@ -436,16 +481,21 @@ final class AO3AuthorProfileModel {
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
-            guard route == expectedRoute else { return }
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration),
+                  route == expectedRoute
+            else { return }
             header = nil
             headerPhase = .idle
         } catch AO3Error.notFound {
-            guard route == expectedRoute else { return }
+            guard route == expectedRoute,
+                  auth.sessionGeneration == expectedSessionGeneration
+            else { return }
             header = nil
             headerPhase = .unavailable
         } catch {
-            guard route == expectedRoute else { return }
+            guard route == expectedRoute,
+                  auth.sessionGeneration == expectedSessionGeneration
+            else { return }
             headerPhase = .failed(Self.message(for: error))
         }
     }

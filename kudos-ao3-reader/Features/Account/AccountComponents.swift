@@ -764,6 +764,7 @@ struct AccountWorksInlineSection: View {
     }
 
     private func load(page: Int, bypassCache: Bool = false) async {
+        let expectedSessionGeneration = auth.sessionGeneration
         guard let username = auth.username,
               let url = kind.url(username: username, page: page)
         else {
@@ -777,6 +778,7 @@ struct AccountWorksInlineSection: View {
                 at: url, auth: auth, bypassCache: bypassCache
             )
             try Task.checkCancellation()
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             let result = try parse(fetched.html, page: page)
             works = result.works
             currentPage = result.currentPage
@@ -797,15 +799,17 @@ struct AccountWorksInlineSection: View {
             // The header task cancels if it scrolls away mid-load; drop back to
             // .idle so its next appearance actually reloads instead of leaving
             // permanent skeletons behind the stale .loading phase.
-            if works.isEmpty { phase = .idle }
+            if auth.sessionGeneration == expectedSessionGeneration, works.isEmpty { phase = .idle }
             return
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             works = []
             phase = .idle
         } catch let error as AO3Error {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
     }

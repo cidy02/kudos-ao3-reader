@@ -145,9 +145,7 @@ struct AccountView: View {
                         initialCommentID: destination.commentID,
                         initialFocusesChapter: destination.focus == .chapter,
                         initialReplyCommentID: destination.opensReplyComposer ? destination.commentID : nil,
-                        onResolveWorkContext: { context in
-                            inboxModel.cacheWorkContext(context, for: destination.workID)
-                        }
+                        onResolveWorkContext: { inboxModel.cacheWorkContext($0, for: destination, auth: auth) }
                     )
                 }
                 .ao3AuthorNavigation(path: $path, tab: .account)
@@ -174,6 +172,11 @@ struct AccountView: View {
                 .task(id: activationKey) { activateVisibleContent() }
                 .onChange(of: auth.username, initial: true) { _, username in
                     syncProfileModel(username: username)
+                }
+                .onChange(of: auth.sessionGeneration, initial: true) { _, _ in
+                    // Reset a hidden Inbox immediately on logout/session replacement,
+                    // but do not fetch it until Activity › Inbox is visibly opened.
+                    inboxModel.syncAuthenticationContext(auth: auth)
                 }
                 .onChange(of: activityTab) { _, tab in
                     if tab != .inbox { inboxModel.endSelection() }
@@ -364,6 +367,7 @@ struct AccountView: View {
     private var activationKey: String {
         [
             auth.username ?? "",
+            String(auth.sessionGeneration),
             String(router.selection == .account),
             selectedTab.rawValue,
             readingTab.rawValue,
@@ -1018,7 +1022,10 @@ private extension AccountView {
     private var inboxMetadataTaskID: String {
         let scope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
         let ids = inboxModel.items.compactMap(\.workID).map(String.init).joined(separator: ",")
-        return "\(scope)|\(inboxModel.metadataRevision)|\(ids)"
+        // Includes `sessionGeneration` so a same-username logout/login restarts
+        // enrichment instead of silently no-op'ing against the new session
+        // (its `scope` string alone would be unchanged; see T91-RF3).
+        return "\(scope)#\(auth.sessionGeneration)|\(inboxModel.metadataRevision)|\(ids)"
     }
 
     private func enrichVisibleInboxWorkContexts() async {
@@ -1060,7 +1067,8 @@ private extension AccountView {
                 commentID: item.id,
                 chapterPosition: item.chapterPosition,
                 focus: focus,
-                opensReplyComposer: opensReplyComposer
+                opensReplyComposer: opensReplyComposer,
+                sessionGeneration: auth.sessionGeneration
             ))
         } else {
             router.open(AO3Client.commentThreadURL(commentID: item.id))

@@ -188,6 +188,7 @@ struct AO3SeriesDetailView: View {
         bypassCache: Bool = false
     ) async {
         let expectedAuthenticationScope = authenticationScope
+        let expectedSessionGeneration = auth.sessionGeneration
         if replace, works.isEmpty { phase = .loading }
         if !replace { isLoadingMore = true }
         loadMoreError = nil
@@ -211,7 +212,9 @@ struct AO3SeriesDetailView: View {
                 throw error
             }
             try Task.checkCancellation()
-            guard authenticationScope == expectedAuthenticationScope else { return }
+            guard authenticationScope == expectedAuthenticationScope,
+                  auth.sessionGeneration == expectedSessionGeneration
+            else { return }
             if replace {
                 works = result.works
             } else {
@@ -227,10 +230,14 @@ struct AO3SeriesDetailView: View {
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            guard authenticationScope == expectedAuthenticationScope else { return }
-            await auth.sessionDidExpire()
+            guard authenticationScope == expectedAuthenticationScope,
+                  auth.sessionGeneration == expectedSessionGeneration
+            else { return }
+            await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration)
         } catch {
-            guard authenticationScope == expectedAuthenticationScope else { return }
+            guard authenticationScope == expectedAuthenticationScope,
+                  auth.sessionGeneration == expectedSessionGeneration
+            else { return }
             let message = (error as? AO3Error)?.errorDescription ?? error.localizedDescription
             if replace, works.isEmpty {
                 phase = .failed(message)

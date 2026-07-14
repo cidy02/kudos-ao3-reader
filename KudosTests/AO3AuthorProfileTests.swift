@@ -567,6 +567,21 @@ struct AO3AuthorProfileStateTests {
             url: inboxPageOne.url,
             authenticationScope: "signed-in:Someone_Else"
         )
+        // Inbox forms are private/session-bound, so a same-username relogin
+        // uses a generation-qualified cache scope rather than reusing a
+        // still-fresh entry from the earlier cookie session (T91-RF3).
+        let previousSessionInbox = AO3AuthorPageCache.Key(
+            url: inboxPageOne.url,
+            authenticationScope: "signed-in:Avery_Archive#session-41"
+        )
+        let currentSessionInbox = AO3AuthorPageCache.Key(
+            url: inboxPageOne.url,
+            authenticationScope: "signed-in:Avery_Archive#session-42"
+        )
+        #expect(previousSessionInbox != currentSessionInbox)
+        await inboxCache.insert("old session form", for: previousSessionInbox, now: now)
+        #expect(await inboxCache.value(for: currentSessionInbox, now: now) == nil)
+
         await inboxCache.insert("page one", for: inboxPageOne, now: now)
         await inboxCache.insert("page two", for: inboxPageTwo, now: now)
         await inboxCache.insert("other account", for: otherScopeInbox, now: now)

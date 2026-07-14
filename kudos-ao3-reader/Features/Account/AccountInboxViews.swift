@@ -25,8 +25,13 @@ nonisolated struct AccountInboxThreadDestination: Hashable, Identifiable {
     let chapterPosition: Int?
     let focus: AccountInboxThreadFocus
     let opensReplyComposer: Bool
+    /// Captured when the Inbox row opened this destination. Used only to keep a
+    /// later Comments-context callback scoped to that same private session.
+    let sessionGeneration: Int
 
-    var id: String { "\(workID):\(commentID):\(focus.rawValue):\(opensReplyComposer)" }
+    var id: String {
+        "\(workID):\(commentID):\(focus.rawValue):\(opensReplyComposer):\(sessionGeneration)"
+    }
 }
 
 /// Account's shared toolbar, with Inbox select mode taking over the same slots
@@ -514,7 +519,7 @@ struct AccountInboxRows: View {
     }
 
     private func perform(_ action: AO3InboxBulkAction, for item: AO3InboxItem) {
-        Task { await model.performItemAction(action, item: item, auth: auth) }
+        model.startItemAction(action, item: item, auth: auth)
     }
 }
 
@@ -648,6 +653,6 @@ struct AccountInboxBulkActionBar: View {
     }
 
     private func perform(_ action: AO3InboxBulkAction) {
-        Task { await model.performBulkAction(action, auth: auth) }
+        model.startBulkAction(action, auth: auth)
     }
 }

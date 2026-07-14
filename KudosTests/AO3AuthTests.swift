@@ -366,13 +366,46 @@ struct AO3AuthServiceTests {
         }
         #expect(performer.isSuspended)
         #expect(service.status == .signingIn)
+        let cancellationCallsBeforeUserCancel = performer.cancelCount
 
         service.cancelLogin()
         await loginTask.value
 
         #expect(service.status == .signedOut)
-        #expect(performer.cancelCount == 1)
+        #expect(performer.cancelCount == cancellationCallsBeforeUserCancel + 1)
         #expect(!service.isLoggedIn)
+    }
+
+    /// A fallback coordinator can retain its callback after `cancel()`. The
+    /// callback must be inert synchronously, before it can queue a new accept.
+    @Test func staleManualCompletionAfterCancelDoesNotResurrectSession() async {
+        let alice = AO3Session(
+            username: "alice",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "alice-cookie")]
+        )
+        let vault = MemoryAO3SessionVault()
+        let performer = MockAO3LoginPerformer(
+            result: .failure(.fallbackRequired("Finish on AO3."))
+        )
+        let cookies = MockAO3CookieManager()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .expired),
+            loginPerformer: performer,
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+
+        await service.login(username: "alice", password: "password")
+        #expect(service.status == .usingFallback)
+
+        service.cancelLogin()
+        performer.completeManualLogin(with: alice) // non-cooperative old callback
+
+        #expect(service.status == .signedOut)
+        #expect(!service.isLoggedIn)
+        #expect(vault.session == nil)
+        #expect(cookies.installed == nil)
     }
 
     @Test func expiredRestoredSessionIsClearedGracefully() async {
@@ -407,7 +440,7 @@ struct AO3AuthServiceTests {
 
         await service.restoreSession()
         #expect(service.status == .signedIn(username: "reader"))
-        await service.sessionDidExpire()
+        await service.sessionDidExpire(expectedGeneration: service.sessionGeneration)
 
         #expect(service.status == .signedOut)
         #expect(service.noticeMessage?.contains("expired") == true)
@@ -439,6 +472,104 @@ struct AO3AuthServiceTests {
         #expect(cookies.clearCount == 1)
         #expect(hints.username == nil)
         #expect(!tracker.isRemovalPending)
+    }
+
+    /// A clear that has already begun must finish before the next account's clear
+    /// and install. Otherwise WebKit can delete B's replacement session cookie
+    /// after the Swift auth state has already moved to B.
+    @Test func delayedLogoutCookieClearCannotEraseANewerLogin() async {
+        let alice = AO3Session(
+            username: "alice",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "alice-cookie")]
+        )
+        let bob = AO3Session(
+            username: "bob",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "bob-cookie")]
+        )
+        let vault = MemoryAO3SessionVault()
+        let cookies = GatedClearAO3CookieManager()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(alice)),
+            loginPerformer: UsernameAO3LoginPerformer(sessions: ["alice": alice, "bob": bob]),
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+
+        await service.login(username: "alice", password: "password")
+        #expect(cookies.installed == alice)
+
+        cookies.gateNextClear()
+        let logout = Task { await service.logout() }
+        await cookies.clearEntered.wait()
+
+        let newerLogin = Task { await service.login(username: "bob", password: "password") }
+        for _ in 0..<10 where service.status != .signingIn {
+            await Task.yield()
+        }
+        #expect(service.status == .signingIn)
+
+        await cookies.releaseClear.fire()
+        await logout.value
+        await newerLogin.value
+
+        #expect(service.status == .signedIn(username: "bob"))
+        #expect(vault.session == bob)
+        #expect(cookies.installed == bob)
+    }
+
+    /// Durable logout must finish before awaiting WebKit. If the replacement
+    /// login later fails, relaunch must not revive the old account from the vault.
+    @Test func delayedLogoutWithFailedReplacementCannotRestoreTheOldSession() async {
+        let alice = AO3Session(
+            username: "alice",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "alice-cookie")]
+        )
+        let vault = MemoryAO3SessionVault()
+        let hints = MemoryAO3SessionHintStore()
+        let tracker = MemoryAO3SessionRemovalTracker()
+        let cookies = GatedClearAO3CookieManager()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(alice)),
+            loginPerformer: UsernameAO3LoginPerformer(sessions: ["alice": alice]),
+            cookieManager: cookies,
+            sessionHintStore: hints,
+            removalTracker: tracker
+        )
+
+        await service.login(username: "alice", password: "password")
+        cookies.gateNextClear()
+        let logout = Task { await service.logout() }
+        await cookies.clearEntered.wait()
+
+        let failedReplacement = Task {
+            await service.login(username: "bob", password: "password")
+        }
+        for _ in 0..<10 where service.status != .signingIn {
+            await Task.yield()
+        }
+        #expect(service.status == .signingIn)
+
+        await cookies.releaseClear.fire()
+        await logout.value
+        await failedReplacement.value
+
+        #expect(service.status == .signedOut)
+        #expect(vault.session == nil)
+        #expect(hints.username == nil)
+        #expect(!tracker.isRemovalPending)
+
+        let relaunched = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(alice)),
+            loginPerformer: MockAO3LoginPerformer(result: .success(alice)),
+            cookieManager: MockAO3CookieManager(),
+            sessionHintStore: hints,
+            removalTracker: tracker
+        )
+        await relaunched.restoreSession()
+        #expect(relaunched.status == .signedOut)
     }
 
     /// A5-F4: a Keychain/file delete that throws must not be reported as a clean
@@ -587,6 +718,42 @@ struct AO3AuthServiceTests {
         #expect(cookies.installed == session)
     }
 
+    /// Launch-time WebKit capture must not revive its old account after the user
+    /// starts and completes a newer login while capture is suspended.
+    @Test func staleWebKitRestoreCannotOverwriteANewerLogin() async {
+        let alice = AO3Session(
+            username: "alice",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "alice-cookie")]
+        )
+        let bob = AO3Session(
+            username: "bob",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "bob-cookie")]
+        )
+        let vault = MemoryAO3SessionVault()
+        let cookies = GatedCaptureAO3CookieManager(capturedCookies: alice.cookies)
+        let service = AO3AuthService(
+            vault: vault,
+            validator: MockAO3SessionValidator(result: .valid(alice)),
+            loginPerformer: UsernameAO3LoginPerformer(sessions: ["bob": bob]),
+            cookieManager: cookies,
+            sessionHintStore: MemoryAO3SessionHintStore(username: alice.username),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+
+        let restoration = Task { await service.restoreSession() }
+        await cookies.captureEntered.wait()
+
+        await service.login(username: "bob", password: "password")
+        let bobGeneration = service.sessionGeneration
+        await cookies.releaseCapture.fire()
+        await restoration.value
+
+        #expect(service.status == .signedIn(username: "bob"))
+        #expect(service.sessionGeneration == bobGeneration)
+        #expect(vault.session == bob)
+        #expect(cookies.installed == bob)
+    }
+
     @Test func unrelatedSessionSaveFailureStillRejectsLogin() async {
         let session = testSession
         let vault = MemoryAO3SessionVault(saveError: .invalidData)
@@ -626,6 +793,7 @@ struct AO3AuthServiceTests {
         )
 
         await service.restoreSession()
+        let generationBeforeVerify = service.sessionGeneration
         await service.verifySession()
 
         guard case .healthy = service.sessionHealth else {
@@ -634,6 +802,7 @@ struct AO3AuthServiceTests {
         }
         #expect(service.isLoggedIn)
         #expect(vault.session == session)
+        #expect(service.sessionGeneration == generationBeforeVerify + 1)
     }
 
     @Test func verifySessionExpiresAndClearsWhenAO3RejectsIt() async {
@@ -692,6 +861,43 @@ struct AO3AuthServiceTests {
         await service.verifySession()
 
         #expect(service.sessionHealth == .unknown)
+    }
+
+    @Test func staleVerificationCannotExpireANewerLogin() async {
+        let alice = AO3Session(
+            username: "alice",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "alice-cookie")]
+        )
+        let bob = AO3Session(
+            username: "bob",
+            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "bob-cookie")]
+        )
+        let vault = MemoryAO3SessionVault()
+        let validator = GatedAO3SessionValidator(result: .expired)
+        let cookies = MockAO3CookieManager()
+        let service = AO3AuthService(
+            vault: vault,
+            validator: validator,
+            loginPerformer: UsernameAO3LoginPerformer(sessions: ["alice": alice, "bob": bob]),
+            cookieManager: cookies,
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+
+        await service.login(username: "alice", password: "password")
+        let verification = Task { await service.verifySession() }
+        await validator.entered.wait()
+
+        await service.logout()
+        await service.login(username: "bob", password: "password")
+        let bobGeneration = service.sessionGeneration
+
+        await validator.release.fire()
+        await verification.value
+
+        #expect(service.status == .signedIn(username: "bob"))
+        #expect(service.sessionGeneration == bobGeneration)
+        #expect(vault.session == bob)
+        #expect(cookies.installed == bob)
     }
 
     /// A5-F1 upgrade gap: the purge must happen at construction, not inside
@@ -849,6 +1055,50 @@ private final class MockAO3CookieManager: AO3CookieManaging {
 }
 
 @MainActor
+private final class GatedCaptureAO3CookieManager: AO3CookieManaging {
+    var installed: AO3Session?
+    private let capturedCookies: [AO3StoredCookie]
+    let captureEntered = AO3AuthTestSignal()
+    let releaseCapture = AO3AuthTestSignal()
+
+    init(capturedCookies: [AO3StoredCookie]) {
+        self.capturedCookies = capturedCookies
+    }
+
+    func install(_ session: AO3Session) async { installed = session }
+    func clear() async { installed = nil }
+
+    func capture() async -> [AO3StoredCookie] {
+        await captureEntered.fire()
+        await releaseCapture.wait()
+        return capturedCookies
+    }
+}
+
+@MainActor
+private final class GatedClearAO3CookieManager: AO3CookieManaging {
+    var installed: AO3Session?
+    private var shouldGateNextClear = false
+    let clearEntered = AO3AuthTestSignal()
+    let releaseClear = AO3AuthTestSignal()
+
+    func gateNextClear() { shouldGateNextClear = true }
+
+    func install(_ session: AO3Session) async { installed = session }
+
+    func clear() async {
+        if shouldGateNextClear {
+            shouldGateNextClear = false
+            await clearEntered.fire()
+            await releaseClear.wait()
+        }
+        installed = nil
+    }
+
+    func capture() async -> [AO3StoredCookie] { [] }
+}
+
+@MainActor
 private final class MockAO3LoginPerformer: AO3LoginPerforming {
     lazy var webView = WKWebView()
     let result: Result<AO3Session, AO3WebLoginError>
@@ -910,4 +1160,59 @@ private final class CancellableMockAO3LoginPerformer: AO3LoginPerforming {
             continuation.resume(throwing: CancellationError())
         }
     }
+}
+
+private actor AO3AuthTestSignal {
+    private var fired = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func fire() {
+        fired = true
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func wait() async {
+        if fired { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+}
+
+@MainActor
+private final class GatedAO3SessionValidator: AO3SessionValidating {
+    let entered = AO3AuthTestSignal()
+    let release = AO3AuthTestSignal()
+    let result: AO3SessionValidation
+
+    init(result: AO3SessionValidation) { self.result = result }
+
+    func validate(_ session: AO3Session) async throws -> AO3SessionValidation {
+        await entered.fire()
+        await release.wait()
+        return result
+    }
+}
+
+@MainActor
+private final class UsernameAO3LoginPerformer: AO3LoginPerforming {
+    lazy var webView = WKWebView()
+    private let sessions: [String: AO3Session]
+
+    init(sessions: [String: AO3Session]) { self.sessions = sessions }
+
+    func login(username: String, password: String) async throws -> AO3Session {
+        guard let session = sessions[username] else {
+            throw AO3WebLoginError.invalidCredentials("Unknown test user.")
+        }
+        return session
+    }
+
+    func beginManualLogin(
+        expectedUsername: String,
+        onAuthenticated: @escaping (AO3Session) -> Void,
+        onError: @escaping (String) -> Void
+    ) {}
+
+    func applyVisibleTheme(_ theme: ReaderTheme) {}
+    func cancel() {}
 }

@@ -94,8 +94,8 @@ scheduling; signed-device Keychain persistence.
 | 1 | Baseline, build, and release configuration | COMPLETE | Original P1 unfrozen-RC process finding resolved by `c1bf211`; 1×P2 (team-ID leak), 1×P3 (target drift) remain. Canonical recheck: verify.sh ALL GREEN (371/371). Earlier iOS+macOS Release builds + unsigned archive SUCCEEDED against the same now-frozen Inbox diff. |
 | 2 | Persistence, migration, backup, sync safety | COMPLETE | 1×P1 (user-tag clobber on stale-archive restore), 1×P3 (ungated EPUB blob overwrite), test-gap notes. Direct inspection + 1 bounded subagent (validated); no destructive error paths found anywhere. |
 | 3 | AO3 networking and parser safety | COMPLETE | Original Area-3 result retained. T-91 addendum adds parser/form findings RF6/RF7/RF9; avatar requests are now paced through `AO3Client`. Area 5's A5-F1 still governs anonymous/auth isolation. |
-| 4 | Concurrency and lifecycle correctness | COMPLETE | Original Area-4 result retained. T-91 addendum adds 3×P1: ambiguous Inbox reply verification checks synthetic page 1 (RF1), unresolved guards are lost across target/screen transitions (RF2), and a post-write reload can cross an account switch (RF3). |
-| 5 | Authentication, security, privacy | COMPLETE | Original 4×P1/3×P2/1×P3 retained. T-91 addendum adds RF3 (cross-account post-write overwrite, P1) and RF5 (same-username session/cache reuse, P2). Existing A5 blockers still apply. |
+| 4 | Concurrency and lifecycle correctness | COMPLETE | Original Area-4 result retained. T-91's three Inbox P1 findings are closed: exact reply verification (RF1), durable duplicate-post guards (RF2), and account-transition isolation (RF3). |
+| 5 | Authentication, security, privacy | COMPLETE | Original 4×P1/3×P2/1×P3 retained. T-91-RF3 (cross-account post-write overwrite) and RF5 (same-username session/cache reuse) are closed; existing A5 blockers still apply. |
 | 6 | Core functional regression matrix | COMPLETE | Original 4×P2/1×P3 retained. T-91 addendum adds Inbox identity hydration, parser-empty, filter, pagination, response, accessibility, and chapter-retry findings RF4–RF11. |
 | 7 | Reader and EPUB behavior | COMPLETE | 2×P1 both RESOLVED 2026-07-13 (iOS auto-finish now requires the navigator's true last-resource end state; macOS persists/restores a normalized intra-chapter position with stale-callback gating and debounced writes), 6×P2 (macOS WKWebView retention, active-content boundary, cross-spine state desync, encoded-href blank chapters, stale extraction overlay; iOS nested-TOC loss), 2×P3 (duplicate-basename TOC collision; malformed-spine compact-index drift). |
 | 8 | Performance and scalability | COMPLETE | 3×P2 (root whole-store observation/recomputation; package backup/restore peak memory scales with all EPUB bytes; unbounded Comments page cache), no P0/P1. Inbox visible-page hydration is bounded/sequential/cached but can take ~12s for 20 uncached works by policy. Manual device thermal/battery and large-store Instruments gates remain. |
@@ -1781,6 +1781,31 @@ prevent post-write reload from running after a mismatch. Regression: suspend A's
 reload, activate B, then resume A; B's rows/forms must remain unchanged. Blocks
 release: **YES**.
 
+**Resolution (2026-07-13):** `AO3InboxModel` now captures one immutable
+`AuthContext` (authentication scope + `AO3AuthService.sessionGeneration`) at
+each public read or write entry point. It re-checks that context after every
+suspension and before changing page, error, selection, metadata, or cache state;
+a stale continuation becomes inert. The post-write reload retains the original
+write snapshot, while the POST remains single-shot and is never cancelled or
+retried. A queued A tap therefore cannot borrow B's form or submit an equivalent
+B item. The Inbox cache adds the generation to its private cache scope and a
+transition bypasses cache, so a same-user relogin cannot reuse old rows or CSRF
+forms. `AO3AuthService` advances the generation for login, restore, logout,
+expiry, and accepted cookie refreshes; it serializes WebKit cookie mutations and
+fences stale login, manual fallback, restore, verification, and expiry paths.
+`AO3AuthorProfileFetcher` checks an operation's context before cache reads,
+writes, and invalidation. **Tests:** 11 deterministic A→B/C Inbox races in
+`AO3InboxAccountTransitionTests`, a generation-qualified author-cache test, and
+four auth-transition race tests cover stale reload/error/enrichment/cache writes,
+post-write reload, queued taps, same-user relogin, logout, delayed cookie clear,
+failed replacement login, stale WebKit restore, and stale manual completion.
+**Verified:** `Scripts/verify.sh` ALL GREEN — invariants, lint gate (warnings
+only), full iOS suite **468 tests / 48 suites** on iPhone 17 / iOS 26.5, macOS
+Debug build, and whitespace clean.
+**Live A→B check remaining (manual gate):** start a Mark Read/Delete on account
+A, switch to B mid-request, and confirm B never flashes A's rows or error while
+A's write lands at most once. T91-RF3 is closed.
+
 **T91-RF4 — P2 Should Fix — A metadata-complete older `SavedWork` with no
 verified creator identities suppresses the exact hydration required for Author
 badges.**
@@ -1818,6 +1843,16 @@ reload. Smallest correction: include a non-secret session generation in private
 cache/model scope and explicitly reset/invalidate Inbox on logout/session
 replacement. Regression: logout→same-user login must cold-load new HTML and form
 tokens. Blocks release: no.
+
+**Resolution (2026-07-13):** closed by the T91-RF3 isolation pass. Inbox cache
+keys pair the account scope with `sessionGeneration`; `activate` resets and
+bypasses cache whenever that pair changes. Login, restore, logout, expiry, and
+an accepted verification advance the generation, so even a same-username
+session refresh cannot reuse private HTML or CSRF fields. Test
+`sameUsernameNewGenerationForcesAFreshFetch`
+(`KudosTests/AO3InboxAccountTransitionTests.swift`) proves the forced fresh
+request without relying on an intermediate signed-out activation. T91-RF5 is
+closed.
 
 **T91-RF6 — P2 Should Fix — Valid AO3 Inbox entries without a normal byline are
 silently dropped, and an all-unavailable page is reported as “No comments yet.”**
@@ -2223,17 +2258,17 @@ before a READY verdict.
 
 **NOT READY**
 
-There are **0 open P0, 2 open P1, 30 open P2, and 7 open P3 findings**. The
+There are **0 open P0, 1 open P1, 29 open P2, and 7 open P3 findings**. The
 frozen candidate builds, tests, archives unsigned, and launches as a Release
-simulator app, but it has a reachable cross-account write race and a
-license-compliance blocker. Required signed-device, live-write,
-accessibility, sync-recovery, upgrade, and reader read-through gates are also
-incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag merge), A5-F1
-(cookie isolation), A5-F2 (MiniZip hardening), A5-F3 (backup EPUB
-validation), A5-F4 (truthful session removal), A7-F1 (premature 99%
+simulator app, but it has a license-compliance blocker. Required signed-device,
+live-write, accessibility, sync-recovery, upgrade, and reader read-through
+gates are also incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag
+merge), A5-F1 (cookie isolation), A5-F2 (MiniZip hardening), A5-F3 (backup
+EPUB validation), A5-F4 (truthful session removal), A7-F1 (premature 99%
 completion/EPUB free), A7-F2 (macOS intra-chapter position loss), T91-RF1
-(guessed reply-verification page), and T91-RF2 (non-durable duplicate-post
-guard) are resolved P1s and are not included in the open count.
+(guessed reply-verification page), T91-RF2 (non-durable duplicate-post
+guard), and T91-RF3 (cross-account write/reload race) are resolved P1s and
+are not included in the open count.
 
 ## Area Summary
 
@@ -2242,7 +2277,7 @@ guard) are resolved P1s and are not included in the open count.
 | 1. Baseline/build | COMPLETE | 1 resolved P1; 1 P2; 1 P3 | 371/371; iOS+macOS Debug/Release; unsigned archive; clean-checkout resolution | Release simulator launch now PASS | Signing/team/target drift; signed artifact NOT RUN |
 | 2. Persistence/sync | COMPLETE | 1 resolved P1; 1 P3 | Backup/sync/preservation suites plus direct path trace | Real upgrade/restore/sync NOT RUN | EPUB overwrite test debt (A2-F2, P3) |
 | 3. Networking/parser | COMPLETE | 1 partially-remediated P2; T-91 parser findings cross-reference Area 4/6 | Policy/parser tests and entry-point enumeration | Minimal final live-AO3 matrix NOT RUN | Author-profile avatar still bypasses paced image pipeline; parser drift remains fixture-dependent |
-| 4. Concurrency/lifecycle | COMPLETE | 2 resolved T-91 P1; 1 open cross-cutting T-91 P1 | Static task/state trace; full suite green (446 tests / 47 suites) | Navigation/logout race exercise NOT RUN | Cross-account state race (T91-RF3) |
+| 4. Concurrency/lifecycle | COMPLETE | 3 resolved T-91 P1; no open T-91 P1 | Static task/state trace; deterministic account-transition/auth-race suites; full suite 468 tests / 48 suites | Live A→B write/logout race exercise NOT RUN | Owner-operated write transition remains manual |
 | 5. Auth/security/privacy | COMPLETE | 4 resolved P1; 3 P2; 1 P3 | Auth/vault/request tests and boundary inspection | Signed Keychain, biometric failure, logout failure NOT RUN | Logging/host trust (A5-F5/A5-F7, both P2) |
 | 6. Functional matrix | COMPLETE | 4 P2; 1 P3 plus T-91 RF4–RF11 | 371 tests; targeted parsers and pure state tests | Final Inbox writes/filters/pagination NOT RUN | Racing batches/lists and incomplete Inbox state coverage |
 | 7. Reader/EPUB | COMPLETE | 2 resolved P1; 6 P2; 2 P3 | 107 focused reader/EPUB tests (25 completion / position-bridge / lifecycle-retention cases added 2026-07-13) plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | Active-content/path/TOC defects; manual read-through still owed |
@@ -2254,9 +2289,7 @@ guard) are resolved P1s and are not included in the open count.
 
 ### Release blockers (P1 Must Fix)
 
-1. **T91-RF3:** a successful Inbox write/reload can cross an account switch and
-   overwrite the new account screen with prior-account private Inbox data.
-2. **A10-F1:** standalone app distributions omit required GPL and dependency
+1. **A10-F1:** standalone app distributions omit required GPL and dependency
    license notices.
 
 **Resolved blockers:** A1-F1 was closed by freezing T-91 as `c1bf211` and
@@ -2272,9 +2305,12 @@ position loss) were closed together (2026-07-13) by the reader
 completion-and-progress pass on `release-fixes`. T91-RF1 (guessed reply-
 verification page) and T91-RF2 (non-durable duplicate-post guard) were closed
 together (2026-07-13) by the Inbox reply-verification-and-duplicate-guards
-pass on `release-fixes`. See the resolution notes under each finding above
-for files, tests, and verification evidence. None should be reopened without
-a code or baseline change that reintroduces the underlying gap.
+pass on `release-fixes`. T91-RF3 (cross-account Inbox transition) and RF5
+(same-user private-cache reuse) were closed (2026-07-13) on
+`claude/inbox-account-transition-isolation-9bf225`. See the resolution notes
+under each finding above for files, tests, and verification evidence. None
+should be reopened without a code or baseline change that reintroduces the
+underlying gap.
 
 ### Open P2 Should Fix findings
 
@@ -2291,10 +2327,9 @@ a code or baseline change that reintroduces the underlying gap.
 - **Performance:** A8-F1 (whole-store observation/recompute), A8-F2 (all-EPUB
   package memory), A8-F3 (unbounded Comments cache).
 - **Inbox:** T91-RF4 (identity hydration skips metadata-complete older works),
-  RF5 (same-user relogin reuses stale session state), RF6 (valid no-byline rows
-  dropped), RF7 (filters not fail-closed), RF8 (pagination retry targets wrong
-  page), RF9 (AO3 caution response treated as success), RF10 (incorrect/duplicate
-  accessibility semantics).
+  RF6 (valid no-byline rows dropped), RF7 (filters not fail-closed), RF8
+  (pagination retry targets wrong page), RF9 (AO3 caution response treated as
+  success), RF10 (incorrect/duplicate accessibility semantics).
 - **Accessibility/UI:** A9-F1 (pagination hit targets/keyboard), A9-F2 (compact
   drag-only reorder), A9-F3 (arbitrary accent contrast), A9-F4 (gesture-only
   author keyboard path).
@@ -2353,11 +2388,10 @@ a code or baseline change that reintroduces the underlying gap.
 ## Exact Release Recommendation
 
 **Do not merge this candidate into the human-approved release line or distribute
-an app binary yet.** First fix and regression-test all 11 P1 findings: the three
-persistence/archive blockers, two auth/privacy blockers, two reader blockers,
-three Inbox reply/account-lifecycle blockers, and license packaging. Then correct
-A10-F2, explicitly fix or owner-accept each P2/P3, freeze a new SHA, and rerun
-`Scripts/verify.sh`, both Release builds, archive inspection, and Release launch.
+an app binary yet.** First fix and regression-test the remaining license-packaging
+P1 (A10-F1). Then correct A10-F2, explicitly fix or owner-accept each P2/P3,
+freeze a new SHA, and rerun `Scripts/verify.sh`, both Release builds, archive
+inspection, and Release launch.
 Finally complete every NOT RUN gate above—especially signed session removal,
 upgrade/backup/sync recovery, live single-shot AO3 writes, both readers, and the
 accessibility/theme/device matrix—and obtain human approval before changing the

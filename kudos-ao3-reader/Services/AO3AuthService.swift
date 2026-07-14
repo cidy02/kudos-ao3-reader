@@ -228,6 +228,14 @@ final class AO3AuthService {
     /// the launch restore/login/expiry paths. Purely informational for the account UI.
     private(set) var sessionHealth: AO3SessionHealth = .unknown
 
+    /// Bumped when a login/restore/logout/expiry transition begins and when
+    /// verification accepts refreshed cookies (T91-RF3). Lets a long-lived
+    /// feature model (e.g. the Inbox) tell apart two sessions that share the
+    /// same `authenticationScope` string — same username, logged out and back
+    /// in, or a same-user cookie rotation — so it never reuses private cache or
+    /// async results from an earlier credential set.
+    private(set) var sessionGeneration = 0
+
     var isLoggedIn: Bool {
         if case .signedIn = status { true } else { false }
     }
@@ -253,6 +261,10 @@ final class AO3AuthService {
     private let removalTracker: AO3SessionRemovalTracking
     private var currentSession: AO3Session?
     private var didRestore = false
+    /// WebKit's cookie store is global and its set/delete callbacks suspend. All
+    /// service instances therefore share one FIFO so an older clear/install cannot
+    /// finish after a newer account has reconciled its cookies.
+    private static var cookieMutationTail: Task<Void, Never>?
 
     init(
         vault: AO3SessionPersisting? = nil,
@@ -339,8 +351,10 @@ final class AO3AuthService {
         // Single-shot by design: this runs once from the root view's `.task` at
         // launch. Later sign-in/out flows drive `status` directly, so restore is
         // never meant to run again in a session.
-        guard !didRestore else { return }
+        guard !didRestore, status == .restoring else { return }
         didRestore = true
+        let restorationGeneration = advanceSessionGeneration()
+        currentSession = nil
         status = .restoring
 
         if removalTracker.isRemovalPending {
@@ -348,14 +362,19 @@ final class AO3AuthService {
             // Retry it now, but refuse to restore anything this launch either way —
             // the saved session must never come back from the dead just because it's
             // still readable. Cookies/hint were already cleared when this was marked.
-            await retryPendingRemoval()
+            await retryPendingRemoval(expectedGeneration: restorationGeneration)
+            guard sessionGeneration == restorationGeneration else { return }
             status = .signedOut
             return
         }
 
         do {
             if let saved = try vault.load(), saved.hasSessionCookie {
-                await restore(saved, source: .keychain)
+                await restore(
+                    saved,
+                    source: .keychain,
+                    expectedGeneration: restorationGeneration
+                )
                 return
             }
             // Unsigned/simulator builds often can't *write* Keychain
@@ -365,11 +384,12 @@ final class AO3AuthService {
             // signed-out. Same path when Keychain is missing the entitlement on
             // load (handled in `catch` below).
             Log.auth.notice("No Keychain AO3 session; checking WebKit's persistent store")
-            await restoreWebSession()
+            await restoreWebSession(expectedGeneration: restorationGeneration)
         } catch {
+            guard sessionGeneration == restorationGeneration else { return }
             if isMissingKeychainEntitlement(error) {
                 Log.auth.notice("Keychain is unavailable; checking WebKit's persistent AO3 session")
-                await restoreWebSession()
+                await restoreWebSession(expectedGeneration: restorationGeneration)
                 return
             }
             status = .signedOut
@@ -385,44 +405,66 @@ final class AO3AuthService {
             return
         }
 
+        let loginGeneration = advanceSessionGeneration()
+        // Stop an old hidden/manual WebKit flow before its response can set
+        // cookies after this replacement login's queued clear.
+        loginPerformer.cancel()
+        currentSession = nil
         errorMessage = nil
         noticeMessage = nil
         fallbackMessage = nil
         status = .signingIn
         // Avoid silently reusing a stale WebKit account when the user is trying
         // to authenticate with a different set of credentials.
-        await cookieManager.clear()
+        let cookieClear = enqueueCookieClear(expectedGeneration: loginGeneration)
+        await cookieClear.value
+        guard sessionGeneration == loginGeneration else { return }
 
         do {
             let session = try await loginPerformer.login(
                 username: trimmedUsername,
                 password: password
             )
-            await accept(session)
+            guard sessionGeneration == loginGeneration else { return }
+            await accept(session, expectedGeneration: loginGeneration)
         } catch let AO3WebLoginError.invalidCredentials(message) {
+            guard sessionGeneration == loginGeneration else { return }
             status = .signedOut
             errorMessage = message
             Log.auth.notice("AO3 rejected the supplied login credentials")
         } catch let AO3WebLoginError.fallbackRequired(message) {
-            beginFallback(expectedUsername: trimmedUsername, reason: message)
-        } catch is CancellationError {
-            status = .signedOut
-        } catch {
             beginFallback(
                 expectedUsername: trimmedUsername,
-                reason: "Let's finish logging in on AO3's page below."
+                reason: message,
+                expectedGeneration: loginGeneration
+            )
+        } catch is CancellationError {
+            guard sessionGeneration == loginGeneration else { return }
+            status = .signedOut
+        } catch {
+            guard sessionGeneration == loginGeneration else { return }
+            beginFallback(
+                expectedUsername: trimmedUsername,
+                reason: "Let's finish logging in on AO3's page below.",
+                expectedGeneration: loginGeneration
             )
         }
     }
 
     func cancelLogin() {
+        guard status == .signingIn || status == .usingFallback else { return }
+        let cancellationGeneration = advanceSessionGeneration()
+        currentSession = nil
         loginPerformer.cancel()
         fallbackMessage = nil
         errorMessage = nil
-        if !isLoggedIn { status = .signedOut }
+        status = .signedOut
+        sessionHealth = .unknown
+        _ = enqueueCookieClear(expectedGeneration: cancellationGeneration)
     }
 
     func logout() async {
+        let logoutGeneration = advanceSessionGeneration()
         loginPerformer.cancel()
         let loggedOutUsername = currentSession?.username
         currentSession = nil
@@ -433,7 +475,6 @@ final class AO3AuthService {
         // survives a logout tap, so nothing in this running instance can act
         // authenticated even if the Keychain/file blob itself proves undeletable.
         sessionHintStore.deleteUsername()
-        await cookieManager.clear()
         status = .signedOut
         sessionHealth = .unknown
         // This account's unresolved comment-submission guards must not survive
@@ -458,15 +499,26 @@ final class AO3AuthService {
                 "session. It won't be restored automatically — we'll keep retrying."
             Log.auth.error("Could not delete the saved AO3 session: \(error.localizedDescription, privacy: .public)")
         }
+        let cookieClear = enqueueCookieClear(expectedGeneration: logoutGeneration)
+        await cookieClear.value
+        // A new login can begin while WebKit finishes clearing the old account's
+        // cookies. The durable state above is already terminal for the outgoing
+        // account; this late continuation must not mutate the incoming session.
+        guard sessionGeneration == logoutGeneration else { return }
     }
 
-    /// Called by future authenticated feature clients when AO3 redirects to its
-    /// login page or otherwise reports that the saved session is no longer valid.
-    func sessionDidExpire() async {
-        await clearStoredSession()
+    /// Called by authenticated feature clients when AO3 redirects to its login
+    /// page or otherwise reports that *their captured* session is no longer
+    /// valid. A later login must never be cleared by an old response.
+    @discardableResult
+    func sessionDidExpire(expectedGeneration: Int) async -> Bool {
+        guard sessionGeneration == expectedGeneration,
+              await clearStoredSession(expectedGeneration: expectedGeneration)
+        else { return false }
         sessionHealth = .expired
         noticeMessage = "Your AO3 session expired. Please log in again."
         Log.auth.notice("AO3 reported that the saved session expired")
+        return true
     }
 
     /// On-demand re-validation of the stored session, driven by the account UI's
@@ -479,10 +531,19 @@ final class AO3AuthService {
             sessionHealth = .unknown
             return
         }
+        let expectedGeneration = sessionGeneration
         sessionHealth = .verifying
         do {
             switch try await validator.validate(session) {
             case let .valid(refreshed):
+                // Validation may merge Set-Cookie values into `refreshed`. Even
+                // for the same username, parsed Inbox forms are private to those
+                // credentials, so revoke old private continuations/cache first.
+                guard sessionGeneration == expectedGeneration,
+                      currentSession == session
+                else { return }
+                sessionGeneration += 1
+                let refreshedGeneration = sessionGeneration
                 do {
                     try vault.save(refreshed)
                 } catch {
@@ -492,16 +553,19 @@ final class AO3AuthService {
                         )
                     }
                 }
-                await finishAccepting(refreshed) // sets sessionHealth = .healthy(now)
+                guard await finishAccepting(
+                    refreshed, expectedGeneration: refreshedGeneration
+                ) else { return }
                 Log.auth.info("AO3 session re-verified on request")
             case .expired:
-                await clearStoredSession()
-                sessionHealth = .expired
-                noticeMessage = "Your AO3 session expired. Please log in again."
+                guard await sessionDidExpire(expectedGeneration: expectedGeneration) else { return }
                 Log.auth.notice("On-demand check found the AO3 session expired")
             }
         } catch {
             // Transient (offline / server hiccup): keep the session, flag unverified.
+            guard sessionGeneration == expectedGeneration,
+                  currentSession == session
+            else { return }
             sessionHealth = .unreachable
             Log.auth.notice("Could not reach AO3 to verify the session; keeping it")
         }
@@ -517,7 +581,8 @@ final class AO3AuthService {
         guard AO3RequestDefaults.isTrustedURL(url) else {
             throw AO3AuthenticatedRequestError.nonAO3URL
         }
-        guard let currentSession,
+        guard isLoggedIn,
+              let currentSession,
               let cookieHeader = currentSession.cookieHeader(for: url)
         else {
             throw AO3AuthenticatedRequestError.notAuthenticated
@@ -575,23 +640,42 @@ final class AO3AuthService {
         loginPerformer.applyVisibleTheme(theme)
     }
 
-    private func beginFallback(expectedUsername: String, reason: String) {
+    private func beginFallback(
+        expectedUsername: String,
+        reason: String,
+        expectedGeneration: Int
+    ) {
+        guard sessionGeneration == expectedGeneration else { return }
         status = .usingFallback
         fallbackMessage = reason
         errorMessage = nil
         loginPerformer.beginManualLogin(
             expectedUsername: expectedUsername,
             onAuthenticated: { [weak self] session in
-                Task { @MainActor [weak self] in await self?.accept(session) }
+                self?.acceptManualLogin(session, expectedGeneration: expectedGeneration)
             },
             onError: { [weak self] message in
+                guard self?.sessionGeneration == expectedGeneration else { return }
                 self?.errorMessage = message
             }
         )
         Log.auth.notice("Falling back to the visible AO3 login page")
     }
 
-    private func accept(_ session: AO3Session) async {
+    private func acceptManualLogin(_ session: AO3Session, expectedGeneration: Int) {
+        guard sessionGeneration == expectedGeneration else { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.sessionGeneration == expectedGeneration else { return }
+            await self.accept(session, expectedGeneration: expectedGeneration)
+        }
+    }
+
+    private func accept(_ session: AO3Session, expectedGeneration: Int) async {
+        guard sessionGeneration == expectedGeneration else { return }
+        // A new generation regardless of outcome below: this is always an
+        // attempt to establish a (possibly different) identity, so any pending
+        // continuation captured under the previous one must stop trusting it.
+        let acceptingGeneration = advanceSessionGeneration()
         do {
             try vault.save(session)
             // A fresh, successful save is the durable store's new source of truth —
@@ -603,29 +687,47 @@ final class AO3AuthService {
                 // Production uses CascadingAO3SessionVault (file fallback), so
                 // this path is mainly for tests that inject a Keychain-only vault.
                 removalTracker.clearRemovalPending()
-                await finishAccepting(session)
+                guard await finishAccepting(
+                    session, expectedGeneration: acceptingGeneration
+                ) else { return }
                 Log.auth.notice(
                     "Keychain is unavailable; retained the AO3 session without Keychain"
                 )
                 return
             }
+            guard sessionGeneration == acceptingGeneration else { return }
             currentSession = nil
             sessionHintStore.deleteUsername()
-            await cookieManager.clear()
+            let cookieClear = enqueueCookieClear(expectedGeneration: acceptingGeneration)
+            await cookieClear.value
+            guard sessionGeneration == acceptingGeneration else { return }
             status = .signedOut
             errorMessage = "AO3 logged in, but the session could not be saved securely."
             Log.auth.error("Could not save the AO3 session: \(error.localizedDescription, privacy: .public)")
             return
         }
 
-        await finishAccepting(session)
+        guard await finishAccepting(session, expectedGeneration: acceptingGeneration) else { return }
         Log.auth.info("Captured and saved an AO3 session")
     }
 
-    private func finishAccepting(_ session: AO3Session) async {
+    @discardableResult
+    private func finishAccepting(
+        _ session: AO3Session,
+        expectedGeneration: Int
+    ) async -> Bool {
+        guard sessionGeneration == expectedGeneration else { return false }
+        // Updating the in-memory request gate before awaiting WebKit means a
+        // generation-observing feature cannot start another request using a
+        // session AO3 has already rejected.
         currentSession = session
         sessionHintStore.saveUsername(session.username)
-        await cookieManager.install(session)
+        let cookieInstall = enqueueCookieInstall(
+            session,
+            expectedGeneration: expectedGeneration
+        )
+        await cookieInstall.value
+        guard sessionGeneration == expectedGeneration else { return false }
         status = .signedIn(username: session.username)
         errorMessage = nil
         noticeMessage = nil
@@ -633,6 +735,7 @@ final class AO3AuthService {
         // Reached only after a successful validate() (launch restore, login, or an
         // on-demand verify), so the session is confirmed live as of now.
         sessionHealth = .healthy(Date())
+        return true
     }
 
     private enum RestoreSource {
@@ -640,8 +743,10 @@ final class AO3AuthService {
         case webKit
     }
 
-    private func restoreWebSession() async {
+    private func restoreWebSession(expectedGeneration: Int) async {
+        guard sessionGeneration == expectedGeneration else { return }
         let cookies = await cookieManager.capture()
+        guard sessionGeneration == expectedGeneration else { return }
         guard cookies.contains(where: { $0.name == "_otwarchive_session" && !$0.isExpired }) else {
             status = .signedOut
             return
@@ -649,16 +754,30 @@ final class AO3AuthService {
 
         let usernameHint = sessionHintStore.loadUsername() ?? ""
         let session = AO3Session(username: usernameHint, cookies: cookies)
-        await restore(session, source: .webKit)
+        await restore(session, source: .webKit, expectedGeneration: expectedGeneration)
     }
 
-    private func restore(_ saved: AO3Session, source: RestoreSource) async {
+    private func restore(
+        _ saved: AO3Session,
+        source: RestoreSource,
+        expectedGeneration: Int
+    ) async {
+        guard sessionGeneration == expectedGeneration else { return }
+        let restoringGeneration = expectedGeneration
         currentSession = saved
-        await cookieManager.install(saved)
+        let cookieInstall = enqueueCookieInstall(
+            saved,
+            expectedGeneration: restoringGeneration
+        )
+        await cookieInstall.value
+        guard sessionGeneration == restoringGeneration else { return }
 
         do {
             switch try await validator.validate(saved) {
             case let .valid(refreshed):
+                guard sessionGeneration == restoringGeneration,
+                      currentSession == saved
+                else { return }
                 do {
                     try vault.save(refreshed)
                 } catch {
@@ -668,15 +787,20 @@ final class AO3AuthService {
                         )
                     }
                 }
-                await finishAccepting(refreshed)
+                guard await finishAccepting(
+                    refreshed, expectedGeneration: restoringGeneration
+                ) else { return }
                 Log.auth.info("Restored and validated an AO3 session")
             case .expired:
-                await clearStoredSession()
+                guard await clearStoredSession(expectedGeneration: restoringGeneration) else { return }
                 if source == .keychain || !saved.username.isEmpty {
                     noticeMessage = "Your AO3 session expired. Please log in again."
                 }
             }
         } catch {
+            guard sessionGeneration == restoringGeneration,
+                  currentSession == saved
+            else { return }
             // A Keychain session is already known to be authenticated. A WebKit
             // session is preserved offline only when a prior successful login
             // left the non-secret username hint.
@@ -700,7 +824,10 @@ final class AO3AuthService {
         (error as? AO3SessionVaultError)?.isMissingEntitlement == true
     }
 
-    private func clearStoredSession() async {
+    @discardableResult
+    private func clearStoredSession(expectedGeneration: Int? = nil) async -> Bool {
+        if let expectedGeneration, sessionGeneration != expectedGeneration { return false }
+        let clearingGeneration = advanceSessionGeneration()
         let clearedUsername = currentSession?.username
         currentSession = nil
         do {
@@ -716,16 +843,19 @@ final class AO3AuthService {
             )
         }
         sessionHintStore.deleteUsername()
-        await cookieManager.clear()
         status = .signedOut
-        // Bare cleared state is "signed out / unknown"; callers meaning "expired"
-        // set that explicitly right after this returns.
+        // Bare cleared state is "signed out / unknown"; callers meaning
+        // "expired" set that explicitly after this returns.
         sessionHealth = .unknown
+        let cookieClear = enqueueCookieClear(expectedGeneration: clearingGeneration)
+        await cookieClear.value
+        guard sessionGeneration == clearingGeneration else { return false }
         // Same isolation reasoning as logout() (T91-RF2): a lost/expired
         // session ends that identity's unresolved comment-submission guards too.
         if let clearedUsername, !clearedUsername.isEmpty {
             UnresolvedCommentSubmissionStore.shared.clear(identity: clearedUsername)
         }
+        return true
     }
 
     /// Retries a durable-store deletion that a previous logout/expiry couldn't
@@ -734,19 +864,61 @@ final class AO3AuthService {
     /// this retry fails again, the vault is left untouched for the rest of this
     /// launch and normal restore is skipped rather than risking a stale sign-in.
     @discardableResult
-    private func retryPendingRemoval() async -> Bool {
+    private func retryPendingRemoval(expectedGeneration: Int) async -> Bool {
+        guard sessionGeneration == expectedGeneration else { return false }
         do {
             try vault.delete()
+            guard sessionGeneration == expectedGeneration else { return false }
             removalTracker.clearRemovalPending()
             Log.auth.info("Retried and cleared a pending AO3 session removal")
             return true
         } catch {
+            guard sessionGeneration == expectedGeneration else { return false }
             Log.auth.error(
                 "AO3 session removal is still pending: \(error.localizedDescription, privacy: .public)"
             )
             noticeMessage = "Couldn't finish removing a previous AO3 session from this device. " +
                 "We'll keep retrying; you are not signed in."
             return false
+        }
+    }
+
+    @discardableResult
+    private func advanceSessionGeneration() -> Int {
+        sessionGeneration += 1
+        return sessionGeneration
+    }
+
+    /// Serializes all mutations of WebKit's process-wide AO3 cookie store. The
+    /// generation check runs only after prior mutations have settled, immediately
+    /// before the next mutation begins, so a stale continuation cannot enqueue a
+    /// delete or install that lands after a newer account's cookies.
+    private func enqueueCookieMutation(
+        expectedGeneration: Int,
+        _ mutation: @escaping @MainActor () async -> Void
+    ) -> Task<Void, Never> {
+        let previous = Self.cookieMutationTail
+        let task = Task { @MainActor [weak self] in
+            if let previous { await previous.value }
+            guard let self, self.sessionGeneration == expectedGeneration else { return }
+            await mutation()
+        }
+        Self.cookieMutationTail = task
+        return task
+    }
+
+    private func enqueueCookieClear(expectedGeneration: Int) -> Task<Void, Never> {
+        enqueueCookieMutation(expectedGeneration: expectedGeneration) { [weak self] in
+            await self?.cookieManager.clear()
+        }
+    }
+
+    private func enqueueCookieInstall(
+        _ session: AO3Session,
+        expectedGeneration: Int
+    ) -> Task<Void, Never> {
+        enqueueCookieMutation(expectedGeneration: expectedGeneration) { [weak self] in
+            await self?.cookieManager.install(session)
         }
     }
 }

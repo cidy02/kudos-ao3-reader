@@ -3,12 +3,66 @@ import Foundation
 /// State for the signed-in user's AO3 Inbox feed (Account › Activity › Inbox).
 /// Fetches go through `AO3AuthorProfileFetcher` for the same TTL cache,
 /// coordinator slot, pacing, and stale-fallback discipline as author pages (the
-/// cache is keyed by full URL + authentication scope, so inbox HTML can never
-/// leak across accounts). Bulk writes use the exact parsed Inbox form once only.
+/// cache is keyed by full URL + authentication/session scope, so Inbox HTML and
+/// forms cannot leak across accounts or same-user sessions). Bulk writes use the
+/// exact parsed Inbox form once only.
 @MainActor
 @Observable
 final class AO3InboxModel {
     typealias WorkContextLoader = (Int, AO3AuthService) async throws -> AO3CommentsWorkContext
+    typealias PageLoader = @MainActor (
+        _ url: URL,
+        _ auth: AO3AuthService,
+        _ authenticationScope: String,
+        _ sessionGeneration: Int,
+        _ bypassCache: Bool
+    ) async throws -> AO3AuthorProfileFetcher.Page
+    typealias BulkActionSubmitter = @MainActor (
+        _ action: AO3InboxBulkAction,
+        _ form: AO3InboxBulkForm,
+        _ items: [AO3InboxItem],
+        _ referer: URL,
+        _ auth: AO3AuthService
+    ) async throws -> String
+
+    /// Identifies which signed-in (or anonymous) session an async Inbox
+    /// operation belongs to. Captured once at the start of every operation and
+    /// re-checked after each suspension point that could outlive an account
+    /// switch, reset, or logout — a mismatch makes that continuation's local
+    /// effects (cache writes, row/form/page assignment, error assignment, a
+    /// post-write reload, or any other user-visible state) permanently inert
+    /// (T91-RF3). `scope` alone can't tell two logins of the *same* username
+    /// apart, which is what `generation` is for.
+    private struct AuthContext: Equatable {
+        let scope: String
+        let generation: Int
+
+        static func current(_ auth: AO3AuthService) -> AuthContext {
+            AuthContext(
+                scope: AO3AuthorProfileFetcher.authenticationScope(for: auth),
+                generation: auth.sessionGeneration
+            )
+        }
+
+        /// The shared author-page cache normally scopes private markup by
+        /// username. Inbox HTML additionally contains session-bound forms, so
+        /// its cache identity must split same-user sessions as well (T91-RF3).
+        var cacheScope: String { "\(scope)#session-\(generation)" }
+    }
+
+    /// Everything a submitted Inbox write needs after its first suspension.
+    /// Capturing this before starting its task prevents a queued A tap from
+    /// borrowing B's form, selection, URL, or authentication context.
+    private struct WriteOperation {
+        let id: UUID
+        let action: AO3InboxBulkAction
+        let form: AO3InboxBulkForm
+        let items: [AO3InboxItem]
+        let referer: URL
+        let username: String?
+        let page: Int
+        let expected: AuthContext
+    }
 
     enum Phase: Equatable {
         case idle
@@ -41,20 +95,44 @@ final class AO3InboxModel {
     /// retry supplemental metadata that failed without coupling it to feed state.
     private(set) var metadataRevision = 0
 
-    private var authenticationScope = ""
+    /// Sentinel that matches no real `AuthContext.current(_:)` (whose `scope` is
+    /// always `"anonymous"` or `"signed-in:…"`), so the very first `activate()`
+    /// always resets and bypasses the cache regardless of whether the app opens
+    /// signed in or signed out.
+    private var authContext = AuthContext(scope: "", generation: -1)
     private var activeTask: Task<Void, Never>?
     private var lastLoadedURL: URL?
     private var workContextCacheOrder: [Int] = []
     private var attemptedMetadataRevisionByWorkID: [Int: Int] = [:]
     private var stoppedMetadataRevision: Int?
     private let workContextLoader: WorkContextLoader
+    private let pageLoader: PageLoader
+    private let bulkActionSubmitter: BulkActionSubmitter
+    private let beforeWriteSubmission: @MainActor () async -> Void
 
-    init() {
-        workContextLoader = Self.loadWorkContext
-    }
-
-    init(workContextLoader: @escaping WorkContextLoader) {
+    init(
+        workContextLoader: @escaping WorkContextLoader = AO3InboxModel.loadWorkContext,
+        pageLoader: @escaping PageLoader = { url, auth, scope, generation, bypassCache in
+            try await AO3AuthorProfileFetcher.page(
+                at: url,
+                auth: auth,
+                cacheScope: "\(scope)#session-\(generation)",
+                isCurrent: {
+                    AO3AuthorProfileFetcher.authenticationScope(for: auth) == scope
+                        && auth.sessionGeneration == generation
+                },
+                bypassCache: bypassCache
+            )
+        },
+        bulkActionSubmitter: @escaping BulkActionSubmitter = { action, form, items, referer, auth in
+            try await auth.performInboxBulkAction(action, form: form, items: items, referer: referer)
+        },
+        beforeWriteSubmission: @escaping @MainActor () async -> Void = {}
+    ) {
         self.workContextLoader = workContextLoader
+        self.pageLoader = pageLoader
+        self.bulkActionSubmitter = bulkActionSubmitter
+        self.beforeWriteSubmission = beforeWriteSubmission
     }
 
     /// Current-page only: AO3's displayed mass-edit form only supplies these
@@ -79,8 +157,49 @@ final class AO3InboxModel {
     }
 
     /// Retains richer context learned by an explicitly opened Comments screen.
-    func cacheWorkContext(_ context: AO3CommentsWorkContext, for workID: Int) {
+    /// The destination carries the generation active when it was opened, so a
+    /// still-finishing Comments screen from account A cannot enrich account B's
+    /// Inbox after an account transition.
+    func cacheWorkContext(
+        _ context: AO3CommentsWorkContext,
+        for workID: Int,
+        sessionGeneration: Int,
+        auth: AO3AuthService
+    ) {
+        guard authContext.generation == sessionGeneration,
+              auth.sessionGeneration == sessionGeneration,
+              isCurrent(authContext, auth)
+        else { return }
         storeWorkContext(context, for: workID)
+    }
+
+    func cacheWorkContext(
+        _ context: AO3CommentsWorkContext,
+        for destination: AccountInboxThreadDestination,
+        auth: AO3AuthService
+    ) {
+        cacheWorkContext(
+            context,
+            for: destination.workID,
+            sessionGeneration: destination.sessionGeneration,
+            auth: auth
+        )
+    }
+
+    /// Synchronizes only the private auth token. AccountView calls this for
+    /// every session-generation change, including while Inbox is hidden, so a
+    /// logout clears old rows without issuing a background Inbox request.
+    @discardableResult
+    func syncAuthenticationContext(auth: AO3AuthService) -> Bool {
+        let context = AuthContext.current(auth)
+        guard context != authContext else { return false }
+        authContext = context
+        reset()
+        return true
+    }
+
+    private func isCurrent(_ expected: AuthContext, _ auth: AO3AuthService) -> Bool {
+        expected == authContext && expected == AuthContext.current(auth)
     }
 
     /// Enriches only the distinct work ids rendered by the current Inbox view.
@@ -91,21 +210,21 @@ final class AO3InboxModel {
         workIDs: [Int], seededContexts: [Int: AO3CommentsWorkContext],
         auth: AO3AuthService
     ) async {
-        let startingScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        guard !startingScope.isEmpty, startingScope == authenticationScope else { return }
+        let expected = AuthContext.current(auth)
+        guard auth.isLoggedIn, isCurrent(expected, auth) else { return }
         seedWorkContexts(seededContexts)
 
         let ids = Self.uniqueWorkIDs(workIDs)
         guard !ids.isEmpty, stoppedMetadataRevision != metadataRevision else { return }
         isEnrichingWorkContexts = true
         defer {
-            if authenticationScope == startingScope { isEnrichingWorkContexts = false }
+            if isCurrent(expected, auth) { isEnrichingWorkContexts = false }
         }
 
         for workID in ids {
             do {
                 try Task.checkCancellation()
-                guard authenticationScope == startingScope else { return }
+                guard isCurrent(expected, auth) else { return }
                 if let context = workContextsByID[workID], !context.needsSummaryEnrichment {
                     continue
                 }
@@ -116,21 +235,24 @@ final class AO3InboxModel {
 
                 let context = try await workContextLoader(workID, auth)
                 try Task.checkCancellation()
-                guard authenticationScope == startingScope else { return }
+                guard isCurrent(expected, auth) else { return }
                 storeWorkContext(context, for: workID)
             } catch is CancellationError {
+                guard isCurrent(expected, auth) else { return }
                 if attemptedMetadataRevisionByWorkID[workID] == metadataRevision {
                     attemptedMetadataRevisionByWorkID[workID] = nil
                 }
                 return
             } catch let error as URLError where error.code == .cancelled {
+                guard isCurrent(expected, auth) else { return }
                 if attemptedMetadataRevisionByWorkID[workID] == metadataRevision {
                     attemptedMetadataRevisionByWorkID[workID] = nil
                 }
                 return
             } catch AO3Error.authenticationRequired {
-                guard authenticationScope == startingScope else { return }
-                await auth.sessionDidExpire()
+                guard isCurrent(expected, auth) else { return }
+                reset()
+                await auth.sessionDidExpire(expectedGeneration: expected.generation)
                 return
             } catch AO3Error.notFound {
                 // One deleted/restricted work must not prevent later visible
@@ -139,6 +261,7 @@ final class AO3InboxModel {
             } catch {
                 // Offline, rate-limit, CDN, and parser failures are likely to
                 // affect the whole batch. Stop instead of multiplying retries.
+                guard isCurrent(expected, auth) else { return }
                 stoppedMetadataRevision = metadataRevision
                 return
             }
@@ -151,34 +274,46 @@ final class AO3InboxModel {
     }
 
     /// Loads the first page if this scope hasn't loaded yet (also called when the
-    /// signed-in account changes — content from another scope is discarded).
+    /// signed-in account changes — content from another scope is discarded). A
+    /// detected transition — a different account, or the same account under a
+    /// new session generation (logged out and back in) — always bypasses the
+    /// page cache in addition to using a generation-qualified cache key, so a
+    /// still-fresh response can never hand this session a prior snapshot (T91-RF3).
     func activate(auth: AO3AuthService) {
-        let scope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        if authenticationScope != scope {
-            authenticationScope = scope
-            reset()
-        }
+        let didTransition = syncAuthenticationContext(auth: auth)
         guard auth.isLoggedIn else {
             reset()
             return
         }
         guard phase == .idle else { return }
-        launch { await self.load(auth: auth, page: 1) }
+        let expected = authContext
+        launch {
+            await self.load(
+                auth: auth, expected: expected, page: 1, bypassCache: didTransition
+            )
+        }
     }
 
     func goToPage(_ page: Int, auth: AO3AuthService) {
-        guard !isPerformingBulkAction else { return }
-        launch { await self.load(auth: auth, page: page) }
+        guard isCurrent(authContext, auth), !isPerformingBulkAction else { return }
+        let expected = authContext
+        launch { await self.load(auth: auth, expected: expected, page: page) }
     }
 
     func retry(auth: AO3AuthService) {
-        guard !isPerformingBulkAction else { return }
-        launch { await self.load(auth: auth, page: self.currentPage, bypassCache: true) }
+        guard isCurrent(authContext, auth), !isPerformingBulkAction else { return }
+        let expected = authContext
+        let page = currentPage
+        launch { await self.load(auth: auth, expected: expected, page: page, bypassCache: true) }
     }
 
     func refresh(auth: AO3AuthService) async {
-        guard !isPerformingBulkAction else { return }
-        let task = launch { await self.load(auth: auth, page: self.currentPage, bypassCache: true) }
+        guard isCurrent(authContext, auth), !isPerformingBulkAction else { return }
+        let expected = authContext
+        let page = currentPage
+        let task = launch {
+            await self.load(auth: auth, expected: expected, page: page, bypassCache: true)
+        }
         await task.value
     }
 
@@ -207,24 +342,29 @@ final class AO3InboxModel {
     }
 
     func applyFilter(fieldName: String, value: String, auth: AO3AuthService) {
-        guard !isPerformingBulkAction,
+        guard isCurrent(authContext, auth),
+              !isPerformingBulkAction,
               let field = filterForm?.fields.first(where: { $0.name == fieldName }),
               field.options.contains(where: { $0.value == value })
         else { return }
         filterValues[fieldName] = value
         endSelection()
-        launch { await self.load(auth: auth, page: 1, bypassCache: true) }
+        let expected = authContext
+        launch {
+            await self.load(auth: auth, expected: expected, page: 1, bypassCache: true)
+        }
     }
 
     func clearActionError() {
         actionError = nil
     }
 
-    /// Executes one mass-edit POST. This never shares `activeTask`: a new read
-    /// must not cancel an in-flight write, and a second action stays disabled until
-    /// the first response arrives.
-    func performBulkAction(_ action: AO3InboxBulkAction, auth: AO3AuthService) async {
-        await performAction(action, items: selectedItems, auth: auth)
+    /// Starts one mass-edit POST from the synchronous button event. This never
+    /// shares `activeTask`: a new read must not cancel an in-flight write, and a
+    /// second action stays disabled until the first response arrives.
+    @discardableResult
+    func startBulkAction(_ action: AO3InboxBulkAction, auth: AO3AuthService) -> Task<Void, Never>? {
+        startAction(action, items: selectedItems, auth: auth)
     }
 
     func canPerformItemAction(_ action: AO3InboxBulkAction, item: AO3InboxItem) -> Bool {
@@ -232,65 +372,100 @@ final class AO3InboxModel {
         return bulkForm.parameters(for: [item], action: action) != nil
     }
 
-    func performItemAction(
+    @discardableResult
+    func startItemAction(
         _ action: AO3InboxBulkAction, item: AO3InboxItem, auth: AO3AuthService
-    ) async {
-        await performAction(action, items: [item], auth: auth)
+    ) -> Task<Void, Never>? {
+        startAction(action, items: [item], auth: auth)
     }
 
-    private func performAction(
+    /// Once `bulkActionSubmitter` returns success the POST has already reached
+    /// AO3 and is single-shot by construction — an account switch afterward can
+    /// only suppress *local* follow-up effects (cache invalidation, the reload,
+    /// this account's `actionError`/selection state), never retry or duplicate
+    /// the write itself.
+    private func startAction(
         _ action: AO3InboxBulkAction, items: [AO3InboxItem], auth: AO3AuthService
-    ) async {
-        let startingScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        let startingUsername = auth.username
-        guard startingScope == authenticationScope,
+    ) -> Task<Void, Never>? {
+        let expected = AuthContext.current(auth)
+        guard isCurrent(expected, auth),
               !isPerformingBulkAction,
               let bulkForm,
               let lastLoadedURL,
               !items.isEmpty,
               items.allSatisfy({ selectableItemIDs.contains($0.id) })
-        else { return }
+        else { return nil }
 
         let writeID = UUID()
         activeWriteID = writeID
         actionError = nil
-        defer {
-            if activeWriteID == writeID { activeWriteID = nil }
+        let operation = WriteOperation(
+            id: writeID,
+            action: action,
+            form: bulkForm,
+            items: items,
+            referer: lastLoadedURL,
+            username: auth.username,
+            page: currentPage,
+            expected: expected
+        )
+        return Task { [weak self] in
+            guard let self else { return }
+            await self.beforeWriteSubmission()
+            await self.performAction(operation, auth: auth)
         }
+    }
+
+    private func performAction(_ operation: WriteOperation, auth: AO3AuthService) async {
+        defer {
+            if activeWriteID == operation.id { activeWriteID = nil }
+        }
+        // `startAction` captured this snapshot synchronously at the button tap,
+        // but its task can begin only after a logout/login has already run. Do
+        // not turn that queued A tap into a B POST.
+        guard isCurrent(operation.expected, auth) else { return }
 
         do {
-            _ = try await auth.performInboxBulkAction(
-                action,
-                form: bulkForm,
-                items: items,
-                referer: lastLoadedURL
+            _ = try await bulkActionSubmitter(
+                operation.action, operation.form, operation.items, operation.referer, auth
             )
-            guard startingScope == authenticationScope,
-                  startingScope == AO3AuthorProfileFetcher.authenticationScope(for: auth)
-            else { return }
+            guard isCurrent(operation.expected, auth) else { return }
             // The page cache's stale fallback must not resurrect the pre-write
             // unread state after a confirmed AO3 update.
-            if let startingUsername {
+            if let username = operation.username {
                 await AO3AuthorProfileFetcher.invalidateInbox(
-                    username: startingUsername,
-                    authenticationScope: startingScope
+                    username: username,
+                    cacheScope: operation.expected.cacheScope,
+                    isCurrent: { self.isCurrent(operation.expected, auth) }
                 )
             }
-            if bulkForm.actionURL != lastLoadedURL {
-                await AO3AuthorProfileFetcher.invalidate(bulkForm.actionURL, auth: auth)
+            guard isCurrent(operation.expected, auth) else { return }
+            if operation.form.actionURL != operation.referer {
+                await AO3AuthorProfileFetcher.invalidate(
+                    operation.form.actionURL,
+                    auth: auth,
+                    cacheScope: operation.expected.cacheScope,
+                    isCurrent: { self.isCurrent(operation.expected, auth) }
+                )
             }
+            guard isCurrent(operation.expected, auth) else { return }
             endSelection()
-            await load(auth: auth, page: currentPage, bypassCache: true)
+            await load(
+                auth: auth,
+                expected: operation.expected,
+                page: operation.page,
+                bypassCache: true
+            )
         } catch is CancellationError {
-            guard startingScope == authenticationScope else { return }
+            guard isCurrent(operation.expected, auth) else { return }
             // Never retry a write after cancellation — the request may have reached AO3.
             actionError = "The Inbox update was interrupted. Reload to check AO3's current state."
         } catch AO3Error.authenticationRequired {
-            guard startingScope == authenticationScope else { return }
-            await auth.sessionDidExpire()
+            guard isCurrent(operation.expected, auth) else { return }
             reset()
+            await auth.sessionDidExpire(expectedGeneration: operation.expected.generation)
         } catch {
-            guard startingScope == authenticationScope else { return }
+            guard isCurrent(operation.expected, auth) else { return }
             if let ao3 = error as? AO3Error, let description = ao3.errorDescription {
                 actionError = description
             } else {
@@ -312,7 +487,17 @@ final class AO3InboxModel {
         return task
     }
 
-    private func load(auth: AO3AuthService, page: Int, bypassCache: Bool = false) async {
+    /// Each public read entry point captures `expected` synchronously before it
+    /// creates its task. That makes a queued A refresh inert if B takes over
+    /// before the task gets a chance to start. The post-write reload retains the
+    /// write's original snapshot for the same reason.
+    private func load(
+        auth: AO3AuthService,
+        expected: AuthContext,
+        page: Int,
+        bypassCache: Bool = false
+    ) async {
+        guard !Task.isCancelled, isCurrent(expected, auth) else { return }
         guard let url = inboxURL(auth: auth, page: page)
         else {
             reset()
@@ -320,10 +505,15 @@ final class AO3InboxModel {
         }
         phase = items.isEmpty ? .loading : .loaded
         do {
-            let fetched = try await AO3AuthorProfileFetcher.page(
-                at: url, auth: auth, bypassCache: bypassCache
+            let fetched = try await pageLoader(
+                url,
+                auth,
+                expected.scope,
+                expected.generation,
+                bypassCache
             )
             try Task.checkCancellation()
+            guard isCurrent(expected, auth) else { return }
             let parsed = try AO3Client.parseInboxPage(fetched.html, page: page)
             items = parsed.items
             currentPage = parsed.currentPage
@@ -341,9 +531,11 @@ final class AO3InboxModel {
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
+            guard isCurrent(expected, auth) else { return }
             reset()
+            await auth.sessionDidExpire(expectedGeneration: expected.generation)
         } catch {
+            guard isCurrent(expected, auth) else { return }
             let message: String
             if let ao3 = error as? AO3Error, let description = ao3.errorDescription {
                 message = description
@@ -370,6 +562,12 @@ final class AO3InboxModel {
         isSelecting = false
         selectedItemIDs = []
         actionError = nil
+        // A write started under a previous account keeps running to completion
+        // (single-shot; never cancelled — see `performAction`), but this
+        // account never asked for it, so it must not read as "performing a
+        // bulk action" and stay UI-locked until that background write's own
+        // `defer` eventually clears it.
+        activeWriteID = nil
         workContextsByID = [:]
         workContextCacheOrder = []
         attemptedMetadataRevisionByWorkID = [:]

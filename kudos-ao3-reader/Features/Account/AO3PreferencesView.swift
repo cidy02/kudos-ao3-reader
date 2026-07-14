@@ -392,44 +392,58 @@ struct AO3PreferencesView: View {
     }
 
     private func load() async {
+        let expectedSessionGeneration = auth.sessionGeneration
         phase = .loading
         banner = nil
         hasEdits = false
         do {
-            snapshot = try await auth.loadPreferences()
+            let loadedSnapshot = try await auth.loadPreferences()
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
+            snapshot = loadedSnapshot
             phase = .ready
         } catch AO3Error.authenticationRequired {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed("Your AO3 session expired. Sign in again from Account.")
-            await auth.sessionDidExpire()
+            await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration)
         } catch let error as AO3Error {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch let error as AO3WriteError {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
     }
 
     private func save() async {
         guard let snapshot else { return }
+        let expectedSessionGeneration = auth.sessionGeneration
         isSaving = true
         banner = nil
         defer { isSaving = false }
         do {
             let message = try await auth.savePreferences(snapshot)
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             hasEdits = false
             banner = .success(message)
             if let refreshed = try? await auth.loadPreferences() {
+                guard auth.sessionGeneration == expectedSessionGeneration else { return }
                 self.snapshot = refreshed
             }
         } catch AO3Error.authenticationRequired {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             banner = .error("Your AO3 session expired. Sign in again from Account.")
-            await auth.sessionDidExpire()
+            await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration)
         } catch let error as AO3WriteError {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             banner = .error(error.errorDescription ?? "Couldn't save preferences.")
         } catch let error as AO3Error {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             banner = .error(error.errorDescription ?? "Couldn't save preferences.")
         } catch {
+            guard auth.sessionGeneration == expectedSessionGeneration else { return }
             banner = .error(error.localizedDescription)
         }
     }

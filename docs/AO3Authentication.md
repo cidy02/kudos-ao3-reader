@@ -71,8 +71,14 @@ sign-up and password-reset pages, opened in the in-app Browse tab.
   log in again.
 - A connectivity failure preserves a plausible session for offline use rather
   than treating it as expired.
-- Future feature clients should call `sessionDidExpire()` when AO3 redirects an
-  authenticated operation to login.
+- Login, restore, logout, session expiry, and an accepted session verification
+  advance `sessionGeneration`. WebKit-cookie installs and clears are serialized
+  and each verifies that generation immediately before mutating the shared store,
+  so an older account transition cannot alter a newer account's cookies.
+- Feature clients must capture `sessionGeneration` before beginning an
+  authenticated operation. If AO3 redirects that operation to login, they call
+  `sessionDidExpire(expectedGeneration:)` with that captured value, so an old
+  response cannot clear a newer account session.
 - Logout clears the Keychain item, username hint, and all AO3 cookies known to
   WebKit and `HTTPCookieStorage`.
 
