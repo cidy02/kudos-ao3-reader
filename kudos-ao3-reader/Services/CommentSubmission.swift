@@ -27,6 +27,9 @@ enum CommentSubmissionPhase: Equatable {
 /// Identity of one attempted submission: where it's going plus the normalized
 /// body. Two taps producing the same key are the same comment.
 struct CommentSubmissionKey: Hashable {
+    /// Chapter-stripped (see `dedupContext`) — not necessarily the exact
+    /// `AO3CommentContext` the composer is showing; verification and draft
+    /// storage must keep using their own live context, not this one.
     let context: AO3CommentContext
     let normalizedBody: String
     /// The signed-in username (guests can't post in Kudos), so an account switch
@@ -34,9 +37,20 @@ struct CommentSubmissionKey: Hashable {
     let identity: String
 
     init(context: AO3CommentContext, body: String, identity: String) {
-        self.context = context
+        self.context = Self.dedupContext(context)
         self.normalizedBody = Self.normalize(body)
         self.identity = identity
+    }
+
+    /// `postCommentReply(parentCommentID:)` and `postComment(workID:)` are
+    /// both chapter-agnostic — a reply's parent id and a top-level comment's
+    /// work id are all AO3 needs. Stripping `chapterID` here means the SAME
+    /// logical submission gets the same key whether it was composed from an
+    /// Inbox focused thread (chapter-scoped) or a work-comments screen
+    /// (`.all`), so an unresolved block recorded from one surface still
+    /// blocks the other instead of silently not applying.
+    private static func dedupContext(_ context: AO3CommentContext) -> AO3CommentContext {
+        AO3CommentContext(workID: context.workID, chapterID: nil, parentCommentID: context.parentCommentID)
     }
 
     /// Whitespace-insensitive, case-preserving normalization: AO3 trims and
@@ -252,7 +266,13 @@ final class CommentSubmissionGuard {
         case .absent:
             fail("The comment didn't reach AO3. You can try posting again.")
         case .unknown:
-            guard let pendingKey else { return }
+            // No key to keep blocked (shouldn't happen — verification only
+            // ever runs with one pending — but a stuck `.verifying` would be
+            // worse than resetting to idle if some future caller manages it).
+            guard let pendingKey else {
+                phase = .idle
+                return
+            }
             let message = "We couldn't confirm whether this posted — AO3 wasn't reachable. "
                 + "Your draft is saved. Check again before re-posting."
             store.markAmbiguous(pendingKey, message: message, submittedAt: now())

@@ -151,6 +151,13 @@ extension AO3AuthService {
                 page = try await AO3Client.shared.commentThreadPage(
                     commentID: parentID, request: request
                 )
+                // The fetch itself succeeded, but if this page doesn't even
+                // contain the parent we asked for (markup drift, an id that
+                // failed to parse), an `.absent` verdict from its replies
+                // would be a guess, not proof — stay ambiguous instead.
+                guard page.comments.flatMap(\.flattened).contains(where: { $0.id == parentID }) else {
+                    return .unknown
+                }
             case let .workComments(workID):
                 let request = try? authenticatedRequest(
                     for: AO3Client.commentsPageURL(workID: workID)

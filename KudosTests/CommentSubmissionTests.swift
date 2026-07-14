@@ -29,6 +29,40 @@ struct CommentSubmissionTests {
         #expect(key(identity: "a") != key(identity: "b"))
     }
 
+    /// `postCommentReply`/`postComment` don't take a chapter — the same
+    /// logical reply composed from an Inbox focused thread (chapter-scoped)
+    /// and from a work-comments screen (`.all`, no chapter) must dedup to the
+    /// same key, or an unresolved block recorded on one surface silently
+    /// wouldn't apply on the other.
+    @Test func keysIgnoreChapterScopeForTheSameParentAndBody() {
+        let chapterScoped = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5),
+            body: "Great chapter!", identity: "reader"
+        )
+        let workScoped = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: nil, parentCommentID: 5),
+            body: "Great chapter!", identity: "reader"
+        )
+        #expect(chapterScoped == workScoped)
+
+        let differentChapter = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: 3, parentCommentID: 5),
+            body: "Great chapter!", identity: "reader"
+        )
+        #expect(chapterScoped == differentChapter)
+
+        // Top-level (no parent) keys are equally chapter-agnostic.
+        let topLevelChapterScoped = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: nil),
+            body: "Loved it!", identity: "reader"
+        )
+        let topLevelWorkScoped = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: nil, parentCommentID: nil),
+            body: "Loved it!", identity: "reader"
+        )
+        #expect(topLevelChapterScoped == topLevelWorkScoped)
+    }
+
     // MARK: Single flight
 
     @Test func secondBeginWhileInFlightIsRejected() {
@@ -316,6 +350,117 @@ struct CommentSubmissionTests {
         // this guard's own in-flight POST.
         guardrail.adopt(key(body: "A different target's text", parent: 9))
         #expect(guardrail.phase == .submitting)
+    }
+
+    /// An ambiguous reply recorded from an Inbox focused thread (`.byChapter`)
+    /// must still block the identical reply attempted from the work-comments
+    /// screen (`.all`) — the two surfaces produce different `AO3CommentContext`
+    /// values but must dedup to the same `CommentSubmissionKey`.
+    @Test func unresolvedBlockFollowsTheSameReplyAcrossChapterScopes() {
+        let store = UnresolvedCommentSubmissionStore()
+        let fromInbox = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5),
+            body: "Great chapter!", identity: "reader"
+        )
+        let fromWorkComments = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: nil, parentCommentID: 5),
+            body: "Great chapter!", identity: "reader"
+        )
+
+        let inboxGuard = CommentSubmissionGuard(store: store)
+        #expect(inboxGuard.begin(fromInbox))
+        inboxGuard.markAmbiguous("Connection dropped.")
+
+        // A fresh guard for the SAME logical reply, reached from the other
+        // surface, must see it as blocked, not as a distinct submission.
+        let workCommentsGuard = CommentSubmissionGuard(store: store)
+        #expect(!workCommentsGuard.begin(fromWorkComments))
+    }
+
+    // MARK: Verification target (T-95 follow-up)
+    //
+    // `CommentsModel.reverify` ("Check Again") must authoritatively check the
+    // ORIGINAL ambiguous submission, never whatever text happens to be in the
+    // composer at the moment the user taps it — a "Check Again" tap after
+    // editing the text would otherwise verify the wrong body, get a spurious
+    // `.absent`, and erase the block on the real unresolved submission
+    // (re-enabling a genuine duplicate POST for it). `CommentsModel.
+    // verificationTarget` is the pure function that enforces this; it
+    // deliberately has no parameter for "the composer's current text" so that
+    // can't leak in by construction.
+
+    @Test func verificationTargetsThePendingKeysBodyNeverTheComposersLiveText() {
+        let pendingKey = CommentSubmissionKey(
+            context: AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5),
+            body: "Original ambiguous text",
+            identity: "reader"
+        )
+        let composerContext = AO3CommentContext(workID: 42, chapterID: 7, parentCommentID: 5)
+
+        let target = CommentsModel.verificationTarget(
+            pendingKey: pendingKey, composerContext: composerContext
+        )
+        #expect(target?.body == "Original ambiguous text")
+        #expect(target?.context == composerContext)
+    }
+
+    @Test func verificationTargetIsNilWithNoPendingKey() {
+        let target = CommentsModel.verificationTarget(
+            pendingKey: nil, composerContext: AO3CommentContext(workID: 42)
+        )
+        #expect(target == nil)
+    }
+
+    /// End-to-end through the guard: begin an ambiguous reply, simulate the
+    /// user editing the composer to different text (never fed into
+    /// `verificationTarget`), then resolve using the target's body. The
+    /// original key must be the one resolved — not some key built from the
+    /// edited text — proving the fix closes the exact regression the review
+    /// described.
+    @Test func resolvingAfterAComposerEditStillTargetsTheOriginalSubmission() {
+        let store = UnresolvedCommentSubmissionStore()
+        let guardrail = CommentSubmissionGuard(store: store)
+        let originalKey = key(body: "Original ambiguous text")
+
+        #expect(guardrail.begin(originalKey))
+        guardrail.markAmbiguous("Connection dropped.")
+
+        // The user edits the composer text — a distinct, different key that
+        // is NEVER passed to `verificationTarget`.
+        let editedKey = key(body: "Something totally different now")
+        #expect(editedKey != originalKey)
+
+        let target = CommentsModel.verificationTarget(
+            pendingKey: guardrail.pendingKey,
+            composerContext: AO3CommentContext(workID: 42, chapterID: 7)
+        )
+        #expect(target?.body == originalKey.normalizedBody)
+
+        // Resolving with that target's (correct) body releases the ORIGINAL
+        // key, exactly as a real `.absent` verification result would.
+        guardrail.resolveAmbiguity(.absent)
+        #expect(store.entry(for: originalKey) == nil)
+        // The edited text was never at risk of being blocked by this
+        // resolution (it was never in the store to begin with) — begin for
+        // it succeeds independently, confirming no cross-key confusion.
+        #expect(guardrail.begin(editedKey))
+    }
+
+    @Test func verificationTargetFoundResolvesThePendingKeyToSuccess() {
+        let store = UnresolvedCommentSubmissionStore()
+        let guardrail = CommentSubmissionGuard(store: store)
+        let pendingKey = key()
+        #expect(guardrail.begin(pendingKey))
+        guardrail.markAmbiguous("Connection dropped.")
+
+        let target = CommentsModel.verificationTarget(
+            pendingKey: guardrail.pendingKey,
+            composerContext: AO3CommentContext(workID: 42, chapterID: 7)
+        )
+        #expect(target != nil)
+        guardrail.resolveAmbiguity(.found)
+        #expect(guardrail.phase == .succeeded)
+        #expect(store.entry(for: pendingKey) == nil)
     }
 
     // MARK: Ambiguity classification

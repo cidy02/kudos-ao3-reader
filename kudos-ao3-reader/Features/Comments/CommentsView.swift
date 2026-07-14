@@ -951,6 +951,12 @@ struct CommentComposerSheet: View {
                 }
             }
             .onChange(of: model.composerText) { _, _ in
+                // An edit away from a blocked submission's exact text must
+                // stop showing that block as if it applied to what's on
+                // screen now — cheap (in-memory dictionary lookup), so unlike
+                // the draft save below this runs on every keystroke, not
+                // debounced.
+                model.syncSubmissionGuardToComposerText(auth: auth)
                 // Preserve draft-as-you-type without synchronously rewriting the
                 // UserDefaults dictionary on every keystroke.
                 draftSaveTask?.cancel()

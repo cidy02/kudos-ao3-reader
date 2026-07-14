@@ -518,14 +518,31 @@ final class CommentsModel {
         composerEditTarget = nil
         composerContext = context
         composerText = drafts.draft(for: context)
-        // Rehydrates from the durable store: an unresolved earlier attempt for
-        // this exact draft (context + text + identity) shows blocked again —
-        // even from a brand-new guard — instead of resetting to idle. A
-        // genuinely different target or edited text adopts as idle without
-        // disturbing that other key's own unresolved entry.
+        // Unconditional: rehydrates an unresolved earlier attempt for this
+        // exact draft (context + text + identity) as blocked again — even
+        // from a brand-new guard — instead of resetting to idle.
+        adoptSubmissionGuardToComposerState(auth: auth)
+    }
+
+    private func adoptSubmissionGuardToComposerState(auth: AO3AuthService) {
+        guard let composerContext, composerEditTarget == nil else { return }
         submissionGuard.adopt(CommentSubmissionKey(
-            context: context, body: composerText, identity: Self.identity(auth: auth, editTarget: nil)
+            context: composerContext, body: composerText, identity: Self.identity(auth: auth, editTarget: nil)
         ))
+    }
+
+    /// Re-syncs the guard ONLY while it's currently showing `.ambiguous`, so
+    /// editing away from a blocked submission's exact text immediately exits
+    /// that display (Check Again disappears, Post becomes available for this
+    /// now-distinct text) instead of staying stuck on a stale banner. Scoped
+    /// to `.ambiguous` specifically — unlike `startComposer`'s unconditional
+    /// adopt, this must never also reset an unrelated `.failed`/`.succeeded`
+    /// display just because the user kept typing. The durable entry for the
+    /// ORIGINAL text is untouched either way — reopening or retyping it still
+    /// shows it blocked. Call on every composer text change.
+    func syncSubmissionGuardToComposerText(auth: AO3AuthService) {
+        guard case .ambiguous = submissionGuard.phase else { return }
+        adoptSubmissionGuardToComposerState(auth: auth)
     }
 
     /// Opens the composer to edit an existing own comment. Prefills the rendered
@@ -585,7 +602,7 @@ final class CommentsModel {
                 submissionGuard.markAmbiguous(
                     "The connection dropped while posting. Checking whether the comment went through…"
                 )
-                await runVerification(auth: auth, context: context, body: body)
+                await runVerification(auth: auth, context: context)
             } else {
                 // Edits are safe to retry explicitly (re-PUTting the same text is
                 // idempotent), so an ambiguous edit surfaces as a plain failure.
@@ -599,22 +616,42 @@ final class CommentsModel {
     /// Re-runs verification for an ambiguous submission ("Check Again").
     func reverify(auth: AO3AuthService) async {
         guard let context = composerContext, case .ambiguous = submissionGuard.phase else { return }
-        await runVerification(auth: auth, context: context, body: composerText)
+        await runVerification(auth: auth, context: context)
         await finishIfSucceeded(auth: auth)
     }
 
-    private func runVerification(
-        auth: AO3AuthService, context: AO3CommentContext, body: String
-    ) async {
+    /// What verification must check: `pendingKey`'s own body, never the
+    /// composer's *current* text. "Check Again" can run after the user has
+    /// typed something different from what was originally posted;
+    /// authoritatively checking THAT edited text against AO3 would verify the
+    /// wrong thing and, on `.absent`, release the block on the real
+    /// unresolved submission — re-enabling a genuine duplicate POST for it.
+    /// This function doesn't even take the composer's live text as an input,
+    /// so that can't leak in by accident. `context` still comes from the live
+    /// composer (not `pendingKey.context`, which is chapter-stripped for
+    /// dedup) so draft clearing hits the exact key the draft was saved under.
+    /// Pure and `nonisolated` so the "verify the pending key, not whatever's
+    /// on screen" invariant is directly unit-testable.
+    nonisolated static func verificationTarget(
+        pendingKey: CommentSubmissionKey?, composerContext: AO3CommentContext
+    ) -> (context: AO3CommentContext, body: String)? {
+        guard let pendingKey else { return nil }
+        return (composerContext, pendingKey.normalizedBody)
+    }
+
+    private func runVerification(auth: AO3AuthService, context: AO3CommentContext) async {
+        guard let target = Self.verificationTarget(
+            pendingKey: submissionGuard.pendingKey, composerContext: context
+        ) else { return }
         submissionGuard.beginVerifying()
         // A reply verifies against its own parent thread (the exact
         // authoritative endpoint), not a page number, so no "which page was
         // showing" state is needed here — see `AO3AuthService.verifyCommentPosted`.
         let verification = await auth.verifyCommentPosted(
-            context: context, body: body, submittedAt: submissionGuard.pendingSubmittedAt
+            context: target.context, body: target.body, submittedAt: submissionGuard.pendingSubmittedAt
         )
         submissionGuard.resolveAmbiguity(verification)
-        if case .found = verification { drafts.clear(for: context) }
+        if case .found = verification { drafts.clear(for: target.context) }
     }
 
     private func finishIfSucceeded(auth: AO3AuthService) async {

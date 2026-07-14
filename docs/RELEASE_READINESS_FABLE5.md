@@ -1704,6 +1704,65 @@ eviction, and `adopt`'s idle/no-clobber-while-busy behavior. `Scripts/verify.sh`
 ALL GREEN (446 tests / 47 suites); iOS + macOS Debug and Release builds green.
 T91-RF2 is closed.
 
+**Follow-up (2026-07-13, review hand-back):** a second-pass review of the
+resolution above (targeted suites green, spec/ledger/scope conformant, no
+regressions) found two residual guard-escape paths, both closed the same day.
+(1) **P1-class:** `CommentsModel.reverify` ("Check Again") passed the
+composer's *current* `composerText` into verification, while the ambiguous
+composer's `TextEditor` stayed editable (disabled only on `isBusy`) and the
+Check Again button stayed visible — so editing the text, then tapping Check
+Again, authoritatively verified the *edited* body against AO3, got a
+spurious `.absent` for text that was never posted, and `resolveAmbiguity`
+released the block on the real, still-unresolved *original* submission
+(`fail()` resolves `pendingKey`, not "whatever body verification happened to
+check"). A subsequent retry of the original text could then create a real
+duplicate. Correction: new pure `CommentsModel.verificationTarget(pendingKey:
+composerContext:)` — deliberately takes no composer-text parameter, so it
+can't leak in — returns `pendingKey.normalizedBody` as the body to verify;
+`runVerification` (both the `submit()` and `reverify()` call paths) now goes
+through it exclusively. `context` still comes from the live composer (not
+`pendingKey.context`, chapter-stripped by fix 2 below) so draft-clearing on
+`.found` still hits the exact key the draft was saved under. Added (optional,
+same pass): `CommentsModel.syncSubmissionGuardToComposerText`, called from
+`CommentComposerSheet`'s existing text `onChange`, re-adopts the guard only
+while `.ambiguous` so editing away from the exact blocked text immediately
+exits that display instead of leaving a stale banner over now-unrelated text
+— scoped to `.ambiguous` specifically so it never also clears an unrelated
+`.failed`/`.succeeded` banner. (2) **P2-class:** `CommentSubmissionKey`
+carried the requesting screen's `chapterID`, but `postCommentReply`/
+`postComment` are chapter-agnostic (a parent id or a work id is all AO3
+needs) — so the *same* logical reply got two different keys depending on
+whether it was composed from an Inbox focused thread (`.byChapter`) or a
+work-comments screen (`.all`), and an unresolved block recorded on one
+surface silently didn't apply on the other. Correction: `CommentSubmissionKey.
+init` now normalizes through a private `dedupContext` that always strips
+`chapterID` (applied uniformly to replies and top-level comments, since both
+POST endpoints are chapter-agnostic); nothing outside `CommentSubmissionKey`
+reads `.context`, so this couldn't affect verification's plan selection or
+draft storage (both already used their own live, unstripped context).
+Additional cheap hardening from the same review, not independently required:
+`resolveAmbiguity(.unknown)` now falls back to `.idle` instead of leaving a
+theoretically-unreachable stuck `.verifying` if some future caller manages a
+nil `pendingKey`; `verifyCommentPosted`'s standalone-thread branch now
+requires the fetched page to actually contain the requested parent id before
+trusting an `.absent` result from its replies — a fetch that "succeeds" but
+doesn't even show the expected parent (markup drift, an id that failed to
+parse) now returns `.unknown` rather than guessing absent. **Tests (6 new):**
+`CommentSubmissionTests` gained `keysIgnoreChapterScopeForTheSameParentAndBody`
+(byChapter/all/different-chapter keys for the same parent+body+identity are
+equal, for both replies and top-level), `unresolvedBlockFollowsTheSameReply
+AcrossChapterScopes` (a block recorded from one chapter scope blocks `begin`
+from the other), `verificationTargetsThePendingKeysBodyNeverTheComposersLive
+Text`, `verificationTargetIsNilWithNoPendingKey`,
+`resolvingAfterAComposerEditStillTargetsTheOriginalSubmission` (the exact
+regression repro: begin+markAmbiguous an original key, construct — but never
+verify against — a distinct "edited" key, confirm `verificationTarget` still
+returns the original body, resolve with it, confirm only the original key
+was released and the edited key remains independently postable), and
+`verificationTargetFoundResolvesThePendingKeyToSuccess`. `Scripts/verify.sh`
+ALL GREEN (452 tests / 47 suites); iOS + macOS Debug and Release builds
+green.
+
 **T91-RF3 — P1 Must Fix — A successful Inbox write can race an account switch
 and let the old account's forced reload overwrite the new account's model.**
 File: `Features/Account/AO3InboxModel.swift:241-283, 315-354`. Repro: account A
