@@ -474,6 +474,87 @@ struct AO3InboxAccountTransitionTests {
 
         #expect(model.workContext(for: 7) == nil)
     }
+
+    // MARK: Fetcher-level wiring (production default `pageLoader`)
+    //
+    // Every scenario above injects a custom `pageLoader`, which exercises the
+    // model's own `AuthContext` guards but not the production default closure
+    // (the wiring that passes `cacheScope`/`isCurrent` into
+    // `AO3AuthorProfileFetcher.page`) or that fetcher's own suspension gates.
+    // These two close that gap directly, without any live network: a valid
+    // `AO3AuthorPageCache.shared` entry is pre-seeded under the exact key the
+    // real wiring computes, so the fetcher's cache-hit path — not a network
+    // fetch — is what's actually exercised.
+
+    /// `AO3InboxModel()`'s default `pageLoader` must build
+    /// `"<scope>#session-<generation>"` and pass it as `AO3AuthorProfileFetcher.page`'s
+    /// `cacheScope`, matching the key `AO3AuthorPageCache` tests separately
+    /// (`AO3AuthorProfileTests.cacheSeparatesRoutesPagesAndAuthenticationScopes`).
+    /// `syncAuthenticationContext` + `goToPage` (rather than `activate`, which
+    /// always forces `bypassCache: true` on a first load) reaches the
+    /// cache-preferring branch, so a matching seed proves the wiring without
+    /// ever needing a real network call.
+    @Test func defaultPageLoaderWiresAGenerationQualifiedCacheScopeIntoTheSharedFetcher() async throws {
+        let auth = Self.makeAuthService()
+        let username = "fetcher-wiring-\(UUID().uuidString.prefix(8))"
+        await auth.login(username: username, password: "password")
+
+        let url = try #require(AO3Client.inboxURL(username: username, page: 1))
+        let cacheScope = "\(AO3AuthorProfileFetcher.authenticationScope(for: auth))"
+            + "#session-\(auth.sessionGeneration)"
+        let key = AO3AuthorPageCache.Key(url: url, authenticationScope: cacheScope)
+        await AO3AuthorPageCache.shared.insert(Self.inboxHTML(total: 17), for: key)
+
+        let model = AO3InboxModel() // production default pageLoader, not injected
+        model.syncAuthenticationContext(auth: auth)
+        model.goToPage(1, auth: auth) // bypassCache defaults to false
+
+        let deadline = ContinuousClock.now + Duration.seconds(2)
+        while model.phase != .loaded, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(model.phase == .loaded)
+        #expect(model.totalComments == 17)
+    }
+
+    /// Calls the real `AO3AuthorProfileFetcher.page` directly (bypassing the
+    /// model entirely) with an `isCurrent` that reports true for the gate
+    /// before the cache lookup's own suspension point, then false for every
+    /// gate after — simulating an account switch landing in that exact
+    /// window. Even though a valid, matching cache entry is found, the
+    /// fetcher's own gate immediately after that await must still reject it
+    /// rather than returning the (now-stale) cached HTML.
+    @Test func fetcherOwnIsCurrentGateRejectsAStaleCacheHitBeforeReturningIt() async throws {
+        let auth = Self.makeAuthService()
+        let username = "fetcher-gate-\(UUID().uuidString.prefix(8))"
+        await auth.login(username: username, password: "password")
+
+        let url = try #require(AO3Client.inboxURL(username: username, page: 1))
+        let cacheScope = "\(AO3AuthorProfileFetcher.authenticationScope(for: auth))"
+            + "#session-\(auth.sessionGeneration)"
+        let key = AO3AuthorPageCache.Key(url: url, authenticationScope: cacheScope)
+        await AO3AuthorPageCache.shared.insert(Self.inboxHTML(total: 3), for: key)
+
+        var isCurrentCallCount = 0
+        await #expect(throws: CancellationError.self) {
+            _ = try await AO3AuthorProfileFetcher.page(
+                at: url,
+                auth: auth,
+                cacheScope: cacheScope,
+                isCurrent: {
+                    isCurrentCallCount += 1
+                    return isCurrentCallCount <= 1
+                },
+                bypassCache: false
+            )
+        }
+        #expect(isCurrentCallCount >= 2)
+
+        // The cache entry itself is untouched — only the in-flight read to
+        // *this* caller was rejected; a fresh, current-scope read still hits it.
+        #expect(await AO3AuthorPageCache.shared.value(for: key) == Self.inboxHTML(total: 3))
+    }
 }
 
 /// A one-shot async gate used to deterministically sequence a gated async

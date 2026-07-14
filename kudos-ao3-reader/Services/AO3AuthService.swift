@@ -452,7 +452,15 @@ final class AO3AuthService {
     }
 
     func cancelLogin() {
-        guard status == .signingIn || status == .usingFallback else { return }
+        guard status == .signingIn || status == .usingFallback else {
+            // Nothing in flight to cancel (e.g. a native attempt already
+            // failed back to `.signedOut` and left `errorMessage` set) — the
+            // login sheet's Cancel button still calls this unconditionally,
+            // so the stale failure text must not resurface the next time the
+            // sheet opens, before any new attempt.
+            errorMessage = nil
+            return
+        }
         let cancellationGeneration = advanceSessionGeneration()
         currentSession = nil
         loginPerformer.cancel()

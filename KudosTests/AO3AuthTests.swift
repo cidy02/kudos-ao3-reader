@@ -376,6 +376,33 @@ struct AO3AuthServiceTests {
         #expect(!service.isLoggedIn)
     }
 
+    /// The login sheet's Cancel button calls `cancelLogin()` unconditionally,
+    /// including right after a native attempt already failed back to
+    /// `.signedOut` with `errorMessage` set (nothing left in flight to abort).
+    /// That stale failure text must not resurface the next time the sheet
+    /// opens, before any new attempt is submitted.
+    @Test func cancelAfterAFailedAttemptClearsTheStaleErrorMessage() async {
+        let performer = MockAO3LoginPerformer(
+            result: .failure(.invalidCredentials("The password was incorrect."))
+        )
+        let service = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: MockAO3SessionValidator(result: .expired),
+            loginPerformer: performer,
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+
+        await service.login(username: "reader", password: "bad")
+        #expect(service.status == .signedOut)
+        #expect(service.errorMessage == "The password was incorrect.")
+
+        service.cancelLogin()
+
+        #expect(service.errorMessage == nil)
+        #expect(service.status == .signedOut)
+    }
+
     /// A fallback coordinator can retain its callback after `cancel()`. The
     /// callback must be inert synchronously, before it can queue a new accept.
     @Test func staleManualCompletionAfterCancelDoesNotResurrectSession() async {
