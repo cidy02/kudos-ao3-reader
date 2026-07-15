@@ -28,6 +28,10 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 - Logged-in/username detection selectors are duplicated between `LiveAO3SessionValidator` (SwiftSoup) and `AO3WebLoginCoordinator.inspectPage()` (in-page JS) — change both or neither (`AO3AuthService.swift:101` note).
 - Locked/restricted works return empty tag groups on a 200 — treated as "keep EPUB tags, retry after cooldown", not as an error.
 - Author index parsers distinguish recognized empty AO3 lists from unrecognized markup; parser drift is an error/retry state, never a fabricated empty profile.
+- Comment and chapter-index parsers likewise require AO3's authoritative
+  `#comments_placeholder` + direct `ol.thread` / `ol.chapter.index` landmarks.
+  Only a present, structurally empty container is empty; login/interstitial or
+  missing/unexpected markup throws instead of fabricating "No Comments Yet."
 
 ## What agents must NOT implement
 
