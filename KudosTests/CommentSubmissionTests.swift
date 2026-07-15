@@ -151,6 +151,26 @@ struct CommentSubmissionTests {
         #expect(!guardrail.begin(key()))
     }
 
+    @Test func hiddenCommentEvidenceSurvivesGuardRecreationAndUnknownRecheck() {
+        let store = UnresolvedCommentSubmissionStore()
+        let pending = key()
+        let original = CommentSubmissionGuard(store: store)
+        #expect(original.begin(pending))
+        original.markAmbiguous(
+            "AO3 did not confirm the post.", commentMayBeHidden: true
+        )
+        #expect(original.pendingCommentMayBeHidden)
+
+        let reopened = CommentSubmissionGuard(store: store)
+        reopened.adopt(pending)
+        #expect(reopened.pendingCommentMayBeHidden)
+        reopened.beginVerifying()
+        reopened.resolveAmbiguity(.unknown)
+
+        #expect(reopened.pendingCommentMayBeHidden)
+        #expect(!CommentSubmissionGuard(store: store).begin(pending))
+    }
+
     @Test func definitiveFailureAllowsRetry() {
         let guardrail = CommentSubmissionGuard()
         #expect(guardrail.begin(key()))
@@ -318,6 +338,21 @@ struct CommentSubmissionTests {
 
         #expect(store.entry(for: aKey)?.submittedAt == Date(timeIntervalSince1970: 1_000))
         #expect(store.entry(for: aKey)?.message == "Still checking.")
+    }
+
+    @Test func guardAnchorsSubmittedAtWhenTheAttemptBegins() {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let store = UnresolvedCommentSubmissionStore(now: { now })
+        let guardrail = CommentSubmissionGuard(now: { now }, store: store)
+        let pending = key()
+
+        #expect(guardrail.begin(pending))
+        #expect(guardrail.pendingSubmittedAt == Date(timeIntervalSince1970: 1_000))
+        now = now.addingTimeInterval(600)
+        guardrail.markAmbiguous("The response arrived late.")
+
+        #expect(store.entry(for: pending)?.submittedAt == Date(timeIntervalSince1970: 1_000))
+        #expect(guardrail.pendingSubmittedAt == Date(timeIntervalSince1970: 1_000))
     }
 
     @Test func storeEntriesExpireAfterMaxAge() {

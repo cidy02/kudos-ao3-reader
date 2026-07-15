@@ -221,6 +221,34 @@ struct AO3WriteActionsTests {
         #expect(AO3Client.commentWriteVerdict(status: 200, body: html) == .unconfirmed)
     }
 
+    @Test func exactCommentFormNoticeCarriesHiddenPostEvidence() {
+        let moderated = """
+        <div id="add_comment_placeholder">
+          <form id="comment_for_42">
+            <p class="notice">Comments on this work are moderated.</p>
+          </form>
+        </div>
+        """
+        let ordinary = """
+        <div id="add_comment_placeholder"><form id="comment_for_42"></form></div>
+        """
+        let unrelated = """
+        <p class="notice">A notice outside the actual comment form.</p>
+        <div id="add_comment_placeholder"><form id="comment_for_42"></form></div>
+        """
+        let moderatedReply = """
+        <div id="add_comment_reply_placeholder_777">
+          <form id="comment_for_777"><p class="notice">Replies are moderated.</p></form>
+        </div>
+        """
+        #expect(AO3Client.commentFormMayHidePostedComment(moderated, commentableID: 42))
+        #expect(!AO3Client.commentFormMayHidePostedComment(ordinary, commentableID: 42))
+        #expect(!AO3Client.commentFormMayHidePostedComment(unrelated, commentableID: 42))
+        #expect(AO3Client.commentFormMayHidePostedComment(
+            moderatedReply, commentableID: 777
+        ))
+    }
+
     @Test func deleteFailureBodyIsRejectedDespite200() {
         // otwarchive redirects a failed delete WITH a 200 final page carrying
         // `flash[:comment_error]` — the status alone proves nothing.

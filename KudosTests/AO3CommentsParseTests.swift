@@ -592,11 +592,65 @@ struct AO3CommentsParseTests {
         #expect(page.comments[1].avatarURL?.absoluteString == uploaded)
     }
 
-    @Test func missingCommentsRegionParsesAsEmpty() throws {
-        let page = try AO3Client.parseCommentsPage("<html><body>No comments UI.</body></html>", page: 2)
+    @Test func recognizedEmptyCommentsPageParsesAsEmpty() throws {
+        let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_empty"), page: 1)
         #expect(page.comments.isEmpty)
-        #expect(page.currentPage == 2)
-        #expect(page.totalPages == 2)
+        #expect(page.totalComments == 0)
+        #expect(page.currentPage == 1)
+        #expect(page.totalPages == 1)
+    }
+
+    @Test func missingCommentsRegionThrowsParse() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseCommentsPage("<html><body>No comments UI.</body></html>", page: 2)
+        }
+    }
+
+    @Test func placeholderWithoutTopThreadThrowsParse() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseCommentsPage(
+                "<html><body><div id='comments_placeholder'></div></body></html>", page: 1
+            )
+        }
+    }
+
+    @Test func nestedThreadFragmentDoesNotCountAsTheTopThread() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseCommentsPage("""
+            <html><body><div id="comments_placeholder"><div>
+              <ol class="thread"><li class="comment" id="comment_1"></li></ol>
+            </div></div></body></html>
+            """, page: 1)
+        }
+    }
+
+    @Test func unexpectedRowDoesNotCountAsAnEmptyTopThread() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseCommentsPage("""
+            <html><body><div id="comments_placeholder">
+              <ol class="thread"><li class="notice">Comments unavailable.</li></ol>
+            </div></body></html>
+            """, page: 1)
+        }
+    }
+
+    @Test func loginPageIsAuthenticationRequiredNotEmpty() throws {
+        do {
+            _ = try AO3Client.parseCommentsPage(fixture("ao3_logged_out"), page: 1)
+            Issue.record("expected the AO3 login page to require authentication")
+        } catch AO3Error.authenticationRequired {
+            // Expected: a restricted-work login bounce is not an empty thread.
+        } catch {
+            Issue.record("expected authenticationRequired, got \(error)")
+        }
+    }
+
+    @Test func maintenancePageThrowsParse() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseCommentsPage("""
+            <html><body><h1>Archive Down for Maintenance</h1></body></html>
+            """, page: 1)
+        }
     }
 
     // MARK: Comment timestamps
@@ -688,6 +742,30 @@ struct AO3CommentsParseTests {
         #expect(chapters[2].dateText == "2026-07-05")
     }
 
+    @Test func emptyChapterIndexIsRecognized() throws {
+        let chapters = try AO3Client.parseChapterIndex(
+            "<html><body><ol class='chapter index group'></ol></body></html>"
+        )
+        #expect(chapters.isEmpty)
+    }
+
+    @Test func missingChapterIndexThrowsParse() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseChapterIndex("<html><body>No chapter index.</body></html>")
+        }
+    }
+
+    @Test func chapterIndexLoginPageRequiresAuthentication() throws {
+        do {
+            _ = try AO3Client.parseChapterIndex(fixture("ao3_logged_out"))
+            Issue.record("expected the AO3 login page to require authentication")
+        } catch AO3Error.authenticationRequired {
+            // Expected.
+        } catch {
+            Issue.record("expected authenticationRequired, got \(error)")
+        }
+    }
+
     // MARK: URL builders
 
     @Test func buildsCommentsURLs() {
@@ -718,6 +796,7 @@ struct AO3CommentsParseTests {
 
     @Test func verificationMatcherFindsTopLevelComment() {
         var mine = AO3Comment(id: 2, author: "Reader", isGuest: false)
+        mine.userPath = "/users/reader/pseuds/Reader"
         mine.bodyText = "Loved  this   chapter!"
         let page = pageWith([mine])
 
@@ -734,6 +813,7 @@ struct AO3CommentsParseTests {
 
     @Test func verificationMatcherRequiresTheRightParentForReplies() {
         var reply = AO3Comment(id: 9, author: "Reader", isGuest: false)
+        reply.userPath = "/users/reader/pseuds/Reader"
         reply.bodyText = "Yes, exactly!"
         var parent = AO3Comment(id: 5, author: "Other", isGuest: false)
         parent.replies = [reply]
@@ -748,6 +828,99 @@ struct AO3CommentsParseTests {
         #expect(!AO3AuthService.containsComment(
             in: page, author: "Reader", normalizedBody: "Yes, exactly!", parentID: 6
         ))
+    }
+
+    @Test func verificationUsesCanonicalUsernameNotDisplayedPseud() {
+        var mine = AO3Comment(id: 2, author: "NightPseud", isGuest: false)
+        mine.userPath = "/users/Reader/pseuds/NightPseud"
+        mine.bodyText = "Made it!"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([mine]), username: "reader", submittedBody: "Made it!",
+            parentID: nil
+        ) == .found)
+
+        mine.userPath = "/users/SomeoneElse/pseuds/NightPseud"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([mine]), username: "reader", submittedBody: "Made it!",
+            parentID: nil
+        ) == .absent)
+    }
+
+    @Test func anonymousCreatorMatchIsUnknown() {
+        var anonymous = AO3Comment(id: 2, author: "Anonymous Creator", isGuest: false)
+        anonymous.isAnonymousCreator = true
+        anonymous.bodyText = "Made it!"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([anonymous]), username: "reader", submittedBody: "Made it!",
+            parentID: nil
+        ) == .unknown)
+    }
+
+    @Test func transformedRichBodyMissesStayUnknownButPlainHeartCanMatch() {
+        var mine = AO3Comment(id: 2, author: "Reader", isGuest: false)
+        mine.userPath = "/users/reader/pseuds/Reader"
+        mine.bodyText = "hello"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([mine]), username: "reader", submittedBody: "<em>hello</em>",
+            parentID: nil
+        ) == .unknown)
+
+        mine.bodyText = "Tom & Jerry"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([mine]), username: "reader", submittedBody: "Tom &amp; Jerry",
+            parentID: nil
+        ) == .unknown)
+
+        mine.bodyText = "Loved it <3"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([mine]), username: "reader", submittedBody: "Loved it <3",
+            parentID: nil
+        ) == .found)
+    }
+
+    @Test func moderatedTopLevelMissIsUnknownButAVisibleMatchStillWins() {
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([]), username: "reader", submittedBody: "Made it!",
+            parentID: nil, commentMayBeHidden: true
+        ) == .unknown)
+
+        var mine = AO3Comment(id: 2, author: "Reader", isGuest: false)
+        mine.userPath = "/users/reader/pseuds/Reader"
+        mine.bodyText = "Made it!"
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([mine]), username: "reader", submittedBody: "Made it!",
+            parentID: nil, commentMayBeHidden: true
+        ) == .found)
+    }
+
+    @Test func moderatedReplyMissIsUnknownButAVisibleMatchStillWins() {
+        var parent = AO3Comment(id: 5, author: "Other", isGuest: false)
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([parent]), username: "reader", submittedBody: "Made it!",
+            parentID: 5, commentMayBeHidden: true
+        ) == .unknown)
+
+        var mine = AO3Comment(id: 9, author: "Reader", isGuest: false)
+        mine.userPath = "/users/reader/pseuds/Reader"
+        mine.bodyText = "Made it!"
+        parent.replies = [mine]
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([parent]), username: "reader", submittedBody: "Made it!",
+            parentID: 5, commentMayBeHidden: true
+        ) == .found)
+    }
+
+    @Test func matchingReplyCannotVerifyAMissingTopLevelComment() {
+        var reply = AO3Comment(id: 9, author: "Reader", isGuest: false)
+        reply.userPath = "/users/reader/pseuds/Reader"
+        reply.bodyText = "Made it!"
+        var parent = AO3Comment(id: 5, author: "Other", isGuest: false)
+        parent.replies = [reply]
+
+        #expect(AO3AuthService.commentVerification(
+            in: pageWith([parent]), username: "reader", submittedBody: "Made it!",
+            parentID: nil
+        ) == .absent)
     }
 
     // MARK: T91-RF1 — exact reply verification endpoint
@@ -795,6 +968,7 @@ struct AO3CommentsParseTests {
     /// shape `AO3Client.commentThreadPage`/`parseStandaloneCommentThread` return.
     @Test func standaloneThreadContainingTheReplyIsFound() {
         var reply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        reply.userPath = "/users/reader/pseuds/Reader"
         reply.bodyText = "Made it!"
         var parent = AO3Comment(id: 555, author: "Other", isGuest: false)
         parent.replies = [reply]
@@ -809,6 +983,7 @@ struct AO3CommentsParseTests {
 
     @Test func timingToleranceAcceptsAGenuineMatchDespiteClockSkew() throws {
         var reply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        reply.userPath = "/users/reader/pseuds/Reader"
         reply.bodyText = "Made it!"
         reply.postedAt = try #require(
             AO3CommentTimestamp.parse("Mon 13 Jul 2026 12:00PM UTC")
@@ -826,8 +1001,9 @@ struct AO3CommentsParseTests {
         ))
     }
 
-    @Test func timingToleranceRejectsAPreExistingUnrelatedReply() throws {
+    @Test func timingDisagreementStaysUnknown() throws {
         var oldReply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        oldReply.userPath = "/users/reader/pseuds/Reader"
         oldReply.bodyText = "Made it!"
         oldReply.postedAt = try #require(
             AO3CommentTimestamp.parse("Mon 01 Jun 2026 12:00PM UTC")
@@ -839,14 +1015,15 @@ struct AO3CommentsParseTests {
         // This attempt started weeks after that old reply — an identical
         // author/parent/body match that old cannot be proof THIS one landed.
         let submittedAt = Date(timeIntervalSince1970: 1_784_000_000) // 2026-07-13ish
-        #expect(!AO3AuthService.containsComment(
-            in: page, author: "Reader", normalizedBody: "Made it!", parentID: 555,
+        #expect(AO3AuthService.commentVerification(
+            in: page, username: "Reader", submittedBody: "Made it!", parentID: 555,
             postedAfter: submittedAt
-        ))
+        ) == .unknown)
     }
 
     @Test func timingCheckIsSkippedWhenPostedAtDidNotParse() {
         var reply = AO3Comment(id: 1000, author: "Reader", isGuest: false)
+        reply.userPath = "/users/reader/pseuds/Reader"
         reply.bodyText = "Made it!"
         reply.postedAt = nil // unparseable timestamp on this comment
         var parent = AO3Comment(id: 555, author: "Other", isGuest: false)

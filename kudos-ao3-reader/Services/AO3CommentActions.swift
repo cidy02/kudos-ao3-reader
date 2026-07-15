@@ -14,7 +14,11 @@ extension AO3AuthService {
     /// renders `form#comment_for_<parent>` when `add_comment_reply_id` focuses
     /// that comment), so it has no pseud control to scrape (CAA-1). Still exactly
     /// one GET.
-    func postCommentReply(parentCommentID: Int, content: String) async throws -> String {
+    func postCommentReply(
+        parentCommentID: Int,
+        content: String,
+        onFormPrepared: (Bool) -> Void = { _ in }
+    ) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
@@ -27,6 +31,9 @@ extension AO3AuthService {
         }
 
         let pseud = try requiredCommentPseudID(from: html)
+        onFormPrepared(AO3Client.commentFormMayHidePostedComment(
+            html, commentableID: parentCommentID
+        ))
         let params: [(String, String)] = [
             ("authenticity_token", token),
             ("comment[comment_content]", text),
@@ -106,7 +113,7 @@ extension AO3AuthService {
 
     /// Outcome of a post-verification check. `unknown` (couldn't reach/parse AO3)
     /// must never be treated as "absent" — that's the double-post path.
-    enum CommentVerification {
+    enum CommentVerification: Equatable {
         case found
         case absent
         case unknown
@@ -150,10 +157,12 @@ extension AO3AuthService {
     /// coincidental older reply with the same author/text/parent cannot be
     /// mistaken for proof this attempt landed.
     func verifyCommentPosted(
-        context: AO3CommentContext, body: String, submittedAt: Date? = nil
+        context: AO3CommentContext,
+        body: String,
+        submittedAt: Date? = nil,
+        commentMayBeHidden: Bool = false
     ) async -> CommentVerification {
         guard let username else { return .unknown }
-        let normalized = CommentSubmissionKey.normalize(body)
         do {
             let page: AO3CommentsPage
             switch Self.verificationPlan(for: context) {
@@ -184,11 +193,14 @@ extension AO3AuthService {
                     )
                     : first
             }
-            let found = Self.containsComment(
-                in: page, author: username, normalizedBody: normalized,
-                parentID: context.parentCommentID, postedAfter: submittedAt
+            return Self.commentVerification(
+                in: page,
+                username: username,
+                submittedBody: body,
+                parentID: context.parentCommentID,
+                postedAfter: submittedAt,
+                commentMayBeHidden: commentMayBeHidden
             )
-            return found ? .found : .absent
         } catch {
             // Offline / rate-limited / parse failure: we genuinely don't know.
             return .unknown
@@ -202,26 +214,73 @@ extension AO3AuthService {
     /// unrelated comment left over from well before this attempt.
     private static let verificationTimingTolerance: TimeInterval = 600
 
-    /// Pure matcher (unit-tested): does the page contain a comment by `author`
-    /// whose normalized body equals `normalizedBody` — under the right parent
-    /// when the submission was a reply, and (when `postedAfter` is supplied)
-    /// posted no earlier than that attempt started, within tolerance?
+    /// Pure three-state matcher. Positive proof requires the canonical account
+    /// username from AO3's profile path, the exact target level, matching text,
+    /// and no parsed timing contradiction. Any evidence that AO3 may have hidden
+    /// or transformed the post stays `unknown`; only a clean miss is `absent`.
+    static func commentVerification(
+        in page: AO3CommentsPage,
+        username: String,
+        submittedBody: String,
+        parentID: Int?,
+        postedAfter: Date? = nil,
+        commentMayBeHidden: Bool = false
+    ) -> CommentVerification {
+        let normalizedBody = CommentSubmissionKey.normalize(submittedBody)
+        let candidates: [AO3Comment]
+        if let parentID {
+            candidates = page.comments
+                .flatMap(\.flattened)
+                .filter { $0.id == parentID }
+                .flatMap(\.replies)
+        } else {
+            // A reply with identical author/text is not proof that the attempted
+            // top-level comment landed (CAA-5).
+            candidates = page.comments
+        }
+
+        var uncertain = commentMayBeHidden || submittedBody.range(
+                of: #"<\s*/?\s*[A-Za-z][^>]*>|&(?:#\d+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);"#,
+                options: .regularExpression
+            ) != nil
+
+        for comment in candidates where
+            CommentSubmissionKey.normalize(comment.bodyText) == normalizedBody {
+            if comment.isAnonymousCreator {
+                uncertain = true
+                continue
+            }
+            guard !comment.isGuest else { continue }
+            guard let commenterUsername = comment.profileRoute?.username else {
+                uncertain = true
+                continue
+            }
+            guard commenterUsername.caseInsensitiveCompare(username) == .orderedSame else {
+                continue
+            }
+            if let postedAfter, let postedAt = comment.postedAt,
+               postedAt < postedAfter.addingTimeInterval(-verificationTimingTolerance) {
+                uncertain = true
+                continue
+            }
+            return .found
+        }
+        return uncertain ? .unknown : .absent
+    }
+
+    /// Positive-only compatibility helper used by the focused matcher tests.
+    /// `verifyCommentPosted` consumes the full three-state verdict above.
     static func containsComment(
         in page: AO3CommentsPage, author: String, normalizedBody: String, parentID: Int?,
         postedAfter: Date? = nil
     ) -> Bool {
-        func matches(_ comment: AO3Comment) -> Bool {
-            guard comment.author.caseInsensitiveCompare(author) == .orderedSame,
-                  CommentSubmissionKey.normalize(comment.bodyText) == normalizedBody
-            else { return false }
-            guard let postedAfter, let postedAt = comment.postedAt else { return true }
-            return postedAt >= postedAfter.addingTimeInterval(-verificationTimingTolerance)
-        }
-        if let parentID {
-            let parents = page.comments.flatMap(\.flattened).filter { $0.id == parentID }
-            return parents.contains { $0.replies.contains(where: matches) }
-        }
-        return page.comments.flatMap(\.flattened).contains(where: matches)
+        commentVerification(
+            in: page,
+            username: author,
+            submittedBody: normalizedBody,
+            parentID: parentID,
+            postedAfter: postedAfter
+        ) == .found
     }
 
     // MARK: Helpers
