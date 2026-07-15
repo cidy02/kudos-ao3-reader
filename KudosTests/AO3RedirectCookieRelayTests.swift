@@ -83,4 +83,77 @@ struct AO3RedirectCookieRelayTests {
         #expect(merged?.contains("_otwarchive_session=fresh-flash-bearing") == true)
         #expect(merged?.contains("stale") == false)
     }
+
+    // MARK: - redirectCookieAction (cross-host leak guard)
+
+    /// The live account session cookie must never follow a redirect off AO3 —
+    /// whether from an open-redirect parameter, a misconfigured route, or an
+    /// intermediary domain (a Cloudflare challenge subdomain, say) that happens
+    /// to echo a cookie of the same name. `.strip` must win regardless of
+    /// what the response otherwise set.
+    @Test func stripsTheCookieHeaderWhenTheRedirectLeavesAO3() {
+        let responseHeaders = setCookieHeaders(["_otwarchive_session=fresh-with-flash; path=/"])
+        let action = AO3RedirectCookieRelay.redirectCookieAction(
+            currentHeader: "_otwarchive_session=live-session-value",
+            responseHeaderFields: responseHeaders,
+            responseURL: url,
+            newRequestURL: URL(string: "https://attacker.example.com/")!
+        )
+        #expect(action == .strip)
+    }
+
+    @Test func stripsWhenTheRedirectTargetIsNotHTTPS() {
+        let action = AO3RedirectCookieRelay.redirectCookieAction(
+            currentHeader: "_otwarchive_session=live-session-value",
+            responseHeaderFields: [:],
+            responseURL: url,
+            newRequestURL: URL(string: "http://archiveofourown.org/")!
+        )
+        #expect(action == .strip)
+    }
+
+    @Test func stripsWhenThereIsNoRedirectTargetURLAtAll() {
+        let action = AO3RedirectCookieRelay.redirectCookieAction(
+            currentHeader: "_otwarchive_session=live-session-value",
+            responseHeaderFields: [:],
+            responseURL: url,
+            newRequestURL: nil
+        )
+        #expect(action == .strip)
+    }
+
+    @Test func setsTheRefreshedCookieWhenTheRedirectStaysOnAO3() {
+        let responseHeaders = setCookieHeaders(["_otwarchive_session=fresh-with-flash; path=/"])
+        let action = AO3RedirectCookieRelay.redirectCookieAction(
+            currentHeader: "_otwarchive_session=stale; other_cookie=unchanged",
+            responseHeaderFields: responseHeaders,
+            responseURL: url,
+            newRequestURL: URL(string: "https://archiveofourown.org/works/1")!
+        )
+        #expect(action == .set("_otwarchive_session=fresh-with-flash; other_cookie=unchanged"))
+    }
+
+    @Test func setsTheRefreshedCookieWhenTheRedirectStaysOnAnAO3Subdomain() {
+        let responseHeaders = setCookieHeaders(["_otwarchive_session=fresh; path=/"])
+        let action = AO3RedirectCookieRelay.redirectCookieAction(
+            currentHeader: "_otwarchive_session=stale",
+            responseHeaderFields: responseHeaders,
+            responseURL: url,
+            newRequestURL: URL(string: "https://download.archiveofourown.org/works/1")!
+        )
+        #expect(action == .set("_otwarchive_session=fresh"))
+    }
+
+    @Test func leavesTheHeaderUnchangedWhenAO3RedirectSetsNoSessionCookie() {
+        // A same-host redirect that just isn't a write's flash-bearing kind
+        // (e.g. a plain page move) must not be touched at all — not stripped,
+        // not rewritten.
+        let action = AO3RedirectCookieRelay.redirectCookieAction(
+            currentHeader: "_otwarchive_session=stale; other_cookie=unchanged",
+            responseHeaderFields: [:],
+            responseURL: url,
+            newRequestURL: URL(string: "https://archiveofourown.org/works/1")!
+        )
+        #expect(action == .leaveUnchanged)
+    }
 }
