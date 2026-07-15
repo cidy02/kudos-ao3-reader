@@ -108,6 +108,10 @@ struct CommentsView: View {
                     reportResolvedWorkContext()
                 }
             }
+            .onChange(of: auth.sessionGeneration) { _, _ in
+                contextLoadTask?.cancel()
+                model.syncAuthenticationContext(auth: auth)
+            }
             .onChange(of: model.scope) { _, scope in
                 // loadInitial sets scope/chapter itself and does the one load; skip
                 // the redundant reload its programmatic changes would otherwise trigger.

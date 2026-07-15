@@ -10,6 +10,15 @@ import SwiftUI
 @MainActor
 @Observable
 final class CommentsModel {
+    private struct AuthContext: Equatable {
+        let scope: String
+        let generation: Int
+
+        static func current(_ auth: AO3AuthService) -> AuthContext {
+            let scope = auth.isLoggedIn ? "signed-in:" + (auth.username ?? "") : "anonymous"
+            return AuthContext(scope: scope, generation: auth.sessionGeneration)
+        }
+    }
     enum Phase: Equatable {
         case idle
         case loading
@@ -88,6 +97,7 @@ final class CommentsModel {
 
     /// Session-wide page cache; 5-minute TTL.
     private static let cache = CommentsPageCache()
+    private var authContext = AuthContext(scope: "", generation: -1)
 
     init(
         workID: Int,
@@ -109,6 +119,35 @@ final class CommentsModel {
         scope == .byChapter ? selectedChapter?.id : nil
     }
 
+    func syncAuthenticationContext(auth: AO3AuthService) {
+        let current = AuthContext.current(auth)
+        guard current != authContext else { return }
+        authContext = current
+        page = nil
+        displayThreads = []
+        chapters = []
+        chaptersFailed = false
+        composerContext = nil
+        composerParent = nil
+        composerEditTarget = nil
+        composerText = ""
+        submissionGuard.reset()
+        phase = .idle
+    }
+
+    private func isCurrent(_ expected: AuthContext, _ auth: AO3AuthService) -> Bool {
+        expected == authContext && expected == AuthContext.current(auth)
+    }
+
+    private func authenticatedRequest(for url: URL, auth: AO3AuthService) throws -> URLRequest? {
+        guard auth.isLoggedIn else { return nil }
+        do {
+            return try auth.authenticatedRequest(for: url)
+        } catch {
+            throw AO3Error.authenticationRequired
+        }
+    }
+
     // MARK: Loading
 
     /// Clears the shown page when the scope/chapter changes, so the list shows
@@ -127,6 +166,7 @@ final class CommentsModel {
     /// (plus the small chapter index) — the `isApplyingInitialContext` flag keeps the
     /// view's onChange handlers from firing extra loads while scope/chapter are set.
     func loadInitial(auth: AO3AuthService) async {
+        syncAuthenticationContext(auth: auth)
         if let commentID = pendingInitialCommentID {
             await loadFocusedThread(commentID: commentID, auth: auth)
             if phase == .loaded { pendingInitialCommentID = nil }
@@ -157,6 +197,8 @@ final class CommentsModel {
     /// reply then costs one additional explicit GET for that root. This remains
     /// bounded at two comment requests and never crawls work/chapter pages.
     private func loadFocusedThread(commentID: Int, auth: AO3AuthService) async {
+        let expected = AuthContext.current(auth)
+        guard isCurrent(expected, auth) else { return }
         let requestedChapterPosition = pendingInitialChapterPosition
         pendingInitialChapterPosition = nil
         isApplyingInitialContext = true
@@ -165,6 +207,7 @@ final class CommentsModel {
         phase = .loading
         do {
             let targetPage = try await fetchStandaloneThread(commentID: commentID, auth: auth)
+            guard isCurrent(expected, auth) else { return }
             guard let rootID = Self.focusedRootID(
                 notificationCommentID: commentID, in: targetPage
             ) else { throw AO3Error.parse }
@@ -173,6 +216,7 @@ final class CommentsModel {
                 focusedPage = targetPage
             } else {
                 focusedPage = try await fetchStandaloneThread(commentID: rootID, auth: auth)
+                guard isCurrent(expected, auth) else { return }
             }
             guard focusedPage.comments.contains(where: { $0.contains(commentID: rootID) }) else {
                 throw AO3Error.parse
@@ -183,6 +227,7 @@ final class CommentsModel {
                 var chapter = Self.chapterRef(in: focusedPage)
                 if chapter == nil, let requestedChapterPosition {
                     await loadChaptersIfNeeded(auth: auth)
+                    guard isCurrent(expected, auth) else { return }
                     chapter = chapterRef(forStoryPosition: requestedChapterPosition)
                 }
                 guard let chapter else { throw AO3Error.parse }
@@ -196,6 +241,7 @@ final class CommentsModel {
                 guard let chapterPage = await fetchPage(
                     1, auth: auth, forceRefresh: false
                 ) else { return }
+                guard isCurrent(expected, auth) else { return }
                 presentedPage = Self.chapterPage(
                     chapterPage,
                     including: focusedPage,
@@ -209,6 +255,7 @@ final class CommentsModel {
             // resolves any missing summary fields with at most one work request.
             if workContext.needsSummaryEnrichment {
                 await enrichWorkContextIfNeeded(auth: auth)
+                guard isCurrent(expected, auth) else { return }
             }
             if let replyID = pendingInitialReplyCommentID,
                !presentedPage.comments.contains(where: { $0.contains(commentID: replyID) }) {
@@ -234,6 +281,7 @@ final class CommentsModel {
         } catch let error as URLError where error.code == .cancelled {
             return
         } catch {
+            guard isCurrent(expected, auth) else { return }
             isOffline = Self.isOfflineError(error)
             phase = .failed(Self.message(for: error))
         }
@@ -253,7 +301,7 @@ final class CommentsModel {
         commentID: Int, auth: AO3AuthService
     ) async throws -> AO3CommentsPage {
         let url = AO3Client.commentThreadURL(commentID: commentID)
-        let request = try? auth.authenticatedRequest(for: url)
+        let request = try authenticatedRequest(for: url, auth: auth)
         return try await AO3Client.shared.commentThreadPage(
             commentID: commentID, request: request
         )
@@ -264,7 +312,7 @@ final class CommentsModel {
               let url = URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")
         else { return }
         do {
-            let request = try? auth.authenticatedRequest(for: url)
+            let request = try authenticatedRequest(for: url, auth: auth)
             let metadata = try await AO3Client.shared.workMetadata(
                 workID: workID, request: request
             )
@@ -356,6 +404,7 @@ final class CommentsModel {
     /// Initial load (or scope/chapter/order change). Serves fresh cache instantly;
     /// otherwise fetches exactly one page.
     func load(auth: AO3AuthService, forceRefresh: Bool = false) async {
+        syncAuthenticationContext(auth: auth)
         // Newest-first starts at the last page; we may need one fetch of page 1
         // first to learn the page count (cached afterwards).
         var target = 1
@@ -372,6 +421,7 @@ final class CommentsModel {
     }
 
     func loadPage(_ number: Int, auth: AO3AuthService, forceRefresh: Bool = false) async {
+        syncAuthenticationContext(auth: auth)
         guard let fetched = await fetchPage(number, auth: auth, forceRefresh: forceRefresh) else {
             return
         }
@@ -418,6 +468,7 @@ final class CommentsModel {
     private func fetchPage(
         _ number: Int, auth: AO3AuthService, forceRefresh: Bool
     ) async -> AO3CommentsPage? {
+        let expected = AuthContext.current(auth)
         // Key includes session identity so a signed-out fetch (no Reply/Edit
         // actions) is never reused after login — that was hiding Reply in All
         // when By Chapter was loaded fresh under the same work id.
@@ -425,7 +476,8 @@ final class CommentsModel {
             workID: workID,
             chapterID: chapterForRequests,
             page: number,
-            sessionIdentity: Self.sessionIdentity(for: auth)
+            authenticationScope: AuthContext.current(auth).scope,
+            sessionGeneration: auth.sessionGeneration
         )
         if !forceRefresh, let cached = Self.cache.page(for: key) {
             isFromCache = true
@@ -435,12 +487,13 @@ final class CommentsModel {
 
         phase = page == nil ? .loading : phase
         do {
-            let request = try? auth.authenticatedRequest(
-                for: AO3Client.commentsPageURL(workID: workID, chapterID: chapterForRequests, page: number)
+            let request = try authenticatedRequest(
+                for: AO3Client.commentsPageURL(workID: workID, chapterID: chapterForRequests, page: number), auth: auth
             )
             let fetched = try await AO3Client.shared.commentsPage(
                 workID: workID, chapterID: chapterForRequests, page: number, request: request
             )
+            guard isCurrent(expected, auth) else { return nil }
             Self.cache.store(fetched, for: key)
             isOffline = false
             isFromCache = false
@@ -450,6 +503,7 @@ final class CommentsModel {
         } catch let error as URLError where error.code == .cancelled {
             return nil
         } catch {
+            guard isCurrent(expected, auth) else { return nil }
             isOffline = Self.isOfflineError(error)
             // Keep showing a cached page if one exists (marked stale) — only a
             // cold miss surfaces the full-screen failure state.
@@ -463,26 +517,28 @@ final class CommentsModel {
         }
     }
 
-    /// Cache identity for a session. Distinguishes a signed-in session — even one
-    /// whose username hasn't resolved yet (a reachable WebKit-restore edge case
-    /// where `AO3AuthService.username` is `""` while `isLoggedIn` is true) — from
-    /// signed-out, so a signed-out page (no Reply/Edit/Delete) and a signed-in page
-    /// never collide on one cache key. `username ?? ""` alone collapses both to `""`.
-    private static func sessionIdentity(for auth: AO3AuthService) -> String {
-        auth.isLoggedIn ? "in:\(auth.username ?? "")" : ""
-    }
-
     /// The chapter index, fetched once per work per session (small /navigate page).
     func loadChaptersIfNeeded(auth: AO3AuthService) async {
+        syncAuthenticationContext(auth: auth)
+        let expected = AuthContext.current(auth)
         guard chapters.isEmpty else { return }
-        if let cached = Self.cache.chapters(forWork: workID) {
+        let context = AuthContext.current(auth)
+        if let cached = Self.cache.chapters(
+            forWork: workID, authenticationScope: context.scope, sessionGeneration: context.generation
+        ) {
             chapters = cached
             return
         }
         do {
-            let request = try? auth.authenticatedRequest(for: AO3Client.chapterIndexURL(workID: workID))
+            let request = try authenticatedRequest(
+                for: AO3Client.chapterIndexURL(workID: workID), auth: auth
+            )
             let fetched = try await AO3Client.shared.chapterIndex(workID: workID, request: request)
-            Self.cache.storeChapters(fetched, forWork: workID)
+            guard isCurrent(expected, auth) else { return }
+            Self.cache.storeChapters(
+                fetched, forWork: workID,
+                authenticationScope: context.scope, sessionGeneration: context.generation
+            )
             chapters = fetched
             chaptersFailed = false
         } catch is CancellationError {
@@ -490,6 +546,7 @@ final class CommentsModel {
         } catch let error as URLError where error.code == .cancelled {
             return
         } catch {
+            guard isCurrent(expected, auth) else { return }
             chaptersFailed = true
         }
     }
@@ -501,7 +558,8 @@ final class CommentsModel {
         // page-1 fetch `load` already falls back to.
         let key = CommentsPageCache.Key(
             workID: workID, chapterID: chapterForRequests, page: 1,
-            sessionIdentity: Self.sessionIdentity(for: auth)
+            authenticationScope: AuthContext.current(auth).scope,
+            sessionGeneration: auth.sessionGeneration
         )
         return Self.cache.page(for: key, ignoringTTL: true)?.totalPages
     }
@@ -509,6 +567,7 @@ final class CommentsModel {
     // MARK: Composer
 
     func startComposer(replyingTo parent: AO3Comment? = nil, auth: AO3AuthService) {
+        syncAuthenticationContext(auth: auth)
         let context = AO3CommentContext(
             workID: workID,
             chapterID: chapterForRequests,
@@ -517,7 +576,7 @@ final class CommentsModel {
         composerParent = parent
         composerEditTarget = nil
         composerContext = context
-        composerText = drafts.draft(for: context)
+        composerText = drafts.draft(for: context, identity: authContext.scope)
         // Unconditional: rehydrates an unresolved earlier attempt for this
         // exact draft (context + text + identity) as blocked again — even
         // from a brand-new guard — instead of resetting to idle.
@@ -569,23 +628,27 @@ final class CommentsModel {
         // Edits don't use the draft store — a stale edit draft could silently
         // overwrite a newer comment revision.
         guard let composerContext, composerEditTarget == nil else { return }
-        drafts.save(composerText, for: composerContext)
+        // A's draft must never appear when B opens the same work/comment target.
+        drafts.save(composerText, for: composerContext, identity: authContext.scope)
     }
 
     /// The full defensive submit flow (see COMMENTS_HANDOFF.md):
     /// one POST at most per attempt; ambiguous outcomes verify before any retry
     /// becomes possible; the draft survives until verified success.
     func submit(auth: AO3AuthService) async {
+        syncAuthenticationContext(auth: auth)
+        let expected = authContext
         guard let context = composerContext else { return }
         let body = composerText
         let key = CommentSubmissionKey(
             context: context, body: body,
-            identity: Self.identity(auth: auth, editTarget: composerEditTarget)
+            identity: composerEditTarget.map { "\(authContext.scope)#edit\($0.id)" } ?? authContext.scope
         )
         guard submissionGuard.begin(key) else { return }
         var commentMayBeHidden = false
 
         do {
+            guard isCurrent(expected, auth) else { return }
             if let editTarget = composerEditTarget {
                 _ = try await auth.editComment(commentID: editTarget.id, content: body)
                 submissionGuard.succeed()
@@ -596,7 +659,7 @@ final class CommentsModel {
                     onFormPrepared: { commentMayBeHidden = $0 }
                 )
                 submissionGuard.succeed()
-                drafts.clear(for: context)
+                drafts.clear(for: context, identity: authContext.scope)
             } else {
                 _ = try await auth.postComment(
                     workID: context.workID,
@@ -604,9 +667,10 @@ final class CommentsModel {
                     onFormPrepared: { commentMayBeHidden = $0 }
                 )
                 submissionGuard.succeed()
-                drafts.clear(for: context)
+                drafts.clear(for: context, identity: authContext.scope)
             }
         } catch {
+            guard isCurrent(expected, auth) else { return }
             if composerEditTarget == nil, Self.isAmbiguousSubmitError(error) {
                 submissionGuard.markAmbiguous(
                     Self.ambiguousSubmitMessage(for: error),
@@ -624,13 +688,17 @@ final class CommentsModel {
             }
         }
 
+        guard isCurrent(expected, auth) else { return }
         await finishIfSucceeded(auth: auth)
     }
 
     /// Re-runs verification for an ambiguous submission ("Check Again").
     func reverify(auth: AO3AuthService) async {
+        syncAuthenticationContext(auth: auth)
+        let expected = authContext
         guard let context = composerContext, case .ambiguous = submissionGuard.phase else { return }
         await runVerification(auth: auth, context: context)
+        guard isCurrent(expected, auth) else { return }
         await finishIfSucceeded(auth: auth)
     }
 
@@ -668,7 +736,9 @@ final class CommentsModel {
             commentMayBeHidden: submissionGuard.pendingCommentMayBeHidden
         )
         submissionGuard.resolveAmbiguity(verification)
-        if case .found = verification { drafts.clear(for: target.context) }
+        if case .found = verification {
+            drafts.clearVariants(for: target.context, identity: submissionGuard.pendingKey?.identity ?? "")
+        }
     }
 
     private func finishIfSucceeded(auth: AO3AuthService) async {
@@ -750,14 +820,12 @@ final class CommentsPageCache {
         let workID: Int
         let chapterID: Int?
         let page: Int
-        /// Signed-in AO3 username, or `""` when signed out. Session-scoped
-        /// actions (Reply/Edit/Delete) differ by auth, so the cache must not
-        /// mix signed-in and signed-out HTML for the same work page.
-        let sessionIdentity: String
+        let authenticationScope: String
+        let sessionGeneration: Int
     }
 
     private var pages: [Key: AO3CommentsPage] = [:]
-    private var chapterIndexes: [Int: (refs: [AO3ChapterRef], fetchedAt: Date)] = [:]
+    private var chapterIndexes: [ChapterKey: (refs: [AO3ChapterRef], fetchedAt: Date)] = [:]
     private let ttl: TimeInterval
 
     init(ttl: TimeInterval = 300) {
@@ -774,12 +842,26 @@ final class CommentsPageCache {
         pages[key] = page
     }
 
-    /// Chapter lists barely change; keep them for the session.
-    func chapters(forWork workID: Int) -> [AO3ChapterRef]? {
-        chapterIndexes[workID]?.refs
+    private struct ChapterKey: Hashable {
+        let workID: Int
+        let authenticationScope: String
+        let sessionGeneration: Int
     }
 
-    func storeChapters(_ refs: [AO3ChapterRef], forWork workID: Int) {
-        chapterIndexes[workID] = (refs, Date())
+    /// Chapter titles can include owner-only drafts, so they are scoped exactly
+    /// like comment pages (including same-account re-login generations).
+    func chapters(forWork workID: Int, authenticationScope: String, sessionGeneration: Int) -> [AO3ChapterRef]? {
+        chapterIndexes[ChapterKey(
+            workID: workID, authenticationScope: authenticationScope, sessionGeneration: sessionGeneration
+        )]?.refs
+    }
+
+    func storeChapters(
+        _ refs: [AO3ChapterRef], forWork workID: Int,
+        authenticationScope: String, sessionGeneration: Int
+    ) {
+        chapterIndexes[ChapterKey(
+            workID: workID, authenticationScope: authenticationScope, sessionGeneration: sessionGeneration
+        )] = (refs, Date())
     }
 }
