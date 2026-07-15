@@ -178,8 +178,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return try await withRetry {
             try await pace()
             let (data, response) = try await session.data(from: url)
+            // `defer`, not after `check`: a non-2xx response still completed a
+            // round-trip and may have set a cookie, so the purge must run
+            // regardless of whether the status throws.
+            defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
             try Self.check(response)
-            Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url)
             return data
         }
     }
@@ -661,6 +664,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let tempURL = try await withRetry { () -> URL in
             try await pace()
             let (tempURL, response) = try await session.download(from: url)
+            defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
             try Self.check(response)
             return tempURL
         }
