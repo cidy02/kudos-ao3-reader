@@ -41,6 +41,100 @@ struct AO3WriteActionsTests {
         #expect(AO3Client.parseDefaultPseudID(from: html) == "7")
     }
 
+    // Single-pseud accounts get a hidden input, not a select (otwarchive
+    // `_comment_form.html.erb`: `f.hidden_field :pseud_id` unless the user has
+    // multiple pseuds) — its value must be parsed and POSTed (CAA-1).
+    @Test func parsesHiddenSinglePseudInput() {
+        let html = """
+        <form action="/works/1/comments" method="post" id="comment_for_1">
+          <h4 class="heading">Comment as <span class="byline">solowriter</span>
+            <input type="hidden" name="comment[pseud_id]" value="123456"
+                   id="comment_pseud_id_for_1">
+          </h4>
+          <textarea name="comment[comment_content]"></textarea>
+        </form>
+        """
+        #expect(AO3Client.parseDefaultPseudID(from: html) == "123456")
+    }
+
+    // Mirrors `ao3_api`'s `get_pseud_id` precedence: the hidden input is
+    // checked before any select. (otwarchive never renders both in one form;
+    // this pins the tiebreak all the same.)
+    @Test func hiddenPseudInputWinsOverSelect() {
+        let html = """
+        <input type="hidden" name="comment[pseud_id]" value="11">
+        <select name="comment[pseud_id]">
+          <option value="99" selected="selected">other</option>
+        </select>
+        """
+        #expect(AO3Client.parseDefaultPseudID(from: html) == "11")
+    }
+
+    /// The no-JS focused reply page (`/comments/<parent>?add_comment_reply_id=
+    /// <parent>`): otwarchive's `_comment_actions.html.erb` renders the full
+    /// comment form inside `add_comment_reply_placeholder_<parent>` with id
+    /// `comment_for_<parent>`. Synthesized from those templates; sanitized ids.
+    private let focusedReplyFormHTML = """
+    <html><head>
+    <meta name="csrf-param" content="authenticity_token">
+    <meta name="csrf-token" content="replyTok3n==">
+    </head><body>
+    <div id="comments_placeholder">
+      <ol class="thread">
+        <li id="comment_777" class="comment group even">
+          <blockquote class="userstuff"><p>Parent comment text</p></blockquote>
+          <ul class="actions" id="navigation_for_comment_777" style="display:none;"></ul>
+          <div id="add_comment_reply_placeholder_777" title="Reply to this">
+            <div class="post comment" id="comment_form_for_777">
+              <form action="/comments/777/comments" method="post" id="comment_for_777">
+                <h4 class="heading">Comment as <span class="byline">solowriter</span>
+                  <input type="hidden" name="comment[pseud_id]" value="654321"
+                         id="comment_pseud_id_for_777">
+                </h4>
+                <textarea name="comment[comment_content]" id="comment_content_for_777"></textarea>
+                <input type="submit" value="Comment" id="comment_submit_for_777">
+              </form>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </div>
+    </body></html>
+    """
+
+    @Test func parsesFocusedReplyFormCSRFAndPseud() {
+        #expect(AO3Client.parseCSRFToken(from: focusedReplyFormHTML) == "replyTok3n==")
+        #expect(AO3Client.parseDefaultPseudID(from: focusedReplyFormHTML) == "654321")
+    }
+
+    /// A page with a CSRF meta but no pseud control (adult interstitial, plain
+    /// unfocused thread page, login bounce) must refuse before any POST — a
+    /// pseud-less signed-in comment is guaranteed-rejected server-side, and ids
+    /// are never synthesized (CAA-1).
+    @Test func formLessPageRefusesToPostWithTypedError() {
+        let interstitial = """
+        <html><head><meta name="csrf-token" content="stillHasToken=="></head>
+        <body><div class="works-show region">
+        <p class="caution notice">This work could have adult content.</p>
+        <a href="/works/1?view_adult=true">Proceed</a>
+        </div></body></html>
+        """
+        #expect(AO3Client.parseCSRFToken(from: interstitial) != nil)
+        #expect(throws: AO3WriteError.noPseudControl) {
+            try AO3AuthService.requiredCommentPseudID(in: interstitial, preferredName: nil)
+        }
+        #expect(throws: AO3WriteError.noPseudControl) {
+            try AO3AuthService.requiredCommentPseudID(in: interstitial, preferredName: "AnyPseud")
+        }
+    }
+
+    @Test func requiredPseudReturnsTheResolvedID() throws {
+        let id = try AO3AuthService.requiredCommentPseudID(
+            in: focusedReplyFormHTML, preferredName: nil
+        )
+        #expect(id == "654321")
+    }
+
     @Test func readsRenderedErrorList() {
         let html = """
         <html><body>
@@ -49,6 +143,128 @@ struct AO3WriteActionsTests {
         """
         #expect(AO3Client.writeErrorMessage(in: html) == "Comment content can't be blank")
         #expect(AO3Client.writeErrorMessage(in: "<html><body>fine</body></html>") == nil)
+    }
+
+    // otwarchive reports blocked comments and failed deletes as
+    // `flash[:comment_error]` → `div.flash.comment_error` — a class the old
+    // `.flash.error` selector never matched (CAA-2).
+    @Test func recognizesCommentErrorFlash() {
+        let html = """
+        <html><body><div class="flash comment_error">
+        Sorry, you have been blocked by one or more of this work's creators.
+        </div></body></html>
+        """
+        #expect(AO3Client.writeErrorMessage(in: html)
+            == "Sorry, you have been blocked by one or more of this work's creators.")
+    }
+
+    // The Inbox mass-edit failure branch sets `flash[:caution]` (T91-RF9).
+    @Test func recognizesCautionFlash() {
+        let html = """
+        <html><body><div class="flash caution">Please select something first.</div></body></html>
+        """
+        #expect(AO3Client.writeErrorMessage(in: html) == "Please select something first.")
+    }
+
+    // otwarchive's static warning boxes (block/mute confirm pages, change-email)
+    // are `div.caution.notice` — no `flash` class. `.flash.caution` must not
+    // match them: `parseAuthorModerationForm` runs this scan over the confirm
+    // page itself, and a false match would break block/mute entirely.
+    @Test func staticCautionNoticeBoxIsNotAWriteError() {
+        let confirmPage = """
+        <html><body>
+        <h2 class="heading">Block SomeUser</h2>
+        <div class="caution notice"><p>Are you sure you want to block SomeUser?</p></div>
+        </body></html>
+        """
+        #expect(AO3Client.writeErrorMessage(in: confirmPage) == nil)
+    }
+
+    // MARK: Write-response verdicts (CAA-2)
+
+    @Test func commentNoticeIsPositiveSuccessEvidence() {
+        let html = """
+        <html><body><div class="flash comment_notice">Comment created!</div>
+        <div id="comments_placeholder"><ol class="thread"></ol></div></body></html>
+        """
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: html) == .success)
+    }
+
+    @Test func plainNoticeFlashIsAlsoSuccessEvidence() {
+        // The unreviewed-delete branch and Inbox mass-edits confirm via
+        // `flash[:notice]`, rendered by the application layout.
+        let html = """
+        <html><body><div class="flash notice">Comment deleted.</div></body></html>
+        """
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: html) == .success)
+    }
+
+    @Test func bareOK200IsUnconfirmedNotSuccess() {
+        // Maintenance pages, blank bodies, and interstitials return 200 with
+        // neither flash — the write may or may not have landed.
+        let maintenance = """
+        <html><body><h1>Archive Down for Maintenance</h1>
+        <p>The Archive of Our Own is briefly unavailable.</p></body></html>
+        """
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: maintenance) == .unconfirmed)
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: "") == .unconfirmed)
+    }
+
+    @Test func moderationNoteIsNotSuccessEvidence() {
+        // The moderated-work note inside the comment form is a bare `p.notice`;
+        // only `div.flash.notice` (both classes) may confirm success.
+        let html = """
+        <html><body><p class="notice">
+        This work's creator has chosen to moderate comments.
+        </p></body></html>
+        """
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: html) == .unconfirmed)
+    }
+
+    @Test func deleteFailureBodyIsRejectedDespite200() {
+        // otwarchive redirects a failed delete WITH a 200 final page carrying
+        // `flash[:comment_error]` — the status alone proves nothing.
+        let html = """
+        <html><body><div class="flash comment_error">We couldn't delete that comment.</div>
+        </body></html>
+        """
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: html)
+            == .rejected("We couldn't delete that comment."))
+    }
+
+    @Test func errorFlashOutranksSuccessFlash() {
+        let html = """
+        <html><body>
+        <div class="flash comment_error">Couldn't save comment!</div>
+        <div class="flash notice">Unrelated notice.</div>
+        </body></html>
+        """
+        #expect(AO3Client.commentWriteVerdict(status: 200, body: html)
+            == .rejected("Couldn't save comment!"))
+    }
+
+    @Test func non2xxWithoutParsedMessageIsRejectedWithNilReason() {
+        #expect(AO3Client.commentWriteVerdict(status: 500, body: "<html></html>")
+            == .rejected(nil))
+        #expect(AO3Client.commentWriteVerdict(status: 422, body: "")
+            == .rejected(nil))
+    }
+
+    // MARK: Comment-form URL shapes (CAA-1)
+
+    @MainActor
+    @Test func commentFormURLsRenderTheActualForms() {
+        // Top-level: the interstitial hides the form without `view_adult=true`.
+        #expect(AO3AuthService.commentFormURL(workID: 42).absoluteString
+            == "https://archiveofourown.org/works/42?view_adult=true")
+        // Reply: only the focused thread page renders `form#comment_for_<parent>`.
+        #expect(AO3AuthService.commentReplyFormURL(parentCommentID: 777).absoluteString
+            == "https://archiveofourown.org/comments/777?add_comment_reply_id=777")
+        // The POST endpoints themselves are unchanged.
+        #expect(AO3AuthService.commentReplyEndpoint(parentCommentID: 777).absoluteString
+            == "https://archiveofourown.org/comments/777/comments")
+        #expect(AO3AuthService.commentsEndpoint(workID: 42).absoluteString
+            == "https://archiveofourown.org/works/42/comments")
     }
 
     @Test func detectsSubscribedStateAndUnsubscribePath() {

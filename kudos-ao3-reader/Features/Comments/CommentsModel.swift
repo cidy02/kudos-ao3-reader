@@ -599,13 +599,15 @@ final class CommentsModel {
             }
         } catch {
             if composerEditTarget == nil, Self.isAmbiguousSubmitError(error) {
-                submissionGuard.markAmbiguous(
-                    "The connection dropped while posting. Checking whether the comment went through…"
-                )
+                submissionGuard.markAmbiguous(Self.ambiguousSubmitMessage(for: error))
                 await runVerification(auth: auth, context: context)
             } else {
-                // Edits are safe to retry explicitly (re-PUTting the same text is
-                // idempotent), so an ambiguous edit surfaces as a plain failure.
+                // An ambiguous edit surfaces as an explicit couldn't-confirm
+                // failure (`AO3WriteError.unconfirmed` message) rather than
+                // entering the ambiguous store — re-PUTs are NOT idempotent
+                // upstream (every update re-stamps `edited_at`, re-notifies, and
+                // consumes rate limit), so the message tells the user to check
+                // AO3 first; an unresolved-edit state is CAA-13 (Part E).
                 submissionGuard.fail(Self.message(for: error))
             }
         }
@@ -672,10 +674,14 @@ final class CommentsModel {
 
     // MARK: Error classification
 
-    /// True when the POST may have reached AO3 even though the response never
-    /// arrived — the only situations where a duplicate is possible and
-    /// verification (not retry) must decide.
+    /// True when the POST may have reached AO3 even though no confirmation came
+    /// back — the only situations where a duplicate is possible and verification
+    /// (not retry) must decide. Two shapes: the response never arrived (timeout /
+    /// dropped connection), or a final-200 page arrived carrying neither a
+    /// recognized error flash nor a recognized success flash
+    /// (`AO3WriteError.unconfirmed` — maintenance page, interstitial; CAA-2).
     static func isAmbiguousSubmitError(_ error: Error) -> Bool {
+        if case AO3WriteError.unconfirmed = error { return true }
         guard let urlError = error as? URLError else { return false }
         switch urlError.code {
         case .timedOut, .networkConnectionLost:
@@ -683,6 +689,16 @@ final class CommentsModel {
         default:
             return false
         }
+    }
+
+    /// The banner text for an ambiguous submit, honest about which of the two
+    /// ambiguity shapes happened.
+    static func ambiguousSubmitMessage(for error: Error) -> String {
+        if case AO3WriteError.unconfirmed = error {
+            return "AO3 answered but didn't confirm the comment posted. "
+                + "Checking whether it went through…"
+        }
+        return "The connection dropped while posting. Checking whether the comment went through…"
     }
 
     private static func isOfflineError(_ error: Error) -> Bool {

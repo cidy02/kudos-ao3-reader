@@ -32,12 +32,17 @@ extension AO3AuthService {
             ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+        // otwarchive's inbox update redirects with `flash[:notice]` on success and
+        // sets `flash[:caution]` on its failure branch (`inbox_controller.rb`), so
+        // the shared verdict reads both honestly; a page with neither is
+        // `unconfirmed`, not success (CAA-2).
+        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
+        case .success:
             return action.successMessage
+        case .unconfirmed:
+            throw AO3WriteError.unconfirmed
+        case let .rejected(reason):
+            throw AO3WriteError.rejected(reason ?? "AO3 couldn't update your Inbox.")
         }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody)
-                ?? "AO3 couldn't update your Inbox."
-        )
     }
 }

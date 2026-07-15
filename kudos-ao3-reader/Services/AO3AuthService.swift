@@ -322,9 +322,12 @@ final class AO3AuthService {
     }
 
     /// The pseud id a comment form should submit, resolved from that exact form's
-    /// pseud `<select>`: the stored preference when one of the form's own options
-    /// matches it by name, else the form's pre-selected default. The id is always
-    /// scraped from the fetched form, never synthesized, so AO3 authorizes it.
+    /// pseud control: the stored "Posting As" preference when the form renders a
+    /// `<select>` and one of its own options matches by name, else the form's own
+    /// default — the multi-pseud select's pre-selected option, or the single-pseud
+    /// hidden input's value (the preference can't apply there; a hidden input
+    /// means AO3 offered exactly one pseud). The id is always scraped from the
+    /// fetched form, never synthesized, so AO3 authorizes it.
     func resolvedPostingPseudID(
         from html: String,
         field: String = "comment[pseud_id]"
@@ -336,8 +339,9 @@ final class AO3AuthService {
         )
     }
 
-    /// Pure resolution (unit-tested): preferred-name match wins, else the form's
-    /// own pre-selected/first default.
+    /// Pure resolution (unit-tested): preferred-name match against the select's
+    /// options wins, else the form's own default (`parseDefaultPseudID`: hidden
+    /// input first, then the select).
     static func resolvePostingPseudID(
         in html: String,
         preferredName: String?,
@@ -352,6 +356,25 @@ final class AO3AuthService {
             }
         }
         return AO3Client.parseDefaultPseudID(from: html, field: field)
+    }
+
+    /// The pseud id a signed-in comment POST **must** carry, or the typed
+    /// pre-POST error when the fetched page renders no pseud control at all
+    /// (CAA-1): otwarchive applies guest validations to a pseud-less comment and
+    /// rejects it, so POSTing without one is guaranteed-doomed — and guessing an
+    /// id would post as a pseud AO3 never authorized on this form. Instance
+    /// wrapper of the pure `requiredCommentPseudID(in:preferredName:)`.
+    func requiredCommentPseudID(from html: String) throws -> String {
+        try Self.requiredCommentPseudID(in: html, preferredName: preferredPostingPseudName)
+    }
+
+    /// Pure requirement (unit-tested): `resolvePostingPseudID` or the typed
+    /// refusal — never nil, never an invented id.
+    static func requiredCommentPseudID(in html: String, preferredName: String?) throws -> String {
+        guard let id = resolvePostingPseudID(in: html, preferredName: preferredName) else {
+            throw AO3WriteError.noPseudControl
+        }
+        return id
     }
 
     func restoreSession() async {

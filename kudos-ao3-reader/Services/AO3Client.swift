@@ -503,14 +503,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// The default pseud id pre-selected in a form's pseud `<select>` (e.g.
-    /// `comment[pseud_id]` for comments, `bookmark[pseud_id]` for bookmarks), so a
-    /// native write posts under the user's default pseud. nil when the form/selection
-    /// can't be read (AO3 then uses the account default).
+    /// The pseud id the fetched form would submit (e.g. `comment[pseud_id]` for
+    /// comments, `bookmark[pseud_id]` for bookmarks). Single-pseud accounts get a
+    /// **hidden input** (otwarchive `_comment_form.html.erb` renders
+    /// `f.hidden_field :pseud_id` unless `current_user.pseuds.count > 1`), whose
+    /// value must still be POSTed — the server never defaults a missing pseud, it
+    /// applies guest validations and rejects the write. Precedence mirrors
+    /// `ao3_api`'s `get_pseud_id`: hidden input first, then the `<select>`
+    /// (explicitly-selected option, else the first). nil when the page renders no
+    /// pseud control at all — an interstitial/login/formless page, never a
+    /// postable form.
     static func parseDefaultPseudID(from html: String, field: String = "comment[pseud_id]") -> String? {
         guard let doc = try? SwiftSoup.parse(html) else { return nil }
+        let hidden = try? doc.select("input[name=\"\(field)\"]").first()?.attr("value")
+        if let hidden, !hidden.isEmpty { return hidden }
         let select = try? doc.select("select[name=\"\(field)\"]").first()
-        // Prefer the explicitly-selected option; else the first option.
         let selected = try? select?.select("option[selected]").first()?.attr("value")
         if let selected, !selected.isEmpty { return selected }
         let first = try? select?.select("option").first()?.attr("value")
@@ -518,10 +525,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     }
 
     /// Every pseud AO3 rendered as an authorized choice in a form's pseud
-    /// `<select>` (same fields as `parseDefaultPseudID`). The default flag follows
-    /// that method's precedence: the explicitly-selected option, else the first.
-    /// Empty when the form has no pseud select (single-pseud accounts get a hidden
-    /// input instead — AO3 then posts under the account default regardless).
+    /// `<select>`. The default flag: the explicitly-selected option, else the
+    /// first. Empty when the form has no pseud select — single-pseud accounts get
+    /// a hidden input instead, which `parseDefaultPseudID` reads (its value must
+    /// still be POSTed; the server rejects a pseud-less signed-in comment rather
+    /// than defaulting it — otwarchive `comment.rb` guest validations).
     static func parsePostingPseudOptions(
         from html: String,
         field: String = "comment[pseud_id]"
@@ -564,13 +572,61 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return (false, nil)
     }
 
-    /// The first form-validation error AO3 renders after a rejected write (so the UI
-    /// can show the real reason), or nil when the page carries no error list.
+    /// The first error AO3 renders after a rejected write (so the UI can show the
+    /// real reason), or nil when the page carries no recognized error. Covers the
+    /// validation error list plus every flash class otwarchive uses for failed
+    /// writes: `flash[:error]` (`.flash.error`), `flash[:comment_error]`
+    /// (`.flash.comment_error` — blocked comments and failed deletes;
+    /// `comments_controller.rb`), and `flash[:caution]` (`.flash.caution` — the
+    /// Inbox mass-edit failure branch, `inbox_controller.rb`). The CSS classes
+    /// don't overlap (`flash_div` emits `class="flash <key>"`), so `.flash.error`
+    /// alone never matched the latter two.
     static func writeErrorMessage(in html: String) -> String? {
         guard let doc = try? SwiftSoup.parse(html) else { return nil }
-        let text = try? doc.select(".errorlist li, .error p, .flash.error").first()?.text()
+        let text = try? doc.select(
+            ".errorlist li, .error p, .flash.error, .flash.comment_error, .flash.caution"
+        ).first()?.text()
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    /// The success flash otwarchive renders after a completed comment or Inbox
+    /// write: `flash[:comment_notice]` on comment create/update and most deletes,
+    /// `flash[:notice]` on the unreviewed-delete branch and Inbox mass-edits.
+    /// Rendered by the comment region (`_commentable.html.erb`,
+    /// `comments/show.html.erb`) and the application layout respectively — this is
+    /// the positive evidence a final-200 write actually landed. Deliberately
+    /// requires both classes (`div.flash.notice`): the moderated-work note inside
+    /// the comment form is a bare `p.notice` and must not read as success.
+    static func writeSuccessMessage(in html: String) -> String? {
+        guard let doc = try? SwiftSoup.parse(html) else { return nil }
+        let text = try? doc.select(".flash.comment_notice, .flash.notice").first()?.text()
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    /// Honest reading of a comment/Inbox write response (CAA-2). A final 2xx/3xx
+    /// page is only `success` with positive evidence (`writeSuccessMessage`);
+    /// a recognized error flash/list is `rejected` (with AO3's own reason when one
+    /// parsed); anything else that returned 2xx/3xx — maintenance pages, blank
+    /// bodies, interstitials that render neither flash — is `unconfirmed`: the
+    /// write may or may not have been recorded, so callers must treat it as
+    /// ambiguous (verification for posts/replies, a visible "couldn't confirm"
+    /// for edit/delete/Inbox), never as success. Pure and static so the
+    /// classification is unit-testable without a network call.
+    enum CommentWriteVerdict: Equatable {
+        case success
+        /// AO3's parsed reason, or nil when only the status code condemned it
+        /// (callers supply their own action-specific fallback message).
+        case rejected(String?)
+        case unconfirmed
+    }
+
+    static func commentWriteVerdict(status: Int, body: String) -> CommentWriteVerdict {
+        if let message = writeErrorMessage(in: body) { return .rejected(message) }
+        guard (200 ... 399).contains(status) else { return .rejected(nil) }
+        if writeSuccessMessage(in: body) != nil { return .success }
+        return .unconfirmed
     }
 
     /// An authenticated reading-list / search-style page (work blurbs + pagination),
