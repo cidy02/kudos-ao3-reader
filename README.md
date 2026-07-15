@@ -17,9 +17,10 @@ and SwiftData.
 - **Library & bookmarks** — saved works with rich metadata (rating, word count,
   chapters, kudos, series), custom tags, filtering, reading history, and favorites.
 - **Portable backups and folder sync** — export Library records, EPUBs, tags,
-  bookmarks, custom fonts, and settings to a versioned `.kudosbackup` package;
-  imports merge safely, and an optional Library Sync Folder can keep
-  `KudosLibrary.kudosbackup` in iCloud Drive or another user-selected folder.
+  bookmarks, custom fonts, and settings to a versioned `.kudosbackup` **ZIP file**
+  (cross-platform layout in `docs/KUDOSBACKUP_FORMAT.md`); imports merge safely
+  and still accept older directory packages; an optional Library Sync Folder can
+  keep `KudosLibrary.kudosbackup` in iCloud Drive or another user-selected folder.
 - **Privacy-aware** — mature works can be hidden behind a Face ID gate.
 - **Cross-platform** — one SwiftUI codebase for iPhone, iPad, and Mac.
 

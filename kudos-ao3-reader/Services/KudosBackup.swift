@@ -8,10 +8,12 @@ import UniformTypeIdentifiers
 // swiftlint:disable file_length
 
 extension UTType {
-    /// A directory-backed document package containing a JSON manifest and assets.
+    /// Portable backup: a single ZIP file (store/deflate) with a JSON manifest and
+    /// asset entries. Extension stays `.kudosbackup`. Folder-sync still uses a
+    /// directory package on disk; only Settings import/export uses this file type.
     static let kudosBackup = UTType(
         filenameExtension: "kudosbackup",
-        conformingTo: .package
+        conformingTo: .data
     )!
 }
 
@@ -27,11 +29,20 @@ struct KudosBackupDocument: FileDocument {
     }
 
     init(configuration: ReadConfiguration) throws {
-        contents = try KudosBackupContents(fileWrapper: configuration.file)
+        // Export is always a single ZIP file. Import also accepts legacy
+        // directory packages (pre-portable exports) when the system hands one.
+        if configuration.file.isDirectory {
+            contents = try KudosBackupContents(fileWrapper: configuration.file)
+        } else if let data = configuration.file.regularFileContents {
+            contents = try KudosBackupContents(zipData: data)
+        } else {
+            throw KudosBackupError.invalidPackage
+        }
     }
 
     func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
-        try contents.fileWrapper()
+        // Portable export is always one ZIP file — never a directory package.
+        FileWrapper(regularFileWithContents: try contents.zipData())
     }
 }
 
@@ -83,11 +94,81 @@ nonisolated struct KudosBackupContents {
         fontFiles = fonts
     }
 
+    /// Reads a portable ZIP `.kudosbackup` **or** a legacy directory package
+    /// (folder-sync / older exports). Detection is by filesystem type, not UTI.
     nonisolated static func read(from url: URL) throws -> Self {
-        let wrapper = try FileWrapper(url: url, options: .immediate)
-        return try Self(fileWrapper: wrapper)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            throw KudosBackupError.invalidPackage
+        }
+        if isDirectory.boolValue {
+            let wrapper = try FileWrapper(url: url, options: .immediate)
+            return try Self(fileWrapper: wrapper)
+        }
+        let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+        return try Self(zipData: data)
     }
 
+    /// Parses a portable ZIP backup (store or deflate entries). Uses MiniZip's
+    /// backup size budget so multi-EPUB libraries fit.
+    nonisolated init(zipData: Data) throws {
+        let zip: MiniZip
+        do {
+            zip = try MiniZip(data: zipData, limits: .backup)
+        } catch {
+            throw KudosBackupError.invalidPackage
+        }
+        guard let manifestData = zip.data(named: "manifest.json") else {
+            throw KudosBackupError.invalidPackage
+        }
+
+        manifest = try Self.makeDecoder().decode(KudosBackupManifest.self, from: manifestData)
+        guard KudosBackupManifest.supportedVersions.contains(manifest.version) else {
+            throw KudosBackupError.unsupportedVersion(manifest.version)
+        }
+
+        var epubs: [UUID: Data] = [:]
+        for work in manifest.works {
+            guard let data = zip.data(named: "Works/\(work.id.uuidString).epub") else {
+                continue
+            }
+            epubs[work.id] = data
+        }
+        epubFiles = epubs
+
+        var fonts: [String: Data] = [:]
+        for font in manifest.fonts {
+            guard Self.isSafeFileName(font.fileName),
+                  let data = zip.data(named: "Fonts/\(font.fileName)")
+            else { continue }
+            fonts[font.fileName] = data
+        }
+        fontFiles = fonts
+    }
+
+    /// Portable single-file export: ZIP with the same logical layout as the
+    /// directory package (`manifest.json`, `Works/…`, `Fonts/…`).
+    nonisolated func zipData() throws -> Data {
+        var entries: [(name: String, data: Data)] = []
+        let manifestData = try Self.makeEncoder().encode(manifest)
+        entries.append((name: "manifest.json", data: manifestData))
+
+        for (id, data) in epubFiles.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            entries.append((name: "Works/\(id.uuidString).epub", data: data))
+        }
+        for (fileName, data) in fontFiles.sorted(by: { $0.key < $1.key }) where Self.isSafeFileName(fileName) {
+            entries.append((name: "Fonts/\(fileName)", data: data))
+        }
+
+        do {
+            return try MiniZipWriter.makeArchive(entries: entries)
+        } catch {
+            throw KudosBackupError.invalidPackage
+        }
+    }
+
+    /// Directory-package layout used by folder sync (`KudosLibrary.kudosbackup`
+    /// as a package on disk). Not used for Settings portable export.
     nonisolated func fileWrapper() throws -> FileWrapper {
         let manifestData = try Self.makeEncoder().encode(manifest)
         var rootFiles = [

@@ -18,6 +18,17 @@ struct MiniZipHostileTests {
         HostileZipFixture.build(entries)
     }
 
+    @Test func storeOnlyWriterRoundTripsThroughMiniZipReader() throws {
+        let payload = Data("hello-portable-backup".utf8)
+        let archive = try MiniZipWriter.makeArchive(entries: [
+            (name: "manifest.json", data: Data(#"{"ok":true}"#.utf8)),
+            (name: "Works/sample.epub", data: payload)
+        ])
+        let zip = try MiniZip(data: archive, limits: .backup)
+        #expect(zip.data(named: "manifest.json") == Data(#"{"ok":true}"#.utf8))
+        #expect(zip.data(named: "Works/sample.epub") == payload)
+    }
+
     private func freshTempDir() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }

@@ -45,7 +45,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Concern | Where |
 |---|---|
 | Models + identity + `markModified` | `Models/Models.swift` |
-| `.kudosbackup` package (manifest v7 + EPUB/font blobs), restore merge rules, tombstone index, `WorkRestoreIndex` | `Services/KudosBackup.swift` |
+| Portable `.kudosbackup` ZIP + legacy directory package (manifest v7 + EPUB/font blobs), restore merge rules, tombstone index, `WorkRestoreIndex` | `Services/KudosBackup.swift`; format contract `docs/KUDOSBACKUP_FORMAT.md`; ZIP create/read `Reading/MiniZip.swift` (`MiniZipWriter` / `MiniZip`) |
 | Folder sync (iCloud Drive via user-picked folder; NSFileCoordinator; safe replace; skip-unchanged stamp; conflict folding) | `Services/FolderSyncService.swift`; background refresh `FolderSyncBackgroundTask.swift` (BGTask id `com.cidy02.Kudos.folderSyncRefresh`, iOS-only) |
 | Migration + asset reconciliation + gate | `Services/PersistenceSync.swift` (`PersistenceMigrationService`, `PersistenceOperationGate`, `SyncTombstones`, `SyncMerge`) |
 | Soft delete / 90-day recovery / hard delete / sweep | `Services/PreservedWorkService.swift`; permanent path `WorkLifecycle.hardDelete` in `WorkLifecycle.swift` |

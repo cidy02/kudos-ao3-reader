@@ -10,7 +10,7 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
-    @Test func packageRoundTripPreservesManifestAndAssets() throws {
+    @Test func portableZipRoundTripPreservesManifestAndAssets() throws {
         let defaults = try testDefaults()
         defaults.set("sepia", forKey: "appTheme")
         defaults.set(21.0, forKey: "readerFontPt")
@@ -48,12 +48,15 @@ struct KudosBackupTests {
         let backupURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("kudosbackup")
-        try document.contents.fileWrapper().write(
-            to: backupURL,
-            options: .atomic,
-            originalContentsURL: nil
-        )
+        // Portable export path: FileDocument writes a single ZIP file.
+        let zipBytes = try document.contents.zipData()
+        try zipBytes.write(to: backupURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: backupURL) }
+
+        var isDirectory: ObjCBool = true
+        #expect(FileManager.default.fileExists(atPath: backupURL.path, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue == false)
+
         let decoded = try KudosBackupContents.read(from: backupURL)
 
         #expect(decoded.manifest.version == KudosBackupManifest.currentVersion)
@@ -65,6 +68,61 @@ struct KudosBackupTests {
         #expect(decoded.manifest.settings.readerFontPt == 21)
         #expect(decoded.epubFiles[work.id] == epub)
         #expect(decoded.fontFiles[font.fileName] == fontData)
+    }
+
+    @Test func legacyDirectoryPackageStillImports() throws {
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Legacy Package Work", author: "Archivist")
+        work.isSaved = true
+        let epub = Data("legacy-epub".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let document = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+        let backupURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("kudosbackup")
+        // Folder-sync / older exports: directory package on disk.
+        try document.contents.fileWrapper().write(
+            to: backupURL,
+            options: .atomic,
+            originalContentsURL: nil
+        )
+        defer { try? FileManager.default.removeItem(at: backupURL) }
+
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: backupURL.path, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue == true)
+
+        let decoded = try KudosBackupContents.read(from: backupURL)
+        #expect(decoded.manifest.works.first?.title == "Legacy Package Work")
+        #expect(decoded.epubFiles[work.id] == epub)
+    }
+
+    @Test func portableExportIsZipFileNotDirectoryPackage() throws {
+        let contents = KudosBackupContents(
+            manifest: KudosBackupManifest(
+                works: [],
+                bookmarks: [],
+                fonts: [],
+                settings: .capture(defaults: try testDefaults())
+            )
+        )
+        let zipBytes = try contents.zipData()
+        // ZIP local-file signature — portable export is always a single file.
+        #expect(zipBytes.starts(with: [0x50, 0x4b, 0x03, 0x04]))
+        // Directory-package writer still exists for folder sync and must differ.
+        let packageWrapper = try contents.fileWrapper()
+        #expect(packageWrapper.isDirectory)
+
+        let roundTrip = try KudosBackupContents(zipData: zipBytes)
+        #expect(roundTrip.manifest.version == KudosBackupManifest.currentVersion)
     }
 
     @Test func authorIdentityPersistsLocallyWithoutChangingBackupSchema() throws {
