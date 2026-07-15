@@ -90,6 +90,10 @@ final class UnresolvedCommentSubmissionStore {
         /// that finds it still ambiguous) keeps this original value rather
         /// than resetting it.
         let submittedAt: Date
+        /// The form warned that a successful comment may be hidden from its
+        /// visible thread (moderation / Anonymous Creator). Verification may
+        /// find it, but absence is never authoritative while this is true.
+        let commentMayBeHidden: Bool
     }
 
     /// The process-lifetime store production code shares across every
@@ -121,9 +125,18 @@ final class UnresolvedCommentSubmissionStore {
     }
 
     /// Records (or re-records) `key` as unresolved.
-    func markAmbiguous(_ key: CommentSubmissionKey, message: String, submittedAt: Date) {
-        let anchoredAt = entriesByIdentity[key.identity]?[key]?.submittedAt ?? submittedAt
-        entriesByIdentity[key.identity, default: [:]][key] = Entry(message: message, submittedAt: anchoredAt)
+    func markAmbiguous(
+        _ key: CommentSubmissionKey,
+        message: String,
+        submittedAt: Date,
+        commentMayBeHidden: Bool = false
+    ) {
+        let existing = entriesByIdentity[key.identity]?[key]
+        entriesByIdentity[key.identity, default: [:]][key] = Entry(
+            message: message,
+            submittedAt: existing?.submittedAt ?? submittedAt,
+            commentMayBeHidden: existing?.commentMayBeHidden == true || commentMayBeHidden
+        )
     }
 
     /// Authoritative resolution (verified success, or a definitive failure that
@@ -161,6 +174,9 @@ final class CommentSubmissionGuard {
     private var recentSuccesses: [CommentSubmissionKey: Date] = [:]
     /// The key this guard instance is currently displaying status for.
     private(set) var pendingKey: CommentSubmissionKey?
+    /// Captured when `begin` claims the attempt, before any form GET or POST.
+    /// An error handled minutes later must not move verification's time anchor.
+    private var startedAt: Date?
 
     /// How long an identical submission stays blocked after a success. Long
     /// enough to cover any double-tap/re-open flow, short enough to allow a
@@ -183,7 +199,12 @@ final class CommentSubmissionGuard {
     /// (nil once resolved/idle) — the timing evidence verification anchors to.
     var pendingSubmittedAt: Date? {
         guard let pendingKey else { return nil }
-        return store.entry(for: pendingKey)?.submittedAt
+        return store.entry(for: pendingKey)?.submittedAt ?? startedAt
+    }
+
+    var pendingCommentMayBeHidden: Bool {
+        guard let pendingKey else { return false }
+        return store.entry(for: pendingKey)?.commentMayBeHidden ?? false
     }
 
     /// Re-syncs `phase`/`pendingKey` for `key` against the durable store.
@@ -194,9 +215,11 @@ final class CommentSubmissionGuard {
         guard !phase.isBusy else { return }
         if let entry = store.entry(for: key) {
             pendingKey = key
+            startedAt = entry.submittedAt
             phase = .ambiguous(entry.message)
         } else {
             pendingKey = nil
+            startedAt = nil
             phase = .idle
         }
     }
@@ -209,6 +232,7 @@ final class CommentSubmissionGuard {
             // Unresolved earlier attempt for this exact comment — verification,
             // not a second POST, is the only way forward.
             pendingKey = key
+            startedAt = entry.submittedAt
             phase = .ambiguous(entry.message)
             return false
         }
@@ -218,6 +242,7 @@ final class CommentSubmissionGuard {
             return false
         }
         pendingKey = key
+        startedAt = now()
         phase = .submitting
         return true
     }
@@ -229,6 +254,7 @@ final class CommentSubmissionGuard {
             store.resolve(pendingKey)
         }
         pendingKey = nil
+        startedAt = nil
         phase = .succeeded
     }
 
@@ -237,15 +263,21 @@ final class CommentSubmissionGuard {
     func fail(_ message: String) {
         if let pendingKey { store.resolve(pendingKey) }
         pendingKey = nil
+        startedAt = nil
         phase = .failed(message)
     }
 
     /// The POST's outcome is unknown (e.g. timeout after the request was sent).
     /// Keeps the key pending in the durable store; `begin` for it stays
     /// blocked for every guard instance, not just this one.
-    func markAmbiguous(_ message: String) {
+    func markAmbiguous(_ message: String, commentMayBeHidden: Bool = false) {
         guard let pendingKey else { return }
-        store.markAmbiguous(pendingKey, message: message, submittedAt: now())
+        store.markAmbiguous(
+            pendingKey,
+            message: message,
+            submittedAt: startedAt ?? now(),
+            commentMayBeHidden: commentMayBeHidden
+        )
         phase = .ambiguous(message)
     }
 
@@ -273,9 +305,14 @@ final class CommentSubmissionGuard {
                 phase = .idle
                 return
             }
-            let message = "We couldn't confirm whether this posted — AO3 wasn't reachable. "
+            let message = "We couldn't confirm whether this posted on AO3. "
                 + "Your draft is saved. Check again before re-posting."
-            store.markAmbiguous(pendingKey, message: message, submittedAt: now())
+            store.markAmbiguous(
+                pendingKey,
+                message: message,
+                submittedAt: startedAt ?? now(),
+                commentMayBeHidden: pendingCommentMayBeHidden
+            )
             phase = .ambiguous(message)
         }
     }
@@ -288,6 +325,7 @@ final class CommentSubmissionGuard {
     func reset() {
         guard !phase.isBusy else { return }
         pendingKey = nil
+        startedAt = nil
         phase = .idle
     }
 }

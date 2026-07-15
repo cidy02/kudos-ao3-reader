@@ -1,6 +1,8 @@
 # Comments & Inbox vs. `ao3_api` — Review-Only Audit
 
-**Status: AWAITING HUMAN REVIEW. No production code, tests, fixtures, or dependencies were changed. Nothing below is approved for implementation.**
+**Status: IMPLEMENTATION IN PROGRESS.** The owner-approved staged implementation
+has landed CAA-1/CAA-2 (T-99, Part A) and CAA-4/CAA-5/CAA-6 (T-102, Part B).
+All other findings remain unchanged and unimplemented.
 
 | Audited side | Commit |
 |---|---|
@@ -66,9 +68,9 @@ Note: otwarchive `master` moved between prompt authorship and this audit; line n
 | CAA-1 | High | High | 3 | 2 | Replies (always) and single-pseud top-level comments (common case) POST without the `comment[pseud_id]` AO3 requires; otwarchive then applies guest validations and rejects the write | Fetch a page that renders the actual form (`/comments/<parent>?add_comment_reply_id=<parent>`; work page with `view_adult=true`); parse hidden input **and** select; fail before POST when neither exists | Unchanged (1 GET + 1 POST); avoids doomed POSTs |
 | CAA-2 | High | High | 3,4,7 | 2 | Success = "no known error selector": `.flash.comment_error` (blocked writes, failed deletes) unrecognized; delete never scans the body; maintenance/malformed 200s pass | Recognize `comment_error` (and `caution`); give delete the same body validation; require positive success evidence (`comment_notice`/expected redirect shape) for final-200 pages | None |
 | CAA-3 | High | High | 1,7,8 | 2 | Comments page/chapter caches and in-flight fetches not isolated by `sessionGeneration`; chapter index cached across accounts (leaks owner draft-chapter titles from `/navigate`); `try?` silently downgrades signed-in fetches to anonymous under a signed-in cache key | Extend the T-96 pattern (immutable scope+generation snapshot, post-await guards, generation-scoped cache keys) to `CommentsModel`/`CommentsPageCache`; make auth-request failure an error, not a downgrade | None normally; ≤2 GETs after a real auth transition |
-| CAA-4 | Medium | High | 5 | 4 | Verification false-`absent` classes unlock re-POST: displayed-pseud≠username match, moderated works (unreviewed comments never render on the commentable), rich-text body mismatch, >600 s skew, anonymous creator, session-expiry anonymous downgrade + CAA-6 fabricated-empty | Match registered authors via canonical `profileRoute`/`userPath` username; treat moderated/anonymous/rich-text/timing mismatches as `.unknown`, never `.absent`; anchor `submittedAt` at POST start | None (same 1–2 verification GETs) |
-| CAA-5 | Medium | High | 5,8 | 3 | Top-level verification searches `flattened` (all descendants), so an identical recent reply can false-`found` a top-level comment → success reported, draft cleared, comment never posted | For `parentID == nil` match against `page.comments` (roots) only | None |
-| CAA-6 | Medium | High | 1,7 | 4 | Missing `#comments_placeholder`/`ol.thread`/`ol.chapter.index` fabricates valid-empty results — otwarchive always renders all three (incl. zero comments), so their absence is drift/maintenance/login/interstitial, not emptiness; anonymous `getHTML` has no login-redirect detection | Require the authoritative container; recognized-empty = placeholder + empty thread (index + zero `li`); otherwise throw `.parse`; detect login-page markup on anonymous fetches | None (retry stays one explicit GET) |
+| CAA-4 | Medium | High | 5 | 4 | **FIXED — T-102 Part B (`4a05556`).** Verification false-`absent` classes unlock re-POST: displayed-pseud≠username match, moderated works (unreviewed comments never render on the commentable), rich-text body mismatch, >600 s skew, anonymous creator, session-expiry anonymous downgrade + CAA-6 fabricated-empty | Match registered authors via canonical `profileRoute`/`userPath` username; treat moderated/anonymous/rich-text/timing mismatches as `.unknown`, never `.absent`; anchor `submittedAt` at POST start | None (same 1–2 verification GETs) |
+| CAA-5 | Medium | High | 5,8 | 3 | **FIXED — T-102 Part B (`4a05556`).** Top-level verification searches `flattened` (all descendants), so an identical recent reply can false-`found` a top-level comment → success reported, draft cleared, comment never posted | For `parentID == nil` match against `page.comments` (roots) only | None |
+| CAA-6 | Medium | High | 1,7 | 4 | **FIXED — T-102 Part B (`4a05556`).** Missing `#comments_placeholder`/`ol.thread`/`ol.chapter.index` fabricates valid-empty results — otwarchive always renders all three (incl. zero comments), so their absence is drift/maintenance/login/interstitial, not emptiness; anonymous `getHTML` has no login-redirect detection | Require the authoritative container; recognized-empty = placeholder + empty thread (index + zero `li`); otherwise throw `.parse`; detect login-page markup on anonymous fetches | None (retry stays one explicit GET) |
 | CAA-7 | Medium | High | 2,8 | 4 | Deep-thread cutoff (`<li class="comment">` with no id, "N more comments in this thread", depth ≥5 & >1 child) renders as "(This comment couldn't be read.)" tombstones that all share one FNV id (hash of "") → SwiftUI identity collision; disclosure count/link lost | Recognize the cutoff (id-less + single `p > a[href^=/comments/]`, no `role` attr) before tombstoning; represent it explicitly with identity derived from parent+link; never auto-fetch the tail | None |
 | CAA-8 | Medium | High | 7 | 3 | Catch-all stale-cache fallback masks every error class (auth expiry, 403, 404, parse, 429, 5xx) with unbounded-age cache; banner shows only when offline | Never mask auth/403/404/parse behind cache; transient fallback only with a visible stale/error state and an age cap (mirror `AO3AuthorProfileService`'s 24 h same-scope rule) | None |
 | CAA-9 | Medium | High | 2,4,5 | 2 | `blockquote.userstuff` bodies with any `<p>` drop all non-`<p>` block content (lists, `pre`, tables, headings — all sanitizer-allowed); corrupts display, edit prefill (re-save destroys content), and verification matching | Flatten the whole blockquote in document order with block boundaries; keep text-only rendering | None |
@@ -136,9 +138,26 @@ Note: otwarchive `master` moved between prompt authorship and this audit; line n
 
 **Fix direction:** match canonical username from `userPath`; return `.unknown` for moderated-work top-level posts (the work context can carry the moderation flag from the form page — `#add_comment_placeholder` region), anonymous-creator identities, unparseable/mismatched rich bodies, and timing disagreement; stamp `submittedAt` at POST start; make top-level verification require the recognized comments container (per CAA-6). **Tests:** `AO3CommentsParseTests` (matcher: alternate pseud path, Anonymous Creator, entity/markup bodies, skew) and `CommentSubmissionTests` (each uncertain class stays blocked).
 
+**Status: FIXED (T-102, Part B; `4a05556`).** Verification now produces a
+three-state verdict from canonical `profileRoute.username`, the exact target
+level, normalized body, and timing evidence. A visible canonical match still
+wins, but moderation/Anonymous Creator form notices, ambiguous identity,
+markup/entity transformation, and parsed timing disagreement remain `.unknown`
+and therefore keep the durable duplicate-post guard blocked. The exact form GET
+passes the notice signal for both top-level comments and replies; it survives
+screen/guard recreation and repeated Check Again. `CommentSubmissionGuard.begin`
+anchors `submittedAt` before the form GET/POST, and re-marking preserves it.
+No additional AO3 request was added. The upstream template supports the shared
+reply/top-level notice; an owner live moderated-comment/reply check remains manual.
+
 ### CAA-5 — Top-level verification false-`found`
 
 `containsComment` with `parentID == nil` searches `page.comments.flatMap(\.flattened)` — every root **and descendant** (`AO3CommentActions.swift:211`; `flattened` = full subtree, `AO3CommentModels.swift:261-269`). A recent identical-body reply by the same author (e.g. the user replied with the same short text minutes earlier, then a top-level attempt timed out) verifies the missing top-level comment as `.found` → "posted" reported, draft cleared (`CommentsModel.swift:654`), comment never exists. This is the one verification path with **silent data loss** and no server-side backstop. Fix: roots only for top-level. Test: `AO3CommentsParseTests` — identical matching reply + no matching root must not verify.
+
+**Status: FIXED (T-102, Part B; `4a05556`).** Top-level verification now
+examines only `page.comments` roots. Reply verification still examines only the
+requested parent's direct replies. A regression test proves that an identical
+matching reply cannot verify a missing top-level submission.
 
 ### CAA-6 — Fabricated empty on missing landmarks
 
@@ -147,6 +166,15 @@ Note: otwarchive `master` moved between prompt authorship and this audit; line n
 **otwarchive:** with `show_comments` the placeholder div, pagination, and the top `ol.thread` are **always** emitted, including zero comments (`_commentable.html.erb:140-148`; `_comment_thread.html.erb:2` always opens `<ol class="thread">`); `/navigate` always emits `ol.chapter.index.group` (`navigate.html.erb:3-7`). So absence of these containers is never "no comments" — it's an interstitial, login page, maintenance page, or markup drift. **`ao3_api`** blindly dereferences the same landmarks and crashes (`works.py:274-276`, `chapters.py:142-146`) — Classification 4; neither behavior is right.
 
 This mirrors the author-index parsers' existing recognized-empty rule (`docs/AO3_NETWORKING_POLICY.md` "Parser fragility assumptions") — Comments predates that discipline. It also upgrades CAA-4: verification `.absent` requires a *recognized* comments region. **Tests:** `AO3CommentsParseTests` — valid zero-comment page (placeholder + empty thread) parses empty; absent placeholder throws `.parse`; placeholder-without-thread throws; login/maintenance HTML throws; valid single/empty chapter index vs. missing landmark. Fixture addition: sanitized zero-comment page.
+
+**Status: FIXED (T-102, Part B; `4a05556`).** `parseCommentsPage` now requires
+`#comments_placeholder` plus its direct, truly empty-or-parseable top
+`ol.thread`; missing/nested/unexpected markup throws `.parse`, while a sanitized
+template-shaped zero-comment fixture is the recognized-empty case. The main AO3
+login form throws `.authenticationRequired`, so restricted-work bounces cannot
+become "No Comments Yet." `parseChapterIndex` likewise requires
+`ol.chapter.index` and distinguishes an empty index from a missing/login page.
+No request behavior changed and no live AO3 request was made.
 
 ### CAA-7 — Deep-thread cutoff becomes colliding tombstones
 

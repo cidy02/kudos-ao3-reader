@@ -40,7 +40,11 @@ extension AO3AuthService {
 
     /// Posts a comment on a work under the resolved posting pseud. The caller must
     /// have confirmed the user's intent. Returns a success message; throws on failure.
-    func postComment(workID: Int, content: String) async throws -> String {
+    func postComment(
+        workID: Int,
+        content: String,
+        onFormPrepared: (Bool) -> Void = { _ in }
+    ) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
@@ -57,6 +61,10 @@ extension AO3AuthService {
         }
 
         let pseud = try requiredCommentPseudID(from: html)
+        // Preserve this exact form-page evidence if the POST outcome becomes
+        // ambiguous. Verification must not call an intentionally hidden,
+        // unreviewed comment "absent" and release the duplicate-post guard.
+        onFormPrepared(AO3Client.commentFormMayHidePostedComment(html, commentableID: workID))
         let params: [(String, String)] = [
             ("authenticity_token", token),
             ("comment[comment_content]", text),

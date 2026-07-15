@@ -162,13 +162,15 @@ Comment markup (inside `div#comments_placeholder`):
   macOS legacy reader); iOS Readium reader toolbar bubble; and shared local /
   remote work-card context menus used by Home, Library, Browse, and Search.
   The former standalone "Leave a Comment" composer was removed.
-- [x] Tests (19): `AO3CommentsParseTests` (threading, guest/registered bylines,
-  chapter refs, pagination/totals, parse-gated edit/delete, empty region,
-  chapter index, URL shapes, verification matcher incl. parent-awareness) +
+- [x] Tests: `AO3CommentsParseTests` (threading, guest/registered bylines,
+  chapter refs, pagination/totals, parse-gated edit/delete, recognized-empty vs.
+  malformed/login pages, chapter index, URL shapes, canonical three-state
+  verification incl. parent-awareness) +
   `CommentSubmissionTests` (key normalization, single-flight, duplicate window
   + expiry, ambiguity lock incl. `.unknown` keeping resubmit blocked, retry
   after verified absence, ambiguity classification, drafts). Fixture:
-  `KudosTests/Fixtures/ao3_comments_page.html` (sanitized live markup).
+  `KudosTests/Fixtures/ao3_comments_page.html` (sanitized live markup) plus the
+  template-shaped `ao3_comments_empty.html` recognized-empty fixture.
 
 ## Respect rules implemented
 - Fetch only on user intent (open screen / switch chapter / page / refresh).
@@ -178,12 +180,17 @@ Comment markup (inside `div#comments_placeholder`):
 - Writes are single-shot, never retried/coalesced (existing submitWrite).
 
 ## Double-post prevention
-- `CommentSubmissionGuard` (pure, tested): key = work+chapter+parent+identity+
-  normalized body. `begin()` rejects while in-flight OR while an identical key
-  succeeded recently (5 min). Timeout/ambiguous network result → state
-  `.ambiguous`, resubmit blocked until a **verification fetch** (newest page of
-  the commentable, match by author+normalized body within window) resolves it.
-  Post button disabled from first tap; draft kept until verified success.
+- `CommentSubmissionGuard` (pure, tested): key = work+parent+identity+normalized
+  body (chapter scope is intentionally stripped). `begin()` rejects while
+  in-flight or while an identical key succeeded recently (5 min), and timestamps
+  the attempt before the form GET/POST. Timeout/unconfirmed POST → `.ambiguous`;
+  a shared auth-scoped store keeps the key blocked across target/screen/guard
+  recreation. A **verification fetch** returns `.found` only for the canonical
+  account at the exact target level with no timing contradiction. Moderation /
+  Anonymous Creator form evidence, rich-body transformation, ambiguous identity,
+  timing disagreement, or an unreadable page stays `.unknown`, so no retry is
+  unlocked on a guess. Post is disabled from first tap; draft survives until
+  verified success.
 
 ## Scope decisions
 - Guest commenting: **out** — posting requires login (existing app model);
@@ -223,10 +230,9 @@ Comment markup (inside `div#comments_placeholder`):
 5. Composer in By Chapter scope implied chapter-targeted posting → honesty
    note added (posts to the work; AO3 shows it on the newest chapter).
 
-Edge accepted (documented): a *different* comment may be submitted while an
-earlier one is still ambiguous; the pending ambiguous key is then dropped
-(its "Check Again" context closes with the composer). Same-key re-posts stay
-blocked throughout.
+Distinct comment keys may proceed while an earlier one is ambiguous, but the
+shared unresolved store retains every ambiguous key independently. Returning
+to the original target/body restores its Check Again state and same-key block.
 
 ## Manual test checklist (owner, live session — from the task spec)
 - View comments: single-chapter work, multichapter (All + By Chapter), switch
@@ -236,6 +242,8 @@ blocked throughout.
 - Double-tap Post rapidly → one request (button disables, guard single-flight).
 - Kill connectivity right after tapping Post (timeout) → app must NOT re-POST;
   verification runs; if unreachable, "Check Again" flow; draft preserved.
+- On a moderated or Anonymous Creator work, repeat the ambiguous post/reply
+  check: a hidden comment must remain blocked until verification can see it.
 - Edit + Delete own comment (verifies the parse-gated markup + endpoints).
 - Copy Link; Thread / Parent Thread only where AO3 rendered those links.
 - Signed-out: browse public work's comments; composer shows sign-in state.

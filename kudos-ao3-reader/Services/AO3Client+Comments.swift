@@ -105,22 +105,24 @@ extension AO3Client {
     /// total comment count from the stats block.
     static func parseCommentsPage(_ html: String, page: Int) throws -> AO3CommentsPage {
         let doc = try SwiftSoup.parse(html)
+        try throwIfCommentsLoginPage(doc)
         var result = AO3CommentsPage(currentPage: page, totalPages: page)
         result.workAuthorIdentities = try parseCommentsWorkAuthors(doc)
         result.workAuthors = result.workAuthorIdentities.map(\.displayName)
 
         guard let placeholder = try doc.select("#comments_placeholder").first() else {
-            // Not an error: works with zero comments render no placeholder threads,
-            // and a missing region on a real page should read as "no comments"
-            // rather than crash — the caller surfaces counts/staleness honestly.
-            result.totalComments = try? parseTotalComments(doc)
-            return result
+            throw AO3Error.parse
         }
 
-        // The first ol.thread in document order is the top-level one — nested
-        // reply threads always come later inside it.
-        if let topThread = try placeholder.select("ol.thread").first() {
-            result.comments = try parseThread(topThread)
+        // otwarchive always emits this direct top-level list, including when it
+        // is empty. A descendant-only thread is a fragment/drift, not proof that
+        // the page has zero comments.
+        guard let topThread = placeholder.children().array().first(where: {
+            $0.tagName() == "ol" && $0.hasClass("thread")
+        }) else { throw AO3Error.parse }
+        result.comments = try parseThread(topThread)
+        if result.comments.isEmpty, !topThread.children().array().isEmpty {
+            throw AO3Error.parse
         }
 
         // Pagination footer inside the comments region (same markup as search).
@@ -167,6 +169,20 @@ extension AO3Client {
         let comments = try parseThread(topThread)
         guard !comments.isEmpty else { throw AO3Error.parse }
         return AO3CommentsPage(comments: comments, currentPage: 1, totalPages: 1)
+    }
+
+    /// AO3 renders a notice inside the actual comment form when a successful
+    /// post may not appear in the visible thread (moderation or anonymous
+    /// creator posting). Structural rather than English-text matching keeps the
+    /// signal valid across localization and wording changes. Both top-level and
+    /// focused-reply placeholders use `form#comment_for_<commentable>`.
+    static func commentFormMayHidePostedComment(_ html: String, commentableID: Int) -> Bool {
+        guard let doc = try? SwiftSoup.parse(html) else { return false }
+        return (try? doc.select(
+            "#add_comment_placeholder form#comment_for_\(commentableID) p.notice, "
+                + "#add_comment_reply_placeholder_\(commentableID) "
+                + "form#comment_for_\(commentableID) p.notice"
+        ).first()) != nil
     }
 
     /// The work-level comment total from the page's stats (`dl.stats dd.comments`).
@@ -330,8 +346,13 @@ extension AO3Client {
     /// text "N. Title" and the chapter id in the href.
     static func parseChapterIndex(_ html: String) throws -> [AO3ChapterRef] {
         let doc = try SwiftSoup.parse(html)
+        try throwIfCommentsLoginPage(doc)
+        guard let index = try doc.select("ol.chapter.index").first() else {
+            throw AO3Error.parse
+        }
         var chapters: [AO3ChapterRef] = []
-        for li in try doc.select("ol.chapter.index li").array() {
+        let rows = try index.select("li").array()
+        for li in rows {
             guard let link = try li.select("a[href*=/chapters/]").first() else { continue }
             let href = try link.attr("href")
             guard let last = href.split(separator: "/").last, let id = Int(last) else { continue }
@@ -351,6 +372,17 @@ extension AO3Client {
             }
             chapters.append(chapter)
         }
+        if !rows.isEmpty, chapters.isEmpty { throw AO3Error.parse }
         return chapters
+    }
+
+    /// Anonymous restricted-work redirects arrive as the full AO3 login page,
+    /// because the anonymous GET pipeline intentionally discards the final URL.
+    /// Match the real main login form, not the global signed-out header controls.
+    private static func throwIfCommentsLoginPage(_ doc: Document) throws {
+        guard let form = try doc.select("#main form#new_user").first() else { return }
+        if try form.select("#user_login, input[name='user[login]']").first() != nil {
+            throw AO3Error.authenticationRequired
+        }
     }
 }
