@@ -550,4 +550,23 @@ struct CommentSubmissionTests {
         store.save("   \n", for: reply)
         #expect(store.draft(for: reply).isEmpty)
     }
+
+    @Test func draftsAreAccountScopedAndVerifiedSuccessClearsChapterVariants() {
+        let suiteName = "CommentSubmissionTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = CommentDraftStore(defaults: defaults)
+        let chapter = AO3CommentContext(workID: 42, chapterID: 7)
+        let all = AO3CommentContext(workID: 42, chapterID: nil)
+
+        store.save("Alice", for: chapter, identity: "alice")
+        store.save("Bob", for: chapter, identity: "bob")
+        store.save("Alice all", for: all, identity: "alice")
+
+        #expect(store.draft(for: chapter, identity: "alice") == "Alice")
+        #expect(store.draft(for: chapter, identity: "bob") == "Bob")
+        store.clearVariants(for: all, identity: "alice")
+        #expect(store.draft(for: chapter, identity: "alice").isEmpty)
+        #expect(store.draft(for: chapter, identity: "bob") == "Bob")
+    }
 }

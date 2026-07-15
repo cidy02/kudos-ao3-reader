@@ -145,6 +145,7 @@ struct AccountView: View {
                         initialCommentID: destination.commentID,
                         initialFocusesChapter: destination.focus == .chapter,
                         initialReplyCommentID: destination.opensReplyComposer ? destination.commentID : nil,
+                        requiredSessionGeneration: destination.sessionGeneration,
                         onResolveWorkContext: { inboxModel.cacheWorkContext($0, for: destination, auth: auth) }
                     )
                 }
@@ -1010,15 +1011,16 @@ struct AccountView: View {
         router.open(url)
     }
 
+}
+
+private extension AccountView {
     private func cachedCount(_ kind: AO3AccountListKind) -> String? {
         AO3AccountListCountsCache.shared.count(
             for: kind,
             authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
         )?.displayText
     }
-}
 
-private extension AccountView {
     private var inboxMetadataTaskID: String {
         let scope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
         let ids = inboxModel.items.compactMap(\.workID).map(String.init).joined(separator: ",")

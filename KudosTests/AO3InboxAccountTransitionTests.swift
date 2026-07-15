@@ -601,7 +601,7 @@ struct AO3InboxAccountTransitionTests {
 /// A one-shot async gate used to deterministically sequence a gated async
 /// dependency (`pageLoader`/`bulkActionSubmitter`) against a concurrent
 /// account switch — mirrors `AO3RequestCoordinatorTests.Signal`.
-private actor Signal {
+actor Signal {
     private var fired = false
     private var continuation: CheckedContinuation<Void, Never>?
 
@@ -618,7 +618,7 @@ private actor Signal {
 }
 
 @MainActor
-private final class MemoryInboxTestSessionVault: AO3SessionPersisting {
+final class MemoryInboxTestSessionVault: AO3SessionPersisting {
     private var session: AO3Session?
     func load() throws -> AO3Session? { session }
     func save(_ session: AO3Session) throws { self.session = session }
@@ -626,19 +626,19 @@ private final class MemoryInboxTestSessionVault: AO3SessionPersisting {
 }
 
 @MainActor
-private final class MemoryInboxTestRemovalTracker: AO3SessionRemovalTracking {
+final class MemoryInboxTestRemovalTracker: AO3SessionRemovalTracking {
     private(set) var isRemovalPending = false
     func markRemovalPending() { isRemovalPending = true }
     func clearRemovalPending() { isRemovalPending = false }
 }
 
 @MainActor
-private struct InboxTestSessionValidator: AO3SessionValidating {
+struct InboxTestSessionValidator: AO3SessionValidating {
     func validate(_ session: AO3Session) async throws -> AO3SessionValidation { .valid(session) }
 }
 
 @MainActor
-private final class NoOpInboxTestCookieManager: AO3CookieManaging {
+final class NoOpInboxTestCookieManager: AO3CookieManaging {
     func install(_ session: AO3Session) async {}
     func clear() async {}
     func capture() async -> [AO3StoredCookie] { [] }
@@ -648,7 +648,7 @@ private final class NoOpInboxTestCookieManager: AO3CookieManaging {
 /// username is actually requested — tests drive the same `AO3AuthService`
 /// through alice → bob (and back to alice) without needing a new performer.
 @MainActor
-private final class DynamicInboxTestLoginPerformer: AO3LoginPerforming {
+final class DynamicInboxTestLoginPerformer: AO3LoginPerforming {
     lazy var webView = WKWebView()
 
     func login(username: String, password: String) async throws -> AO3Session {

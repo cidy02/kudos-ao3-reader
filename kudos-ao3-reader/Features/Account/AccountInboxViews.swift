@@ -25,8 +25,8 @@ nonisolated struct AccountInboxThreadDestination: Hashable, Identifiable {
     let chapterPosition: Int?
     let focus: AccountInboxThreadFocus
     let opensReplyComposer: Bool
-    /// Captured when the Inbox row opened this destination. Used only to keep a
-    /// later Comments-context callback scoped to that same private session.
+    /// Captured when the Inbox row opened this destination. The destination and
+    /// any context it returns remain scoped to that same private session.
     let sessionGeneration: Int
 
     var id: String {

@@ -17,8 +17,10 @@ extension AO3AuthService {
     func postCommentReply(
         parentCommentID: Int,
         content: String,
+        expectedGeneration: Int,
         onFormPrepared: (Bool) -> Void = { _ in }
     ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
@@ -26,6 +28,7 @@ extension AO3AuthService {
         let formURL = Self.commentReplyFormURL(parentCommentID: parentCommentID)
         let pageRequest = try authenticatedRequest(for: formURL)
         let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        try requireSessionGeneration(expectedGeneration)
         guard let token = AO3Client.parseCSRFToken(from: html) else {
             throw AO3WriteError.noCSRFToken
         }
@@ -60,10 +63,12 @@ extension AO3AuthService {
     /// scanned like every other write (CAA-2): otwarchive reports a failed delete
     /// as `flash[:comment_error]` on a redirected 200, so a bare status check
     /// would report success for a comment that's still there.
-    func deleteComment(commentID: Int) async throws -> String {
+    func deleteComment(commentID: Int, expectedGeneration: Int) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let threadURL = Self.commentThreadURL(commentID)
         let token = try await commentPageCSRF(at: threadURL)
+        try requireSessionGeneration(expectedGeneration)
         // Rails destroy: POST to the comment resource with _method=delete.
         let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
         let request = try writeRequest(
@@ -82,13 +87,17 @@ extension AO3AuthService {
 
     /// Edits one of the session's own comments (`PUT /comments/<id>` via
     /// `_method=put`, per Rails update). Gated the same way as delete.
-    func editComment(commentID: Int, content: String) async throws -> String {
+    func editComment(
+        commentID: Int, content: String, expectedGeneration: Int
+    ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
 
         let editURL = Self.commentEditURL(commentID)
         let token = try await commentPageCSRF(at: editURL)
+        try requireSessionGeneration(expectedGeneration)
         let body = Self.formEncoded([
             ("_method", "put"),
             ("authenticity_token", token),
@@ -160,19 +169,27 @@ extension AO3AuthService {
         context: AO3CommentContext,
         body: String,
         submittedAt: Date? = nil,
-        commentMayBeHidden: Bool = false
-    ) async -> CommentVerification {
-        guard let username else { return .unknown }
-        do {
-            let page: AO3CommentsPage
-            switch Self.verificationPlan(for: context) {
-            case let .standaloneThread(parentID):
-                let request = try? authenticatedRequest(
+        commentMayBeHidden: Bool = false,
+        expectedGeneration: Int
+    ) async throws -> CommentVerification {
+        try requireSessionGeneration(expectedGeneration)
+        guard let username else { throw AO3Error.authenticationRequired }
+        let page: AO3CommentsPage
+        switch Self.verificationPlan(for: context) {
+        case let .standaloneThread(parentID):
+            let request: URLRequest
+            do {
+                request = try authenticatedRequest(
                     for: AO3Client.commentThreadURL(commentID: parentID)
                 )
+            } catch {
+                throw AO3Error.authenticationRequired
+            }
+            do {
                 page = try await AO3Client.shared.commentThreadPage(
                     commentID: parentID, request: request
                 )
+                try requireSessionGeneration(expectedGeneration)
                 // The fetch itself succeeded, but if this page doesn't even
                 // contain the parent we asked for (markup drift, an id that
                 // failed to parse), an `.absent` verdict from its replies
@@ -180,31 +197,51 @@ extension AO3AuthService {
                 guard page.comments.flatMap(\.flattened).contains(where: { $0.id == parentID }) else {
                     return .unknown
                 }
-            case let .workComments(workID):
-                let request = try? authenticatedRequest(
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch AO3Error.authenticationRequired {
+                throw AO3Error.authenticationRequired
+            } catch {
+                return .unknown
+            }
+        case let .workComments(workID):
+            let request: URLRequest
+            do {
+                request = try authenticatedRequest(
                     for: AO3Client.commentsPageURL(workID: workID)
                 )
+            } catch {
+                throw AO3Error.authenticationRequired
+            }
+            do {
                 let first = try await AO3Client.shared.commentsPage(
                     workID: workID, page: 1, request: request
                 )
-                page = first.totalPages > 1
-                    ? try await AO3Client.shared.commentsPage(
+                try requireSessionGeneration(expectedGeneration)
+                if first.totalPages > 1 {
+                    page = try await AO3Client.shared.commentsPage(
                         workID: workID, page: first.totalPages, request: request
                     )
-                    : first
+                    try requireSessionGeneration(expectedGeneration)
+                } else {
+                    page = first
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch AO3Error.authenticationRequired {
+                throw AO3Error.authenticationRequired
+            } catch {
+                return .unknown
             }
-            return Self.commentVerification(
-                in: page,
-                username: username,
-                submittedBody: body,
-                parentID: context.parentCommentID,
-                postedAfter: submittedAt,
-                commentMayBeHidden: commentMayBeHidden
-            )
-        } catch {
-            // Offline / rate-limited / parse failure: we genuinely don't know.
-            return .unknown
         }
+        return Self.commentVerification(
+            in: page,
+            username: username,
+            submittedBody: body,
+            parentID: context.parentCommentID,
+            postedAfter: submittedAt,
+            commentMayBeHidden: commentMayBeHidden
+        )
     }
 
     /// Generous clock-skew/rounding allowance for the `postedAfter` timing

@@ -328,6 +328,16 @@ final class CommentSubmissionGuard {
         startedAt = nil
         phase = .idle
     }
+
+    /// Drops only this screen's presentation state when another authentication
+    /// generation takes over. Any durable ambiguous entry remains owned by its
+    /// original identity in `store`; a stale continuation must not keep the new
+    /// account's composer permanently busy.
+    func resetForAuthenticationChange() {
+        pendingKey = nil
+        startedAt = nil
+        phase = .idle
+    }
 }
 
 /// Per-context comment drafts, persisted so nothing typed is lost to a dismissal,
@@ -341,28 +351,40 @@ final class CommentDraftStore {
         self.defaults = defaults
     }
 
-    private func key(for context: AO3CommentContext) -> String {
-        "w\(context.workID)-c\(context.chapterID ?? 0)-p\(context.parentCommentID ?? 0)"
+    private func key(for context: AO3CommentContext, identity: String) -> String {
+        "\(identity)|w\(context.workID)-c\(context.chapterID ?? 0)-p\(context.parentCommentID ?? 0)"
     }
 
-    func draft(for context: AO3CommentContext) -> String {
-        drafts()[key(for: context)] ?? ""
+    func draft(for context: AO3CommentContext, identity: String = "") -> String {
+        drafts()[key(for: context, identity: identity)] ?? ""
     }
 
-    func save(_ text: String, for context: AO3CommentContext) {
+    func save(_ text: String, for context: AO3CommentContext, identity: String = "") {
         var all = drafts()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            all.removeValue(forKey: key(for: context))
+            all.removeValue(forKey: key(for: context, identity: identity))
         } else {
-            all[key(for: context)] = text
+            all[key(for: context, identity: identity)] = text
         }
         defaults.set(all, forKey: storageKey)
     }
 
-    func clear(for context: AO3CommentContext) {
+    func clear(for context: AO3CommentContext, identity: String = "") {
         var all = drafts()
-        all.removeValue(forKey: key(for: context))
+        all.removeValue(forKey: key(for: context, identity: identity))
+        defaults.set(all, forKey: storageKey)
+    }
+
+    /// A verified post is work/parent-scoped on AO3, so clear every chapter
+    /// variant of that same account's draft rather than leaving a stale sibling.
+    func clearVariants(for context: AO3CommentContext, identity: String) {
+        var all = drafts()
+        let prefix = "\(identity)|w\(context.workID)-"
+        let suffix = "-p\(context.parentCommentID ?? 0)"
+        all.keys.filter { $0.hasPrefix(prefix) && $0.hasSuffix(suffix) }.forEach {
+            all.removeValue(forKey: $0)
+        }
         defaults.set(all, forKey: storageKey)
     }
 
