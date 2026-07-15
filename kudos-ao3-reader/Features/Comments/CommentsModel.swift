@@ -583,23 +583,35 @@ final class CommentsModel {
             identity: Self.identity(auth: auth, editTarget: composerEditTarget)
         )
         guard submissionGuard.begin(key) else { return }
+        var commentMayBeHidden = false
 
         do {
             if let editTarget = composerEditTarget {
                 _ = try await auth.editComment(commentID: editTarget.id, content: body)
                 submissionGuard.succeed()
             } else if let parentID = context.parentCommentID {
-                _ = try await auth.postCommentReply(parentCommentID: parentID, content: body)
+                _ = try await auth.postCommentReply(
+                    parentCommentID: parentID,
+                    content: body,
+                    onFormPrepared: { commentMayBeHidden = $0 }
+                )
                 submissionGuard.succeed()
                 drafts.clear(for: context)
             } else {
-                _ = try await auth.postComment(workID: context.workID, content: body)
+                _ = try await auth.postComment(
+                    workID: context.workID,
+                    content: body,
+                    onFormPrepared: { commentMayBeHidden = $0 }
+                )
                 submissionGuard.succeed()
                 drafts.clear(for: context)
             }
         } catch {
             if composerEditTarget == nil, Self.isAmbiguousSubmitError(error) {
-                submissionGuard.markAmbiguous(Self.ambiguousSubmitMessage(for: error))
+                submissionGuard.markAmbiguous(
+                    Self.ambiguousSubmitMessage(for: error),
+                    commentMayBeHidden: commentMayBeHidden
+                )
                 await runVerification(auth: auth, context: context)
             } else {
                 // An ambiguous edit surfaces as an explicit couldn't-confirm
@@ -650,7 +662,10 @@ final class CommentsModel {
         // authoritative endpoint), not a page number, so no "which page was
         // showing" state is needed here — see `AO3AuthService.verifyCommentPosted`.
         let verification = await auth.verifyCommentPosted(
-            context: target.context, body: target.body, submittedAt: submissionGuard.pendingSubmittedAt
+            context: target.context,
+            body: target.body,
+            submittedAt: submissionGuard.pendingSubmittedAt,
+            commentMayBeHidden: submissionGuard.pendingCommentMayBeHidden
         )
         submissionGuard.resolveAmbiguity(verification)
         if case .found = verification { drafts.clear(for: target.context) }
