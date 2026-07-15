@@ -559,14 +559,14 @@ struct CommentSubmissionTests {
         let chapter = AO3CommentContext(workID: 42, chapterID: 7)
         let all = AO3CommentContext(workID: 42, chapterID: nil)
 
-        store.save("Alice", for: chapter, identity: "signed-in:alice")
-        store.save("Bob", for: chapter, identity: "signed-in:bob")
-        store.save("Alice all", for: all, identity: "signed-in:alice")
+        store.save("Alice", for: chapter, identity: "alice")
+        store.save("Bob", for: chapter, identity: "bob")
+        store.save("Alice all", for: all, identity: "alice")
 
-        #expect(store.draft(for: chapter, identity: "signed-in:alice") == "Alice")
-        #expect(store.draft(for: chapter, identity: "signed-in:bob") == "Bob")
-        store.clearVariants(for: all, identity: "signed-in:alice")
-        #expect(store.draft(for: chapter, identity: "signed-in:alice").isEmpty)
-        #expect(store.draft(for: chapter, identity: "signed-in:bob") == "Bob")
+        #expect(store.draft(for: chapter, identity: "alice") == "Alice")
+        #expect(store.draft(for: chapter, identity: "bob") == "Bob")
+        store.clearVariants(for: all, identity: "alice")
+        #expect(store.draft(for: chapter, identity: "alice").isEmpty)
+        #expect(store.draft(for: chapter, identity: "bob") == "Bob")
     }
 }

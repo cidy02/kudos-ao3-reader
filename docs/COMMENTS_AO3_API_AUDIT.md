@@ -126,6 +126,19 @@ Note: otwarchive `master` moved between prompt authorship and this audit; line n
 
 **Fix direction:** apply the T-96 pattern — capture scope+generation at load start, guard after each await, include generation in `CommentsPageCache.Key` and the chapter-index key, treat auth-request construction failure as `AO3Error.authenticationRequired`, and reset mounted Comments state on generation change. **Request impact:** zero normally; one fresh page GET + conditional `/navigate` after a real transition. **Tests:** model cases beside `AO3CommentsParseTests`' model coverage (deferred A→B result inert; owner index never served to B; same-username relogin misses old cache; invalid signed-in cookies surface auth error rather than anonymous downgrade).
 
+**Status: FIXED (T-103, Part C).** `CommentsModel` captures an immutable
+`AuthContext` snapshot (identity, cache scope, `sessionGeneration`) when a
+load/submit/verification starts and re-checks it after every await; stale
+continuations are inert. `CommentsPageCache.Key` and the chapter-index key
+both carry authentication scope + generation, so a same-username relogin
+cold-loads and an owner's `/navigate` draft-chapter titles never serve across
+accounts or sign-out. Required Comments reads and verification surface
+authenticated-request construction failure as `AO3Error.authenticationRequired`
+(never a silent anonymous fetch); `CommentsView` resets or dismisses a mounted
+screen on generation change, and Inbox destinations stay bound to the session
+generation that created them. Deterministic A→B coverage:
+`CommentsAccountTransitionTests`.
+
 ### CAA-4 — Verification false-`absent` classes
 
 **Kudos:** `containsComment` matches `comment.author` (the **displayed pseud** byline text) case-insensitively against the **account username** (`AO3CommentActions.swift:196-206`), although the canonical username is available from `userPath`/`profileRoute` (`AO3CommentModels.swift:164-166`, `210-216`) — otwarchive renders registered bylines as `link_to pseud.byline, [user, pseud]` → `/users/<username>/pseuds/<pseud>` (`comments_helper.rb:54-66`). Any account whose posting pseud differs from its username never matches → `.absent` → `resolveAmbiguity` calls `fail` and releases the key (`CommentSubmission.swift:262-267`, `237-241`).
@@ -196,6 +209,18 @@ The `submit` catch spans both the form GET and the POST (`CommentsModel.swift:58
 
 Draft keys are `w<work>-c<chapter>-p<parent>` with no identity (`CommentSubmission.swift:306-308`); `startComposer` restores whatever draft exists (`CommentsModel.swift:511-525`); submission identity is read from live auth at tap time (`:578-585`, `:669-671`); verification uses live auth (`:642-655`). Consequences: account B's composer shows and can post account A's draft; an A-composed submission crossing an account transition builds its POST or its verification against B's session. The unresolved store itself is identity-partitioned (T-95) — this finding is about drafts and in-flight continuations, the part T-96 fixed for Inbox (`AO3InboxModel` `AuthContext` guards) but not Comments. Multi-account-per-device usage is the only exposure. **Fix direction:** identity-scoped draft keys (with same-account relogin recovery), identity+generation snapshot at composer open/submit, abort on mismatch. **Tests:** `CommentSubmissionTests` — A-draft invisible to B and restored for A; A→B mid-composer cannot post; stale-generation continuations inert.
 
+**Status: FIXED (T-103, Part C).** Draft keys are account-scoped
+(`<identity>|w-c-p`, canonical bare username; a signed-in session whose
+username is unknown stays generation-local instead of collapsing into a shared
+empty identity), and the same identity is used consistently by composer
+adoption, submission keys, verification clearing, and logout cleanup.
+`postComment`/`postCommentReply`/`editComment`/`deleteComment` take a required
+expected session generation, re-checked immediately after the form GET and
+before POST construction, so an account switch between form GET and POST
+aborts pre-POST instead of pairing one account's CSRF/pseud with another's
+cookie. Stale successful/failed submissions and stale verifications cannot
+touch the replacement account's composer, drafts, guard, or page.
+
 ### CAA-12 — Duplicate-guard residue
 
 At `4e57337c`: `begin` writes nothing to the shared store (`CommentSubmission.swift:206-223` — `.submitting` is instance-local), so two live guard instances (two windows/scenes on iPad/macOS) can both pass `begin` for one key and double-POST concurrently — the one path where even otwarchive's uniqueness validation can race (it's an application-level validation, not a DB constraint). `recentSuccesses` is instance-local by documented design (`:158-161`). Unresolved entries silently expire after 1 h (`:108`, `:116-119`) and are cleared on logout (`AO3AuthService.swift:488-494` — deliberate, T91-RF2-derived, but the store's identity partitioning already prevents cross-account leakage, so retention would be strictly safer for the same-user-relogs-in case). The store is process-lifetime memory by documented decision (`CommentSubmission.swift:78-82`), so process death between POST and verification drops the block while the UserDefaults draft survives — relaunch re-offers the text and a re-POST (identical → server-rejected; edited → user-authored new comment). Given the server dedup backstop and the narrowness of the true race, severity Low; the in-flight claim in the shared store is the piece genuinely worth adding. **Tests:** `CommentSubmissionTests` — two guards/one key (second blocked pre-ambiguity), success window shared across guards, expiry/logout policy as decided.
@@ -215,6 +240,15 @@ otwarchive renders an orphaned registered pseud as plain text `Account Deleted` 
 ### CAA-16 — Cross-scope draft clearing
 
 `CommentSubmissionKey` strips `chapterID` (deliberate, T-95: `CommentSubmission.swift:52-54`) while draft keys retain it (`:306-308`); `runVerification` clears only the live composer context's draft (`CommentsModel.swift:642-655`). An ambiguous attempt made from By-Chapter, verified `.found` from All scope, leaves the chapter-scoped draft alive after its key resolved; reopening that scope restores the stale text and a re-POST is possible (identical → server-rejected error; edited → user-authored). Escape from the settled chapter-normalization fix in the *draft* layer only. **Fix direction:** store the originating full context in the unresolved entry, or clear every chapter-variant of the context on verified success. **Test:** `CommentSubmissionTests` — chapter-scoped ambiguous → work-scoped verified found → no surviving stale draft.
+
+**Status: FIXED (T-103, Part C).** `CommentDraftStore.clearVariants` removes
+every chapter variant of the work/parent draft for the resolving identity, and
+verification captures the pending key (and its identity) *before* resolution
+nils it, so a chapter-scoped ambiguous attempt verified `.found` from work
+scope leaves no stale sibling draft. Definitive POST success clears variants
+the same way. Covered end-to-end (two models sharing one unresolved store) in
+`CommentsAccountTransitionTests`, plus the store-level case in
+`CommentSubmissionTests`.
 
 ---
 

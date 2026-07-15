@@ -7,6 +7,11 @@ import AppKit
 /// reply/compose and the per-comment actions AO3 actually exposes. Pushed from
 /// Work Detail and presented as a sheet from the reader's actions menu.
 struct CommentsView: View {
+    private struct PendingDelete {
+        let comment: AO3Comment
+        let generation: Int
+    }
+
     let workID: Int
     let workContext: AO3CommentsWorkContext
     /// True when presented modally (a sheet/pop-up card) rather than pushed onto
@@ -31,7 +36,7 @@ struct CommentsView: View {
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
     @State private var showingLogin = false
-    @State private var pendingDelete: AO3Comment?
+    @State private var pendingDelete: PendingDelete?
     @State private var actionBanner: String?
     @State private var contextLoadTask: Task<Void, Never>?
     /// The comment "Thread"/"Parent Thread" most recently scrolled to, briefly
@@ -52,6 +57,7 @@ struct CommentsView: View {
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
         initialCommentID: Int? = nil, initialFocusesChapter: Bool = false,
         initialReplyCommentID: Int? = nil,
+        requiredSessionGeneration: Int? = nil,
         isModal: Bool = false, onRequestExpand: (() -> Void)? = nil,
         onResolveWorkContext: ((AO3CommentsWorkContext) -> Void)? = nil
     ) {
@@ -63,6 +69,7 @@ struct CommentsView: View {
         _model = State(initialValue: CommentsModel(
             workID: workID,
             workContext: context,
+            requiredSessionGeneration: requiredSessionGeneration,
             initialChapterPosition: initialChapterPosition,
             initialCommentID: initialCommentID,
             initialFocusesChapter: initialFocusesChapter,
@@ -70,7 +77,20 @@ struct CommentsView: View {
         ))
     }
 
+    private var authenticationKey: String {
+        "\(auth.sessionGeneration)|\(auth.isLoggedIn)|\(auth.username ?? "")"
+    }
+
     var body: some View {
+        if model.belongsToCurrentSession(auth: auth) {
+            commentsBody
+        } else {
+            ProgressView()
+                .task { dismiss() }
+        }
+    }
+
+    private var commentsBody: some View {
         ScrollViewReader { proxy in
             List {
                 infoSection
@@ -108,9 +128,22 @@ struct CommentsView: View {
                     reportResolvedWorkContext()
                 }
             }
-            .onChange(of: auth.sessionGeneration) { _, _ in
+            .onChange(of: authenticationKey) { _, _ in
+                guard model.belongsToCurrentSession(auth: auth) else {
+                    dismiss()
+                    return
+                }
                 contextLoadTask?.cancel()
+                pendingDelete = nil
+                actionBanner = nil
                 model.syncAuthenticationContext(auth: auth)
+                contextLoadTask = Task {
+                    // Let any scope/chapter reset observers replace this task first,
+                    // so an account switch still issues only one comments request.
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    await model.load(auth: auth, forceRefresh: true)
+                }
             }
             .onChange(of: model.scope) { _, scope in
                 // loadInitial sets scope/chapter itself and does the one load; skip
@@ -173,8 +206,8 @@ struct CommentsView: View {
             .sheet(isPresented: $showingLogin) {
                 AO3LoginView()
             }
-            .alert("Delete this comment?", isPresented: deleteBinding, presenting: pendingDelete) { comment in
-                Button("Delete", role: .destructive) { delete(comment) }
+            .alert("Delete this comment?", isPresented: deleteBinding, presenting: pendingDelete) { pending in
+                Button("Delete", role: .destructive) { delete(pending) }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
                 Text("This removes the comment on AO3. It can't be undone.")
@@ -271,8 +304,14 @@ struct CommentsView: View {
     private func threadHandlers(scrollProxy: ScrollViewProxy) -> CommentThreadHandlers {
         CommentThreadHandlers(
             onReply: { model.startComposer(replyingTo: $0, auth: auth) },
-            onEdit: { model.startEditing($0) },
-            onDelete: { pendingDelete = $0 },
+            onEdit: { model.startEditing($0, auth: auth) },
+            onDelete: { comment in
+                guard let current = model.deletableComment(comment, auth: auth) else { return }
+                pendingDelete = PendingDelete(
+                    comment: current,
+                    generation: auth.sessionGeneration
+                )
+            },
             onCopyLink: { copyLink($0) },
             onFocusThread: { focusThread($0, proxy: scrollProxy) },
             onRequestLogin: { showingLogin = true },
@@ -703,7 +742,10 @@ struct CommentsView: View {
                         ContentUnavailableView(
                             "Couldn't Load Chapters",
                             systemImage: "exclamationmark.triangle",
-                            description: Text("Check your connection and try again.")
+                            description: Text(
+                                model.chaptersFailureMessage
+                                    ?? "Check your connection and try again."
+                            )
                         )
                     } else {
                         ProgressView()
@@ -731,12 +773,24 @@ struct CommentsView: View {
 
     // MARK: Actions
 
-    private func delete(_ comment: AO3Comment) {
+    private func delete(_ pending: PendingDelete) {
+        let expectedGeneration = pending.generation
+        guard auth.sessionGeneration == expectedGeneration else { return }
         Task {
             do {
-                actionBanner = try await auth.deleteComment(commentID: comment.id)
-                await model.load(auth: auth, forceRefresh: true)
+                let message = try await auth.deleteComment(
+                    commentID: pending.comment.id,
+                    expectedGeneration: expectedGeneration
+                )
+                guard auth.sessionGeneration == expectedGeneration else { return }
+                actionBanner = message
+                await model.load(
+                    auth: auth,
+                    forceRefresh: true,
+                    expectedGeneration: expectedGeneration
+                )
             } catch {
+                guard auth.sessionGeneration == expectedGeneration else { return }
                 actionBanner = CommentsModel.message(for: error)
             }
         }
@@ -960,7 +1014,7 @@ struct CommentComposerSheet: View {
                 // screen now — cheap (in-memory dictionary lookup), so unlike
                 // the draft save below this runs on every keystroke, not
                 // debounced.
-                model.syncSubmissionGuardToComposerText(auth: auth)
+                model.syncSubmissionGuardToComposerText()
                 // Preserve draft-as-you-type without synchronously rewriting the
                 // UserDefaults dictionary on every keystroke.
                 draftSaveTask?.cancel()

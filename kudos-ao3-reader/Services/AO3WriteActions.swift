@@ -43,8 +43,10 @@ extension AO3AuthService {
     func postComment(
         workID: Int,
         content: String,
+        expectedGeneration: Int,
         onFormPrepared: (Bool) -> Void = { _ in }
     ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
@@ -56,6 +58,7 @@ extension AO3AuthService {
         let formURL = Self.commentFormURL(workID: workID)
         let pageRequest = try authenticatedRequest(for: formURL)
         let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        try requireSessionGeneration(expectedGeneration)
         guard let token = AO3Client.parseCSRFToken(from: html) else {
             throw AO3WriteError.noCSRFToken
         }

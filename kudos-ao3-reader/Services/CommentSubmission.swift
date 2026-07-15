@@ -328,6 +328,16 @@ final class CommentSubmissionGuard {
         startedAt = nil
         phase = .idle
     }
+
+    /// Drops only this screen's presentation state when another authentication
+    /// generation takes over. Any durable ambiguous entry remains owned by its
+    /// original identity in `store`; a stale continuation must not keep the new
+    /// account's composer permanently busy.
+    func resetForAuthenticationChange() {
+        pendingKey = nil
+        startedAt = nil
+        phase = .idle
+    }
 }
 
 /// Per-context comment drafts, persisted so nothing typed is lost to a dismissal,

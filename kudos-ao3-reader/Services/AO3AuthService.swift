@@ -636,6 +636,15 @@ final class AO3AuthService {
         return request
     }
 
+    /// A comment form's CSRF token and pseud belong to the session that fetched
+    /// them. Re-check immediately before its POST so an account switch during
+    /// the form GET aborts instead of borrowing the replacement session's cookie.
+    func requireSessionGeneration(_ expectedGeneration: Int) throws {
+        guard sessionGeneration == expectedGeneration else {
+            throw CancellationError()
+        }
+    }
+
     /// Appends `AO3Client`'s currently-held Cloudflare cookies (T-100) after the
     /// account's own explicit cookie pairs, so an authenticated/write request
     /// presents a warm `cf_clearance`/`__cf_bm` too — not just anonymous reads.
