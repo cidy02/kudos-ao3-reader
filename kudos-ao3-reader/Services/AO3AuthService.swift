@@ -212,6 +212,13 @@ nonisolated enum AO3RequestDefaults {
         else { return false }
         return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
     }
+
+    /// otwarchive's Rails session cookie name (`config/initializers/session_store.rb`
+    /// — `session_store :force_signed_cookie_store, key: '_otwarchive_session'`), the
+    /// one cookie that ever carries account identity. Single-sourced so every place
+    /// that must recognize or, just as importantly, deliberately exclude it (T-100's
+    /// Cloudflare-cookie jar) references the same literal.
+    static let sessionCookieName = "_otwarchive_session"
 }
 
 /// The sole authentication API exposed to the rest of the app. UI and future AO3
@@ -598,9 +605,26 @@ final class AO3AuthService {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
+        request.setValue(
+            Self.mergedCookieHeader(auth: cookieHeader, for: url),
+            forHTTPHeaderField: "Cookie"
+        )
         request.setValue(AO3RequestDefaults.userAgent, forHTTPHeaderField: "User-Agent")
         return request
+    }
+
+    /// Appends `AO3Client`'s currently-held Cloudflare cookies (T-100) after the
+    /// account's own explicit cookie pairs, so an authenticated/write request
+    /// presents a warm `cf_clearance`/`__cf_bm` too — not just anonymous reads.
+    /// Pure string concatenation (unit-tested); the read of `AO3Client`'s jar is
+    /// the only impure step, isolated to the one call site below.
+    static func mergedCookieHeader(auth: String, challenge: String?) -> String {
+        guard let challenge, !challenge.isEmpty else { return auth }
+        return "\(auth); \(challenge)"
+    }
+
+    private static func mergedCookieHeader(auth: String, for url: URL) -> String {
+        mergedCookieHeader(auth: auth, challenge: AO3Client.shared.challengeCookieHeader(for: url))
     }
 
     /// Fetches one page of the signed-in user's works from an account-list URL built
@@ -755,7 +779,7 @@ final class AO3AuthService {
         guard sessionGeneration == expectedGeneration else { return }
         let cookies = await cookieManager.capture()
         guard sessionGeneration == expectedGeneration else { return }
-        guard cookies.contains(where: { $0.name == "_otwarchive_session" && !$0.isExpired }) else {
+        guard cookies.contains(where: { $0.name == AO3RequestDefaults.sessionCookieName && !$0.isExpired }) else {
             status = .signedOut
             return
         }

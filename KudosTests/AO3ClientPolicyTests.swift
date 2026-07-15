@@ -65,18 +65,86 @@ struct AO3ClientPolicyTests {
         #expect(step.nextAllowed == now.addingTimeInterval(0.6))
     }
 
-    // MARK: - Cookie isolation policy (A5-F1)
+    // MARK: - Cookie isolation policy (A5-F1 / T-100)
 
-    /// The anonymous session must be structurally unable to read or write cookies —
-    /// not merely start with an empty jar. `httpCookieStorage == nil` is what stops
-    /// a signed-in session's cookie (mirrored into `HTTPCookieStorage.shared` by
-    /// `AO3CookieBridge` for WebKit's benefit) from silently riding along on a
-    /// nominally anonymous search/browse/tag request.
-    @Test func anonymousSessionConfigurationDisablesCookieHandling() {
+    /// T-100: the session's cookie jar must be its own **private, ephemeral**
+    /// store — never `HTTPCookieStorage.shared` (the jar `AO3CookieBridge` used to
+    /// mirror a signed-in session's cookie into, the A5-F1 leak) — so Cloudflare's
+    /// own cookies can be kept warm without reopening that leak. `.ephemeral`
+    /// configurations always carry their own dedicated cookie storage distinct
+    /// from `.shared`, so accept/set being enabled here is safe precisely because
+    /// nothing outside this one session can ever read or write into it.
+    @Test func anonymousSessionConfigurationUsesAPrivateEphemeralCookieJarNeverTheSharedOne() {
         let config = AO3Client.makeAnonymousSessionConfiguration()
-        #expect(config.httpCookieStorage == nil)
-        #expect(config.httpShouldSetCookies == false)
-        #expect(config.httpCookieAcceptPolicy == .never)
+        #expect(config.httpCookieStorage !== HTTPCookieStorage.shared)
+        #expect(config.httpShouldSetCookies == true)
+        #expect(config.httpCookieAcceptPolicy == .always)
+    }
+
+    /// The AO3 auth/session cookie must never appear in the Cloudflare-cookie
+    /// header authenticated/write requests append to their own explicit Cookie
+    /// header — even if it somehow ended up in the jar, it must be filtered here
+    /// too (defense in depth alongside `purgeSessionCookie`).
+    @Test func challengeCookieHeaderNeverIncludesTheAO3AuthCookie() {
+        let cloudflare = HTTPCookie(properties: [
+            .name: "cf_clearance", .value: "abc123",
+            .domain: ".archiveofourown.org", .path: "/"
+        ])!
+        let botManagement = HTTPCookie(properties: [
+            .name: "__cf_bm", .value: "def456",
+            .domain: ".archiveofourown.org", .path: "/"
+        ])!
+        let authCookie = HTTPCookie(properties: [
+            .name: AO3RequestDefaults.sessionCookieName, .value: "should-never-appear-here",
+            .domain: ".archiveofourown.org", .path: "/"
+        ])!
+
+        let header = AO3Client.challengeCookieHeader(from: [cloudflare, botManagement, authCookie])
+        #expect(header != nil)
+        #expect(header?.contains("cf_clearance=abc123") == true)
+        #expect(header?.contains("__cf_bm=def456") == true)
+        #expect(header?.contains(AO3RequestDefaults.sessionCookieName) == false)
+    }
+
+    @Test func challengeCookieHeaderIsNilWhenOnlyTheAuthCookieIsPresent() {
+        let authCookie = HTTPCookie(properties: [
+            .name: AO3RequestDefaults.sessionCookieName, .value: "secret",
+            .domain: ".archiveofourown.org", .path: "/"
+        ])!
+        #expect(AO3Client.challengeCookieHeader(from: [authCookie]) == nil)
+        #expect(AO3Client.challengeCookieHeader(from: []) == nil)
+    }
+
+    /// The purge is a structural invariant, not a best-effort cleanup: after it
+    /// runs, the auth cookie cannot be read back from the jar for that URL, while
+    /// an unrelated cookie in the same jar survives untouched.
+    @Test func purgeSessionCookieRemovesOnlyTheAO3AuthCookie() {
+        let storage = HTTPCookieStorage.sharedCookieStorage(
+            forGroupContainerIdentifier: "AO3ClientPolicyTests-\(UUID().uuidString)"
+        )
+        let url = URL(string: "https://archiveofourown.org/")!
+        let authCookie = HTTPCookie(properties: [
+            .name: AO3RequestDefaults.sessionCookieName, .value: "leaked-guest-session",
+            .domain: ".archiveofourown.org", .path: "/"
+        ])!
+        let cloudflareCookie = HTTPCookie(properties: [
+            .name: "cf_clearance", .value: "abc123",
+            .domain: ".archiveofourown.org", .path: "/"
+        ])!
+        storage.setCookie(authCookie)
+        storage.setCookie(cloudflareCookie)
+        #expect(storage.cookies(for: url)?.contains { $0.name == AO3RequestDefaults.sessionCookieName } == true)
+
+        AO3Client.purgeSessionCookie(from: storage, url: url)
+
+        let remaining = storage.cookies(for: url) ?? []
+        #expect(!remaining.contains { $0.name == AO3RequestDefaults.sessionCookieName })
+        #expect(remaining.contains { $0.name == "cf_clearance" })
+    }
+
+    @Test func purgeSessionCookieToleratesANilStorage() {
+        // Must not crash/throw when the configuration's cookie storage is nil.
+        AO3Client.purgeSessionCookie(from: nil, url: URL(string: "https://archiveofourown.org/")!)
     }
 
     /// The authenticated coalescer's key must differ per account (and between an

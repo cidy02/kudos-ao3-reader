@@ -101,7 +101,7 @@ struct AO3Session: Codable, Equatable {
     }
 
     var hasSessionCookie: Bool {
-        validCookies.contains { $0.name == "_otwarchive_session" }
+        validCookies.contains { $0.name == AO3RequestDefaults.sessionCookieName }
     }
 
     func cookieHeader(for url: URL) -> String? {
