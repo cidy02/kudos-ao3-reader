@@ -31,24 +31,65 @@ struct AboutView: View {
                     Text("Kudos is free software, released under the "
                         + "**GNU General Public License v3.0**. You may use, study, "
                         + "share, and modify it under the terms of that license.")
+                    NavigationLink("Read the Full License Text") {
+                        LegalNoticesView(document: .gpl)
+                    }
                 }
 
                 Section("Open-Source Components") {
                     creditRow(
-                        "SwiftSoup", license: "MIT License",
+                        "SwiftSoup", license: "MIT",
                         detail: "HTML parsing for AO3 scraping.",
                         url: "https://github.com/scinfu/SwiftSoup"
                     )
                     creditRow(
                         "Readium Swift Toolkit", license: "BSD-3-Clause",
-                        detail: "The EPUB reading engine on the Readium reader build.",
+                        detail: "The EPUB reading engine on the Readium reader build (iOS/iPadOS).",
                         url: "https://github.com/readium/swift-toolkit"
+                    )
+                    creditRow(
+                        "CryptoSwift", license: "Zlib",
+                        detail: "Cryptographic primitives used by the Readium toolkit.",
+                        url: "https://github.com/krzyzanowskim/CryptoSwift"
+                    )
+                    creditRow(
+                        "DifferenceKit", license: "Apache-2.0",
+                        detail: "Diffing algorithms used by the Readium toolkit.",
+                        url: "https://github.com/ra1028/DifferenceKit"
+                    )
+                    creditRow(
+                        "Fuzi", license: "MIT",
+                        detail: "XML/HTML parsing used by the Readium toolkit.",
+                        url: "https://github.com/readium/Fuzi"
+                    )
+                    creditRow(
+                        "GCDWebServer", license: "BSD-3-Clause",
+                        detail: "Local HTTP server used by the Readium toolkit.",
+                        url: "https://github.com/readium/GCDWebServer"
+                    )
+                    creditRow(
+                        "SQLite.swift", license: "MIT",
+                        detail: "SQLite access used by the Readium toolkit.",
+                        url: "https://github.com/stephencelis/SQLite.swift"
+                    )
+                    creditRow(
+                        "Zip", license: "MIT",
+                        detail: "Archive extraction used by the legacy macOS reader.",
+                        url: "https://github.com/marmelroy/Zip"
+                    )
+                    creditRow(
+                        "ZIPFoundation", license: "MIT",
+                        detail: "Archive extraction used by the Readium toolkit.",
+                        url: "https://github.com/readium/ZIPFoundation"
                     )
                     creditRow(
                         "ao3_api", license: "Reference",
                         detail: "AO3 page selectors are ported from this project.",
                         url: "https://github.com/ArmindoFlores/ao3_api"
                     )
+                    NavigationLink("Read Full Third-Party Notices") {
+                        LegalNoticesView(document: .thirdParty)
+                    }
                 }
 
                 Section("Help & Feedback") {

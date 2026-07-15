@@ -2218,6 +2218,34 @@ platforms. Regression: a packaging invariant opens the built app/archive and
 asserts the GPL plus one notice keyed to every `Package.resolved` identity.
 Blocks release: **YES**.
 
+**Resolution (2026-07-15):** the root `LICENSE` (GPL-3.0, byte-identical) and a
+new generated `kudos-ao3-reader/Legal/ThirdPartyNotices.txt` (one full-text
+entry per pinned `Package.resolved` identity — CryptoSwift, DifferenceKit,
+Fuzi, GCDWebServer, SQLite.swift, `swift-toolkit`/Readium, SwiftSoup, Zip,
+ZIPFoundation) are now checked in under `kudos-ao3-reader/Legal/`, inside the
+app target's `PBXFileSystemSynchronizedRootGroup` — no pbxproj membership
+edit needed; both files bundle automatically as Copy Bundle Resources on
+iOS and macOS. New `Settings/LegalNoticesView.swift` reads either file from
+`Bundle.main` and renders it full-text, monospaced, text-selectable; `About`
+gained two `NavigationLink`s ("Read the Full License Text", "Read Full
+Third-Party Notices") reaching it, alongside expanded per-dependency credit
+rows naming all nine packages with their actual licenses (was two).
+`Scripts/check-invariants.sh` gained a new check (#9): fails if either Legal
+file is missing, if the bundled `LICENSE.txt` has drifted from the root
+`LICENSE`, or if any `Package.resolved` identity has no matching "Package
+identity: `<id>`" line in `ThirdPartyNotices.txt` — the packaging invariant
+this finding's own Regression note asked for. **Verified directly against
+built artifacts** (not just source presence): both a macOS Release build and
+an iOS Simulator Release build were produced from a clean state; both
+`Kudos.app/Contents/Resources/{LICENSE,ThirdPartyNotices}.txt` (macOS) and
+`Kudos.app/{LICENSE,ThirdPartyNotices}.txt` (iOS) were located and diffed
+byte-identical against the checked-in source files; `LegalNoticesView`
+symbols confirmed compiled into the macOS binary. The macOS Release app was
+then launched and driven end-to-end: About → "Read the Full License Text"
+renders the real bundled GPL text; About → "Read Full Third-Party Notices"
+renders the real bundled per-dependency notices, both scrollable and
+text-selectable, both reachable fully offline. A10-F1 is closed.
+
 **A10-F2 — P2 Should Fix — Public and operational documentation has drifted
 from the actual release workflow and implementation.**
 Files: `README.md:14-29`, `docs/EPUBParsing.md:140-142`, and
@@ -2244,6 +2272,29 @@ requires feature-owning docs to be reviewed in the same commit as behavior
 changes. Blocks release: no independently, but accurate docs remain required
 before a READY verdict.
 
+**Resolution (2026-07-15):** README's "Branch strategy" section now describes
+the actual gated `main`/`merge-test` workflow (linking `AGENTS.md`'s
+"Branches" section for the full contract) instead of the retired
+single-branch claim, while keeping the historical note about the June 2026
+`readium-migration` consolidation (which predated the gated workflow and is
+unrelated to it). README's "imports merge safely" claim was checked against
+A2-F1/A5-F3 specifically — both are now resolved (T-92, 2026-07-12, backup
+and EPUB archive integrity hardening) — so the claim is accurate as written
+and was left unqualified rather than hedged against a since-closed risk.
+`docs/EPUBParsing.md` no longer claims iOS import uses Readium's richer
+metadata; it now states plainly that `WorkImporter.importEPUB` uses the
+legacy `EPUBMetadata`/`OPFParser` rules on **both** platforms today, that
+`ReadiumMetadataMapper` exists but is unused dead code, and that wiring it in
+is unshipped follow-up work (matches Area 7's recorded drift). `docs/
+AO3Authentication.md` no longer describes state-changing AO3 actions as
+future work; it now names the four write clients that ship today
+(`AO3WriteActions`, `AO3CommentActions`, `AO3PreferencesActions`,
+`AO3InboxActions`) and the shipped feature set (bookmarks, Marked for Later,
+kudos, comments, preferences, Inbox actions). No other file in this finding's
+scope statement needed correction — read `README.md` end to end for
+platform-requirements/privacy claims beyond the flagged lines and found
+none stale. A10-F2 is closed.
+
 ### Packaging and documentation strengths
 
 - The source repository carries GPL-3.0, accurate AO3/OTW non-affiliation and
@@ -2261,17 +2312,18 @@ before a READY verdict.
 
 **NOT READY**
 
-There are **0 open P0, 1 open P1, 29 open P2, and 7 open P3 findings**. The
+There are **0 open P0, 0 open P1, 28 open P2, and 7 open P3 findings**. The
 frozen candidate builds, tests, archives unsigned, and launches as a Release
-simulator app, but it has a license-compliance blocker. Required signed-device,
-live-write, accessibility, sync-recovery, upgrade, and reader read-through
-gates are also incomplete. A1-F1 (unfrozen candidate), A2-F1 (stale-tag
-merge), A5-F1 (cookie isolation), A5-F2 (MiniZip hardening), A5-F3 (backup
-EPUB validation), A5-F4 (truthful session removal), A7-F1 (premature 99%
-completion/EPUB free), A7-F2 (macOS intra-chapter position loss), T91-RF1
-(guessed reply-verification page), T91-RF2 (non-durable duplicate-post
-guard), and T91-RF3 (cross-account write/reload race) are resolved P1s and
-are not included in the open count.
+simulator app; the license-compliance blocker is now closed. Required
+signed-device, live-write, accessibility, sync-recovery, upgrade, and reader
+read-through gates are still incomplete. A1-F1 (unfrozen candidate), A2-F1
+(stale-tag merge), A5-F1 (cookie isolation), A5-F2 (MiniZip hardening),
+A5-F3 (backup EPUB validation), A5-F4 (truthful session removal), A7-F1
+(premature 99% completion/EPUB free), A7-F2 (macOS intra-chapter position
+loss), T91-RF1 (guessed reply-verification page), T91-RF2 (non-durable
+duplicate-post guard), T91-RF3 (cross-account write/reload race), and
+A10-F1 (missing GPL/dependency notices) are resolved P1s and are not
+included in the open count.
 
 ## Area Summary
 
@@ -2286,14 +2338,13 @@ are not included in the open count.
 | 7. Reader/EPUB | COMPLETE | 2 resolved P1; 6 P2; 2 P3 | 107 focused reader/EPUB tests (25 completion / position-bridge / lifecycle-retention cases added 2026-07-13) plus dependency/source trace | Current iPhone/iPad/macOS read-through NOT RUN | Active-content/path/TOC defects; manual read-through still owed |
 | 8. Performance | COMPLETE | 3 P2 | Synthetic 256 MiB memory probe; algorithm/cache inspection | Large-store Instruments/device thermal NOT RUN | Whole-store recomputation, all-EPUB backup memory, unbounded Comments cache |
 | 9. Accessibility/UI/platform | COMPLETE | 4 P2 plus T91-RF10 | Static semantic/layout/platform trace; theme unit tests; builds | Owner-tested Inbox configuration PASS; full matrix NOT RUN | Hit targets, keyboard paths, accent contrast, VoiceOver/Dynamic Type unknowns |
-| 10. Docs/packaging | COMPLETE | 1 P1; 1 P2 | Bundle/license inspection; Release simulator install/launch | Signed distribution/legal review NOT RUN | Missing license notices and material documentation drift |
+| 10. Docs/packaging | COMPLETE | 1 resolved P1; 1 resolved P2 | Bundle/license inspection incl. built-artifact diff on both platforms; new packaging invariant; Release simulator install/launch | Signed distribution/legal review NOT RUN | None open; a formal legal review of the generated notices before store submission remains a recommendation, not a finding |
 
 ## Open Findings
 
 ### Release blockers (P1 Must Fix)
 
-1. **A10-F1:** standalone app distributions omit required GPL and dependency
-   license notices.
+None open.
 
 **Resolved blockers:** A1-F1 was closed by freezing T-91 as `c1bf211` and
 re-running the canonical suite. A2-F1 (stale-archive tag clobber), A5-F2
@@ -2310,10 +2361,13 @@ verification page) and T91-RF2 (non-durable duplicate-post guard) were closed
 together (2026-07-13) by the Inbox reply-verification-and-duplicate-guards
 pass on `release-fixes`. T91-RF3 (cross-account Inbox transition) and RF5
 (same-user private-cache reuse) were closed (2026-07-13) on
-`claude/inbox-account-transition-isolation-9bf225`. See the resolution notes
-under each finding above for files, tests, and verification evidence. None
-should be reopened without a code or baseline change that reintroduces the
-underlying gap.
+`claude/inbox-account-transition-isolation-9bf225`. A10-F1 (missing
+GPL/dependency notices) was closed (2026-07-15) by bundling `LICENSE.txt` and
+a generated `ThirdPartyNotices.txt` (verified byte-identical inside built
+iOS and macOS Release artifacts) with a new offline About/Legal UI and a
+packaging invariant. See the resolution notes under each finding above for
+files, tests, and verification evidence. None should be reopened without a
+code or baseline change that reintroduces the underlying gap.
 
 ### Open P2 Should Fix findings
 
@@ -2336,7 +2390,10 @@ underlying gap.
 - **Accessibility/UI:** A9-F1 (pagination hit targets/keyboard), A9-F2 (compact
   drag-only reorder), A9-F3 (arbitrary accent contrast), A9-F4 (gesture-only
   author keyboard path).
-- **Documentation:** A10-F2 (branch, safety, import, and auth docs drift).
+
+A10-F2 (branch, safety, import, and auth docs drift) was closed (2026-07-15)
+by correcting README/EPUBParsing.md/AO3Authentication.md; see its resolution
+note above.
 
 ### Open P3 Follow-up findings
 
@@ -2386,15 +2443,16 @@ underlying gap.
 | VoiceOver, AX Dynamic Type, contrast/transparency/motion, keyboard/pointer | NOT RUN | Full Area-9 matrix outstanding. |
 | Light, Dark, Sepia, OLED and several accents across critical screens | NOT RUN | Tested owner configuration only. |
 | Large-library/large-backup Instruments, memory, thermal, and battery | NOT RUN | Synthetic probe found known P2 risks; device characterization absent. |
-| GPL and third-party notices included in standalone distribution | FAIL | A10-F1: built app contains no license/notice artifact. |
+| GPL and third-party notices included in standalone distribution | PASS | A10-F1 resolved 2026-07-15: `LICENSE.txt`/`ThirdPartyNotices.txt` confirmed present and byte-identical inside both a built macOS Release `.app` and a built iOS Simulator Release `.app`; reachable offline via About → Legal in the running macOS app. |
 
 ## Exact Release Recommendation
 
 **Do not merge this candidate into the human-approved release line or distribute
-an app binary yet.** First fix and regression-test the remaining license-packaging
-P1 (A10-F1). Then correct A10-F2, explicitly fix or owner-accept each P2/P3,
-freeze a new SHA, and rerun `Scripts/verify.sh`, both Release builds, archive
-inspection, and Release launch.
+an app binary yet.** The license-packaging P1 (A10-F1) and the documentation
+P2 (A10-F2) are now both resolved and regression-tested (`Scripts/verify.sh`
+green, both Release builds inspected). Explicitly fix or owner-accept each
+remaining open P2/P3, freeze a new SHA, and rerun `Scripts/verify.sh`, both
+Release builds, archive inspection, and Release launch.
 Finally complete every NOT RUN gate above—especially signed session removal,
 upgrade/backup/sync recovery, live single-shot AO3 writes, both readers, and the
 accessibility/theme/device matrix—and obtain human approval before changing the

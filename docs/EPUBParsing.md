@@ -137,9 +137,14 @@ AO3 rating is inferred only when a subject exactly matches one of:
 All other subjects become initial work tags after removing the selected rating.
 The AO3 work-page refresh may later replace or enrich language and tag metadata.
 
-On iOS, the import maps Readium's richer metadata into the same Library fields. It
-joins multiple authors, uses the first language and series, and keeps the same exact
-AO3-rating subject matching. macOS continues to use the legacy rules above.
+`WorkImporter.importEPUB` currently uses the legacy `EPUBMetadata`/`OPFParser` rules
+above on **both** iOS and macOS at import time. A `ReadiumMetadataMapper`
+(`Features/ReaderReadium/ReadiumMetadataMapper.swift`) exists that maps a Readium
+`Publication`'s richer metadata (joined multi-author, calibre series/index, same
+exact AO3-rating subject matching) onto the shared `ImportedWorkMetadata` shape,
+but nothing currently calls it — it is unused dead code today, not exercised by
+either the import path or the Readium reader itself. Wiring it into import is
+tracked as follow-up work, not shipped behavior.
 
 ## Import and failure behavior
 

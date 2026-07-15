@@ -88,11 +88,13 @@ sign-up and password-reset pages, opened in the in-app Browse tab.
 and attaches the cookies that apply to that URL. This is the starting point for
 bookmarks, history, Marked for Later, subscriptions, kudos, and comments.
 
-State-changing AO3 actions will still need to fetch the relevant AO3 page,
-extract its current authenticity token, submit the expected form fields, and
-detect a redirect to login. Those feature-specific details should live in their
-own clients while authentication and session invalidation remain centralized in
-`AO3AuthService`.
+State-changing AO3 actions fetch the relevant AO3 page, extract its current
+authenticity token, submit the expected form fields, and detect a redirect to
+login. Bookmarks, Marked for Later, kudos, comments, preferences, and Inbox
+actions all ship today (`AO3WriteActions`, `AO3CommentActions`,
+`AO3PreferencesActions`, `AO3InboxActions`); each feature-specific client owns
+its own form/token details while authentication and session invalidation
+remain centralized in `AO3AuthService`.
 
 ## AO3 markup assumptions
 

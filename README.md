@@ -25,8 +25,12 @@ and SwiftData.
 
 ## Branch strategy
 
-Single branch: **`main`**. (The project previously tracked a `main`/`readium-migration`
-split during the reader migration; those were consolidated into `main` in June 2026.)
+`main` is gated: it only receives human-approved merges. Active feature work
+stacks on `merge-test` (a linear integration branch), with one focused branch
+per task branched from the stack's current tip. See [`AGENTS.md`](AGENTS.md#branches--main-is-gated-features-stack-on-merge-test)
+for the full workflow. (The project previously tracked a `main`/`readium-migration`
+split during the reader migration; those were consolidated into a single `main`
+in June 2026, before the gated-branch workflow below was adopted.)
 
 The reader uses the [Readium Swift Toolkit](https://github.com/readium/swift-toolkit)
 on **iOS/iPadOS**, and the original custom WKWebView + JavaScript reader (with

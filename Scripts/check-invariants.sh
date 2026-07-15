@@ -82,6 +82,33 @@ if ! grep -q "replaceItemAt" "$APP/Services/FolderSyncService.swift"; then
     "Failed writes must leave the previous package intact. docs/DATA_AND_PERSISTENCE_INVARIANTS.md."
 fi
 
+# 9. Every Package.resolved pin has a bundled license notice (A10-F1): the GPL
+#    text and the third-party notices file must exist inside the synced
+#    kudos-ao3-reader/ folder (so Xcode actually bundles them as resources),
+#    the bundled GPL copy must stay byte-identical to the root LICENSE, and
+#    every pinned package identity must appear in ThirdPartyNotices.txt.
+LEGAL="$APP/Legal"
+RESOLVED="$ROOT/AO3_App_OpenSource.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+if [ ! -f "$LEGAL/LICENSE.txt" ]; then
+  fail "kudos-ao3-reader/Legal/LICENSE.txt is missing" \
+    "The bundled GPL text is required for release distribution. docs/RELEASE_READINESS_FABLE5.md (A10-F1)."
+elif ! diff -q "$ROOT/LICENSE" "$LEGAL/LICENSE.txt" >/dev/null 2>&1; then
+  fail "kudos-ao3-reader/Legal/LICENSE.txt has drifted from the root LICENSE" \
+    "Re-copy the root LICENSE into the bundled resource. docs/RELEASE_READINESS_FABLE5.md (A10-F1)."
+fi
+if [ ! -f "$LEGAL/ThirdPartyNotices.txt" ]; then
+  fail "kudos-ao3-reader/Legal/ThirdPartyNotices.txt is missing" \
+    "Bundled dependency notices are required for release distribution. docs/RELEASE_READINESS_FABLE5.md (A10-F1)."
+elif [ -f "$RESOLVED" ]; then
+  IDENTITIES=$(grep '"identity"' "$RESOLVED" | sed -E 's/.*"identity" *: *"([^"]+)".*/\1/')
+  for id in $IDENTITIES; do
+    if ! grep -qi "Package identity: $id\$" "$LEGAL/ThirdPartyNotices.txt"; then
+      fail "Package.resolved identity '$id' has no ThirdPartyNotices.txt entry" \
+        "Add its license/copyright text so every distributed dependency is credited. docs/RELEASE_READINESS_FABLE5.md (A10-F1)."
+    fi
+  done
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "check-invariants: FAILED"
   exit 1
