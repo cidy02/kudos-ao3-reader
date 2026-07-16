@@ -874,9 +874,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Ensures a local `SavedWork` exists, importing the remote work on demand (the
-    /// same download+import the reader already used — no new AO3 request types), then
-    /// runs `action` with it. Local works run `action` immediately.
+    /// Ensures a local `SavedWork` exists, importing the remote work on demand through
+    /// the same centralized resolve/download/import/apply-metadata sequence every other
+    /// remote-work action (`WorkCardActions.performRemoteAction`, bulk actions) already
+    /// uses — no new AO3 request types, and no separately-derived chapter count. Local
+    /// works, and works with an existing (possibly Recently-Deleted, silently revived)
+    /// local match, run `action` immediately without a download.
     private func withLocalWork(_ action: @escaping (SavedWork) -> Void) {
         resolveExistingIfNeeded()
         if let work = localWork { action(work); return }
@@ -886,14 +889,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             working = true
             loadError = nil
             do {
-                let temp = try await AO3Client.shared.downloadEPUB(workID: summary.id)
-                let posted = Int(summary.chapters.split(separator: "/").first?
-                    .trimmingCharacters(in: .whitespaces) ?? "") ?? 0
-                let saved = try await importEPUB(temp, source: summary.workURL,
-                                                 isComplete: summary.isComplete ?? false,
-                                                 seriesURL: summary.seriesURL ?? "",
-                                                 knownChapterCount: posted, into: context)
-                applyRemoteMetadata(summary, to: saved)
+                let saved = try await ReadingQueueService.resolveLocalWork(for: summary, in: context)
                 localWork = saved
                 working = false
                 action(saved)
@@ -905,15 +901,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 working = false
             }
         }
-    }
-
-    /// Copies the AO3 summary's stats / warnings / categories onto a freshly-imported
-    /// work so the detail (and a later Library open) shows full parity immediately — the
-    /// EPUB carries none of these. The background AO3 refresh keeps them current. Only
-    /// fills blanks, so it never clobbers values the import already set.
-    private func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
-        ReadingQueueService.applyRemoteMetadata(summary, to: work)
-        context.saveBestEffort(reason: "Saving remote metadata failed")
     }
 
     // MARK: - Reading Queues
