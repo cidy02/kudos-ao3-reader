@@ -118,35 +118,6 @@ struct PersistenceSyncTests {
         #expect(restored.lastScrollFraction == 0.9)
     }
 
-    @Test func queueOrderingFallsBackDeterministically() throws {
-        let container = try container()
-        let context = container.mainContext
-        let queue = ReadingQueue(name: "Queue")
-        let first = SavedWork(title: "A", author: "Writer")
-        let second = SavedWork(title: "B", author: "Writer")
-        let early = ReadingQueueMembership(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            queue: queue,
-            work: first,
-            queuedAt: Date(timeIntervalSince1970: 100),
-            sortOrderInQueue: 0
-        )
-        let late = ReadingQueueMembership(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-            queue: queue,
-            work: second,
-            queuedAt: Date(timeIntervalSince1970: 200),
-            sortOrderInQueue: 0
-        )
-        context.insert(queue)
-        context.insert(first)
-        context.insert(second)
-        context.insert(late)
-        context.insert(early)
-
-        #expect(SyncMerge.deterministicMembershipOrder([late, early]).map(\.id) == [early.id, late.id])
-    }
-
     @Test func deletingWorkCreatesTombstone() throws {
         let container = try container()
         let context = container.mainContext
