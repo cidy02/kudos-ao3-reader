@@ -370,12 +370,6 @@ final class CommentDraftStore {
         defaults.set(all, forKey: storageKey)
     }
 
-    func clear(for context: AO3CommentContext, identity: String = "") {
-        var all = drafts()
-        all.removeValue(forKey: key(for: context, identity: identity))
-        defaults.set(all, forKey: storageKey)
-    }
-
     /// A verified post is work/parent-scoped on AO3, so clear every chapter
     /// variant of that same account's draft rather than leaving a stale sibling.
     func clearVariants(for context: AO3CommentContext, identity: String) {

@@ -65,14 +65,14 @@ struct LibraryFilters: Equatable {
         if rating != .any, !rating.matchesRatingText(work.rating) { return false }
 
         if !warnings.isEmpty {
-            let present = lowercased(work.workWarnings.isEmpty ? work.workTags : work.workWarnings)
+            let present = FilterTextMatching.lowercased(work.workWarnings.isEmpty ? work.workTags : work.workWarnings)
             for warning in warnings where !warning.matchNames.contains(where: { present.contains($0.lowercased()) }) {
                 return false
             }
         }
 
         if !categories.isEmpty {
-            let present = lowercased(work.workCategories.isEmpty ? work.workTags : work.workCategories)
+            let present = FilterTextMatching.lowercased(work.workCategories.isEmpty ? work.workTags : work.workCategories)
             for category in categories where !present.contains(category.title.lowercased()) {
                 return false
             }
@@ -90,8 +90,8 @@ struct LibraryFilters: Equatable {
         // Word-count bounds only apply to works whose count is known (> 0); works
         // not yet refreshed from AO3 keep an unknown count and aren't hidden.
         if work.wordCount > 0 {
-            if let from = boundValue(wordsFrom), work.wordCount < from { return false }
-            if let to = boundValue(wordsTo), work.wordCount > to { return false }
+            if let from = FilterTextMatching.bound(wordsFrom), work.wordCount < from { return false }
+            if let to = FilterTextMatching.bound(wordsTo), work.wordCount > to { return false }
         }
 
         return true
@@ -112,15 +112,6 @@ struct LibraryFilters: Equatable {
     /// list, or its flat tag list when the work hasn't been refreshed from AO3 yet.
     private func tagSet(_ categorized: [String], fallback: [String]) -> Set<String> {
         Set(categorized.isEmpty ? fallback : categorized)
-    }
-
-    private func lowercased(_ values: [String]) -> Set<String> {
-        Set(values.map { $0.lowercased() })
-    }
-
-    private func boundValue(_ text: String) -> Int? {
-        let digits = text.filter(\.isNumber)
-        return digits.isEmpty ? nil : Int(digits)
     }
 }
 

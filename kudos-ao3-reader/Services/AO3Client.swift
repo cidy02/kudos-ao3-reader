@@ -441,10 +441,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
             try await performAuthenticatedFetch(for: fetchRequest)
         }
-        if let path = responsePath, path.contains("/users/login") {
+        if Self.isLoginRedirect(path: responsePath) {
             throw AO3Error.authenticationRequired
         }
         return Self.htmlString(from: data)
+    }
+
+    /// Whether AO3 bounced an authenticated request to its login page — the
+    /// signal that the session cookies are no longer valid.
+    private static func isLoginRedirect(path: String?) -> Bool {
+        path?.contains("/users/login") == true
     }
 
     /// The `authCoalescer` key: URL *and* Cookie header, so a mid-flight account
@@ -485,7 +491,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
-        if let url = http.url, url.path.contains("/users/login") {
+        if Self.isLoginRedirect(path: http.url?.path) {
             throw AO3Error.authenticationRequired
         }
         if http.statusCode == 429 {

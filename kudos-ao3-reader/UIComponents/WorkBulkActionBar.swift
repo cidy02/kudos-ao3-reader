@@ -85,10 +85,8 @@ struct WorkBulkActionBar: View {
             Button {
                 bulkToggleFinished()
             } label: {
-                Label(
-                    allFinished ? "Mark as Still Reading" : "Mark as Finished",
-                    systemImage: allFinished ? "arrow.uturn.backward.circle" : "checkmark.circle"
-                )
+                let labels = WorkActionLabels.finished(isFinished: allFinished)
+                Label(labels.title, systemImage: labels.systemImage)
             }
         } label: {
             Text("Actions")

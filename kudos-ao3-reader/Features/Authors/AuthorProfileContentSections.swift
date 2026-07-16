@@ -63,39 +63,56 @@ struct AO3AuthorInlineErrorRow: View {
     }
 }
 
-/// The Load More / retry-pagination rows for the model's selected tab.
+/// The Load More / retry-pagination rows for a paginated tab. Purely
+/// presentational — any paginated source (an `AO3AuthorProfileModel` tab, or a
+/// view's own local `@State`) supplies its current values and a load-more action.
 struct AO3AuthorPaginationRows: View {
-    var model: AO3AuthorProfileModel
-
-    @Environment(AO3AuthService.self) private var auth
+    var loadMoreError: String?
+    var hasMore: Bool
+    var isLoadingMore: Bool
+    var currentPage: Int
+    var totalPages: Int
+    var loadMore: () -> Void
 
     var body: some View {
-        if let error = model.loadMoreError {
+        if let loadMoreError {
             VStack(alignment: .leading, spacing: 8) {
-                Label(error, systemImage: "exclamationmark.triangle")
+                Label(loadMoreError, systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Button("Try Loading More") { model.loadMore(auth: auth) }
+                Button("Try Loading More", action: loadMore)
                     .frame(minHeight: 44)
             }
             .cardRow()
-        } else if model.hasMore || model.isLoadingMore {
-            Button {
-                model.loadMore(auth: auth)
-            } label: {
+        } else if hasMore || isLoadingMore {
+            Button(action: loadMore) {
                 HStack {
-                    if model.isLoadingMore { ProgressView().controlSize(.small) }
-                    Text(model.isLoadingMore ? "Loading…" : "Load More")
+                    if isLoadingMore { ProgressView().controlSize(.small) }
+                    Text(isLoadingMore ? "Loading…" : "Load More")
                     Spacer()
-                    Text("Page \(max(1, model.currentPage)) of \(model.totalPages)")
+                    Text("Page \(max(1, currentPage)) of \(totalPages)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(minHeight: 44)
             }
-            .disabled(model.isLoadingMore)
+            .disabled(isLoadingMore)
             .cardRow()
         }
+    }
+}
+
+extension AO3AuthorPaginationRows {
+    /// Convenience for the common case: drive directly off an `AO3AuthorProfileModel`.
+    init(model: AO3AuthorProfileModel, auth: AO3AuthService) {
+        self.init(
+            loadMoreError: model.loadMoreError,
+            hasMore: model.hasMore,
+            isLoadingMore: model.isLoadingMore,
+            currentPage: model.currentPage,
+            totalPages: model.totalPages,
+            loadMore: { model.loadMore(auth: auth) }
+        )
     }
 }
 
@@ -183,6 +200,7 @@ struct AO3AuthorWorksSection: View {
     /// Lets an embedding surface scope its Mature-reveal control to these rows.
     var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
 
+    @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -227,7 +245,7 @@ struct AO3AuthorWorksSection: View {
                     }
                 }
                 AccountWorksCompactGrid(entries: workEntries)
-                AO3AuthorPaginationRows(model: model)
+                AO3AuthorPaginationRows(model: model, auth: auth)
                     .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
             }
         }
@@ -266,7 +284,7 @@ struct AO3AuthorWorksSection: View {
                         }
                     }
                 }
-                AO3AuthorPaginationRows(model: model)
+                AO3AuthorPaginationRows(model: model, auth: auth)
             }
         }
     }
@@ -309,6 +327,8 @@ struct AO3AuthorWorksSection: View {
 struct AO3AuthorSeriesSection: View {
     var model: AO3AuthorProfileModel
 
+    @Environment(AO3AuthService.self) private var auth
+
     var body: some View {
         Section("Series") {
             if model.contentPhase == .loading, model.series.isEmpty {
@@ -329,7 +349,7 @@ struct AO3AuthorSeriesSection: View {
                         .cardNavigation(to: series)
                         .cardRow()
                 }
-                AO3AuthorPaginationRows(model: model)
+                AO3AuthorPaginationRows(model: model, auth: auth)
             }
         }
     }
@@ -343,6 +363,8 @@ struct AO3AuthorBookmarksSection: View {
     var expandAll: Bool
     var displayMode: WorkListDisplayMode = .detailed
     var layout: AccountWorksLayout = .list
+
+    @Environment(AO3AuthService.self) private var auth
 
     var body: some View {
         if layout == .scroll, displayMode == .compact {
@@ -378,7 +400,7 @@ struct AO3AuthorBookmarksSection: View {
                     }
                 }
                 AccountBookmarksCompactGrid(bookmarks: model.bookmarks)
-                AO3AuthorPaginationRows(model: model)
+                AO3AuthorPaginationRows(model: model, auth: auth)
                     .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
             }
         }
@@ -404,7 +426,7 @@ struct AO3AuthorBookmarksSection: View {
                         .cardNavigation(to: bookmark.work)
                         .cardRow()
                 }
-                AO3AuthorPaginationRows(model: model)
+                AO3AuthorPaginationRows(model: model, auth: auth)
             }
         }
     }

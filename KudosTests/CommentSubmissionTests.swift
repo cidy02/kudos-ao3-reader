@@ -527,7 +527,7 @@ struct CommentSubmissionTests {
 
     // MARK: Drafts
 
-    @Test func draftsPersistPerContextAndClearOnSuccess() {
+    @Test func draftsPersistPerContextAndEmptySaveClears() {
         let suiteName = "CommentSubmissionTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -541,10 +541,6 @@ struct CommentSubmissionTests {
 
         #expect(store.draft(for: topLevel) == "Half-typed thought…")
         #expect(store.draft(for: reply) == "Reply in progress")
-
-        store.clear(for: topLevel)
-        #expect(store.draft(for: topLevel).isEmpty)
-        #expect(store.draft(for: reply) == "Reply in progress") // untouched
 
         // Saving an effectively-empty draft removes the entry.
         store.save("   \n", for: reply)

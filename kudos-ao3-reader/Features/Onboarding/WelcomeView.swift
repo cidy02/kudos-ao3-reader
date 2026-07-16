@@ -8,35 +8,13 @@ struct WelcomeView: View {
     /// Called when the user taps Continue; the host persists completion.
     var onContinue: () -> Void
 
-    @Environment(ThemeManager.self) private var theme
-
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 28) {
-                    header
-                    points
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 44)
-                .padding(.bottom, 24)
-                .frame(maxWidth: 540)
-                .frame(maxWidth: .infinity)
-            }
+        OnboardingScaffold {
+            header
+            points
+        } footer: {
             footer
         }
-        .background(backgroundColor.ignoresSafeArea())
-    }
-
-    /// The themed app background, falling back to the platform's default surface
-    /// for Light/Dark (where `appBaseBackground` is nil).
-    private var backgroundColor: Color {
-        if let themed = theme.appTheme.appBaseBackground { return themed }
-        #if os(macOS)
-        return Color(nsColor: .windowBackgroundColor)
-        #else
-        return Color(uiColor: .systemBackground)
-        #endif
     }
 
     private var header: some View {
@@ -63,46 +41,27 @@ struct WelcomeView: View {
 
     private var points: some View {
         VStack(alignment: .leading, spacing: 22) {
-            point(
-                "book", "Built for AO3 Readers",
-                "An unofficial, third-party reader for Archive of Our Own — free, open "
+            OnboardingPointRow(
+                symbol: "book", title: "Built for AO3 Readers",
+                message: "An unofficial, third-party reader for Archive of Our Own — free, open "
                     + "source, and always ad-free. Not affiliated with AO3 or the OTW."
             )
-            point(
-                "lock.shield", "Your Privacy Matters",
-                "No ads, analytics, tracking, or hidden data collection. Anything the "
+            OnboardingPointRow(
+                symbol: "lock.shield", title: "Your Privacy Matters",
+                message: "No ads, analytics, tracking, or hidden data collection. Anything the "
                     + "app needs — like your AO3 login — stays on your device."
             )
-            point(
-                "heart", "Community Built",
-                "A labor of love. Donations aren't accepted, but contributions are "
+            OnboardingPointRow(
+                symbol: "heart", title: "Community Built",
+                message: "A labor of love. Donations aren't accepted, but contributions are "
                     + "always welcome."
             )
-            point(
-                "ladybug", "Need Help?",
-                "Found a bug? Shake your device to send a report, or open a GitHub "
+            OnboardingPointRow(
+                symbol: "ladybug", title: "Need Help?",
+                message: "Found a bug? Shake your device to send a report, or open a GitHub "
                     + "issue. Please don't contact the AO3 team — they can't support this app."
             )
         }
-    }
-
-    private func point(_ symbol: String, _ title: String, _ body: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: symbol)
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                Text(body)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private var footer: some View {
@@ -123,11 +82,5 @@ struct WelcomeView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 14)
-        .padding(.bottom, 22)
-        .frame(maxWidth: 540)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
     }
 }

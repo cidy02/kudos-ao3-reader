@@ -302,11 +302,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             } label: {
-                let finished = localWork?.isFinished ?? false
-                Label(
-                    finished ? "Mark as Still Reading" : "Mark as Finished",
-                    systemImage: finished ? "arrow.uturn.backward.circle" : "checkmark.circle"
-                )
+                let labels = WorkActionLabels.finished(isFinished: localWork?.isFinished ?? false)
+                Label(labels.title, systemImage: labels.systemImage)
             }
 
             Button {
@@ -367,7 +364,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if work.isInSavedForLaterQueue {
             switch work.epubPreservationStatus {
             case .preserved:
-                if hasReadableEPUB(for: work) {
+                if WorkReaderPreparation.hasReadableEPUB(for: work) {
                     return "Saved for Later — a local EPUB is kept for offline reading."
                 }
                 return "Saved for Later, but the local EPUB needs to be restored."
@@ -400,10 +397,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             if work.isFavorite { return "Favorited, so its file is kept when finished." }
             return "Reading. When you finish, the file is freed unless you save or favorite it."
         }
-    }
-
-    private func hasReadableEPUB(for work: SavedWork) -> Bool {
-        work.hasEPUB && FileManager.default.fileExists(atPath: work.fileURL.path)
     }
 
     // MARK: - Toolbar (favorite + more)

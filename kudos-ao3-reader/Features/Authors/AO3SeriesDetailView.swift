@@ -90,9 +90,7 @@ struct AO3SeriesDetailView: View {
     @ViewBuilder
     private var worksContent: some View {
         if phase == .loading, works.isEmpty {
-            ForEach(0..<4, id: \.self) { _ in
-                AO3WorkRowSkeleton().cardRow()
-            }
+            AO3AuthorLoadingRows()
         } else if case let .failed(message) = phase, works.isEmpty {
             AO3ProfileMessageRow(
                 title: "Couldn't load series",
@@ -111,10 +109,7 @@ struct AO3SeriesDetailView: View {
             .cardRow()
         } else {
             if case let .failed(message) = phase {
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .cardRow()
+                AO3AuthorInlineErrorRow(message: message)
             }
             ForEach(workEntries) { entry in
                 if let work = entry.local {
@@ -127,38 +122,14 @@ struct AO3SeriesDetailView: View {
                         .cardRow()
                 }
             }
-            paginationRow
-        }
-    }
-
-    @ViewBuilder
-    private var paginationRow: some View {
-        if let loadMoreError {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(loadMoreError, systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button("Try Loading More") {
-                    startLoad(page: currentPage + 1, replace: false)
-                }
-            }
-            .cardRow()
-        } else if currentPage < totalPages || isLoadingMore {
-            Button {
-                startLoad(page: currentPage + 1, replace: false)
-            } label: {
-                HStack {
-                    if isLoadingMore { ProgressView().controlSize(.small) }
-                    Text(isLoadingMore ? "Loading…" : "Load More")
-                    Spacer()
-                    Text("Page \(max(1, currentPage)) of \(totalPages)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(minHeight: 44)
-            }
-            .disabled(isLoadingMore)
-            .cardRow()
+            AO3AuthorPaginationRows(
+                loadMoreError: loadMoreError,
+                hasMore: currentPage < totalPages,
+                isLoadingMore: isLoadingMore,
+                currentPage: currentPage,
+                totalPages: totalPages,
+                loadMore: { startLoad(page: currentPage + 1, replace: false) }
+            )
         }
     }
 

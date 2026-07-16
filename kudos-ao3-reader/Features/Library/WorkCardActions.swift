@@ -107,6 +107,22 @@ private struct LocalWorkReaderDestination: View {
     }
 }
 
+/// Label/icon pairs for work-lifecycle toggles duplicated across card context
+/// menus, work detail, and the bulk-action bar.
+enum WorkActionLabels {
+    static func finished(isFinished: Bool) -> (title: String, systemImage: String) {
+        isFinished
+            ? ("Mark as Still Reading", "arrow.uturn.backward.circle")
+            : ("Mark as Finished", "checkmark.circle")
+    }
+
+    static func savedForLater(isQueued: Bool) -> (title: String, systemImage: String) {
+        isQueued
+            ? ("Remove from Saved for Later", "bookmark.slash")
+            : ("Save for Later", "bookmark.fill")
+    }
+}
+
 enum WorkReaderPreparation {
     @MainActor
     static func hasReadableEPUB(for work: SavedWork) -> Bool {
@@ -216,10 +232,8 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 Button {
                     toggleSavedForLater()
                 } label: {
-                    Label(
-                        work.isInSavedForLaterQueue ? "Remove from Saved for Later" : "Save for Later",
-                        systemImage: work.isInSavedForLaterQueue ? "bookmark.slash" : "bookmark.fill"
-                    )
+                    let labels = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
 
                 Button {
@@ -231,10 +245,8 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 Button {
                     toggleFinished()
                 } label: {
-                    Label(
-                        work.isFinished ? "Mark as Still Reading" : "Mark as Finished",
-                        systemImage: work.isFinished ? "arrow.uturn.backward.circle" : "checkmark.circle"
-                    )
+                    let labels = WorkActionLabels.finished(isFinished: work.isFinished)
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
 
                 Button {
@@ -355,12 +367,10 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 Button {
                     toggleSavedForLater()
                 } label: {
-                    Label(
-                        existingLocalWork?.isInSavedForLaterQueue == true
-                            ? "Remove from Saved for Later" : "Save for Later",
-                        systemImage: existingLocalWork?.isInSavedForLaterQueue == true
-                            ? "bookmark.slash" : "bookmark.fill"
+                    let labels = WorkActionLabels.savedForLater(
+                        isQueued: existingLocalWork?.isInSavedForLaterQueue == true
                     )
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
                 .disabled(working)
 
@@ -374,12 +384,8 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 Button {
                     toggleFinished()
                 } label: {
-                    Label(
-                        existingLocalWork?.isFinished == true ? "Mark as Still Reading" : "Mark as Finished",
-                        systemImage: existingLocalWork?.isFinished == true
-                            ? "arrow.uturn.backward.circle"
-                            : "checkmark.circle"
-                    )
+                    let labels = WorkActionLabels.finished(isFinished: existingLocalWork?.isFinished == true)
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
                 .disabled(working)
 

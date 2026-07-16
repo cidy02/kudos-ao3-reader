@@ -834,7 +834,7 @@ struct AccountWorksInlineSection: View {
             try AO3Client.parseBookmarksPage(html, page: page)
         case .subscriptions:
             try AO3Client.parseSubscriptionsPage(html, page: page)
-        case .markedForLater, .history, .myWorks, .collection:
+        case .markedForLater, .history, .collection:
             try AO3Client.parseSearchPage(html, page: page)
         }
     }

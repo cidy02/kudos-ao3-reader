@@ -45,7 +45,7 @@ extension AO3SearchFilters {
 
     private func warningsMatch(_ work: AO3WorkSummary) -> Bool {
         guard !warnings.isEmpty || !excludedWarnings.isEmpty else { return true }
-        let present = lowercased(work.warnings)
+        let present = FilterTextMatching.lowercased(work.warnings)
         func hasWarning(_ warning: AO3SearchFilters.Warning) -> Bool {
             warning.matchNames.contains { present.contains($0.lowercased()) }
         }
@@ -54,7 +54,7 @@ extension AO3SearchFilters {
 
     private func categoriesMatch(_ work: AO3WorkSummary) -> Bool {
         guard !categories.isEmpty || !excludedCategories.isEmpty else { return true }
-        let present = lowercased(work.categories)
+        let present = FilterTextMatching.lowercased(work.categories)
         func hasCategory(_ category: AO3SearchFilters.Category) -> Bool {
             present.contains(category.title.lowercased())
         }
@@ -77,8 +77,8 @@ extension AO3SearchFilters {
     /// Word-count bounds only apply when AO3 gave a count; works without one aren't hidden.
     private func wordCountMatches(_ work: AO3WorkSummary) -> Bool {
         guard let words = work.words else { return true }
-        if let from = bound(wordsFrom), words < from { return false }
-        if let to = bound(wordsTo), words > to { return false }
+        if let from = FilterTextMatching.bound(wordsFrom), words < from { return false }
+        if let to = FilterTextMatching.bound(wordsTo), words > to { return false }
         return true
     }
 
@@ -96,12 +96,4 @@ extension AO3SearchFilters {
             || tags.contains { $0.localizedCaseInsensitiveContains(value) }
     }
 
-    private func lowercased(_ values: [String]) -> Set<String> {
-        Set(values.map { $0.lowercased() })
-    }
-
-    private func bound(_ text: String) -> Int? {
-        let digits = text.filter(\.isNumber)
-        return digits.isEmpty ? nil : Int(digits)
-    }
 }
