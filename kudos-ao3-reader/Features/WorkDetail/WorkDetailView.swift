@@ -408,7 +408,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 withLocalWork { work in
                     work.isFavorite.toggle()
                     work.markModified()
-                    saveBestEffort("Saving favorite state failed")
+                    context.saveBestEffort(reason: "Saving favorite state failed")
                 }
             } label: {
                 let fav = localWork?.isFavorite ?? false
@@ -913,7 +913,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// fills blanks, so it never clobbers values the import already set.
     private func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
         ReadingQueueService.applyRemoteMetadata(summary, to: work)
-        saveBestEffort("Saving remote metadata failed")
+        context.saveBestEffort(reason: "Saving remote metadata failed")
     }
 
     // MARK: - Reading Queues
@@ -1071,22 +1071,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 + "\(result.preserved) work\(result.preserved == 1 ? "" : "s")."
         }
         if result.total == 0 { return "No other series works were found." }
-        var parts: [String] = []
-        if result.preserved > 0 {
-            parts.append("\(result.preserved) preserved")
-        }
-        if result.alreadyPreserved > 0 {
-            parts.append("\(result.alreadyPreserved) already preserved")
-        }
-        if result.unavailable > 0 {
-            parts.append("\(result.unavailable) unavailable")
-        }
-        if result.failed > 0 {
-            parts.append("\(result.failed) failed")
-        }
-        if result.skipped > 0 {
-            parts.append("\(result.skipped) skipped")
-        }
+        let parts = result.summaryParts(verb: "preserved")
         if parts.isEmpty {
             return "Series works are already preserved for later."
         }
@@ -1157,7 +1142,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             let tag = tag(named: name)
             if !work.tags.contains(where: { $0.name == tag.name }) {
                 work.tags.append(tag)
-                saveBestEffort("Saving tag assignment failed")
+                context.saveBestEffort(reason: "Saving tag assignment failed")
             }
         }
     }
@@ -1165,7 +1150,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private func removeTag(_ tag: Tag) {
         guard let work = localWork else { return }
         work.tags.removeAll { $0.name == tag.name }
-        saveBestEffort("Saving tag removal failed")
+        context.saveBestEffort(reason: "Saving tag removal failed")
     }
 
     /// Returns an existing tag with this name (case-insensitive) or creates one.
@@ -1176,16 +1161,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         let created = Tag(name: name)
         context.insert(created)
         return created
-    }
-
-    private func saveBestEffort(_ reason: StaticString) {
-        do {
-            try context.save()
-        } catch {
-            Log.library.error(
-                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-        }
     }
 }
 

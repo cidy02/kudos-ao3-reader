@@ -35,7 +35,7 @@ enum PreservedWorkService {
         work.permanentDeletionScheduledAt = now.addingTimeInterval(recoveryWindow)
         work.markModified(now)
         SyncTombstones.recordDeletion(of: work, in: context)
-        saveBestEffort(context, reason: "Saving soft-deleted work failed")
+        context.saveBestEffort(reason: "Saving soft-deleted work failed")
     }
 
     /// Moves a collection to Recently Deleted. Its `works` relationship is left
@@ -48,7 +48,7 @@ enum PreservedWorkService {
         collection.permanentDeletionScheduledAt = now.addingTimeInterval(recoveryWindow)
         collection.markModified(now)
         SyncTombstones.recordDeletion(of: collection, in: context)
-        saveBestEffort(context, reason: "Saving soft-deleted collection failed")
+        context.saveBestEffort(reason: "Saving soft-deleted collection failed")
     }
 
     /// Moves a reading queue to Recently Deleted. Deliberately does **not** remove
@@ -62,7 +62,7 @@ enum PreservedWorkService {
         queue.permanentDeletionScheduledAt = now.addingTimeInterval(recoveryWindow)
         queue.markModified(now)
         SyncTombstones.recordDeletion(of: queue, in: context)
-        saveBestEffort(context, reason: "Saving soft-deleted queue failed")
+        context.saveBestEffort(reason: "Saving soft-deleted queue failed")
     }
 
     // MARK: - Restore
@@ -73,7 +73,7 @@ enum PreservedWorkService {
         work.permanentDeletionScheduledAt = nil
         work.markModified()
         retractTombstone(recordID: work.id, type: .savedWork, in: context)
-        saveBestEffort(context, reason: "Saving restored work failed")
+        context.saveBestEffort(reason: "Saving restored work failed")
     }
 
     static func restore(_ collection: WorkCollection, in context: ModelContext) {
@@ -82,7 +82,7 @@ enum PreservedWorkService {
         collection.permanentDeletionScheduledAt = nil
         collection.markModified()
         retractTombstone(recordID: collection.id, type: .workCollection, in: context)
-        saveBestEffort(context, reason: "Saving restored collection failed")
+        context.saveBestEffort(reason: "Saving restored collection failed")
     }
 
     static func restore(_ queue: ReadingQueue, in context: ModelContext) {
@@ -91,7 +91,7 @@ enum PreservedWorkService {
         queue.permanentDeletionScheduledAt = nil
         queue.markModified()
         retractTombstone(recordID: queue.id, type: .readingQueue, in: context)
-        saveBestEffort(context, reason: "Saving restored queue failed")
+        context.saveBestEffort(reason: "Saving restored queue failed")
     }
 
     /// Deletes the tombstone recorded at soft-delete time, rather than relying on a
@@ -115,7 +115,7 @@ enum PreservedWorkService {
     /// `sweepExpired` once the window naturally lapses.
     static func hardDelete(_ collection: WorkCollection, in context: ModelContext) {
         context.delete(collection)
-        saveBestEffort(context, reason: "Saving permanently-deleted collection failed")
+        context.saveBestEffort(reason: "Saving permanently-deleted collection failed")
     }
 
     /// Permanently deletes a reading queue right away. Tombstones each membership
@@ -132,7 +132,7 @@ enum PreservedWorkService {
             }
         }
         context.delete(queue)
-        saveBestEffort(context, reason: "Saving permanently-deleted queue failed")
+        context.saveBestEffort(reason: "Saving permanently-deleted queue failed")
     }
 
     // MARK: - Sweep
@@ -179,15 +179,5 @@ enum PreservedWorkService {
             Log.library.info("Recently Deleted sweep permanently removed \(count, privacy: .public) record(s)")
         }
         return count
-    }
-
-    private static func saveBestEffort(_ context: ModelContext, reason: StaticString) {
-        do {
-            try context.save()
-        } catch {
-            Log.library.error(
-                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-        }
     }
 }

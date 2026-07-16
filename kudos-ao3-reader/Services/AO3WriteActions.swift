@@ -15,7 +15,7 @@ extension AO3AuthService {
     func giveKudos(workID: Int) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
-        let token = try await csrfToken(forPageAt: workURL)
+        let (_, token) = try await fetchCSRFPage(at: workURL)
 
         let body = Self.formEncoded([
             ("authenticity_token", token),
@@ -56,12 +56,8 @@ extension AO3AuthService {
         // the comment form — without it, an adult work's top-level comment would
         // POST pseud-less and be rejected (CAA-1).
         let formURL = Self.commentFormURL(workID: workID)
-        let pageRequest = try authenticatedRequest(for: formURL)
-        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        let (html, token) = try await fetchCSRFPage(at: formURL)
         try requireSessionGeneration(expectedGeneration)
-        guard let token = AO3Client.parseCSRFToken(from: html) else {
-            throw AO3WriteError.noCSRFToken
-        }
 
         let pseud = try requiredCommentPseudID(from: html)
         // Preserve this exact form-page evidence if the POST outcome becomes
@@ -78,14 +74,11 @@ extension AO3AuthService {
             body: Self.formEncoded(params), csrf: token, referer: formURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
-        case .success:
-            return "Comment posted."
-        case .unconfirmed:
-            throw AO3WriteError.unconfirmed
-        case let .rejected(reason):
-            throw AO3WriteError.rejected(reason ?? "AO3 couldn't post the comment.")
-        }
+        return try commentWriteResult(
+            status: status, body: responseBody,
+            onSuccess: "Comment posted.",
+            rejectionFallback: "AO3 couldn't post the comment."
+        )
     }
 
     /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
@@ -94,9 +87,7 @@ extension AO3AuthService {
     func toggleSubscribe(workID: Int) async throws -> String {
         guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
-        let pageRequest = try authenticatedRequest(for: workURL)
-        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
-        guard let token = AO3Client.parseCSRFToken(from: html) else { throw AO3WriteError.noCSRFToken }
+        let (html, token) = try await fetchCSRFPage(at: workURL)
 
         let state = AO3Client.parseSubscription(from: html)
         if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
@@ -135,7 +126,7 @@ extension AO3AuthService {
     func markForLater(workID: Int) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
-        let token = try await csrfToken(forPageAt: workURL)
+        let (_, token) = try await fetchCSRFPage(at: workURL)
         let body = Self.formEncoded([("authenticity_token", token)])
         let request = try writeRequest(
             to: Self.markForLaterEndpoint(workID: workID),
@@ -161,9 +152,7 @@ extension AO3AuthService {
     func createBookmark(workID: Int, input: BookmarkInput) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
-        let pageRequest = try authenticatedRequest(for: workURL)
-        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
-        guard let token = AO3Client.parseCSRFToken(from: html) else { throw AO3WriteError.noCSRFToken }
+        let (html, token) = try await fetchCSRFPage(at: workURL)
 
         var params: [(String, String)] = [
             ("authenticity_token", token),
@@ -191,13 +180,44 @@ extension AO3AuthService {
 
     // MARK: - Helpers
 
-    private func csrfToken(forPageAt url: URL) async throws -> String {
+    /// Fetches a page and its CSRF token together — the common first step of
+    /// every AO3 write action. Callers that also need the page HTML (pseud/
+    /// subscription-state parsing, form-drift detection) read it from the same
+    /// fetch; callers that only need the token (kudos, mark-for-later, comment
+    /// delete/edit) just discard it. Internal (not private) so sibling
+    /// write-action extensions (`AO3CommentActions`) share the one
+    /// implementation instead of forking it.
+    func fetchCSRFPage(at url: URL) async throws -> (html: String, token: String) {
         let request = try authenticatedRequest(for: url)
         let html = try await AO3Client.shared.authenticatedPageHTML(for: request)
         guard let token = AO3Client.parseCSRFToken(from: html) else {
             throw AO3WriteError.noCSRFToken
         }
-        return token
+        return (html, token)
+    }
+
+    /// Turns AO3's write-verdict for a comment-shaped POST (post/reply/edit/
+    /// delete/Inbox-bulk-action) into either `onSuccess()` or a thrown error
+    /// carrying `rejectionFallback()` when AO3 gave no specific reason.
+    /// Deliberately **not** used by `giveKudos` — kudos has its own
+    /// "already left kudos" 2xx/422 semantics with no flash-message equivalent,
+    /// so folding it in here would be a real behavior change, not deduplication.
+    /// Internal (not private) so sibling write-action extensions
+    /// (`AO3CommentActions`, `AO3InboxActions`) share the one implementation.
+    func commentWriteResult(
+        status: Int,
+        body: String,
+        onSuccess: @autoclosure () -> String,
+        rejectionFallback: @autoclosure () -> String
+    ) throws -> String {
+        switch AO3Client.commentWriteVerdict(status: status, body: body) {
+        case .success:
+            return onSuccess()
+        case .unconfirmed:
+            throw AO3WriteError.unconfirmed
+        case let .rejected(reason):
+            throw AO3WriteError.rejected(reason ?? rejectionFallback())
+        }
     }
 
     /// Builds an authenticated `POST` carrying the CSRF token, form body, and (for

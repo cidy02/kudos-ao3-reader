@@ -26,12 +26,8 @@ extension AO3AuthService {
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
 
         let formURL = Self.commentReplyFormURL(parentCommentID: parentCommentID)
-        let pageRequest = try authenticatedRequest(for: formURL)
-        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        let (html, token) = try await fetchCSRFPage(at: formURL)
         try requireSessionGeneration(expectedGeneration)
-        guard let token = AO3Client.parseCSRFToken(from: html) else {
-            throw AO3WriteError.noCSRFToken
-        }
 
         let pseud = try requiredCommentPseudID(from: html)
         onFormPrepared(AO3Client.commentFormMayHidePostedComment(
@@ -47,14 +43,11 @@ extension AO3AuthService {
             body: Self.formEncoded(params), csrf: token, referer: formURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
-        case .success:
-            return "Reply posted."
-        case .unconfirmed:
-            throw AO3WriteError.unconfirmed
-        case let .rejected(reason):
-            throw AO3WriteError.rejected(reason ?? "AO3 couldn't post the reply.")
-        }
+        return try commentWriteResult(
+            status: status, body: responseBody,
+            onSuccess: "Reply posted.",
+            rejectionFallback: "AO3 couldn't post the reply."
+        )
     }
 
     /// Deletes one of the session's own comments. Only callable when AO3 itself
@@ -67,7 +60,7 @@ extension AO3AuthService {
         try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let threadURL = Self.commentThreadURL(commentID)
-        let token = try await commentPageCSRF(at: threadURL)
+        let (_, token) = try await fetchCSRFPage(at: threadURL)
         try requireSessionGeneration(expectedGeneration)
         // Rails destroy: POST to the comment resource with _method=delete.
         let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
@@ -75,14 +68,11 @@ extension AO3AuthService {
             to: threadURL, body: body, csrf: token, referer: threadURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
-        case .success:
-            return "Comment deleted."
-        case .unconfirmed:
-            throw AO3WriteError.unconfirmed
-        case let .rejected(reason):
-            throw AO3WriteError.rejected(reason ?? "AO3 couldn't delete the comment.")
-        }
+        return try commentWriteResult(
+            status: status, body: responseBody,
+            onSuccess: "Comment deleted.",
+            rejectionFallback: "AO3 couldn't delete the comment."
+        )
     }
 
     /// Edits one of the session's own comments (`PUT /comments/<id>` via
@@ -96,7 +86,7 @@ extension AO3AuthService {
         guard !text.isEmpty else { throw AO3WriteError.emptyComment }
 
         let editURL = Self.commentEditURL(commentID)
-        let token = try await commentPageCSRF(at: editURL)
+        let (_, token) = try await fetchCSRFPage(at: editURL)
         try requireSessionGeneration(expectedGeneration)
         let body = Self.formEncoded([
             ("_method", "put"),
@@ -108,14 +98,11 @@ extension AO3AuthService {
             body: body, csrf: token, referer: editURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
-        case .success:
-            return "Comment updated."
-        case .unconfirmed:
-            throw AO3WriteError.unconfirmed
-        case let .rejected(reason):
-            throw AO3WriteError.rejected(reason ?? "AO3 couldn't update the comment.")
-        }
+        return try commentWriteResult(
+            status: status, body: responseBody,
+            onSuccess: "Comment updated.",
+            rejectionFallback: "AO3 couldn't update the comment."
+        )
     }
 
     // MARK: Ambiguous-submit verification
@@ -321,15 +308,6 @@ extension AO3AuthService {
     }
 
     // MARK: Helpers
-
-    private func commentPageCSRF(at url: URL) async throws -> String {
-        let request = try authenticatedRequest(for: url)
-        let html = try await AO3Client.shared.authenticatedPageHTML(for: request)
-        guard let token = AO3Client.parseCSRFToken(from: html) else {
-            throw AO3WriteError.noCSRFToken
-        }
-        return token
-    }
 
     static func commentThreadURL(_ commentID: Int) -> URL {
         URL(string: "https://archiveofourown.org/comments/\(commentID)")!

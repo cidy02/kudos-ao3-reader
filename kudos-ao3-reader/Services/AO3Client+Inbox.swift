@@ -48,12 +48,7 @@ extension AO3Client {
         let bulkForm = Self.parseInboxBulkForm(in: doc, items: items)
         let filterForm = Self.parseInboxFilterForm(in: doc)
 
-        var totalPages = page
-        for li in try doc.select("ol.pagination li").array() {
-            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
-                totalPages = value
-            }
-        }
+        let totalPages = try paginationTotal(in: doc, currentPage: page)
 
         // "My Inbox (12 comments, 3 unread)" — take the first two integers in the
         // heading. Absent/unreadable counts stay nil (they're a bonus, not load-bearing).

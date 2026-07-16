@@ -36,13 +36,10 @@ extension AO3AuthService {
         // sets `flash[:caution]` on its failure branch (`inbox_controller.rb`), so
         // the shared verdict reads both honestly; a page with neither is
         // `unconfirmed`, not success (CAA-2).
-        switch AO3Client.commentWriteVerdict(status: status, body: responseBody) {
-        case .success:
-            return action.successMessage
-        case .unconfirmed:
-            throw AO3WriteError.unconfirmed
-        case let .rejected(reason):
-            throw AO3WriteError.rejected(reason ?? "AO3 couldn't update your Inbox.")
-        }
+        return try commentWriteResult(
+            status: status, body: responseBody,
+            onSuccess: action.successMessage,
+            rejectionFallback: "AO3 couldn't update your Inbox."
+        )
     }
 }

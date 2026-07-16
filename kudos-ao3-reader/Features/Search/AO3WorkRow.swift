@@ -102,15 +102,12 @@ struct AO3WorkRow: View {
 
             // Stats wrap to a second line rather than truncating when they don't fit
             // (long ratings like "Teen And Up Audiences" no longer clip the row).
-            FlowLayout(spacing: 18, rowSpacing: 5) {
-                if !work.rating.isEmpty { WorkStatLabel(text: work.rating, symbol: "checkmark.shield") }
-                if let words = work.words { WorkStatLabel(text: words.formatted(), symbol: "textformat.size") }
-                if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
-                if let kudos = work.kudos { WorkStatLabel(text: kudos.formatted(), symbol: "heart") }
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .padding(.top, 1)
+            WorkListStatsRow(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                wordCount: work.words,
+                chapters: work.chapters.isEmpty ? nil : work.chapters,
+                kudos: work.kudos
+            )
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)

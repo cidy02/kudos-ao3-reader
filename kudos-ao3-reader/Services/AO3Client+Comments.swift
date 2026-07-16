@@ -126,12 +126,7 @@ extension AO3Client {
         }
 
         // Pagination footer inside the comments region (same markup as search).
-        for li in try placeholder.select("ol.pagination li").array() {
-            if let value = try? Int(li.text().trimmingCharacters(in: .whitespaces)),
-               value > result.totalPages {
-                result.totalPages = value
-            }
-        }
+        result.totalPages = try paginationTotal(in: placeholder, currentPage: result.totalPages)
 
         result.totalComments = try? parseTotalComments(doc)
         return result

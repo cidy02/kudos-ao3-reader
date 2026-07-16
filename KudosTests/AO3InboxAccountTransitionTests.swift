@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import WebKit
 @testable import Kudos
 
 /// T91-RF3: an Inbox write/reload must never outlive an account switch and
@@ -41,11 +40,11 @@ struct AO3InboxAccountTransitionTests {
 
     private static func makeAuthService() -> AO3AuthService {
         AO3AuthService(
-            vault: MemoryInboxTestSessionVault(),
+            vault: MemoryAO3SessionVault(),
             validator: InboxTestSessionValidator(),
             loginPerformer: DynamicInboxTestLoginPerformer(),
-            cookieManager: NoOpInboxTestCookieManager(),
-            removalTracker: MemoryInboxTestRemovalTracker()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
     }
 
@@ -596,74 +595,4 @@ struct AO3InboxAccountTransitionTests {
         #expect(scoped == "signed-in:alice#session-\(auth.sessionGeneration)")
         #expect(scoped != bare)
     }
-}
-
-/// A one-shot async gate used to deterministically sequence a gated async
-/// dependency (`pageLoader`/`bulkActionSubmitter`) against a concurrent
-/// account switch — mirrors `AO3RequestCoordinatorTests.Signal`.
-actor Signal {
-    private var fired = false
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    func fire() {
-        fired = true
-        continuation?.resume()
-        continuation = nil
-    }
-
-    func wait() async {
-        if fired { return }
-        await withCheckedContinuation { continuation = $0 }
-    }
-}
-
-@MainActor
-final class MemoryInboxTestSessionVault: AO3SessionPersisting {
-    private var session: AO3Session?
-    func load() throws -> AO3Session? { session }
-    func save(_ session: AO3Session) throws { self.session = session }
-    func delete() throws { session = nil }
-}
-
-@MainActor
-final class MemoryInboxTestRemovalTracker: AO3SessionRemovalTracking {
-    private(set) var isRemovalPending = false
-    func markRemovalPending() { isRemovalPending = true }
-    func clearRemovalPending() { isRemovalPending = false }
-}
-
-@MainActor
-struct InboxTestSessionValidator: AO3SessionValidating {
-    func validate(_ session: AO3Session) async throws -> AO3SessionValidation { .valid(session) }
-}
-
-@MainActor
-final class NoOpInboxTestCookieManager: AO3CookieManaging {
-    func install(_ session: AO3Session) async {}
-    func clear() async {}
-    func capture() async -> [AO3StoredCookie] { [] }
-}
-
-/// Unlike a fixed-result login double, this builds a session from whatever
-/// username is actually requested — tests drive the same `AO3AuthService`
-/// through alice → bob (and back to alice) without needing a new performer.
-@MainActor
-final class DynamicInboxTestLoginPerformer: AO3LoginPerforming {
-    lazy var webView = WKWebView()
-
-    func login(username: String, password: String) async throws -> AO3Session {
-        AO3Session(
-            username: username,
-            cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "session-\(username)")]
-        )
-    }
-
-    func beginManualLogin(
-        expectedUsername: String,
-        onAuthenticated: @escaping (AO3Session) -> Void,
-        onError: @escaping (String) -> Void
-    ) {}
-
-    func applyVisibleTheme(_ theme: ReaderTheme) {}
-    func cancel() {}
 }

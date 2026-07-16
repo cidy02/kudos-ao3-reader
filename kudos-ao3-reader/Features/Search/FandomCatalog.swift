@@ -74,17 +74,32 @@ final class FandomCatalog {
         .map(\.self)
     }
 
-    /// Shows any disk-cached lists immediately, then fetches the categories that are
-    /// missing or stale — **concurrently but bounded** (a few at a time, polite) so
-    /// the cards fill in together rather than one slow row at a time. Fresh results
-    /// update the cards and the on-disk cache. Safe to call repeatedly (in-flight /
-    /// fresh categories are skipped) and cancellable (leaving the screen stops the
-    /// remaining fetches).
+    /// Shows any disk-cached lists immediately, then fetches only the categories
+    /// that are missing or stale. See `fetch(_:onlyStale:)` for the mechanics.
     func loadMissing(for categories: [AO3MediaCategory]) async {
+        await fetch(categories, onlyStale: true)
+    }
+
+    /// User-triggered refresh for the categories currently on screen. Unlike
+    /// `loadMissing`, this bypasses staleness so pull-to-refresh really updates the
+    /// visible counts, but failures keep the previous cached lists in place.
+    func refresh(_ categories: [AO3MediaCategory]) async {
+        await fetch(categories, onlyStale: false)
+    }
+
+    /// Shared fetch behind `loadMissing`/`refresh`: shows any disk-cached lists
+    /// immediately, then fetches the categories that are missing/stale (or, for
+    /// a user-triggered refresh, every candidate regardless of staleness) —
+    /// **concurrently but bounded** (a few at a time, polite) so the cards fill
+    /// in together rather than one slow row at a time. Fresh results update the
+    /// cards and the on-disk cache. Safe to call repeatedly (in-flight / fresh
+    /// categories are skipped) and cancellable (leaving the screen stops the
+    /// remaining fetches).
+    private func fetch(_ categories: [AO3MediaCategory], onlyStale: Bool) async {
         await loadCacheIfNeeded()
 
         let pending = categories.filter {
-            FandomCatalogCache.isStale(entries[$0.id])
+            (!onlyStale || FandomCatalogCache.isStale(entries[$0.id]))
                 && !inFlight.contains($0.id)
                 && !$0.fandomsURL.isEmpty
         }
@@ -113,43 +128,6 @@ final class FandomCatalog {
                     // a single end-of-group persist loses every fetched list and the
                     // next Browse open repeats the full burst — a kill loop.
                     persist()
-                }
-                inFlight.remove(key)
-                if Task.isCancelled { group.cancelAll() }
-            }
-        }
-    }
-
-    /// User-triggered refresh for the categories currently on screen. Unlike
-    /// `loadMissing`, this bypasses staleness so pull-to-refresh really updates the
-    /// visible counts, but failures keep the previous cached lists in place.
-    func refresh(_ categories: [AO3MediaCategory]) async {
-        await loadCacheIfNeeded()
-
-        let pending = categories.filter {
-            !inFlight.contains($0.id) && !$0.fandomsURL.isEmpty
-        }
-        guard !pending.isEmpty else { return }
-        for category in pending {
-            inFlight.insert(category.id)
-        }
-
-        await withTaskGroup(of: (String, [AO3Fandom]?).self) { group in
-            for category in pending {
-                let key = category.id
-                let path = category.fandomsURL
-                group.addTask {
-                    let list = try? await AO3RequestCoordinator.shared.withSlot {
-                        try await AO3Client.shared.fandoms(atPath: path)
-                    }
-                    return (key, list)
-                }
-            }
-            for await (key, list) in group {
-                if let list {
-                    fandomsByCategory[key] = list
-                    entries[key] = FandomCatalogCache.Entry(fandoms: list, fetchedAt: Date())
-                    persist() // per landing — see loadMissing's rationale
                 }
                 inFlight.remove(key)
                 if Task.isCancelled { group.cancelAll() }

@@ -1,6 +1,36 @@
 import SwiftData
 import SwiftUI
 
+/// The rating/chapters/completion/word-count stat row on a compact cover card.
+/// Shared by `WorkCoverCard` (local `SavedWork`) and `AO3WorkCoverCard` (remote
+/// `AO3WorkSummary`) — each derives these already-formatted, already-nil-checked
+/// values from its own model shape and hands them here.
+struct CoverCardStatsRow: View {
+    var ratingShort: String?
+    var chapters: String?
+    var completion: (text: String, symbol: String)?
+    var wordCount: Int?
+
+    var body: some View {
+        FlowLayout(spacing: 8, rowSpacing: 5) {
+            if let ratingShort {
+                WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
+            }
+            if let chapters {
+                WorkStatLabel(text: chapters, symbol: "book")
+            }
+            if let completion {
+                WorkStatLabel(text: completion.text, symbol: completion.symbol)
+            }
+            if let wordCount {
+                WorkStatLabel(text: wordCount.formatted(.number.notation(.compactName)), symbol: "textformat.size")
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+    }
+}
+
 /// Standard carousel card: a compact AO3 work summary surface with the title, author,
 /// status, metadata, and reading progress all inside the tappable card.
 struct WorkCoverCard: View {
@@ -51,23 +81,12 @@ struct WorkCoverCard: View {
     }
 
     private var cardStats: some View {
-        FlowLayout(spacing: 8, rowSpacing: 5) {
-            let ratingShort = WorkStat.ratingShort(work.rating)
-            if let ratingShort {
-                WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
-            }
-            if !work.chapters.isEmpty {
-                WorkStatLabel(text: work.chapters, symbol: "book")
-            }
-            if let completion = completionStatus {
-                WorkStatLabel(text: completion, symbol: work.isComplete ? "checkmark.seal" : "circle.dashed")
-            }
-            if work.wordCount > 0 {
-                WorkStatLabel(text: work.wordCount.formatted(.number.notation(.compactName)), symbol: "textformat.size")
-            }
-        }
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
+        CoverCardStatsRow(
+            ratingShort: WorkStat.ratingShort(work.rating),
+            chapters: work.chapters.isEmpty ? nil : work.chapters,
+            completion: completionStatus.map { ($0, work.isComplete ? "checkmark.seal" : "circle.dashed") },
+            wordCount: work.wordCount > 0 ? work.wordCount : nil
+        )
     }
 
     private var progressValue: Double? {
@@ -167,24 +186,14 @@ struct AO3WorkCoverCard: View {
     }
 
     private var cardStats: some View {
-        FlowLayout(spacing: 8, rowSpacing: 5) {
-            let ratingShort = WorkStat.ratingShort(work.rating)
-            if let ratingShort {
-                WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
-            }
-            if !work.chapters.isEmpty {
-                WorkStatLabel(text: work.chapters, symbol: "book")
-            }
-            if let isComplete = work.isComplete {
-                WorkStatLabel(text: isComplete ? "Complete" : "WIP",
-                              symbol: isComplete ? "checkmark.seal" : "circle.dashed")
-            }
-            if let words = work.words {
-                WorkStatLabel(text: words.formatted(.number.notation(.compactName)), symbol: "textformat.size")
-            }
-        }
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
+        CoverCardStatsRow(
+            ratingShort: WorkStat.ratingShort(work.rating),
+            chapters: work.chapters.isEmpty ? nil : work.chapters,
+            completion: work.isComplete.map {
+                ($0 ? "Complete" : "WIP", $0 ? "checkmark.seal" : "circle.dashed")
+            },
+            wordCount: work.words
+        )
     }
 }
 

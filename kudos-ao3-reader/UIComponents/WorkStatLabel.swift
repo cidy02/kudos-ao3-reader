@@ -20,6 +20,30 @@ struct WorkStatLabel: View {
     }
 }
 
+/// The rating/word-count/chapters/kudos stat row on a detailed list row. Shared
+/// by `WorkRow` (local `SavedWork`) and `AO3WorkRow` (remote `AO3WorkSummary`)
+/// — each derives these already-formatted, already-nil-checked values from its
+/// own model shape and hands them here, so the two never drift out of layout
+/// sync with each other.
+struct WorkListStatsRow: View {
+    var rating: String?
+    var wordCount: Int?
+    var chapters: String?
+    var kudos: Int?
+
+    var body: some View {
+        FlowLayout(spacing: 18, rowSpacing: 5) {
+            if let rating { WorkStatLabel(text: rating, symbol: "checkmark.shield") }
+            if let wordCount { WorkStatLabel(text: wordCount.formatted(), symbol: "textformat.size") }
+            if let chapters { WorkStatLabel(text: chapters, symbol: "book") }
+            if let kudos { WorkStatLabel(text: kudos.formatted(), symbol: "heart") }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+        .padding(.top, 1)
+    }
+}
+
 enum WorkStat {
     /// AO3 rating → a one/two-letter badge for tight spaces (cover cards). Full
     /// rating text stays on the wide rows.

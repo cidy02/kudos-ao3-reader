@@ -16,11 +16,11 @@ struct CommentsAccountTransitionTests {
         loginPerformer: AO3LoginPerforming? = nil
     ) -> AO3AuthService {
         AO3AuthService(
-            vault: MemoryInboxTestSessionVault(),
+            vault: MemoryAO3SessionVault(),
             validator: InboxTestSessionValidator(),
             loginPerformer: loginPerformer ?? DynamicInboxTestLoginPerformer(),
-            cookieManager: NoOpInboxTestCookieManager(),
-            removalTracker: MemoryInboxTestRemovalTracker()
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
         )
     }
 
@@ -486,15 +486,6 @@ private final class WrongPathCommentsLoginPerformer: AO3LoginPerforming {
             )]
         )
     }
-
-    func beginManualLogin(
-        expectedUsername: String,
-        onAuthenticated: @escaping (AO3Session) -> Void,
-        onError: @escaping (String) -> Void
-    ) {}
-
-    func applyVisibleTheme(_ theme: ReaderTheme) {}
-    func cancel() {}
 }
 
 @MainActor
@@ -509,13 +500,4 @@ private final class UnknownUsernameCommentsLoginPerformer: AO3LoginPerforming {
             )]
         )
     }
-
-    func beginManualLogin(
-        expectedUsername: String,
-        onAuthenticated: @escaping (AO3Session) -> Void,
-        onError: @escaping (String) -> Void
-    ) {}
-
-    func applyVisibleTheme(_ theme: ReaderTheme) {}
-    func cancel() {}
 }

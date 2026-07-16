@@ -40,6 +40,14 @@ nonisolated struct AO3PreferenceHelpContent: Equatable, Identifiable, Sendable {
     }
 }
 
+/// The attribute key inside an AO3 Preferences form field name
+/// (`preference[adult]` → `adult`). Fields that don't match the shape are
+/// returned as-is.
+nonisolated func preferenceFieldKey(_ name: String) -> String {
+    guard name.hasPrefix("preference["), name.hasSuffix("]") else { return name }
+    return String(name.dropFirst("preference[".count).dropLast())
+}
+
 /// One boolean preference from AO3's Preferences form (`preference[key]`).
 nonisolated struct AO3PreferenceToggle: Identifiable, Equatable, Hashable, Sendable {
     /// Full form field name, e.g. `preference[adult]`.
@@ -52,10 +60,7 @@ nonisolated struct AO3PreferenceToggle: Identifiable, Equatable, Hashable, Senda
     var id: String { name }
 
     /// The attribute key inside `preference[...]`.
-    var key: String {
-        guard name.hasPrefix("preference["), name.hasSuffix("]") else { return name }
-        return String(name.dropFirst("preference[".count).dropLast())
-    }
+    var key: String { preferenceFieldKey(name) }
 }
 
 /// A `<select>` preference (site skin, time zone, optional locale).
@@ -74,10 +79,7 @@ nonisolated struct AO3PreferenceSelect: Identifiable, Equatable, Hashable, Senda
         var id: String { value }
     }
 
-    var key: String {
-        guard name.hasPrefix("preference["), name.hasSuffix("]") else { return name }
-        return String(name.dropFirst("preference[".count).dropLast())
-    }
+    var key: String { preferenceFieldKey(name) }
 }
 
 /// A free-text preference (currently browser page title format).
@@ -89,10 +91,7 @@ nonisolated struct AO3PreferenceTextField: Identifiable, Equatable, Hashable, Se
 
     var id: String { name }
 
-    var key: String {
-        guard name.hasPrefix("preference["), name.hasSuffix("]") else { return name }
-        return String(name.dropFirst("preference[".count).dropLast())
-    }
+    var key: String { preferenceFieldKey(name) }
 }
 
 /// One fieldset on AO3's Preferences page (Privacy, Display, Comments, …).

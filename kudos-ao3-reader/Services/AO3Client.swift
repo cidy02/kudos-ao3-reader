@@ -1145,12 +1145,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                 authorIdentities: identities
             ))
         }
-        var totalPages = page
-        for li in try doc.select("ol.pagination li").array() {
-            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
-                totalPages = value
-            }
-        }
+        let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
@@ -1161,14 +1156,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let blurbs = try doc.select(blurbSelector).array()
         // Skip any single malformed / non-work blurb rather than failing the page.
         let works = blurbs.compactMap { try? Self.parseBlurb($0) }
-        // AO3's pagination lists every page number (… 27); the largest is the
-        // total. Falls back to the current page when there's no pagination.
-        var totalPages = page
-        for li in try doc.select("ol.pagination li").array() {
-            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
-                totalPages = value
-            }
-        }
+        let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
@@ -1224,7 +1212,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             (try? el.select("dl.stats dd.\(cls)").first()?.text() ?? "") ?? ""
         }
         func statInt(_ cls: String) -> Int? {
-            Int(stat(cls).replacingOccurrences(of: ",", with: ""))
+            Self.statInt(cls, in: el)
         }
 
         // Series block: "Part <strong>N</strong> of <a href="/series/ID">Title</a>".

@@ -437,13 +437,7 @@ extension AO3Client {
     }
 
     private static func humanizePreferenceName(_ name: String) -> String {
-        let key: String
-        if name.hasPrefix("preference["), name.hasSuffix("]") {
-            key = String(name.dropFirst("preference[".count).dropLast())
-        } else {
-            key = name
-        }
-        return key
+        preferenceFieldKey(name)
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
     }
