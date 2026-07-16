@@ -312,6 +312,67 @@ struct PreservedWorkTests {
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
     }
 
+    @Test func importEPUBMergesAcrossAO3URLVariants() async throws {
+        let container = try container()
+        let context = container.mainContext
+        // Saved from AO3's download-URL variant: no "works" path component and no
+        // stored work ID, so only the canonical-URL identity tier can connect it
+        // to the work-page URL the re-download arrives under.
+        let work = SavedWork(
+            title: "Same Work, Different URL",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/downloads/9911/story.epub"
+        )
+        work.markModified()
+        context.insert(work)
+        try context.save()
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PreservedWorkTests-\(UUID().uuidString).epub")
+        try FileManager.default.copyItem(at: try EPUBTests.sampleEPUB, to: temp)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let imported = try await importEPUB(
+            temp,
+            source: URL(string: "https://archiveofourown.org/works/9911"),
+            into: context
+        )
+
+        #expect(imported.id == work.id)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test func importEPUBMergesExactNonAO3SourceMatch() async throws {
+        let container = try container()
+        let context = container.mainContext
+        // A non-AO3 source has no work ID and no canonical AO3 URL — the exact
+        // source-string tier is the only thing that can dedupe a re-import.
+        let work = SavedWork(
+            title: "Offsite Story",
+            author: "Writer",
+            sourceURL: "https://example.com/fic/story-123"
+        )
+        work.markModified()
+        context.insert(work)
+        try context.save()
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PreservedWorkTests-\(UUID().uuidString).epub")
+        try FileManager.default.copyItem(at: try EPUBTests.sampleEPUB, to: temp)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let imported = try await importEPUB(
+            temp,
+            source: URL(string: "https://example.com/fic/story-123"),
+            into: context
+        )
+
+        #expect(imported.id == work.id)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
     @Test func userEPUBImportRevivesRecentlyDeletedDuplicate() async throws {
         let container = try container()
         let context = container.mainContext

@@ -3,10 +3,6 @@ import OSLog
 import SwiftData
 import SwiftSoup
 
-// Import funnels (AO3 download + user-file) and their shared iCloud-materialization
-// helper are cohesive; avoid a behavior-risking split for lint.
-// swiftlint:disable file_length
-
 /// Imports a downloaded EPUB into the library: reads its metadata, moves the
 /// file into permanent storage, and inserts a `SavedWork`. Returns the inserted
 /// work, or throws if the file couldn't be saved. Shared by the Browse tab's
@@ -488,13 +484,13 @@ private func existingWork(
     in context: ModelContext
 ) -> SavedWork? {
     let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-    if let importedID = WorkTags.ao3WorkID(from: inspection.sourceURL),
-       let byID = works.first(where: {
-           $0.ao3WorkID == importedID || WorkTags.ao3WorkID(from: $0.sourceURL) == importedID
-       }) {
-        return byID
+    if let match = WorkIdentityIndex(works)
+        .existingWork(ao3WorkID: nil, sourceURL: inspection.sourceURL) {
+        return match
     }
 
+    // No usable AO3 identity — fall back to a title/author/file-size similarity
+    // heuristic so re-importing the same non-AO3 EPUB doesn't duplicate it.
     let titleKey = normalizedKey(inspection.title)
     let authorKey = normalizedKey(inspection.author)
     guard !titleKey.isEmpty else { return nil }
@@ -805,18 +801,16 @@ private extension ExtractedAO3EPUBMetadata {
 }
 
 /// Returns an already-saved work that came from the given AO3 source URL, if one
-/// exists — so we can open it instead of downloading a duplicate.
+/// exists — so we can open it instead of downloading a duplicate. Identity resolves
+/// through `WorkIdentityIndex` (AO3 work ID → canonical URL); an exact
+/// source-string comparison remains as a final tier for non-AO3 or otherwise
+/// non-canonicalizable sources, which carry no identity the index can use.
 @MainActor
 func existingWork(forSource source: URL, in context: ModelContext) -> SavedWork? {
     let target = source.absoluteString
-    let sourceID = WorkTags.ao3WorkID(from: target)
-    let canonicalTarget = WorkTags.canonicalAO3WorkURL(from: target)
     let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-    return works.first {
-        $0.sourceURL == target
-            || (canonicalTarget != nil
-                && WorkTags.canonicalAO3WorkURL(from: $0.sourceURL) == canonicalTarget)
-            || (sourceID != nil && ($0.ao3WorkID == sourceID
-                    || WorkTags.ao3WorkID(from: $0.sourceURL) == sourceID))
+    if let match = WorkIdentityIndex(works).existingWork(ao3WorkID: nil, sourceURL: target) {
+        return match
     }
+    return works.first { $0.sourceURL == target }
 }
