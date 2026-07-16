@@ -647,3 +647,249 @@ in Pass 2, before any of them move to §3/§4.
 - None of the findings in this report change AO3 request pacing, retry/backoff timing, or
   what gets sent in an authenticated write request — no live-AO3 verification is required
   beyond the existing fixture/unit test suite.
+
+---
+
+## 10. Session E — investigate-lead research pass (2026-07-16)
+
+Per §8's own instruction, this session ran a narrowly-scoped pass on §6's 6 leads: one
+finder agent per lead, each verdict adversarially verified by a second agent instructed to
+try to refute it (same methodology as Pass 2). **Research only — no source files were
+touched in this session; every action below is a recommendation for a future session, not
+a change already made.** 2 of 6 initial verdicts required a real correction under
+verification (not just a rubber-stamp) — both are called out explicitly.
+
+### 10.1 §6.1 — Relative-AO3-href-to-absolute-URL resolvers: duplication confirmed, but the "security risk" framing does not hold
+
+**Verdict: confirmed-duplicate, but re-scoped from a possible credential-leak risk down to
+a correctness/robustness cleanup.**
+
+The finder counted **10** occurrences (not the audit's "at least 3," not the pre-check's 4)
+across 5 files in `Services/`: 6 named functions —
+`AO3Client+Authors.swift:541`'s `absoluteAO3URL(_:)` (throws, validates AO3 host via
+`AO3AuthorRoute.isAO3URL`), `AO3Client+Authors.swift:550`'s `safeRichTextURL(_:)` (a third
+policy the finder's own evidence missed and the verifier caught — scheme-checked but
+deliberately *not* AO3-host-checked, for legitimate external links in author bios),
+`AO3Client+Preferences.swift:445`'s `absoluteAO3URL(_:)` (no host validation),
+`AO3Client.swift:854`'s nested `absoluteAO3URL(_:)` closure (returns `String?`, not `URL?`
+— the only outlier), `AO3WriteActions.swift:274`'s `absoluteURL(_:)` (no trimming, empty
+input silently "succeeds" with the AO3 homepage URL), and `AO3Client+Inbox.swift:292`'s
+`inboxAbsoluteURL(_:)` — plus 4 more inline, non-extracted duplicates of the identical
+logic at `AO3Client+Inbox.swift:94,140` and `AO3Client.swift:1030,1221`.
+
+The finder's initial verdict flagged this as the audit's protected authenticated-write-
+action category because three of these resolvers feed scraped `action`/`path` attributes
+into what becomes the **target URL of an authenticated write POST** (Preferences save,
+unsubscribe, Inbox bulk action) with no host validation at the resolver level — reading as
+a live credential-leak exposure. **The verifier refuted this specific claim**: every write
+path in the app, without exception (confirmed via all 12 `writeRequest(` call sites),
+funnels through `AO3WriteActions.swift`'s `writeRequest` → `AO3AuthService.swift:615`'s
+`authenticatedRequest(for:method:)`, which unconditionally rejects any URL failing
+`AO3RequestDefaults.isTrustedURL` (https + archiveofourown.org/subdomain only) *before*
+attaching cookies or sending anything. A non-AO3 URL surviving one of these resolvers
+throws and fails cleanly — it does not carry session credentials to an attacker-controlled
+host. The verifier also caught a smaller factual error: 2 of the 6 call sites the finder
+called "read-only navigation/display" (subscription/moderation form `actionURL`) are
+themselves write-endpoint targets — meaning resolver #1 (`AO3Client+Authors.swift`'s
+`absoluteAO3URL`) is already the codebase's own correctly-strict variant for that job.
+
+What genuinely does hold: two independent, near-identical host-validation predicates exist
+and disagree (`AO3AuthService.swift:209-214`'s `isTrustedURL` requires scheme exactly
+`"https"`; `Models/AO3AuthorModels.swift:110-115`'s `AO3AuthorRoute.isAO3URL` accepts
+`"http"` or `"https"`) — a robustness/confusing-error issue, not a leak. Real latent
+correctness bugs also survive: empty-input handling diverges (some return `nil`, some
+silently resolve to the AO3 homepage), and leading-slash normalization is inconsistent
+(some use Foundation's `URL(string:relativeTo:)`, some hand-concatenate with no
+normalization at all — a malformed-URL risk if a captured href/path ever lacks a leading
+`/`).
+
+**Recommended next action (not yet scheduled):** a careful, test-covered consolidation
+into two canonical helpers by *policy*, not one — (1) a strict, host-validated
+`absoluteURL(_:)` for write-endpoint/navigable-link targets, modeled on the existing
+`AO3Client+Authors.swift` implementation; (2) a permissive, non-host-validated
+`resolvedAssetURL(_:)` for image/`src` resolution, matching the deliberate policy already
+documented in `Models/AO3CommentModels.swift`'s `ao3URL(for:)`. Frame this as closing
+latent correctness bugs and consolidating drift, not as closing a live vulnerability — the
+`authenticatedRequest`/`isTrustedURL` gate already provides that protection today,
+independent of whether these resolvers get consolidated.
+
+### 10.2 §6.2 — `SyncMerge.deterministicMembershipOrder(_:)`: confirmed dead
+
+**Verdict: confirmed-dead, safe to delete. Verification held with no correction.**
+
+Exhaustive symbol grep (exact and partial-match) across the whole repo returns exactly 2
+hits: the definition (`PersistenceSync.swift:447-457`) and its own unit test
+(`KudosTests/PersistenceSyncTests.swift:121-148`,
+`queueOrderingFallsBackDeterministically`). `SyncMerge` is a plain namespace `enum` with no
+protocol conformance anywhere in the repo (`grep -rn "extension SyncMerge"` → 0 hits) and
+the app has zero Objective-C/`Mirror(reflecting` reflection sites, ruling out every hidden-
+caller vector the adversarial pass checks for. Its four sibling primitives, added in the
+same commit (`56adb3a3`, "Prepare metadata-first iCloud persistence"), are all live in
+`KudosBackup.swift` (`shouldApplyIncoming` ×4, `effectiveQueueModifiedAt` ×2,
+`tombstoneResolution` ×3, `applyProgress` ×1) — this one alone never got wired into the
+real merge loop. The two actual membership-ordering implementations that do run in
+production (`ReadingQueues.swift`'s display sort, `KudosBackup.swift`'s restore loop)
+neither call it nor share its tiebreak semantics, so deleting it changes no runtime
+behavior.
+
+**Recommended next action:** delete `SyncMerge.deterministicMembershipOrder(_:)`
+(`PersistenceSync.swift:447-457`) and its sole test (`PersistenceSyncTests.swift:121-148`).
+Mechanically as safe as any §3 finding — the only reason this wasn't already in §3 is that
+the audit's own finder flagged it `investigate` out of caution for the protected sync
+category, and that caution is now resolved.
+
+### 10.3 §6.3 — `FolderSyncService.foldConflictContents`: not a simple duplicate — a real undercount bug
+
+**Verdict: confirmed-duplicate-but-risky — this is a product decision, not a delete.
+Verification held with no correction.**
+
+`foldConflictContents(_:into:defaults:)` (`FolderSyncService.swift:166-179`) and the
+private `foldFileProviderConflicts(at:into:defaults:)` (`:287-311`, called only from
+`performSyncDown`) were added together in the same commit, not as a later test-only
+add-on. They are **not** strict duplicates: different input shape (a decoded array vs.
+on-disk `NSFileVersion` enumeration + `NSFileCoordinator` read), sync vs. async, and —
+the material finding — a genuine behavioral asymmetry. `foldConflictContents`'s loop
+absorbs every restore summary into a full `FolderSyncResult` (`restoredWorks`/
+`suppressedQueues`/`revivedQueues`/`ambiguousQueueConflicts` all populated).
+`foldFileProviderConflicts`'s production loop **discards** the restore summary
+(`_ = try KudosBackupService.restore(...)` at line 302) while doing `NSFileVersion`-
+specific resolution bookkeeping `foldConflictContents` has no way to do. Confirmed
+end-to-end: `SettingsView.swift:1016-1025` displays those same four counts from
+`lastFolderSyncResult`, which is populated only via the discarding path — meaning **the
+real-conflict-resolution counts shown to the user in Settings today silently undercount
+whenever a File-Provider conflict is folded**, a real latent bug independent of the
+duplication question. `foldConflictContents` is reachable only from
+`KudosTests/FolderSyncTests.swift` (2 call sites, confirmed by repo-wide grep across all 27
+`FolderSyncService.*` call sites app-wide), so it is not literally orphaned — it's the only
+test coverage this merge-loop shape has, since `foldFileProviderConflicts`'s own production
+loop is untestable in isolation (`NSFileVersion` requires genuine File-Provider conflict
+state).
+
+**Recommended next action:** do **not** delete `foldConflictContents` as orphaned API —
+that would drop the only coverage this pattern has. Instead this needs an explicit product
+decision: should conflict-version restores' summary stats count toward the numbers shown in
+Settings? If yes, refactor `foldFileProviderConflicts` to decode each conflict version's
+contents into an array and delegate the restore+absorb+count loop to
+`foldConflictContents` (eliminating the duplication *and* fixing the undercount), keeping
+the `NSFileVersion`-specific resolution/cleanup as a thin wrapper around it.
+
+### 10.4 §6.4 — `AccountWorksInlineSection` vs. `AO3AccountWorksList`: confirmed genuinely distinct — retain
+
+**Verdict: retain-genuinely-distinct. Verification held (one minor citation correction,
+substance unaffected).**
+
+Read both in full. `AccountWorksInlineSection` (`AccountComponents.swift:595-873`) is
+constructed only from `AccountView.swift` (6 call sites, all in the same file) — a
+single-host embedded preview widget rendered inside AccountView's own two root layouts.
+`AO3AccountWorksList` (`AO3AccountWorksList.swift:10-368`) is registered once as a
+`navigationDestination` and reached from three independent hosts: AccountView's own
+"refine" pushes, `AO3CollectionsList.swift` (tapping a collection), and `HomeView.swift`'s
+Subscriptions "See All" — a genuinely shared, multi-host, deep-linkable full-screen
+destination. Both already reuse the *same* `AO3AccountWorksList.Kind` enum — this is not
+two independently-defined kind/endpoint sets. Their fetch primitives genuinely diverge:
+`AO3AccountWorksList` uses simple coalesced live fetches; `AccountWorksInlineSection` uses
+`AO3AuthorProfileFetcher`'s cached/queued/`isCurrent`-fenced primitive, needed specifically
+because it's embedded and can be remounted across tab switches without re-fetching. Both
+implement the same T-96 stale-response-fencing shape (the audit's own §7 already notes this
+pattern is legitimately repeated app-wide, not a missed-abstraction signal).
+
+**Recommended next action:** none — retain as separate. If any future cleanup is wanted,
+the only safe, narrow, low-risk cut identified is mechanical: hoist the identical
+`AO3AccountListCountsCache.shared.record(...)` call
+(`AO3AccountWorksList.swift:349-355`, `AccountComponents.swift:835-841`) into one shared
+helper both call. Do not attempt to unify the load functions, `Phase` enums, or `@State` —
+that would force one side to inherit UI/caching behavior it deliberately doesn't have, for
+no behavioral gain.
+
+### 10.5 §6.5 — `AccountView`'s two root layouts: mostly a false positive
+
+**Verdict: retain — the apparent duplication is largely illusory. Verification held with no
+correction.**
+
+Read `compactScopeChrome`/`compactWorksContent` and `readingSections`/`writingSections`/
+`activitySections` in full, plus everything they depend on. The path selector
+(`usesLibraryStyleCompactLayout`) is a **persisted user display-mode preference**
+(`@AppStorage("account.displayMode")`, toggled from the toolbar) combined with a
+content-type gate — not a device-idiom or size-class split. The actual sub-tab switch
+*logic* — state ownership (`selectedTab`/`readingTab`/`writingTab`/`activityTab`) and the
+mutation widget itself (the shared generic `AccountScopeMenu<Tab>`) — is already fully
+centralized; both presentation paths call it with identical argument lists, differing only
+in surrounding chrome (`AccountScrollChromeCard` vs. `Section` + `.accountControlCardRow()`).
+The list-rendering components (`AccountWorksInlineSection`, `profileContentSections`) are
+explicitly designed for dual hosting via an existing `AccountWorksLayout` enum
+(`.list`/`.scroll`) and both paths call the same components with the same arguments,
+differing only by that one layout parameter.
+
+**Recommended next action:** none — close this lead. The only real leftover is a small
+(~60-90 line) case-scaffolding overlap for the shared work-list sub-tabs, which already
+funnels into the same shared components — optional cleanup at most, not a delete/consolidate
+action item.
+
+### 10.6 §6.6 — `WorkDetailView.withLocalWork` vs. `ReadingQueueService.resolveLocalWork`: consolidation direction confirmed, but the original safety argument was wrong
+
+**Verdict: confirmed-duplicate-safe-to-consolidate, but the finder's specific safety
+justification did not survive verification — a real gap was found, and a different, deeper
+safety net that actually covers it.**
+
+The core duplication holds exactly as found: `withLocalWork` (`WorkDetailView.swift:880-908`)
+and `resolveLocalWork` (`ReadingQueueService.swift:592-615`) run the identical
+download → `importEPUB` → `applyRemoteMetadata` → save sequence with identical arguments,
+and `WorkDetailView`'s inline chapter-count expression is character-for-character
+`SavedWork.postedChapterCount(from:)` — not a latent disagreement bug, genuinely identical
+logic duplicated. `resolveLocalWork` already has 2 other callers using the exact
+"thin UI wrapper + `resolveLocalWork` core" pattern `withLocalWork` would need
+(`WorkCardActions.performRemoteAction`, `RemoteWorkBulkActions`'s bulk resolver).
+
+**Where the finder's own reasoning failed under verification:** the finder argued the one
+behavioral divergence — `withLocalWork` unconditionally redownloads on a Recently-Deleted
+revival, `resolveLocalWork`'s fast-path does not — is safe because "the EPUB stays on disk
+for the whole recovery window," citing `PreservedWorkService.softDelete`'s doc comment as
+sufficient justification and stating no further investigation was needed. **The verifier
+found that premise is false**: `ReadingQueueService.normalize(_:)`, invoked immediately
+before every `softDelete` call, actively checks file existence and sets `hasEPUB = false`
+whenever the file is genuinely missing — so a soft-deleted record is not guaranteed to have
+its EPUB on disk, and `resolveLocalWork`'s fast path would leave `hasEPUB` incorrectly
+`false` after reviving such a record, which `withLocalWork`'s unconditional redownload
+currently self-heals.
+
+Having found that real gap, the verifier traced further (work the finder never did) and
+found the change is still safe, for different reasons: `WorkReaderPreparation
+.hasReadableEPUB`/`.restoreReadableEPUB` (`WorkCardActions.swift`) independently re-verify
+on-disk presence and self-heal at `read()` time regardless of how the work was resolved,
+and `ReadingQueueService.preserve(_:in:downloadEPUB:)` — what actually runs on queue-add —
+starts with its own `normalize` + existence recheck. Across all 7 of `withLocalWork`'s call
+sites (the finder's citation said "6"; the verifier recounted 7), this means no path
+strands a user with a permanently-unreadable record — worst case is a redundant re-download
+tap, which is arguably correct behavior given the file genuinely isn't there.
+
+**Recommended next action:** the consolidation (replace `withLocalWork`'s manual Task body
+with a call to `resolveLocalWork`, keeping the surrounding `working`/`loadError`/`action(...)`
+wrapper exactly as-is, mirroring `WorkCardActions.performRemoteAction`'s existing pattern)
+can proceed, but the PR/diff should cite the *correct* safety argument — the
+`hasReadableEPUB`/`restoreReadableEPUB` self-heal chain at `read()` plus `preserve()`'s own
+`normalize`+recheck at queue-add — not the `softDelete` docstring premise, which is
+contradicted by `normalize()`'s own file-existence check. Add or confirm a regression test
+for "revive a Recently-Deleted work whose EPUB file is missing, then tap Read" before
+merging, given this touches the Recently-Deleted revival path (a protected category).
+
+### 10.7 Session E summary
+
+| Lead | Verdict after verification | Action |
+|---|---|---|
+| §6.1 href resolvers | Confirmed duplicate (10 occurrences); "security risk" framing refuted — real gate already exists downstream | Correctness/robustness cleanup, not urgent |
+| §6.2 `deterministicMembershipOrder` | Confirmed dead | **Safe to delete** — as mechanical as any §3 finding |
+| §6.3 `foldConflictContents` | Confirmed not-a-duplicate; found a real Settings undercount bug | Needs owner product decision, not a delete |
+| §6.4 `AccountWorksInlineSection`/`AO3AccountWorksList` | Confirmed genuinely distinct | Retain; one tiny optional hoist identified |
+| §6.5 `AccountView`'s two roots | Mostly false positive | Retain; close the lead |
+| §6.6 `withLocalWork`/`resolveLocalWork` | Confirmed safe to consolidate, but for different reasons than first argued | Proceed with corrected safety justification + a new regression test |
+
+§6.7 (`KudosBackupManifest.supportedVersions`) and §6.8 (owner sign-off gating for §4.1/§4.7)
+were not part of this pass — §6.7 is a product question the audit already resolved as
+"retain, revisit only if the owner confirms," and §6.8's §4.1 half was implemented in
+Session C while §4.7 (Session D) was explicitly deferred by the owner as too much risk for
+too little size/efficiency gain.
+
+Two of six leads (§6.1, §6.6) needed real corrections under adversarial verification, not
+just confirmation — consistent with this report's own Pass 2 experience (1 correction in
+27 verified findings) scaled to a smaller, harder sample deliberately chosen for being
+ambiguous enough to need a human/deeper pass in the first place.
