@@ -66,17 +66,7 @@ struct FandomWorksView: View {
     /// refined via the same filter panel the Search tab uses.
     @State private var filters: AO3SearchFilters
     @State private var showingFilters = false
-
-    @Environment(\.modelContext) private var context
-    @State private var isSelecting = false
-    @State private var selection: Set<Int> = []
-    @State private var isProcessingBatch = false
-    @State private var batchTask: Task<Void, Never>?
-    @State private var resolvedQueueWorks: [SavedWork] = []
-    @State private var showingAddToQueue = false
-    @State private var resolvedCollectionWorks: [SavedWork] = []
-    @State private var showingAddToCollection = false
-    @State private var batchActionError: String?
+    @State private var bulkSelection = RemoteWorkSelectionController()
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
@@ -97,10 +87,6 @@ struct FandomWorksView: View {
         filters != Self.baseline(for: fandom)
     }
 
-    private var selectedSummaries: [AO3WorkSummary] {
-        results.filter { selection.contains($0.id) }
-    }
-
     var body: some View {
         Group {
             if phase == .loading, results.isEmpty {
@@ -111,8 +97,8 @@ struct FandomWorksView: View {
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(results) { work in
-                            workRow(for: work)
-                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
+                            SelectableAO3WorkRow(work: work, expandAll: expandAll, controller: bulkSelection)
+                                .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
                         }
                     }
                     if showPagination { Section { paginationRow } }
@@ -139,55 +125,8 @@ struct FandomWorksView: View {
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 .navigationTitle("Filter Works")
             }
-            .sheet(isPresented: $showingAddToQueue) {
-                AddToQueueView(works: resolvedQueueWorks)
-            }
-            .sheet(isPresented: $showingAddToCollection) {
-                AddToCollectionView(works: resolvedCollectionWorks)
-            }
-            .alert(
-                "Action Failed",
-                isPresented: Binding(
-                    get: { batchActionError != nil },
-                    set: { if !$0 { batchActionError = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) { batchActionError = nil }
-            } message: {
-                Text(batchActionError ?? "")
-            }
+            .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
-            // Unstructured batch tasks outlive the view unless explicitly cancelled;
-            // the bulk loops bail out cleanly on CancellationError.
-            .onDisappear { batchTask?.cancel() }
-    }
-
-    @ViewBuilder
-    private func workRow(for work: AO3WorkSummary) -> some View {
-        let row = AO3WorkRow(
-            work: work,
-            expandAll: expandAll,
-            isSelecting: isSelecting,
-            isSelected: selection.contains(work.id)
-        )
-        if isSelecting {
-            Button { toggleSelection(work) } label: { row }
-                .buttonStyle(.plain)
-                .accessibilityLabel(work.title)
-                .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-                .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
-                .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
-        } else {
-            row.cardNavigation(to: work)
-        }
-    }
-
-    private func toggleSelection(_ work: AO3WorkSummary) {
-        if selection.contains(work.id) {
-            selection.remove(work.id)
-        } else {
-            selection.insert(work.id)
-        }
     }
 
     private var showPagination: Bool {
@@ -198,7 +137,7 @@ struct FandomWorksView: View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
             // A different page replaces `results` with different works entirely —
             // a stale selection would otherwise reference IDs that no longer exist.
-            selection.removeAll()
+            bulkSelection.selection.removeAll()
             Task { await load(page: page) }
         }
         .cardRow()
@@ -280,15 +219,10 @@ struct FandomWorksView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if isSelecting {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { exitSelectMode() }
+        if bulkSelection.isSelecting {
+            RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                bulkSelection.selected(in: results)
             }
-            #if os(iOS)
-            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
-            #else
-            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
-            #endif
         } else if phase == .loaded, !results.isEmpty {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
@@ -297,7 +231,7 @@ struct FandomWorksView: View {
                                  filterHelp: "Filter works in this fandom",
                                  onClearFilters: resetFilters)
                     WorkListMoreMenu {
-                        Button { isSelecting = true } label: {
+                        Button { bulkSelection.isSelecting = true } label: {
                             Label("Select", systemImage: "checklist")
                         }
                         ExpandAllMenuItem(expandAll: $expandAll)
@@ -305,94 +239,6 @@ struct FandomWorksView: View {
                 }
                 .labelStyle(.iconOnly)
             }
-        }
-    }
-
-    /// The bulk-action controls shown while selecting (bottom bar on iOS), mirroring
-    /// `LibraryView`'s bulk-action bar. Each resolves selected remote summaries to
-    /// local works one at a time — never bursting concurrent AO3 requests.
-    @ViewBuilder
-    private var bulkActionBar: some View {
-        Button {
-            batchTask = Task { await bulkSave() }
-        } label: {
-            Label("Save", systemImage: "bookmark")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkSaveForLater() }
-        } label: {
-            Label("Save for Later", systemImage: "clock.arrow.circlepath")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToCollection() }
-        } label: {
-            Label("Add to Collection", systemImage: "square.stack")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToQueue() }
-        } label: {
-            Label("Add to Queue", systemImage: "list.bullet.rectangle")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        if isProcessingBatch {
-            ProgressView()
-                .controlSize(.small)
-        }
-    }
-
-    private func exitSelectMode() {
-        isSelecting = false
-        selection = []
-    }
-
-    private func bulkSave() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            for work in works {
-                WorkLifecycle.setSaved(work, true, in: context)
-            }
-        }
-    }
-
-    private func bulkSaveForLater() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
-    }
-
-    private func bulkAddToCollection() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedCollectionWorks = works
-            showingAddToCollection = true
-        }
-    }
-
-    private func bulkAddToQueue() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedQueueWorks = works
-            showingAddToQueue = true
         }
     }
 }
@@ -412,27 +258,13 @@ struct TagWorksView: View {
     /// place, contextual to the page (the tag itself stays fixed).
     @State private var filters = AO3SearchFilters()
     @State private var showingFilters = false
-
-    @Environment(\.modelContext) private var context
-    @State private var isSelecting = false
-    @State private var selection: Set<Int> = []
-    @State private var isProcessingBatch = false
-    @State private var batchTask: Task<Void, Never>?
-    @State private var resolvedQueueWorks: [SavedWork] = []
-    @State private var showingAddToQueue = false
-    @State private var resolvedCollectionWorks: [SavedWork] = []
-    @State private var showingAddToCollection = false
-    @State private var batchActionError: String?
+    @State private var bulkSelection = RemoteWorkSelectionController()
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
     /// This page's works narrowed by the active refine filters.
     private var visibleResults: [AO3WorkSummary] {
         filters.apply(to: results)
-    }
-
-    private var selectedSummaries: [AO3WorkSummary] {
-        visibleResults.filter { selection.contains($0.id) }
     }
 
     var body: some View {
@@ -444,8 +276,8 @@ struct TagWorksView: View {
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(visibleResults) { work in
-                            workRow(for: work)
-                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
+                            SelectableAO3WorkRow(work: work, expandAll: expandAll, controller: bulkSelection)
+                                .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
                         }
                     }
                     if showPagination { Section { paginationRow } }
@@ -472,61 +304,16 @@ struct TagWorksView: View {
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 .navigationTitle("Filter Works")
             }
-            .sheet(isPresented: $showingAddToQueue) {
-                AddToQueueView(works: resolvedQueueWorks)
-            }
-            .sheet(isPresented: $showingAddToCollection) {
-                AddToCollectionView(works: resolvedCollectionWorks)
-            }
-            .alert(
-                "Action Failed",
-                isPresented: Binding(
-                    get: { batchActionError != nil },
-                    set: { if !$0 { batchActionError = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) { batchActionError = nil }
-            } message: {
-                Text(batchActionError ?? "")
-            }
+            .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
-            .onDisappear { batchTask?.cancel() }
-    }
-
-    @ViewBuilder
-    private func workRow(for work: AO3WorkSummary) -> some View {
-        let row = AO3WorkRow(work: work, expandAll: expandAll, isSelecting: isSelecting, isSelected: selection.contains(work.id))
-        if isSelecting {
-            Button { toggleSelection(work) } label: { row }
-                .buttonStyle(.plain)
-                .accessibilityLabel(work.title)
-                .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-                .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
-                .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
-        } else {
-            row.cardNavigation(to: work)
-        }
-    }
-
-    private func toggleSelection(_ work: AO3WorkSummary) {
-        if selection.contains(work.id) {
-            selection.remove(work.id)
-        } else {
-            selection.insert(work.id)
-        }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if isSelecting {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { exitSelectMode() }
+        if bulkSelection.isSelecting {
+            RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                bulkSelection.selected(in: visibleResults)
             }
-            #if os(iOS)
-            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
-            #else
-            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
-            #endif
         } else if phase == .loaded, !results.isEmpty {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 2) {
@@ -534,7 +321,7 @@ struct TagWorksView: View {
                                  showingFilters: $showingFilters,
                                  onClearFilters: { filters = AO3SearchFilters() })
                     WorkListMoreMenu {
-                        Button { isSelecting = true } label: {
+                        Button { bulkSelection.isSelecting = true } label: {
                             Label("Select", systemImage: "checklist")
                         }
                         ExpandAllMenuItem(expandAll: $expandAll)
@@ -542,93 +329,6 @@ struct TagWorksView: View {
                 }
                 .labelStyle(.iconOnly)
             }
-        }
-    }
-
-    /// Mirrors FandomWorksView's bulk-action bar exactly, sharing the same resolution
-    /// helpers so both surfaces behave identically for the same batch actions.
-    @ViewBuilder
-    private var bulkActionBar: some View {
-        Button {
-            batchTask = Task { await bulkSave() }
-        } label: {
-            Label("Save", systemImage: "bookmark")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkSaveForLater() }
-        } label: {
-            Label("Save for Later", systemImage: "clock.arrow.circlepath")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToCollection() }
-        } label: {
-            Label("Add to Collection", systemImage: "square.stack")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToQueue() }
-        } label: {
-            Label("Add to Queue", systemImage: "list.bullet.rectangle")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        if isProcessingBatch {
-            ProgressView()
-                .controlSize(.small)
-        }
-    }
-
-    private func exitSelectMode() {
-        isSelecting = false
-        selection = []
-    }
-
-    private func bulkSave() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            for work in works {
-                WorkLifecycle.setSaved(work, true, in: context)
-            }
-        }
-    }
-
-    private func bulkSaveForLater() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
-    }
-
-    private func bulkAddToCollection() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedCollectionWorks = works
-            showingAddToCollection = true
-        }
-    }
-
-    private func bulkAddToQueue() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedQueueWorks = works
-            showingAddToQueue = true
         }
     }
 
@@ -640,7 +340,7 @@ struct TagWorksView: View {
         SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
             // A different page replaces `results` with different works entirely —
             // a stale selection would otherwise reference IDs that no longer exist.
-            selection.removeAll()
+            bulkSelection.selection.removeAll()
             Task { await load(page: page) }
         }
         .cardRow()

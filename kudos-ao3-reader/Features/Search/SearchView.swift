@@ -51,29 +51,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         let totalPages: Int
     }
 
-    // Multi-select / bulk actions over AO3 search results, mirroring Browse's
-    // FandomWorksView/TagWorksView (same shared resolution helpers).
-    @State private var isSelecting = false
-    @State private var selection: Set<Int> = []
-    @State private var isProcessingBatch = false
-    @State private var batchTask: Task<Void, Never>?
-    @State private var resolvedQueueWorks: [SavedWork] = []
-    @State private var showingAddToQueue = false
-    @State private var resolvedCollectionWorks: [SavedWork] = []
-    @State private var showingAddToCollection = false
-    @State private var batchActionError: String?
+    // Multi-select / bulk actions over AO3 search results — the same shared
+    // selection shell as Browse's FandomWorksView/TagWorksView.
+    @State private var bulkSelection = RemoteWorkSelectionController()
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
-    }
-
-    private var selectedSummaries: [AO3WorkSummary] {
-        results.filter { selection.contains($0.id) }
-    }
-
-    private func exitSelectMode() {
-        isSelecting = false
-        selection = []
     }
 
     var body: some View {
@@ -106,15 +89,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .ao3AuthorNavigation(path: $path, tab: .search)
                 .toolbar {
-                    if isSelecting {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { exitSelectMode() }
+                    if bulkSelection.isSelecting {
+                        RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                            bulkSelection.selected(in: results)
                         }
-                        #if os(iOS)
-                        ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
-                        #else
-                        ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
-                        #endif
                     } else {
                         #if os(iOS)
                         // Search is a focused, full-screen mode. Results replace the
@@ -139,7 +117,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         if phase == .loaded, !results.isEmpty {
                             ToolbarItem(placement: .primaryAction) {
                                 WorkListMoreMenu {
-                                    Button { isSelecting = true } label: {
+                                    Button { bulkSelection.isSelecting = true } label: {
                                         Label("Select", systemImage: "checklist")
                                     }
                                     ExpandAllMenuItem(expandAll: $expandAllCards)
@@ -172,24 +150,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 } message: {
                     Text("Save the current search and its filters to re-run later.")
                 }
-                .sheet(isPresented: $showingAddToQueue) {
-                    AddToQueueView(works: resolvedQueueWorks)
-                }
-                .sheet(isPresented: $showingAddToCollection) {
-                    AddToCollectionView(works: resolvedCollectionWorks)
-                }
-                .alert(
-                    "Action Failed",
-                    isPresented: Binding(
-                        get: { batchActionError != nil },
-                        set: { if !$0 { batchActionError = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) { batchActionError = nil }
-                } message: {
-                    Text(batchActionError ?? "")
-                }
-                .onDisappear { batchTask?.cancel() }
+                .remoteWorkSelectionChrome(bulkSelection)
         }
     }
 
@@ -218,8 +179,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     Section {
                         ForEach(results) { work in
-                            searchResultRow(for: work)
-                                .cardRow(isSelected: isSelecting && selection.contains(work.id))
+                            SelectableAO3WorkRow(work: work, expandAll: expandAllCards, controller: bulkSelection)
+                                .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
                         }
                     }
 
@@ -462,114 +423,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Expands or collapses every result card at once (each card can still be
-    /// toggled individually afterwards). Shown only while results are visible.
-    @ViewBuilder
-    private func searchResultRow(for work: AO3WorkSummary) -> some View {
-        let row = AO3WorkRow(work: work, expandAll: expandAllCards, isSelecting: isSelecting, isSelected: selection.contains(work.id))
-        if isSelecting {
-            Button { toggleSelection(work) } label: { row }
-                .buttonStyle(.plain)
-                .accessibilityLabel(work.title)
-                .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-                .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
-                .accessibilityAddTraits(selection.contains(work.id) ? .isSelected : [])
-        } else {
-            row.cardNavigation(to: work)
-        }
-    }
-
-    private func toggleSelection(_ work: AO3WorkSummary) {
-        if selection.contains(work.id) {
-            selection.remove(work.id)
-        } else {
-            selection.insert(work.id)
-        }
-    }
-
-    /// Mirrors Browse's FandomWorksView/TagWorksView bulk-action bar exactly, sharing
-    /// the same resolution helpers so results behave identically everywhere.
-    @ViewBuilder
-    private var bulkActionBar: some View {
-        Button {
-            batchTask = Task { await bulkSave() }
-        } label: {
-            Label("Save", systemImage: "bookmark")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkSaveForLater() }
-        } label: {
-            Label("Save for Later", systemImage: "clock.arrow.circlepath")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToCollection() }
-        } label: {
-            Label("Add to Collection", systemImage: "square.stack")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToQueue() }
-        } label: {
-            Label("Add to Queue", systemImage: "list.bullet.rectangle")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        if isProcessingBatch {
-            ProgressView()
-                .controlSize(.small)
-        }
-    }
-
-    private func bulkSave() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            for work in works {
-                WorkLifecycle.setSaved(work, true, in: context)
-            }
-        }
-    }
-
-    private func bulkSaveForLater() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
-    }
-
-    private func bulkAddToCollection() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedCollectionWorks = works
-            showingAddToCollection = true
-        }
-    }
-
-    private func bulkAddToQueue() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedQueueWorks = works
-            showingAddToQueue = true
-        }
-    }
-
-
     /// Resets every filter (keeping the query) and refreshes — shared by the
     /// long-press confirmation and mirroring the sidebar's "Reset Filters".
     private func clearAllFilters() {
@@ -639,7 +492,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             // it can't overwrite what we just restored. Selection is cleared because
             // the works (and their IDs) change wholesale, mirroring loadPage.
             loadToken += 1
-            selection.removeAll()
+            bulkSelection.selection.removeAll()
             filters = previous.filters
             results = previous.results
             currentPage = previous.page
@@ -778,7 +631,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         guard page >= 1, page <= totalPages, page != currentPage else { return }
         // A different page replaces `results` with different works entirely — a
         // stale selection would otherwise reference IDs that no longer exist.
-        selection.removeAll()
+        bulkSelection.selection.removeAll()
         load(page: page)
     }
 
