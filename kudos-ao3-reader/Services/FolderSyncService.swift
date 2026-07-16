@@ -37,6 +37,17 @@ struct FolderSyncResult: Equatable {
         revivedQueues += summary.revivedQueues
         ambiguousQueueConflicts += summary.ambiguousQueueConflicts
     }
+
+    /// Folds another result's counts into this one — used when a sub-step (e.g. resolving
+    /// File-Provider conflict versions) already accumulated its own `FolderSyncResult` and
+    /// the caller needs those counts reflected in its own total rather than discarded.
+    mutating func absorb(_ other: FolderSyncResult) {
+        restoredWorks += other.restoredWorks
+        suppressedQueues += other.suppressedQueues
+        revivedQueues += other.revivedQueues
+        ambiguousQueueConflicts += other.ambiguousQueueConflicts
+        foldedConflicts += other.foldedConflicts
+    }
 }
 
 enum FolderSyncError: LocalizedError, Equatable {
@@ -232,11 +243,11 @@ enum FolderSyncService {
             result.didReadRemoteFile = true
             let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
             result.absorb(summary)
-            result.foldedConflicts += try await foldFileProviderConflicts(
+            result.absorb(try await foldFileProviderConflicts(
                 at: syncFileURL,
                 into: context,
                 defaults: defaults
-            )
+            ))
             if let remoteStamp {
                 defaults.set(remoteStamp, forKey: lastRestoredRemoteStampKey)
             } else {
@@ -284,30 +295,36 @@ enum FolderSyncService {
         )
     }
 
+    /// Folds every unresolved File-Provider conflict version of the sync file into
+    /// `context`, one restore per version. Returns the accumulated `FolderSyncResult`
+    /// (not just a bare count) so a caller's own totals — e.g. the counts `SettingsView`
+    /// displays — reflect works/queues restored from a folded conflict instead of
+    /// silently dropping them.
     private static func foldFileProviderConflicts(
         at syncFileURL: URL,
         into context: ModelContext,
         defaults: UserDefaults
-    ) async throws -> Int {
+    ) async throws -> FolderSyncResult {
         guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: syncFileURL),
               !versions.isEmpty
-        else { return 0 }
+        else { return FolderSyncResult() }
 
-        var folded = 0
+        var result = FolderSyncResult()
         for version in versions {
             let conflictURL = version.url
             let contents = try await Task.detached {
                 try coordinatedReadContents(from: conflictURL)
             }.value
-            _ = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            result.absorb(summary)
+            result.foldedConflicts += 1
             version.isResolved = true
-            folded += 1
         }
 
-        if folded == versions.count {
+        if result.foldedConflicts == versions.count {
             try? NSFileVersion.removeOtherVersionsOfItem(at: syncFileURL)
         }
-        return folded
+        return result
     }
 
     private static func resolveFolder(defaults: UserDefaults) throws -> URL {

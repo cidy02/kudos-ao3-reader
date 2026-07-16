@@ -220,6 +220,32 @@ struct FolderSyncTests {
         #expect(Set(works.compactMap(\.ao3WorkID)) == [3001, 3002])
     }
 
+    /// `foldFileProviderConflicts` (the private, `performSyncDown`-only path) folds its
+    /// own `FolderSyncResult` into the caller's via this overload rather than discarding
+    /// it — regression coverage for the undercount §6.3 of the ponytail audit found:
+    /// conflict-restore counts must reach the totals `SettingsView` displays, not just
+    /// the raw folded-version count.
+    @Test func folderSyncResultAbsorbsAnotherResultsCountsRatherThanDiscardingThem() {
+        var total = FolderSyncResult()
+        total.restoredWorks = 1
+        total.suppressedQueues = 1
+
+        var conflictFold = FolderSyncResult()
+        conflictFold.restoredWorks = 2
+        conflictFold.suppressedQueues = 3
+        conflictFold.revivedQueues = 1
+        conflictFold.ambiguousQueueConflicts = 1
+        conflictFold.foldedConflicts = 2
+
+        total.absorb(conflictFold)
+
+        #expect(total.restoredWorks == 3)
+        #expect(total.suppressedQueues == 4)
+        #expect(total.revivedQueues == 1)
+        #expect(total.ambiguousQueueConflicts == 1)
+        #expect(total.foldedConflicts == 2)
+    }
+
     /// A work explicitly removed from a collection must not be silently re-added by a
     /// stale sync file that still lists it — the same resurrection bug class fixed for
     /// deleted works/queues, now closed for collection membership too.
