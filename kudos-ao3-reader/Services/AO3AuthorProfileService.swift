@@ -303,37 +303,19 @@ final class AO3AuthorProfileModel {
 
     func toggleSubscription(auth: AO3AuthService) async {
         guard let form = header?.subscriptionForm, !isPerformingSubscription else { return }
-        let actionRoute = route
-        let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        let actionSessionGeneration = auth.sessionGeneration
         isPerformingSubscription = true
         actionMessage = nil
         defer { isPerformingSubscription = false }
-        do {
+        await performFencedAuthorAction(auth: auth) { actionRoute, actionAuthenticationScope in
             let message = try await auth.submitAuthorSubscription(form)
             await AO3AuthorProfileFetcher.invalidateAuthorDashboards(
                 username: actionRoute.username,
                 authenticationScope: actionAuthenticationScope
             )
-            guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
-                    == .orderedSame,
-                  AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                    == actionAuthenticationScope,
-                  auth.sessionGeneration == actionSessionGeneration else { return }
+            return message
+        } onSuccess: { message in
             actionMessage = message
             await reloadHeaderTracked(auth: auth)
-        } catch AO3Error.authenticationRequired {
-            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope,
-                  auth.sessionGeneration == actionSessionGeneration
-            else { return }
-            await auth.sessionDidExpire(expectedGeneration: actionSessionGeneration)
-        } catch {
-            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope,
-                  auth.sessionGeneration == actionSessionGeneration
-            else { return }
-            actionMessage = Self.message(for: error)
         }
     }
 
@@ -347,42 +329,23 @@ final class AO3AuthorProfileModel {
             actionMessage = AO3WriteError.notSignedIn.localizedDescription
             return
         }
-        let actionRoute = route
-        let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        let actionSessionGeneration = auth.sessionGeneration
         isPerformingModeration = true
         actionMessage = nil
         pendingModerationForm = nil
         moderationFormForSubmit = nil
         defer { isPerformingModeration = false }
-        do {
+        await performFencedAuthorAction(auth: auth) { actionRoute, _ in
             let page = try await pageLoader(action.url, auth, true)
-            let form = try AO3Client.parseAuthorModerationForm(
+            return try AO3Client.parseAuthorModerationForm(
                 page.html,
                 referer: action.url,
                 webKind: action.kind,
                 targetUsername: actionRoute.username
             )
-            guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
-                    == .orderedSame,
-                  AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                    == actionAuthenticationScope,
-                  auth.sessionGeneration == actionSessionGeneration else { return }
+        } onSuccess: { form in
             // Keep a submit snapshot; the alert binding may clear `pending` on dismiss.
             moderationFormForSubmit = form
             pendingModerationForm = form
-        } catch AO3Error.authenticationRequired {
-            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope,
-                  auth.sessionGeneration == actionSessionGeneration
-            else { return }
-            await auth.sessionDidExpire(expectedGeneration: actionSessionGeneration)
-        } catch {
-            guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
-                == actionAuthenticationScope,
-                  auth.sessionGeneration == actionSessionGeneration
-            else { return }
-            actionMessage = Self.message(for: error)
         }
     }
 
@@ -390,27 +353,54 @@ final class AO3AuthorProfileModel {
         // Prefer the snapshot — alert dismiss often nils `pendingModerationForm` first.
         guard let form = moderationFormForSubmit ?? pendingModerationForm,
               !isPerformingModeration else { return }
-        let actionRoute = route
-        let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
-        let actionSessionGeneration = auth.sessionGeneration
         isPerformingModeration = true
         actionMessage = nil
         pendingModerationForm = nil
         moderationFormForSubmit = nil
         defer { isPerformingModeration = false }
-        do {
+        await performFencedAuthorAction(auth: auth) { actionRoute, actionAuthenticationScope in
             let message = try await auth.submitAuthorModeration(form)
             await AO3AuthorProfileFetcher.invalidateAuthorDashboards(
                 username: actionRoute.username,
                 authenticationScope: actionAuthenticationScope
             )
+            return message
+        } onSuccess: { message in
+            actionMessage = message
+            await reloadHeaderTracked(auth: auth)
+        }
+    }
+
+    /// The stale-response fence shared by the three authenticated author actions
+    /// (Subscribe, block/mute begin, block/mute confirm): captures the route /
+    /// authentication scope / session generation *before* `operation`'s await,
+    /// and only lets `onSuccess` touch model state when all three still match
+    /// afterward. Both failure paths re-check scope + generation (deliberately
+    /// not route, matching the original per-method catch blocks — an error's
+    /// only side effects are session-wide, not route-scoped):
+    /// `AO3Error.authenticationRequired` reports expiry against the *captured*
+    /// generation so an old response can never log out a replacement session;
+    /// any other failure surfaces through `actionMessage`. `operation` receives
+    /// the captured route + scope so cache invalidation and form parsing use the
+    /// values the action started with, never post-switch state. Internal (not
+    /// private) so the fence itself is unit-testable without a live AO3 submit.
+    func performFencedAuthorAction<Value>(
+        auth: AO3AuthService,
+        operation: (_ actionRoute: AO3AuthorRoute, _ actionAuthenticationScope: String)
+            async throws -> Value,
+        onSuccess: (Value) async -> Void
+    ) async {
+        let actionRoute = route
+        let actionAuthenticationScope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let actionSessionGeneration = auth.sessionGeneration
+        do {
+            let value = try await operation(actionRoute, actionAuthenticationScope)
             guard route.username.localizedCaseInsensitiveCompare(actionRoute.username)
                     == .orderedSame,
                   AO3AuthorProfileFetcher.authenticationScope(for: auth)
                     == actionAuthenticationScope,
                   auth.sessionGeneration == actionSessionGeneration else { return }
-            actionMessage = message
-            await reloadHeaderTracked(auth: auth)
+            await onSuccess(value)
         } catch AO3Error.authenticationRequired {
             guard AO3AuthorProfileFetcher.authenticationScope(for: auth)
                 == actionAuthenticationScope,
