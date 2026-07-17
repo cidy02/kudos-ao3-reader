@@ -237,8 +237,18 @@ struct AO3CommentsParseTests {
         }
     }
 
-    /// Edit/Delete come straight from AO3's per-session markup — present on the
-    /// session's own comment, absent everywhere else. The UI is gated on these.
+    /// Edit/Delete come straight from AO3's per-session markup — Edit only on
+    /// the session's own comment, Delete also on others' comments on the
+    /// session user's own works (work-owner moderation right). The UI is gated
+    /// on these. Per otwarchive's `comments_helper.rb#can_edit_comment?`, AO3
+    /// renders Edit only while the own comment has *zero replies* and isn't
+    /// frozen — a replied-to comment loses Edit permanently, so "Delete shows
+    /// but Edit doesn't" on the same comment is AO3 behavior the app must
+    /// mirror, not a parsing bug. The fixture's own-comment action list mirrors
+    /// markup captured live 2026-07-16: Edit/Delete as `data-remote` links
+    /// (`/comments/<id>/edit`, `/comments/delete_comment?id=<id>`) plus a
+    /// Freeze-Thread `button_to` form the parser must skip (it only reads
+    /// anchors).
     @Test func exposesOnlyActionsAO3Rendered() throws {
         let page = try AO3Client.parseCommentsPage(fixture("ao3_comments_page"), page: 1)
         let guest = try #require(page.comments.first)
@@ -248,7 +258,7 @@ struct AO3CommentsParseTests {
 
         let own = try #require(guest.replies.first)
         #expect(own.editPath == "/comments/1002/edit")
-        #expect(own.deletePath == "/comments/1002")
+        #expect(own.deletePath == "/comments/delete_comment?id=1002")
         #expect(own.canReply)
         #expect(own.threadActionURL?.absoluteString == "https://archiveofourown.org/comments/1002")
         #expect(own.parentThreadURL?.absoluteString == "https://archiveofourown.org/comments/1001")
