@@ -31,7 +31,11 @@ struct AO3WorkActionsMenu: View {
             }
 
             Button { actions.startBookmark() } label: {
-                Label("Bookmark on AO3", systemImage: "bookmark")
+                if actions.workPageStates?.existingBookmark != nil {
+                    Label("Edit Bookmark on AO3", systemImage: "bookmark.fill")
+                } else {
+                    Label("Bookmark on AO3", systemImage: "bookmark")
+                }
             }
             Button { actions.markForLater(workID: workID, auth: auth) } label: {
                 Label("Mark for Later", systemImage: "clock.badge")
@@ -39,7 +43,11 @@ struct AO3WorkActionsMenu: View {
             .disabled(actions.isWorking)
 
             Button { actions.subscribe(workID: workID, auth: auth) } label: {
-                Label("Subscribe", systemImage: "bell")
+                if actions.workPageStates?.isSubscribed == true {
+                    Label("Unsubscribe", systemImage: "bell.slash")
+                } else {
+                    Label("Subscribe", systemImage: "bell")
+                }
             }
             .disabled(actions.isWorking)
 
@@ -48,6 +56,11 @@ struct AO3WorkActionsMenu: View {
                 Label("Open on AO3", systemImage: "safari")
             }
         }
+        // Menu content builds when the menu opens — fetch the subscribed/
+        // bookmarked state then (never on plain work-detail views), so the
+        // labels above reflect AO3 instead of always reading "Subscribe" /
+        // "Bookmark on AO3".
+        .onAppear { actions.refreshWorkPageStates(workID: workID, auth: auth) }
     }
 
     private func openWeb(_ path: String) {

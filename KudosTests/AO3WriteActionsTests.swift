@@ -319,6 +319,41 @@ struct AO3WriteActionsTests {
         #expect(result.unsubscribePath == nil)
     }
 
+    // MARK: Work-page action states (fixtures trimmed from live captures, 2026-07-16)
+
+    private final class FixtureAnchor {}
+
+    private func workFixture(_ name: String) throws -> String {
+        let url = try #require(
+            Bundle(for: FixtureAnchor.self).url(forResource: name, withExtension: "html")
+        )
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// A bookmarked work's page embeds the *edit* form (`/bookmarks/<id>` +
+    /// `_method=put`) prefilled with the bookmark's current values — the state
+    /// the actions menu shows as "Edit Bookmark on AO3".
+    @Test func readsExistingBookmarkFromWorkPageEditForm() throws {
+        let html = try workFixture("ao3_work_bookmarked_subscribed")
+        let existing = try #require(AO3Client.parseExistingBookmark(from: html))
+        #expect(existing.editPath == "/bookmarks/2997787566")
+        #expect(existing.input.notes == "Test bookmark")
+        #expect(existing.input.tags.isEmpty)
+        #expect(existing.input.isPrivate)
+        #expect(!existing.input.isRec)
+        #expect(existing.collectionNames.isEmpty)
+        // Same live page: the subscription form is the delete variant.
+        #expect(AO3Client.parseSubscription(from: html).isSubscribed)
+    }
+
+    /// A never-bookmarked work renders only the create form
+    /// (`/works/<id>/bookmarks`, no method override) → no existing bookmark.
+    @Test func createOnlyBookmarkFormMeansNoExistingBookmark() throws {
+        let html = try workFixture("ao3_work_unbookmarked")
+        #expect(AO3Client.parseExistingBookmark(from: html) == nil)
+        #expect(!AO3Client.parseSubscription(from: html).isSubscribed)
+    }
+
     @Test func parsesCollectionsIndex() throws {
         let html = """
         <html><body>

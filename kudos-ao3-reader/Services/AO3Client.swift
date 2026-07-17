@@ -578,6 +578,36 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return (false, nil)
     }
 
+    /// The signed-in user's existing bookmark of this work, read from the work
+    /// page's embedded bookmark form. When already bookmarked, AO3 renders that
+    /// form as an *edit*: `action="/bookmarks/<id>"` carrying `_method=put`,
+    /// prefilled with the bookmark's current values (verified live 2026-07-16).
+    /// A not-yet-bookmarked work renders a create form
+    /// (`action="/works/<id>/bookmarks"`, no method override) → nil.
+    static func parseExistingBookmark(from html: String) -> AO3ExistingBookmark? {
+        guard let doc = try? SwiftSoup.parse(html),
+              let form = try? doc.select("form[action*=/bookmarks]").first(),
+              let action = try? form.attr("action"),
+              action.contains("/bookmarks/"),
+              let method = try? form.select("input[name=_method]").first()?.attr("value"),
+              method.lowercased() == "put"
+        else { return nil }
+
+        var input = AO3AuthService.BookmarkInput()
+        if let notes = try? form.select("textarea[name='bookmark[bookmarker_notes]']").first()?.text() {
+            input.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        input.tags = (try? form.select("input[name='bookmark[tag_string]']").first()?
+            .attr("value")) ?? ""
+        input.isPrivate = (try? form.select("input[type=checkbox][name='bookmark[private]']").first()?
+            .hasAttr("checked")) ?? false
+        input.isRec = (try? form.select("input[type=checkbox][name='bookmark[rec]']").first()?
+            .hasAttr("checked")) ?? false
+        let collections = (try? form.select("input[name='bookmark[collection_names]']").first()?
+            .attr("value")) ?? ""
+        return AO3ExistingBookmark(editPath: action, collectionNames: collections, input: input)
+    }
+
     /// The first error AO3 renders after a rejected write (so the UI can show the
     /// real reason), or nil when the page carries no recognized error. Covers the
     /// validation error list plus every flash class otwarchive uses for failed

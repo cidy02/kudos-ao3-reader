@@ -142,42 +142,71 @@ extension AO3AuthService {
         )
     }
 
-    /// The fields of a new AO3 bookmark.
-    struct BookmarkInput: Equatable {
+    /// The fields of a new AO3 bookmark. `nonisolated` so the nonisolated
+    /// work-page parser (`AO3Client.parseExistingBookmark`) can build the
+    /// prefill without inheriting this service's MainActor isolation.
+    nonisolated struct BookmarkInput: Equatable {
         var notes = ""
         var tags = "" // comma-separated
         var isPrivate = false
         var isRec = false
     }
 
-    /// Creates a bookmark on the work under the chosen "Posting As" pseud when
-    /// this form offers it, else the form's own default (see resolvedPostingPseudID).
-    func createBookmark(workID: Int, input: BookmarkInput) async throws -> String {
+    /// One authenticated work-page read serving the actions menu's state labels:
+    /// current subscription + existing bookmark. Advisory only — every write
+    /// re-reads the live page at submit time, so a stale label can never
+    /// mis-route an action (`toggleSubscribe` and `saveBookmark` both decide
+    /// from the fresh HTML, not from this snapshot).
+    func workActionStates(workID: Int) async throws -> AO3WorkActionStates {
+        guard isLoggedIn else { throw AO3WriteError.notSignedIn }
+        let (html, _) = try await fetchCSRFPage(at: Self.workURL(workID))
+        return AO3WorkActionStates(
+            isSubscribed: AO3Client.parseSubscription(from: html).isSubscribed,
+            existingBookmark: AO3Client.parseExistingBookmark(from: html)
+        )
+    }
+
+    /// Creates — or, when the fetched work page carries the user's existing
+    /// bookmark, updates — the bookmark under the chosen "Posting As" pseud when
+    /// the form offers it, else the form's own default (see
+    /// resolvedPostingPseudID). The page itself distinguishes the two cases: an
+    /// existing bookmark renders an *edit* form (`/bookmarks/<id>` +
+    /// `_method=put`, verified live 2026-07-16) whose action is reused here, so
+    /// a stale menu label can never turn an update into a duplicate create.
+    func saveBookmark(workID: Int, input: BookmarkInput) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
         let (html, token) = try await fetchCSRFPage(at: workURL)
 
-        var params: [(String, String)] = [
+        let existing = AO3Client.parseExistingBookmark(from: html)
+        var params: [(String, String)] = []
+        if existing != nil { params.append(("_method", "put")) }
+        params.append(contentsOf: [
             ("authenticity_token", token),
             ("bookmark[bookmarker_notes]", input.notes),
             ("bookmark[tag_string]", input.tags),
-            ("bookmark[collection_names]", ""),
+            // Collections aren't edited in the app's composer — carry the
+            // form's current value through so an update never strips them.
+            ("bookmark[collection_names]", existing?.collectionNames ?? ""),
             ("bookmark[private]", input.isPrivate ? "1" : "0"),
             ("bookmark[rec]", input.isRec ? "1" : "0")
-        ]
+        ])
         if let pseud = resolvedPostingPseudID(from: html, field: "bookmark[pseud_id]") {
             params.append(("bookmark[pseud_id]", pseud))
         }
+        let endpoint = existing.flatMap { Self.absoluteURL($0.editPath) }
+            ?? Self.bookmarksEndpoint(workID: workID)
         let request = try writeRequest(
-            to: Self.bookmarksEndpoint(workID: workID),
+            to: endpoint,
             body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
         if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "Bookmarked."
+            return existing == nil ? "Bookmarked." : "Bookmark updated."
         }
         throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't bookmark this work."
+            AO3Client.writeErrorMessage(in: responseBody)
+                ?? (existing == nil ? "Couldn't bookmark this work." : "Couldn't update the bookmark.")
         )
     }
 
@@ -291,6 +320,23 @@ extension AO3AuthService {
         }
         return Data(pairs.joined(separator: "&").utf8)
     }
+}
+
+/// The signed-in user's live state for a work's "On AO3" actions, scraped from
+/// one work-page read: subscription plus any existing bookmark.
+nonisolated struct AO3WorkActionStates: Equatable {
+    var isSubscribed: Bool
+    var existingBookmark: AO3ExistingBookmark?
+}
+
+/// An already-saved bookmark exactly as AO3's work-page edit form presents it.
+/// `editPath` is that form's own action (`/bookmarks/<id>`); `collectionNames`
+/// rides along un-edited so an update never strips collection membership; the
+/// prefilled `input` lets the composer round-trip the current values.
+nonisolated struct AO3ExistingBookmark: Equatable {
+    var editPath: String
+    var collectionNames: String
+    var input: AO3AuthService.BookmarkInput
 }
 
 /// Errors specific to native AO3 write actions. (Network/rate-limit/auth errors come
