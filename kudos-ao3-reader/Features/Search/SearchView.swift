@@ -70,6 +70,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     guard let request else { return }
                     applyTagSearch(request)
                     router.pendingTagSearch = nil
+                    // A new tag search always replaces the visible results at Search's
+                    // root — collapse any pushed work/author screen so the request
+                    // (from a chip tapped on a work already pushed inside Search's own
+                    // stack, or from another tab entirely) is never silently applied
+                    // behind a still-visible, unrelated screen.
+                    path = NavigationPath()
                 }
                 .navigationTitle("Search")
             #if os(iOS)
@@ -552,7 +558,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 newFilters.additionalTags = request.value
             }
         }
-        pushFilters(newFilters)
+        pushFilters(newFilters, isFreshTabJump: request.isFreshTabJump)
     }
 
     /// Pushes the current filters onto the history stack before overwriting them —
@@ -562,8 +568,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// there's no real prior search to return to, and pushing that empty state
     /// anyway just forced an extra Back tap through a blank results screen before
     /// `goBack()`'s own idle/Browse fallback ever got a chance to run.
-    private func pushFilters(_ new: AO3SearchFilters) {
-        if filters.isSearchable {
+    ///
+    /// `isFreshTabJump` marks a request that switched the user into Search from a
+    /// different tab: whatever filters/history Search still had from an earlier,
+    /// unrelated session must not be kept — otherwise the first `goBack()` after this
+    /// new search restores that stale, unrelated prior search instead of returning to
+    /// wherever the user actually came from.
+    private func pushFilters(_ new: AO3SearchFilters, isFreshTabJump: Bool) {
+        if isFreshTabJump {
+            filterHistory.removeAll()
+        } else if filters.isSearchable {
             filterHistory.append(FilterHistoryEntry(
                 filters: filters,
                 page: currentPage,

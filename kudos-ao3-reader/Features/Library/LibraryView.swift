@@ -198,6 +198,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     }
                     filters = applied
                     router.pendingLibraryTag = nil
+                    // The filtered dashboard lives at the stack root — if a pushed
+                    // screen (e.g. the Work Detail the tag was tapped on) is still on
+                    // top, applying the filter here is otherwise invisible until the
+                    // user separately backs all the way out.
+                    path = NavigationPath()
                 }
         }
     }

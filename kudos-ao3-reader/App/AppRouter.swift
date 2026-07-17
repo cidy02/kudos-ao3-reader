@@ -48,6 +48,11 @@ struct AO3TagSearch: Equatable {
     enum Field { case warning, fandom, character, relationship, freeform }
     let field: Field
     let value: String
+    /// True when this request switched the user into the Search tab (they were on a
+    /// different tab when the chip was tapped). A same-tab tap — a chip on a result
+    /// already inside Search's own stack — is a deliberate drill-down (tag A → tag B)
+    /// and must not be treated as the start of a brand new, unrelated search.
+    let isFreshTabJump: Bool
 }
 
 /// A request to show a tag's works page natively (from a tapped AO3 link, e.g. in a
@@ -195,7 +200,8 @@ final class AppRouter {
     /// Switches to Search and runs an AO3 search for `value` in the given tag `field`
     /// (a tapped fandom/character/relationship/freeform chip → "more works with this").
     func searchAO3(_ field: AO3TagSearch.Field, _ value: String) {
-        pendingTagSearch = AO3TagSearch(field: field, value: value)
+        let isFreshTabJump = selection != .search
+        pendingTagSearch = AO3TagSearch(field: field, value: value, isFreshTabJump: isFreshTabJump)
         selection = .search
     }
 

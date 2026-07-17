@@ -16,6 +16,10 @@ struct LocalWorkDestinationView: View {
     var onReaderOpen: (SavedWork) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
+    /// Set once, on this view's genuine first `.onAppear` — never updated again, so a
+    /// later re-appearance (e.g. Back from a pushed Author Profile revealing this view)
+    /// is never mistaken for a fresh, possibly-spurious push.
+    @State private var appearedAt: Date?
 
     var body: some View {
         Group {
@@ -29,7 +33,15 @@ struct LocalWorkDestinationView: View {
         // Author byline taps can also activate the row NavigationLink. Dismiss must
         // be async — SwiftUI often ignores dismiss() inside the same navigation
         // transaction as the push (profile stayed buried until the user pressed Back).
-        .onAppear { dismissIfAuthorBylineConflict() }
+        // Only the first appearance can be that spurious push, so only it sets
+        // `appearedAt` / runs the check — a later re-appearance (Back from a child)
+        // must never re-trigger it.
+        .onAppear {
+            if appearedAt == nil {
+                appearedAt = Date()
+                dismissIfAuthorBylineConflict()
+            }
+        }
         .onChange(of: router.cardNavigationSuppressed) { _, suppressed in
             if suppressed { dismissIfAuthorBylineConflict() }
         }
@@ -37,6 +49,11 @@ struct LocalWorkDestinationView: View {
 
     private func dismissIfAuthorBylineConflict() {
         guard router.shouldSuppressCardNavigation else { return }
+        // Only a same-touch race at this view's own genuine push can make it the
+        // spurious duplicate `cardNavigationSuppressed` guards against. Without this,
+        // tapping this already-settled screen's own author byline flips the same
+        // global flag and this handler dismissed the very screen the user is on.
+        guard let appearedAt, Date().timeIntervalSince(appearedAt) < 0.5 else { return }
         Task { @MainActor in
             await Task.yield()
             guard router.shouldSuppressCardNavigation else { return }
