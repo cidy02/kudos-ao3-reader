@@ -149,6 +149,45 @@ struct AO3AuthorActionFencingTests {
         #expect(gated.actionMessage == nil)
     }
 
+    // MARK: Alert dismissal vs. the submit snapshot
+
+    /// SwiftUI runs the alert's `isPresented = false` write-back *before* the
+    /// confirm button's action, so the dismiss path must preserve the submit
+    /// snapshot — clearing both staged forms there made Confirm a silent no-op
+    /// (the live "Block confirm does nothing" bug). Explicit Cancel still
+    /// drops both.
+    @Test func alertDismissKeepsTheSubmitSnapshotForConfirm() async throws {
+        let auth = Self.makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let html = try Self.fixture("ao3_author_confirm_block")
+        let model = try Self.makeModel { _, _, _ in
+            AO3AuthorProfileFetcher.Page(html: html, isStale: false)
+        }
+        await model.beginModeration(action: Self.blockAction, auth: auth)
+        let staged = try #require(model.pendingModerationForm)
+
+        model.moderationAlertDidDismiss()
+
+        #expect(model.pendingModerationForm == nil)
+        #expect(model.moderationFormForSubmit == staged)
+    }
+
+    @Test func explicitCancelDropsBothStagedForms() async throws {
+        let auth = Self.makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let html = try Self.fixture("ao3_author_confirm_block")
+        let model = try Self.makeModel { _, _, _ in
+            AO3AuthorProfileFetcher.Page(html: html, isStale: false)
+        }
+        await model.beginModeration(action: Self.blockAction, auth: auth)
+        #expect(model.pendingModerationForm != nil)
+
+        model.cancelPendingModeration()
+
+        #expect(model.pendingModerationForm == nil)
+        #expect(model.moderationFormForSubmit == nil)
+    }
+
     // MARK: The shared fence itself (success-path route check)
 
     @MainActor

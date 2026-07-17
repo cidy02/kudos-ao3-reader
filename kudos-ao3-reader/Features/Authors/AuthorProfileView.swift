@@ -380,7 +380,11 @@ private extension AuthorProfileView {
     private var moderationConfirmPresented: Binding<Bool> {
         Binding(
             get: { model.pendingModerationForm != nil },
-            set: { if !$0 { model.cancelPendingModeration() } }
+            // Dismiss-only: SwiftUI writes `false` here *before* running the
+            // tapped button's action, so this must not clear the submit
+            // snapshot — that made Confirm a silent no-op. The Cancel button
+            // (and only it) calls `cancelPendingModeration()` to drop both.
+            set: { if !$0 { model.moderationAlertDidDismiss() } }
         )
     }
 

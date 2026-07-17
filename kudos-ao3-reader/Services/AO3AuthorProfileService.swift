@@ -148,9 +148,10 @@ final class AO3AuthorProfileModel {
     private(set) var isPerformingModeration = false
     /// Set after a successful confirm-page fetch; the UI presents a native dialog.
     private(set) var pendingModerationForm: AO3AuthorModerationForm?
-    /// Snapshot for submit — SwiftUI alert dismiss can clear `pendingModerationForm`
-    /// before the confirm button's `Task` runs, which previously no-op'd the POST.
-    private var moderationFormForSubmit: AO3AuthorModerationForm?
+    /// Snapshot for submit — SwiftUI alert dismiss clears `pendingModerationForm`
+    /// before the confirm button's `Task` runs, so submit must read this instead.
+    /// Internal getter so tests can assert it survives `moderationAlertDidDismiss()`.
+    private(set) var moderationFormForSubmit: AO3AuthorModerationForm?
     private(set) var actionMessage: String?
 
     private var worksPage = 0
@@ -416,6 +417,19 @@ final class AO3AuthorProfileModel {
         }
     }
 
+    /// The confirm alert's `isPresented` write-back. SwiftUI sets the binding to
+    /// `false` *before* the tapped button's action runs, so this clears only the
+    /// presentation state — `moderationFormForSubmit` must survive dismiss or
+    /// `confirmPendingModeration` finds nothing to submit and silently returns
+    /// (the live "Block/Mute confirm does nothing" bug). The snapshot never
+    /// leaks: Cancel clears it, Confirm consumes it, and `beginModeration`
+    /// replaces it.
+    func moderationAlertDidDismiss() {
+        pendingModerationForm = nil
+    }
+
+    /// Explicit user cancel (the alert's Cancel button): drop the presentation
+    /// state *and* the submit snapshot so nothing is left to submit.
     func cancelPendingModeration() {
         pendingModerationForm = nil
         moderationFormForSubmit = nil
