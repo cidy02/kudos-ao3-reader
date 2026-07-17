@@ -214,43 +214,43 @@ struct ReadingQueueDetailView: View {
             }
             .toolbar {
                 if !works.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
-                        if isReordering {
+                    if isReordering {
+                        ToolbarItem(placement: .primaryAction) {
                             Button("Done") { setReordering(false) }
-                        } else {
-                            HStack(spacing: 2) {
-                                FilterButton(filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in this queue",
-                                             onClearFilters: { filters = LibraryFilters() })
-                                WorkListMoreMenu {
+                        }
+                    } else {
+                        ActionToolbar {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in this queue",
+                                         onClearFilters: { filters = LibraryFilters() })
+                            WorkListMoreMenu {
+                                Button {
+                                    setReordering(true)
+                                } label: {
+                                    Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                }
+                                .disabled(filters.hasActiveFilters)
+                                .help(filters.hasActiveFilters
+                                    ? "Clear filters to reorder"
+                                    : "Reorder works in this queue")
+                                DisplayModeMenuPicker(mode: $displayMode)
+                                // Compact cards don't expand/collapse — only detailed rows do.
+                                if displayMode == .detailed {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                }
+                                if queue.kind == .custom {
+                                    Divider()
                                     Button {
-                                        setReordering(true)
+                                        renameText = queue.name
+                                        showingRename = true
                                     } label: {
-                                        Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                        Label("Rename", systemImage: "pencil")
                                     }
-                                    .disabled(filters.hasActiveFilters)
-                                    .help(filters.hasActiveFilters
-                                        ? "Clear filters to reorder"
-                                        : "Reorder works in this queue")
-                                    DisplayModeMenuPicker(mode: $displayMode)
-                                    // Compact cards don't expand/collapse — only detailed rows do.
-                                    if displayMode == .detailed {
-                                        ExpandAllMenuItem(expandAll: $expandAll)
-                                    }
-                                    if queue.kind == .custom {
-                                        Divider()
-                                        Button {
-                                            renameText = queue.name
-                                            showingRename = true
-                                        } label: {
-                                            Label("Rename", systemImage: "pencil")
-                                        }
-                                        Button(role: .destructive) {
-                                            confirmDelete = true
-                                        } label: {
-                                            Label("Delete Queue", systemImage: "trash")
-                                        }
+                                    Button(role: .destructive) {
+                                        confirmDelete = true
+                                    } label: {
+                                        Label("Delete Queue", systemImage: "trash")
                                     }
                                 }
                             }

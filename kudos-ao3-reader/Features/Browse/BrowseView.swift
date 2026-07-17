@@ -54,6 +54,7 @@ struct AO3WebBrowserView: View {
                 Image(systemName: "chevron.backward")
             }
             .disabled(!model.canGoBack)
+            .accessibilityLabel("Back")
 
             // iOS uses edge-swipe gestures to go forward, so only Back is shown.
             #if !os(iOS)
@@ -61,6 +62,7 @@ struct AO3WebBrowserView: View {
                 Image(systemName: "chevron.forward")
             }
             .disabled(!model.canGoForward)
+            .accessibilityLabel("Forward")
             #endif
         }
 
@@ -72,6 +74,7 @@ struct AO3WebBrowserView: View {
             Button { bookmarkCurrentPage() } label: {
                 Image(systemName: "bookmark")
             }
+            .accessibilityLabel("Add Bookmark")
         }
 
         ToolbarItem(placement: .confirmationAction) {

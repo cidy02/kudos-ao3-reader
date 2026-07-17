@@ -160,22 +160,19 @@ struct HomeView: View {
                         // Gated as a whole, not just its inner pieces — an empty HStack
                         // still reserves an (empty-looking) toolbar slot, which is
                         // exactly what showed a blank button when the Library was empty.
-                        ToolbarItem(placement: .primaryAction) {
-                            HStack(spacing: 2) {
-                                if PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature) {
-                                    MatureRevealToggle()
-                                }
-                                if !allLocalSectionWorks.isEmpty {
-                                    WorkListMoreMenu {
-                                        Button {
-                                            enterSelectMode()
-                                        } label: {
-                                            Label("Select", systemImage: "checklist")
-                                        }
+                        ActionToolbar {
+                            if PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature) {
+                                MatureRevealToggle()
+                            }
+                            if !allLocalSectionWorks.isEmpty {
+                                WorkListMoreMenu {
+                                    Button {
+                                        enterSelectMode()
+                                    } label: {
+                                        Label("Select", systemImage: "checklist")
                                     }
                                 }
                             }
-                            .labelStyle(.iconOnly)
                         }
                     }
                 }

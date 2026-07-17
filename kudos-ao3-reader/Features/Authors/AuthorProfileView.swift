@@ -428,7 +428,7 @@ private extension AuthorProfileView {
                 bulkSelection.selected(in: model.works)
             }
         } else {
-            ToolbarItem(placement: .primaryAction) {
+            ActionToolbar {
                 profileMenu
             }
         }
@@ -459,9 +459,8 @@ private extension AuthorProfileView {
                 ExpandAllMenuItem(expandAll: $expandAll)
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Label("Author actions", systemImage: "ellipsis.circle")
         }
-        .accessibilityLabel("Author actions")
     }
 
     /// Own-profile management links only — Mute/Block live next to Subscribe in the hero.

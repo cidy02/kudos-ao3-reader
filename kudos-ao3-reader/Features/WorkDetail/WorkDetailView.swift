@@ -403,20 +403,20 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ToolbarItem {
-            Button {
+        ActionToolbar {
+            let fav = localWork?.isFavorite ?? false
+            ToolbarIconButton(
+                title: fav ? "Unfavorite" : "Favorite",
+                systemImage: fav ? "star.fill" : "star",
+                tint: fav ? .yellow : nil
+            ) {
                 withLocalWork { work in
                     work.isFavorite.toggle()
                     work.markModified()
                     context.saveBestEffort(reason: "Saving favorite state failed")
                 }
-            } label: {
-                let fav = localWork?.isFavorite ?? false
-                Label(fav ? "Unfavorite" : "Favorite", systemImage: fav ? "star.fill" : "star")
             }
-            .tint((localWork?.isFavorite ?? false) ? .yellow : nil)
-        }
-        ToolbarItem {
+
             Menu {
                 if let id = ao3WorkID {
                     AO3WorkActionsMenu(workID: id, actions: workActions, workContext: .init(

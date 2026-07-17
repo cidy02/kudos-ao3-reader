@@ -503,41 +503,38 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 // even a ToolbarItemGroup) get the system's wide spacing, which
                 // squeezes the large "Library" title. Icon-only so they read as a
                 // compact cluster.
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 2) {
-                        if showsMature {
-                            MatureRevealToggle()
-                        }
-                        // Filter sits directly visible, right after Privacy —
-                        // everything else (Reading Insights, Select) lives behind
-                        // the "..." menu.
-                        if !works.isEmpty {
-                            FilterButton(filtersActive: filters.hasActiveFilters,
-                                         showingFilters: router.isShowing(.libraryFilters),
-                                         onClearFilters: { filters = LibraryFilters() })
-                        }
-                        if showsMoreMenu {
-                            WorkListMoreMenu {
-                                if showsStatistics {
-                                    NavigationLink {
-                                        ReadingStatisticsView(works: statisticsWorks)
-                                    } label: {
-                                        Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                                    }
+                ActionToolbar {
+                    if showsMature {
+                        MatureRevealToggle()
+                    }
+                    // Filter sits directly visible, right after Privacy —
+                    // everything else (Reading Insights, Select) lives behind
+                    // the "..." menu.
+                    if !works.isEmpty {
+                        FilterButton(filtersActive: filters.hasActiveFilters,
+                                     showingFilters: router.isShowing(.libraryFilters),
+                                     onClearFilters: { filters = LibraryFilters() })
+                    }
+                    if showsMoreMenu {
+                        WorkListMoreMenu {
+                            if showsStatistics {
+                                NavigationLink {
+                                    ReadingStatisticsView(works: statisticsWorks)
+                                } label: {
+                                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
                                 }
-                                #if os(iOS)
-                                if showsSelect {
-                                    Button {
-                                        enterSelectMode()
-                                    } label: {
-                                        Label("Select", systemImage: "checklist")
-                                    }
-                                }
-                                #endif
                             }
+                            #if os(iOS)
+                            if showsSelect {
+                                Button {
+                                    enterSelectMode()
+                                } label: {
+                                    Label("Select", systemImage: "checklist")
+                                }
+                            }
+                            #endif
                         }
                     }
-                    .labelStyle(.iconOnly)
                 }
             }
         }

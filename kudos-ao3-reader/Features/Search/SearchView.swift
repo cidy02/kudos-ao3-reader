@@ -109,13 +109,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         ToolbarItem(placement: .principal) { searchField }
                         // Filter sits directly visible, right after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
-                        ToolbarItem(placement: .primaryAction) {
+                        ActionToolbar {
                             FilterButton(filtersActive: filters.hasActiveFilters,
                                          showingFilters: router.isShowing(.searchFilters),
                                          onClearFilters: clearAllFilters)
-                        }
-                        if phase == .loaded, !results.isEmpty {
-                            ToolbarItem(placement: .primaryAction) {
+                            if phase == .loaded, !results.isEmpty {
                                 WorkListMoreMenu {
                                     Button { bulkSelection.isSelecting = true } label: {
                                         Label("Select", systemImage: "checklist")

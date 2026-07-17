@@ -224,20 +224,17 @@ struct FandomWorksView: View {
                 bulkSelection.selected(in: results)
             }
         } else if phase == .loaded, !results.isEmpty {
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 2) {
-                    FilterButton(filtersActive: hasExtraFilters,
-                                 showingFilters: $showingFilters,
-                                 filterHelp: "Filter works in this fandom",
-                                 onClearFilters: resetFilters)
-                    WorkListMoreMenu {
-                        Button { bulkSelection.isSelecting = true } label: {
-                            Label("Select", systemImage: "checklist")
-                        }
-                        ExpandAllMenuItem(expandAll: $expandAll)
+            ActionToolbar {
+                FilterButton(filtersActive: hasExtraFilters,
+                             showingFilters: $showingFilters,
+                             filterHelp: "Filter works in this fandom",
+                             onClearFilters: resetFilters)
+                WorkListMoreMenu {
+                    Button { bulkSelection.isSelecting = true } label: {
+                        Label("Select", systemImage: "checklist")
                     }
+                    ExpandAllMenuItem(expandAll: $expandAll)
                 }
-                .labelStyle(.iconOnly)
             }
         }
     }
@@ -315,19 +312,16 @@ struct TagWorksView: View {
                 bulkSelection.selected(in: visibleResults)
             }
         } else if phase == .loaded, !results.isEmpty {
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 2) {
-                    FilterButton(filtersActive: filters.hasActiveFilters,
-                                 showingFilters: $showingFilters,
-                                 onClearFilters: { filters = AO3SearchFilters() })
-                    WorkListMoreMenu {
-                        Button { bulkSelection.isSelecting = true } label: {
-                            Label("Select", systemImage: "checklist")
-                        }
-                        ExpandAllMenuItem(expandAll: $expandAll)
+            ActionToolbar {
+                FilterButton(filtersActive: filters.hasActiveFilters,
+                             showingFilters: $showingFilters,
+                             onClearFilters: { filters = AO3SearchFilters() })
+                WorkListMoreMenu {
+                    Button { bulkSelection.isSelecting = true } label: {
+                        Label("Select", systemImage: "checklist")
                     }
+                    ExpandAllMenuItem(expandAll: $expandAll)
                 }
-                .labelStyle(.iconOnly)
             }
         }
     }

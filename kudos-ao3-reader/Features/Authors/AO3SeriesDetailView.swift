@@ -55,7 +55,7 @@ struct AO3SeriesDetailView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ActionToolbar {
                     Menu {
                         Button { router.open(series.url) } label: {
                             Label("Open on AO3", systemImage: "safari")
@@ -67,9 +67,8 @@ struct AO3SeriesDetailView: View {
                             ExpandAllMenuItem(expandAll: $expandAll)
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Label("Series actions", systemImage: "ellipsis.circle")
                     }
-                    .accessibilityLabel("Series actions")
                 }
             }
             .refreshable { await load(page: 1, replace: true, bypassCache: true) }

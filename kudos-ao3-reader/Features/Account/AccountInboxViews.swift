@@ -65,38 +65,38 @@ struct AccountToolbarContent: ToolbarContent {
                 }
             #endif
         } else {
-            // One tight HStack — matches Library/Home so controls don't inherit
+            // One tight cluster — matches Library/Home so controls don't inherit
             // the wide system spacing of separate toolbar items.
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 2) {
-                    if showsMatureRevealControl {
-                        MatureRevealToggle()
-                    }
-                    if showsWorkListControls {
-                        WorkListMoreMenu {
-                            DisplayModeMenuPicker(mode: $displayMode)
-                            if displayMode == .detailed {
-                                ExpandAllMenuItem(expandAll: $expandAll)
-                            }
+            ActionToolbar {
+                if showsMatureRevealControl {
+                    MatureRevealToggle()
+                }
+                if showsWorkListControls {
+                    WorkListMoreMenu {
+                        DisplayModeMenuPicker(mode: $displayMode)
+                        if displayMode == .detailed {
+                            ExpandAllMenuItem(expandAll: $expandAll)
                         }
-                    }
-                    if isInboxVisible, model.canFilter {
-                        Button {
-                            showingInboxFilters = true
-                        } label: {
-                            Label("Inbox Filters", systemImage: "line.3.horizontal.decrease.circle")
-                        }
-                    }
-                    if isInboxVisible, model.canSelectItems {
-                        Button(action: model.beginSelection) {
-                            Label("Select Inbox Items", systemImage: "checklist")
-                        }
-                    }
-                    NavigationLink(value: AccountView.Route.settings) {
-                        Label("Settings", systemImage: "gearshape")
                     }
                 }
-                .labelStyle(.iconOnly)
+                if isInboxVisible, model.canFilter {
+                    ToolbarIconButton(
+                        title: "Inbox Filters",
+                        systemImage: "line.3.horizontal.decrease.circle"
+                    ) {
+                        showingInboxFilters = true
+                    }
+                }
+                if isInboxVisible, model.canSelectItems {
+                    ToolbarIconButton(
+                        title: "Select Inbox Items",
+                        systemImage: "checklist",
+                        action: model.beginSelection
+                    )
+                }
+                NavigationLink(value: AccountView.Route.settings) {
+                    Label("Settings", systemImage: "gearshape")
+                }
             }
         }
     }

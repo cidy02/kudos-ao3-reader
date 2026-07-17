@@ -172,20 +172,18 @@ struct AO3AccountWorksList: View {
                     // system's wide spacing, which reads as inconsistent between the
                     // privacy toggle and the expand/filter cluster. Matches the pattern
                     // already established in LibraryView.swift's dashboard toolbar.
-                    ToolbarItem(placement: .primaryAction) {
-                        HStack(spacing: 2) {
-                            if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
-                                MatureRevealToggle()
-                            }
-                            if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
-                                FilterButton(filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             onClearFilters: { filters = AO3SearchFilters() })
-                                WorkListMoreMenu {
-                                    DisplayModeMenuPicker(mode: $displayMode)
-                                    if displayMode == .detailed {
-                                        ExpandAllMenuItem(expandAll: $expandAll)
-                                    }
+                    ActionToolbar {
+                        if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
+                            MatureRevealToggle()
+                        }
+                        if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         onClearFilters: { filters = AO3SearchFilters() })
+                            WorkListMoreMenu {
+                                DisplayModeMenuPicker(mode: $displayMode)
+                                if displayMode == .detailed {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
                                 }
                             }
                         }

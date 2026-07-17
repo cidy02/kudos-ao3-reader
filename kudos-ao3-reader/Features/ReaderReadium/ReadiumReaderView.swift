@@ -628,23 +628,18 @@ struct ReadiumReaderView: View {
             .navigationTitle(work.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // One item holding a tight HStack so the icons cluster like the
-                // Library toolbar (separate ToolbarItems get the system's wide spacing).
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 2) {
-                        if ao3WorkID != nil {
-                            Button { showingComments = true } label: {
-                                Label("Comments", systemImage: "bubble.left.and.bubble.right")
-                            }
-                        }
-                        Button { router.toggle(.readerChapters) } label: {
-                            Label("Chapters", systemImage: "list.bullet")
-                        }
-                        Button { router.toggle(.readerDisplay) } label: {
-                            Label("Display Options", systemImage: "textformat.size")
+                ActionToolbar {
+                    if ao3WorkID != nil {
+                        ToolbarIconButton(title: "Comments", systemImage: "bubble.left.and.bubble.right") {
+                            showingComments = true
                         }
                     }
-                    .labelStyle(.iconOnly)
+                    ToolbarIconButton(title: "Chapters", systemImage: "list.bullet") {
+                        router.toggle(.readerChapters)
+                    }
+                    ToolbarIconButton(title: "Display Options", systemImage: "textformat.size") {
+                        router.toggle(.readerDisplay)
+                    }
                 }
             }
             .sheet(isPresented: readerPanelBinding) { readerSheet }

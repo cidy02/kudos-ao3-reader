@@ -138,27 +138,25 @@ struct HomeSectionListView: View {
                     // system's wide spacing, which reads as inconsistent between the
                     // privacy toggle and the expand/filter cluster. Matches the pattern
                     // already established in LibraryView.swift's dashboard toolbar.
-                    ToolbarItem(placement: .primaryAction) {
-                        HStack(spacing: 2) {
-                            if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
-                                MatureRevealToggle()
-                            }
-                            if !items.isEmpty {
-                                FilterButton(filtersActive: filters.hasActiveFilters,
-                                             showingFilters: $showingFilters,
-                                             filterHelp: "Filter the works in this section",
-                                             onClearFilters: { filters = LibraryFilters() })
-                                WorkListMoreMenu {
-                                    Button {
-                                        isSelecting = true
-                                    } label: {
-                                        Label("Select", systemImage: "checklist")
-                                    }
-                                    DisplayModeMenuPicker(mode: $displayMode)
-                                    // Compact cards don't expand/collapse — only detailed rows do.
-                                    if displayMode == .detailed {
-                                        ExpandAllMenuItem(expandAll: $expandAll)
-                                    }
+                    ActionToolbar {
+                        if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
+                            MatureRevealToggle()
+                        }
+                        if !items.isEmpty {
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in this section",
+                                         onClearFilters: { filters = LibraryFilters() })
+                            WorkListMoreMenu {
+                                Button {
+                                    isSelecting = true
+                                } label: {
+                                    Label("Select", systemImage: "checklist")
+                                }
+                                DisplayModeMenuPicker(mode: $displayMode)
+                                // Compact cards don't expand/collapse — only detailed rows do.
+                                if displayMode == .detailed {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
                                 }
                             }
                         }
