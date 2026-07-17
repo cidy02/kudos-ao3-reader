@@ -229,7 +229,6 @@ struct AccountView: View {
                     .labelsHidden()
                 }
 
-                compactOverviewLink
                 compactScopeChrome
                 compactWorksContent
             }
@@ -237,29 +236,6 @@ struct AccountView: View {
         }
         .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
         .refreshable { await refreshCurrentTab() }
-    }
-
-    private var compactOverviewLink: some View {
-        AccountScrollChromeCard {
-            Button {
-                selectedTab = .overview
-            } label: {
-                HStack(spacing: 10) {
-                    Label("Overview", systemImage: "square.grid.2x2")
-                    Spacer()
-                    Text("Shortcuts & Preferences")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Shows Account shortcuts and preferences")
-        }
     }
 
     @ViewBuilder
