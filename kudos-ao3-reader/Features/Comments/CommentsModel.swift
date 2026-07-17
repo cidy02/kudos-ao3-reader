@@ -5,8 +5,9 @@ import SwiftUI
 ///
 /// Networking respect (see `docs/ai/COMMENTS_HANDOFF.md`): every request maps to
 /// an explicit user action — opening the screen, switching chapter/page/order,
-/// or pull-to-refresh. Pages are cached (TTL) so re-visits don't re-fetch, and
-/// nothing loads eagerly, in the background, or per-chapter in bulk.
+/// or pull-to-refresh. Pages are cached for this Comments session so re-visits
+/// don't re-fetch, and nothing loads eagerly, in the background, or per-chapter
+/// in bulk.
 @MainActor
 @Observable
 final class CommentsModel {
@@ -132,10 +133,10 @@ final class CommentsModel {
     let submissionGuard: CommentSubmissionGuard
     private let drafts: CommentDraftStore
 
-    /// Session-wide page cache; 5-minute TTL. Injectable so tests stay hermetic
-    /// even when a runner executes the same suite twice in one process (fake
-    /// auth services restart generation numbering, so runs would otherwise
-    /// collide in the process-global instance).
+    /// Scoped to this one Comments-viewing session — owned per instance (not a
+    /// shared singleton) so it lives and dies with the screen, per `CommentsView`
+    /// constructing a fresh `CommentsModel` via `@State` on every open. Injectable
+    /// so tests can hand in their own instance.
     private let cache: CommentsPageCache
     private var authContext = AuthContext(identity: "", cacheScope: "", generation: -1)
     private let pageLoader: PageLoader
@@ -187,7 +188,7 @@ final class CommentsModel {
         self.commentVerifier = commentVerifier
         self.submissionGuard = submissionGuard ?? CommentSubmissionGuard(store: .shared)
         self.drafts = draftStore ?? CommentDraftStore()
-        self.cache = pageCache ?? .shared
+        self.cache = pageCache ?? CommentsPageCache()
     }
 
     var chapterForRequests: Int? {
@@ -666,7 +667,7 @@ final class CommentsModel {
             isOffline = Self.isOfflineError(error)
             // Keep showing a cached page if one exists (marked stale) — only a
             // cold miss surfaces the full-screen failure state.
-            if let cached = cache.page(for: key, ignoringTTL: true) {
+            if let cached = cache.page(for: key) {
                 isFromCache = true
                 phase = .loaded
                 return cached
@@ -723,16 +724,17 @@ final class CommentsModel {
     }
 
     private func knownTotalPages() -> Int? {
-        // Session-scoped only. Another session's cached page count can legitimately
-        // differ (AO3 hides some comments from some viewers), so sizing "newest
-        // first" off it would jump to the wrong last page. A miss just costs the one
-        // page-1 fetch `load` already falls back to.
+        // Keyed by the current auth scope/generation only — another authentication
+        // context's cached page count can legitimately differ (AO3 hides some
+        // comments from some viewers), so sizing "newest first" off it would jump
+        // to the wrong last page. A miss just costs the one page-1 fetch `load`
+        // already falls back to.
         let key = CommentsPageCache.Key(
             workID: workID, chapterID: chapterForRequests, page: 1,
             authenticationScope: authContext.cacheScope,
             sessionGeneration: authContext.generation
         )
-        return cache.page(for: key, ignoringTTL: true)?.totalPages
+        return cache.page(for: key)?.totalPages
     }
 
     private static func submitComment(
@@ -1044,16 +1046,14 @@ final class CommentsModel {
     }
 }
 
-/// Session-scoped comment page cache with a short TTL: repeat visits inside the
-/// window cost AO3 nothing; anything older re-fetches on demand. Intentionally
-/// in-memory only — comments are live site state, not library content.
+/// Comment-page + chapter-index cache for one Comments-viewing session. Each
+/// `CommentsModel` owns its own instance (never a shared singleton), so entries
+/// live exactly as long as the screen does — cleared for free on dismiss when
+/// SwiftUI deallocates the `@State` that owns it, no TTL bookkeeping needed.
+/// Intentionally in-memory only — comments are live site state, not library
+/// content, and nothing here is meant to outlive the session that fetched it.
 @MainActor
 final class CommentsPageCache {
-    /// The process-lifetime cache every production `CommentsModel` shares.
-    /// Tests construct their own instance so repeated suite executions in one
-    /// process never observe each other's entries.
-    static let shared = CommentsPageCache()
-
     struct Key: Hashable {
         let workID: Int
         let chapterID: Int?
@@ -1063,17 +1063,10 @@ final class CommentsPageCache {
     }
 
     private var pages: [Key: AO3CommentsPage] = [:]
-    private var chapterIndexes: [ChapterKey: (refs: [AO3ChapterRef], fetchedAt: Date)] = [:]
-    private let ttl: TimeInterval
+    private var chapterIndexes: [ChapterKey: [AO3ChapterRef]] = [:]
 
-    init(ttl: TimeInterval = 300) {
-        self.ttl = ttl
-    }
-
-    func page(for key: Key, ignoringTTL: Bool = false) -> AO3CommentsPage? {
-        guard let cached = pages[key] else { return nil }
-        if ignoringTTL || Date().timeIntervalSince(cached.fetchedAt) < ttl { return cached }
-        return nil
+    func page(for key: Key) -> AO3CommentsPage? {
+        pages[key]
     }
 
     func store(_ page: AO3CommentsPage, for key: Key) {
@@ -1091,7 +1084,7 @@ final class CommentsPageCache {
     func chapters(forWork workID: Int, authenticationScope: String, sessionGeneration: Int) -> [AO3ChapterRef]? {
         chapterIndexes[ChapterKey(
             workID: workID, authenticationScope: authenticationScope, sessionGeneration: sessionGeneration
-        )]?.refs
+        )]
     }
 
     func storeChapters(
@@ -1100,6 +1093,6 @@ final class CommentsPageCache {
     ) {
         chapterIndexes[ChapterKey(
             workID: workID, authenticationScope: authenticationScope, sessionGeneration: sessionGeneration
-        )] = (refs, Date())
+        )] = refs
     }
 }
