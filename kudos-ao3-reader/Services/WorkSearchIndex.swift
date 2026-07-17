@@ -16,7 +16,8 @@ import SwiftData
 enum WorkSearchIndex {
     /// Bump when `indexText(for:)`'s composition changes so existing records
     /// rebuild on next launch. 0 is reserved for "never indexed".
-    static let currentVersion = 1
+    /// v2: added the series title and the user's own tags (`SavedWork.tags`).
+    static let currentVersion = 2
 
     /// Summary text beyond this contributes noise, memory, and store size, not
     /// recall — AO3 blurbs are typically well under it.
@@ -52,6 +53,12 @@ enum WorkSearchIndex {
     /// The normalized searchable text for a work's current fields.
     static func indexText(for work: SavedWork) -> String {
         var parts: [String] = [work.title, work.author]
+        // Series title, so a work is findable by the series it belongs to.
+        parts.append(work.seriesTitle)
+        // The user's own organizational tags. Every mutation site must reindex:
+        // WorkDetailView's add/remove, and KudosBackup's restore (which links
+        // archived user tags and must therefore reindex *after* linking them).
+        parts.append(contentsOf: work.tags.map(\.name))
         parts.append(contentsOf: work.workFandoms)
         parts.append(contentsOf: work.workRelationships)
         parts.append(contentsOf: work.workCharacters)

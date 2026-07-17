@@ -58,7 +58,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 |---|---|
 | 3-tier work identity (AO3 id → canonical URL → record UUID) | `Services/WorkIdentityIndex.swift` — the ONLY matcher; used by restore, context menus, queue service, canonical merge |
 | Local/remote card dedup (`remoteLed` / `remoteOnly`) | `Services/CanonicalWorkMerge.swift` + `Models/CanonicalWork.swift` |
-| Derived search index (normalize/reindex/match/rebuild) | `Services/WorkSearchIndex.swift`; fields `SavedWork.searchText` + `searchIndexVersion` |
+| Derived search index (normalize/reindex/match/rebuild) | `Services/WorkSearchIndex.swift`; fields `SavedWork.searchText` + `searchIndexVersion`. The fandom-catalog search index (normalized, deduped, count-ranked; lazy rebuild + `revision` stamp) lives in `Features/Search/FandomCatalog.swift` (`searchIndex`/`rankedMatches`) |
 | Verified AO3 account/pseud identity | `Models/AO3AuthorModels.swift`; parsed beside legacy author strings and persisted as `SavedWork.authorIdentitiesJSON` only after AO3 enrichment; never infer routes from display text |
 | Queue service (membership, preservation, `resolveLocalWork`, `addToSavedForLater`, series preservation) | `Services/ReadingQueueService.swift` |
 

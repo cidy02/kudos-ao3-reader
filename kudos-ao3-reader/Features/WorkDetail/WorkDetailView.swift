@@ -1147,6 +1147,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             let tag = tag(named: name)
             if !work.tags.contains(where: { $0.name == tag.name }) {
                 work.tags.append(tag)
+                // User tags are part of the derived search text (index v2).
+                WorkSearchIndex.reindex(work)
                 context.saveBestEffort(reason: "Saving tag assignment failed")
             }
         }
@@ -1155,6 +1157,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private func removeTag(_ tag: Tag) {
         guard let work = localWork else { return }
         work.tags.removeAll { $0.name == tag.name }
+        WorkSearchIndex.reindex(work)
         context.saveBestEffort(reason: "Saving tag removal failed")
     }
 

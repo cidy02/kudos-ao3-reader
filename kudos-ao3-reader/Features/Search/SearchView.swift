@@ -39,6 +39,45 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// previous filter level instead of losing it to applyTagSearch's overwrite.
     /// Manual typed searches don't push here — only the tag-tap chain does.
     @State private var filterHistory: [FilterHistoryEntry] = []
+    /// The debounced on-device match snapshot the local results list renders from.
+    /// Computed once per settled query by `refreshLocalMatches()` — previously five
+    /// computed properties re-scanned the library and the whole cached AO3 fandom
+    /// catalog twice per keystroke render, which is what made typing hang.
+    @State private var localMatches = LocalMatches()
+
+    /// On-device matches for the current query — works (via `WorkSearchIndex`),
+    /// library fandoms, cached AO3 fandoms, user tags, and collections. Arrays are
+    /// already capped to what the list shows.
+    private struct LocalMatches {
+        var works: [SavedWork] = []
+        var libraryFandoms: [String] = []
+        var ao3Fandoms: [AO3Fandom] = []
+        var tags: [Tag] = []
+        var collections: [WorkCollection] = []
+    }
+
+    /// Everything the debounced local-match compute depends on. A change to any
+    /// field restarts the `.task(id:)`: the query as the user types; record counts
+    /// so an addition/deletion refreshes a visible result list (and a deleted
+    /// model drops out of the snapshot); and the catalog revision so AO3 fandom
+    /// matches appear once the disk cache finishes loading mid-typing.
+    private struct LocalMatchKey: Equatable {
+        let query: String
+        let workCount: Int
+        let tagCount: Int
+        let collectionCount: Int
+        let catalogRevision: Int
+    }
+
+    private var localMatchKey: LocalMatchKey {
+        LocalMatchKey(
+            query: localQuery,
+            workCount: savedWorks.count,
+            tagCount: allTags.count,
+            collectionCount: collections.count,
+            catalogRevision: FandomCatalog.shared.revision
+        )
+    }
 
     private struct FilterHistoryEntry {
         let filters: AO3SearchFilters
@@ -63,6 +102,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         NavigationStack(path: $path) {
             content
                 .task { await FandomCatalog.shared.warmCache() }
+                .task(id: localMatchKey) { await refreshLocalMatches() }
                 // A tapped tag chip elsewhere (work detail / search results) routes here to
                 // run an AO3 search for that tag. `initial` catches a request that arrived
                 // before this view existed (first visit to Search).
@@ -272,49 +312,73 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         filters.query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Matches against the precomputed `WorkSearchIndex` text — case- and
-    /// diacritic-insensitive over title, author, tags, rating, language, and summary
-    /// (previously title/author only, re-lowercased per keystroke). The query's
-    /// terms must all match, so multi-word queries can span fields; results keep the
-    /// query's own newest-first order.
-    private var matchingWorks: [SavedWork] {
-        let terms = WorkSearchIndex.terms(from: localQuery)
-        return savedWorks.filter { WorkSearchIndex.matches($0, terms: terms) }
+    /// Debounced local-match refresh: coalesces a burst of keystrokes so the match
+    /// scan (library index + fandom catalog) runs once per pause, not once per
+    /// letter. An emptied query clears instantly — the idle screen must not lag.
+    private func refreshLocalMatches() async {
+        if localQuery.isEmpty {
+            localMatches = LocalMatches()
+            return
+        }
+        // Sleep throws when a newer keystroke restarts the task — just stop.
+        guard (try? await Task.sleep(for: .milliseconds(150))) != nil else { return }
+        localMatches = computeLocalMatches()
     }
 
-    private var matchingFandoms: [String] {
-        let query = localQuery.lowercased()
-        var seen = Set<String>()
-        var out: [String] = []
-        for work in savedWorks {
-            for fandom in work.workFandoms where fandom.lowercased().contains(query) {
-                if seen.insert(fandom.lowercased()).inserted { out.append(fandom) }
+    /// One pass over the local sources for the current query, every list stopping
+    /// at its display cap. Work matching runs on the precomputed
+    /// `WorkSearchIndex` text — case- and diacritic-insensitive over title,
+    /// author, series, user tags, AO3 tags, rating, language, and summary — with
+    /// AND-across-terms, so multi-word queries can span fields; results keep the
+    /// library query's newest-first order. Fandom/tag/collection name matching
+    /// shares the same normalization.
+    private func computeLocalMatches() -> LocalMatches {
+        var matches = LocalMatches()
+        let query = localQuery
+        guard !query.isEmpty else { return matches }
+        let terms = WorkSearchIndex.terms(from: query)
+        let normalizedQuery = WorkSearchIndex.normalize(query)
+
+        matches.works = Array(
+            savedWorks.lazy.filter { WorkSearchIndex.matches($0, terms: terms) }.prefix(20)
+        )
+
+        var seenFandoms = Set<String>()
+        outer: for work in savedWorks {
+            for fandom in work.workFandoms {
+                let key = WorkSearchIndex.normalize(fandom)
+                guard key.contains(normalizedQuery), seenFandoms.insert(key).inserted else { continue }
+                matches.libraryFandoms.append(fandom)
+                if matches.libraryFandoms.count >= 12 { break outer }
             }
         }
-        return out
+
+        // Cached AO3 fandoms (from the on-disk catalog), minus any already shown
+        // under the user's own library fandoms. Instant, no scraping; tapping one
+        // runs the real AO3 search, which corrects any stale cached counts.
+        matches.ao3Fandoms = FandomCatalog.shared.cachedFandoms(matching: query)
+            .filter { !seenFandoms.contains(WorkSearchIndex.normalize($0.name)) }
+
+        matches.tags = Array(
+            allTags.lazy.filter { WorkSearchIndex.normalize($0.name).contains(normalizedQuery) }.prefix(12)
+        )
+        matches.collections = Array(
+            collections.lazy.filter { WorkSearchIndex.normalize($0.name).contains(normalizedQuery) }.prefix(12)
+        )
+        return matches
     }
 
-    private var matchingTags: [Tag] {
-        allTags.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
-    }
-
-    private var matchingCollections: [WorkCollection] {
-        collections.filter { $0.name.lowercased().contains(localQuery.lowercased()) }
-    }
-
-    /// Cached AO3 fandoms matching the query (from the on-disk fandom catalog), minus
-    /// any already shown under the user's own library fandoms. Instant, no scraping;
-    /// tapping one runs the real AO3 search, which corrects any stale cached counts.
-    private var cachedAO3Fandoms: [AO3Fandom] {
-        let inLibrary = Set(matchingFandoms.map { $0.lowercased() })
-        return FandomCatalog.shared.cachedFandoms(matching: localQuery)
-            .filter { !inLibrary.contains($0.name.lowercased()) }
-    }
-
-    /// On-device matches shown live as the user types, plus an explicit AO3 search
-    /// action (no AO3 request fires until the user taps it or submits).
+    /// On-device matches shown live as the user types (from the debounced
+    /// `localMatches` snapshot), plus an explicit AO3 search action (no AO3
+    /// request fires until the user taps it or submits).
     private var localResultsList: some View {
-        List {
+        // A deletion re-keys the compute task via the record counts, but a render
+        // can land in the gap before the debounce fires — drop invalidated models
+        // rather than touching them (SwiftData asserts on invalidated access).
+        let works = localMatches.works.filter { $0.modelContext != nil }
+        let tags = localMatches.tags.filter { $0.modelContext != nil }
+        let matchedCollections = localMatches.collections.filter { $0.modelContext != nil }
+        return List {
             Section {
                 Button(action: runSearch) {
                     Label("Search AO3 for “\(localQuery)”", systemImage: "magnifyingglass")
@@ -323,17 +387,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 Text("Archive of Our Own")
             }
 
-            if !matchingWorks.isEmpty {
+            if !works.isEmpty {
                 Section("In Your Library") {
-                    ForEach(matchingWorks.prefix(20)) { work in
+                    ForEach(works) { work in
                         WorkRow(work: work).cardNavigation(to: work)
                     }
                     .cardRow()
                 }
             }
-            if !matchingFandoms.isEmpty {
+            if !localMatches.libraryFandoms.isEmpty {
                 Section("Fandoms in Your Library") {
-                    ForEach(matchingFandoms.prefix(12), id: \.self) { fandom in
+                    ForEach(localMatches.libraryFandoms, id: \.self) { fandom in
                         Button { router.filterLibrary(.fandom, fandom) } label: {
                             Label(fandom, systemImage: "books.vertical")
                         }
@@ -341,9 +405,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             }
-            if !cachedAO3Fandoms.isEmpty {
+            if !localMatches.ao3Fandoms.isEmpty {
                 Section("Fandoms on AO3") {
-                    ForEach(cachedAO3Fandoms, id: \.id) { fandom in
+                    ForEach(localMatches.ao3Fandoms, id: \.id) { fandom in
                         Button {
                             setIncludedFandom(fandom.name)
                             runSearch()
@@ -363,9 +427,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             }
-            if !matchingTags.isEmpty {
+            if !tags.isEmpty {
                 Section("Your Tags") {
-                    ForEach(matchingTags.prefix(12)) { tag in
+                    ForEach(tags) { tag in
                         Button { router.filterLibrary(.userTag, tag.name) } label: {
                             Label(tag.name, systemImage: "tag")
                         }
@@ -373,9 +437,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             }
-            if !matchingCollections.isEmpty {
+            if !matchedCollections.isEmpty {
                 Section("Collections") {
-                    ForEach(matchingCollections.prefix(12)) { collection in
+                    ForEach(matchedCollections) { collection in
                         NavigationLink(value: collection) {
                             Label(collection.name, systemImage: "square.stack")
                         }

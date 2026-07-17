@@ -1035,10 +1035,6 @@ enum KudosBackupService {
             apply(archived, to: work, isNewRecord: isNewRecord)
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
-            // Merged/created from source-of-truth archive fields — the derived search
-            // text (never carried in the backup itself) is rebuilt here so restored
-            // works are searchable immediately, not only after the next launch sweep.
-            WorkSearchIndex.reindex(work)
 
             // Union-only: a stale archive must never remove a tag the user added locally
             // after the snapshot was taken (A2-F1). There is no per-tag tombstone, so the
@@ -1059,6 +1055,13 @@ enum KudosBackupService {
                 }
                 work.tags.append(tag)
             }
+            // Merged/created from source-of-truth archive fields — the derived search
+            // text (never carried in the backup itself) is rebuilt here so restored
+            // works are searchable immediately, not only after the next launch sweep.
+            // Deliberately after the user-tag union above: tag names are part of the
+            // index (v2), so reindexing before linking them would drop them until the
+            // next unrelated reindex.
+            WorkSearchIndex.reindex(work)
 
             if let epub = contents.epubFiles[archived.id] {
                 // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.

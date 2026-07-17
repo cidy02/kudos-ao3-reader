@@ -32,10 +32,6 @@ struct WorkRow: View {
         externalExpanded ?? $internalExpanded
     }
 
-    private var summaryText: String {
-        work.summary.strippingHTML()
-    }
-
     /// Real content warnings only — AO3's "No Archive Warnings Apply" / "Creator
     /// Chose Not To Use Archive Warnings" aren't warnings worth flagging.
     private var warnings: [String] {
@@ -49,16 +45,20 @@ struct WorkRow: View {
     /// a long summary or any categorized tags. Exposed statically so SensitiveWorkRow
     /// can decide whether to render an external expand button without building a row.
     static func isExpandable(for work: SavedWork) -> Bool {
-        work.summary.strippingHTML().count > 120 || !work.workRelationships.isEmpty
+        isExpandable(strippedSummary: work.summary.strippingHTML(), for: work)
+    }
+
+    /// Core of `isExpandable(for:)`, taking an already-stripped summary so `body`
+    /// (which needs the stripped text anyway) strips it once per render, not per use.
+    private static func isExpandable(strippedSummary: String, for work: SavedWork) -> Bool {
+        strippedSummary.count > 120 || !work.workRelationships.isEmpty
             || !work.workCharacters.isEmpty || !work.workFreeforms.isEmpty
             || (!work.hasCategorizedWorkTags && !work.workTags.isEmpty)
     }
 
-    private var isExpandable: Bool {
-        Self.isExpandable(for: work)
-    }
-
     var body: some View {
+        let summaryText = work.summary.strippingHTML()
+        let isExpandable = Self.isExpandable(strippedSummary: summaryText, for: work)
         VStack(alignment: .leading, spacing: 6) {
             // Title + author, with the favorite star and expand control pinned top-trailing.
             VStack(alignment: .leading, spacing: 2) {

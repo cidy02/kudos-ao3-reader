@@ -26,6 +26,10 @@ struct WorkSearchIndexTests {
         work.rating = "Teen And Up Audiences"
         work.language = "Français"
         work.isComplete = true
+        work.seriesTitle = "Sérendipity Saga"
+        let tag = Tag(name: "Comfort Rëads")
+        context.insert(tag)
+        work.tags.append(tag)
         context.insert(work)
 
         WorkSearchIndex.reindex(work)
@@ -33,7 +37,9 @@ struct WorkSearchIndexTests {
         #expect(work.searchIndexVersion == WorkSearchIndex.currentVersion)
         for expected in [
             "uber story", "em writer", "test fandom", "a/b", "charlie",
-            "fluff", "teen and up", "francais", "complete", "cafe adventure"
+            "fluff", "teen and up", "francais", "complete", "cafe adventure",
+            // v2 additions: series title and the user's own tags.
+            "serendipity saga", "comfort reads"
         ] {
             #expect(work.searchText.contains(expected), "missing: \(expected)")
         }
@@ -86,6 +92,21 @@ struct WorkSearchIndexTests {
         #expect(await WorkSearchIndex.rebuildIfNeeded(in: context) == 0)
     }
 
+    @Test func rebuildIfNeededMigratesRecordsIndexedUnderOlderVersions() async throws {
+        let context = try makeContext()
+        let work = SavedWork(title: "Series Hunter", author: "Writer", sourceURL: "")
+        work.seriesTitle = "The Long Résumé Chronicles"
+        context.insert(work)
+        // Simulate a record indexed by the v1 schema: stale stamp, no series text.
+        work.searchText = WorkSearchIndex.normalize("series hunter\nwriter")
+        work.searchIndexVersion = 1
+        try context.save()
+
+        #expect(await WorkSearchIndex.rebuildIfNeeded(in: context) == 1)
+        #expect(work.searchIndexVersion == WorkSearchIndex.currentVersion)
+        #expect(WorkSearchIndex.matches(work, terms: WorkSearchIndex.terms(from: "resume chronicles")))
+    }
+
     @Test func backupRestoreRebuildsSearchTextWithoutCarryingIt() throws {
         let sourceContext = try makeContext()
         let work = SavedWork(
@@ -118,6 +139,38 @@ struct WorkSearchIndexTests {
         let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.searchIndexVersion == WorkSearchIndex.currentVersion)
         #expect(WorkSearchIndex.matches(restored, terms: WorkSearchIndex.terms(from: "heroine comfort")))
+    }
+
+    @Test func backupRestoreIndexesRestoredUserTags() throws {
+        let sourceContext = try makeContext()
+        let work = SavedWork(
+            title: "Tagged Work",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/8104"
+        )
+        work.ao3WorkID = 8104
+        let tag = Tag(name: "Wintër Favorites")
+        sourceContext.insert(tag)
+        work.tags.append(tag)
+        sourceContext.insert(work)
+        WorkSearchIndex.reindex(work)
+        try sourceContext.save()
+
+        let document = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: testDefaults()
+        )
+        let targetContext = try makeContext()
+        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: testDefaults())
+
+        // Restore links archived user tags *after* applying the plain fields — the
+        // reindex must run after that linking, or the tag text is missing until
+        // some unrelated later reindex.
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(WorkSearchIndex.matches(restored, terms: WorkSearchIndex.terms(from: "winter favorites")))
     }
 
     // MARK: - Helpers

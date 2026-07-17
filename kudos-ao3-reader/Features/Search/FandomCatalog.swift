@@ -19,11 +19,35 @@ final class FandomCatalog {
     /// stale cached list while a fresh copy is being fetched.
     private(set) var fandomsByCategory: [String: [AO3Fandom]] = [:]
 
+    /// Monotonic stamp bumped on every catalog content change (cache load, a
+    /// category fetch landing, clear). Global Search keys its debounced match
+    /// snapshot off this, so results computed before the disk cache finished
+    /// loading refresh once it lands instead of staying empty until the next
+    /// keystroke.
+    private(set) var revision = 0
+
     private let cache: FandomCatalogCache
     /// Cache entries (with fetch dates) backing `fandomsByCategory`; drives staleness.
     private var entries: [String: FandomCatalogCache.Entry] = [:]
     private var inFlight: Set<String> = []
     private var didLoadCache = false
+
+    /// Flattened, deduplicated index over every cached fandom — normalized names
+    /// precomputed and entries pre-sorted by work count — so a query is one
+    /// allocation-free scan. Rebuilt lazily on first use after a catalog change:
+    /// the catalog holds tens of thousands of names, and re-normalizing (or worse,
+    /// re-sorting) them per keystroke is exactly the main-thread stall this
+    /// index exists to prevent.
+    private var searchEntries: [SearchEntry] = []
+    private var searchIndexStale = true
+
+    /// One entry of the flattened catalog search index: a fandom plus its
+    /// normalized (`WorkSearchIndex.normalize`) name. Internal so tests can build
+    /// and query the pure index helpers directly.
+    struct SearchEntry: Sendable {
+        let normalizedName: String
+        let fandom: AO3Fandom
+    }
 
     private init() {
         cache = FandomCatalogCache()
@@ -41,6 +65,14 @@ final class FandomCatalog {
         fandomsByCategory = [:]
         entries = [:]
         didLoadCache = false
+        catalogDidChange()
+    }
+
+    /// Records a catalog content change: the flattened search index is stale and
+    /// any observer keying off `revision` (Global Search) recomputes.
+    private func catalogDidChange() {
+        searchIndexStale = true
+        revision += 1
     }
 
     /// Loads the on-disk fandom cache into memory **without any network**, so other
@@ -53,25 +85,70 @@ final class FandomCatalog {
 
     /// Cached AO3 fandoms (across all categories) whose name contains `query` —
     /// matched on-device, so typing feels live without scraping AO3 per keystroke.
-    /// Prefix matches first, then by work count. Deduped by name.
+    /// Prefix matches first, then by work count; deduped by normalized name.
+    /// Matching is case- and diacritic-insensitive (`WorkSearchIndex.normalize`,
+    /// the same folding Library/Search matching uses), so "pokemon" finds
+    /// "Pokémon". Cost per call is one scan of the precomputed index — no string
+    /// normalization or sorting happens per query.
     func cachedFandoms(matching query: String, limit: Int = 12) -> [AO3Fandom] {
-        let normalizedQuery = query.lowercased()
+        let normalizedQuery = WorkSearchIndex.normalize(query)
         guard !normalizedQuery.isEmpty else { return [] }
-        var seen = Set<String>()
-        var matches: [AO3Fandom] = []
-        for list in fandomsByCategory.values {
-            for fandom in list where fandom.name.lowercased().contains(normalizedQuery) {
-                if seen.insert(fandom.name.lowercased()).inserted { matches.append(fandom) }
+        if searchIndexStale {
+            searchIndexStale = false
+            searchEntries = Self.searchIndex(over: fandomsByCategory.values)
+        }
+        return Self.rankedMatches(in: searchEntries, normalizedQuery: normalizedQuery, limit: limit)
+    }
+
+    /// Builds the flattened index: names normalized once, deduplicated across
+    /// categories (a fandom can be listed under several media types — the copy
+    /// with the highest work count wins, deterministically, where the old
+    /// per-query dedup kept whichever category happened to iterate first), and
+    /// sorted by work count descending (name ascending as a stable tiebreaker)
+    /// so `rankedMatches` never sorts per query.
+    nonisolated static func searchIndex(over lists: some Collection<[AO3Fandom]>) -> [SearchEntry] {
+        var bestByName: [String: AO3Fandom] = [:]
+        bestByName.reserveCapacity(lists.reduce(0) { $0 + $1.count })
+        for list in lists {
+            for fandom in list {
+                let key = WorkSearchIndex.normalize(fandom.name)
+                if let existing = bestByName[key], (existing.workCount ?? 0) >= (fandom.workCount ?? 0) {
+                    continue
+                }
+                bestByName[key] = fandom
             }
         }
-        return matches.sorted { lhs, rhs in
-            let leftHasPrefix = lhs.name.lowercased().hasPrefix(normalizedQuery)
-            let rightHasPrefix = rhs.name.lowercased().hasPrefix(normalizedQuery)
-            if leftHasPrefix != rightHasPrefix { return leftHasPrefix }
-            return (lhs.workCount ?? 0) > (rhs.workCount ?? 0)
+        return bestByName
+            .map { SearchEntry(normalizedName: $0.key, fandom: $0.value) }
+            .sorted { lhs, rhs in
+                let left = lhs.fandom.workCount ?? 0
+                let right = rhs.fandom.workCount ?? 0
+                if left != right { return left > right }
+                return lhs.normalizedName < rhs.normalizedName
+            }
+    }
+
+    /// Scans the pre-ranked index once: prefix matches outrank substring matches,
+    /// and within each bucket the index's own work-count order stands. The scan
+    /// stops early once `limit` prefix matches exist — nothing later can outrank
+    /// them — and the substring bucket never grows past `limit` either, so a
+    /// one-letter query over tens of thousands of entries stays allocation-light.
+    nonisolated static func rankedMatches(
+        in entries: [SearchEntry],
+        normalizedQuery: String,
+        limit: Int
+    ) -> [AO3Fandom] {
+        var prefixMatches: [AO3Fandom] = []
+        var substringMatches: [AO3Fandom] = []
+        for entry in entries {
+            if entry.normalizedName.hasPrefix(normalizedQuery) {
+                prefixMatches.append(entry.fandom)
+                if prefixMatches.count >= limit { break }
+            } else if substringMatches.count < limit, entry.normalizedName.contains(normalizedQuery) {
+                substringMatches.append(entry.fandom)
+            }
         }
-        .prefix(limit)
-        .map(\.self)
+        return Array((prefixMatches + substringMatches).prefix(limit))
     }
 
     /// Shows any disk-cached lists immediately, then fetches only the categories
@@ -122,6 +199,7 @@ final class FandomCatalog {
             for await (key, list) in group {
                 if let list {
                     fandomsByCategory[key] = list
+                    catalogDidChange()
                     entries[key] = FandomCatalogCache.Entry(fandoms: list, fetchedAt: Date())
                     // Persist per landing, not once after the whole group: if the
                     // process dies mid-load (the exact jetsam scenario BUG-5 chased),
@@ -146,6 +224,7 @@ final class FandomCatalog {
             entries[key] = entry
             if fandomsByCategory[key] == nil { fandomsByCategory[key] = entry.fandoms }
         }
+        if !loaded.isEmpty { catalogDidChange() }
     }
 
     /// Writes the cache off the main actor (the payload can be a few MB).
