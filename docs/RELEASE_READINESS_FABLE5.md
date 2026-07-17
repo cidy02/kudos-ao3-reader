@@ -1,34 +1,33 @@
 # RELEASE_READINESS_FABLE5.md — Fable 5 Release-Readiness Audit
 
-Sequential ten-area audit ledger. Audit only — no production code is modified by
-this audit. Continue from this file; do not restart completed areas.
+Sequential ten-area audit ledger plus the final release-blocker certification.
+The certification does not reopen the completed areas and changes no runtime
+behavior. Continue from this file; do not restart completed areas.
 
 ## 1. Release candidate
 
 | Field | Value |
 |---|---|
-| Branch | `inbox-refinement` |
-| Product baseline SHA | `c1bf21176763df481ddf48488b99e2d8dfc62bae` |
-| Product baseline subject | `Refine native Inbox comments and actions` |
-| Recorded | 2026-07-12 |
+| Branch | `release-fixes` |
+| Certified product SHA | `b82807d8709ac2ce08fc2f2fc51a262e893fca09` |
+| Updated-`main` baseline | `37987ddafe17c3eaaf702a203da56381510c2fd0` (`Merge inbox-refinement into main`) |
+| Certified | 2026-07-16 |
 
 Areas 1–7 were originally inspected while the Inbox refinement was an
-uncommitted diff on `58e307e`. That exact diff is now frozen in `c1bf211`; Area
-1's canonical verification was re-run against the clean product commit before
-Area 8 began. The earlier area narratives retain their historical SHA wording
-so their evidence trail is not rewritten after the fact.
+uncommitted diff on `58e307e`. That exact diff was frozen in `c1bf211` and later
+merged to local `main` as `37987dd`. The ten original area narratives retain
+their historical SHA wording so their evidence trail is not rewritten after the
+fact. The final certification below supersedes only the candidate/evidence and
+overall verdict for the current `release-fixes` tip.
 
 ## 2. Working-tree cleanliness
 
-**PRODUCT TREE CLEAN at `c1bf211`.** T-91's Inbox implementation, fixtures,
-tests, networking-policy update, regression matrix, and task handoff are all in
-the product commit. `Scripts/verify.sh` was re-run after the commit: 371/371
-tests passed, macOS built, and invariants/lint gate/whitespace passed.
-
-The working directory still contains this audit ledger plus unrelated untracked
-`.idea/` and `android/` directories. The latter is the separate Android product
-line and is deliberately excluded; neither directory nor the ledger changes the
-audited iOS/macOS product artifact.
+**PRODUCT TREE CLEAN at `b82807d8` before certification.** The local and fetched
+`release-fixes` tips were identical, the branch contained the updated local
+`main` Inbox baseline, and `main` was an ancestor. T-105 then changed only this
+audit, `TASKS.md`, and authentication-architecture wording; it made no runtime
+behavior change. Verification and archive evidence were gathered from that
+exact final file content before the evidence commit.
 
 ## 3. Intended platforms and build configurations
 
@@ -670,6 +669,21 @@ asserts the legacy cookie is already gone immediately after construction —
 before `restoreSession()` is ever called — with a second assertion after
 `restoreSession()` for regression safety. `Scripts/verify.sh` invariants/lint
 green; full iOS suite (384 tests / 44 suites) and macOS build green.
+
+**Final-candidate architecture follow-up (T-100, 2026-07-14):** disabling all
+cookie handling also discarded Cloudflare continuity and a write redirect's
+re-signed Rails session cookie. The final candidate therefore uses an
+**ephemeral, private, in-memory** `AO3Client` cookie jar for challenge cookies,
+not `HTTPCookieStorage.shared`. It filters `_otwarchive_session` from the
+challenge header and purges that cookie after every fetch/download;
+authenticated requests still attach their captured account session explicitly.
+A task-scoped redirect relay accepts the refreshed auth cookie only for a
+trusted AO3 HTTPS target and strips the entire Cookie header for nil, non-HTTPS,
+or off-host redirects. `AO3ClientPolicyTests`,
+`AO3RedirectCookieRelayTests`, and auth/cookie tests cover the final mechanics.
+The 2026-07-16 certification re-ran those suites and the 566-test canonical
+suite, inspected the final archive, and found no ambient-auth or cross-host
+regression. A5-F1 remains closed.
 
 **A5-F2 — P1 Must Fix — MiniZip trusts archive-controlled paths and sizes,
 allowing sandbox path traversal plus malformed-archive crashes/exhaustion.**
@@ -2308,13 +2322,117 @@ none stale. A10-F2 is closed.
 - Product artifacts and user IDE state are not tracked. The Android directory is
   a separate product line and deliberately excluded from this candidate.
 
+## Final Release-Blocker Certification — 2026-07-16
+
+Scope: the eleven requested P1 blockers only, their changed paths/direct callers,
+their regression tests, and the final packaging output. This pass did not reopen
+the completed ten-area audit and did not fix or reclassify any P2/P3 finding.
+
+### Candidate and ancestry
+
+- Certified product content: `release-fixes` at
+  `b82807d8709ac2ce08fc2f2fc51a262e893fca09`; local and fetched branch tips
+  matched at the start of the pass and the tracked tree was clean.
+- Updated local `main`: `37987ddafe17c3eaaf702a203da56381510c2fd0`
+  (`Merge inbox-refinement into main`). It is the merge base and an ancestor of
+  the candidate. `origin/main` remained older at `58e307e`; that remote-ref drift
+  is a process observation, not a product diff.
+- `main..b82807d8` contains 57 commits and changes 120 files
+  (+12,987/−2,293). Every production/test delta is classified below. Carrier,
+  evidence, merge, and task-ledger commits contain no unclassified product logic.
+
+### Exhaustive production/test change classification
+
+| Commit group | Classification | Production/test scope |
+|---|---|---|
+| `d851b918`, `e255c455` (carrier `638ba5e5`) | A2-F1, A5-F2, A5-F3 | Backup merge/EPUB replacement and MiniZip/EPUB validation; backup, folder-sync, EPUB, hostile-ZIP, and queue tests. |
+| `073d9c5f`, `24f23aaf`, `e6ba6a0d` | A5-F1, A5-F4 | AO3 client/auth/vault/cookie bridge and privacy notice; client-policy/auth/vault/cookie tests. |
+| `1b88fe37` | A7-F1, A7-F2 | Readium completion, macOS reader progress/controller/style, lifecycle cleanup; Readium, lifecycle, and progress-bridge tests. |
+| `632a7524`, `66e2c3d5` | T91-RF1, T91-RF2 | Exact reply verification plus the process-lifetime unresolved-submission store/guard; comments parser/submission tests. |
+| `06031af1`, `28f1f5ff`, `df8207cc` (evidence `775f3241`, `4e57337c`) | T91-RF3 (and broader RF5 cache scoping) | Inbox/auth/account cache generation fencing and account UI callers; Inbox transition, auth, author-profile, and account-list-count tests. |
+| `e08ac0ab` | A10-F1 (plus resolved A10-F2 docs) | Bundled GPL/dependency notices, About/Legal UI, packaging invariant, and documentation alignment. |
+| `374aa299` | Unrelated, review-only T-97 | Comments/Inbox versus `ao3_api` audit document; no runtime change. |
+| `3a6ce108`…`f94d5573` (carrier `277c113d`) | Unrelated T-98 | Debounced iOS Readium progress, flush/dirty semantics, diagnosis and focused persistence tests. Reviewed against A7-F1; the exact end-of-publication completion path remains separate. |
+| `257eb1dd`, `3e8cdccf` (carrier `e5921171`) | Unrelated T-99 | Comment pseud/form routing and honest AO3 write verdicts plus tests. |
+| `dec87d63`, `8bcca450`, `7234cb2d` (carrier `9beab877`) | A5-F1-compatible T-100 follow-up | Private ephemeral Cloudflare-cookie continuity, explicit auth cookie headers, trusted redirect relay/off-host stripping, and policy/relay tests. Final A5-F1 mechanics supersede the initial cookie-disabled implementation without reopening ambient authentication. |
+| `4a05556d`, `4d056e6c` (carrier `a3a3966d`) | Unrelated T-102 | Fail-closed comment parsing and three-state canonical verification, with parser/write/submission tests. It strengthens RF1/RF2 uncertainty handling. |
+| `87ac733c`, `f88e1afb` (carrier `f7a66a90`) | Unrelated T-103 | Comments account/session generation isolation, scoped caches/drafts, stale-result inertia, and account-transition tests. It leaves RF1/RF2 duplicate guards intact. |
+| T-104 commits `51cb5439`…`d2443744` (carrier `0f683636`, ledger tip `b82807d8`) | Material unrelated scope, explicitly flagged | Ponytail dead-code/consolidation sessions; author-action fences; work-identity reuse; shared remote selection; folder-sync result accounting; WorkDetail reuse; and five owner-found live fixes (comment fixture, Mark-for-Later method override, work action state, moderation confirmation, Recently Deleted menus), with their tests/docs. Final implementations and all later patches touching blocker files were adversarially re-read; no blocker regression was found. |
+
+### Per-blocker result
+
+| Blocker | Result | Final-candidate evidence |
+|---|---|---|
+| A2-F1 | PASS / RESOLVED | Restore unions normalized archived user tags into the current tag set and never removes a newer local tag; repeated restore is idempotent. `KudosBackupTests` targeted and full runs pass. |
+| A5-F1 | PASS / RESOLVED | Anonymous reads use a private ephemeral challenge-cookie jar; `_otwarchive_session` is filtered/purged, authenticated calls use explicit per-session headers, legacy shared cookies are purged before view tasks, and redirects strip cookies off trusted AO3 HTTPS scope. Client-policy, auth/cookie, and redirect-relay suites pass. |
+| A5-F2 | PASS / RESOLVED | MiniZip validates record bounds, methods/flags, names, duplicates, output quotas/ratio, and containment before staged extraction. Hostile ZIP/EPUB tests pass with typed failure and no outside write. |
+| A5-F3 | PASS / RESOLVED | Backup EPUB bytes are staged and inspected before `replaceItemAt`; invalid/hostile assets increment the skip count and leave an existing valid EPUB unchanged. Backup/folder-sync/queue tests pass. |
+| A5-F4 | PASS / RESOLVED | Vault deletion attempts both stores, surfaces real failure, marks removal pending, prevents stale restore, and retries; soft/live session state still clears immediately. Auth/vault/logout tests pass. Signed Keychain failure remains a manual gate. |
+| A7-F1 | PASS / RESOLVED | Auto-finish requires the final reading-order resource with trailing viewport upper bound exactly 1.0; 0.99/0.999 do not finish or free an EPUB. Readium/lifecycle tests pass. |
+| A7-F2 | PASS / RESOLVED | macOS stores a normalized fraction per spine with generation-gated callbacks, debounced writes, forced flushes, and restore after render/style changes. Progress-bridge tests pass; a real WKWebView journey remains manual. |
+| T91-RF1 | PASS / RESOLVED | Reply verification loads the standalone parent thread, requires the exact parent, checks direct replies with the captured body/identity/time anchor, and returns unknown rather than guessing on hidden/transformed markup. Parser/verifier tests pass. |
+| T91-RF2 | PASS / RESOLVED | A shared, identity-partitioned, process-lifetime unresolved-key set survives guard/view recreation and chapter-scope changes; begin/adopt consult it atomically and verification targets the pending key, not edited live text. Submission tests pass. |
+| T91-RF3 | PASS / RESOLVED | Inbox reads, writes, reloads, metadata, destinations, forms, and private caches capture auth scope plus session generation and make stale A continuations inert after A→B/logout/same-user relogin. Deterministic account-transition suites pass. |
+| A10-F1 | PASS / RESOLVED | The archive contains root GPL `LICENSE.txt` and generated `ThirdPartyNotices.txt`, byte-identical to source, with all nine resolved dependencies represented and an offline About/Legal route. The packaging invariant passes. |
+
+### Automated, Release, archive, and install evidence
+
+| Check | Result |
+|---|---|
+| Blocker-focused iOS run | PASS — 284 tests / 18 suites. |
+| `Scripts/check-invariants.sh` | PASS — includes license/source/dependency coverage. |
+| `Scripts/verify.sh` | ALL GREEN — invariants, lint gate, 566 tests / 53 suites, macOS Debug build, whitespace. |
+| Clean iOS Simulator Release build | PASS — isolated DerivedData, signing disabled. |
+| Clean macOS Release build | PASS — isolated DerivedData, signing disabled. |
+| Unsigned generic-iOS archive | PASS — `/tmp/Kudos-release-cert-b828.xcarchive`, 98 MB; 17 MB arm64 app with `LC_MAIN`, iOS 26.5 build target, matching app/dSYM UUID, expected unsigned/no provisioning state. |
+| Version and background metadata | PASS — `com.cidy02.Kudos`, version 1.0 (1), iPhone+iPad families, `UIBackgroundModes=[fetch]`, and `BGTaskSchedulerPermittedIdentifiers=[com.cidy02.Kudos.folderSyncRefresh]`, matching the production constant. |
+| Readium/SPM resources | PASS — all five expected bundles present: CryptoSwift, Readium ZIPFoundation, Navigator, Shared, and Streamer; Readium HTML/JS/CSS/fonts/localizations are present. |
+| Legal/resource hygiene | PASS — GPL/notices are byte-identical; 49 app files enumerated; no app source, XCTest bundle, debug fixture/test identifier, embedded credentials/private keys, or provisioning profile found. The only `.md`/`.gitignore` payload files are dependency-owned Readium CSS/font/script assets inside its resource bundle, not app project material. |
+| Release simulator install/launch | PASS — installed the isolated Release app on iPhone 17, launched `com.cidy02.Kudos`, and visually confirmed the Home UI rendered in `/tmp/Kudos-release-cert-launch.png`. |
+
+Build output retains the already-known deployment-target warning plus current
+Swift concurrency diagnostics in MiniZip/CommentSubmission and a macOS-only
+dead-ternary warning. They do not fail the current Swift-language-mode builds
+and this focused pass found no runtime blocker regression; they are not silently
+reclassified or fixed here.
+
+### Manual gates required by the certification prompt
+
+| Gate | Status | Requirement |
+|---|---|---|
+| Signed-device archive/install/launch | NOT RUN | Requires the owner signing identity and physical hardware. |
+| Keychain persistence and forced deletion failure | NOT RUN | Exercise persist/relaunch, unavailable/locked/failing deletion, truthful notice, and retry on a signed build. |
+| Upgrade with library/progress preservation | NOT RUN | Install over the prior release without deleting the app and compare works, EPUBs, tags, queues, and both reader-progress formats. |
+| Backup restore/folder-sync recovery on hardware | NOT RUN | Exercise a representative backup, interruption/retry, selected folder/provider conflict, and recovery. |
+| Minimal respectful authenticated AO3 smoke, including Inbox/comment writes | NOT RUN | Owner-operated, paced, single-shot read/write matrix on the final signed candidate. |
+| Account A→B transition | NOT RUN | Switch during/after an Inbox write and confirm A's result cannot mutate or reload B. |
+| iPhone/iPad/macOS reader read-through and offline reopen | NOT RUN | Include 99% versus true end, close/reopen, progress resume, TOC/links, modes, and offline retained EPUB. |
+| VoiceOver, Dynamic Type, themes, accent contrast, gestures | NOT RUN | Run the human accessibility/theme/device matrix. |
+| Long-session battery, thermal, and leaks | NOT RUN | Characterize both readers and large-library/backup paths with device Instruments. |
+
+### Certification verdict and next action
+
+**P1 BLOCKER CERTIFICATION: PASS. OVERALL RELEASE VERDICT: NOT READY.** All
+eleven requested P1s are resolved on the final candidate content and no new P1
+was found in the scoped review. The 28 P2 and 7 P3 findings below are unchanged
+and have not been owner-accepted, and all nine mandatory human/device/live gates
+above remain NOT RUN. Therefore the stricter `CONDITIONALLY READY` condition
+(only explicit human/device/live-AO3 gates remain) is not yet satisfied.
+
+Exact next action: the owner must disposition the unchanged P2/P3 list (fix or
+explicitly accept), run and record every manual gate above on the final signed
+candidate, and review this evidence. Only after those pass should the owner give
+an explicit instruction to merge `release-fixes` into `main`; this certification
+does not perform that merge.
+
 ## Executive Verdict
 
 **NOT READY**
 
-There are **0 open P0, 0 open P1, 28 open P2, and 7 open P3 findings**. The
-frozen candidate builds, tests, archives unsigned, and launches as a Release
-simulator app; the license-compliance blocker is now closed. Required
+There are **0 open P0, 0 open P1, 28 open P2, and 7 open P3 findings**. Final
+blocker certification at `b82807d8` passed (targeted 284/18; canonical 566/53),
+both clean Release builds succeeded, the unsigned archive passed inspection,
+and the installed Release simulator app launched. Required
 signed-device, live-write, accessibility, sync-recovery, upgrade, and reader
 read-through gates are still incomplete. A1-F1 (unfrozen candidate), A2-F1
 (stale-tag merge), A5-F1 (cookie isolation), A5-F2 (MiniZip hardening),
@@ -2427,7 +2545,7 @@ note above.
 
 | Gate | Status | Evidence / requirement |
 |---|---|---|
-| Release iPhone-simulator install and launch | PASS | Existing Release product installed/launched on iPhone 17; Home rendered (`/tmp/kudos-release-launch.png`). |
+| Release iPhone-simulator install and launch | PASS | The isolated final Release product installed/launched on iPhone 17; Home rendered (`/tmp/Kudos-release-cert-launch.png`). |
 | Owner visual acceptance of the tested Inbox configuration | PASS | Owner iteratively tested the T-91 UI/metadata changes and approved the final tested configuration before `c1bf211`. |
 | Signed iPhone install/launch and stable-toolchain archive | NOT RUN | Requires signing identity/device and final distribution toolchain. |
 | Signed iPad install/launch, portrait/landscape/split view | NOT RUN | No final-candidate device pass. |
@@ -2443,17 +2561,17 @@ note above.
 | VoiceOver, AX Dynamic Type, contrast/transparency/motion, keyboard/pointer | NOT RUN | Full Area-9 matrix outstanding. |
 | Light, Dark, Sepia, OLED and several accents across critical screens | NOT RUN | Tested owner configuration only. |
 | Large-library/large-backup Instruments, memory, thermal, and battery | NOT RUN | Synthetic probe found known P2 risks; device characterization absent. |
-| GPL and third-party notices included in standalone distribution | PASS | A10-F1 resolved 2026-07-15: `LICENSE.txt`/`ThirdPartyNotices.txt` confirmed present and byte-identical inside both a built macOS Release `.app` and a built iOS Simulator Release `.app`; reachable offline via About → Legal in the running macOS app. |
+| GPL and third-party notices included in standalone distribution | PASS | A10-F1 resolved 2026-07-15 and re-certified 2026-07-16: `LICENSE.txt`/`ThirdPartyNotices.txt` are present and byte-identical in the generic-iOS archive; the generated notices cover every resolved package and remain reachable offline via About → Legal. |
 
 ## Exact Release Recommendation
 
 **Do not merge this candidate into the human-approved release line or distribute
-an app binary yet.** The license-packaging P1 (A10-F1) and the documentation
-P2 (A10-F2) are now both resolved and regression-tested (`Scripts/verify.sh`
-green, both Release builds inspected). Explicitly fix or owner-accept each
-remaining open P2/P3, freeze a new SHA, and rerun `Scripts/verify.sh`, both
-Release builds, archive inspection, and Release launch.
-Finally complete every NOT RUN gate above—especially signed session removal,
+an app binary yet.** The focused P1 certification passed, including the license
+archive check, canonical suite, clean Release builds, and Release-simulator
+launch. The owner must now explicitly fix or accept each unchanged P2/P3 and
+complete every NOT RUN gate above—especially signed session removal,
 upgrade/backup/sync recovery, live single-shot AO3 writes, both readers, and the
-accessibility/theme/device matrix—and obtain human approval before changing the
-verdict to READY.
+accessibility/theme/device matrix. If disposition changes product content,
+freeze that new SHA and repeat this certification. After all gates pass, obtain
+human approval and an explicit merge instruction before changing the verdict or
+merging `release-fixes` to `main`.

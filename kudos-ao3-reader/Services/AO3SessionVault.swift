@@ -300,9 +300,10 @@ struct CascadingAO3SessionVault: AO3SessionPersisting {
 /// every cookie into that shared jar). `AO3Client`'s "anonymous" session used
 /// `URLSessionConfiguration.default`, whose default cookie storage is that same
 /// shared jar — so a signed-in session's cookie rode along on every nominally
-/// anonymous search/browse/tag request (A5-F1). `AO3Client` now runs with cookie
-/// handling disabled outright, so there is no isolated consumer left for this bridge
-/// to serve; only WebKit's own store needs to reflect the session.
+/// anonymous search/browse/tag request (A5-F1). `AO3Client` now owns a private,
+/// ephemeral jar only for challenge-cookie continuity and purges the AO3 session
+/// cookie after every fetch/download; no consumer needs authentication mirrored
+/// into the shared jar. Only WebKit's own store needs to reflect the saved session.
 @MainActor
 enum AO3CookieBridge {
     static func install(_ session: AO3Session) async {

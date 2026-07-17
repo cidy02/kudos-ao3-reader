@@ -23,8 +23,13 @@ website session, and never stores the user's password.
   it fall back to an app-container file
   (`Application Support/KudosAuth/ao3-session.json` via `FileAO3SessionVault`).
   That file is cleared on logout and with the app container on uninstall.
-- `AO3CookieBridge` keeps the saved session, WebKit cookie store, and shared HTTP
-  cookie store in agreement.
+- `AO3CookieBridge` installs or clears the saved session only in WebKit's cookie
+  store. It never mirrors authentication into `HTTPCookieStorage.shared`.
+- `AO3Client` uses its own ephemeral, in-memory cookie jar so Cloudflare
+  challenge cookies can survive between requests. The AO3 authentication cookie
+  is filtered from that jar when headers are built and purged after every fetch
+  or EPUB download; authenticated requests attach the captured account session
+  explicitly.
 - Preferences still hold only a non-secret username hint.
 - If Keychain and the file are both empty, restore falls back to capturing
   cookies from WebKit's persistent store (dev safety net).
@@ -43,8 +48,9 @@ website session, and never stores the user's password.
 4. Login is considered successful only when AO3's returned page identifies
    itself as logged in. The mere presence of `_otwarchive_session` is not enough,
    because AO3 also gives anonymous visitors a session cookie.
-5. AO3 cookies are captured, serialized, saved to Keychain, and installed for
-   authenticated WebKit and URL requests. The password is discarded.
+5. AO3 cookies are captured, serialized, saved to Keychain, installed in WebKit,
+   and attached explicitly to authenticated URL requests. The password is
+   discarded.
 
 The automatic-login WebView stays mounted (but invisible, at 1×1) behind the
 native form so it always has a window: an off-screen `WKWebView` can have its
@@ -79,8 +85,9 @@ sign-up and password-reset pages, opened in the in-app Browse tab.
   authenticated operation. If AO3 redirects that operation to login, they call
   `sessionDidExpire(expectedGeneration:)` with that captured value, so an old
   response cannot clear a newer account session.
-- Logout clears the Keychain item, username hint, and all AO3 cookies known to
-  WebKit and `HTTPCookieStorage`.
+- Logout clears the Keychain item, username hint, and AO3 cookies known to
+  WebKit. The shared HTTP cookie jar is never an authentication store; an
+  idempotent startup sweep removes any AO3 cookies left there by older builds.
 
 ## Authenticated feature requests
 
