@@ -354,7 +354,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: "Reading Queues",
             collapseKey: "library.readingQueues",
             hasItems: true,
-            onSeeAll: customQueues.count > 11 ? { path.append(AllReadingQueuesDestination()) } : nil
+            onSeeAll: !customQueues.isEmpty ? { path.append(AllReadingQueuesDestination()) } : nil
         ) {
             Button {
                 newQueueName = ""
