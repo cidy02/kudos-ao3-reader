@@ -122,12 +122,15 @@ extension AO3AuthService {
         )
     }
 
-    /// Adds the work to the user's Marked-for-Later reading list.
+    /// Adds the work to the user's Marked-for-Later reading list. AO3's control is
+    /// a `button_to` form — `POST /works/<id>/mark_for_later` carrying
+    /// `_method=patch` (verified live 2026-07-16); without the Rails method
+    /// override the POST matches no route and the action always failed.
     func markForLater(workID: Int) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
         let (_, token) = try await fetchCSRFPage(at: workURL)
-        let body = Self.formEncoded([("authenticity_token", token)])
+        let body = Self.formEncoded([("_method", "patch"), ("authenticity_token", token)])
         let request = try writeRequest(
             to: Self.markForLaterEndpoint(workID: workID),
             body: body, csrf: token, referer: workURL, ajax: false
