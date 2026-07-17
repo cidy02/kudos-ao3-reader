@@ -15,6 +15,42 @@ final class AO3WorkActionsModel {
     var showingBookmark = false
     var bookmarkInput = AO3AuthService.BookmarkInput()
     var bookmarkError: String?
+    /// True when the composer edits the existing AO3 bookmark (title/labels only —
+    /// the submit itself re-detects the real state from the fresh work page).
+    private(set) var bookmarkIsUpdate = false
+
+    /// Live subscribed/bookmarked state for the menu labels, fetched lazily the
+    /// first time the menu content appears for a work and after each relevant
+    /// write. nil = unknown → the menu falls back to its default labels.
+    private(set) var workPageStates: AO3WorkActionStates?
+    private var workPageStatesWorkID: Int?
+    private var isFetchingWorkPageStates = false
+
+    /// One work-page GET, only when signed in and only once per work (or when
+    /// `force`d after a write). Advisory labels only — see
+    /// `AO3AuthService.workActionStates`.
+    func refreshWorkPageStates(workID: Int, auth: AO3AuthService, force: Bool = false) {
+        guard auth.isLoggedIn else {
+            workPageStates = nil
+            workPageStatesWorkID = nil
+            return
+        }
+        if workPageStatesWorkID != workID {
+            workPageStates = nil
+            workPageStatesWorkID = workID
+        } else if workPageStates != nil, !force {
+            return
+        }
+        guard !isFetchingWorkPageStates else { return }
+        isFetchingWorkPageStates = true
+        Task {
+            defer { isFetchingWorkPageStates = false }
+            let states = try? await auth.workActionStates(workID: workID)
+            // A slow response for a previous work must not label this one.
+            guard workPageStatesWorkID == workID else { return }
+            workPageStates = states
+        }
+    }
 
     /// Drives the native comments screen (sheet). The work context is captured at
     /// tap time — the model itself stays work-agnostic.
@@ -35,7 +71,7 @@ final class AO3WorkActionsModel {
     }
 
     func subscribe(workID: Int, auth: AO3AuthService) {
-        run { try await auth.toggleSubscribe(workID: workID) }
+        run(afterSuccessRefresh: (workID, auth)) { try await auth.toggleSubscribe(workID: workID) }
     }
 
     func markForLater(workID: Int, auth: AO3AuthService) {
@@ -43,12 +79,20 @@ final class AO3WorkActionsModel {
     }
 
     /// Runs a fire-and-forget write whose result is shown as the host banner.
-    private func run(_ action: @escaping () async throws -> String) {
+    /// Pass `afterSuccessRefresh` for writes that change the menu's
+    /// subscribed/bookmarked labels so they refetch instead of going stale.
+    private func run(
+        afterSuccessRefresh: (workID: Int, auth: AO3AuthService)? = nil,
+        _ action: @escaping () async throws -> String
+    ) {
         guard !isWorking else { return }
         isWorking = true
         Task {
             do {
                 banner = try await action()
+                if let refresh = afterSuccessRefresh {
+                    refreshWorkPageStates(workID: refresh.workID, auth: refresh.auth, force: true)
+                }
             } catch {
                 banner = Self.message(for: error)
             }
@@ -56,8 +100,16 @@ final class AO3WorkActionsModel {
         }
     }
 
+    /// Opens the composer — prefilled with the existing bookmark's values when
+    /// the fetched state says this work is already bookmarked, blank otherwise.
     func startBookmark() {
-        bookmarkInput = AO3AuthService.BookmarkInput()
+        if let existing = workPageStates?.existingBookmark {
+            bookmarkInput = existing.input
+            bookmarkIsUpdate = true
+        } else {
+            bookmarkInput = AO3AuthService.BookmarkInput()
+            bookmarkIsUpdate = false
+        }
         bookmarkError = nil
         showingBookmark = true
     }
@@ -69,9 +121,10 @@ final class AO3WorkActionsModel {
         bookmarkError = nil
         Task {
             do {
-                let message = try await auth.createBookmark(workID: workID, input: input)
+                let message = try await auth.saveBookmark(workID: workID, input: input)
                 showingBookmark = false
                 banner = message
+                refreshWorkPageStates(workID: workID, auth: auth, force: true)
             } catch {
                 bookmarkError = Self.message(for: error)
             }
@@ -164,7 +217,7 @@ private struct AO3BookmarkComposer: View {
             }
             .formStyle(.grouped)
             .appThemedScroll()
-            .navigationTitle("Bookmark on AO3")
+            .navigationTitle(actions.bookmarkIsUpdate ? "Edit Bookmark on AO3" : "Bookmark on AO3")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif

@@ -265,7 +265,7 @@ struct ReadingQueueDetailView: View {
                     if !trimmed.isEmpty {
                         queue.name = trimmed
                         queue.markModified()
-                        saveBestEffort("Saving queue rename failed")
+                        context.saveBestEffort(reason: "Saving queue rename failed")
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -382,16 +382,6 @@ struct ReadingQueueDetailView: View {
     private func deleteQueue() {
         PreservedWorkService.softDelete(queue, in: context)
         dismiss()
-    }
-
-    private func saveBestEffort(_ reason: StaticString) {
-        do {
-            try context.save()
-        } catch {
-            Log.library.error(
-                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-        }
     }
 }
 
@@ -845,22 +835,7 @@ struct AddToQueueView: View {
                 + "\(result.preserved == 1 ? "" : "s")."
         }
         if result.total == 0 { return "No series works were found." }
-        var parts: [String] = []
-        if result.preserved > 0 {
-            parts.append("\(result.preserved) added")
-        }
-        if result.alreadyPreserved > 0 {
-            parts.append("\(result.alreadyPreserved) already preserved")
-        }
-        if result.unavailable > 0 {
-            parts.append("\(result.unavailable) unavailable")
-        }
-        if result.failed > 0 {
-            parts.append("\(result.failed) failed")
-        }
-        if result.skipped > 0 {
-            parts.append("\(result.skipped) skipped")
-        }
+        let parts = result.summaryParts(verb: "added")
         return parts.isEmpty ? "Series works are already in the selected queues." : parts.joined(separator: ", ") + "."
     }
 

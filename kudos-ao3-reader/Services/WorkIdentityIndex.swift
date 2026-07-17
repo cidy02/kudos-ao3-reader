@@ -4,10 +4,11 @@ import SwiftData
 /// The one shared answer to "is this local record the same AO3 work?", matched in
 /// priority order: AO3 work ID → canonical AO3 work URL → local record UUID.
 ///
-/// Backup/sync restore (`WorkRestoreIndex`), the remote-card context menu,
-/// `ReadingQueueService`'s acquisition paths, and `CanonicalWorkMerge` all resolve
-/// identity through this index, so a work can't dodge one surface's dedup by
-/// matching under a different identity tier somewhere else.
+/// Backup/sync restore (`WorkRestoreIndex`), the import funnels (`WorkImporter`),
+/// the remote-card context menu, `ReadingQueueService`'s acquisition paths, and
+/// `CanonicalWorkMerge` all resolve identity through this index, so a work can't
+/// dodge one surface's dedup by matching under a different identity tier
+/// somewhere else.
 @MainActor
 struct WorkIdentityIndex {
     private var worksByID: [UUID: SavedWork] = [:]

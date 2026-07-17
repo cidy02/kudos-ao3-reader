@@ -135,15 +135,12 @@ struct WorkRow: View {
             Divider().padding(.top, 1)
 
             // Stats wrap rather than truncate (matches AO3WorkRow).
-            FlowLayout(spacing: 18, rowSpacing: 5) {
-                if !work.rating.isEmpty { WorkStatLabel(text: work.rating, symbol: "checkmark.shield") }
-                if work.wordCount > 0 { WorkStatLabel(text: work.wordCount.formatted(), symbol: "textformat.size") }
-                if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
-                if work.kudos > 0 { WorkStatLabel(text: work.kudos.formatted(), symbol: "heart") }
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .padding(.top, 1)
+            WorkListStatsRow(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                wordCount: work.wordCount > 0 ? work.wordCount : nil,
+                chapters: work.chapters.isEmpty ? nil : work.chapters,
+                kudos: work.kudos > 0 ? work.kudos : nil
+            )
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)

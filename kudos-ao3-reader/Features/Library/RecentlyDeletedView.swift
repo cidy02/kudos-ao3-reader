@@ -168,7 +168,9 @@ struct RecentlyDeletedView: View {
 }
 
 /// A single Recently Deleted row: title, subtitle, and a days-remaining label, with
-/// Restore (leading swipe) and Delete Permanently (trailing swipe) actions.
+/// Restore (leading swipe) and Delete Permanently (trailing swipe) actions. The same
+/// two actions live in a context menu — swipes are invisible until tried, and on
+/// macOS they only exist for trackpad users, so the menu is the discoverable path.
 private struct RecentlyDeletedRow: View {
     let title: String
     let subtitle: String
@@ -214,6 +216,14 @@ private struct RecentlyDeletedRow: View {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
             .tint(.blue)
+        }
+        .contextMenu {
+            Button(action: onRestore) {
+                Label("Restore", systemImage: "arrow.uturn.backward")
+            }
+            Button(role: .destructive, action: onDeletePermanently) {
+                Label("Delete Permanently", systemImage: "trash.fill")
+            }
         }
     }
 }

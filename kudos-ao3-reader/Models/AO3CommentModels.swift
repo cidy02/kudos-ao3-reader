@@ -304,8 +304,6 @@ nonisolated struct AO3CommentsPage: Equatable, Sendable {
     var workAuthorIdentities: [AO3AuthorIdentity] = []
     /// When this page was fetched (drives the cache TTL + offline staleness label).
     var fetchedAt = Date()
-
-    var totalOnPage: Int { comments.reduce(0) { $0 + $1.descendantCount } }
 }
 
 /// One chapter from a work's `/navigate` index — the AO3 chapter id is what the

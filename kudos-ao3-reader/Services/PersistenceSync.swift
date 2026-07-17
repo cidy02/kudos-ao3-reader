@@ -442,17 +442,4 @@ nonisolated enum SyncMerge {
         work.progressModifiedAt = incomingModifiedAt
         work.markModified(work.progressModifiedAt ?? Date())
     }
-
-    @MainActor
-    static func deterministicMembershipOrder(_ memberships: [ReadingQueueMembership]) -> [ReadingQueueMembership] {
-        memberships.sorted {
-            if $0.sortOrderInQueue != $1.sortOrderInQueue {
-                return $0.sortOrderInQueue < $1.sortOrderInQueue
-            }
-            if $0.queuedAt != $1.queuedAt {
-                return $0.queuedAt < $1.queuedAt
-            }
-            return $0.id.uuidString < $1.id.uuidString
-        }
-    }
 }

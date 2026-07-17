@@ -496,7 +496,11 @@ extension AO3Client {
         return result
     }
 
-    private static func paginationTotal(in doc: Document, currentPage: Int) throws -> Int {
+    /// AO3's pagination lists every page number; the largest is the total. Falls
+    /// back to `currentPage` when there's no pagination (or it's the only page).
+    /// `in` is `Element` (not `Document`) so callers can scope the search to a
+    /// sub-region of the page (e.g. comments' `#comments_placeholder`).
+    static func paginationTotal(in doc: Element, currentPage: Int) throws -> Int {
         var total = currentPage
         for element in try doc.select("ol.pagination li, nav.pagination a, .pagination li").array() {
             let digits = try element.text().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -505,7 +509,10 @@ extension AO3Client {
         return total
     }
 
-    private static func statInt(_ kind: String, in element: Element) -> Int? {
+    /// A stat's numeric value (word count, kudos, hits, …), stripped of commas
+    /// and any other non-digit characters. Shared across every parser that reads
+    /// `dl.stats dd.<kind>` directly (blurbs, author works/series).
+    static func statInt(_ kind: String, in element: Element) -> Int? {
         let text = (try? element.select("dl.stats dd.\(kind)").first()?.text()) ?? ""
         return Int(text.filter(\.isNumber))
     }

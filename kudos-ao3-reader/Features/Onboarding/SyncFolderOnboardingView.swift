@@ -11,7 +11,6 @@ struct SyncFolderOnboardingView: View {
     /// the host free to show this again next launch.
     var onFinished: () -> Void
 
-    @Environment(ThemeManager.self) private var theme
     @Environment(\.modelContext) private var modelContext
     @State private var dontRemindAgain = false
     @State private var choosingFolder = false
@@ -19,21 +18,12 @@ struct SyncFolderOnboardingView: View {
     @State private var connectionError: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 28) {
-                    header
-                    introPoints
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 44)
-                .padding(.bottom, 24)
-                .frame(maxWidth: 540)
-                .frame(maxWidth: .infinity)
-            }
+        OnboardingScaffold {
+            header
+            introPoints
+        } footer: {
             footer
         }
-        .background(backgroundColor.ignoresSafeArea())
         .fileImporter(
             isPresented: $choosingFolder,
             allowedContentTypes: [.folder],
@@ -41,15 +31,6 @@ struct SyncFolderOnboardingView: View {
         ) { result in
             connect(result)
         }
-    }
-
-    private var backgroundColor: Color {
-        if let themed = theme.appTheme.appBaseBackground { return themed }
-        #if os(macOS)
-        return Color(nsColor: .windowBackgroundColor)
-        #else
-        return Color(uiColor: .systemBackground)
-        #endif
     }
 
     private var header: some View {
@@ -75,44 +56,27 @@ struct SyncFolderOnboardingView: View {
 
     private var introPoints: some View {
         VStack(alignment: .leading, spacing: 22) {
-            point(
-                "folder", "Choose a Folder",
-                "Choose a folder where Kudos can safely keep a copy of your library data. "
+            OnboardingPointRow(
+                symbol: "folder", title: "Choose a Folder",
+                message: "Choose a folder where Kudos can safely keep a copy of your library data. "
                     + "If you choose a folder in iCloud Drive, Apple can sync it across your devices."
             )
-            point(
-                "wifi.slash", "Works Fully Offline",
-                "Kudos still works completely offline either way, and you can set this up "
+            OnboardingPointRow(
+                symbol: "wifi.slash", title: "Works Fully Offline",
+                message: "Kudos still works completely offline either way, and you can set this up "
                     + "later in Settings if you'd rather skip it for now."
             )
-            point(
-                "doc.text.magnifyingglass", "Not Real-Time CloudKit Sync",
-                "This uses the existing Kudos backup format written to a folder you choose — "
+            OnboardingPointRow(
+                symbol: "doc.text.magnifyingglass", title: "Not Real-Time CloudKit Sync",
+                message: "This uses the existing Kudos backup format written to a folder you choose — "
                     + "it's folder-based sync, not real-time CloudKit sync."
             )
             if let connectionError {
-                point("exclamationmark.triangle", "Couldn't Connect", connectionError)
+                OnboardingPointRow(
+                    symbol: "exclamationmark.triangle", title: "Couldn't Connect", message: connectionError
+                )
             }
         }
-    }
-
-    private func point(_ symbol: String, _ title: String, _ body: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: symbol)
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                Text(body)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private var footer: some View {
@@ -139,12 +103,6 @@ struct SyncFolderOnboardingView: View {
                 .font(.subheadline.weight(.medium))
                 .disabled(isConnecting)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 14)
-        .padding(.bottom, 22)
-        .frame(maxWidth: 540)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
     }
 
     private func dismissWithoutConnecting() {
@@ -179,10 +137,6 @@ enum FolderSyncOnboardingState {
     static let configuredKey = "hasConfiguredSyncFolder"
     static let permanentlyDismissedKey = "hasPermanentlyDismissedSyncFolderOnboarding"
 
-    static func shouldShow(defaults: UserDefaults = .standard) -> Bool {
-        !defaults.bool(forKey: configuredKey) && !defaults.bool(forKey: permanentlyDismissedKey)
-    }
-
     static func recordConfigured(defaults: UserDefaults = .standard) {
         defaults.set(true, forKey: configuredKey)
     }
@@ -191,7 +145,7 @@ enum FolderSyncOnboardingState {
         if permanently {
             defaults.set(true, forKey: permanentlyDismissedKey)
         }
-        // Otherwise: no flag changes at all, so shouldShow(...) naturally stays true and
-        // the screen reappears next launch — no separate "show next launch" flag needed.
+        // Otherwise: no flag changes at all, so the onboarding predicate naturally stays
+        // true and the screen reappears next launch — no separate "show next launch" flag needed.
     }
 }

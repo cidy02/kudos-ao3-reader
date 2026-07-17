@@ -100,13 +100,13 @@ final class AppRouter {
     private(set) var cardNavigationSuppressed = false
 
     /// The one right-hand inspector panel open anywhere in the app. Routing every
-    /// panel (Settings, Search filters, Reader chapters/display) through a single
+    /// panel (Search filters, Reader chapters/display) through a single
     /// shared value guarantees only one inspector is ever presented at a time —
     /// two presented simultaneously crash AppKit's layout.
     var panel: Panel = .none
 
     enum Panel: Equatable {
-        case none, settings, searchFilters, libraryFilters, readerChapters, readerDisplay
+        case none, searchFilters, libraryFilters, readerChapters, readerDisplay
     }
 
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.

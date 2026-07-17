@@ -755,7 +755,7 @@ struct AccountView: View {
             profileSeriesSections
         case .drafts:
             Section {
-                externalNavCard(
+                AccountExternalNavCard(
                     title: "Open Drafts on AO3",
                     systemImage: "doc.badge.clock",
                     pathSuffix: "works/drafts"
@@ -981,34 +981,6 @@ struct AccountView: View {
         }
         .buttonStyle(.plain)
         .accountControlCardRow()
-    }
-
-    private func externalNavCard(
-        title: String, systemImage: String, pathSuffix: String
-    ) -> some View {
-        Button {
-            openUserPath(pathSuffix)
-        } label: {
-            AccountNavCardLabel(
-                title: title,
-                systemImage: systemImage,
-                opensExternally: true
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(auth.username == nil)
-        .accountControlCardRow()
-    }
-
-    private func openUserPath(_ suffix: String) {
-        guard let username = auth.username else { return }
-        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-            ?? username
-        let path = suffix.isEmpty
-            ? "/users/\(encoded)"
-            : "/users/\(encoded)/\(suffix)"
-        guard let url = URL(string: "https://archiveofourown.org\(path)") else { return }
-        router.open(url)
     }
 
 }

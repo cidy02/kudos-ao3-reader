@@ -381,6 +381,38 @@ struct AccountNavCardLabel: View {
     }
 }
 
+/// A nav card that opens `archiveofourown.org/users/<username>/<pathSuffix>` in
+/// Browse (an empty suffix opens the profile itself). Disabled when signed
+/// out. Shared by `AccountView`'s own external-nav cards and
+/// `AccountMoreOnAO3View`'s long-tail AO3 destinations.
+struct AccountExternalNavCard: View {
+    let title: String
+    let systemImage: String
+    let pathSuffix: String
+
+    @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
+
+    var body: some View {
+        Button {
+            Self.openUserPath(pathSuffix, username: auth.username, router: router)
+        } label: {
+            AccountNavCardLabel(title: title, systemImage: systemImage, opensExternally: true)
+        }
+        .buttonStyle(.plain)
+        .disabled(auth.username == nil)
+        .accountControlCardRow()
+    }
+
+    static func openUserPath(_ suffix: String, username: String?, router: AppRouter) {
+        guard let username else { return }
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let path = suffix.isEmpty ? "/users/\(encoded)" : "/users/\(encoded)/\(suffix)"
+        guard let url = URL(string: "https://archiveofourown.org\(path)") else { return }
+        router.open(url)
+    }
+}
+
 /// One free-standing shortcut icon for Overview's 3×2 grid. Each tile owns its
 /// own card chrome so the six destinations read as separate controls, not one
 /// shared panel of symbols.
@@ -834,7 +866,7 @@ struct AccountWorksInlineSection: View {
             try AO3Client.parseBookmarksPage(html, page: page)
         case .subscriptions:
             try AO3Client.parseSubscriptionsPage(html, page: page)
-        case .markedForLater, .history, .myWorks, .collection:
+        case .markedForLater, .history, .collection:
             try AO3Client.parseSearchPage(html, page: page)
         }
     }

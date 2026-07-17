@@ -2,22 +2,13 @@ import SwiftData
 import SwiftUI
 
 struct AuthorProfileView: View {
-    @Environment(\.modelContext) private var context
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
 
     @State private var model: AO3AuthorProfileModel
     @State private var expandAll = false
-    @State private var isSelecting = false
-    @State private var selection = Set<Int>()
-    @State private var isProcessingBatch = false
-    @State private var batchTask: Task<Void, Never>?
-    @State private var batchActionError: String?
-    @State private var resolvedQueueWorks: [SavedWork] = []
-    @State private var resolvedCollectionWorks: [SavedWork] = []
-    @State private var showingAddToQueue = false
-    @State private var showingAddToCollection = false
+    @State private var bulkSelection = RemoteWorkSelectionController()
     @State private var confirmingUnsubscribe = false
     /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
     @State private var showingLoginRequired = false
@@ -52,12 +43,7 @@ struct AuthorProfileView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
-            .sheet(isPresented: $showingAddToQueue) {
-                AddToQueueView(works: resolvedQueueWorks)
-            }
-            .sheet(isPresented: $showingAddToCollection) {
-                AddToCollectionView(works: resolvedCollectionWorks)
-            }
+            .remoteWorkSelectionChrome(bulkSelection)
             .sheet(isPresented: $showingLogin, onDismiss: {
                 Task { await resumePendingAuthActionIfNeeded() }
             }) {
@@ -81,11 +67,6 @@ struct AuthorProfileView: View {
                 }
             } message: {
                 Text("This action requires an AO3 account, log in first.")
-            }
-            .alert("Action Failed", isPresented: batchErrorPresented) {
-                Button("OK", role: .cancel) { batchActionError = nil }
-            } message: {
-                Text(batchActionError ?? "")
             }
             .confirmationDialog(
                 "Unsubscribe from \(model.route.username)?",
@@ -121,12 +102,11 @@ struct AuthorProfileView: View {
                 }
             }
             .onChange(of: authenticationScope, initial: true) { _, _ in
-                exitSelectMode()
+                bulkSelection.exitSelectMode()
                 model.activate(auth: auth)
             }
             .onDisappear {
                 model.cancel()
-                batchTask?.cancel()
             }
     }
 }
@@ -189,7 +169,7 @@ private extension AuthorProfileView {
                 }
             }
 
-            AO3AuthorFandomFilterSection(model: model, onWillChange: exitSelectMode)
+            AO3AuthorFandomFilterSection(model: model, onWillChange: bulkSelection.exitSelectMode)
 
             contentRows
         }
@@ -201,7 +181,7 @@ private extension AuthorProfileView {
         Binding(
             get: { model.selectedTab },
             set: { tab in
-                exitSelectMode()
+                bulkSelection.exitSelectMode()
                 model.selectTab(tab, auth: auth)
             }
         )
@@ -215,7 +195,7 @@ private extension AuthorProfileView {
             Menu {
                 if let allPseuds = AO3AuthorRoute(username: model.route.username) {
                     Button {
-                        exitSelectMode()
+                        bulkSelection.exitSelectMode()
                         model.selectScope(allPseuds, auth: auth)
                     } label: {
                         Label(
@@ -226,7 +206,7 @@ private extension AuthorProfileView {
                 }
                 ForEach(pseuds) { pseud in
                     Button {
-                        exitSelectMode()
+                        bulkSelection.exitSelectMode()
                         model.selectScope(pseud.route, auth: auth)
                     } label: {
                         Label(
@@ -257,9 +237,9 @@ private extension AuthorProfileView {
             AO3AuthorWorksSection(
                 model: model,
                 expandAll: expandAll,
-                isSelecting: isSelecting,
-                selection: selection,
-                onToggleSelection: toggleSelection
+                isSelecting: bulkSelection.isSelecting,
+                selection: bulkSelection.selection,
+                onToggleSelection: bulkSelection.toggle
             )
         case .series:
             AO3AuthorSeriesSection(model: model)
@@ -290,7 +270,7 @@ private extension AuthorProfileView {
                 Section("Pseuds") {
                     ForEach(about.pseuds) { pseud in
                         Button {
-                            exitSelectMode()
+                            bulkSelection.exitSelectMode()
                             model.selectScope(pseud.route, auth: auth)
                         } label: {
                             HStack {
@@ -334,17 +314,6 @@ private extension AuthorProfileView {
 }
 
 private extension AuthorProfileView {
-    private func toggleSelection(_ work: AO3WorkSummary) {
-        if selection.contains(work.id) {
-            selection.remove(work.id)
-        } else {
-            selection.insert(work.id)
-        }
-    }
-
-    private var selectedSummaries: [AO3WorkSummary] {
-        model.works.filter { selection.contains($0.id) }
-    }
 
     private var isOwnProfile: Bool {
         auth.username?.localizedCaseInsensitiveCompare(model.route.username) == .orderedSame
@@ -411,7 +380,11 @@ private extension AuthorProfileView {
     private var moderationConfirmPresented: Binding<Bool> {
         Binding(
             get: { model.pendingModerationForm != nil },
-            set: { if !$0 { model.cancelPendingModeration() } }
+            // Dismiss-only: SwiftUI writes `false` here *before* running the
+            // tapped button's action, so this must not clear the submit
+            // snapshot — that made Confirm a silent no-op. The Cancel button
+            // (and only it) calls `cancelPendingModeration()` to drop both.
+            set: { if !$0 { model.moderationAlertDidDismiss() } }
         )
     }
 
@@ -443,12 +416,6 @@ private extension AuthorProfileView {
         )
     }
 
-    private var batchErrorPresented: Binding<Bool> {
-        Binding(
-            get: { batchActionError != nil },
-            set: { if !$0 { batchActionError = nil } }
-        )
-    }
 }
 
 private extension AuthorProfileView {
@@ -456,15 +423,10 @@ private extension AuthorProfileView {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if isSelecting {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done", action: exitSelectMode)
+        if bulkSelection.isSelecting {
+            RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                bulkSelection.selected(in: model.works)
             }
-            #if os(iOS)
-            ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
-            #else
-            ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
-            #endif
         } else {
             ToolbarItem(placement: .primaryAction) {
                 profileMenu
@@ -489,7 +451,7 @@ private extension AuthorProfileView {
 
             if model.selectedTab == .works, !model.works.isEmpty {
                 Divider()
-                Button { isSelecting = true } label: {
+                Button { bulkSelection.isSelecting = true } label: {
                     Label("Select Works", systemImage: "checklist")
                 }
             }
@@ -550,83 +512,4 @@ private extension AuthorProfileView {
         }
     }
 
-    @ViewBuilder
-    private var bulkActionBar: some View {
-        Button {
-            batchTask = Task { await bulkSave() }
-        } label: {
-            Label("Save", systemImage: "bookmark")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkSaveForLater() }
-        } label: {
-            Label("Save for Later", systemImage: "clock.arrow.circlepath")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToCollection() }
-        } label: {
-            Label("Add to Collection", systemImage: "square.stack")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        Spacer()
-
-        Button {
-            batchTask = Task { await bulkAddToQueue() }
-        } label: {
-            Label("Add to Queue", systemImage: "list.bullet.rectangle")
-        }
-        .disabled(selection.isEmpty || isProcessingBatch)
-
-        if isProcessingBatch { ProgressView().controlSize(.small) }
-    }
-
-    private func exitSelectMode() {
-        isSelecting = false
-        selection.removeAll()
-    }
-
-    private func bulkSave() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            for work in works { WorkLifecycle.setSaved(work, true, in: context) }
-        }
-    }
-
-    private func bulkSaveForLater() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await bulkSaveForLaterRemote(selectedSummaries, in: context)
-    }
-
-    private func bulkAddToCollection() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedCollectionWorks = works
-            showingAddToCollection = true
-        }
-    }
-
-    private func bulkAddToQueue() async {
-        guard !isProcessingBatch else { return }
-        isProcessingBatch = true
-        defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selectedSummaries, in: context) { works in
-            resolvedQueueWorks = works
-            showingAddToQueue = true
-        }
-    }
 }

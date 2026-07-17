@@ -441,10 +441,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
             try await performAuthenticatedFetch(for: fetchRequest)
         }
-        if let path = responsePath, path.contains("/users/login") {
+        if Self.isLoginRedirect(path: responsePath) {
             throw AO3Error.authenticationRequired
         }
         return Self.htmlString(from: data)
+    }
+
+    /// Whether AO3 bounced an authenticated request to its login page — the
+    /// signal that the session cookies are no longer valid.
+    private static func isLoginRedirect(path: String?) -> Bool {
+        path?.contains("/users/login") == true
     }
 
     /// The `authCoalescer` key: URL *and* Cookie header, so a mid-flight account
@@ -485,7 +491,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
-        if let url = http.url, url.path.contains("/users/login") {
+        if Self.isLoginRedirect(path: http.url?.path) {
             throw AO3Error.authenticationRequired
         }
         if http.statusCode == 429 {
@@ -570,6 +576,36 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             return (true, action.isEmpty ? nil : action)
         }
         return (false, nil)
+    }
+
+    /// The signed-in user's existing bookmark of this work, read from the work
+    /// page's embedded bookmark form. When already bookmarked, AO3 renders that
+    /// form as an *edit*: `action="/bookmarks/<id>"` carrying `_method=put`,
+    /// prefilled with the bookmark's current values (verified live 2026-07-16).
+    /// A not-yet-bookmarked work renders a create form
+    /// (`action="/works/<id>/bookmarks"`, no method override) → nil.
+    static func parseExistingBookmark(from html: String) -> AO3ExistingBookmark? {
+        guard let doc = try? SwiftSoup.parse(html),
+              let form = try? doc.select("form[action*=/bookmarks]").first(),
+              let action = try? form.attr("action"),
+              action.contains("/bookmarks/"),
+              let method = try? form.select("input[name=_method]").first()?.attr("value"),
+              method.lowercased() == "put"
+        else { return nil }
+
+        var input = AO3AuthService.BookmarkInput()
+        if let notes = try? form.select("textarea[name='bookmark[bookmarker_notes]']").first()?.text() {
+            input.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        input.tags = (try? form.select("input[name='bookmark[tag_string]']").first()?
+            .attr("value")) ?? ""
+        input.isPrivate = (try? form.select("input[type=checkbox][name='bookmark[private]']").first()?
+            .hasAttr("checked")) ?? false
+        input.isRec = (try? form.select("input[type=checkbox][name='bookmark[rec]']").first()?
+            .hasAttr("checked")) ?? false
+        let collections = (try? form.select("input[name='bookmark[collection_names]']").first()?
+            .attr("value")) ?? ""
+        return AO3ExistingBookmark(editPath: action, collectionNames: collections, input: input)
     }
 
     /// The first error AO3 renders after a rejected write (so the UI can show the
@@ -1139,12 +1175,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                 authorIdentities: identities
             ))
         }
-        var totalPages = page
-        for li in try doc.select("ol.pagination li").array() {
-            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
-                totalPages = value
-            }
-        }
+        let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
@@ -1155,14 +1186,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let blurbs = try doc.select(blurbSelector).array()
         // Skip any single malformed / non-work blurb rather than failing the page.
         let works = blurbs.compactMap { try? Self.parseBlurb($0) }
-        // AO3's pagination lists every page number (… 27); the largest is the
-        // total. Falls back to the current page when there's no pagination.
-        var totalPages = page
-        for li in try doc.select("ol.pagination li").array() {
-            if let value = try Int((li.text()).trimmingCharacters(in: .whitespaces)), value > totalPages {
-                totalPages = value
-            }
-        }
+        let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
@@ -1218,7 +1242,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             (try? el.select("dl.stats dd.\(cls)").first()?.text() ?? "") ?? ""
         }
         func statInt(_ cls: String) -> Int? {
-            Int(stat(cls).replacingOccurrences(of: ",", with: ""))
+            Self.statInt(cls, in: el)
         }
 
         // Series block: "Part <strong>N</strong> of <a href="/series/ID">Title</a>".

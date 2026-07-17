@@ -89,6 +89,22 @@ nonisolated struct AO3SeriesPreview: Equatable, Sendable {
 /// query parameters; the ids/values are taken from AO3's own search form. Covers
 /// the same filters as AO3's faceted sidebar, minus the live per-fandom counts
 /// (those come from a different browse endpoint — here you type tag names).
+/// Tiny text-parsing helpers shared by `LibraryFilters` and `AO3SummaryFilter` —
+/// both match a work's tag facets and word-count bounds, just over different
+/// model shapes (`SavedWork`'s flat/categorized tags vs. `AO3WorkSummary`'s arrays).
+nonisolated enum FilterTextMatching {
+    static func lowercased(_ values: [String]) -> Set<String> {
+        Set(values.map { $0.lowercased() })
+    }
+
+    /// The first run of digits in a free-typed word-count bound field, or nil if
+    /// the field has none (e.g. empty or non-numeric).
+    static func bound(_ text: String) -> Int? {
+        let digits = text.filter(\.isNumber)
+        return digits.isEmpty ? nil : Int(digits)
+    }
+}
+
 nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     var query: String = ""
     // Tag fields (comma-separated names).

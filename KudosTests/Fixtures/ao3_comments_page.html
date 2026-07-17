@@ -93,11 +93,16 @@
 
 <ul class="actions" id="navigation_for_comment_1002" >
     <li id="add_comment_reply_link_1002"><a data-remote="true" href="/comments/add_comment_reply?chapter_id=9003&amp;id=1002&amp;view_full_work=true">Reply</a></li>
-    <li><a href="/comments/1002/edit">Edit</a></li>
-    <li><a data-confirm="Are you sure?" data-method="delete" href="/comments/1002">Delete</a></li>
+  <li><a href="/comments/1002">Thread</a></li>
+    <li><form class="button_to" method="post" action="/comments/1002/freeze"><input type="hidden" name="_method" value="put" autocomplete="off" /><button type="submit">Freeze Thread</button><input type="hidden" name="authenticity_token" value="fixture-token" autocomplete="off" /></form></li>
+    <li id="edit_comment_link_1002">
+      <a data-remote="true" href="/comments/1002/edit">Edit</a>
+    </li>
+    <li id="delete_comment_link_1002">
+      <a data-remote="true" href="/comments/delete_comment?id=1002">Delete</a>
+    </li>
     <li><a href="/comments/1001">Parent</a></li>
     <li><a href="/comments/1001">Parent Thread</a></li>
-  <li><a href="/comments/1002">Thread</a></li>
 </ul>
 
   <div id="delete_comment_placeholder_1002" style="display:none;">

@@ -302,11 +302,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             } label: {
-                let finished = localWork?.isFinished ?? false
-                Label(
-                    finished ? "Mark as Still Reading" : "Mark as Finished",
-                    systemImage: finished ? "arrow.uturn.backward.circle" : "checkmark.circle"
-                )
+                let labels = WorkActionLabels.finished(isFinished: localWork?.isFinished ?? false)
+                Label(labels.title, systemImage: labels.systemImage)
             }
 
             Button {
@@ -367,7 +364,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if work.isInSavedForLaterQueue {
             switch work.epubPreservationStatus {
             case .preserved:
-                if hasReadableEPUB(for: work) {
+                if WorkReaderPreparation.hasReadableEPUB(for: work) {
                     return "Saved for Later — a local EPUB is kept for offline reading."
                 }
                 return "Saved for Later, but the local EPUB needs to be restored."
@@ -402,10 +399,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    private func hasReadableEPUB(for work: SavedWork) -> Bool {
-        work.hasEPUB && FileManager.default.fileExists(atPath: work.fileURL.path)
-    }
-
     // MARK: - Toolbar (favorite + more)
 
     @ToolbarContentBuilder
@@ -415,7 +408,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 withLocalWork { work in
                     work.isFavorite.toggle()
                     work.markModified()
-                    saveBestEffort("Saving favorite state failed")
+                    context.saveBestEffort(reason: "Saving favorite state failed")
                 }
             } label: {
                 let fav = localWork?.isFavorite ?? false
@@ -881,9 +874,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Ensures a local `SavedWork` exists, importing the remote work on demand (the
-    /// same download+import the reader already used — no new AO3 request types), then
-    /// runs `action` with it. Local works run `action` immediately.
+    /// Ensures a local `SavedWork` exists, importing the remote work on demand through
+    /// the same centralized resolve/download/import/apply-metadata sequence every other
+    /// remote-work action (`WorkCardActions.performRemoteAction`, bulk actions) already
+    /// uses — no new AO3 request types, and no separately-derived chapter count. Local
+    /// works, and works with an existing (possibly Recently-Deleted, silently revived)
+    /// local match, run `action` immediately without a download.
     private func withLocalWork(_ action: @escaping (SavedWork) -> Void) {
         resolveExistingIfNeeded()
         if let work = localWork { action(work); return }
@@ -893,14 +889,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             working = true
             loadError = nil
             do {
-                let temp = try await AO3Client.shared.downloadEPUB(workID: summary.id)
-                let posted = Int(summary.chapters.split(separator: "/").first?
-                    .trimmingCharacters(in: .whitespaces) ?? "") ?? 0
-                let saved = try await importEPUB(temp, source: summary.workURL,
-                                                 isComplete: summary.isComplete ?? false,
-                                                 seriesURL: summary.seriesURL ?? "",
-                                                 knownChapterCount: posted, into: context)
-                applyRemoteMetadata(summary, to: saved)
+                let saved = try await ReadingQueueService.resolveLocalWork(for: summary, in: context)
                 localWork = saved
                 working = false
                 action(saved)
@@ -912,15 +901,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 working = false
             }
         }
-    }
-
-    /// Copies the AO3 summary's stats / warnings / categories onto a freshly-imported
-    /// work so the detail (and a later Library open) shows full parity immediately — the
-    /// EPUB carries none of these. The background AO3 refresh keeps them current. Only
-    /// fills blanks, so it never clobbers values the import already set.
-    private func applyRemoteMetadata(_ summary: AO3WorkSummary, to work: SavedWork) {
-        ReadingQueueService.applyRemoteMetadata(summary, to: work)
-        saveBestEffort("Saving remote metadata failed")
     }
 
     // MARK: - Reading Queues
@@ -1078,22 +1058,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 + "\(result.preserved) work\(result.preserved == 1 ? "" : "s")."
         }
         if result.total == 0 { return "No other series works were found." }
-        var parts: [String] = []
-        if result.preserved > 0 {
-            parts.append("\(result.preserved) preserved")
-        }
-        if result.alreadyPreserved > 0 {
-            parts.append("\(result.alreadyPreserved) already preserved")
-        }
-        if result.unavailable > 0 {
-            parts.append("\(result.unavailable) unavailable")
-        }
-        if result.failed > 0 {
-            parts.append("\(result.failed) failed")
-        }
-        if result.skipped > 0 {
-            parts.append("\(result.skipped) skipped")
-        }
+        let parts = result.summaryParts(verb: "preserved")
         if parts.isEmpty {
             return "Series works are already preserved for later."
         }
@@ -1164,7 +1129,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             let tag = tag(named: name)
             if !work.tags.contains(where: { $0.name == tag.name }) {
                 work.tags.append(tag)
-                saveBestEffort("Saving tag assignment failed")
+                context.saveBestEffort(reason: "Saving tag assignment failed")
             }
         }
     }
@@ -1172,7 +1137,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private func removeTag(_ tag: Tag) {
         guard let work = localWork else { return }
         work.tags.removeAll { $0.name == tag.name }
-        saveBestEffort("Saving tag removal failed")
+        context.saveBestEffort(reason: "Saving tag removal failed")
     }
 
     /// Returns an existing tag with this name (case-insensitive) or creates one.
@@ -1183,16 +1148,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         let created = Tag(name: name)
         context.insert(created)
         return created
-    }
-
-    private func saveBestEffort(_ reason: StaticString) {
-        do {
-            try context.save()
-        } catch {
-            Log.library.error(
-                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-        }
     }
 }
 

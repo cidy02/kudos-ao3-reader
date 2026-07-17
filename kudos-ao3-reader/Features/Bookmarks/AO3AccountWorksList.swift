@@ -15,7 +15,6 @@ struct AO3AccountWorksList: View {
         case bookmarks
         case history
         case subscriptions
-        case myWorks
         /// Works in a named collection (the user's own collections list links here).
         case collection(name: String, title: String)
 
@@ -25,7 +24,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "My AO3 Bookmarks"
             case .history: "My AO3 History"
             case .subscriptions: "My Subscriptions"
-            case .myWorks: "My Works"
             case let .collection(_, title): title
             }
         }
@@ -36,7 +34,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "No bookmarks yet"
             case .history: "No reading history"
             case .subscriptions: "No subscriptions"
-            case .myWorks: "No works yet"
             case .collection: "No works in this collection"
             }
         }
@@ -47,7 +44,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "Bookmark a work on AO3 to see it here."
             case .history: "Works you read on AO3 show up here."
             case .subscriptions: "Works you subscribe to on AO3 show up here."
-            case .myWorks: "Works you post on AO3 show up here."
             case .collection: "This collection has no works yet."
             }
         }
@@ -58,7 +54,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "AO3 Bookmarks"
             case .history: "AO3 History"
             case .subscriptions: "AO3 Subscriptions"
-            case .myWorks: "My Works"
             case let .collection(_, title): title
             }
         }
@@ -69,7 +64,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: "Log in to AO3 to see the works you've bookmarked."
             case .history: "Log in to AO3 to see your reading history."
             case .subscriptions: "Log in to AO3 to see the works you subscribe to."
-            case .myWorks: "Log in to AO3 to see the works you've posted."
             case .collection: "Log in to AO3 to see this collection's works."
             }
         }
@@ -80,7 +74,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: AO3Client.bookmarksURL(username: username, page: page)
             case .history: AO3Client.historyURL(username: username, page: page)
             case .subscriptions: AO3Client.subscriptionsURL(username: username, page: page)
-            case .myWorks: AO3Client.myWorksURL(username: username, page: page)
             case let .collection(name, _): AO3Client.collectionWorksURL(name: name, page: page)
             }
         }
@@ -89,7 +82,7 @@ struct AO3AccountWorksList: View {
             switch self {
             // Standard work-blurb pages; bookmarks and subscriptions need their own
             // outer selector / parser.
-            case .markedForLater, .history, .myWorks, .collection:
+            case .markedForLater, .history, .collection:
                 try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks:
                 try await AO3Client.shared.bookmarksPage(for: request, page: page)
@@ -107,7 +100,6 @@ struct AO3AccountWorksList: View {
             case .bookmarks: .bookmarks
             case .history: .history
             case .subscriptions: .subscriptions
-            case .myWorks: .myWorks
             case .collection: nil
             }
         }

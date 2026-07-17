@@ -332,18 +332,3 @@ struct MatureRevealToggle: View {
         }
     }
 }
-
-/// Placeholder shown when a list's only items are Mature works hidden by privacy.
-struct MatureContentHiddenView: View {
-    @Environment(PrivacyGate.self) private var gate
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Mature works hidden", systemImage: "eye.slash")
-        } description: {
-            Text("Mature and Explicit works are hidden. Reveal them to read.")
-        } actions: {
-            Button("Show mature") { gate.toggleRevealAll() }
-        }
-    }
-}

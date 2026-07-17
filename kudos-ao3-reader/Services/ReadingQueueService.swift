@@ -21,6 +21,22 @@ enum ReadingQueueService {
         var completed: Int {
             preserved + alreadyPreserved + skipped + failed + unavailable + cancelled
         }
+
+        /// The count fragments ("N <verb>", "M already preserved", …) shared by
+        /// every series-preservation completion message. Empty when there's
+        /// nothing to report. `verb` names what a non-zero `preserved` count did
+        /// ("preserved" for Work Detail's own-series preservation, "added" for
+        /// Add to Queue's to-other-queues flow) — the one piece of copy that
+        /// genuinely differs between call sites.
+        func summaryParts(verb: String) -> [String] {
+            var parts: [String] = []
+            if preserved > 0 { parts.append("\(preserved) \(verb)") }
+            if alreadyPreserved > 0 { parts.append("\(alreadyPreserved) already preserved") }
+            if unavailable > 0 { parts.append("\(unavailable) unavailable") }
+            if failed > 0 { parts.append("\(failed) failed") }
+            if skipped > 0 { parts.append("\(skipped) skipped") }
+            return parts
+        }
     }
 
     struct SeriesPreservationPrompt: Equatable {
@@ -77,16 +93,6 @@ enum ReadingQueueService {
         )
     }
 
-    private static func saveBestEffort(_ context: ModelContext, reason: StaticString) {
-        do {
-            try context.save()
-        } catch {
-            Log.library.error(
-                "\(String(describing: reason), privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-        }
-    }
-
     @discardableResult
     static func ensureSavedForLaterQueue(in context: ModelContext) -> ReadingQueue {
         let descriptor = FetchDescriptor<ReadingQueue>(
@@ -117,7 +123,7 @@ enum ReadingQueueService {
                 }
                 context.delete(duplicate)
             }
-            saveBestEffort(context, reason: "Saving merged Saved for Later queue failed")
+            context.saveBestEffort(reason: "Saving merged Saved for Later queue failed")
             return primary
         }
 
@@ -127,7 +133,7 @@ enum ReadingQueueService {
             sortOrder: -1000
         )
         context.insert(queue)
-        saveBestEffort(context, reason: "Saving Saved for Later queue failed")
+        context.saveBestEffort(reason: "Saving Saved for Later queue failed")
         return queue
     }
 
@@ -139,7 +145,7 @@ enum ReadingQueueService {
             sortOrder: nextQueueSortOrder(in: context)
         )
         context.insert(queue)
-        saveBestEffort(context, reason: "Saving reading queue failed")
+        context.saveBestEffort(reason: "Saving reading queue failed")
         return queue
     }
 
@@ -155,7 +161,7 @@ enum ReadingQueueService {
         for work in works {
             normalize(work)
         }
-        saveBestEffort(context, reason: "Saving queue normalization failed")
+        context.saveBestEffort(reason: "Saving queue normalization failed")
     }
 
     static func normalize(_ work: SavedWork) {
@@ -220,7 +226,7 @@ enum ReadingQueueService {
         work.markModified(now)
         work.isQueuedForLater = true
         normalize(work)
-        saveBestEffort(context, reason: "Saving queue membership failed")
+        context.saveBestEffort(reason: "Saving queue membership failed")
         return membership
     }
 
@@ -351,24 +357,24 @@ enum ReadingQueueService {
         normalize(work)
         guard work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil else {
             work.metadataSyncStatus = work.workTags.isEmpty ? .incomplete : .complete
-            saveBestEffort(context, reason: "Saving queue metadata status failed")
+            context.saveBestEffort(reason: "Saving queue metadata status failed")
             return
         }
         guard work.needsAO3Refresh else {
             work.metadataSyncStatus = .complete
-            saveBestEffort(context, reason: "Saving queue metadata completion failed")
+            context.saveBestEffort(reason: "Saving queue metadata completion failed")
             return
         }
 
         work.metadataSyncStatus = .syncing
-        saveBestEffort(context, reason: "Saving queue metadata sync start failed")
+        context.saveBestEffort(reason: "Saving queue metadata sync start failed")
         await WorkTags.refreshFromAO3(for: work, in: context)
         if work.needsAO3Refresh {
             work.metadataSyncStatus = work.ao3Unavailable ? .failed : .incomplete
         } else {
             work.metadataSyncStatus = .complete
         }
-        saveBestEffort(context, reason: "Saving queue metadata sync result failed")
+        context.saveBestEffort(reason: "Saving queue metadata sync result failed")
     }
 
     static func preserveSeries(
@@ -548,7 +554,7 @@ enum ReadingQueueService {
         work.markModified(now)
         work.isQueuedForLater = !work.queueMemberships.isEmpty
         normalize(work)
-        saveBestEffort(context, reason: "Saving queue removal failed")
+        context.saveBestEffort(reason: "Saving queue removal failed")
     }
 
     static func removeFromQueueAndDeleteIfQueueOnly(
@@ -706,6 +712,6 @@ enum ReadingQueueService {
             membership.markModified()
         }
         queue.markMembershipChanged()
-        saveBestEffort(context, reason: "Saving queue reorder failed")
+        context.saveBestEffort(reason: "Saving queue reorder failed")
     }
 }
