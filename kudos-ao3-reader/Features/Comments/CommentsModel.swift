@@ -5,9 +5,9 @@ import SwiftUI
 ///
 /// Networking respect (see `docs/ai/COMMENTS_HANDOFF.md`): every request maps to
 /// an explicit user action — opening the screen, switching chapter/page/order,
-/// or pull-to-refresh. Pages are cached for this Comments session so re-visits
-/// don't re-fetch, and nothing loads eagerly, in the background, or per-chapter
-/// in bulk.
+/// or pull-to-refresh. Pages are cached for this Comments session, under a short
+/// TTL, so re-visits don't re-fetch, and nothing loads eagerly, in the background,
+/// or per-chapter in bulk.
 @MainActor
 @Observable
 final class CommentsModel {
@@ -637,7 +637,7 @@ final class CommentsModel {
             authenticationScope: expected.cacheScope,
             sessionGeneration: expected.generation
         )
-        if !forceRefresh, let cached = cache.page(for: key) {
+        if !forceRefresh, let cached = cache.freshPage(for: key) {
             isFromCache = true
             if phase != .loaded { phase = .loaded }
             return cached
@@ -1049,7 +1049,14 @@ final class CommentsModel {
 /// Comment-page + chapter-index cache for one Comments-viewing session. Each
 /// `CommentsModel` owns its own instance (never a shared singleton), so entries
 /// live exactly as long as the screen does — cleared for free on dismiss when
-/// SwiftUI deallocates the `@State` that owns it, no TTL bookkeeping needed.
+/// SwiftUI deallocates the `@State` that owns it.
+///
+/// Owning the cache per screen bounds how *much* is retained, but not how *stale*
+/// any one entry gets: a Comments screen left open would otherwise serve its first
+/// fetch for the rest of its life, and the stale banner only appears when offline.
+/// Hence the TTL on `freshPage`. Reads that would rather have something old than
+/// nothing at all use `page` instead.
+///
 /// Intentionally in-memory only — comments are live site state, not library
 /// content, and nothing here is meant to outlive the session that fetched it.
 @MainActor
@@ -1064,9 +1071,23 @@ final class CommentsPageCache {
 
     private var pages: [Key: AO3CommentsPage] = [:]
     private var chapterIndexes: [ChapterKey: [AO3ChapterRef]] = [:]
+    private let ttl: TimeInterval
 
+    init(ttl: TimeInterval = 300) {
+        self.ttl = ttl
+    }
+
+    /// Any cached entry, however old — for reads where a stale page beats no page.
     func page(for key: Key) -> AO3CommentsPage? {
         pages[key]
+    }
+
+    /// A cached entry still inside the TTL, for the happy-path read: past it, the
+    /// page re-fetches on the next visit rather than being served indefinitely.
+    func freshPage(for key: Key) -> AO3CommentsPage? {
+        guard let cached = pages[key],
+              Date().timeIntervalSince(cached.fetchedAt) < ttl else { return nil }
+        return cached
     }
 
     func store(_ page: AO3CommentsPage, for key: Key) {
