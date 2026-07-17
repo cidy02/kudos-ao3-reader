@@ -325,7 +325,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
             hasItems: true,
-            onSeeAll: collections.count > 11 ? { path.append(AllCollectionsDestination()) } : nil
+            onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             Button {
                 newCollectionName = ""
