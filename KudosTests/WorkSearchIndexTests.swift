@@ -107,6 +107,27 @@ struct WorkSearchIndexTests {
         #expect(WorkSearchIndex.matches(work, terms: WorkSearchIndex.terms(from: "resume chronicles")))
     }
 
+    @Test func rebuildIfNeededSweepsLargeLibrariesCompletely() async throws {
+        // Big enough to cross several incremental-save boundaries and (usually)
+        // several time slices — the sweep must index every record exactly once
+        // regardless of how the pacing chops it up.
+        let context = try makeContext()
+        for index in 0..<1_200 {
+            let work = SavedWork(title: "Bulk Work \(index)", author: "Writer \(index % 7)", sourceURL: "")
+            work.summary = "Summary text for bulk work number \(index)."
+            context.insert(work)
+        }
+        try context.save()
+
+        #expect(await WorkSearchIndex.rebuildIfNeeded(in: context) == 1_200)
+        let version = WorkSearchIndex.currentVersion
+        let unindexed = (try? context.fetch(FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.searchIndexVersion != version }
+        ))) ?? []
+        #expect(unindexed.isEmpty)
+        #expect(await WorkSearchIndex.rebuildIfNeeded(in: context) == 0)
+    }
+
     @Test func backupRestoreRebuildsSearchTextWithoutCarryingIt() throws {
         let sourceContext = try makeContext()
         let work = SavedWork(

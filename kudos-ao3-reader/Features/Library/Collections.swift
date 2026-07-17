@@ -422,20 +422,25 @@ struct AddWorksToCollectionView: View {
             .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
-    private var filtered: [SavedWork] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return candidates }
-        return candidates.filter { work in
-            work.title.lowercased().contains(trimmed)
-                || work.author.lowercased().contains(trimmed)
-                || work.workFandoms.contains { $0.lowercased().contains(trimmed) }
-        }
+    /// Narrows the candidates through the precomputed `WorkSearchIndex` text —
+    /// the same case-/diacritic-insensitive AND-across-terms matching as Global
+    /// Search (title, author, series, tags, …), replacing a per-keystroke
+    /// lowercase rescan of title/author/every fandom of every library work.
+    private func filteredWorks(in eligible: [SavedWork]) -> [SavedWork] {
+        let terms = WorkSearchIndex.terms(from: query)
+        guard !terms.isEmpty else { return eligible }
+        return eligible.filter { WorkSearchIndex.matches($0, terms: terms) }
     }
 
     var body: some View {
+        // Evaluated once per render — eligibility (library scan + privacy gate)
+        // and the query match are shared by every branch below instead of being
+        // recomputed by each `candidates`/`filtered` mention.
+        let eligible = candidates
+        let matches = filteredWorks(in: eligible)
         NavigationStack {
             Group {
-                if candidates.isEmpty {
+                if eligible.isEmpty {
                     ContentUnavailableView {
                         Label("No works to add", systemImage: "square.stack")
                     } description: {
@@ -444,12 +449,12 @@ struct AddWorksToCollectionView: View {
                     }
                 } else {
                     List {
-                        ForEach(filtered) { work in
+                        ForEach(matches) { work in
                             Button { toggle(work) } label: { row(work) }
                                 .buttonStyle(.plain)
                         }
                         .appThemedRows()
-                        if filtered.isEmpty {
+                        if matches.isEmpty {
                             Text("No works match “\(query)”.")
                                 .foregroundStyle(.secondary)
                                 .appThemedRows()

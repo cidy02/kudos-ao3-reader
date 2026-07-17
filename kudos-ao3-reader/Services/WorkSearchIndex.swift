@@ -23,9 +23,17 @@ enum WorkSearchIndex {
     /// recall — AO3 blurbs are typically well under it.
     private static let summaryLimit = 600
 
-    /// Yield to the run loop every N records so a large stale library doesn't
-    /// freeze the UI for the whole launch-time rebuild.
-    private static let yieldInterval = 200
+    /// Launch-rebuild pacing. A version bump reindexes the entire library on the
+    /// main actor, so each uninterrupted slice stays within a frame-ish budget and
+    /// then briefly sleeps, letting typing/scrolling interleave — a fixed
+    /// record-count yield cadence let heavy records (user-tag relationship faults,
+    /// long summaries) stall input for seconds on large libraries. Saving every
+    /// `saveInterval` records bounds autosave churn and preserves progress if the
+    /// app is killed mid-sweep (the sweep is idempotent, but re-doing thousands of
+    /// records every launch is the exact burst this pacing exists to avoid).
+    private static let sliceBudget: Duration = .milliseconds(5)
+    private static let sliceBreather: Duration = .milliseconds(2)
+    private static let saveInterval = 250
 
     // MARK: Normalization
 
@@ -110,15 +118,24 @@ enum WorkSearchIndex {
             FetchDescriptor<SavedWork>(predicate: #Predicate { $0.searchIndexVersion != version })
         )) ?? []
         guard !stale.isEmpty else { return 0 }
-        var processed = 0
+        var sinceSave = 0
+        let clock = ContinuousClock()
+        var sliceStart = clock.now
         for work in stale {
-            // The yields below let other main-actor work interleave — including a
-            // user deleting one of the fetched works. Touching an invalidated model
+            // The suspensions below let other main-actor work interleave — including
+            // a user deleting one of the fetched works. Touching an invalidated model
             // asserts, so re-check liveness (same guard as the migration service).
             guard work.modelContext != nil else { continue }
             reindex(work)
-            processed += 1
-            if processed.isMultiple(of: yieldInterval) { await Task.yield() }
+            sinceSave += 1
+            if sinceSave >= saveInterval {
+                try? context.save()
+                sinceSave = 0
+            }
+            if clock.now - sliceStart > sliceBudget {
+                try? await Task.sleep(for: sliceBreather)
+                sliceStart = clock.now
+            }
         }
         try? context.save()
         Log.library.info("Search index rebuilt for \(stale.count, privacy: .public) work(s)")

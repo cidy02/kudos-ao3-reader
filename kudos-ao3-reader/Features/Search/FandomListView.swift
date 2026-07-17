@@ -10,16 +10,19 @@ struct FandomListView: View {
     let onSelect: (String) -> Void
 
     @State private var fandoms: [AO3Fandom] = []
+    /// Names normalized once per load (`WorkSearchIndex.normalize`) so the live
+    /// filter is a plain substring pass — a category holds up to tens of
+    /// thousands of fandoms, and locale-collating every name on every keystroke
+    /// (the old `localizedCaseInsensitiveContains` filter) froze typing.
+    @State private var searchEntries: [FandomCatalog.SearchEntry] = []
+    /// The rows the List renders. Refreshed by the debounced filter task instead
+    /// of recomputed per keystroke render — re-diffing a many-thousand-row list
+    /// on every letter was the other half of the freeze.
+    @State private var filtered: [AO3Fandom] = []
     @State private var phase: Phase = .loading
     @State private var query = ""
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
-
-    private var filtered: [AO3Fandom] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return fandoms }
-        return fandoms.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
-    }
 
     var body: some View {
         Group {
@@ -48,6 +51,7 @@ struct FandomListView: View {
                 .cardList()
                 .refreshable { await refresh() }
                 .searchable(text: $query, prompt: "Filter \(category.name)")
+                .task(id: query) { await applyFilter() }
             }
         }
         .navigationTitle(category.name)
@@ -56,6 +60,28 @@ struct FandomListView: View {
         #endif
             .hidesFloatingTabBar()
             .task { if fandoms.isEmpty { await load() } }
+    }
+
+    /// One pass over the precomputed normalized names — case- and
+    /// diacritic-insensitive (matching Global Search's folding, so "pokemon"
+    /// finds "Pokémon"), preserving the list's most-popular-first order.
+    private func matchedFandoms(for trimmedQuery: String) -> [AO3Fandom] {
+        guard !trimmedQuery.isEmpty else { return fandoms }
+        let normalizedQuery = WorkSearchIndex.normalize(trimmedQuery)
+        return searchEntries.filter { $0.normalizedName.contains(normalizedQuery) }.map(\.fandom)
+    }
+
+    /// Debounced filter: coalesces a keystroke burst into one scan + one List
+    /// diff. An emptied query restores the full list instantly.
+    private func applyFilter() async {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            filtered = fandoms
+            return
+        }
+        // Sleep throws when a newer keystroke restarts the task — just stop.
+        guard (try? await Task.sleep(for: .milliseconds(120))) != nil else { return }
+        filtered = matchedFandoms(for: trimmed)
     }
 
     private func load() async {
@@ -69,6 +95,12 @@ struct FandomListView: View {
             // Surface the biggest fandoms first; the index arrives alphabetically.
             list.sort { ($0.workCount ?? 0) > ($1.workCount ?? 0) }
             fandoms = list
+            searchEntries = list.map {
+                FandomCatalog.SearchEntry(normalizedName: WorkSearchIndex.normalize($0.name), fandom: $0)
+            }
+            // Re-apply any active filter against the fresh list right away — the
+            // debounced task only reruns on query changes, not data changes.
+            filtered = matchedFandoms(for: query.trimmingCharacters(in: .whitespaces))
             phase = .loaded
         } catch let error as AO3Error {
             if fandoms.isEmpty {

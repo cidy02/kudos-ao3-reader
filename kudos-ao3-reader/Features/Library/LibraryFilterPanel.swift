@@ -197,24 +197,33 @@ private struct LibraryOptionPicker: View {
     @Binding var selection: Set<String>
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    /// Options normalized once per presentation so each keystroke is one plain
+    /// substring pass (case- and diacritic-folded, matching Global Search) —
+    /// freeform-tag lists reach thousands of entries, and locale-collating each
+    /// one per keystroke made typing stutter.
+    @State private var normalizedOptions: [(value: String, normalized: String)] = []
 
     private var filtered: [String] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return options }
-        return options.filter { $0.localizedCaseInsensitiveContains(trimmed) }
+        let normalizedQuery = WorkSearchIndex.normalize(trimmed)
+        return normalizedOptions.filter { $0.normalized.contains(normalizedQuery) }.map(\.value)
     }
 
     var body: some View {
         NavigationStack {
             List {
+                // Evaluated once per render — the isEmpty branch and the ForEach
+                // below share this instead of re-running the filter.
+                let matches = filtered
                 if options.isEmpty {
                     Text("No \(title.lowercased()) in your library yet.")
                         .foregroundStyle(.secondary)
-                } else if filtered.isEmpty {
+                } else if matches.isEmpty {
                     Text("No matches for “\(query)”.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(filtered, id: \.self) { value in
+                    ForEach(matches, id: \.self) { value in
                         Button {
                             if selection.contains(value) {
                                 selection.remove(value)
@@ -244,6 +253,9 @@ private struct LibraryOptionPicker: View {
                 .navigationBarTitleDisplayMode(.inline)
             #endif
                 .searchable(text: $query, prompt: "Filter \(title)")
+                .task {
+                    normalizedOptions = options.map { ($0, WorkSearchIndex.normalize($0)) }
+                }
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { dismiss() }
