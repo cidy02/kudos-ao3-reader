@@ -28,11 +28,23 @@ struct ToolbarIconButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(role: role, action: action) {
-            Label(title, systemImage: systemImage)
+        // `.tint(_:)` is only applied when non-nil: calling it even with `nil` opts
+        // this button out of the system's automatic Liquid Glass grouping with
+        // adjacent untinted toolbar buttons, which otherwise share one pill — an
+        // always-nil-tint button ends up rendered in its own isolated pill instead.
+        if let tint {
+            Button(role: role, action: action) {
+                Label(title, systemImage: systemImage)
+            }
+            .tint(tint)
+            .disabled(isDisabled)
+            .help(help ?? title)
+        } else {
+            Button(role: role, action: action) {
+                Label(title, systemImage: systemImage)
+            }
+            .disabled(isDisabled)
+            .help(help ?? title)
         }
-        .tint(tint)
-        .disabled(isDisabled)
-        .help(help ?? title)
     }
 }
