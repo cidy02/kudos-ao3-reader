@@ -22,15 +22,18 @@ extension WorkDetailView {
 
     @ViewBuilder
     private var summarySection: some View {
-        if !displaySummary.isEmpty {
+        // Bound once per render: a local work's summary strips HTML on read.
+        let summary = displaySummary
+        if !summary.isEmpty {
+            let collapses = WorkDetailPresentation.summaryCollapses(summary)
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(displaySummary)
+                    Text(summary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(summaryCollapsed ? 8 : nil)
-                    if WorkDetailPresentation.summaryCollapses(displaySummary) {
+                        .lineLimit(collapses && !summaryExpanded ? 8 : nil)
+                    if collapses {
                         Button(summaryExpanded ? "Show Less" : "Show More") {
-                            withAnimation { summaryExpanded.toggle() }
+                            animateUnlessReduced { summaryExpanded.toggle() }
                         }
                         .font(.subheadline.weight(.medium))
                         .buttonStyle(.borderless)
@@ -44,21 +47,18 @@ extension WorkDetailView {
         }
     }
 
-    private var summaryCollapsed: Bool {
-        WorkDetailPresentation.summaryCollapses(displaySummary) && !summaryExpanded
-    }
-
     // MARK: Quick actions
 
-    private static let quickActionColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
+    /// Three columns normally; two at accessibility Dynamic Type sizes so the
+    /// tile labels keep room to grow instead of scaling away.
+    private var quickActionColumns: [GridItem] {
+        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+    }
 
     private var quickActionsSection: some View {
         Section {
-            LazyVGrid(columns: Self.quickActionColumns, spacing: 10) {
+            LazyVGrid(columns: quickActionColumns, spacing: 10) {
                 readQuickAction
                 if let ao3URL {
                     quickAction(title: "Open on AO3", systemImage: "safari") {
@@ -104,7 +104,9 @@ extension WorkDetailView {
 
     private var readQuickAction: some View {
         let label = WorkDetailPresentation.readAction(
-            hasEPUB: localWork?.hasEPUB ?? false, working: working
+            hasEPUB: localWork?.hasEPUB ?? false, working: working,
+            continueReading: (localWork?.hasStartedReading ?? false)
+                && !(localWork?.isFinished ?? false)
         )
         return quickAction(
             title: label.title, systemImage: label.systemImage,
@@ -170,7 +172,7 @@ extension WorkDetailView {
             systemImage: "bubble.left.and.bubble.right",
             detail: displayComments.map { $0.formatted() }
         ) {
-            withAnimation { selectedTab = .discussion }
+            animateUnlessReduced { selectedTab = .discussion }
         }
     }
 
@@ -251,7 +253,7 @@ extension WorkDetailView {
                         // Tappable: jumps to the Discussion section, which owns
                         // the full comments entry points.
                         Button {
-                            withAnimation { selectedTab = .discussion }
+                            animateUnlessReduced { selectedTab = .discussion }
                         } label: {
                             HStack {
                                 Text("Comments")

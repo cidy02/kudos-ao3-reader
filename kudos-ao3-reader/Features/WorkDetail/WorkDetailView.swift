@@ -40,6 +40,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @Environment(\.modelContext) var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(AppRouter.self) var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(DownloadQueue.self) private var downloadQueue
@@ -50,6 +52,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// a remote summary, or the record created when a remote work is imported on tap.
     @State var localWork: SavedWork?
     @State private var refreshedRemote: AO3WorkSummary?
+    /// Published date parsed by a remote pull-to-refresh. `AO3WorkSummary`
+    /// doesn't carry it, so it's kept screen-local rather than widening the
+    /// shared summary model (no extra request — same fetched work page).
+    @State private var refreshedPublished: String?
     @State private var resolvedExisting = false
 
     /// The selected top-level section. Plain view state, like Account's
@@ -337,7 +343,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     var displayPublishedDate: String {
-        localWork?.datePublished ?? ""
+        firstNonEmpty(localWork?.datePublished, refreshedPublished)
     }
 
     var displayUpdatedDate: String {
@@ -544,7 +550,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             if let work = localWork {
                 try await WorkMetadataRefresh.refresh(work, in: context)
             } else if let summary = remote {
-                refreshedRemote = try await WorkMetadataRefresh.remoteSummary(workID: summary.id)
+                let metadata = try await WorkMetadataRefresh.remoteMetadata(workID: summary.id)
+                refreshedRemote = metadata.summaryValue
+                refreshedPublished = metadata.datePublished
             } else {
                 return
             }
@@ -563,7 +571,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// local match, run `action` immediately without a download.
     func withLocalWork(_ action: @escaping (SavedWork) -> Void) {
         resolveExistingIfNeeded()
-        if let work = localWork { action(work); return }
+        if let work = localWork {
+            // Removing the last queue membership can soft-delete a queue-only
+            // work while this screen stays bound to it. Acquiring/mutating a
+            // Recently Deleted record must revive it first, never touch it
+            // while hidden (docs/DATA_AND_PERSISTENCE_INVARIANTS.md).
+            if work.isPendingDeletion {
+                PreservedWorkService.restore(work, in: context)
+            }
+            action(work)
+            return
+        }
         // A remote work needs importing; ignore re-taps while one is already in flight.
         guard let summary = remote, !working else { return }
         Task {
@@ -649,13 +667,35 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
             in: context
         )
-        if work.isPendingDeletion, case .remote = source {
+        queueNotice = "Removed from Saved for Later."
+        switch WorkDetailPresentation.postRemovalAction(
+            isPendingDeletion: work.isPendingDeletion,
+            hasRemoteSource: remote != nil
+        ) {
+        case .keepLocal:
+            break
+        case .showRemote:
             // The record existed only for the queue; the page returns to remote
             // state — the same rule as resolveExistingIfNeeded, which never adopts
             // a Recently-Deleted match.
             localWork = nil
+        case .dismiss:
+            // Opened directly from the (now soft-deleted) local record: there is
+            // no remote state to fall back to, and leaving the detail bound to a
+            // hidden record would let later taps mutate it while hidden. Return
+            // to the previous screen instead.
+            dismiss()
         }
-        queueNotice = "Removed from Saved for Later."
+    }
+
+    /// Section switches and summary expansion animate only when the user hasn't
+    /// asked for reduced motion.
+    func animateUnlessReduced(_ change: () -> Void) {
+        if reduceMotion {
+            change()
+        } else {
+            withAnimation { change() }
+        }
     }
 
     func retryPreservation(_ work: SavedWork) {

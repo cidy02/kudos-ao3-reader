@@ -56,6 +56,7 @@ struct CommentsView: View {
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
         initialCommentID: Int? = nil, initialFocusesChapter: Bool = false,
+        initialComposes: Bool = false,
         initialReplyCommentID: Int? = nil,
         requiredSessionGeneration: Int? = nil,
         isModal: Bool = false, onRequestExpand: (() -> Void)? = nil,
@@ -73,6 +74,7 @@ struct CommentsView: View {
             initialChapterPosition: initialChapterPosition,
             initialCommentID: initialCommentID,
             initialFocusesChapter: initialFocusesChapter,
+            initialComposes: initialComposes,
             initialReplyCommentID: initialReplyCommentID
         ))
     }

@@ -235,6 +235,60 @@ struct ReadingQueueTests {
         #expect(FileManager.default.fileExists(atPath: fileURL.path))
     }
 
+    @Test func detailRemovalPathRevivesQueueOnlyWorkBeforeMutation() throws {
+        // Work Details' "Remove from Later" can soft-delete a queue-only work
+        // while the detail screen stays bound to it. Any later mutation from
+        // that screen must revive the record first (restore + act), never
+        // mutate it while hidden — docs/DATA_AND_PERSISTENCE_INVARIANTS.md.
+        let context = try makeContext()
+
+        let work = SavedWork(
+            title: "Detail Removal Revive",
+            author: "Writer",
+            sourceURL: "https://archiveofourown.org/works/656"
+        )
+        work.hasEPUB = true
+        context.insert(work)
+
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        ReadingQueueService.add(work, to: queue, in: context)
+        ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: queue, in: context)
+
+        #expect(work.isPendingDeletion)
+        #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.recordID == work.id })
+
+        // The view's withLocalWork guard: revive, then run the action (Save).
+        PreservedWorkService.restore(work, in: context)
+        WorkLifecycle.setSaved(work, true, in: context)
+
+        #expect(!work.isPendingDeletion)
+        #expect(work.deletedAt == nil)
+        #expect(work.isSaved)
+        #expect(!(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.recordID == work.id }))
+    }
+
+    @Test func orderedWorksProjectionSortsAndSkipsSoftDeleted() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Projection", in: context)
+
+        let first = SavedWork(title: "First", author: "A",
+                              sourceURL: "https://archiveofourown.org/works/661")
+        let second = SavedWork(title: "Second", author: "B",
+                               sourceURL: "https://archiveofourown.org/works/662")
+        let hidden = SavedWork(title: "Hidden", author: "C",
+                               sourceURL: "https://archiveofourown.org/works/663")
+        for work in [first, second, hidden] {
+            context.insert(work)
+            ReadingQueueService.add(work, to: queue, in: context)
+        }
+        // Reverse the assigned order so the sort is actually exercised.
+        ReadingQueueService.reorder([second.id, first.id, hidden.id], in: queue, context: context)
+        PreservedWorkService.softDelete(hidden, in: context)
+
+        let ordered = ReadingQueueService.orderedWorks(in: queue)
+        #expect(ordered.map(\.title) == ["Second", "First"])
+    }
+
     @Test func removeOneQueueMembershipKeepsWorkIfOtherMembershipExists() throws {
         let context = try makeContext()
         let work = SavedWork(

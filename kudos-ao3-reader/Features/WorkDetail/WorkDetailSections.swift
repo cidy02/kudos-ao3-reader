@@ -36,8 +36,12 @@ extension WorkDetailView {
         let groups = tagGroups
         if groups.isEmpty {
             Section {
-                Text("No AO3 tags are available for this work yet. "
-                    + "Pull to refresh to fetch the latest details from AO3.")
+                // Only offer an AO3 refresh when a refresh can actually succeed;
+                // a plain imported EPUB has no AO3 identity to fetch from.
+                Text(ao3WorkID != nil
+                    ? "No AO3 tags are available for this work yet. "
+                        + "Pull to refresh to fetch the latest details from AO3."
+                    : "This imported work isn't linked to AO3, so it has no AO3 tags.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .cardRow()
@@ -45,11 +49,15 @@ extension WorkDetailView {
         } else {
             ForEach(Array(groups.enumerated()), id: \.element.title) { index, group in
                 Section {
-                    FlowLayout(spacing: 8, rowSpacing: 8) {
+                    FlowLayout(spacing: 8, rowSpacing: 4) {
                         ForEach(group.tags, id: \.self) { tag in
-                            // Tap a tag → search AO3 for works carrying it.
+                            // Tap a tag → search AO3 for works carrying it. Full
+                            // canonical text wraps (no truncation), and the frame +
+                            // content shape give every chip a ≥44pt hit target.
                             Button { router.searchAO3(group.field, tag) } label: {
-                                TagChip(text: tag)
+                                TagChip(text: tag, multiline: true)
+                                    .frame(minHeight: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -91,7 +99,7 @@ extension WorkDetailView {
 
                     // A single-chapter work has no per-chapter view worth opening;
                     // unknown totals ("5/?") keep the entry available.
-                    if WorkDetailPresentation.totalChapterCount(from: displayChapters) != 1 {
+                    if SavedWork.totalChapterCount(from: displayChapters) != 1 {
                         NavigationLink {
                             CommentsView(
                                 workID: id, context: commentsWorkContext,
@@ -103,7 +111,10 @@ extension WorkDetailView {
                     }
 
                     NavigationLink {
-                        CommentsView(workID: id, context: commentsWorkContext)
+                        CommentsView(
+                            workID: id, context: commentsWorkContext,
+                            initialComposes: true
+                        )
                     } label: {
                         Label("Write a Comment", systemImage: "pencil")
                     }
@@ -139,6 +150,10 @@ extension WorkDetailView {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .cardRow()
+            } footer: {
+                // The pre-redesign remote lifecycle guidance (reading downloads
+                // the file; finishing frees it unless saved/favorited).
+                Text(statusFooter)
             }
         }
         myTagsSection
@@ -246,8 +261,8 @@ extension WorkDetailView {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                 }
-                ForEach(queueMembershipLines(for: work), id: \.self) { line in
-                    Text(line)
+                ForEach(queueMembershipLines(for: work)) { line in
+                    Text(line.text)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.leading, 30)
@@ -258,28 +273,30 @@ extension WorkDetailView {
         .disabled(working)
     }
 
-    /// "Queue name — #position of count" per queue, matching the ordering the
-    /// queue screen itself renders (sort order, then most recently queued).
-    private func queueMembershipLines(for work: SavedWork) -> [String] {
+    /// One display line per membership. Identified by the membership's UUID, not
+    /// the rendered text — two same-named queues can produce identical strings.
+    private struct QueueMembershipLine: Identifiable {
+        let id: UUID
+        let text: String
+    }
+
+    /// "Queue name — #position of count" per queue, using the same ordering
+    /// projection the queue screen itself renders.
+    private func queueMembershipLines(for work: SavedWork) -> [QueueMembershipLine] {
         work.queueMemberships
             .filter { !$0.isPendingDeletion }
-            .compactMap { membership -> String? in
+            .compactMap { membership -> QueueMembershipLine? in
                 guard let queue = membership.queue, !queue.isPendingDeletion else { return nil }
-                let orderedWorks = queue.memberships
-                    .sorted {
-                        if $0.sortOrderInQueue != $1.sortOrderInQueue {
-                            return $0.sortOrderInQueue < $1.sortOrderInQueue
-                        }
-                        return $0.queuedAt > $1.queuedAt
-                    }
-                    .compactMap(\.work)
-                    .filter { !$0.isPendingDeletion }
+                let orderedWorks = ReadingQueueService.orderedWorks(in: queue)
                 guard let index = orderedWorks.firstIndex(where: { $0.id == work.id }) else {
-                    return queue.name
+                    return QueueMembershipLine(id: membership.id, text: queue.name)
                 }
-                return "\(queue.name) — #\(index + 1) of \(orderedWorks.count)"
+                return QueueMembershipLine(
+                    id: membership.id,
+                    text: "\(queue.name) — #\(index + 1) of \(orderedWorks.count)"
+                )
             }
-            .sorted()
+            .sorted { $0.text < $1.text }
     }
 
     private func collectionsRow(for work: SavedWork) -> some View {
@@ -334,7 +351,11 @@ extension WorkDetailView {
             }
             return "Downloaded"
         }
-        return "File freed — re-downloads when you read"
+        // Only an AO3-identified work can actually re-download; an imported EPUB
+        // with a missing file has no recovery path to promise.
+        return ao3WorkID != nil
+            ? "File freed — re-downloads when you read"
+            : "File missing — imported EPUBs can't be re-downloaded"
     }
 
     private func libraryActivitySection(for work: SavedWork) -> some View {

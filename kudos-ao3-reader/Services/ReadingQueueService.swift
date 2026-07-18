@@ -137,6 +137,21 @@ enum ReadingQueueService {
         return queue
     }
 
+    /// The queue's works in display order (explicit sort order, then most
+    /// recently queued), excluding soft-deleted works. The single ordering
+    /// projection shared by the queue screen and Work Details' queue rows.
+    static func orderedWorks(in queue: ReadingQueue) -> [SavedWork] {
+        queue.memberships
+            .sorted {
+                if $0.sortOrderInQueue != $1.sortOrderInQueue {
+                    return $0.sortOrderInQueue < $1.sortOrderInQueue
+                }
+                return $0.queuedAt > $1.queuedAt
+            }
+            .compactMap(\.work)
+            .filter { !$0.isPendingDeletion }
+    }
+
     static func createQueue(named rawName: String, in context: ModelContext) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         let queue = ReadingQueue(

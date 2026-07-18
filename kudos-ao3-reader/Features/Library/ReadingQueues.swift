@@ -144,15 +144,7 @@ struct ReadingQueueDetailView: View {
     // Soft-deleted works keep their membership rows (restore re-joins them here)
     // but render only in Recently Deleted until then.
     private var works: [SavedWork] {
-        queue.memberships
-            .sorted {
-                if $0.sortOrderInQueue != $1.sortOrderInQueue {
-                    return $0.sortOrderInQueue < $1.sortOrderInQueue
-                }
-                return $0.queuedAt > $1.queuedAt
-            }
-            .compactMap(\.work)
-            .filter { !$0.isPendingDeletion }
+        ReadingQueueService.orderedWorks(in: queue)
     }
 
     private var visibleWorks: [SavedWork] {

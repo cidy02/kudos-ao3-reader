@@ -13,6 +13,38 @@ struct WorkDetailPresentationTests {
         #expect(WorkDetailPresentation.readAction(hasEPUB: true, working: true).title == "Downloading…")
     }
 
+    @Test func readActionShowsContinueForStartedUnfinishedDownloads() {
+        #expect(WorkDetailPresentation.readAction(
+            hasEPUB: true, working: false, continueReading: true
+        ).title == "Continue Reading")
+        // Continue never overrides a missing file or an in-flight download.
+        #expect(WorkDetailPresentation.readAction(
+            hasEPUB: false, working: false, continueReading: true
+        ).title == "Download & Read")
+        #expect(WorkDetailPresentation.readAction(
+            hasEPUB: true, working: true, continueReading: true
+        ).title == "Downloading…")
+    }
+
+    @Test func postRemovalActionRoutesByDeletionAndSource() {
+        // The record survived removal (still saved/favorited/queued elsewhere).
+        #expect(WorkDetailPresentation.postRemovalAction(
+            isPendingDeletion: false, hasRemoteSource: true
+        ) == .keepLocal)
+        #expect(WorkDetailPresentation.postRemovalAction(
+            isPendingDeletion: false, hasRemoteSource: false
+        ) == .keepLocal)
+        // Soft-deleted with a remote summary to fall back to → show remote state.
+        #expect(WorkDetailPresentation.postRemovalAction(
+            isPendingDeletion: true, hasRemoteSource: true
+        ) == .showRemote)
+        // Soft-deleted and opened from the local record itself → dismiss; the
+        // screen must not keep mutating a Recently Deleted record.
+        #expect(WorkDetailPresentation.postRemovalAction(
+            isPendingDeletion: true, hasRemoteSource: false
+        ) == .dismiss)
+    }
+
     @Test func savedAndLaterActionsAreStateAware() {
         #expect(WorkDetailPresentation.savedAction(isSaved: false).title == "Save to Keep")
         #expect(WorkDetailPresentation.savedAction(isSaved: true).title == "Saved")
@@ -30,15 +62,6 @@ struct WorkDetailPresentationTests {
         #expect(WorkDetailPresentation.collectionLabel(count: 0) == "Add to Collection")
         #expect(WorkDetailPresentation.collectionLabel(count: 1) == "In 1 Collection")
         #expect(WorkDetailPresentation.collectionLabel(count: 2) == "In 2 Collections")
-    }
-
-    @Test func totalChapterCountParsesAO3ChapterStat() {
-        #expect(WorkDetailPresentation.totalChapterCount(from: "5/10") == 10)
-        #expect(WorkDetailPresentation.totalChapterCount(from: "1/1") == 1)
-        // Unknown totals and malformed values stay nil.
-        #expect(WorkDetailPresentation.totalChapterCount(from: "5/?") == nil)
-        #expect(WorkDetailPresentation.totalChapterCount(from: "") == nil)
-        #expect(WorkDetailPresentation.totalChapterCount(from: "12") == nil)
     }
 
     @Test func summaryCollapsesOnlyWhenLong() {

@@ -103,6 +103,9 @@ final class CommentsModel {
     /// first open. This bounded lookup avoids scanning paginated work comments.
     private var pendingInitialCommentID: Int?
     private var pendingInitialFocusesChapter = false
+    /// Work Details' "Write a Comment" entry: open the composer once the first
+    /// page has loaded (signed-in sessions only; consumed either way).
+    private var pendingInitialComposes = false
     /// Inbox's Reply control uses the same focused-thread load, then opens the
     /// existing composer against this exact notification comment.
     private var pendingInitialReplyCommentID: Int?
@@ -151,6 +154,7 @@ final class CommentsModel {
         initialChapterPosition: Int? = nil,
         initialCommentID: Int? = nil,
         initialFocusesChapter: Bool = false,
+        initialComposes: Bool = false,
         initialReplyCommentID: Int? = nil,
         pageLoader: @escaping PageLoader = { workID, chapterID, page, request in
             try await AO3Client.shared.commentsPage(
@@ -181,6 +185,7 @@ final class CommentsModel {
         self.pendingInitialChapterPosition = initialChapterPosition
         self.pendingInitialCommentID = initialCommentID
         self.pendingInitialFocusesChapter = initialFocusesChapter
+        self.pendingInitialComposes = initialComposes
         self.pendingInitialReplyCommentID = initialReplyCommentID
         self.pageLoader = pageLoader
         self.chapterLoader = chapterLoader
@@ -221,6 +226,7 @@ final class CommentsModel {
         pendingInitialChapterPosition = nil
         pendingInitialCommentID = nil
         pendingInitialFocusesChapter = false
+        pendingInitialComposes = false
         pendingInitialReplyCommentID = nil
         isApplyingInitialContext = false
         composerContext = nil
@@ -276,7 +282,12 @@ final class CommentsModel {
             return
         }
         guard let target = pendingInitialChapterPosition else {
-            await load(auth: auth, expected: expected)
+            if pendingInitialFocusesChapter {
+                await loadInitialChapterScope(auth: auth, expected: expected)
+            } else {
+                await load(auth: auth, expected: expected)
+            }
+            consumeInitialComposeIfNeeded(auth: auth, expected: expected)
             return
         }
         pendingInitialChapterPosition = nil
@@ -291,11 +302,42 @@ final class CommentsModel {
             // Index failed or the work has no chapter list (e.g. single-chapter):
             // work-level All comments show the same thread anyway.
             await load(auth: auth, expected: expected)
+            consumeInitialComposeIfNeeded(auth: auth, expected: expected)
             return
         }
         scope = .byChapter
         selectedChapter = ref
         await load(auth: auth, expected: expected)
+        consumeInitialComposeIfNeeded(auth: auth, expected: expected)
+    }
+
+    /// Work Details' "Chapter Comments" entry: open directly in By Chapter scope
+    /// on the first chapter instead of All. Falls back to an All load when the
+    /// chapter index is unavailable or empty (e.g. a single-chapter work).
+    private func loadInitialChapterScope(auth: AO3AuthService, expected: AuthContext) async {
+        pendingInitialFocusesChapter = false
+        isApplyingInitialContext = true
+        defer {
+            if isCurrent(expected, auth) { isApplyingInitialContext = false }
+        }
+        await loadChaptersIfNeeded(auth: auth, expected: expected)
+        guard isCurrent(expected, auth) else { return }
+        if let first = chapters.first {
+            scope = .byChapter
+            selectedChapter = first
+        }
+        await load(auth: auth, expected: expected)
+    }
+
+    /// Consumes the initial-compose intent after the first load. Only a current,
+    /// signed-in session with a loaded page opens the composer — signed-out
+    /// sessions keep the plain page (the write bar offers Log In) — and the
+    /// intent is cleared either way so it can never fire on a later reload.
+    private func consumeInitialComposeIfNeeded(auth: AO3AuthService, expected: AuthContext) {
+        guard pendingInitialComposes else { return }
+        pendingInitialComposes = false
+        guard isCurrent(expected, auth), phase == .loaded, auth.isLoggedIn else { return }
+        startComposer(auth: auth)
     }
 
     /// Loads the exact Inbox notification thread. AO3's standalone comment page

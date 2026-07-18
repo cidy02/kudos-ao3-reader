@@ -81,9 +81,12 @@ struct WorkDetailHeroCard: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            // Only the stat pills merge into one VoiceOver element. The card
+            // itself must stay `.contain` so the byline's individually routed
+            // co-author buttons remain separately focusable/activatable.
+            .accessibilityElement(children: .combine)
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -159,9 +162,12 @@ struct WorkQuickActionTile: View {
 /// rows, extracted from the old single-list view so the moved logic stays
 /// unit-testable.
 enum WorkDetailPresentation {
-    static func readAction(hasEPUB: Bool, working: Bool) -> (title: String, systemImage: String) {
+    static func readAction(
+        hasEPUB: Bool, working: Bool, continueReading: Bool = false
+    ) -> (title: String, systemImage: String) {
         if working { return ("Downloading…", "arrow.down.circle") }
-        return hasEPUB ? ("Read", "book") : ("Download & Read", "arrow.down.circle")
+        guard hasEPUB else { return ("Download & Read", "arrow.down.circle") }
+        return continueReading ? ("Continue Reading", "book") : ("Read", "book")
     }
 
     static func savedAction(isSaved: Bool) -> (title: String, systemImage: String) {
@@ -182,12 +188,21 @@ enum WorkDetailPresentation {
         count == 0 ? "Add to Collection" : "In \(count) Collection\(count == 1 ? "" : "s")"
     }
 
-    /// The total-chapter side of AO3's "5/10" stat; nil when unknown ("5/?" or
-    /// missing). Drives whether per-chapter comment entry points make sense.
-    static func totalChapterCount(from chapters: String) -> Int? {
-        let parts = chapters.split(separator: "/")
-        guard parts.count == 2 else { return nil }
-        return Int(parts[1].trimmingCharacters(in: .whitespaces))
+    /// What the detail should do after "Remove from Later" possibly soft-deleted
+    /// a queue-only record: keep showing the (still-live) local work, fall back
+    /// to remote state, or — with no remote source to fall back to — dismiss so
+    /// the screen can't keep mutating a Recently Deleted record.
+    enum PostRemovalAction: Equatable {
+        case keepLocal
+        case showRemote
+        case dismiss
+    }
+
+    static func postRemovalAction(
+        isPendingDeletion: Bool, hasRemoteSource: Bool
+    ) -> PostRemovalAction {
+        guard isPendingDeletion else { return .keepLocal }
+        return hasRemoteSource ? .showRemote : .dismiss
     }
 
     /// Long summaries start collapsed behind a Show More affordance; short ones

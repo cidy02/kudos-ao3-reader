@@ -84,11 +84,12 @@ enum WorkMetadataRefresh {
         try context.save()
     }
 
-    static func remoteSummary(workID: Int) async throws -> AO3WorkSummary {
-        let metadata = try await AO3RequestCoordinator.shared.withSlot {
+    /// The full parsed work-page metadata, for callers (Work Details refresh)
+    /// that need fields `AO3WorkSummary` doesn't carry, like the published date.
+    static func remoteMetadata(workID: Int) async throws -> AO3WorkMetadata {
+        try await AO3RequestCoordinator.shared.withSlot {
             try await AO3Client.shared.workMetadata(workID: workID)
         }
-        return metadata.summaryValue
     }
 
     static func message(for error: Error) -> String {
