@@ -196,7 +196,11 @@ struct AO3SeriesRow: View {
                     WorkStatLabel(text: "\(workCount) works", symbol: "square.stack")
                 }
                 if let words = series.words {
-                    WorkStatLabel(text: words.formatted(), symbol: "textformat.size")
+                    WorkStatLabel(
+                        text: words.formatted(),
+                        symbol: "textformat.size",
+                        accessibilityLabel: "\(words.formatted()) words"
+                    )
                 }
                 if let complete = series.isComplete {
                     WorkStatLabel(

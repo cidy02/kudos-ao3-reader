@@ -67,7 +67,7 @@ struct WorkDetailHeroCard: View {
                     WorkStatLabel(text: rating, symbol: "checkmark.shield")
                 }
                 if !chapters.isEmpty {
-                    WorkStatLabel(text: chapters, symbol: "book")
+                    WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
                 }
                 if let status {
                     WorkStatLabel(
@@ -76,7 +76,11 @@ struct WorkDetailHeroCard: View {
                     )
                 }
                 if let words {
-                    WorkStatLabel(text: words.formatted(), symbol: "textformat.size")
+                    WorkStatLabel(
+                        text: words.formatted(),
+                        symbol: "textformat.size",
+                        accessibilityLabel: "\(words.formatted()) words"
+                    )
                 }
             }
             .font(.caption)

@@ -7,6 +7,10 @@ import SwiftUI
 /// values from its own model shape and hands them here.
 struct CoverCardStatsRow: View {
     var ratingShort: String?
+    /// The full rating name ("Teen And Up Audiences"), announced instead of the
+    /// visible one/two-letter `ratingShort` badge — "T" alone is meaningless to
+    /// VoiceOver.
+    var ratingFull: String?
     var chapters: String?
     var completion: (text: String, symbol: String)?
     var wordCount: Int?
@@ -14,16 +18,24 @@ struct CoverCardStatsRow: View {
     var body: some View {
         FlowLayout(spacing: 8, rowSpacing: 5) {
             if let ratingShort {
-                WorkStatLabel(text: ratingShort, symbol: "checkmark.shield")
+                WorkStatLabel(
+                    text: ratingShort,
+                    symbol: "checkmark.shield",
+                    accessibilityLabel: ratingFull ?? ratingShort
+                )
             }
             if let chapters {
-                WorkStatLabel(text: chapters, symbol: "book")
+                WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
             }
             if let completion {
                 WorkStatLabel(text: completion.text, symbol: completion.symbol)
             }
             if let wordCount {
-                WorkStatLabel(text: wordCount.formatted(.number.notation(.compactName)), symbol: "textformat.size")
+                WorkStatLabel(
+                    text: wordCount.formatted(.number.notation(.compactName)),
+                    symbol: "textformat.size",
+                    accessibilityLabel: "\(wordCount.formatted()) words"
+                )
             }
         }
         .font(.caption2)
@@ -48,12 +60,12 @@ struct WorkCoverCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !work.author.isEmpty {
-                    CardMetaLabel(text: work.author, symbol: "person")
+                    CardMetaLabel(text: work.author, symbol: "person", accessibilityLabel: "Author: \(work.author)")
                         .font(.caption)
                 }
 
                 if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                    CardMetaLabel(text: fandom, symbol: "books.vertical")
+                    CardMetaLabel(text: fandom, symbol: "books.vertical", accessibilityLabel: "Fandom: \(fandom)")
                         .font(.caption2)
                 }
 
@@ -83,6 +95,7 @@ struct WorkCoverCard: View {
     private var cardStats: some View {
         CoverCardStatsRow(
             ratingShort: WorkStat.ratingShort(work.rating),
+            ratingFull: work.rating.isEmpty ? nil : work.rating,
             chapters: work.chapters.isEmpty ? nil : work.chapters,
             completion: completionStatus.map { ($0, work.isComplete ? "checkmark.seal" : "circle.dashed") },
             wordCount: work.wordCount > 0 ? work.wordCount : nil
@@ -163,13 +176,16 @@ struct AO3WorkCoverCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let author = work.authors.first, !author.isEmpty {
-                    CardMetaLabel(text: author, symbol: "person")
+                    CardMetaLabel(text: author, symbol: "person", accessibilityLabel: "Author: \(author)")
                         .font(.caption)
                 }
 
                 if let fandom = work.fandoms.first, !fandom.isEmpty {
-                    CardMetaLabel(text: fandom, symbol: "books.vertical", lineLimit: 2)
-                        .font(.caption2)
+                    CardMetaLabel(
+                        text: fandom, symbol: "books.vertical", lineLimit: 2,
+                        accessibilityLabel: "Fandom: \(fandom)"
+                    )
+                    .font(.caption2)
                 }
 
                 cardStats
@@ -188,6 +204,7 @@ struct AO3WorkCoverCard: View {
     private var cardStats: some View {
         CoverCardStatsRow(
             ratingShort: WorkStat.ratingShort(work.rating),
+            ratingFull: work.rating.isEmpty ? nil : work.rating,
             chapters: work.chapters.isEmpty ? nil : work.chapters,
             completion: work.isComplete.map {
                 ($0 ? "Complete" : "WIP", $0 ? "checkmark.seal" : "circle.dashed")
@@ -304,6 +321,9 @@ private struct CardMetaLabel: View {
     let text: String
     let symbol: String
     var lineLimit: Int = 1
+    /// What VoiceOver announces instead of the bare `text` — a name or fandom on
+    /// its own doesn't say what role it plays on the card ("Author: " / "Fandom: ").
+    var accessibilityLabel: String?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -313,7 +333,7 @@ private struct CardMetaLabel: View {
                 .foregroundStyle(.secondary)
         }
         .lineLimit(lineLimit)
-        .combinedAccessibilityRow(text)
+        .combinedAccessibilityRow(accessibilityLabel ?? text)
     }
 }
 

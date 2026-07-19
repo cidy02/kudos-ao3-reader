@@ -29,6 +29,11 @@ extension View {
 struct WorkStatLabel: View {
     let text: String
     let symbol: String
+    /// What VoiceOver announces instead of the bare visible `text` — a stat like
+    /// "45,678" or "T" is meaningless without knowing what it's counting. Defaults
+    /// to `text` for callers where the visible string is already self-describing
+    /// (e.g. a full rating name, "Complete").
+    var accessibilityLabel: String?
 
     var body: some View {
         HStack(spacing: 3) {
@@ -39,7 +44,7 @@ struct WorkStatLabel: View {
         }
         .lineLimit(1)
         .fixedSize()
-        .combinedAccessibilityRow(text)
+        .combinedAccessibilityRow(accessibilityLabel ?? text)
     }
 }
 
@@ -57,9 +62,23 @@ struct WorkListStatsRow: View {
     var body: some View {
         FlowLayout(spacing: 18, rowSpacing: 5) {
             if let rating { WorkStatLabel(text: rating, symbol: "checkmark.shield") }
-            if let wordCount { WorkStatLabel(text: wordCount.formatted(), symbol: "textformat.size") }
-            if let chapters { WorkStatLabel(text: chapters, symbol: "book") }
-            if let kudos { WorkStatLabel(text: kudos.formatted(), symbol: "heart") }
+            if let wordCount {
+                WorkStatLabel(
+                    text: wordCount.formatted(),
+                    symbol: "textformat.size",
+                    accessibilityLabel: "\(wordCount.formatted()) words"
+                )
+            }
+            if let chapters {
+                WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
+            }
+            if let kudos {
+                WorkStatLabel(
+                    text: kudos.formatted(),
+                    symbol: "heart",
+                    accessibilityLabel: "\(kudos.formatted()) kudos"
+                )
+            }
         }
         .font(.caption2)
         .foregroundStyle(.tertiary)

@@ -158,11 +158,19 @@ lint → iOS suite → macOS build → whitespace), required ALL GREEN before ev
   screenshot gate required (owner, still open — see Remains manual below); call-site migration
   deliberately OUT of this wave (Wave 2 mass-adopts) to bound blast radius.
 - **Testing:** `verify.sh` ALL GREEN (602 tests/57 suites, iOS + macOS builds); 14 new table-driven
-  unit tests for the resolver. **Remains manual (owner):** the screenshot gate — Library (X1 row
-  height), Account (X4's 14→12pt radius), Sepia theme (ContentView fix + X3 favorite-star recolor).
-  `errorColor`/`favoriteColor`/`statusSuccessColor` RGB values are placeholder estimates, not
-  WCAG-verified against each theme's real backdrop — check before Wave 2 migrates the exclude/status
-  call sites onto them. **API review gate**: skim the six signatures before Wave 2 mass-adopts them.
+  unit tests for the resolver. **Adversarial review (T-119, 2026-07-19) found 5 issues in X1/X2/X3/X6**
+  — all fixed; see `TASKS.md` T-119 for the fixes and the runtime evidence. X1's hit-target claim is
+  now **runtime-verified by real device taps** (was previously asserted, not exercised); X3's
+  `onAccentColor` was renamed `onEffectiveTint` and fixed to judge the color controls actually
+  render with. **Remains manual (owner):** the screenshot gate — Library (X1 row height), Account
+  (X4's 14→12pt radius), Sepia theme (ContentView fix + X3 favorite-star recolor); **and** a real
+  VoiceOver/Accessibility-Inspector pass on X5's `combinedAccessibilityRow` label text (T-119
+  implemented the fix but couldn't complete the runtime spot-check — Accessibility Inspector's
+  element-picker mode got stuck globally intercepting clicks via a system service that computer-use
+  can't allowlist). `errorColor`/`favoriteColor`/`statusSuccessColor` RGB values are placeholder
+  estimates, not WCAG-verified against each theme's real backdrop — check before Wave 2 migrates the
+  exclude/status call sites onto them. **API review gate**: skim the six signatures before Wave 2
+  mass-adopts them.
 - **Complexity:** Medium.
 
 ### Wave 2 — `UIComponents/` sweep (biggest multiplier)

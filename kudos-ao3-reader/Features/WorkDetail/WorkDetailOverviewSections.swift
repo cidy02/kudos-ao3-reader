@@ -33,7 +33,7 @@ extension WorkDetailView {
                         .lineLimit(collapses && !summaryExpanded ? 8 : nil)
                     if collapses {
                         Button(summaryExpanded ? "Show Less" : "Show More") {
-                            animateUnlessReduced { summaryExpanded.toggle() }
+                            withAnimationUnlessReduced(reduceMotion: reduceMotion) { summaryExpanded.toggle() }
                         }
                         .font(.subheadline.weight(.medium))
                         .buttonStyle(.borderless)
@@ -172,7 +172,7 @@ extension WorkDetailView {
             systemImage: "bubble.left.and.bubble.right",
             detail: displayComments.map { $0.formatted() }
         ) {
-            animateUnlessReduced { selectedTab = .discussion }
+            withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion }
         }
     }
 
@@ -253,7 +253,7 @@ extension WorkDetailView {
                         // Tappable: jumps to the Discussion section, which owns
                         // the full comments entry points.
                         Button {
-                            animateUnlessReduced { selectedTab = .discussion }
+                            withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion }
                         } label: {
                             HStack {
                                 Text("Comments")

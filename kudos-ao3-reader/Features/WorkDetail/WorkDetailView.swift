@@ -688,16 +688,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Section switches and summary expansion animate only when the user hasn't
-    /// asked for reduced motion.
-    func animateUnlessReduced(_ change: () -> Void) {
-        if reduceMotion {
-            change()
-        } else {
-            withAnimation { change() }
-        }
-    }
-
     func retryPreservation(_ work: SavedWork) {
         Task {
             queueNotice = nil

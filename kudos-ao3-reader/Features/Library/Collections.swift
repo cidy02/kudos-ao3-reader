@@ -88,6 +88,7 @@ struct CollectionDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
     @Query(sort: \Tag.name) private var allTags: [Tag]
+    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingRename = false
     @State private var renameText = ""
     @State private var confirmDelete = false
@@ -134,7 +135,11 @@ struct CollectionDetailView: View {
                         SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    pendingRemoval = work
+                                    if confirmBeforeDelete {
+                                        pendingRemoval = work
+                                    } else {
+                                        remove(work)
+                                    }
                                 } label: {
                                     Label("Remove", systemImage: "minus.circle")
                                 }

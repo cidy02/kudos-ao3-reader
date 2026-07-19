@@ -368,10 +368,18 @@ struct CommentsView: View {
                         WorkStatLabel(text: model.workContext.rating, symbol: "checkmark.shield")
                     }
                     if !model.workContext.chapters.isEmpty {
-                        WorkStatLabel(text: model.workContext.chapters, symbol: "book")
+                        WorkStatLabel(
+                            text: model.workContext.chapters,
+                            symbol: "book",
+                            accessibilityLabel: "Chapters \(model.workContext.chapters)"
+                        )
                     }
                     if let total = model.page?.totalComments {
-                        WorkStatLabel(text: total.formatted(), symbol: "bubble.left")
+                        WorkStatLabel(
+                            text: total.formatted(),
+                            symbol: "bubble.left",
+                            accessibilityLabel: "\(total.formatted()) comments"
+                        )
                     }
                 }
                 .font(.caption)
