@@ -255,7 +255,8 @@ struct LibrarySectionListView: View {
             if showsMarkedForLater {
                 Section("Marked for Later on AO3") {
                     ForEach(visibleMarkedForLater) { work in
-                        AO3WorkRow(work: work, expandAll: expandAll).cardNavigation(to: work)
+                        AO3WorkRow(work: work, expandAll: expandAll)
+                            .cardNavigation(to: work, accessibilityLabel: work.title)
                     }
                     .cardRow()
                 }

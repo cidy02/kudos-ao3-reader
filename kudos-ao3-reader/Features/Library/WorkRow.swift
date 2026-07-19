@@ -172,6 +172,7 @@ struct WorkRow: View {
                     ForEach(tags, id: \.self) { tag in
                         Button { router.searchAO3(field, tag) } label: { TagChip(text: tag) }
                             .buttonStyle(.borderless)
+                            .minimumHitTarget(28)
                     }
                 }
             }

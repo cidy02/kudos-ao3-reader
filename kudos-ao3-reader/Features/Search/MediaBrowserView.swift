@@ -192,6 +192,7 @@ struct MediaBrowserView: View {
                         TagChip(text: fandom)
                     }
                     .buttonStyle(.borderless)
+                    .minimumHitTarget(28)
                 }
             }
         }

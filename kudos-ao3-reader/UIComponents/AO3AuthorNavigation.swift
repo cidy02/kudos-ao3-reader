@@ -61,6 +61,10 @@ struct AO3AuthorBylineView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(\.ao3AuthorNavigationEnabled) private var navigationEnabled
+    /// Which co-author token currently holds hardware-keyboard focus (macOS/iPadOS).
+    /// Keyed by `AO3AuthorBylineToken.id`, not a Bool, since a byline can hold several
+    /// independently-focusable names.
+    @FocusState private var focusedTokenID: Int?
 
     init(
         names: [String],
@@ -123,21 +127,38 @@ struct AO3AuthorBylineView: View {
                     // background `cardNavigation` NavigationLinks still activate on
                     // borderless Button taps, stacking the work/reader on top of the
                     // author profile — profile only appeared after Back. Priority
-                    // gesture claims the touch so the row link does not fire.
+                    // gesture claims the touch so the row link does not fire. A real
+                    // Button was tried here before and reverted for the same reason —
+                    // don't reintroduce one; hardware-keyboard support below is added
+                    // via .focusable/.onKeyPress instead, not by becoming a Button.
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
                         .foregroundStyle(.tint)
                         .contentShape(Rectangle())
-                        .highPriorityGesture(TapGesture().onEnded {
-                            if let onOpenRoute {
-                                onOpenRoute(route)
-                            } else {
-                                router.openAuthorProfile(route)
-                            }
-                        })
+                        .highPriorityGesture(TapGesture().onEnded { activate(route) })
                         .accessibilityLabel(token.name)
                         .accessibilityHint("Open AO3 author profile")
                         .accessibilityAddTraits(.isButton)
+                        // NOT .minimumHitTarget() here: that modifier's plain
+                        // .frame(minHeight:) centers its content vertically, which
+                        // shifts this Text's baseline and reproduces the exact
+                        // "dropped it below 'by'" regression noted above (1) — the
+                        // frame must stay top-aligned so the enlarged hit box only
+                        // grows downward, leaving the text's own baseline in place.
+                        .frame(minWidth: 28, minHeight: 28, alignment: .top)
+                        .contentShape(Rectangle())
+                        .focusable(true)
+                        .focused($focusedTokenID, equals: token.id)
+                        .onKeyPress(keys: [.return, .space]) { _ in
+                            activate(route)
+                            return .handled
+                        }
+                        .overlay {
+                            if focusedTokenID == token.id {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color.accentColor, lineWidth: 2)
+                            }
+                        }
                 } else {
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
@@ -162,6 +183,16 @@ struct AO3AuthorBylineView: View {
             identities: identities,
             fallbackText: fallbackText
         )
+    }
+
+    /// Shared by the tap gesture and the keyboard-activation path below so both
+    /// trigger identically.
+    private func activate(_ route: AO3AuthorRoute) {
+        if let onOpenRoute {
+            onOpenRoute(route)
+        } else {
+            router.openAuthorProfile(route)
+        }
     }
 }
 

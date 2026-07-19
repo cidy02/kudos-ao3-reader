@@ -190,7 +190,7 @@ struct SelectableAO3WorkRow: View {
                 .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
         } else {
-            row.cardNavigation(to: work)
+            row.cardNavigation(to: work, accessibilityLabel: work.title)
         }
     }
 }

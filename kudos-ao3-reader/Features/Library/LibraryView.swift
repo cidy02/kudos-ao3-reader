@@ -440,6 +440,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             TagChip(text: text, tinted: selected)
         }
         .buttonStyle(.plain)
+        .minimumHitTarget(28)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

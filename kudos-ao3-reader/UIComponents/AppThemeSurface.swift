@@ -285,11 +285,19 @@ extension View {
     /// Value-based row navigation **without** the trailing disclosure chevron — the
     /// `>` clutters the rounded work cards. The List still makes the whole card
     /// tappable, and inner controls (tag / fandom / expand buttons) keep their own
-    /// taps because the link sits behind the content rather than wrapping it.
-    /// Disabled while `AppRouter.cardNavigationSuppressed` so an author byline tap
-    /// does not also open the work/reader underneath the profile.
-    func cardNavigation(to value: some Hashable) -> some View {
-        modifier(CardNavigationModifier(value: value))
+    /// taps *and* stay individually reachable to VoiceOver, because the link sits
+    /// behind the content rather than wrapping it — this modifier does not combine
+    /// or hide the row's own accessibility elements, only labels its own invisible
+    /// link. Disabled while `AppRouter.cardNavigationSuppressed` so an author byline
+    /// tap does not also open the work/reader underneath the profile.
+    ///
+    /// - Parameter accessibilityLabel: What VoiceOver announces for this row's "open"
+    ///   action — normally the work's title. Required (not defaulted) because a
+    ///   blank/generic label here was a confirmed HIG finding (UI-2): every card in
+    ///   the app used to carry one unlabeled "Button" stop with no way to tell which
+    ///   work it opened.
+    func cardNavigation(to value: some Hashable, accessibilityLabel: String) -> some View {
+        modifier(CardNavigationModifier(value: value, accessibilityLabel: accessibilityLabel))
     }
 }
 
@@ -297,6 +305,7 @@ extension View {
 /// so the same-touch row activation can be disabled after a byline tap.
 private struct CardNavigationModifier<Value: Hashable>: ViewModifier {
     let value: Value
+    let accessibilityLabel: String
     @Environment(AppRouter.self) private var router
 
     func body(content: Content) -> some View {
@@ -305,6 +314,15 @@ private struct CardNavigationModifier<Value: Hashable>: ViewModifier {
                 .opacity(0)
                 .disabled(router.cardNavigationSuppressed)
                 .allowsHitTesting(!router.cardNavigationSuppressed)
+                // Deliberately NOT accessibilityHidden nor combined with the row's own
+                // elements (see the doc comment above) — this stays its own reachable
+                // stop so VoiceOver users have an explicit "open" action, while the
+                // fandom/expand/byline buttons elsewhere in the row keep their own.
+                // Hidden only while suppressed, matching its disabled/hit-testing state,
+                // so VoiceOver doesn't announce a currently-inert control.
+                .accessibilityHidden(router.cardNavigationSuppressed)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityAddTraits(.isButton)
         }
     }
 }

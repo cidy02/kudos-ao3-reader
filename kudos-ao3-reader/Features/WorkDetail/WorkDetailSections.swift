@@ -52,14 +52,12 @@ extension WorkDetailView {
                     FlowLayout(spacing: 8, rowSpacing: 4) {
                         ForEach(group.tags, id: \.self) { tag in
                             // Tap a tag → search AO3 for works carrying it. Full
-                            // canonical text wraps (no truncation), and the frame +
-                            // content shape give every chip a ≥44pt hit target.
+                            // canonical text wraps (no truncation).
                             Button { router.searchAO3(group.field, tag) } label: {
                                 TagChip(text: tag, multiline: true)
-                                    .frame(minHeight: 44)
-                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .minimumHitTarget(28)
                         }
                     }
                     .padding(.vertical, 2)
@@ -425,6 +423,7 @@ extension WorkDetailView {
                             ForEach(suggestions, id: \.self) { name in
                                 Button { apply(named: name) } label: { TagChip(text: name) }
                                     .buttonStyle(.plain)
+                                    .minimumHitTarget(28)
                             }
                         }
                         .padding(.vertical, 2)

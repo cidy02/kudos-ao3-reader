@@ -13,5 +13,10 @@ struct ReorderHandleView: View {
             .frame(width: 28, height: 28)
             .background(.regularMaterial, in: Circle())
             .accessibilityLabel("Reorder")
+            // Dragging this handle isn't performable with VoiceOver — the card it sits
+            // on carries the actual VoiceOver-accessible equivalent as custom actions
+            // (Move Up / Move Down / Move to Top / Move to Bottom), reachable via the
+            // Actions rotor while focused anywhere on the card.
+            .accessibilityHint("Use the Actions rotor on this card to move it")
     }
 }

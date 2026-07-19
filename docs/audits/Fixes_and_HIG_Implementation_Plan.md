@@ -173,26 +173,56 @@ lint → iOS suite → macOS build → whitespace), required ALL GREEN before ev
   mass-adopts them.
 - **Complexity:** Medium.
 
-### Wave 2 — `UIComponents/` sweep (biggest multiplier)
+### Wave 2 — `UIComponents/` sweep (biggest multiplier) — ✅ DONE 2026-07-19 (T-120)
 
 - **Goal:** apply X1/X2/X5 (+ token migration) across the shared components so every downstream
   surface inherits the fix.
-- **Findings addressed:** **[HIG]** UI-2 (`WorkStatLabel`, `TagChip`, `AppThemeSurface`
-  `CardNavigationModifier` stray VoiceOver stop), UI-3 (`ReorderHandle`, `WorkCarouselSection`
-  collapse+see-all, `AO3AuthorNavigation` byline targets), UI-5 (`WorkCarouselSection` collapse
-  animation), UI-6 (`WorkCardListControls` clear-filters idiom via X6); **[fold]** A9-F2
-  (ReorderHandle drag-only + missing hint), A9-F4 (author links keyboard-focusable), A6-F2 partial
-  (bulk-action bar lives here).
-- **Shared components:** `WorkStatLabel`, `CardMetaLabel`, `TagChip`, `ReorderHandle`,
-  `WorkCarouselSection`, `AO3AuthorNavigation`, `WorkCardListControls`, `AppThemeSurface`,
-  `CarouselCardStyle` (token only — defer the frame change to Wave 8).
-- **Primary files:** all under `UIComponents/`.
-- **Dependencies:** Wave 1. **Risks:** these render everywhere — a regression is app-wide, so the
-  screenshot + VoiceOver spot-check gates are mandatory. Do NOT change card frame sizes here
-  (that's Wave 8) to keep this wave low-risk.
-- **Testing:** `verify.sh`; VoiceOver spot-check on Home/Library cards (validates the two
-  runtime-flagged UI-2 items: `CardNavigationModifier` stray stop, WorkStatLabel grouping);
-  screenshot gate. **Complexity:** Medium. **Highest value in the plan.**
+- **Findings addressed:** **[HIG]** UI-2 (`TagChip` `.isSelected` parity, `CardNavigationModifier`
+  stray VoiceOver stop — now labeled, not hidden), UI-3 (`ReorderHandle` 28pt, `WorkCarouselSection`
+  collapse+see-all both fixed, `AO3AuthorNavigation` byline targets at 28pt with baseline-safe
+  top-alignment), UI-6 (`WorkCardListControls` clear-filters — investigated, left unchanged, see
+  below); **[fold]** A9-F2 (ReorderHandle — 4 `.accessibilityAction`s: Move Up/Down/to Top/to
+  Bottom, added to the compact-grid mode only; the default `detailedList` mode already reorders
+  accessibly via `List`+`.onMove`+`EditMode`), A9-F4 (author links — `.focusable`+`.onKeyPress`+
+  focus-ring, not a `Button` conversion — one was tried at this exact spot before and reverted for
+  double-navigation under `cardNavigation`), A6-F2 (confirmed non-issue for `WorkCardListControls.swift`
+  — no bulk-action-bar code lives in that specific file). `WorkStatLabel`/`CardMetaLabel` labeling
+  was already done in Wave 1/T-119; not revisited here.
+- **UI-6 re-scoped, not fixed:** research found `WorkCardListControls`'s "Clear All Filters"
+  destructive-styling-with-no-confirmation already matches 3 established app-wide siblings
+  (`AO3FilterPanel`/`LibraryFilterPanel` "Reset Filters", `CustomizeThemeView` "Reset Theme") —
+  changing it either direction would make it the sole outlier. Owner confirmed: leave the styling
+  alone. The real gap is discoverability (context-menu-only vs. the siblings' visible Form rows),
+  deferred as a separate IA decision, not scheduled.
+- **Shared components:** `TagChip` (call sites only, component itself untouched), `ReorderHandle`,
+  `WorkCarouselSection`, `AO3AuthorNavigation`, `AppThemeSurface` (`CardNavigationModifier`).
+  `WorkCardListControls` reviewed, no change. `CarouselCardStyle` (token only) — still deferred to
+  Wave 8, untouched.
+- **Primary files:** `UIComponents/TagChip.swift` callers (6 files), `UIComponents/ReorderHandle.swift`
+  + `Features/Library/ReadingQueues.swift`, `UIComponents/WorkCarouselSection.swift`,
+  `UIComponents/AO3AuthorNavigation.swift`, `UIComponents/AppThemeSurface.swift` + its 16
+  `cardNavigation(to:)` call sites across 9 feature directories.
+- **Dependencies:** Wave 1. **Risks realized and handled:** the CardNavigationModifier fix's
+  highest risk (a card losing its only VoiceOver "open" action) did not materialize, but an
+  **adversarial review caught a different real bug before merge**: 4 call sites double-wrapped
+  `SensitiveWorkRow` in an external `.cardNavigation` it already applies internally — harmless
+  while unlabeled, but a **privacy-gate bypass** once the label became mandatory (a blurred
+  Mature/Explicit work's hidden title became VoiceOver-reachable and directly navigable, skipping
+  the reveal gate). Fixed; see `TASKS.md` T-120 for detail. This is exactly the class of
+  regression this wave's own risk note anticipated ("these render everywhere — a regression is
+  app-wide") — worth noting for Wave 3+'s own review passes.
+- **Testing:** `verify.sh` ALL GREEN (602 tests/57 suites, iOS + macOS builds); a 3-lens adversarial
+  review (compile-correctness / VoiceOver-navigability-regression / label-content-audit) plus
+  independent re-verification of every flagged issue. **Remains manual (owner) — screenshot +
+  VoiceOver spot-check gates, not yet done:** AO3AuthorNavigation's baseline-alignment fix (this
+  exact file has a documented history of an almost-identical technique visually failing — the
+  `.top`-alignment fix is reasoned to avoid it but not runtime-verified), WorkCarouselSection's
+  ~15pt header-height growth, TagChip's `FlowLayout` reflow at the new 28pt floor. Two attempts to
+  do these visually this session were both blocked by a stuck Accessibility Inspector /
+  `axAuditService` click-interception state (same tooling wall as T-119's Finding 2) — clears with
+  a direct click at the owner's own keyboard/mouse.
+- **Complexity:** Medium. **Highest value in the plan** (confirmed — also caught the wave's only
+  real bug via adversarial review, not the original static audit).
 
 ### Wave 3 — `Features/Search/`
 

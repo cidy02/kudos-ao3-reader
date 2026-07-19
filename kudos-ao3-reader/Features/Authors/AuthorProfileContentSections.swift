@@ -161,7 +161,8 @@ struct AO3AuthorFandomFilterSection: View {
                     TagChip(text: "All", tinted: model.selectedFandom == nil)
                 }
                 .buttonStyle(.plain)
-                .frame(minHeight: 44)
+                .minimumHitTarget(28)
+                .accessibilityAddTraits(model.selectedFandom == nil ? .isSelected : [])
 
                 ForEach(fandoms) { fandom in
                     Button {
@@ -175,7 +176,8 @@ struct AO3AuthorFandomFilterSection: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .frame(minHeight: 44)
+                    .minimumHitTarget(28)
+                    .accessibilityAddTraits(model.selectedFandom == fandom ? .isSelected : [])
                 }
             }
         }
@@ -274,12 +276,17 @@ struct AO3AuthorWorksSection: View {
                 } else {
                     ForEach(workEntries) { entry in
                         if let work = entry.local {
+                            // No .cardNavigation here: SensitiveWorkRow already applies it
+                            // internally (MatureContent.swift) for its non-blurred,
+                            // non-selecting branch. Re-wrapping it here would stack a
+                            // second, unhidden, real-titled NavigationLink behind the
+                            // blurred branch's reveal gate — a privacy bypass, not just a
+                            // duplicate VoiceOver stop.
                             SensitiveWorkRow(work: work, expandAll: expandAll)
-                                .cardNavigation(to: work)
                                 .cardRow()
                         } else if let remote = entry.remote {
                             AO3WorkRow(work: remote, expandAll: expandAll)
-                                .cardNavigation(to: remote)
+                                .cardNavigation(to: remote, accessibilityLabel: remote.title)
                                 .cardRow()
                         }
                     }
@@ -346,7 +353,7 @@ struct AO3AuthorSeriesSection: View {
                 }
                 ForEach(model.series) { series in
                     AO3SeriesRow(series: series)
-                        .cardNavigation(to: series)
+                        .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)
@@ -423,7 +430,7 @@ struct AO3AuthorBookmarksSection: View {
                 }
                 ForEach(model.bookmarks) { bookmark in
                     AO3AuthorBookmarkRow(bookmark: bookmark, expandAll: expandAll)
-                        .cardNavigation(to: bookmark.work)
+                        .cardNavigation(to: bookmark.work, accessibilityLabel: bookmark.work.title)
                         .cardRow()
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)

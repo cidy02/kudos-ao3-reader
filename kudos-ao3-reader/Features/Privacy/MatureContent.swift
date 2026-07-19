@@ -221,9 +221,9 @@ struct SensitiveWorkRow: View {
         } else {
             switch openMode {
             case .detail:
-                row.cardNavigation(to: work)
+                row.cardNavigation(to: work, accessibilityLabel: work.title)
             case .reader:
-                row.cardNavigation(to: LocalWorkDestination.reader(work))
+                row.cardNavigation(to: LocalWorkDestination.reader(work), accessibilityLabel: work.title)
             }
         }
     }

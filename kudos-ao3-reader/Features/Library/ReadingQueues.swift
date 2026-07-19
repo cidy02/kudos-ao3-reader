@@ -339,6 +339,13 @@ struct ReadingQueueDetailView: View {
                 queue: queue,
                 context: context
             ))
+            // VoiceOver can't perform the drag gesture above, so this is the only way
+            // a VoiceOver user can reorder the compact grid (the detailedList's List +
+            // EditMode reorder control is natively accessible and needs no equivalent).
+            .accessibilityAction(named: "Move Up") { moveWork(work, toIndex: currentIndex(of: work) - 1) }
+            .accessibilityAction(named: "Move Down") { moveWork(work, toIndex: currentIndex(of: work) + 1) }
+            .accessibilityAction(named: "Move to Top") { moveWork(work, toIndex: 0) }
+            .accessibilityAction(named: "Move to Bottom") { moveWork(work, toIndex: works.count - 1) }
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 SensitiveWorkCoverCard(work: work)
@@ -358,6 +365,7 @@ struct ReadingQueueDetailView: View {
                 draggedWorkID = work.id
                 return NSItemProvider(object: work.id.uuidString as NSString)
             }
+            .minimumHitTarget(28)
     }
 
     /// `.onMove`'s indices are relative to `displayedWorks`, which is the unfiltered
@@ -368,6 +376,26 @@ struct ReadingQueueDetailView: View {
         guard isReordering else { return }
         var ids = works.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
+        ReadingQueueService.reorder(ids, in: queue, context: context)
+    }
+
+    private func currentIndex(of work: SavedWork) -> Int {
+        works.firstIndex(where: { $0.id == work.id }) ?? 0
+    }
+
+    /// The compact grid's VoiceOver-accessible alternative to the drag handle above —
+    /// same `toOffset` direction convention `WorkReorderDropDelegate.dropEntered`
+    /// already uses (`+1` only when moving forward), and the same `reorder(_:)` write
+    /// path both existing reorder mechanisms funnel through. Clamping `newIndex` makes
+    /// this a safe no-op at either boundary (already first/last), so every accessibility
+    /// action can be attached unconditionally.
+    private func moveWork(_ work: SavedWork, toIndex newIndex: Int) {
+        guard isReordering else { return }
+        let idx = currentIndex(of: work)
+        let clamped = max(0, min(newIndex, works.count - 1))
+        guard clamped != idx else { return }
+        var ids = works.map(\.id)
+        ids.move(fromOffsets: IndexSet(integer: idx), toOffset: clamped > idx ? clamped + 1 : clamped)
         ReadingQueueService.reorder(ids, in: queue, context: context)
     }
 

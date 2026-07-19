@@ -70,6 +70,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                 }
             }
             .buttonStyle(.plain)
+            .minimumHitTarget()
             .accessibilityLabel(collapsed ? "Expand \(title)" : "Collapse \(title)")
 
             Spacer(minLength: 8)
@@ -83,6 +84,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .minimumHitTarget()
                 .accessibilityLabel("See all \(title)")
             }
         }

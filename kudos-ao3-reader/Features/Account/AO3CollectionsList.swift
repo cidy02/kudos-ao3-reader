@@ -63,10 +63,13 @@ struct AO3CollectionsList: View {
                                 )
                             }
                         }
-                        .cardNavigation(to: AO3AccountWorksList.Kind.collection(
-                            name: collection.name,
-                            title: collection.title
-                        ))
+                        .cardNavigation(
+                            to: AO3AccountWorksList.Kind.collection(
+                                name: collection.name,
+                                title: collection.title
+                            ),
+                            accessibilityLabel: collection.title
+                        )
                     }
                     .cardRow()
                 }

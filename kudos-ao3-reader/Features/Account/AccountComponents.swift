@@ -793,12 +793,15 @@ struct AccountWorksInlineSection: View {
         } else {
             ForEach(entries) { entry in
                 if let work = entry.local {
+                    // No .cardNavigation here: SensitiveWorkRow already applies it
+                    // internally (MatureContent.swift) for its non-blurred, non-selecting
+                    // branch — re-wrapping it stacks a second, unhidden, real-titled
+                    // NavigationLink behind the blurred branch's reveal gate.
                     SensitiveWorkRow(work: work, expandAll: expandAll)
-                        .cardNavigation(to: work)
                         .modifier(OptionalCardRow(enabled: useCardRow))
                 } else if let remote = entry.remote {
                     AO3WorkRow(work: remote, expandAll: expandAll)
-                        .cardNavigation(to: remote)
+                        .cardNavigation(to: remote, accessibilityLabel: remote.title)
                         .modifier(OptionalCardRow(enabled: useCardRow))
                 }
             }

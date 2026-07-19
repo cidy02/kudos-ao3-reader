@@ -390,7 +390,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             if !works.isEmpty {
                 Section("In Your Library") {
                     ForEach(works) { work in
-                        WorkRow(work: work).cardNavigation(to: work)
+                        WorkRow(work: work).cardNavigation(to: work, accessibilityLabel: work.title)
                     }
                     .cardRow()
                 }
