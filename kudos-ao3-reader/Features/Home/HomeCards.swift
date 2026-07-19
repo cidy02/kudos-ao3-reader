@@ -313,6 +313,7 @@ private struct CardMetaLabel: View {
                 .foregroundStyle(.secondary)
         }
         .lineLimit(lineLimit)
+        .combinedAccessibilityRow(text)
     }
 }
 

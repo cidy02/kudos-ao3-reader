@@ -46,8 +46,8 @@ consolidation precedent, `DeleteConfirmation` for destructive alerts). The plan 
 ### Recommended execution order
 
 ```
-Wave 0  Owner decisions (no code)         ── gates Waves 4,10 and Track B1
-Wave 1  Shared foundation                 ── MERGE FIRST; everything depends on it
+Wave 0  Owner decisions (no code)         ── ✅ RESOLVED 2026-07-19; Waves 4,10, Track B1 clear
+Wave 1  Shared foundation                 ── ✅ DONE 2026-07-19 (T-118); Wave 2 next
 Wave 2  UIComponents/ sweep               ── biggest multiplier
         ┌─ Wave 3  Search/        ┐
         ├─ Wave 4  Library/       │  disjoint files → may run in PARALLEL
@@ -113,39 +113,56 @@ Notation: **[HIG]** = from the T-115 review; **[fold]** = still-open finding fro
 placed here because it shares this wave's files. `verify.sh` = `Scripts/verify.sh` (invariants →
 lint → iOS suite → macOS build → whitespace), required ALL GREEN before every merge.
 
-### Wave 0 — Owner decisions (no code; unblocks later waves)
+### Wave 0 — Owner decisions (no code; unblocks later waves) — ✅ RESOLVED 2026-07-19
 
 - **Goal:** resolve the decision-gated items that otherwise block downstream waves.
-- **Findings:** BUG-8 / KD-LAYOUT-READERAFFORD (macOS Library card → reader vs → detail);
-  A1-F2 / KD-TEAMID (`DEVELOPMENT_TEAM` in public repo — keep or scrub + policy); PONY-6.7
-  (`KudosBackupManifest.supportedVersions` retention); KD-MIGRATION-META (Readium vs custom OPF
-  metadata); SHORT-R5 (Compact default migration for existing users).
+- **Decisions** (full detail: `TASKS.md` Key Decisions + T-117):
+  1. **BUG-8 / KD-LAYOUT-READERAFFORD** — not a bug. Library cards open the reader directly on
+     **both** iOS and macOS by design (confirmed live on-device); the "cards open detail" text
+     was stale documentation and has been corrected. Wave 4 drops the BUG-8 routing item.
+  2. **A1-F2 / KD-TEAMID** — keep `DEVELOPMENT_TEAM = NQH85H7343` as-is. No scrub, no
+     git-history purge. Track B1 drops the team-id action item.
+  3. **PONY-6.7** — raise `KudosBackupManifest.supportedVersions` to the latest version only (no
+     pre-July backups in use). Decided, **not yet implemented** — one-line change in
+     `Services/KudosBackup.swift:174-175`, unscheduled.
+  4. **KD-MIGRATION-META** — split by platform: iOS consolidates onto Readium metadata; macOS
+     keeps the custom OPF layer (no Readium navigator there to source from).
+  5. **SHORT-R5** — keep `@AppStorage` Compact-default semantics, no forced migration. **New
+     scope item:** unify the compact/detailed toggle into one app-wide setting (today 5
+     independent, un-synced stores — full list in `TASKS.md` T-117). Unscheduled; candidate for
+     Wave 1 (same "one helper, many call sites" shape as X1–X6).
 - **Shared components / files:** none (decisions only).
-- **Dependencies:** none. **Blocks:** Wave 4 (BUG-8 routing), Wave 10, Track B1 (team-id).
-- **Risks:** proceeding without a decision means either wasted work or a wrong-way fix.
+- **Dependencies:** none. **Blocked (now cleared):** Wave 4, Wave 10, Track B1 may proceed.
 - **Testing:** none. **Complexity:** Small (owner time, not engineering).
 
-### Wave 1 — Shared foundation (MERGE FIRST)
+### Wave 1 — Shared foundation (MERGE FIRST) — ✅ DONE 2026-07-19 (T-118)
 
 - **Goal:** land the six cross-wave helpers (X1–X6) + the PONY-6.1 resolver, each proven on one
   reference call site. Establish the API every later wave imports.
 - **Findings addressed:** none end-to-end yet (infrastructure) — but unblocks UI-2/3/5/6/7.
-- **Shared components to create/modify:** new hit-target modifier; promoted reduce-motion helper;
-  new theme color roles in `App/ThemeManager.swift` + `Features/Reader/ReaderStyle.swift`;
-  unified token source (extend `UIComponents/AppThemeSurface.swift`'s `CardListMetrics` or a new
-  `DesignTokens`); combined-a11y-row helper; shared destructive-confirm helper; shared href
-  resolver in `Services/`.
-- **Primary files:** `App/ThemeManager.swift`, `UIComponents/AppThemeSurface.swift`,
-  `UIComponents/SkeletonLoading.swift` (model), a new small helpers file under `UIComponents/`,
-  `Services/` (resolver). Also fold **App/ContentView.swift Sepia segmented-control** (UI-6/P3)
-  here since it is theming infrastructure (route it through X3 instead of the global UIKit
-  appearance proxy + hardcoded RGB).
+- **Shared components created:** `UIComponents/MinimumHitTarget.swift` (X1); `UIComponents/ReduceMotion.swift`
+  (X2); `UIComponents/SemanticThemeColors.swift` + `relativeLuminance` (`Utilities/ColorHex.swift`)
+  + `onAccentColor` (`App/ThemeManager.swift`) (X3); `CardRadius` enum in `UIComponents/AppThemeSurface.swift`
+  (X4); `combinedAccessibilityRow(_:)` in `UIComponents/WorkStatLabel.swift` (X5); `DestructiveConfirmationStyle`
+  + generic overloads in `UIComponents/DeleteConfirmation.swift` (X6); `Services/AO3URLResolver.swift`
+  (PONY-6.1, +14 unit tests). Also folded the **App/ContentView.swift Sepia segmented-control** fix
+  (UI-6/P3) — now reads `ReaderTheme.appBaseBackground`/`appElevatedBackground`/`textColor` instead
+  of hardcoded RGB.
+- **Reference call sites (proof, not mass adoption):** `WorkRow.swift` (X1 expand button, X3 favorite
+  star), `WorkCarouselSection.swift` (X2 collapse toggle), `AccountComponents.swift` +
+  `WorkDetailComponents.swift` (X4, both stray 14pt tiles), `WorkStatLabel.swift` + `HomeCards.swift`
+  (X5), `Collections.swift` (X6, "Remove from collection" — previously unconfirmed despite
+  `role: .destructive`), `AO3Client.swift` `parseBlurb` (PONY-6.1).
 - **Dependencies:** Wave 0 not required. **Everything in Track A depends on this.**
 - **Risks:** token unification + theme roles have wide visual reach (31 files read the theme) →
-  screenshot gate required; keep call-site migration OUT of this wave (later waves migrate as they
-  touch files) to bound blast radius.
-- **Testing:** `verify.sh`; unit tests for the resolver and any pure token/label helpers; **API
-  review gate** before Wave 2; **screenshot gate** for the token/theme visuals.
+  screenshot gate required (owner, still open — see Remains manual below); call-site migration
+  deliberately OUT of this wave (Wave 2 mass-adopts) to bound blast radius.
+- **Testing:** `verify.sh` ALL GREEN (602 tests/57 suites, iOS + macOS builds); 14 new table-driven
+  unit tests for the resolver. **Remains manual (owner):** the screenshot gate — Library (X1 row
+  height), Account (X4's 14→12pt radius), Sepia theme (ContentView fix + X3 favorite-star recolor).
+  `errorColor`/`favoriteColor`/`statusSuccessColor` RGB values are placeholder estimates, not
+  WCAG-verified against each theme's real backdrop — check before Wave 2 migrates the exclude/status
+  call sites onto them. **API review gate**: skim the six signatures before Wave 2 mass-adopts them.
 - **Complexity:** Medium.
 
 ### Wave 2 — `UIComponents/` sweep (biggest multiplier)
@@ -189,11 +206,11 @@ lint → iOS suite → macOS build → whitespace), required ALL GREEN before ev
   grouping), UI-3 (`WorkRow` expand button), UI-6 (`Collections` remove destructive role, favorite
   star `.yellow` → X3), UI-7 (`LibraryView` dual bulk-select impl + non-modal tab-bar hide),
   UI-2 (`WorkCardActions` a11y coverage); **[fold]** A6-F1 (queue drag-reorder broken — pairs with
-  Wave 2's ReorderHandle), BUG-8 (macOS card routing — only if Wave 0 rules it a bug).
+  Wave 2's ReorderHandle). ~~BUG-8 (macOS card routing)~~ — resolved by Wave 0 as not-a-bug, dropped.
 - **Shared components:** consumes X1, X3, X6, and the Wave-2 ReorderHandle. **Primary files:**
   `Features/Library/*` (`LibraryView`, `LibraryFilterPanel`, `RecentlyDeletedView`, `Collections`,
   `WorkRow`, `WorkCardActions`, `ReadingQueues`).
-- **Dependencies:** Waves 1–2; Wave 0 for BUG-8. **Parallel-safe** with 3/5/6/7.
+- **Dependencies:** Waves 1–2. **Parallel-safe** with 3/5/6/7.
 - **Risks:** the bulk-select unification (UI-7) is behavioral (adds macOS select mode) — keep it a
   clearly-scoped sub-change; A6-F1 reorder is a real correctness fix, review separately.
 - **Testing:** `verify.sh`; new tests for reorder index bridge (per A6-F1); screenshot gate on
@@ -314,7 +331,7 @@ noted `AppRouter`/`MatureContent` file coordination.
 
 | Track | Findings | Files | Notes |
 |---|---|---|---|
-| **B1 Security** | A1-F2/KD-TEAMID (gated on Wave 0), A5-F5 (log hygiene), A5-F6 (Face-ID fail-open), A5-F7 (AO3 hostname predicate), A5-F8 (path in tracked doc), A7-F4 (macOS EPUB script) | `project.pbxproj`, `Services/AO3Client.swift`, `Features/Privacy/MatureContent.swift`, `App/AppRouter.swift`, `Services/`, `Features/Reader/ReaderController.swift` | **Coordinate:** A5-F6 shares `MatureContent.swift` with HIG UI-2 (Wave 7-adjacent); A5-F7 shares `AppRouter.swift` with Wave 9. Sequence these to avoid double-touch. |
+| **B1 Security** | ~~A1-F2/KD-TEAMID~~ (resolved by Wave 0 — keep as-is, no action), A5-F5 (log hygiene), A5-F6 (Face-ID fail-open), A5-F7 (AO3 hostname predicate), A5-F8 (path in tracked doc), A7-F4 (macOS EPUB script) | `project.pbxproj`, `Services/AO3Client.swift`, `Features/Privacy/MatureContent.swift`, `App/AppRouter.swift`, `Services/`, `Features/Reader/ReaderController.swift` | **Coordinate:** A5-F6 shares `MatureContent.swift` with HIG UI-2 (Wave 7-adjacent); A5-F7 shares `AppRouter.swift` with Wave 9. Sequence these to avoid double-touch. |
 | **B2 Comments Part D+** | CAA-8, CAA-9 (Part D, not started), CAA-10, CAA-12, CAA-13, CAA-14, CAA-15, BUG-6, A6-F5, A8-F3 (cache eviction) | `Services/` comment parser/model, `Features/Comments/CommentsModel` | Continues the T-97/99/102/103 line. Parser/correctness, not UI — keep off Wave 7. Heavy on fixture tests; **no live AO3**. |
 | **B3 Functional correctness** | A6-F1 (folded to Wave 4), A6-F2 (Wave 2-adjacent), A6-F3 (account list pagination), A6-F4 (batch cancel), T91-RF4/RF7/RF9/RF11 | `Features/Library/`, `Features/Bookmarks/AO3AccountWorksList.swift`, `Services/`, `Models/` | RF6/RF8/RF10 already folded into Wave 6. The rest are standalone correctness. |
 | **B4 Reader correctness** | A7-F6, A7-F7, A7-F9, A7-F10, T-07 (lazy extraction) | `Services/` EPUB/reader, `Features/Reader/` | Batch after Wave 10 (same area, but distinct from the a11y/dead-code work). |
@@ -376,8 +393,11 @@ first and rebasing the other.
 The `AGENTS.md` UI-Consistency/Density screenshot gate is **mandatory before every UI wave merges
 to `main`**. In addition:
 
-1. **Wave 0 — decision gate.** Owner resolves BUG-8, team-id policy, manifest versions,
-   migration-meta, Compact-default migration **before** Waves 4/10 and Track B1 start.
+1. **Wave 0 — decision gate. ✅ Resolved 2026-07-19** (BUG-8 → not a bug; team-id → keep as-is;
+   manifest versions → raise floor to latest, unimplemented; migration-meta → split iOS
+   Readium/macOS OPF; Compact-default → keep, no forced migration, plus a new app-wide-scope
+   follow-up). Full detail: `TASKS.md` Key Decisions + T-117. Waves 4/10 and Track B1 are clear
+   to start.
 2. **After Wave 1 — API + visual gate.** Review the six helper signatures **before** mass
    application (a bad shared API multiplies across every later wave), plus a screenshot pass on the
    token-unification / theme-role visuals.

@@ -102,7 +102,7 @@ struct WorkQuickActionTile: View {
     var detail: String?
     var isBusy = false
 
-    private let cornerRadius: CGFloat = 14
+    private let cornerRadius: CGFloat = CardRadius.tile
 
     var body: some View {
         VStack(spacing: 8) {

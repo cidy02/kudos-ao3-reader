@@ -1248,7 +1248,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // Series block: "Part <strong>N</strong> of <a href="/series/ID">Title</a>".
         let seriesLink = try el.select("ul.series li a").first()
         let seriesTitle = try seriesLink?.text()
-        let seriesURL = try (seriesLink?.attr("href")).map { "https://archiveofourown.org\($0)" }
+        let seriesURL = try AO3URLResolver.resolve(seriesLink?.attr("href"))?.absoluteString
         let seriesPosition = Int((try? el.select("ul.series li strong").first()?.text() ?? "") ?? "")
 
         return AO3WorkSummary(

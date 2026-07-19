@@ -60,6 +60,14 @@ final class ThemeManager {
         appTheme.appTint ?? accentColor
     }
 
+    /// A foreground guaranteed to stay readable on top of `accentColor`. Unlike the
+    /// `ReaderTheme` role colors, this can't be a fixed per-theme case switch: the
+    /// accent is user-customizable (`setAccent`), so contrast is derived from the
+    /// actual chosen color's luminance every time it changes.
+    var onAccentColor: Color {
+        accentColor.relativeLuminance > 0.45 ? .black : .white
+    }
+
     /// Sets the accent from a picked colour (stored as hex).
     func setAccent(_ color: Color) {
         accentHex = color.hexString

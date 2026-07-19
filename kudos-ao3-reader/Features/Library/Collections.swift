@@ -93,6 +93,7 @@ struct CollectionDetailView: View {
     @State private var confirmDelete = false
     @State private var showingAddWorks = false
     @State private var expandAll = false
+    @State private var pendingRemoval: SavedWork?
     /// Filters scoped to this one collection, applied live to its works.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
@@ -133,7 +134,7 @@ struct CollectionDetailView: View {
                         SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    remove(work)
+                                    pendingRemoval = work
                                 } label: {
                                     Label("Remove", systemImage: "minus.circle")
                                 }
@@ -235,6 +236,16 @@ struct CollectionDetailView: View {
                         + "themselves stay in your Library either way."
                 )
             }
+            .destructiveConfirmation(
+                for: $pendingRemoval,
+                title: "Remove this work?",
+                confirmLabel: "Remove",
+                message: { work in
+                    "“\(work.title)” will no longer be in “\(collection.name)”. "
+                        + "The work itself stays in your Library."
+                },
+                perform: { remove($0) }
+            )
     }
 
     private func remove(_ work: SavedWork) {

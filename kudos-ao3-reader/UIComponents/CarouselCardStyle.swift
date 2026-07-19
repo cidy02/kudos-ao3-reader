@@ -19,7 +19,7 @@ enum CoverArt {
 enum CarouselCardMetrics {
     static let width: CGFloat = 164
     static let height: CGFloat = 228
-    static let cornerRadius: CGFloat = 12
+    static let cornerRadius: CGFloat = CardRadius.tile
 }
 
 struct CarouselCardShadow {

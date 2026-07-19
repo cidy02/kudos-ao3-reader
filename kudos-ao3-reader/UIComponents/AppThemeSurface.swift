@@ -150,11 +150,44 @@ extension ReaderTheme {
     }
 }
 
+/// Single source of truth for every rounded-rect radius used by the app's card
+/// systems (List cards, carousel tiles, Account's nav/grid controls). Each
+/// semantic name documents WHY its value differs from the others — pick one of
+/// these instead of a fresh `CGFloat` literal. Values that were accidental drift
+/// (not intentional), like the two independent 14pt grid-tile literals that used
+/// to live in `WorkQuickActionTile`/`AccountShortcutGridTile`, collapse onto the
+/// nearest semantic case here rather than keeping a bespoke number alive.
+enum CardRadius {
+    /// Fixed-size carousel/grid tiles: Work/Collection/Reading-Queue cover tiles
+    /// (`CarouselCardMetrics`) and the small square icon tiles in the
+    /// Account/Work-Detail quick-action grids. All of these are compact,
+    /// roughly-square tiles arranged in a grid/row, as opposed to full-width list
+    /// rows, so they share one smaller radius.
+    static let tile: CGFloat = 12
+
+    /// Full-width List rows rendered as free-standing cards (Comments threads,
+    /// Author Profile, Work Detail overview rows, Bookmarks works list, Account
+    /// rows). The base case `cardRow()` defaults to.
+    static let listRow: CGFloat = 16
+
+    /// Account's navigation/submenu trigger rows — deliberately softer/rounder
+    /// than a standard list row (see `AccountControlMetrics`'s own doc comment:
+    /// "Work cards deliberately retain the library's standard geometry").
+    static let accountControl: CGFloat = 20
+
+    /// Inline pill controls inside Account rows (buttonBorderShape triggers).
+    /// Equal to `.tile` today; kept as its own name because it is a UNIT (a
+    /// button's rounded-rect radius), not a card, and the two happening to match
+    /// is coincidental, not load-bearing — don't delete this case to
+    /// "deduplicate" against `.tile`.
+    static let accountInlineControl: CGFloat = 12
+}
+
 /// Card-list spacing constants, kept in one place so every adopting list matches.
 /// Internal so the comments thread cards share the radius/gap rather than
 /// re-hardcoding the same numbers.
 enum CardListMetrics {
-    static let cornerRadius: CGFloat = 16
+    static let cornerRadius: CGFloat = CardRadius.listRow
     static let interCardSpacing: CGFloat = 12 // vertical gap between cards
     static let sideMargin: CGFloat = 16 // card inset from the screen edges
     static let innerVertical: CGFloat = 10 // padding inside the card (on top of row content)

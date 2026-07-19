@@ -26,6 +26,7 @@ struct WorkRow: View {
     var externalExpanded: Binding<Bool>?
 
     @Environment(AppRouter.self) private var router
+    @Environment(ThemeManager.self) private var theme
     @State private var internalExpanded = false
 
     private var expandedBinding: Binding<Bool> {
@@ -71,7 +72,7 @@ struct WorkRow: View {
                     if work.isFavorite {
                         Image(systemName: "star.fill")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(theme.appTheme.favoriteColor)
                     }
                     if isExpandable && showsExpandButton { expandButton }
                     if isSelecting {
@@ -197,6 +198,7 @@ struct WorkRowExpandButton: View {
         .buttonBorderShape(.circle)
         .controlSize(.small)
         .tint(.accentColor)
+        .minimumHitTarget()
         .accessibilityLabel(expanded ? "Show less" : "Show more")
     }
 }

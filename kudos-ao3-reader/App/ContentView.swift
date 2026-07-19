@@ -248,20 +248,27 @@ struct ContentView: View {
     }
 
     /// Warms `UISegmentedControl` for Sepia (resets to default for Light/Dark).
-    private func applySegmentedControlAppearance(for theme: ReaderTheme) {
+    /// Colors are bridged from `ReaderTheme`'s existing semantic surface/text
+    /// tokens — the same ones `.appThemedRows()`/`.appThemedScroll()` use for
+    /// every Sepia Form/List row — instead of restating their RGB values here, so
+    /// this proxy can never silently drift out of sync with the rest of the Sepia
+    /// palette.
+    private func applySegmentedControlAppearance(for readerTheme: ReaderTheme) {
         #if canImport(UIKit)
         let proxy = UISegmentedControl.appearance()
-        guard theme == .sepia else {
+        guard readerTheme == .sepia else {
             proxy.selectedSegmentTintColor = nil
             proxy.backgroundColor = nil
             proxy.setTitleTextAttributes(nil, for: .normal)
             proxy.setTitleTextAttributes(nil, for: .selected)
             return
         }
-        // Recessed warm track + raised light-cream selected segment + brown text.
-        proxy.backgroundColor = UIColor(red: 0.886, green: 0.831, blue: 0.718, alpha: 1)
-        proxy.selectedSegmentTintColor = UIColor(red: 0.992, green: 0.965, blue: 0.910, alpha: 1)
-        let brown = UIColor(red: 0.357, green: 0.275, blue: 0.212, alpha: 1)
+        // Recessed warm track + raised light-cream selected segment + brown text —
+        // the same appBaseBackground/appElevatedBackground/textColor pairing every
+        // other Sepia surface already uses (ReaderStyle.swift).
+        proxy.backgroundColor = readerTheme.appBaseBackground.map(UIColor.init)
+        proxy.selectedSegmentTintColor = readerTheme.appElevatedBackground.map(UIColor.init)
+        let brown = UIColor(readerTheme.textColor)
         proxy.setTitleTextAttributes([.foregroundColor: brown], for: .normal)
         proxy.setTitleTextAttributes([.foregroundColor: brown], for: .selected)
         #endif

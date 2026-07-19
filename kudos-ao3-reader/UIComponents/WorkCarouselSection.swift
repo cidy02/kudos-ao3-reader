@@ -16,6 +16,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let emptyState: () -> Empty
 
     @AppStorage private var collapsed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         title: String,
@@ -56,7 +57,9 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         HStack(spacing: 8) {
             // Tap the title (or its disclosure chevron) to collapse/expand.
             Button {
-                withAnimation(.snappy(duration: 0.22)) { collapsed.toggle() }
+                withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
+                    collapsed.toggle()
+                }
             } label: {
                 HStack(spacing: 6) {
                     Text(title).font(.title2.bold()).foregroundStyle(.primary)

@@ -1,5 +1,27 @@
 import SwiftUI
 
+extension View {
+    /// Collapses a small icon+text metadata row (e.g. `WorkStatLabel`,
+    /// `CardMetaLabel`) into one VoiceOver stop instead of two — one for the
+    /// decorative icon, one for the text. Ignores the row's own subview
+    /// accessibility entirely (so a glyph's auto-derived SF Symbol name, e.g.
+    /// "checkmark shield", never leaks into the announcement — no need to
+    /// `.accessibilityHidden` the icon separately) and reports `label` instead,
+    /// normally the same string already shown by the row's `Text`.
+    ///
+    /// Deliberately NOT a `Label` conversion: `Label`'s icon-tint renders
+    /// inconsistently between `List` and plain `ScrollView` containers in this
+    /// codebase — see the icon+title row comment near `AccountComponents.swift`'s
+    /// `chapterSection`-style row (icon and text styled separately "rather than via
+    /// a single Label, whose icon otherwise only picks up the accent tint inside a
+    /// List... and falls back to .primary in Compact's plain ScrollView") — and
+    /// these rows appear in both container types.
+    func combinedAccessibilityRow(_ label: String) -> some View {
+        accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+    }
+}
+
 /// A single compact work stat: a bold, theme-tinted glyph hugging its value, with
 /// the value inheriting the surrounding font/colour. Shared across every work
 /// surface — the Search/Library rows (`AO3WorkRow` / `WorkRow`) and the Home/Library
@@ -17,6 +39,7 @@ struct WorkStatLabel: View {
         }
         .lineLimit(1)
         .fixedSize()
+        .combinedAccessibilityRow(text)
     }
 }
 

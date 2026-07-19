@@ -432,7 +432,7 @@ struct AccountShortcutGridTile: View {
     var count: String?
     var opensExternally: Bool = false
 
-    private let cornerRadius: CGFloat = 14
+    private let cornerRadius: CGFloat = CardRadius.tile
 
     var body: some View {
         VStack(spacing: 8) {
