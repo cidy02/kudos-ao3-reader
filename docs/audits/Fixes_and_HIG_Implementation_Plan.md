@@ -178,15 +178,21 @@ lint → iOS suite → macOS build → whitespace), required ALL GREEN before ev
 - **Goal:** apply X1/X2/X5 (+ token migration) across the shared components so every downstream
   surface inherits the fix.
 - **Findings addressed:** **[HIG]** UI-2 (`TagChip` `.isSelected` parity, `CardNavigationModifier`
-  stray VoiceOver stop — now labeled, not hidden), UI-3 (`ReorderHandle` 28pt, `WorkCarouselSection`
-  collapse+see-all both fixed, `AO3AuthorNavigation` byline targets at 28pt with baseline-safe
-  top-alignment), UI-6 (`WorkCardListControls` clear-filters — investigated, left unchanged, see
-  below); **[fold]** A9-F2 (ReorderHandle — 4 `.accessibilityAction`s: Move Up/Down/to Top/to
-  Bottom, added to the compact-grid mode only; the default `detailedList` mode already reorders
-  accessibly via `List`+`.onMove`+`EditMode`), A9-F4 (author links — `.focusable`+`.onKeyPress`+
+  stray VoiceOver stop — now labeled, not hidden), UI-3 (`ReorderHandle` — its effective drag-source
+  region was already ~40pt (28pt view + 6pt padding each side) before this wave, above the 28pt
+  floor, so UI-3's tap-target complaint for it is closed as already-adequate, not by enlargement;
+  `WorkCarouselSection` collapse+see-all both fixed; `AO3AuthorNavigation` byline targets at 28pt
+  with baseline-safe top-alignment), UI-6 (`WorkCardListControls` clear-filters — investigated, left
+  unchanged, see below); **[fold]** A9-F2 (ReorderHandle's real fix — 4 `.accessibilityAction`s: Move
+  Up/Down/to Top/to Bottom, added to the compact-grid mode only; the default `detailedList` mode
+  already reorders accessibly via `List`+`.onMove`+`EditMode`), A9-F4 (author links — `.focusable`+`.onKeyPress`+
   focus-ring, not a `Button` conversion — one was tried at this exact spot before and reverted for
-  double-navigation under `cardNavigation`), A6-F2 (confirmed non-issue for `WorkCardListControls.swift`
-  — no bulk-action-bar code lives in that specific file). `WorkStatLabel`/`CardMetaLabel` labeling
+  double-navigation under `cardNavigation`). **A6-F2 is NOT a Wave-2 item after all — still open, on
+  Track B3:** the plan's own B3 table (below) already scopes A6-F2 to `Features/Library/` and
+  `Features/Bookmarks/AO3AccountWorksList.swift` — `WorkBulkActionBar` (the actual untracked
+  bulk-Save-for-Later fan-out this finding is about) lives outside `UIComponents/` entirely. All
+  Wave 2 confirmed is that `WorkCardListControls.swift` specifically carries none of that logic —
+  that closes nothing on Track B3. `WorkStatLabel`/`CardMetaLabel` labeling
   was already done in Wave 1/T-119; not revisited here.
 - **UI-6 re-scoped, not fixed:** research found `WorkCardListControls`'s "Clear All Filters"
   destructive-styling-with-no-confirmation already matches 3 established app-wide siblings
@@ -403,6 +409,16 @@ tissue about cross-branch pollution (the T-104/Codex Readium incident) — so ke
 
 **Parallel fan (cut from the post-Wave-2 tip; disjoint files → no conflicts):**
 
+> Made explicit per T-120/T-121: Wave 2's actual implementation touched files across Search
+> (`MediaBrowserView.swift`), Library (`LibraryView.swift`, `ReadingQueues.swift`), WorkDetail
+> (`WorkDetailSections.swift`), Account (`AccountComponents.swift`), and Authors
+> (`AO3SeriesDetailView.swift`, `AuthorProfileContentSections.swift`) — not just `UIComponents/`
+> itself, since the call-site-threading fixes (TagChip, CardNavigationModifier) necessarily reach
+> into every directory that uses those shared components. **Waves 3-7 must cut from the tip that
+> carries T-120 + its review-fix round (T-121), not from `775ed22`** (Wave 1's tip) — cutting from
+> the wrong point would silently drop this wave's fixes in whichever wave branch touches the same
+> files.
+
 3. `claude/hig-w3-search`, `claude/hig-w4-library`, `claude/hig-w5-workdetail`,
    `claude/hig-w6-account-support`, `claude/hig-w7-comments-authors` — run up to **~2–3
    concurrently** (not all five) to keep the density-gate review load manageable and rebasing
@@ -450,7 +466,13 @@ to `main`**. In addition:
    VoiceOver findings **by code, not at runtime** (report §5.4/§9). Before closing the accessibility
    waves (2, 6, 7), the owner runs a VoiceOver / Accessibility-Inspector pass — this is the gate
    that confirms the two runtime-flagged UI-2 items (`CardNavigationModifier` stray stop; WorkStatLabel
-   grouping) actually resolved.
+   grouping) actually resolved. **Wave 2 addition:** this pass should also confirm the
+   `CardNavigationModifier` labeled-link design's accepted trade-off is tolerable by ear — a card's
+   title is now announced twice per row (once in the row's own combined content, once as the
+   separate "open" link's label), a deliberate cost of keeping nested fandom/expand/byline buttons
+   independently reachable rather than combining the whole card into one element (see T-120). If it
+   reads as genuinely confusing rather than mildly redundant, reconsider before Waves 3-7 build more
+   surfaces on the same pattern.
 7. **Track B security (B1) — separate security-review lens** (not the UI density gate); the team-id
    scrub additionally needs the owner's public-repo decision from Wave 0.
 

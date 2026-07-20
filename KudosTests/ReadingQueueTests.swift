@@ -145,6 +145,54 @@ struct ReadingQueueTests {
         #expect(queue.memberships.first?.sortOrderInQueue == 1)
     }
 
+    // MARK: - moveOffsets (compact-grid VoiceOver Move Up/Down/to Top/to Bottom actions)
+
+    @Test func moveOffsetsForwardAddsOneToToOffset() {
+        // Matches WorkReorderDropDelegate.dropEntered's own convention: moving an
+        // item later in the array needs toOffset past the gap the removal leaves.
+        let result = ReadingQueueService.moveOffsets(currentIndex: 0, requestedIndex: 2, count: 4)
+        #expect(result?.from == IndexSet(integer: 0))
+        #expect(result?.to == 3)
+    }
+
+    @Test func moveOffsetsBackwardUsesRequestedIndexDirectly() {
+        let result = ReadingQueueService.moveOffsets(currentIndex: 3, requestedIndex: 1, count: 4)
+        #expect(result?.from == IndexSet(integer: 3))
+        #expect(result?.to == 1)
+    }
+
+    @Test func moveOffsetsClampsPastTheEndToTheLastIndex() {
+        // "Move to Bottom" from anywhere requests count-1; also covers a Move Down
+        // that overshoots the array (should land on the last index, not go out of bounds).
+        let result = ReadingQueueService.moveOffsets(currentIndex: 1, requestedIndex: 99, count: 4)
+        #expect(result?.from == IndexSet(integer: 1))
+        #expect(result?.to == 4) // last index (3) + 1, since it's a forward move
+    }
+
+    @Test func moveOffsetsClampsBeforeTheStartToZero() {
+        let result = ReadingQueueService.moveOffsets(currentIndex: 2, requestedIndex: -99, count: 4)
+        #expect(result?.from == IndexSet(integer: 2))
+        #expect(result?.to == 0)
+    }
+
+    @Test func moveOffsetsIsANoOpAlreadyAtTheRequestedIndex() {
+        #expect(ReadingQueueService.moveOffsets(currentIndex: 2, requestedIndex: 2, count: 4) == nil)
+    }
+
+    @Test func moveOffsetsIsANoOpMovingUpFromTheTop() {
+        // The Move Up action at index 0 requests index -1, which clamps back to 0 —
+        // the same index it's already at, so this must be a safe no-op, not a crash.
+        #expect(ReadingQueueService.moveOffsets(currentIndex: 0, requestedIndex: -1, count: 4) == nil)
+    }
+
+    @Test func moveOffsetsIsANoOpMovingDownFromTheBottom() {
+        #expect(ReadingQueueService.moveOffsets(currentIndex: 3, requestedIndex: 4, count: 4) == nil)
+    }
+
+    @Test func moveOffsetsIsANoOpOnAnEmptyQueue() {
+        #expect(ReadingQueueService.moveOffsets(currentIndex: 0, requestedIndex: 0, count: 0) == nil)
+    }
+
     @Test func queuedWorkKeepsEPUBWhenMarkedFinished() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

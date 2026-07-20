@@ -131,22 +131,28 @@ struct AO3AuthorBylineView: View {
                     // Button was tried here before and reverted for the same reason —
                     // don't reintroduce one; hardware-keyboard support below is added
                     // via .focusable/.onKeyPress instead, not by becoming a Button.
+                    //
+                    // frame + contentShape are established BEFORE highPriorityGesture
+                    // is attached (not after) so the gesture is unambiguously scoped to
+                    // the full enlarged region from the moment it exists — relying on a
+                    // later outer contentShape to retroactively extend an
+                    // already-attached gesture is exactly the kind of ordering risk that
+                    // needs a runtime check, not just a plausible reading of the docs;
+                    // this ordering sidesteps the question instead of resting on it.
+                    // NOT .minimumHitTarget() here: that modifier's plain
+                    // .frame(minHeight:) centers its content vertically, which shifts
+                    // this Text's baseline and reproduces the exact "dropped it below
+                    // 'by'" regression noted above (1) — the frame must stay top-aligned
+                    // so the enlarged hit box only grows downward, off the baseline.
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
                         .foregroundStyle(.tint)
+                        .frame(minWidth: 28, minHeight: 28, alignment: .top)
                         .contentShape(Rectangle())
                         .highPriorityGesture(TapGesture().onEnded { activate(route) })
                         .accessibilityLabel(token.name)
                         .accessibilityHint("Open AO3 author profile")
                         .accessibilityAddTraits(.isButton)
-                        // NOT .minimumHitTarget() here: that modifier's plain
-                        // .frame(minHeight:) centers its content vertically, which
-                        // shifts this Text's baseline and reproduces the exact
-                        // "dropped it below 'by'" regression noted above (1) — the
-                        // frame must stay top-aligned so the enlarged hit box only
-                        // grows downward, leaving the text's own baseline in place.
-                        .frame(minWidth: 28, minHeight: 28, alignment: .top)
-                        .contentShape(Rectangle())
                         .focusable(true)
                         .focused($focusedTokenID, equals: token.id)
                         .onKeyPress(keys: [.return, .space]) { _ in

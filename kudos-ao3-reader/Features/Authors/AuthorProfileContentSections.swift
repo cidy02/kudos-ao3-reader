@@ -161,7 +161,13 @@ struct AO3AuthorFandomFilterSection: View {
                     TagChip(text: "All", tinted: model.selectedFandom == nil)
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget(28)
+                // 44pt (not the 28pt dense-flow floor used elsewhere in Wave 2): this
+                // is a single horizontal scroll row, not a wrapping FlowLayout, so a
+                // full 44pt box can't overlap an adjacent row the way it could in a
+                // dense tag cloud — and 44pt is what this bar already had before Wave 2
+                // (a hand-rolled .frame(minHeight: 44)), so this restores rather than
+                // grows it.
+                .minimumHitTarget()
                 .accessibilityAddTraits(model.selectedFandom == nil ? .isSelected : [])
 
                 ForEach(fandoms) { fandom in
@@ -176,7 +182,9 @@ struct AO3AuthorFandomFilterSection: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .minimumHitTarget(28)
+                    // See the "All" chip above: 44pt restores this bar's pre-Wave-2 size
+                    // (a single scroll row, no FlowLayout overlap risk).
+                    .minimumHitTarget()
                     .accessibilityAddTraits(model.selectedFandom == fandom ? .isSelected : [])
                 }
             }

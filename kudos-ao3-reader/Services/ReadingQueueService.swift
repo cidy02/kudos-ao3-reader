@@ -708,6 +708,21 @@ enum ReadingQueueService {
         (queue.memberships.map(\.sortOrderInQueue).max() ?? -1) + 1
     }
 
+    /// Pure index arithmetic for a single-step reorder (`ReadingQueueDetailView.moveWork(_:toIndex:)`,
+    /// the compact grid's VoiceOver Move Up/Down/to Top/to Bottom actions) — extracted so the
+    /// math is directly unit-testable without a `ModelContext`/SwiftUI. Mirrors
+    /// `WorkReorderDropDelegate.dropEntered`'s direction convention: `toOffset` gets `+1` only
+    /// when moving forward, matching `Array.move(fromOffsets:toOffset:)`'s contract that
+    /// `toOffset` names a position in the array as it stood *before* the move. Returns `nil`
+    /// when `requestedIndex` clamps to `currentIndex` (already at that boundary) — the safe
+    /// no-op every accessibility action relies on to be attachable unconditionally.
+    static func moveOffsets(currentIndex: Int, requestedIndex: Int, count: Int) -> (from: IndexSet, to: Int)? {
+        guard count > 0 else { return nil }
+        let clamped = max(0, min(requestedIndex, count - 1))
+        guard clamped != currentIndex else { return nil }
+        return (IndexSet(integer: currentIndex), clamped > currentIndex ? clamped + 1 : clamped)
+    }
+
     /// Applies a user-dragged reorder of a queue's works. `workIDs` is the full,
     /// unfiltered work list in its new order; each matching membership's
     /// `sortOrderInQueue` is rewritten to its index, so the same ordering survives

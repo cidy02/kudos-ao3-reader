@@ -365,6 +365,14 @@ struct ReadingQueueDetailView: View {
                 draggedWorkID = work.id
                 return NSItemProvider(object: work.id.uuidString as NSString)
             }
+            // Geometrically a no-op today: ReorderHandleView is already 28×28pt and
+            // the surrounding .padding(6) already grows the drag source to ~40pt in
+            // each dimension (well above this 28pt floor), so this doesn't enlarge
+            // anything — it's an explicit, self-documenting minimum kept in case the
+            // padding above ever shrinks, plus the corner-coverage .contentShape it
+            // adds. The actual UI-3/A9-F2 fix for this handle is the 4
+            // .accessibilityAction custom actions on the reordering-mode card below
+            // (VoiceOver can't perform the drag this handle starts at all), not this.
             .minimumHitTarget(28)
     }
 
@@ -390,12 +398,13 @@ struct ReadingQueueDetailView: View {
     /// this a safe no-op at either boundary (already first/last), so every accessibility
     /// action can be attached unconditionally.
     private func moveWork(_ work: SavedWork, toIndex newIndex: Int) {
-        guard isReordering else { return }
-        let idx = currentIndex(of: work)
-        let clamped = max(0, min(newIndex, works.count - 1))
-        guard clamped != idx else { return }
+        guard isReordering,
+              let (from, to) = ReadingQueueService.moveOffsets(
+                  currentIndex: currentIndex(of: work), requestedIndex: newIndex, count: works.count
+              )
+        else { return }
         var ids = works.map(\.id)
-        ids.move(fromOffsets: IndexSet(integer: idx), toOffset: clamped > idx ? clamped + 1 : clamped)
+        ids.move(fromOffsets: from, toOffset: to)
         ReadingQueueService.reorder(ids, in: queue, context: context)
     }
 
