@@ -129,6 +129,7 @@ struct TagPickerView: View {
     /// Included fandoms used to seed the default list with popular tags.
     var fandomContext: [String] = []
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var theme
 
     @State private var query = ""
     @State private var results: [String] = []
@@ -238,15 +239,20 @@ struct TagPickerView: View {
 
     private func tagRows(_ tags: [String]) -> some View {
         ForEach(tags, id: \.self) { tag in
+            let state = state(of: tag)
             Button {
                 cycle(tag)
             } label: {
                 HStack {
                     Text(tag).foregroundStyle(.primary)
                     Spacer()
-                    selectionLabel(for: state(of: tag))
+                    selectionLabel(for: state)
                 }
                 .contentShape(Rectangle())
+                // Same shape as AO3FilterPanel's cyclingFacetRow (a Label nested in a
+                // Button splits into two VoiceOver stops instead of combining) — the
+                // fix mirrors that row's.
+                .combinedAccessibilityRow([tag, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
             }
             .buttonStyle(.plain)
         }
@@ -264,7 +270,7 @@ struct TagPickerView: View {
         case .excluded:
             Label("Exclude", systemImage: "minus.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.red)
+                .foregroundStyle(theme.appTheme.excludeColor)
         }
     }
 
@@ -323,8 +329,10 @@ private struct FilterTagChip: View {
     let state: FilterSelectionState
     let onCycle: () -> Void
 
+    @Environment(ThemeManager.self) private var theme
+
     private var color: Color {
-        state == .excluded ? .red : .accentColor
+        state == .excluded ? theme.appTheme.excludeColor : .accentColor
     }
 
     private var symbol: String {

@@ -8,6 +8,8 @@ struct SearchPaginationBar: View {
     let totalPages: Int
     let onSelect: (Int) -> Void
 
+    @Environment(ThemeManager.self) private var theme
+
     var body: some View {
         HStack(spacing: 0) {
             navButton(.backward)
@@ -59,38 +61,37 @@ struct SearchPaginationBar: View {
         let tapLabel = isBackward ? "Previous page" : "Next page"
         let endLabel = isBackward ? "First page" : "Last page"
 
-        return Image(systemName: isBackward ? "chevron.left" : "chevron.right")
-            .font(.caption.weight(.bold))
-            .frame(width: 31, height: 31)
-            .background(
-                Circle().fill(enabled ? Color.accentColor.opacity(0.12)
-                    : Color.secondary.opacity(0.06))
-            )
-            .contentShape(Circle())
-            .foregroundStyle(enabled ? Color.accentColor : Color.secondary.opacity(0.35))
-            .allowsHitTesting(enabled)
-            .gesture(
-                LongPressGesture(minimumDuration: 0.45)
-                    .exclusively(before: TapGesture())
-                    .onEnded { result in
-                        switch result {
-                        case .first:
-                            onSelect(endPage)
-                        case .second:
-                            onSelect(tapPage)
-                        }
-                    }
-            )
-            .accessibilityElement()
-            .accessibilityLabel(tapLabel)
-            .accessibilityHint("Long-press for \(endLabel.lowercased()).")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction {
-                if enabled { onSelect(tapPage) }
-            }
-            .accessibilityAction(named: Text(endLabel)) {
+        // A real Button (not a bare Image + gesture) so Tab / Full Keyboard Access
+        // can focus and activate it (HIG audit A9-F1); `.contextMenu` gives sighted
+        // users a visible affordance for the jump-to-end action the long-press
+        // gesture used to hide entirely. SwiftUI auto-exposes contextMenu content
+        // as a VoiceOver custom action, so — unlike the old gesture-only version —
+        // no separate `.accessibilityAction(named:)` is needed here; adding one
+        // would just register the same "First/Last page" action twice.
+        return Button {
+            if enabled { onSelect(tapPage) }
+        } label: {
+            Image(systemName: isBackward ? "chevron.left" : "chevron.right")
+                .font(.caption.weight(.bold))
+                .frame(width: 31, height: 31)
+                .background(
+                    Circle().fill(enabled ? Color.accentColor.opacity(0.12)
+                        : Color.secondary.opacity(0.06))
+                )
+                .foregroundStyle(enabled ? Color.accentColor : Color.secondary.opacity(0.35))
+        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(enabled)
+        // Grows the tap/focus region to 44pt without touching the 31pt visual
+        // chrome above (HIG audit UI-3). Last modifier per its own doc comment.
+        .minimumHitTarget()
+        .contextMenu {
+            Button(endLabel) {
                 if enabled { onSelect(endPage) }
             }
+        }
+        .accessibilityLabel(tapLabel)
+        .accessibilityHint("Long-press for \(endLabel.lowercased()).")
     }
 
     enum Direction {
@@ -126,7 +127,7 @@ struct SearchPaginationBar: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
-                .foregroundStyle(isCurrent ? Color.white : Color.primary)
+                .foregroundStyle(isCurrent ? theme.onEffectiveTint : Color.primary)
                 .padding(.horizontal, isWide ? 9 : 0)
                 .frame(minWidth: 31, minHeight: 31)
                 .background(
@@ -141,6 +142,14 @@ struct SearchPaginationBar: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        // 28pt, not the 44pt default: pills sit only 6pt apart in `pageItems`,
+        // and `pageItems` is `.fixedSize` inside a `.layoutPriority(1)`
+        // `ViewThatFits` — a full 44pt-per-pill minimum measurably widens the
+        // row and makes the AO3-style "1 … 5 6 7 … 142" window fall back to
+        // the cramped `compactItems` variant sooner than before this fix.
+        // `.minimumHitTarget`'s own doc comment reserves exactly this
+        // tightly-packed case for a smaller floor (HIG audit UI-3/A9-F1).
+        .minimumHitTarget(28)
         .accessibilityLabel("Page \(page)")
         .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
     }

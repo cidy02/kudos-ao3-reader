@@ -14,6 +14,8 @@ struct AO3FilterPanel: View {
     /// primary button just confirms rather than searching.
     enum Mode { case search, refine }
 
+    @Environment(ThemeManager.self) private var theme
+
     @Binding var filters: AO3SearchFilters
     var mode: Mode = .search
     /// Show the Fandoms include/exclude picker. Hidden in Browse, where the page's
@@ -196,10 +198,14 @@ struct AO3FilterPanel: View {
                 case .excluded:
                     Label("Exclude", systemImage: "minus.circle.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(theme.appTheme.excludeColor)
                 }
             }
             .contentShape(Rectangle())
+            // Without this, VoiceOver splits the row into two stops — the title,
+            // then a separate "Include"/"Exclude" Label — even though both live
+            // inside the same Button (HIG audit T-115, adversarially verified).
+            .combinedAccessibilityRow([title, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
         }
         .buttonStyle(.plain)
     }

@@ -541,6 +541,18 @@ nonisolated enum FilterSelectionState: Equatable {
         case .excluded: .clear
         }
     }
+
+    /// VoiceOver-only status word, appended to a facet/tag's name so a cycling
+    /// row's title and its include/exclude indicator announce as one combined
+    /// stop instead of two. `nil` for `.clear` — sighted users see no badge
+    /// either, so the announcement is just the bare name.
+    var accessibilityStatus: String? {
+        switch self {
+        case .clear: nil
+        case .included: "Included"
+        case .excluded: "Excluded"
+        }
+    }
 }
 
 // MARK: - Work tags (categorized)
