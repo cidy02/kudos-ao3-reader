@@ -88,7 +88,7 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				000000000000000150000000 /* Strip Readium Bundle xattrs (for signing) */,
-				000000000000000160000000 /* Add Background Modes to Info.plist (iOS only) */,
+				000000000000000160000000 /* Inject Info.plist keys (git SHA + iOS background modes) */,
 			);
 			buildRules = (
 			);
@@ -222,13 +222,13 @@
 				"",
 			);
 		};
-		000000000000000160000000 /* Add Background Modes to Info.plist (iOS only) */ = {
+		000000000000000160000000 /* Inject Info.plist keys (git SHA + iOS background modes) */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			inputPaths = (
 				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
 			);
-			name = "Add Background Modes to Info.plist (iOS only)";
+			name = "Inject Info.plist keys (git SHA + iOS background modes)";
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
 				"$(DERIVED_FILE_DIR)/BackgroundModesInjected.stamp",
@@ -241,50 +241,67 @@
 				"# INFOPLIST_FILE cannot be combined with GENERATE_INFOPLIST_FILE=YES (both",
 				"# try to produce the same output path, a hard Xcode build error). Inject the",
 				"# two array keys directly into the already-generated Info.plist instead.",
+				"# The same phase also stamps GitCommitSHA (the commit this build came from,",
+				"# shown in About and bug reports) — it must live here because two script",
+				"# phases cannot both declare the processed Info.plist as an output.",
 				"#",
-				"# Declaring the processed Info.plist as both input and output does two things:",
-				"# (1) gives Xcode's build-graph scheduler the edge it needs to run this phase",
-				"# strictly after Info.plist generation instead of racing it, and (2) is",
-				"# required for User Script Sandboxing (ENABLE_USER_SCRIPT_SANDBOXING=YES) to",
-				"# permit writing to this path at all — without a declared output, PlistBuddy's",
-				"# writes here are silently sandbox-denied (it prints \\\"Operation not",
-				"# permitted\\\" but still exits 0, so the failure was invisible until this",
-				"# script started checking its own output below).",
+				"# Declaring the processed Info.plist as both input and output gives Xcode's",
+				"# build-graph scheduler the edge it needs to run this phase strictly after",
+				"# Info.plist generation instead of racing it.",
+				"#",
+				"# ENABLE_USER_SCRIPT_SANDBOXING is NO project-wide because the git call",
+				"# below cannot run sandboxed: the sandbox only whitelists literal declared",
+				"# input paths, and git reads branch-dependent loose refs and pack files",
+				"# under .git/ that cannot be enumerated statically (verified empirically:",
+				"# rev-parse dies with 'Needed a single revision' in a plain checkout, and",
+				"# only accidentally worked in git worktrees, whose real gitdir sits outside",
+				"# SRCROOT and thus outside the sandbox's deny rules).",
 				"",
 				"set -eu",
 				"",
-				"case \"${PLATFORM_NAME}\" in",
-				"  iphoneos|iphonesimulator) ;;",
-				"  *) exit 0 ;;",
-				"esac",
-				"",
-				"PLIST=\"${CODESIGNING_FOLDER_PATH}/Info.plist\"",
+				"PLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"",
 				"if [ ! -f \"$PLIST\" ]; then",
-				"  echo \"warning: $PLIST not found; skipping background-modes injection.\"",
+				"  echo \"warning: $PLIST not found; skipping Info.plist key injection.\"",
 				"  exit 0",
 				"fi",
 				"",
-				"/usr/libexec/PlistBuddy -c \"Delete :UIBackgroundModes\" \"$PLIST\" 2>/dev/null || true",
-				"/usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes array\" \"$PLIST\"",
-				"/usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:0 string fetch\" \"$PLIST\"",
-				"",
-				"/usr/libexec/PlistBuddy -c \"Delete :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" 2>/dev/null || true",
-				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers array\" \"$PLIST\"",
-				"/usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers:0 string com.cidy02.Kudos.folderSyncRefresh\" \"$PLIST\"",
-				"",
-				"# Fail loudly rather than silently, since PlistBuddy itself doesn't: verify",
-				"# the keys actually landed before declaring success.",
-				"if ! /usr/libexec/PlistBuddy -c \"Print :UIBackgroundModes\" \"$PLIST\" >/dev/null 2>&1 || \\",
-				"   ! /usr/libexec/PlistBuddy -c \"Print :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" >/dev/null 2>&1; then",
-				"  echo \"error: failed to inject background-modes keys into $PLIST\"",
-				"  exit 1",
+				"# --- GitCommitSHA (all platforms). git can legitimately fail here (e.g.",
+				"# building from a source tarball with no repo); the key is then simply",
+				"# absent and the UI omits it, so warn instead of failing.",
+				"GIT_SHA=$(git -C \"${SRCROOT}\" rev-parse --short=7 HEAD 2>/dev/null || true)",
+				"/usr/libexec/PlistBuddy -c \"Delete :GitCommitSHA\" \"$PLIST\" 2>/dev/null || true",
+				"if [ -n \"$GIT_SHA\" ]; then",
+				"  /usr/libexec/PlistBuddy -c \"Add :GitCommitSHA string ${GIT_SHA}\" \"$PLIST\"",
+				"  echo \"Injected GitCommitSHA=${GIT_SHA} into Info.plist.\"",
+				"else",
+				"  echo \"warning: could not read the git commit SHA; GitCommitSHA not injected.\"",
 				"fi",
 				"",
-				"echo \"Injected UIBackgroundModes/BGTaskSchedulerPermittedIdentifiers into Info.plist.\"",
+				"# --- Background modes (iOS only) ---",
+				"case \"${PLATFORM_NAME}\" in",
+				"  iphoneos|iphonesimulator)",
+				"    /usr/libexec/PlistBuddy -c \"Delete :UIBackgroundModes\" \"$PLIST\" 2>/dev/null || true",
+				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes array\" \"$PLIST\"",
+				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:0 string fetch\" \"$PLIST\"",
+				"",
+				"    /usr/libexec/PlistBuddy -c \"Delete :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" 2>/dev/null || true",
+				"    /usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers array\" \"$PLIST\"",
+				"    /usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers:0 string com.cidy02.Kudos.folderSyncRefresh\" \"$PLIST\"",
+				"",
+				"    # Fail loudly rather than silently, since PlistBuddy itself doesn't: verify",
+				"    # the keys actually landed before declaring success.",
+				"    if ! /usr/libexec/PlistBuddy -c \"Print :UIBackgroundModes\" \"$PLIST\" >/dev/null 2>&1 || \\",
+				"       ! /usr/libexec/PlistBuddy -c \"Print :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" >/dev/null 2>&1; then",
+				"      echo \"error: failed to inject background-modes keys into $PLIST\"",
+				"      exit 1",
+				"    fi",
+				"    echo \"Injected UIBackgroundModes/BGTaskSchedulerPermittedIdentifiers into Info.plist.\"",
+				"    ;;",
+				"esac",
 				"",
 				"# Second declared output required alongside a mutable (input==output) node —",
-				"# Xcode's build system otherwise errors with \\\"mutable output but no other",
-				"# virtual output node.\\\" Content is irrelevant; only its existence matters.",
+				"# Xcode's build system otherwise errors with 'mutable output but no other",
+				"# virtual output node.' Content is irrelevant; only its existence matters.",
 				"mkdir -p \"$(dirname \"${DERIVED_FILE_DIR}/BackgroundModesInjected.stamp\")\"",
 				"touch \"${DERIVED_FILE_DIR}/BackgroundModesInjected.stamp\"",
 				"",
@@ -354,7 +371,7 @@
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -424,7 +441,7 @@
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

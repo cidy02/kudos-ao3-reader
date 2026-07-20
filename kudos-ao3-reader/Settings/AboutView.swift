@@ -150,6 +150,11 @@ struct AboutView: View {
     static var versionString: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        // Stamped into the Info.plist by the "Inject Info.plist keys" build
+        // phase; absent when the build didn't come from a git checkout.
+        if let sha = Bundle.main.object(forInfoDictionaryKey: "GitCommitSHA") as? String, !sha.isEmpty {
+            return "\(version) (\(build)) · \(sha)"
+        }
         return "\(version) (\(build))"
     }
 }
