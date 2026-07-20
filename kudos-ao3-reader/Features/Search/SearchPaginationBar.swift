@@ -203,9 +203,24 @@ struct SearchPaginationBar: View {
         return result
     }
 
+    /// Page window for the narrow-width fallback: the current page and its
+    /// neighbors, as a range that is valid for ANY input pair. Pagination state
+    /// is remote-derived, and `currentPage ≤ totalPages` currently holds only
+    /// because `AO3Client.paginationTotal(in:currentPage:)` happens to seed its
+    /// max-scan with the requested page — an accident of the parser, not a
+    /// contract. Unclamped, a stale `currentPage` past a shrunken `totalPages`
+    /// (e.g. 7 of 5) would build `6...5` and trap at render time — and
+    /// `ViewThatFits` evaluates `compactItems` on every `body` pass, even when
+    /// the full window is the variant displayed.
+    static func compactPageWindow(currentPage: Int, totalPages: Int) -> ClosedRange<Int> {
+        let last = max(totalPages, 1)
+        let anchor = min(max(currentPage, 1), last)
+        return max(1, anchor - 1) ... min(last, anchor + 1)
+    }
+
     /// A narrow-width fallback that keeps the current page and its neighbors.
     private var compactItems: [Item] {
-        let pages = max(1, currentPage - 1) ... min(totalPages, currentPage + 1)
-        return pages.map { Item(id: $0, kind: .page($0)) }
+        Self.compactPageWindow(currentPage: currentPage, totalPages: totalPages)
+            .map { Item(id: $0, kind: .page($0)) }
     }
 }
