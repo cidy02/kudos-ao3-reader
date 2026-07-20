@@ -238,7 +238,7 @@ lint → iOS suite → macOS build → whitespace), required ALL GREEN before ev
   exclude role; reset-filters destructive role), UI-7 (`SearchView` duplicate pagination bar),
   UI-3 (pagination long-press affordance); **[fold]** A9-F1 (pagination hit-target + gesture-only —
   same file as UI-3), A9-F3 partial (accent contrast on chips/pagination).
-- **Shared components:** consumes X1, X3. **Primary files:** `Features/Search/*`.
+- **Shared components:** consumes X1, X3, X5. **Primary files:** `Features/Search/*`.
 - **Dependencies:** Waves 1–2. **Parallel-safe** with Waves 4–7 (disjoint files).
 - **Risks:** low. **Testing:** `verify.sh`; screenshot gate; AX runtime check of the pagination
   bar. **Complexity:** Small–Medium.

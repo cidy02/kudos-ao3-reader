@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// AO3-style page navigation arranged as one calm row: single-step arrows flank a
-/// windowed set of page numbers (1 … 5 6 7 … 142). Long-pressing an arrow jumps
-/// to the corresponding end. `SearchView` supplies the same card surface as rows.
+/// windowed set of page numbers (1 … 5 6 7 … 142). Long-pressing (or right-
+/// clicking) an arrow opens a menu to jump to the corresponding end.
+/// `SearchView` supplies the same card surface as rows.
 struct SearchPaginationBar: View {
     let currentPage: Int
     let totalPages: Int
@@ -14,7 +15,15 @@ struct SearchPaginationBar: View {
         HStack(spacing: 0) {
             navButton(.backward)
 
-            Spacer(minLength: 18)
+            // 5pt, not 18: the arrows' own .minimumHitTarget() (44pt) already
+            // reserves ~6.5pt of invisible margin on each side, which now
+            // supplies most of the visual separation this spacer used to.
+            // Keeping the old 18pt here would double-charge that gap against
+            // the ViewThatFits budget below and force the compact fallback
+            // sooner than before the arrows grew (HIG Wave 3 review-fix F1).
+            // Spacer still expands to fill extra room, so wide bars are
+            // unaffected — only the minimum shrank.
+            Spacer(minLength: 5)
 
             // Keep the full AO3-style anchor window when it fits. On compact
             // cards, fall back to nearby pages so the bar never exceeds its row.
@@ -24,7 +33,7 @@ struct SearchPaginationBar: View {
             }
             .layoutPriority(1)
 
-            Spacer(minLength: 18)
+            Spacer(minLength: 5)
 
             navButton(.forward)
         }
@@ -62,18 +71,23 @@ struct SearchPaginationBar: View {
         let endLabel = isBackward ? "First page" : "Last page"
 
         // A real Button (not a bare Image + gesture) so Tab / Full Keyboard Access
-        // can focus and activate it (HIG audit A9-F1); `.contextMenu` gives sighted
-        // users a visible affordance for the jump-to-end action the long-press
-        // gesture used to hide entirely. SwiftUI auto-exposes contextMenu content
-        // as a VoiceOver custom action, so — unlike the old gesture-only version —
-        // no separate `.accessibilityAction(named:)` is needed here; adding one
+        // can focus and activate it (HIG audit A9-F1). `.contextMenu` replaces the
+        // old bespoke hidden long-press gesture with a standard, labeled system
+        // menu for the jump-to-end action — still only revealed by a long-press/
+        // right-click, not visible up front, but a native affordance a user has
+        // already learned elsewhere, plus proper VoiceOver exposure: SwiftUI
+        // auto-exposes contextMenu content as a VoiceOver custom action, so no
+        // separate `.accessibilityAction(named:)` is needed here; adding one
         // would just register the same "First/Last page" action twice.
         return Button {
             if enabled { onSelect(tapPage) }
         } label: {
             Image(systemName: isBackward ? "chevron.left" : "chevron.right")
                 .font(.caption.weight(.bold))
-                .frame(width: 31, height: 31)
+                // min-, not exact-, frame: parity with pageButton's pill so the
+                // chevron can grow with Dynamic Type instead of clipping against
+                // a fixed 31×31 circle (T-115 UI-3's Dynamic-Type sub-point).
+                .frame(minWidth: 31, minHeight: 31)
                 .background(
                     Circle().fill(enabled ? Color.accentColor.opacity(0.12)
                         : Color.secondary.opacity(0.06))
@@ -86,8 +100,14 @@ struct SearchPaginationBar: View {
         // chrome above (HIG audit UI-3). Last modifier per its own doc comment.
         .minimumHitTarget()
         .contextMenu {
-            Button(endLabel) {
-                if enabled { onSelect(endPage) }
+            // Gated on the item's presence, not just its action: an empty
+            // contextMenu doesn't present at all, so a disabled arrow's
+            // long-press/right-click stays fully inert (matching its pre-Button
+            // behavior) instead of showing a menu with a silently no-op item,
+            // and VoiceOver's auto-exposed custom action disappears along with
+            // it rather than advertising an action that does nothing.
+            if enabled {
+                Button(endLabel) { onSelect(endPage) }
             }
         }
         .accessibilityLabel(tapLabel)
@@ -142,13 +162,18 @@ struct SearchPaginationBar: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        // 28pt, not the 44pt default: pills sit only 6pt apart in `pageItems`,
-        // and `pageItems` is `.fixedSize` inside a `.layoutPriority(1)`
-        // `ViewThatFits` — a full 44pt-per-pill minimum measurably widens the
-        // row and makes the AO3-style "1 … 5 6 7 … 142" window fall back to
-        // the cramped `compactItems` variant sooner than before this fix.
-        // `.minimumHitTarget`'s own doc comment reserves exactly this
-        // tightly-packed case for a smaller floor (HIG audit UI-3/A9-F1).
+        // Self-documenting floor, not an enlargement: the label above already
+        // carries `.frame(minWidth: 31, minHeight: 31)`, so every pill is
+        // already ≥31×31 before this modifier — 28 < 31 adds no size. Its only
+        // real effect is `.contentShape(Rectangle())` making the capsule's
+        // corner regions tappable (the label's own `.contentShape(Capsule())`
+        // otherwise excludes them). The 44pt default was deliberately NOT used
+        // here: pills sit only 6pt apart in `pageItems`, which is `.fixedSize`
+        // inside a `.layoutPriority(1)` `ViewThatFits` — a genuine 44pt-per-pill
+        // minimum would widen the row and fall back to the cramped
+        // `compactItems` variant sooner (HIG audit UI-3/A9-F1; kept at 31pt,
+        // same conclusion Wave 3's review-fix round reached for the arrows'
+        // hit region vs. their 31pt visual chrome).
         .minimumHitTarget(28)
         .accessibilityLabel("Page \(page)")
         .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
