@@ -473,7 +473,14 @@ private struct WorkReorderDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        if let pendingOrder {
+        // Persist only when the drag actually changed the order. `reorderedIDs` is a
+        // no-op for a self-hover (which fires at drag start, over the source card's
+        // own drop target) and for a cross-and-return, so `pendingOrder` can be
+        // non-nil yet equal to the stored order; committing that would rewrite every
+        // `sortOrderInQueue`, flip all memberships to `.pending` for sync, and hit
+        // disk for a drag that moved nothing. `works` is unmutated during the gesture
+        // (the whole point of deferring the write), so it's still the pre-drag order.
+        if let pendingOrder, pendingOrder != works.map(\.id) {
             ReadingQueueService.reorder(pendingOrder, in: queue, context: context)
         }
         pendingOrder = nil
