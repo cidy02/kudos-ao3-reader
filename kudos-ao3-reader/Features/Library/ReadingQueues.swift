@@ -120,6 +120,10 @@ struct ReadingQueueDetailView: View {
     /// Which card is currently mid-drag in the compact grid — read by
     /// `WorkReorderDropDelegate` rather than decoding the drag payload asynchronously.
     @State private var draggedWorkID: UUID?
+    /// The compact grid's live drag-preview order, written by
+    /// `WorkReorderDropDelegate.dropEntered` and committed to `ReadingQueueService`
+    /// only in `performDrop` — see that type's doc comment for why (A6-F1).
+    @State private var pendingCompactOrder: [UUID]?
 
     private var isReordering: Bool {
         #if os(iOS)
@@ -136,9 +140,11 @@ struct ReadingQueueDetailView: View {
         isReorderingMac = active
         #endif
         // A drag abandoned mid-gesture (e.g. tapping Done before releasing) only
-        // clears draggedWorkID on a completed drop — reset it here too so a stale
-        // id can't leave an unrelated card faded on the next reorder-mode entry.
+        // clears draggedWorkID/pendingCompactOrder on a completed drop — reset both
+        // here too so neither a stale id nor a discarded preview leaks into the next
+        // reorder-mode entry.
         draggedWorkID = nil
+        pendingCompactOrder = nil
     }
 
     // Soft-deleted works keep their membership rows (restore re-joins them here)
@@ -155,6 +161,16 @@ struct ReadingQueueDetailView: View {
     /// index-stability against the same unfiltered array `reorder(_:)` writes back.
     private var displayedWorks: [SavedWork] {
         isReordering ? works : visibleWorks
+    }
+
+    /// `compactGrid`'s order: `pendingCompactOrder` while a drag is live, otherwise
+    /// the same `displayedWorks` the detailed list also reads. See
+    /// `WorkReorderDropDelegate`'s doc comment for why the live preview is kept in
+    /// local state instead of writing straight through to `ReadingQueueService` (A6-F1).
+    private var compactDisplayedWorks: [SavedWork] {
+        guard let pendingCompactOrder else { return displayedWorks }
+        let byID = Dictionary(uniqueKeysWithValues: works.map { ($0.id, $0) })
+        return pendingCompactOrder.compactMap { byID[$0] }
     }
 
     var body: some View {
@@ -310,7 +326,7 @@ struct ReadingQueueDetailView: View {
     private var compactGrid: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(displayedWorks) { work in
+                ForEach(compactDisplayedWorks) { work in
                     compactCard(work)
                 }
             }
@@ -336,6 +352,7 @@ struct ReadingQueueDetailView: View {
                 target: work,
                 works: works,
                 draggedWorkID: $draggedWorkID,
+                pendingOrder: $pendingCompactOrder,
                 queue: queue,
                 context: context
             ))
@@ -414,31 +431,50 @@ struct ReadingQueueDetailView: View {
     }
 }
 
-/// Live-reorders `works` as the drag crosses into each card's drop target, purely
-/// from `draggedWorkID` state — the drag payload itself is never decoded back, which
-/// keeps this synchronous and avoids `NSItemProvider` async-decode pitfalls for what
-/// is always a same-app-only reorder.
+/// Live-reorders as the drag crosses into each card's drop target, purely from
+/// local state — the drag payload itself is never decoded back, which keeps this
+/// synchronous and avoids `NSItemProvider` async-decode pitfalls for what is always
+/// a same-app-only reorder. `dropEntered` writes only `pendingOrder` (plain local
+/// state); the SwiftData write is deferred to `performDrop`. An earlier version
+/// called `ReadingQueueService.reorder(_:)` straight from `dropEntered`, mutating
+/// `queue.memberships` on every drag-over — a SwiftData relationship this screen
+/// observes, so each call re-rendered the ForEach and rebuilt every card's drop
+/// delegate *while the OS drag session driving this same delegate was still active*.
+/// That's the reproduced failure behind A6-F1 (owner-confirmed broken): the drag
+/// visibly starts but never completes, and nothing is ever persisted.
 private struct WorkReorderDropDelegate: DropDelegate {
     let target: SavedWork
     let works: [SavedWork]
     @Binding var draggedWorkID: UUID?
+    @Binding var pendingOrder: [UUID]?
     let queue: ReadingQueue
     let context: ModelContext
 
+    /// What this drag is currently reordering relative to: the in-progress preview
+    /// if this is a continuation of the same gesture (it already crossed at least
+    /// one other card), otherwise the persisted order the drag started from.
+    private var baseOrder: [UUID] {
+        pendingOrder ?? works.map(\.id)
+    }
+
     func dropEntered(info: DropInfo) {
-        guard let draggedWorkID, draggedWorkID != target.id,
-              let fromIndex = works.firstIndex(where: { $0.id == draggedWorkID }),
-              let toIndex = works.firstIndex(where: { $0.id == target.id })
+        guard let draggedWorkID, draggedWorkID != target.id else { return }
+        var ids = baseOrder
+        guard let fromIndex = ids.firstIndex(of: draggedWorkID),
+              let toIndex = ids.firstIndex(of: target.id)
         else { return }
-        var ids = works.map(\.id)
         ids.move(
             fromOffsets: IndexSet(integer: fromIndex),
             toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex
         )
-        ReadingQueueService.reorder(ids, in: queue, context: context)
+        pendingOrder = ids
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        if let pendingOrder {
+            ReadingQueueService.reorder(pendingOrder, in: queue, context: context)
+        }
+        pendingOrder = nil
         draggedWorkID = nil
         return true
     }

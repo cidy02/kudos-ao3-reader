@@ -9,8 +9,9 @@ import SwiftUI
 /// Collections, Downloaded. Saved for Later merges in the user's AO3 "Marked for
 /// Later" list; Collections is a placeholder until shelves land.
 ///
-/// Filtering (the inspector panel), Reading Insights, content privacy, and — on iOS —
-/// multi-select bulk actions are kept from the previous list-based Library.
+/// Filtering (the inspector panel), Reading Insights, content privacy, and
+/// multi-select bulk actions (all platforms) are kept from the previous
+/// list-based Library.
 struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -45,23 +46,20 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var showingNewQueue = false
     @State private var newQueueName = ""
 
-    // Multi-select / bulk actions. `EditMode` is iOS-only, so macOS has no select mode.
-    #if os(iOS)
-    @State private var editMode: EditMode = .inactive
-    #endif
+    // Multi-select / bulk actions — a plain cross-platform Bool, the same pattern
+    // `LibrarySectionListView` already uses (its `EditMode`-free `isSelecting`
+    // state works identically on iOS and macOS). This used to be a local,
+    // never-bound `EditMode` on this dashboard specifically (never attached to any
+    // List's `\.editMode` environment, so wrapping it in `#if os(iOS)` bought
+    // nothing but an accidental macOS gap): the dashboard's own select-mode list,
+    // card-selection bubbles, and toolbar "Select" entry were all `#if os(iOS)`
+    // besides, so macOS had no way to enter bulk-select at all (HIG audit UI-7).
+    @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     @State private var showingSelectionList = false
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
-
-    private var isSelecting: Bool {
-        #if os(iOS)
-        editMode.isEditing
-        #else
-        false
-        #endif
-    }
 
     private var selectedWorks: [SavedWork] {
         works.filter { selection.contains($0.id) }
@@ -494,11 +492,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         } else {
             let showsMature = PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature)
             let showsStatistics = !statisticsWorks.isEmpty
-            #if os(iOS)
             let showsSelect = !works.isEmpty
-            #else
-            let showsSelect = false
-            #endif
             let showsMoreMenu = showsStatistics || showsSelect
             // Gated as a whole, not just its inner pieces — an empty HStack (or a
             // WorkListMoreMenu with no items) still reserves an (empty-looking)
@@ -530,7 +524,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                                     Label("Reading Insights", systemImage: "chart.bar.xaxis")
                                 }
                             }
-                            #if os(iOS)
                             if showsSelect {
                                 Button {
                                     enterSelectMode()
@@ -538,7 +531,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                                     Label("Select", systemImage: "checklist")
                                 }
                             }
-                            #endif
                         }
                     }
                 }
@@ -606,15 +598,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     // MARK: Multi-select / bulk actions
 
-    /// All local works visible under privacy + the active filters, for the iOS
+    /// All local works visible under privacy + the active filters, for the
     /// select-mode list. Already newest-first from the query.
     private var selectableWorks: [SavedWork] {
         filters.apply(to: works.filter { !$0.isQueueOnlyWork && passesPrivacy($0) })
     }
 
-    @ViewBuilder
     private var selectList: some View {
-        #if os(iOS)
         List {
             Section {
                 ForEach(selectableWorks) { work in
@@ -636,9 +626,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             await task.value
         }
         .cancelRefreshOnTabChange($refreshTask)
-        #else
-        EmptyView()
-        #endif
     }
 
     private var allSelectableSelected: Bool {
@@ -650,35 +637,26 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         selection = allSelectableSelected ? [] : Set(selectableWorks.map(\.id))
     }
 
-    #if os(iOS)
     private func enterSelectMode(selecting work: SavedWork? = nil) {
         if let work {
             selection.insert(work.id)
         }
         showingSelectionList = false
-        editMode = .active
+        isSelecting = true
     }
-    #endif
 
     private func selectAction(for work: SavedWork) -> (() -> Void)? {
-        #if os(iOS)
-        return { enterSelectMode(selecting: work) }
-        #else
-        return nil
-        #endif
+        { enterSelectMode(selecting: work) }
     }
 
     private func exitSelectMode() {
-        #if os(iOS)
-        editMode = .inactive
-        #endif
+        isSelecting = false
         showingSelectionList = false
         selection = []
     }
 
     @ViewBuilder
     private func localCarouselCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
-        #if os(iOS)
         if isSelecting {
             SensitiveWorkCoverCard(
                 work: work,
@@ -696,13 +674,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
-        #else
-        NavigationLink(value: LocalWorkDestination.reader(work)) {
-            SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
-        }
-        .buttonStyle(.plain)
-        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-        #endif
     }
 
     private func toggleSelection(_ work: SavedWork) {

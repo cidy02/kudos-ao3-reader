@@ -155,6 +155,9 @@ struct LibraryFilterPanel: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Matches the sibling filterChip (LibraryView.swift) — without this, VoiceOver
+        // announces the row but never says whether it's currently selected.
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

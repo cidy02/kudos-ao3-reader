@@ -180,6 +180,43 @@ private struct RecentlyDeletedRow: View {
     let onDeletePermanently: () -> Void
 
     var body: some View {
+        // authorIdentities.isEmpty: subtitle is a plain, non-interactive Text, so the
+        // whole row safely combines into one VoiceOver stop instead of three (HIG
+        // audit UI-2). Otherwise the subtitle is an AO3AuthorBylineView, whose author
+        // names can be individually VoiceOver-focusable/navigable (AO3AuthorNavigation)
+        // — combining would sweep those into one non-interactive element and silently
+        // remove that navigation, so this case is left as separate stops instead.
+        Group {
+            if authorIdentities.isEmpty {
+                rowContent.accessibilityElement(children: .combine)
+            } else {
+                rowContent
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive, action: onDeletePermanently) {
+                Label("Delete Permanently", systemImage: "trash.fill")
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button(action: onRestore) {
+                Label("Restore", systemImage: "arrow.uturn.backward")
+            }
+            .tint(.blue)
+        }
+        .contextMenu {
+            Button(action: onRestore) {
+                Label("Restore", systemImage: "arrow.uturn.backward")
+            }
+            Button(role: .destructive, action: onDeletePermanently) {
+                Label("Delete Permanently", systemImage: "trash.fill")
+            }
+        }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
@@ -203,27 +240,6 @@ private struct RecentlyDeletedRow: View {
             Text(daysRemaining == 1 ? "1 day left" : "\(daysRemaining) days left")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive, action: onDeletePermanently) {
-                Label("Delete Permanently", systemImage: "trash.fill")
-            }
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button(action: onRestore) {
-                Label("Restore", systemImage: "arrow.uturn.backward")
-            }
-            .tint(.blue)
-        }
-        .contextMenu {
-            Button(action: onRestore) {
-                Label("Restore", systemImage: "arrow.uturn.backward")
-            }
-            Button(role: .destructive, action: onDeletePermanently) {
-                Label("Delete Permanently", systemImage: "trash.fill")
-            }
         }
     }
 }
