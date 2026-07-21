@@ -345,8 +345,8 @@ struct LibrarySectionListView: View {
                     work.markModified()
                     try? context.save()
                 } label: {
-                    Label(work.isFavorite ? "Unfavorite" : "Favorite",
-                          systemImage: work.isFavorite ? "star.slash" : "star")
+                    let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
                 .tint(.yellow)
             }

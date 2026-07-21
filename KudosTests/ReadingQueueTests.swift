@@ -193,6 +193,48 @@ struct ReadingQueueTests {
         #expect(ReadingQueueService.moveOffsets(currentIndex: 0, requestedIndex: 0, count: 0) == nil)
     }
 
+    // MARK: - reorderedIDs (compact-grid live drag-over reorder, WorkReorderDropDelegate.dropEntered)
+
+    @Test func reorderedIDsMovesForward() {
+        let ids = [UUID(), UUID(), UUID(), UUID()] // A B C D
+        let result = ReadingQueueService.reorderedIDs(base: ids, moving: ids[0], over: ids[2])
+        #expect(result == [ids[1], ids[2], ids[0], ids[3]]) // B C A D
+    }
+
+    @Test func reorderedIDsMovesBackward() {
+        let ids = [UUID(), UUID(), UUID(), UUID()] // A B C D
+        let result = ReadingQueueService.reorderedIDs(base: ids, moving: ids[3], over: ids[1])
+        #expect(result == [ids[0], ids[3], ids[1], ids[2]]) // A D B C
+    }
+
+    @Test func reorderedIDsIsANoOpHoveringItsOwnSourceCard() {
+        let ids = [UUID(), UUID(), UUID()]
+        #expect(ReadingQueueService.reorderedIDs(base: ids, moving: ids[0], over: ids[0]) == ids)
+    }
+
+    @Test func reorderedIDsIsANoOpForAnUnknownDraggedID() {
+        let ids = [UUID(), UUID(), UUID()]
+        #expect(ReadingQueueService.reorderedIDs(base: ids, moving: UUID(), over: ids[1]) == ids)
+    }
+
+    @Test func reorderedIDsIsANoOpForAnUnknownTargetID() {
+        let ids = [UUID(), UUID(), UUID()]
+        #expect(ReadingQueueService.reorderedIDs(base: ids, moving: ids[0], over: UUID()) == ids)
+    }
+
+    @Test func reorderedIDsComposesAcrossSequentialCallsInTheSameDrag() {
+        // The exact path automation couldn't reach live (T-127 F1): dropEntered's
+        // `base` is the previous call's result while a single drag gesture crosses
+        // multiple cards in a row, not the original pre-drag order each time.
+        let ids = [UUID(), UUID(), UUID(), UUID()] // A B C D
+        let afterFirstCrossing = ReadingQueueService.reorderedIDs(base: ids, moving: ids[0], over: ids[1])
+        #expect(afterFirstCrossing == [ids[1], ids[0], ids[2], ids[3]]) // B A C D
+        let afterSecondCrossing = ReadingQueueService.reorderedIDs(
+            base: afterFirstCrossing, moving: ids[0], over: ids[3]
+        )
+        #expect(afterSecondCrossing == [ids[1], ids[2], ids[3], ids[0]]) // B C D A
+    }
+
     @Test func queuedWorkKeepsEPUBWhenMarkedFinished() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

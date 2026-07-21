@@ -259,6 +259,20 @@ lint → iOS suite → macOS build → whitespace), required ALL GREEN before ev
   clearly-scoped sub-change; A6-F1 reorder is a real correctness fix, review separately.
 - **Testing:** `verify.sh`; new tests for reorder index bridge (per A6-F1); screenshot gate on
   select mode. **Complexity:** Medium (Large if A6-F1 reorder repair is included).
+- **Addendum (Wave 4 review-fix round, T-127):** T-115 also verified a P2 in this wave's own
+  directory that the findings list above omitted — `LibrarySectionListView.swipeableRow`'s swipe
+  actions (Save/Favorite/Delete) had no accompanying context-menu equivalent, unlike sibling
+  detailed-list rows. **Disposition: folded in, fixed at the shared-component level** — the row
+  already inherits a rich context menu via `SensitiveWorkRow`'s `.localWorkContextMenu`
+  (`WorkCardActions.swift`); the actual gap was that shared menu missing a Favorite toggle
+  specifically (Save/Delete/Queue/Finished/Collection were already present). Added
+  `WorkActionLabels.favorite(isFavorite:)` + a `toggleFavorite()` menu item there, which now
+  reaches every `.localWorkContextMenu` call site app-wide, not just Library — one fix instead of
+  a per-file mirror, and no separate/second `.contextMenu` was added (that would have collided
+  with the existing one). A related P2 (`SensitiveWorkRow`'s nested expand button VoiceOver-
+  unreachable inside `MatureContent.swift`'s outer `.accessibilityElement(children: .ignore)`
+  Button) was flagged, not fixed — `Features/Privacy/`, out of this wave's directory; belongs to
+  the Privacy/WorkDetail wave.
 
 ### Wave 5 — `Features/WorkDetail/`
 

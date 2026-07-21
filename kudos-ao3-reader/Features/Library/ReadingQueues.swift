@@ -169,7 +169,11 @@ struct ReadingQueueDetailView: View {
     /// local state instead of writing straight through to `ReadingQueueService` (A6-F1).
     private var compactDisplayedWorks: [SavedWork] {
         guard let pendingCompactOrder else { return displayedWorks }
-        let byID = Dictionary(uniqueKeysWithValues: works.map { ($0.id, $0) })
+        // uniquingKeysWith, not uniqueKeysWithValues: ReadingQueueService.reorder builds
+        // this same work-id→membership map defensively for duplicate memberships
+        // pointing at the same work; this render-path map shouldn't be less defensive
+        // than the service feeding it — uniqueKeysWithValues traps at runtime instead.
+        let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return pendingCompactOrder.compactMap { byID[$0] }
     }
 
@@ -436,12 +440,18 @@ struct ReadingQueueDetailView: View {
 /// synchronous and avoids `NSItemProvider` async-decode pitfalls for what is always
 /// a same-app-only reorder. `dropEntered` writes only `pendingOrder` (plain local
 /// state); the SwiftData write is deferred to `performDrop`. An earlier version
-/// called `ReadingQueueService.reorder(_:)` straight from `dropEntered`, mutating
-/// `queue.memberships` on every drag-over — a SwiftData relationship this screen
-/// observes, so each call re-rendered the ForEach and rebuilt every card's drop
-/// delegate *while the OS drag session driving this same delegate was still active*.
-/// That's the reproduced failure behind A6-F1 (owner-confirmed broken): the drag
-/// visibly starts but never completes, and nothing is ever persisted.
+/// called `ReadingQueueService.reorder(_:)` straight from `dropEntered` on every
+/// drag-over. The actual failure wasn't the resulting SwiftUI re-render by itself —
+/// this type's ForEach already re-renders on every `pendingOrder` write today, and
+/// that's fine, because `SavedWork` identities stay stable across a plain local-array
+/// reorder. What broke the drag was that call's `context.saveBestEffort` writing
+/// `queue.memberships` — a SwiftData relationship this screen *observes* — which
+/// invalidates the owning `@Model` and tore down the OS drag session mid-gesture, not
+/// merely rebuilding views under it. That's the reproduced failure behind A6-F1
+/// (owner-confirmed broken): the drag visibly starts but never completes, and nothing
+/// is ever persisted. A future edit must not reintroduce any observed-model write
+/// inside `dropEntered` — only `performDrop`, once the gesture has actually ended, is
+/// safe for that.
 private struct WorkReorderDropDelegate: DropDelegate {
     let target: SavedWork
     let works: [SavedWork]
@@ -458,16 +468,8 @@ private struct WorkReorderDropDelegate: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
-        guard let draggedWorkID, draggedWorkID != target.id else { return }
-        var ids = baseOrder
-        guard let fromIndex = ids.firstIndex(of: draggedWorkID),
-              let toIndex = ids.firstIndex(of: target.id)
-        else { return }
-        ids.move(
-            fromOffsets: IndexSet(integer: fromIndex),
-            toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex
-        )
-        pendingOrder = ids
+        guard let draggedWorkID else { return }
+        pendingOrder = ReadingQueueService.reorderedIDs(base: baseOrder, moving: draggedWorkID, over: target.id)
     }
 
     func performDrop(info: DropInfo) -> Bool {

@@ -723,6 +723,33 @@ enum ReadingQueueService {
         return (IndexSet(integer: currentIndex), clamped > currentIndex ? clamped + 1 : clamped)
     }
 
+    /// Pure index arithmetic for the compact grid's live drag-over reorder
+    /// (`WorkReorderDropDelegate.dropEntered`) — extracted for the same reason as
+    /// `moveOffsets` above: directly unit-testable without a `ModelContext`/SwiftUI
+    /// drag session, which simulator automation cannot reliably drive (A6-F1).
+    /// `base` is the order the drag started from, or the accumulated preview from an
+    /// earlier crossing in the same still-live gesture. Returns `base` unchanged when
+    /// either id is absent from it, or when the drag is hovering its own source card
+    /// (`draggedID == targetID`) — both safe no-ops callable unconditionally. Otherwise
+    /// replicates `RangeReplaceableCollection.move(fromOffsets:toOffset:)`'s single-
+    /// element semantics by hand — that SwiftUI extension isn't available here, and
+    /// this file deliberately doesn't import SwiftUI (a service layer, not a view).
+    /// `toOffset` gets `+1` only when moving forward, same convention `moveOffsets` uses;
+    /// removing the dragged element first shifts every later index down by one, so the
+    /// insert position is `toOffset - 1` whenever the move is forward (`toOffset` sits
+    /// past the removed element), else `toOffset` unchanged.
+    static func reorderedIDs(base: [UUID], moving draggedID: UUID, over targetID: UUID) -> [UUID] {
+        guard draggedID != targetID,
+              let fromIndex = base.firstIndex(of: draggedID),
+              let toIndex = base.firstIndex(of: targetID)
+        else { return base }
+        let toOffset = toIndex > fromIndex ? toIndex + 1 : toIndex
+        var ids = base
+        let dragged = ids.remove(at: fromIndex)
+        ids.insert(dragged, at: toOffset > fromIndex ? toOffset - 1 : toOffset)
+        return ids
+    }
+
     /// Applies a user-dragged reorder of a queue's works. `workIDs` is the full,
     /// unfiltered work list in its new order; each matching membership's
     /// `sortOrderInQueue` is rewritten to its index, so the same ordering survives

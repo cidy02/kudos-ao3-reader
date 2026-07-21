@@ -138,6 +138,12 @@ enum WorkActionLabels {
             ? ("Remove from Saved for Later", "bookmark.slash")
             : ("Save for Later", "bookmark.fill")
     }
+
+    static func favorite(isFavorite: Bool) -> (title: String, systemImage: String) {
+        isFavorite
+            ? ("Unfavorite", "star.slash")
+            : ("Favorite", "star")
+    }
 }
 
 enum WorkReaderPreparation {
@@ -247,6 +253,13 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 }
 
                 Button {
+                    toggleFavorite()
+                } label: {
+                    let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
+                    Label(labels.title, systemImage: labels.systemImage)
+                }
+
+                Button {
                     toggleSavedForLater()
                 } label: {
                     let labels = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
@@ -294,6 +307,13 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: { PreservedWorkService.softDelete($0, in: context) }
             )
+    }
+
+    @MainActor
+    private func toggleFavorite() {
+        work.isFavorite.toggle()
+        work.markModified()
+        try? context.save()
     }
 
     @MainActor
