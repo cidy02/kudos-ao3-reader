@@ -255,15 +255,15 @@ extension WorkDetailView {
                         Button {
                             withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion }
                         } label: {
+                            // No trailing chevron: this switches the segmented tab
+                            // in place, it doesn't push a new screen — HIG reserves
+                            // the disclosure indicator for hierarchical navigation.
                             HStack {
                                 Text("Comments")
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 Text(displayComments.map { $0.formatted() } ?? "Open")
                                     .foregroundStyle(.secondary)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
                             }
                             .contentShape(Rectangle())
                         }

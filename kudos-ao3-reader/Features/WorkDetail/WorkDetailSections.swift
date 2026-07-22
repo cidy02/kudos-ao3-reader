@@ -249,16 +249,12 @@ extension WorkDetailView {
             withLocalWork { _ in showingAddToQueue = true }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Label(
-                        WorkDetailPresentation.queueLabel(count: work.queueMemberships.count),
-                        systemImage: "list.bullet.rectangle"
-                    )
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
+                // No trailing chevron: this row opens a sheet, not a hierarchical
+                // push — HIG reserves the disclosure indicator for the latter.
+                Label(
+                    WorkDetailPresentation.queueLabel(count: work.queueMemberships.count),
+                    systemImage: "list.bullet.rectangle"
+                )
                 ForEach(queueMembershipLines(for: work)) { line in
                     Text(line.text)
                         .font(.footnote)
@@ -303,16 +299,12 @@ extension WorkDetailView {
             withLocalWork { _ in showingAddToCollection = true }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Label(
-                        WorkDetailPresentation.collectionLabel(count: work.collections.count),
-                        systemImage: "square.stack"
-                    )
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
+                // No trailing chevron: this row opens a sheet, not a hierarchical
+                // push — HIG reserves the disclosure indicator for the latter.
+                Label(
+                    WorkDetailPresentation.collectionLabel(count: work.collections.count),
+                    systemImage: "square.stack"
+                )
                 if !names.isEmpty {
                     Text(names.joined(separator: ", "))
                         .font(.footnote)
@@ -404,6 +396,14 @@ extension WorkDetailView {
                                 Image(systemName: "minus.circle.fill").foregroundStyle(.red)
                             }
                             .buttonStyle(.borderless)
+                            // 28pt, not the 44pt default: this row is one of several
+                            // stacked inside a single shared .cardRow() (myTagsSection),
+                            // not its own independent List row, so nothing here already
+                            // enforces a 44pt floor — the default would inflate every
+                            // tag row's height to 44pt via HStack's tallest-child sizing.
+                            // Matches the suggestion-chip row below, which uses the same
+                            // 28pt floor for the identical reason.
+                            .minimumHitTarget(28)
                             .accessibilityLabel("Remove tag \(tag.name)")
                         }
                     }

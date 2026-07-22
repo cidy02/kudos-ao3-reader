@@ -2,9 +2,14 @@ import SwiftUI
 
 // Building blocks for the redesigned Work Details hub: the work identity hero
 // card, the Overview quick-action grid tile, and the pure label/state helpers
-// behind them. Visual language matches the Account tab (AccountShortcutGridTile,
-// `.cardRow()` surfaces, native segmented Pickers) so Work Details reads as a
-// sibling of Account and Author Profiles.
+// behind them. Visual language matches the Account tab where the two hubs are
+// playing the same role — the segmented section Picker uses Account's own
+// `accountControlCardRow()` chrome, and `WorkQuickActionTile` shares
+// `AccountShortcutGridTile`'s `CardRadius.tile` — but work-content cards
+// (the hero, tag/status/stats sections) deliberately keep the Library's
+// standard `.cardRow()` geometry instead, exactly as `AccountControlStyle.swift`
+// documents ("Work cards deliberately retain the library's standard geometry").
+// The two hubs are siblings in navigation-chrome, not in every card radius.
 
 /// The four top-level Work Details sections, mirroring Account's
 /// Overview / Reading / Writing / Activity segmented control.
@@ -157,8 +162,11 @@ struct WorkQuickActionTile: View {
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        // .combine (not .isButton) — this tile's only call site (quickAction(_:)
+        // in WorkDetailOverviewSections.swift) already wraps it in a real Button,
+        // which supplies the trait on its own; adding it again here doubled the
+        // "Button" announcement (HIG audit UI-2).
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
     }
 }
 
