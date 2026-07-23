@@ -22,6 +22,22 @@ enum CarouselCardMetrics {
     static let cornerRadius: CGFloat = CardRadius.tile
 }
 
+/// Scales `CarouselCardMetrics`'s fixed 164×228 tile size in proportion to the
+/// user's Dynamic Type setting, preserving its aspect ratio — every compact
+/// carousel card (Work, Reading Queue, Collection) embeds one of these so the
+/// whole card grows together at large accessibility text sizes instead of
+/// only getting taller while staying pinned at 164pt wide. `width`/`height`
+/// use the same `relativeTo: .body` scale curve, so their ratio stays exactly
+/// 164:228 at every Dynamic Type size. `@ScaledMetric` only tracks environment
+/// changes when declared directly on a `DynamicProperty`-conforming type —
+/// it can't be shared via a static helper — so each carousel card view embeds
+/// a plain `var` of this type rather than redeclaring the two `@ScaledMetric`
+/// properties itself.
+struct ScaledCarouselCardSize: DynamicProperty {
+    @ScaledMetric(relativeTo: .body) var width: CGFloat = CarouselCardMetrics.width
+    @ScaledMetric(relativeTo: .body) var height: CGFloat = CarouselCardMetrics.height
+}
+
 extension CarouselCardMetrics {
     /// Column layout for a wrapping grid of compact cover cards (Work, Reading
     /// Queue, Collection) — `count` columns normally, collapsing to a single column

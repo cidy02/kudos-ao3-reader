@@ -493,3 +493,54 @@ to `main`**. In addition:
 **Global testing bar (every wave):** `Scripts/verify.sh` ALL GREEN (incl. macOS build); new tests
 per `docs/REGRESSION_TEST_MATRIX.md`; any `docs/*.md` statement a change falsifies updated in the
 same commit; `TASKS.md` row updated with what was verified and what remains manual.
+
+---
+
+## Wave 11 (proposed) — Skeleton loading placeholders don't scale with the cards they precede
+
+- **Origin:** owner follow-up (2026-07-23) to the T-131/T-134/T-133 work-card and grid
+  Dynamic-Type fixes on `hig-review`. Those fixes made the real carousel/grid cards
+  (`WorkSummaryCardSurface`, `ReadingQueueCard`, `NewReadingQueueCard`, `CollectionCard`,
+  `NewCollectionCard`) scale **both** width and height together at large Dynamic Type sizes,
+  via a new shared `ScaledCarouselCardSize` (`UIComponents/CarouselCardStyle.swift`) —
+  `@ScaledMetric(relativeTo: .body)` on both `width`/`height`, so their 164:228 ratio is
+  preserved at every text size. `UIComponents/SkeletonLoading.swift`'s carousel-card skeleton
+  was deliberately **left untouched** in that pass (see the T-131 TASKS.md entry) — but that
+  now means the loading placeholder pops from its old fixed 164×228 size to the real card's
+  new, proportionally-larger size the instant content arrives, a visible size jump at any
+  Dynamic Type size above the default, worst at accessibility sizes where the real card can be
+  dramatically bigger.
+- **Goal:** make the skeleton's outer frame track the same `ScaledCarouselCardSize` the real
+  cards use, **and** proportionally scale its internal placeholder geometry to match — a
+  same-size but internally-mismatched skeleton (tiny fixed-size bars floating in a much bigger
+  card) would look worse than the current pop, not better.
+- **Findings / scope:** `UIComponents/SkeletonLoading.swift:95-117`'s carousel-card skeleton
+  (used by Home/Library loading states) hard-codes both the outer frame
+  (`.frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height, ...)`, lines
+  111-113) **and** every internal placeholder block's size in points (`SkeletonTextLine(height:
+  15, width: 132)` for the title, `SkeletonBlock(height: 18, width: 58, cornerRadius: 9)` for
+  each stat pill, etc. — none of it derived from `CarouselCardMetrics` or scaled). Both need to
+  move together: the outer frame to `ScaledCarouselCardSize` (matching the real cards exactly),
+  and each inner block's width/height/corner-radius to the same scale factor the outer frame
+  uses, so the whole skeleton grows as one coherent, proportional wireframe instead of just its
+  container.
+- **Shared components:** reuses `ScaledCarouselCardSize` as-is for the outer frame — no new
+  scaling primitive needed there. The inner-block scaling is new: derive a single scale factor
+  (e.g. `cardSize.width / CarouselCardMetrics.width`, or a second small `@ScaledMetric`-backed
+  helper) and apply it uniformly to every `SkeletonTextLine`/`SkeletonBlock` literal in this one
+  skeleton, rather than hand-tuning each block's scaled size individually.
+- **Primary files:** `UIComponents/SkeletonLoading.swift` only. Read-only reference:
+  `Features/Home/HomeCards.swift` (`WorkSummaryCardSurface`, the real card this skeleton
+  stands in for) and `UIComponents/CarouselCardStyle.swift` (`ScaledCarouselCardSize`).
+- **Dependencies:** none — `ScaledCarouselCardSize` already exists and is stable
+  (`hig-review`). **Parallel-safe** with everything else; touches no shared file any other wave
+  claims.
+- **Risks:** low — purely a loading-state visual, no data/behavior. The one real risk is
+  getting the proportional math wrong and producing a skeleton that's a *worse* match than
+  today's fixed-size one (e.g. only scaling the container, not the inner blocks — see Goal
+  above); verify with a runtime AX-XL screenshot comparing the skeleton against the loaded card
+  it precedes, not just a lint/build pass.
+- **Testing:** `verify.sh`; runtime screenshot at default and an accessibility size, comparing
+  skeleton geometry against the loaded `WorkSummaryCardSurface` at the same size (title-line
+  width proportion, stat-pill count/spacing) to confirm the two now read as the same card at
+  two points in its load, not two different shapes. **Complexity:** Small.

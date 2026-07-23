@@ -13,6 +13,19 @@ struct ReadingQueueCard: View {
     @Environment(ThemeManager.self) private var themeManager
     let queue: ReadingQueue
 
+    /// Scales width and height together so the card grows proportionally at
+    /// large Dynamic Type sizes instead of only getting taller.
+    var cardSize = ScaledCarouselCardSize()
+
+    /// Explicit, non-defaulted init — the compiler-synthesized memberwise
+    /// init's defaulted `cardSize:` parameter measurably slows type-checking
+    /// of the already-long `.navigationDestination` chain this card is
+    /// constructed inside (LibraryView.swift), to the point of a hard
+    /// "unable to type-check in reasonable time" build failure.
+    init(queue: ReadingQueue) {
+        self.queue = queue
+    }
+
     // Memberships of a soft-deleted work survive (so restoring it re-joins its
     // queues), but the work itself belongs to Recently Deleted, not this card.
     private var works: [SavedWork] {
@@ -22,8 +35,8 @@ struct ReadingQueueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
-                .frame(minWidth: CarouselCardMetrics.width, maxWidth: CarouselCardMetrics.width,
-                       minHeight: CarouselCardMetrics.height)
+                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
+                       minHeight: cardSize.height)
             Text(queue.displayName)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
@@ -33,7 +46,7 @@ struct ReadingQueueCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: CarouselCardMetrics.width, alignment: .leading)
+        .frame(width: cardSize.width, alignment: .leading)
     }
 
     private var tile: some View {
@@ -67,12 +80,19 @@ struct ReadingQueueCard: View {
 }
 
 struct NewReadingQueueCard: View {
+    /// Scales width and height together so the card grows proportionally at
+    /// large Dynamic Type sizes instead of only getting taller.
+    var cardSize = ScaledCarouselCardSize()
+
+    /// Explicit, non-defaulted init — see `ReadingQueueCard.init`.
+    init() {}
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(minWidth: CarouselCardMetrics.width, maxWidth: CarouselCardMetrics.width,
-                       minHeight: CarouselCardMetrics.height)
+                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
+                       minHeight: cardSize.height)
                 .overlay {
                     Image(systemName: "plus")
                         .font(.system(size: 34, weight: .medium))
@@ -87,7 +107,7 @@ struct NewReadingQueueCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: CarouselCardMetrics.width, alignment: .leading)
+        .frame(width: cardSize.width, alignment: .leading)
     }
 }
 

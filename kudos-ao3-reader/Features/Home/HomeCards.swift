@@ -267,11 +267,14 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     var hue: Double?
     @ViewBuilder var content: () -> Content
 
-    /// The card's fixed outer width (`CarouselCardMetrics.width`) minus the
-    /// symmetric 12pt padding applied below — the exact width the content
-    /// itself renders at.
+    /// Scales width and height together so the card grows proportionally at
+    /// large Dynamic Type sizes instead of only getting taller.
+    var cardSize = ScaledCarouselCardSize()
+
+    /// The card's scaled outer width minus the symmetric 12pt padding applied
+    /// below — the exact width the content itself renders at.
     private var contentWidth: CGFloat {
-        CarouselCardMetrics.width - 24
+        cardSize.width - 24
     }
 
     var body: some View {
@@ -290,7 +293,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             .frame(width: contentWidth, alignment: .topLeading)
             .padding(12)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(minHeight: CarouselCardMetrics.height, alignment: .topLeading)
+            .frame(minHeight: cardSize.height, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)

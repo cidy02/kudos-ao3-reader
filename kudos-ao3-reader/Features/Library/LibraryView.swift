@@ -93,6 +93,36 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         tags.map(\.name)
     }
 
+    // Extracted out of `body`'s `.navigationDestination` chain (rather than inlined
+    // as trailing closures) with an explicit `some View` return type — that chain is
+    // already a long compound expression, and inlining these left the compiler
+    // unable to type-check it in reasonable time (a hard build failure), not just slow.
+    private var collectionsGridDestination: some View {
+        LibraryEntityGridView(
+            title: "Collections",
+            items: collections,
+            onNew: {
+                newCollectionName = ""
+                showingNewCollection = true
+            },
+            card: { CollectionCard(collection: $0) },
+            newCard: { NewCollectionCard() }
+        )
+    }
+
+    private var readingQueuesGridDestination: some View {
+        LibraryEntityGridView(
+            title: "Reading Queues",
+            items: readingQueues.filter { $0.kind == .custom }.sorted { $0.sortOrder < $1.sortOrder },
+            onNew: {
+                newQueueName = ""
+                showingNewQueue = true
+            },
+            card: { ReadingQueueCard(queue: $0) },
+            newCard: { NewReadingQueueCard() }
+        )
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             Group {
@@ -119,30 +149,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
-                .navigationDestination(for: AllCollectionsDestination.self) { _ in
-                    LibraryEntityGridView(
-                        title: "Collections",
-                        items: collections,
-                        onNew: {
-                            newCollectionName = ""
-                            showingNewCollection = true
-                        },
-                        card: { CollectionCard(collection: $0) },
-                        newCard: { NewCollectionCard() }
-                    )
-                }
-                .navigationDestination(for: AllReadingQueuesDestination.self) { _ in
-                    LibraryEntityGridView(
-                        title: "Reading Queues",
-                        items: readingQueues.filter { $0.kind == .custom }.sorted { $0.sortOrder < $1.sortOrder },
-                        onNew: {
-                            newQueueName = ""
-                            showingNewQueue = true
-                        },
-                        card: { ReadingQueueCard(queue: $0) },
-                        newCard: { NewReadingQueueCard() }
-                    )
-                }
+                .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
+                .navigationDestination(for: AllReadingQueuesDestination.self) { _ in readingQueuesGridDestination }
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
