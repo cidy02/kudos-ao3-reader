@@ -68,12 +68,25 @@ final class AO3InboxModel {
         case idle
         case loading
         case loaded
+        /// Nothing usable has ever loaded (or the model was reset) — the whole
+        /// feed is the error state.
         case failed(String)
+        /// A later page failed while an earlier page's `items` are still
+        /// retained: `requestedPage` is the page that actually failed (what
+        /// `retry()` re-requests), not the page still on screen (T91-RF8).
+        case paginationFailed(requestedPage: Int, message: String)
     }
 
     private(set) var items: [AO3InboxItem] = []
     private(set) var phase: Phase = .idle
+    /// The last page whose parse actually *succeeded* — only this drives the
+    /// pagination bar's "current page" and what a plain reload repeats.
     private(set) var currentPage = 1
+    /// The page most recently asked for, updated before that request even
+    /// starts. Separate from `currentPage` so a failed page-N request can
+    /// report which page failed and `retry()` can target it, instead of
+    /// silently repeating whatever page is still showing (T91-RF8).
+    private(set) var requestedPage = 1
     private(set) var totalPages = 1
     /// Exact totals from the inbox heading, when AO3 printed them.
     private(set) var totalComments: Int?
@@ -303,7 +316,9 @@ final class AO3InboxModel {
     func retry(auth: AO3AuthService) {
         guard isCurrent(authContext, auth), !isPerformingBulkAction else { return }
         let expected = authContext
-        let page = currentPage
+        // The page that actually failed, not `currentPage` (T91-RF8) — for a
+        // first-ever load these are the same value anyway.
+        let page = requestedPage
         launch { await self.load(auth: auth, expected: expected, page: page, bypassCache: true) }
     }
 
@@ -503,6 +518,7 @@ final class AO3InboxModel {
             reset()
             return
         }
+        requestedPage = page
         phase = items.isEmpty ? .loading : .loaded
         do {
             let fetched = try await pageLoader(
@@ -542,7 +558,10 @@ final class AO3InboxModel {
             } else {
                 message = error.localizedDescription
             }
-            phase = .failed(message)
+            // Only blow away the whole feed when there's nothing behind the
+            // error to preserve; a later page's failure keeps the last
+            // successfully loaded page's items/pagination on screen (T91-RF8).
+            phase = items.isEmpty ? .failed(message) : .paginationFailed(requestedPage: page, message: message)
         }
     }
 
@@ -551,6 +570,7 @@ final class AO3InboxModel {
         items = []
         phase = .idle
         currentPage = 1
+        requestedPage = 1
         totalPages = 1
         totalComments = nil
         unreadCount = nil

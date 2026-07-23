@@ -41,8 +41,17 @@ extension AO3Client {
         }
 
         // Skip a malformed entry rather than failing the page (same convention as
-        // the works-list parsers).
+        // the works-list parsers) — `parseInboxItem` itself already turns AO3's
+        // known admin-hidden/no-byline row shape into a tombstone rather than
+        // throwing, so this only drops entries that are malformed some other
+        // way. If AO3 rendered rows and *none* of them could be represented at
+        // all, that's markup drift beyond the known tombstone shape: fail the
+        // page honestly instead of silently reporting a fabricated empty inbox
+        // (T91-RF6).
         let items = itemElements.compactMap { try? Self.parseInboxItem($0) }
+        if items.isEmpty, !itemElements.isEmpty {
+            throw AO3Error.parse
+        }
         // The display page is still useful if AO3 changes an optional management
         // form, but native controls must fail closed rather than inventing fields.
         let bulkForm = Self.parseInboxBulkForm(in: doc, items: items)
@@ -74,9 +83,16 @@ extension AO3Client {
     }
 
     private static func parseInboxItem(_ li: Element) throws -> AO3InboxItem {
-        guard let id = Int(li.id().replacingOccurrences(of: "feedback_comment_", with: "")),
-              let byline = try li.select("h4.heading.byline").first()
+        guard let id = Int(li.id().replacingOccurrences(of: "feedback_comment_", with: ""))
         else { throw AO3Error.parse }
+
+        guard let byline = try li.select("h4.heading.byline").first() else {
+            // AO3's current template renders an admin-hidden/unavailable comment
+            // as a `<li id="feedback_comment_…">` with only an unavailable
+            // message (and, often, its actions/checkbox) — no byline. Represent
+            // it as a minimal tombstone rather than throwing (T91-RF6).
+            return try Self.parseUnavailableInboxItem(li, id: id)
+        }
 
         // The commentable ("on …") link is the byline link whose path carries
         // /comments/ (work_comment_path & friends); the commenter link, when the
@@ -173,6 +189,34 @@ extension AO3Client {
             isReplied: isReplied,
             canReply: canReply,
             bulkSelectionField: bulkSelectionField
+        )
+    }
+
+    /// The admin-hidden/unavailable row shape (T91-RF6): still a real `<li>`
+    /// with an id and (when AO3 still renders it) a selection checkbox, but no
+    /// commenter, subject, or excerpt to show — so this stays a minimal
+    /// tombstone rather than being dropped.
+    private static func parseUnavailableInboxItem(_ li: Element, id: Int) throws -> AO3InboxItem {
+        let bulkSelectionField: AO3FormField?
+        if let checkbox = try li.select("input[type=checkbox][name][value]").first(),
+           let name = try? checkbox.attr("name"), !name.isEmpty,
+           let value = try? checkbox.attr("value"), !value.isEmpty {
+            bulkSelectionField = AO3FormField(name: name, value: value)
+        } else {
+            bulkSelectionField = nil
+        }
+        return AO3InboxItem(
+            id: id,
+            commenterName: "Unavailable",
+            isGuest: false,
+            subjectTitle: "",
+            excerpt: "",
+            postedAgo: "",
+            isUnread: li.hasClass("unread"),
+            isReplied: false,
+            canReply: false,
+            bulkSelectionField: bulkSelectionField,
+            isUnavailable: true
         )
     }
 

@@ -131,7 +131,15 @@ struct AccountInboxItemRow: View {
             }
             .buttonStyle(.plain)
             .disabled(!isSelectable)
-            .accessibilityHint("Toggle selection")
+            // Matches `SelectableAO3WorkRow`'s selection idiom (X5): an explicit
+            // label/value/trait instead of relying on the hidden checkmark alone
+            // to carry selected state (UI-2/T91-RF10).
+            .accessibilityLabel(accessibilitySummary)
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this notification.")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else if item.isUnavailable {
+            unavailableContent
         } else {
             interactiveContent
                 .confirmationDialog(
@@ -152,6 +160,14 @@ struct AccountInboxItemRow: View {
         }
     }
 
+    /// The sighted layout below still overlaps a full-card button with per-piece
+    /// avatar/byline/excerpt buttons, a Chapter chip, a Reply button, and a More
+    /// menu — none of that visible layout or tap behavior changes. What changes
+    /// (UI-2/T91-RF10) is VoiceOver exposure: instead of hitting every one of
+    /// those as its own "open thread" stop, `.accessibilityElement(children:
+    /// .ignore)` below folds the whole card into one element whose default
+    /// action opens the thread, with Reply/Chapter/the More menu's items
+    /// reachable as named accessibility actions (the actions rotor) instead.
     private var interactiveContent: some View {
         ZStack {
             // Keeps the visible card surface (including the words around the
@@ -162,12 +178,10 @@ struct AccountInboxItemRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(item.commenterName)'s comment thread")
 
             HStack(alignment: .top, spacing: 10) {
                 Button(action: onOpen) { avatar }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(item.commenterName)'s comment thread")
 
                 VStack(alignment: .leading, spacing: 4) {
                     Button(action: onOpen) {
@@ -175,7 +189,6 @@ struct AccountInboxItemRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityHint("Open the comment's thread")
 
                     subjectControl
 
@@ -190,7 +203,6 @@ struct AccountInboxItemRow: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("Open the comment's thread")
                     }
 
                     HStack(spacing: 8) {
@@ -211,10 +223,53 @@ struct AccountInboxItemRow: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint("Open the comment's thread")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) { onOpen() }
+        .accessibilityActions {
+            if item.chapterPosition != nil {
+                Button("Open Chapter Comments") { onOpenChapter() }
+            }
+            if item.canReply {
+                Button("Reply") { onReply() }
+            }
+            Button("Copy Link") { copyLink() }
+            if canToggleReadState {
+                Button(item.isUnread ? "Mark Read" : "Mark Unread") { onToggleReadState() }
+            }
+            if canDeleteFromInbox {
+                Button("Delete From Inbox", role: .destructive) { confirmDelete = true }
+            }
+        }
+    }
+
+    /// The admin-hidden/unavailable tombstone shape (T91-RF6): AO3 rendered a
+    /// real row with an id (and, when present, its selection checkbox) but no
+    /// byline, subject, or excerpt — so there is genuinely nothing to open.
+    /// Still counted and still selectable in bulk-select mode via
+    /// `selectionContent`, just not wired to `onOpen`.
+    private var unavailableContent: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "eye.slash")
+                .foregroundStyle(.secondary)
+                .frame(width: 40, height: 40)
+            Text("A comment here is unavailable")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("A comment here is unavailable")
     }
 
     private var selectionContent: some View {
         HStack(alignment: .top, spacing: 10) {
+            // Visual selected state only — the wrapping Button in `body` carries
+            // the real `.isSelected` accessibility trait/value (UI-2/T91-RF10),
+            // so this glyph staying hidden no longer leaves selection unannounced.
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
                 .foregroundStyle(isSelected ? Color.accentColor : .secondary)
@@ -223,26 +278,56 @@ struct AccountInboxItemRow: View {
             avatar
 
             VStack(alignment: .leading, spacing: 4) {
-                byline
-                if !item.subjectTitle.isEmpty {
-                    Text("on \(item.subjectTitle)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if !item.excerpt.isEmpty {
-                    Text(item.excerpt)
+                if item.isUnavailable {
+                    Text("A comment here is unavailable")
                         .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
+                } else {
+                    byline
+                    if !item.subjectTitle.isEmpty {
+                        Text("on \(item.subjectTitle)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    if !item.excerpt.isEmpty {
+                        Text(item.excerpt)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if item.isReplied { InboxRepliedBadge() }
                 }
-                if item.isReplied { InboxRepliedBadge() }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+    }
+
+    /// One VoiceOver-friendly summary of this notification, shared by the
+    /// consolidated `interactiveContent` element and the select-mode row
+    /// (UI-2/T91-RF10) — both need the same context that used to be spread
+    /// across several separately-focusable pieces.
+    private var accessibilitySummary: String {
+        if item.isUnavailable {
+            return "A comment here is unavailable"
+        }
+        var parts: [String] = []
+        if item.isUnread { parts.append("Unread") }
+        parts.append(item.commenterName)
+        let role = item.participantRole(
+            workAuthors: workAuthors,
+            workAuthorIdentities: workAuthorIdentities,
+            currentUsername: auth.username
+        )
+        if role != .user { parts.append(role.rawValue) }
+        if !item.subjectTitle.isEmpty { parts.append("on \(item.subjectTitle)") }
+        if !item.excerpt.isEmpty { parts.append(item.excerpt) }
+        if !item.postedAgo.isEmpty { parts.append(item.postedAgo) }
+        if item.isReplied { parts.append("Replied") }
+        return parts.joined(separator: ". ")
     }
 
     private var byline: some View {
@@ -271,6 +356,10 @@ struct AccountInboxItemRow: View {
         }
     }
 
+    /// Both branches' buttons are folded into `interactiveContent`'s single
+    /// accessibility element (its "Open Chapter Comments" custom action covers
+    /// the Chapter chip; the default "open thread" action covers the plain-text
+    /// case) — neither carries its own accessibility label/hint here anymore.
     @ViewBuilder
     private var subjectControl: some View {
         if !item.subjectTitle.isEmpty {
@@ -288,7 +377,6 @@ struct AccountInboxItemRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Open \(chapter) comments and focus this thread")
                     Text("of \(item.workTitle)")
                         .lineLimit(2)
                 }
@@ -304,7 +392,6 @@ struct AccountInboxItemRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Open the comment's thread")
             }
         }
     }
@@ -414,6 +501,19 @@ struct AccountInboxRows: View {
         case let .failed(message):
             AO3ProfileMessageRow(
                 title: "Couldn't load your inbox",
+                systemImage: "exclamationmark.triangle",
+                message: message,
+                actionTitle: "Try Again",
+                action: { model.retry(auth: auth) }
+            )
+            .accountControlCardRow()
+        case let .paginationFailed(requestedPage, message):
+            // The last successfully loaded page's items/pagination stay on
+            // screen; only a page-specific error/retry is added below them
+            // (T91-RF8) — a failed page 2 must not hide page 1's comments.
+            itemRows
+            AO3ProfileMessageRow(
+                title: "Couldn't load page \(requestedPage)",
                 systemImage: "exclamationmark.triangle",
                 message: message,
                 actionTitle: "Try Again",
@@ -538,6 +638,7 @@ struct AccountInboxFilterSheet: View {
                 ForEach(model.filterForm?.fields ?? []) { field in
                     Section(field.title) {
                         ForEach(field.options) { option in
+                            let isSelected = selectedValue(for: field) == option.value
                             Button {
                                 model.applyFilter(
                                     fieldName: field.name,
@@ -549,7 +650,7 @@ struct AccountInboxFilterSheet: View {
                                 HStack {
                                     Text(option.label)
                                     Spacer()
-                                    if selectedValue(for: field) == option.value {
+                                    if isSelected {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.tint)
                                             .accessibilityHidden(true)
@@ -559,6 +660,10 @@ struct AccountInboxFilterSheet: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            // Matches LibraryFilterPanel's `selectableRow` (X5) — without
+                            // this, VoiceOver announces the row but never says whether it's
+                            // currently selected (UI-2/T91-RF10).
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
                 }
@@ -609,8 +714,9 @@ struct AccountInboxBulkActionBar: View {
                 perform(.markRead)
             } label: {
                 Image(systemName: "envelope.open")
-                    .frame(minWidth: 44, minHeight: 32)
             }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
             .accessibilityLabel("Mark Read")
 
             Divider().frame(height: 22)
@@ -619,11 +725,11 @@ struct AccountInboxBulkActionBar: View {
                 perform(.markUnread)
             } label: {
                 Image(systemName: "envelope.badge")
-                    .frame(minWidth: 44, minHeight: 32)
             }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
             .accessibilityLabel("Mark Unread")
         }
-        .buttonStyle(.plain)
         .background(.regularMaterial, in: Capsule())
         .disabled(isDisabled)
 

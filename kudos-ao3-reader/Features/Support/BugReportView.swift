@@ -10,6 +10,7 @@ import UIKit
 /// shake, a screenshot of the moment is offered to attach.
 struct BugReportView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var summary = ""
 
     #if os(iOS)
@@ -21,53 +22,64 @@ struct BugReportView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Text("Found a bug? Describe what happened and Kudos will open a "
-                        + "prefilled GitHub issue you can review and post. Nothing is "
-                        + "sent automatically.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("What went wrong?") {
-                    TextField(
-                        "What happened, and what did you expect instead?",
-                        text: $summary,
-                        axis: .vertical
-                    )
-                    .lineLimit(4 ... 10)
-                }
-
-                screenshotSection
-
-                Section("Included with your report") {
-                    LabeledContent("App version", value: AboutView.versionString)
-                    LabeledContent("System", value: Self.systemInfo)
-                    Text("Only these app and system details are attached — no personal "
-                        + "data, and never your AO3 account.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    if let url = issueURL {
-                        Link(destination: url) {
-                            Label("Continue on GitHub", systemImage: "ladybug")
-                        }
-                        .disabled(trimmedSummary.isEmpty)
+                Group {
+                    Section {
+                        Text("Found a bug? Describe what happened and Kudos will open a "
+                            + "prefilled GitHub issue you can review and post. Nothing is "
+                            + "sent automatically.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    if let issues = URL(string: AppLinks.issues) {
-                        Link(destination: issues) {
-                            Label("Browse existing issues", systemImage: "list.bullet")
-                        }
-                        .font(.subheadline)
+
+                    Section("What went wrong?") {
+                        TextField(
+                            "What happened, and what did you expect instead?",
+                            text: $summary,
+                            axis: .vertical
+                        )
+                        .lineLimit(4 ... 10)
                     }
-                } footer: {
-                    Text("Please don't contact the AO3 team about Kudos — they can't "
-                        + "provide support for this app.")
+
+                    screenshotSection
+
+                    Section("Included with your report") {
+                        LabeledContent("App version", value: AboutView.versionString)
+                        LabeledContent("System", value: Self.systemInfo)
+                        Text("Only these app and system details are attached — no personal "
+                            + "data, and never your AO3 account.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Section {
+                        if let url = issueURL {
+                            // A `Link` has no reliably-defined VoiceOver-disabled state
+                            // (unlike `Button`), so a real `Button` driving `openURL`
+                            // is used here instead — same visible label/icon/behavior
+                            // when enabled, but a `.disabled()` VoiceOver users can
+                            // actually hear (UI-2).
+                            Button {
+                                openURL(url)
+                            } label: {
+                                Label("Continue on GitHub", systemImage: "ladybug")
+                            }
+                            .disabled(trimmedSummary.isEmpty)
+                        }
+                        if let issues = URL(string: AppLinks.issues) {
+                            Link(destination: issues) {
+                                Label("Browse existing issues", systemImage: "list.bullet")
+                            }
+                            .font(.subheadline)
+                        }
+                    } footer: {
+                        Text("Please don't contact the AO3 team about Kudos — they can't "
+                            + "provide support for this app.")
+                    }
                 }
+                .appThemedRows()
             }
             .formStyle(.grouped)
+            .appThemedScroll()
             .navigationTitle("Report a Bug")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -102,6 +114,7 @@ struct BugReportView: View {
                                 .strokeBorder(.quaternary)
                         )
                         .padding(.vertical, 2)
+                        .accessibilityLabel("Attached screenshot preview")
                     ShareLink(
                         item: Image(uiImage: screenshot),
                         preview: SharePreview("Kudos screenshot", image: Image(uiImage: screenshot))

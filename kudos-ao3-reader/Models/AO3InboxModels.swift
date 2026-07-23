@@ -38,6 +38,12 @@ nonisolated struct AO3InboxItem: Identifiable, Hashable {
     /// InboxComment record id, which is distinct from the feedback-comment id
     /// above on real AO3 pages; bulk writes must submit this field verbatim.
     var bulkSelectionField: AO3FormField?
+    /// True when AO3 rendered this row as an admin-hidden/unavailable
+    /// tombstone — a real `<li id="feedback_comment_…">` with no byline,
+    /// subject, or excerpt to show. Kept as a minimal row instead of being
+    /// dropped (T91-RF6): it still counts and is still selectable when AO3
+    /// still renders its checkbox, just with nothing to open.
+    var isUnavailable = false
 
     /// Strictly parsed from AO3's own "Chapter N of Work" label. This is only
     /// presentation/routing intent; the exact chapter id is resolved from the

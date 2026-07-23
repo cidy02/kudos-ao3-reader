@@ -236,6 +236,80 @@ struct AO3InboxParseTests {
         }
     }
 
+    // MARK: T91-RF6 — admin-hidden/unavailable rows
+
+    /// AO3's current template renders an admin-hidden comment as a bare
+    /// `<li id="feedback_comment_…">` with no `h4.heading.byline` — just a
+    /// message and its actions/checkbox. Before the fix, `parseInboxItem`
+    /// threw on this shape and the page's `compactMap` silently discarded it;
+    /// this proves the row survives as a minimal, still-selectable tombstone
+    /// instead of vanishing from `items`.
+    @Test func adminHiddenRowBecomesATombstoneInsteadOfBeingDropped() throws {
+        let html = """
+        <html><body>
+        <h2 class="heading">My Inbox (2 comments, 1 unread)</h2>
+        <ol class="comment index group">
+          <li class="unread comment group even" role="article" id="feedback_comment_9001">
+            <h4 class="heading byline">
+              <a href="/users/reader1/pseuds/ReaderOne">ReaderOne</a> on
+              <a href="/works/123456/comments/9001">My Great Fic</a>
+              <span class="posted datetime">3 days ago</span>
+            </h4>
+            <div class="icon">
+              <a href="/users/reader1/pseuds/ReaderOne"><img alt="" class="icon"
+                src="https://example.com/icons/1/standard.png"></a>
+            </div>
+            <blockquote class="userstuff"><p>Loved this chapter so much!</p></blockquote>
+            <ul class="actions" role="menu">
+              <li><label><input type="checkbox" name="inbox_comments[]" value="1">Select</label></li>
+            </ul>
+          </li>
+          <li class="read comment group odd" role="article" id="feedback_comment_9099">
+            <p>This comment has been hidden by an admin.</p>
+            <ul class="actions" role="menu">
+              <li><label><input type="checkbox" name="inbox_comments[]" value="2">Select</label></li>
+            </ul>
+          </li>
+        </ol>
+        </body></html>
+        """
+        let page = try AO3Client.parseInboxPage(html, page: 1)
+        #expect(page.items.count == 2)
+
+        let tombstone = try #require(page.items.last)
+        #expect(tombstone.id == 9099)
+        #expect(tombstone.isUnavailable)
+        #expect(!tombstone.isUnread)
+        #expect(tombstone.subjectTitle.isEmpty)
+        #expect(tombstone.excerpt.isEmpty)
+        #expect(!tombstone.canReply)
+        #expect(tombstone.bulkSelectionField?.value == "2")
+
+        let normal = try #require(page.items.first)
+        #expect(!normal.isUnavailable)
+    }
+
+    /// If AO3 rendered rows but *none* of them could be represented at all
+    /// (markup drift beyond the known admin-hidden tombstone shape — here, a
+    /// row whose own id doesn't even parse), the page must fail honestly
+    /// instead of returning an empty `items` array that the UI would render
+    /// as a fabricated "No comments yet."
+    @Test func allUnparseableRowsFailInsteadOfFabricatingEmptyInbox() {
+        let malformed = """
+        <html><body>
+        <h2 class="heading">My Inbox (1 comments, 0 unread)</h2>
+        <ol class="comment index group">
+          <li class="read comment group even" role="article" id="feedback_comment_">
+            <p>This comment is currently unavailable.</p>
+          </li>
+        </ol>
+        </body></html>
+        """
+        #expect(throws: AO3Error.self) {
+            _ = try AO3Client.parseInboxPage(malformed, page: 1)
+        }
+    }
+
     @Test func buildsInboxURL() {
         #expect(
             AO3Client.inboxURL(username: "tester", page: 1)?.absoluteString
