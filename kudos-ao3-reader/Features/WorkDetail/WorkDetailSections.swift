@@ -251,10 +251,13 @@ extension WorkDetailView {
             VStack(alignment: .leading, spacing: 4) {
                 // No trailing chevron: this row opens a sheet, not a hierarchical
                 // push — HIG reserves the disclosure indicator for the latter.
-                Label(
-                    WorkDetailPresentation.queueLabel(count: work.queueMemberships.count),
-                    systemImage: "list.bullet.rectangle"
-                )
+                HStack {
+                    Label(
+                        WorkDetailPresentation.queueLabel(count: work.queueMemberships.count),
+                        systemImage: "list.bullet.rectangle"
+                    )
+                    Spacer()
+                }
                 ForEach(queueMembershipLines(for: work)) { line in
                     Text(line.text)
                         .font(.footnote)
@@ -301,10 +304,13 @@ extension WorkDetailView {
             VStack(alignment: .leading, spacing: 4) {
                 // No trailing chevron: this row opens a sheet, not a hierarchical
                 // push — HIG reserves the disclosure indicator for the latter.
-                Label(
-                    WorkDetailPresentation.collectionLabel(count: work.collections.count),
-                    systemImage: "square.stack"
-                )
+                HStack {
+                    Label(
+                        WorkDetailPresentation.collectionLabel(count: work.collections.count),
+                        systemImage: "square.stack"
+                    )
+                    Spacer()
+                }
                 if !names.isEmpty {
                     Text(names.joined(separator: ", "))
                         .font(.footnote)
