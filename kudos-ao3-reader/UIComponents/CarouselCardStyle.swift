@@ -22,6 +22,39 @@ enum CarouselCardMetrics {
     static let cornerRadius: CGFloat = CardRadius.tile
 }
 
+extension CarouselCardMetrics {
+    /// Column layout for a wrapping grid of compact cover cards (Work, Reading
+    /// Queue, Collection) — `count` columns normally, collapsing to a single column
+    /// at accessibility Dynamic Type sizes. These cards are much narrower than
+    /// WorkDetail's quick-action tiles, so even two columns is already the failure
+    /// mode: card text wraps character-by-character with nowhere left to grow. One
+    /// column is what actually stays legible. Mirrors the same
+    /// `isAccessibilitySize` pattern as `WorkDetailView.quickActionColumns`.
+    static func compactCardColumns(
+        for dynamicTypeSize: DynamicTypeSize,
+        count: Int = 2,
+        spacing: CGFloat = 16
+    ) -> [GridItem] {
+        let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : count
+        return Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
+    }
+
+    /// Same collapse-to-one-column rule for an adaptive grid, whose column count
+    /// otherwise comes purely from `minimum` width and never accounts for Dynamic
+    /// Type — a card that fits two-up by raw pixel width can still be far too
+    /// narrow for its scaled text once Dynamic Type is at an accessibility size.
+    static func adaptiveCardColumns(
+        for dynamicTypeSize: DynamicTypeSize,
+        minimum: CGFloat = CarouselCardMetrics.width,
+        spacing: CGFloat = 16
+    ) -> [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: spacing)]
+        }
+        return [GridItem(.adaptive(minimum: minimum), spacing: spacing)]
+    }
+}
+
 struct CarouselCardShadow {
     let color: Color
     let radius: CGFloat

@@ -14,8 +14,15 @@ struct LibraryEntityGridView<Item: Identifiable & Hashable, Card: View, NewCard:
     @ViewBuilder let newCard: () -> NewCard
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let columns = [GridItem(.adaptive(minimum: CarouselCardMetrics.width), spacing: 16)]
+    /// Adaptive column count from card width normally; collapses to one column at
+    /// accessibility Dynamic Type sizes, where `.adaptive(minimum:)` alone would
+    /// still fit two cards by raw pixel width even though their scaled text can't
+    /// (see `CarouselCardMetrics.adaptiveCardColumns`).
+    private var columns: [GridItem] {
+        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize)
+    }
 
     var body: some View {
         ScrollView {

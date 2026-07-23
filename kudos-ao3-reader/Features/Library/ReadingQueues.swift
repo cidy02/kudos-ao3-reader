@@ -99,6 +99,7 @@ struct ReadingQueueDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var showingRename = false
     @State private var renameText = ""
@@ -328,10 +329,11 @@ struct ReadingQueueDetailView: View {
     }
 
     /// Apple Books-style two-up grid — the same cover cards every carousel already
-    /// uses, wrapping down the page instead of scrolling horizontally.
+    /// uses, wrapping down the page instead of scrolling horizontally. Collapses to
+    /// one column at accessibility Dynamic Type sizes (see `compactCardColumns`).
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            LazyVGrid(columns: CarouselCardMetrics.compactCardColumns(for: dynamicTypeSize), spacing: 16) {
                 ForEach(compactDisplayedWorks) { work in
                     compactCard(work)
                 }

@@ -10,6 +10,7 @@ struct HomeSectionListView: View {
     @Environment(\.modelContext) private var context
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
@@ -198,10 +199,11 @@ struct HomeSectionListView: View {
     }
 
     /// Apple Books-style two-up grid — the same cover cards every carousel already
-    /// uses, wrapping down the page instead of scrolling horizontally.
+    /// uses, wrapping down the page instead of scrolling horizontally. Collapses to
+    /// one column at accessibility Dynamic Type sizes (see `compactCardColumns`).
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            LazyVGrid(columns: CarouselCardMetrics.compactCardColumns(for: dynamicTypeSize), spacing: 16) {
                 ForEach(visibleItems) { work in
                     if isSelecting {
                         SensitiveWorkCoverCard(
