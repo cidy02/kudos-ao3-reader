@@ -22,7 +22,8 @@ struct ReadingQueueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
-                .frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height)
+                .frame(minWidth: CarouselCardMetrics.width, maxWidth: CarouselCardMetrics.width,
+                       minHeight: CarouselCardMetrics.height)
             Text(queue.displayName)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
@@ -70,7 +71,8 @@ struct NewReadingQueueCard: View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(width: CarouselCardMetrics.width, height: CarouselCardMetrics.height)
+                .frame(minWidth: CarouselCardMetrics.width, maxWidth: CarouselCardMetrics.width,
+                       minHeight: CarouselCardMetrics.height)
                 .overlay {
                     Image(systemName: "plus")
                         .font(.system(size: 34, weight: .medium))

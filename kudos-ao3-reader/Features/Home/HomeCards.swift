@@ -270,8 +270,8 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     var body: some View {
         content()
             .padding(12)
-            .frame(width: CarouselCardMetrics.width,
-                   height: CarouselCardMetrics.height,
+            .frame(minWidth: CarouselCardMetrics.width, maxWidth: CarouselCardMetrics.width,
+                   minHeight: CarouselCardMetrics.height,
                    alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
