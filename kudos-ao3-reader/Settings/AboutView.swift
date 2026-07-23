@@ -4,6 +4,7 @@ import SwiftUI
 /// the AO3/OTW disclaimer. Presented as a sheet from the Settings page.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
     @State private var showingBugReport = false
 
     var body: some View {
@@ -128,7 +129,11 @@ struct AboutView: View {
                 }
             }
             .presentationDragIndicator(.visible)
-            .sheet(isPresented: $showingBugReport) { BugReportView() }
+            .sheet(isPresented: $showingBugReport) {
+                BugReportView()
+                    .environment(themeManager)
+                    .tint(themeManager.effectiveTint)
+            }
     }
 
     private func creditRow(_ name: String, license: String, detail: String, url: String) -> some View {

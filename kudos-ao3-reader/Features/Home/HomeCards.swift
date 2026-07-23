@@ -267,12 +267,30 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     var hue: Double?
     @ViewBuilder var content: () -> Content
 
+    /// The card's fixed outer width (`CarouselCardMetrics.width`) minus the
+    /// symmetric 12pt padding applied below — the exact width the content
+    /// itself renders at.
+    private var contentWidth: CGFloat {
+        CarouselCardMetrics.width - 24
+    }
+
     var body: some View {
         content()
+            // Pins the content's width to a single, unambiguous value *before*
+            // asking for its ideal height, rather than letting an outer
+            // .frame(minWidth:maxWidth:) negotiate width across two separate
+            // passes (once for the ideal-size query, once for placement).
+            // FlowLayout's sizeThatFits reads whatever width it's proposed —
+            // if the two passes disagree even slightly, it can wrap a
+            // different number of rows in each, undershooting the reported
+            // ideal height (and thus the floor .frame(minHeight:) grows to)
+            // by a full row at large accessibility text sizes, since the
+            // stats row is a FlowLayout. A single .frame(width:) is proposed
+            // identically in every pass, so both queries wrap the same way.
+            .frame(width: contentWidth, alignment: .topLeading)
             .padding(12)
-            .frame(minWidth: CarouselCardMetrics.width, maxWidth: CarouselCardMetrics.width,
-                   minHeight: CarouselCardMetrics.height,
-                   alignment: .topLeading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(minHeight: CarouselCardMetrics.height, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)

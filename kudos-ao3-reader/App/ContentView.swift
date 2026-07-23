@@ -154,8 +154,12 @@ struct ContentView: View {
             .sheet(isPresented: $showingBugReport) {
                 #if os(iOS)
                 BugReportView(screenshot: bugReportScreenshot)
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
                 #else
                 BugReportView()
+                    .environment(theme)
+                    .tint(theme.effectiveTint)
                 #endif
             }
         // First-launch welcome, then (once that's done) sync-folder onboarding — never

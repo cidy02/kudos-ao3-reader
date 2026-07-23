@@ -507,9 +507,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         .sheet(isPresented: $showAbout) {
             NavigationStack { AboutView() }
+                .environment(themeManager)
+                .tint(themeManager.effectiveTint)
         }
         .sheet(isPresented: $showingBugReport) {
             BugReportView()
+                .environment(themeManager)
+                .tint(themeManager.effectiveTint)
         }
         .sheet(isPresented: $showingSyncDetails) {
             NavigationStack {
