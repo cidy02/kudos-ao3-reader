@@ -75,12 +75,15 @@ nonisolated struct MiniZip {
         )
 
         /// Sized for `.kudosbackup` archives: a manifest plus one EPUB per
-        /// library work. The total stays bounded well below anything that
-        /// could be materialized in memory anyway.
+        /// library work. Streaming export and ZIP64 mean the archive itself is
+        /// no longer bounded by memory or classic 32-bit ZIP fields; these
+        /// caps bound what a hostile archive can make the reader allocate
+        /// (per entry, and per restore in total) while comfortably covering
+        /// any real library.
         static let backup = Limits(
-            maxEntryCount: 50_000,
-            maxSingleEntryUncompressedSize: 500_000_000,
-            maxTotalUncompressedSize: 2_000_000_000,
+            maxEntryCount: 250_000,
+            maxSingleEntryUncompressedSize: 1_000_000_000,
+            maxTotalUncompressedSize: 64_000_000_000,
             maxCompressionRatio: 1100
         )
     }
@@ -461,90 +464,245 @@ nonisolated struct MiniZip {
 // MARK: - Minimal ZIP writer
 
 extension MiniZip {
-    /// Builds a ZIP archive from named entries using stored (uncompressed)
-    /// entries only — EPUB payloads are already internally DEFLATE-compressed,
-    /// so re-compressing them buys nothing, and stored entries keep the writer
-    /// trivially verifiable (declared sizes are the real sizes). Entry names
-    /// pass the same `validatedRelativePath` safety rules the reader enforces,
-    /// so everything this writer produces is readable by `MiniZip` and by any
-    /// standard ZIP tool. No ZIP64: entry count, sizes, and offsets must fit
-    /// the classic 16/32-bit fields, which comfortably covers any archive this
-    /// app can materialize in memory anyway.
-    static func archiveData(_ entries: [(name: String, data: Data)]) throws -> Data {
-        guard !entries.isEmpty, entries.count <= 0xFFFF else {
-            throw MiniZipError.malformedArchive
+    /// Incremental stored-entry ZIP writer. Each appended entry's local header
+    /// and payload go straight to the sink; only the (small) central-directory
+    /// records stay in memory until `finish()`, so an archive of any size can
+    /// be produced without ever materializing it. Entries are stored
+    /// (uncompressed) only — EPUB payloads are already internally
+    /// DEFLATE-compressed, so re-compressing them buys nothing, and stored
+    /// entries keep the writer trivially verifiable (declared sizes are the
+    /// real sizes). Entry names pass the same `validatedRelativePath` safety
+    /// rules the reader enforces.
+    ///
+    /// ZIP64 records are emitted exactly when a value outgrows its classic
+    /// 16/32-bit field (entry size, local-header offset, entry count, or
+    /// central-directory offset/size), so archives below those thresholds stay
+    /// byte-identical to the pre-ZIP64 writer's output.
+    ///
+    /// Not reusable: after `finish()` — or any thrown error, which can leave
+    /// the sink mid-record — the writer must be discarded.
+    final class ArchiveWriter {
+        /// Bytes are handed over in write order and never revisited, so a sink
+        /// may append to a file handle or to an in-memory buffer.
+        private let sink: (Data) throws -> Void
+        /// Read size for file-backed payloads; injectable so tests can force
+        /// multi-chunk streaming with small fixtures.
+        private let chunkSize: Int
+        private var offset: UInt64 = 0
+        private var centralDirectory = Data()
+        private var entryCount = 0
+        private var seenNames = Set<String>()
+        private var finished = false
+
+        init(chunkSize: Int = 4 << 20, sink: @escaping (Data) throws -> Void) {
+            self.chunkSize = max(1, chunkSize)
+            self.sink = sink
         }
 
-        var seenNames = Set<String>()
-        var archive = Data()
-        var centralDirectory = Data()
+        /// Appends one stored entry whose payload is already in memory.
+        func append(name: String, data payload: Data) throws {
+            try appendEntry(name: name, size: UInt64(payload.count), crc: MiniZip.crc32(payload)) {
+                try emit(payload)
+            }
+        }
 
-        for (name, payload) in entries {
-            _ = try validatedRelativePath(name)
+        /// Appends one stored entry streamed from a file in `chunkSize` reads,
+        /// so the payload never lives in memory at once. The file is read
+        /// twice — once for the CRC-32 the stored local header must declare
+        /// ahead of the payload, once to stream the payload — and exactly the
+        /// initially-measured byte count both times: a file that shrinks
+        /// between passes fails the append (`truncatedRecord`) rather than
+        /// producing a corrupt archive.
+        func append(name: String, contentsOf url: URL) throws {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let size = try handle.seekToEnd()
+
+            try handle.seek(toOffset: 0)
+            var crcState: UInt32 = 0xFFFF_FFFF
+            try readExactly(size, from: handle) { chunk in
+                crcState = MiniZip.crc32Update(crcState, chunk)
+            }
+
+            try handle.seek(toOffset: 0)
+            try appendEntry(name: name, size: size, crc: crcState ^ 0xFFFF_FFFF) {
+                try readExactly(size, from: handle) { chunk in
+                    try emit(chunk)
+                }
+            }
+        }
+
+        /// Writes the central directory, the ZIP64 EOCD record + locator when
+        /// any count or offset outgrew its classic field, and the classic EOCD.
+        func finish() throws {
+            precondition(!finished, "ArchiveWriter used after finish()")
+            finished = true
+            guard entryCount > 0 else { throw MiniZipError.malformedArchive }
+
+            let centralDirectoryOffset = offset
+            let centralDirectorySize = UInt64(centralDirectory.count)
+            try emit(centralDirectory)
+            centralDirectory = Data()
+
+            let needsZip64 = entryCount >= 0xFFFF
+                || centralDirectoryOffset >= 0xFFFF_FFFF
+                || centralDirectorySize >= 0xFFFF_FFFF
+            if needsZip64 {
+                let zip64EOCDOffset = offset
+                var records = Data()
+                // ZIP64 end of central directory record.
+                records.appendU32(0x0606_4B50)
+                records.appendU64(44) // size of the record after this field
+                records.appendU16(45) // version made by
+                records.appendU16(45) // version needed
+                records.appendU32(0) // this disk
+                records.appendU32(0) // central-directory disk
+                records.appendU64(UInt64(entryCount))
+                records.appendU64(UInt64(entryCount))
+                records.appendU64(centralDirectorySize)
+                records.appendU64(centralDirectoryOffset)
+                // ZIP64 end of central directory locator.
+                records.appendU32(0x0706_4B50)
+                records.appendU32(0) // disk holding the ZIP64 EOCD
+                records.appendU64(zip64EOCDOffset)
+                records.appendU32(1) // total disks
+                try emit(records)
+            }
+
+            var eocd = Data()
+            eocd.appendU32(0x0605_4B50)
+            eocd.appendU16(0) // this disk
+            eocd.appendU16(0) // central-directory disk
+            let count16 = UInt16(clampingToSentinel: UInt64(entryCount))
+            eocd.appendU16(count16)
+            eocd.appendU16(count16)
+            eocd.appendU32(UInt32(clampingToSentinel: centralDirectorySize))
+            eocd.appendU32(UInt32(clampingToSentinel: centralDirectoryOffset))
+            eocd.appendU16(0) // comment length
+            try emit(eocd)
+        }
+
+        /// Writes the local header and matching central-directory record for
+        /// one stored entry, with `payload` emitting exactly `size` bytes in
+        /// between.
+        private func appendEntry(
+            name: String,
+            size: UInt64,
+            crc: UInt32,
+            payload: () throws -> Void
+        ) throws {
+            precondition(!finished, "ArchiveWriter used after finish()")
+            _ = try MiniZip.validatedRelativePath(name)
             guard seenNames.insert(name).inserted else { throw MiniZipError.malformedArchive }
             guard let nameBytes = name.data(using: .utf8), nameBytes.count <= 0xFFFF else {
                 throw MiniZipError.pathTraversal
             }
-            guard payload.count < 0xFFFF_FFFF, archive.count < 0xFFFF_FFFF else {
-                throw MiniZipError.entryTooLarge
-            }
 
-            let crc = crc32(payload)
-            let localHeaderOffset = UInt32(archive.count)
+            let localHeaderOffset = offset
+            let needsZip64Sizes = size >= 0xFFFF_FFFF
+            let needsZip64Offset = localHeaderOffset >= 0xFFFF_FFFF
+            let size32 = UInt32(clampingToSentinel: size)
 
             // Local file header. Flags set only bit 11 (UTF-8 names); the
             // fixed 1980-01-01 DOS timestamp keeps output deterministic —
             // `exportedAt` inside the manifest is the meaningful date.
-            archive.appendU32(0x0403_4B50)
-            archive.appendU16(20) // version needed
-            archive.appendU16(0x0800) // flags: UTF-8 names
-            archive.appendU16(0) // method: stored
-            archive.appendU16(0) // DOS time
-            archive.appendU16(0x0021) // DOS date: 1980-01-01
-            archive.appendU32(crc)
-            archive.appendU32(UInt32(payload.count)) // compressed
-            archive.appendU32(UInt32(payload.count)) // uncompressed
-            archive.appendU16(UInt16(nameBytes.count))
-            archive.appendU16(0) // extra length
-            archive.append(nameBytes)
-            archive.append(payload)
+            var local = Data()
+            local.appendU32(0x0403_4B50)
+            local.appendU16(needsZip64Sizes ? 45 : 20) // version needed
+            local.appendU16(0x0800) // flags: UTF-8 names
+            local.appendU16(0) // method: stored
+            local.appendU16(0) // DOS time
+            local.appendU16(0x0021) // DOS date: 1980-01-01
+            local.appendU32(crc)
+            local.appendU32(size32) // compressed
+            local.appendU32(size32) // uncompressed
+            local.appendU16(UInt16(nameBytes.count))
+            local.appendU16(needsZip64Sizes ? 20 : 0) // extra length
+            local.append(nameBytes)
+            if needsZip64Sizes {
+                local.appendU16(0x0001)
+                local.appendU16(16)
+                local.appendU64(size) // original (uncompressed) size
+                local.appendU64(size) // compressed size
+            }
+            try emit(local)
 
-            // Matching central-directory record.
-            centralDirectory.appendU32(0x0201_4B50)
-            centralDirectory.appendU16(20) // version made by
-            centralDirectory.appendU16(20) // version needed
-            centralDirectory.appendU16(0x0800) // flags: UTF-8 names
-            centralDirectory.appendU16(0) // method: stored
-            centralDirectory.appendU16(0) // DOS time
-            centralDirectory.appendU16(0x0021) // DOS date
-            centralDirectory.appendU32(crc)
-            centralDirectory.appendU32(UInt32(payload.count))
-            centralDirectory.appendU32(UInt32(payload.count))
-            centralDirectory.appendU16(UInt16(nameBytes.count))
-            centralDirectory.appendU16(0) // extra length
-            centralDirectory.appendU16(0) // comment length
-            centralDirectory.appendU16(0) // disk number
-            centralDirectory.appendU16(0) // internal attributes
-            centralDirectory.appendU32(0) // external attributes
-            centralDirectory.appendU32(localHeaderOffset)
-            centralDirectory.append(nameBytes)
+            try payload()
+
+            // Matching central-directory record; saturated fields carry their
+            // real values in the ZIP64 extra block, in spec order.
+            let zip64FieldCount = (needsZip64Sizes ? 2 : 0) + (needsZip64Offset ? 1 : 0)
+            let needsZip64 = zip64FieldCount > 0
+            var central = Data()
+            central.appendU32(0x0201_4B50)
+            central.appendU16(needsZip64 ? 45 : 20) // version made by
+            central.appendU16(needsZip64 ? 45 : 20) // version needed
+            central.appendU16(0x0800) // flags: UTF-8 names
+            central.appendU16(0) // method: stored
+            central.appendU16(0) // DOS time
+            central.appendU16(0x0021) // DOS date
+            central.appendU32(crc)
+            central.appendU32(size32)
+            central.appendU32(size32)
+            central.appendU16(UInt16(nameBytes.count))
+            central.appendU16(needsZip64 ? UInt16(4 + 8 * zip64FieldCount) : 0) // extra length
+            central.appendU16(0) // comment length
+            central.appendU16(0) // disk number
+            central.appendU16(0) // internal attributes
+            central.appendU32(0) // external attributes
+            central.appendU32(UInt32(clampingToSentinel: localHeaderOffset))
+            central.append(nameBytes)
+            if needsZip64 {
+                central.appendU16(0x0001)
+                central.appendU16(UInt16(8 * zip64FieldCount))
+                if needsZip64Sizes {
+                    central.appendU64(size) // original (uncompressed) size
+                    central.appendU64(size) // compressed size
+                }
+                if needsZip64Offset {
+                    central.appendU64(localHeaderOffset)
+                }
+            }
+            centralDirectory.append(central)
+            entryCount += 1
         }
 
-        let centralDirectoryOffset = archive.count
-        guard centralDirectoryOffset + centralDirectory.count < 0xFFFF_FFFF else {
-            throw MiniZipError.archiveTooLarge
+        /// Reads exactly `size` bytes from `handle` in `chunkSize` slices,
+        /// handing each to `consume`. Fewer available bytes than promised —
+        /// the file shrank since it was measured — fail the archive.
+        private func readExactly(
+            _ size: UInt64,
+            from handle: FileHandle,
+            consume: (Data) throws -> Void
+        ) throws {
+            var remaining = size
+            while remaining > 0 {
+                let request = Int(min(remaining, UInt64(chunkSize)))
+                guard let chunk = try handle.read(upToCount: request), !chunk.isEmpty else {
+                    throw MiniZipError.truncatedRecord
+                }
+                try consume(chunk)
+                remaining -= UInt64(chunk.count)
+            }
         }
-        archive.append(centralDirectory)
 
-        // End of central directory.
-        archive.appendU32(0x0605_4B50)
-        archive.appendU16(0) // this disk
-        archive.appendU16(0) // central-directory disk
-        archive.appendU16(UInt16(entries.count))
-        archive.appendU16(UInt16(entries.count))
-        archive.appendU32(UInt32(centralDirectory.count))
-        archive.appendU32(UInt32(centralDirectoryOffset))
-        archive.appendU16(0) // comment length
+        private func emit(_ bytes: Data) throws {
+            try sink(bytes)
+            offset += UInt64(bytes.count)
+        }
+    }
+
+    /// Builds a ZIP archive from named entries entirely in memory — the
+    /// streaming `ArchiveWriter` with an in-memory sink. Suited to small
+    /// archives; the backup exporter streams to a file instead.
+    static func archiveData(_ entries: [(name: String, data: Data)]) throws -> Data {
+        guard !entries.isEmpty else { throw MiniZipError.malformedArchive }
+        var archive = Data()
+        let writer = ArchiveWriter { archive.append($0) }
+        for entry in entries {
+            try writer.append(name: entry.name, data: entry.data)
+        }
+        try writer.finish()
         return archive
     }
 
@@ -552,11 +710,20 @@ extension MiniZip {
     /// ZIP format for every entry. Table-driven; verified in tests against the
     /// canonical "123456789" → 0xCBF43926 check value.
     static func crc32(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        for byte in data {
-            crc = (crc >> 8) ^ Self.crcTable[Int((crc ^ UInt32(byte)) & 0xFF)]
+        crc32Update(0xFFFF_FFFF, data) ^ 0xFFFF_FFFF
+    }
+
+    /// Incremental form: seed with 0xFFFFFFFF, fold in each chunk, then XOR
+    /// the final state with 0xFFFFFFFF. Lets file-backed archive entries be
+    /// checksummed in bounded memory.
+    fileprivate static func crc32Update(_ state: UInt32, _ chunk: Data) -> UInt32 {
+        chunk.withUnsafeBytes { buffer in
+            var crc = state
+            for byte in buffer {
+                crc = (crc >> 8) ^ Self.crcTable[Int((crc ^ UInt32(byte)) & 0xFF)]
+            }
+            return crc
         }
-        return crc ^ 0xFFFF_FFFF
     }
 
     private static let crcTable: [UInt32] = (0 ..< 256).map { index in
@@ -565,6 +732,22 @@ extension MiniZip {
             value = (value & 1) == 1 ? (value >> 1) ^ 0xEDB8_8320 : value >> 1
         }
         return value
+    }
+}
+
+nonisolated private extension UInt16 {
+    /// The value itself when it fits below the ZIP64 sentinel, else the
+    /// sentinel (0xFFFF) directing readers to the ZIP64 record.
+    init(clampingToSentinel value: UInt64) {
+        self = value >= 0xFFFF ? 0xFFFF : UInt16(value)
+    }
+}
+
+nonisolated private extension UInt32 {
+    /// The value itself when it fits below the ZIP64 sentinel, else the
+    /// sentinel (0xFFFFFFFF) directing readers to the ZIP64 extra field.
+    init(clampingToSentinel value: UInt64) {
+        self = value >= 0xFFFF_FFFF ? 0xFFFF_FFFF : UInt32(value)
     }
 }
 
@@ -579,6 +762,11 @@ nonisolated private extension Data {
         append(UInt8((value >> 8) & 0xFF))
         append(UInt8((value >> 16) & 0xFF))
         append(UInt8(value >> 24))
+    }
+
+    mutating func appendU64(_ value: UInt64) {
+        appendU32(UInt32(value & 0xFFFF_FFFF))
+        appendU32(UInt32(value >> 32))
     }
 }
 
