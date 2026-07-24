@@ -220,14 +220,30 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private var sectionPickerSection: some View {
         Section {
-            Picker("Work Details Section", selection: $selectedTab) {
-                ForEach(WorkDetailTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
+            sectionPicker
+                .accountControlCardRow()
+        }
+    }
+
+    /// The four-segment section control. A native `.segmented` picker caps its
+    /// labels' Dynamic Type scaling rather than reflowing, so at accessibility
+    /// sizes four words ("Overview"/"Discussion"/…) become unreadably clipped
+    /// (runtime-confirmed, HIG review §5). At those sizes fall back to a `.menu`
+    /// picker — the same `dynamicTypeSize.isAccessibilitySize` reflow idiom the
+    /// quick-action grid in this hub already uses — which keeps every label at
+    /// full size behind a compact tappable row. The picker's content is built once
+    /// so the two styles can't drift.
+    @ViewBuilder
+    private var sectionPicker: some View {
+        let picker = Picker("Work Details Section", selection: $selectedTab) {
+            ForEach(WorkDetailTab.allCases) { tab in
+                Text(tab.rawValue).tag(tab)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accountControlCardRow()
+        }
+        if dynamicTypeSize.isAccessibilitySize {
+            picker.pickerStyle(.menu)
+        } else {
+            picker.pickerStyle(.segmented).labelsHidden()
         }
     }
 

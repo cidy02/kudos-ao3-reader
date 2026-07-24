@@ -104,6 +104,28 @@ extension CarouselCardMetrics {
         }
         return [GridItem(.adaptive(minimum: minimum), spacing: spacing)]
     }
+
+    /// The right rule for a full-width "see all" cover-card grid: fixed `count`
+    /// columns on **compact** width (iPhone portrait) so it never drops below its
+    /// intended two-up at a normal text size — `.adaptive(minimum:)` alone falls to
+    /// a single column on 375pt-wide iPhones, where two 164pt columns miss the
+    /// available width by ~1pt — but **adaptive** on regular width (iPad, macOS,
+    /// landscape) so it widens to 3–4 columns instead of leaving two over-wide ones.
+    /// Collapses to one column at accessibility Dynamic Type sizes on either width
+    /// (both delegates already do). Shared so the Home and Reading-Queue see-all
+    /// grids apply one rule instead of drifting.
+    static func responsiveCardColumns(
+        for dynamicTypeSize: DynamicTypeSize,
+        horizontalSizeClass: UserInterfaceSizeClass?,
+        minimum: CGFloat = CarouselCardMetrics.width,
+        count: Int = 2,
+        spacing: CGFloat = 16
+    ) -> [GridItem] {
+        if horizontalSizeClass == .compact {
+            return compactCardColumns(for: dynamicTypeSize, count: count, spacing: spacing)
+        }
+        return adaptiveCardColumns(for: dynamicTypeSize, minimum: minimum, spacing: spacing)
+    }
 }
 
 struct CarouselCardShadow {

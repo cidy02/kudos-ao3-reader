@@ -14,6 +14,7 @@ struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var localWorks: [SavedWork]
 
     @State private var path = NavigationPath()
@@ -564,17 +565,19 @@ struct AccountView: View {
 
     // MARK: Overview — identity hub
 
-    private static let shortcutGridColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
+    /// Three icon cards per row normally; reflows to two at accessibility Dynamic
+    /// Type sizes rather than shrinking each tile's text via `minimumScaleFactor`
+    /// into illegibility (mirrors `WorkDetailView.quickActionColumns`' 3→2 idiom).
+    private var shortcutGridColumns: [GridItem] {
+        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+    }
 
     @ViewBuilder
     private var overviewSections: some View {
         Section {
             // 3×2 of individual icon cards (not one shared panel).
-            LazyVGrid(columns: Self.shortcutGridColumns, spacing: 10) {
+            LazyVGrid(columns: shortcutGridColumns, spacing: 10) {
                 shortcutGridButton(
                     title: "My Dashboard",
                     systemImage: "square.grid.2x2"

@@ -11,6 +11,14 @@ struct HomeSectionListView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Mirrors the scaled width the cover cards themselves render at (see
+    /// `ScaledCarouselCardSize`), so the see-all grid's adaptive minimum tracks a
+    /// card grown wider by Dynamic Type instead of the static 164pt base — same
+    /// reasoning as `LibraryEntityGridView.cardSize`. Safe as `private` here
+    /// because this view has an explicit `init` (no synthesized memberwise init to
+    /// drag down to `private`).
+    private var cardSize = ScaledCarouselCardSize()
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
@@ -198,12 +206,22 @@ struct HomeSectionListView: View {
         .cardList()
     }
 
-    /// Apple Books-style two-up grid — the same cover cards every carousel already
-    /// uses, wrapping down the page instead of scrolling horizontally. Collapses to
-    /// one column at accessibility Dynamic Type sizes (see `compactCardColumns`).
+    /// Two-up on iPhone (never fewer, even on 375pt widths), widening on
+    /// iPad/macOS, one column at accessibility Dynamic Type sizes (see
+    /// `responsiveCardColumns`).
+    private var compactGridColumns: [GridItem] {
+        CarouselCardMetrics.responsiveCardColumns(
+            for: dynamicTypeSize,
+            horizontalSizeClass: horizontalSizeClass,
+            minimum: cardSize.width
+        )
+    }
+
+    /// Apple Books-style grid — the same cover cards every carousel already uses,
+    /// wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: CarouselCardMetrics.compactCardColumns(for: dynamicTypeSize), spacing: 16) {
+            LazyVGrid(columns: compactGridColumns, spacing: 16) {
                 ForEach(visibleItems) { work in
                     if isSelecting {
                         SensitiveWorkCoverCard(

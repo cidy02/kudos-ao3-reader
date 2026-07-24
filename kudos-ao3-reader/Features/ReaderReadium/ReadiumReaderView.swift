@@ -846,8 +846,15 @@ struct ReadiumReaderView: View {
             .font(.footnote.weight(.medium))
             .monospacedDigit()
             .lineLimit(1)
+            // Cap Dynamic Type on this compact, supplementary floating pill: the
+            // same percent/chapter/page is fully scalable elsewhere, and without a
+            // backstop a scaled `.footnote` on this long single-line label blows
+            // out of the capsule (HIG review UI-4, §5). It still grows through the
+            // first two accessibility tiers — a real improvement over the previous
+            // hard `height: 40` clip.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .padding(.horizontal, 16)
-            .frame(height: 40)
+            .frame(minHeight: 40)
             .glassEffect(.regular, in: .capsule)
             .opacity(label.isEmpty ? 0 : 1)
     }
