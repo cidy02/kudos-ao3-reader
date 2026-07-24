@@ -75,11 +75,14 @@ if [ -n "$HITS" ]; then
 fi
 
 # 8. Destructive write pattern: never remove a sync/backup destination before
-#    writing its replacement (destroyed-only-copy window, T-73). Heuristic: the
-#    folder-sync writer must keep using replaceItemAt.
-if ! grep -q "replaceItemAt" "$APP/Services/FolderSyncService.swift"; then
-  fail "FolderSyncService no longer stages+replaces its package write" \
-    "Failed writes must leave the previous package intact. docs/DATA_AND_PERSISTENCE_INVARIANTS.md."
+#    writing its replacement (destroyed-only-copy window, T-73). Heuristic since
+#    T-139's incremental sync directory: every per-file write in the folder-sync
+#    writer must stay atomic (temp + rename), so a failed write leaves the
+#    previous manifest/asset intact. Covered end-to-end by
+#    FolderSyncTests/failedSyncUpWritePreservesExistingRemoteManifest.
+if ! grep -q "options: .atomic" "$APP/Services/FolderSyncService.swift"; then
+  fail "FolderSyncService no longer writes sync files atomically" \
+    "Failed writes must leave the previous manifest intact. docs/DATA_AND_PERSISTENCE_INVARIANTS.md."
 fi
 
 # 9. Every Package.resolved pin has a bundled license notice (A10-F1): the GPL

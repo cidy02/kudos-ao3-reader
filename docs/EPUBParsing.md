@@ -39,11 +39,14 @@ before parsing and rendering it.
   Directory record.
 - The EOCD is within the final 65,558 bytes, allowing the standard maximum ZIP
   comment.
-- Entry counts, sizes, and local-header offsets fit in 16/32-bit ZIP fields.
-  ZIP64 is unsupported.
+- ZIP64 archives are supported: a classic field saturated at its sentinel
+  (0xFFFF / 0xFFFFFFFF) resolves through the matching ZIP64 record (the
+  0x0001 extended-information extra field, or the ZIP64 EOCD record via its
+  locator). A saturated field with no ZIP64 record to resolve it rejects the
+  archive — sentinels are never silently read as values.
 - File names are UTF-8. Legacy ZIP filename encodings are not decoded.
 - Entries are either stored (`method 0`) or DEFLATE-compressed (`method 8`).
-  Other nonzero methods are currently attempted as DEFLATE and will fail.
+  Other methods, and encrypted entries, are rejected (`unsupportedEntry`).
 - Entries are not encrypted. DRM-protected EPUBs are unsupported.
 - Central-directory sizes are accurate. CRC values are not checked.
 

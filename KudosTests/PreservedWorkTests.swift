@@ -3,9 +3,10 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-// Serialized for the same reason as FolderSyncTests/KudosBackupTests/PersistenceSyncTests:
-// PersistenceOperationGate is a process-wide static lock that can spuriously contend
-// across concurrently-running test suites.
+// Nested under PersistenceGateSuites (see its doc comment): sweepExpired and the
+// two-device convergence test take PersistenceOperationGate, a process-wide static
+// lock, so they must serialize against the other gate-taking suites too.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct PreservedWorkTests {
@@ -155,7 +156,7 @@ struct PreservedWorkTests {
         PreservedWorkService.softDelete(work, in: context)
         let scheduledAt = try #require(work.permanentDeletionScheduledAt)
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -163,8 +164,8 @@ struct PreservedWorkTests {
             defaults: try testDefaults()
         )
 
-        #expect(document.contents.manifest.version == KudosBackupManifest.currentVersion)
-        let archivedWork = try #require(document.contents.manifest.works.first)
+        #expect(contents.manifest.version == KudosBackupManifest.currentVersion)
+        let archivedWork = try #require(contents.manifest.works.first)
         #expect(archivedWork.permanentDeletionScheduledAt == scheduledAt)
     }
 
@@ -178,7 +179,7 @@ struct PreservedWorkTests {
         try context.save()
 
         // A stale archive still shows the old soft-delete state.
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -191,7 +192,7 @@ struct PreservedWorkTests {
         work.markModified(Date(timeIntervalSince1970: 2000))
         try context.save()
 
-        _ = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(staleContents, into: context, defaults: defaults)
 
         let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(!restored.isPendingDeletion)
@@ -491,4 +492,5 @@ struct PreservedWorkTests {
         try context.save()
         return work
     }
+}
 }

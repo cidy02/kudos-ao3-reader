@@ -3,10 +3,14 @@ import SwiftData
 import Testing
 @testable import Kudos
 
+// Nested under PersistenceGateSuites (see its doc comment): every sync call here
+// takes PersistenceOperationGate, a process-wide static lock, so this suite must
+// serialize against the other gate-taking suites too, not just within itself.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct FolderSyncTests {
-    @Test func syncUpWritesReadableBackupPackage() async throws {
+    @Test func syncUpWritesReadableSyncDirectory() async throws {
         let container = try container()
         let context = container.mainContext
         let defaults = try testDefaults()
@@ -27,8 +31,17 @@ struct FolderSyncTests {
         try FolderSyncService.connect(to: folder, defaults: defaults)
         let result = try await FolderSyncService.syncUp(in: context, defaults: defaults)
 
-        let syncFileURL = folder.appendingPathComponent(FolderSyncService.syncFileName)
-        let contents = try KudosBackupContents.read(from: syncFileURL)
+        // The live payload is a plain directory (manifest + per-asset files),
+        // not an archive — that's what lets iCloud sync per-file deltas. Its
+        // layout matches the legacy package's, so the shared reader can verify it.
+        let syncDirectoryURL = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(
+            atPath: syncDirectoryURL.path,
+            isDirectory: &isDirectory
+        ))
+        #expect(isDirectory.boolValue)
+        let contents = try KudosBackupContents.read(from: syncDirectoryURL)
         #expect(result.didWriteRemoteFile)
         #expect(contents.manifest.works.count == 1)
         #expect(contents.manifest.works.first?.title == "Folder Sync Work")
@@ -264,7 +277,7 @@ struct FolderSyncTests {
         try context.save()
 
         // The stale manifest: a snapshot from before the removal, still listing the work.
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -287,7 +300,7 @@ struct FolderSyncTests {
         collection.markModified(Date(timeIntervalSince1970: 200))
         try context.save()
 
-        _ = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(staleContents, into: context, defaults: defaults)
 
         let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
         #expect(restored.works.isEmpty)
@@ -320,7 +333,7 @@ struct FolderSyncTests {
         // A newer snapshot (t=300) re-adds the work — newer than the removal, so it wins.
         collection.works.append(work)
         collection.markModified(Date(timeIntervalSince1970: 300))
-        let newerDocument = try KudosBackupService.makeDocument(
+        let newerContents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -332,7 +345,7 @@ struct FolderSyncTests {
         collection.markModified(Date(timeIntervalSince1970: 100))
         try context.save()
 
-        _ = try KudosBackupService.restore(newerDocument.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(newerContents, into: context, defaults: defaults)
 
         let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
         #expect(restored.works.map(\.id) == [work.id])
@@ -353,7 +366,7 @@ struct FolderSyncTests {
         staleCollection.markModified(Date(timeIntervalSince1970: 100))
         sourceContext.insert(staleCollection)
         try sourceContext.save()
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [],
             bookmarks: [],
             fonts: [],
@@ -371,7 +384,7 @@ struct FolderSyncTests {
         ))
         try context.save()
 
-        let summary = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+        let summary = try KudosBackupService.restore(staleContents, into: context, defaults: defaults)
 
         #expect(summary.suppressedCollections == 1)
         #expect(try context.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
@@ -403,10 +416,10 @@ struct FolderSyncTests {
         #expect(collection.lastModifiedAt == modifiedAt)
     }
 
-    /// A failed sync-up write must never destroy the existing remote package — the
+    /// A failed sync-up write must never destroy the existing remote manifest — the
     /// previous copy is the only cloud copy, so other devices must still be able to
     /// restore from it.
-    @Test func failedSyncUpWritePreservesExistingRemotePackage() async throws {
+    @Test func failedSyncUpWritePreservesExistingRemoteManifest() async throws {
         let container = try container()
         let context = container.mainContext
         let defaults = try testDefaults()
@@ -418,20 +431,229 @@ struct FolderSyncTests {
         try FolderSyncService.connect(to: folder, defaults: defaults)
         _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
 
-        // A read-only parent makes the swap-into-place step fail after the new package
-        // has already been staged — the window where the old copy used to be deleted.
-        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
-        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+        // A read-only sync directory makes the manifest's atomic replacement fail
+        // mid-write — exactly the window where a non-atomic writer would have
+        // already truncated or removed the previous copy.
+        let syncDirectoryURL = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555],
+            ofItemAtPath: syncDirectoryURL.path
+        )
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: syncDirectoryURL.path
+            )
+        }
 
         try insertWork(into: context, title: "Doomed Update", ao3WorkID: 7002)
         await #expect(throws: (any Error).self) {
             _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
         }
 
-        let syncFileURL = folder.appendingPathComponent(FolderSyncService.syncFileName)
-        let contents = try KudosBackupContents.read(from: syncFileURL)
+        let contents = try KudosBackupContents.read(from: syncDirectoryURL)
         #expect(contents.manifest.works.count == 1)
         #expect(contents.manifest.works.first?.title == "Survivor Work")
+    }
+
+    /// Migration: a folder that still holds the pre-archive
+    /// `KudosLibrary.kudosbackup` directory package is folded read-only — its
+    /// data arrives, the new plain-directory layout is written alongside, and
+    /// the legacy package itself is never modified or deleted, so an
+    /// old-version device (or an interrupted migration) can still rely on it.
+    @Test func legacySyncPackageIsFoldedReadOnlyAndLeftUntouched() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        // Build the legacy on-disk shape by hand — production code no longer writes it.
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let work = try insertWork(into: sourceContext, title: "Legacy Survivor", ao3WorkID: 8001)
+        let legacyContents = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let legacyManifestData = try legacyContents.manifestData()
+        let legacyURL = folder.appendingPathComponent(FolderSyncService.legacySyncFileName)
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: legacyManifestData),
+            "Works": FileWrapper(directoryWithFileWrappers: [:]),
+            "Fonts": FileWrapper(directoryWithFileWrappers: [:])
+        ])
+        try wrapper.write(to: legacyURL, options: .atomic, originalContentsURL: nil)
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let first = try await FolderSyncService.syncNow(in: targetContext, defaults: targetDefaults)
+        #expect(first.restoredWorks == 1)
+        #expect(first.didReadRemoteFile)
+        #expect(first.missingRemoteFile == false)
+
+        // The new layout now exists; the legacy package is byte-identical.
+        let newManifestURL = folder
+            .appendingPathComponent(FolderSyncService.syncDirectoryName)
+            .appendingPathComponent(FolderSyncService.manifestFileName)
+        #expect(FileManager.default.fileExists(atPath: newManifestURL.path))
+        let legacyManifestAfter = try Data(
+            contentsOf: legacyURL.appendingPathComponent("manifest.json")
+        )
+        #expect(legacyManifestAfter == legacyManifestData)
+
+        // Idempotent: a repeat sync neither duplicates records nor re-reads.
+        let second = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(second.skippedUnchanged)
+        #expect(try targetContext.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    /// The point of the plain-directory payload: an unchanged EPUB is not
+    /// rewritten by later sync-ups, so iCloud Drive never re-uploads it.
+    @Test func syncUpLeavesUnchangedEPUBFilesAlone() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+
+        let work = try insertWork(into: context, title: "Stable EPUB", ao3WorkID: 9001)
+        work.hasEPUB = true
+        let epub = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        try context.save()
+
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+
+        let remoteEPUBURL = folder
+            .appendingPathComponent(FolderSyncService.syncDirectoryName)
+            .appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+            .appendingPathComponent("\(work.id.uuidString).epub")
+        #expect(FileManager.default.fileExists(atPath: remoteEPUBURL.path))
+        // Backdate the remote copy so any rewrite is detectable.
+        let sentinelDate = Date(timeIntervalSince1970: 1_000_000)
+        try FileManager.default.setAttributes(
+            [.modificationDate: sentinelDate],
+            ofItemAtPath: remoteEPUBURL.path
+        )
+
+        try insertWork(into: context, title: "Unrelated Addition", ao3WorkID: 9002)
+        _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+
+        let modified = try #require(
+            try FileManager.default.attributesOfItem(atPath: remoteEPUBURL.path)[.modificationDate]
+                as? Date
+        )
+        #expect(modified == sentinelDate)
+    }
+
+    /// Orphaned asset files (no manifest record references them anymore) are
+    /// removed after the manifest commit; a remote EPUB whose work is still in
+    /// the manifest survives even when this device holds no local copy, and
+    /// unrelated hidden files are left alone.
+    @Test func syncUpRemovesOrphanedAssetsButKeepsManifestReferencedOnes() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+
+        let work = try insertWork(into: context, title: "Referenced Work", ao3WorkID: 9101)
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+
+        let worksDirectory = folder
+            .appendingPathComponent(FolderSyncService.syncDirectoryName)
+            .appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+        let orphanURL = worksDirectory.appendingPathComponent("\(UUID().uuidString).epub")
+        try Data("orphan".utf8).write(to: orphanURL)
+        // Another device preserved this work's EPUB; this device has no local copy.
+        let keptURL = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        try Data("kept-remote-epub".utf8).write(to: keptURL)
+        let hiddenURL = worksDirectory.appendingPathComponent(".DS_Store")
+        try Data("hidden".utf8).write(to: hiddenURL)
+
+        FolderSyncService.markDirty(defaults: defaults)
+        _ = try await FolderSyncService.syncUp(in: context, defaults: defaults)
+
+        #expect(!FileManager.default.fileExists(atPath: orphanURL.path))
+        #expect(FileManager.default.fileExists(atPath: keptURL.path))
+        #expect(FileManager.default.fileExists(atPath: hiddenURL.path))
+    }
+
+    /// A manifest can sync down while an EPUB is still an undownloaded iCloud
+    /// placeholder. The work must still restore (without the EPUB), the skip
+    /// stamp must stay withheld, and the EPUB must be fetched by a later sync
+    /// even though the manifest never changes again.
+    @Test func syncDownRetriesManifestReferencedEPUBOnceItAppears() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        // Remote state by hand: a manifest listing an EPUB-bearing work, but no
+        // EPUB file uploaded yet.
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let work = try insertWork(into: sourceContext, title: "Late EPUB", ao3WorkID: 9201)
+        work.hasEPUB = true
+        try sourceContext.save()
+        let contents = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let syncDirectoryURL = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let worksDirectory = syncDirectoryURL
+            .appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+        try FileManager.default.createDirectory(
+            at: worksDirectory,
+            withIntermediateDirectories: true
+        )
+        try contents.manifestData().write(
+            to: syncDirectoryURL.appendingPathComponent(FolderSyncService.manifestFileName),
+            options: .atomic
+        )
+        // The EPUB itself is still only an iCloud placeholder — present in the
+        // listing, contents not yet downloaded.
+        let placeholderURL = worksDirectory
+            .appendingPathComponent(".\(work.id.uuidString).epub.icloud")
+        try Data().write(to: placeholderURL)
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let first = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        defer { try? FileManager.default.removeItem(at: restored.fileURL) }
+        #expect(first.didReadRemoteFile)
+        #expect(restored.hasEPUB == false)
+
+        // The EPUB materializes later, with no manifest change at all.
+        let epub = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try epub.write(to: worksDirectory.appendingPathComponent("\(work.id.uuidString).epub"))
+        try FileManager.default.removeItem(at: placeholderURL)
+
+        let second = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(second.skippedUnchanged == false)
+        #expect(second.didReadRemoteFile)
+        #expect(restored.hasEPUB)
+        #expect(FileManager.default.fileExists(atPath: restored.fileURL.path))
+
+        // Once everything has arrived, the skip stamp finally engages.
+        let third = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(third.skippedUnchanged)
     }
 
     @Test func syncDownSkipsUnchangedRemotePackage() async throws {
@@ -472,10 +694,12 @@ struct FolderSyncTests {
         // modification-date bump guards against filesystem timestamp granularity.
         try insertWork(into: sourceContext, title: "Second Work", ao3WorkID: 6002)
         _ = try await FolderSyncService.syncUp(in: sourceContext, defaults: sourceDefaults)
-        let syncFileURL = folder.appendingPathComponent(FolderSyncService.syncFileName)
+        let manifestURL = folder
+            .appendingPathComponent(FolderSyncService.syncDirectoryName)
+            .appendingPathComponent(FolderSyncService.manifestFileName)
         try FileManager.default.setAttributes(
             [.modificationDate: Date().addingTimeInterval(10)],
-            ofItemAtPath: syncFileURL.path
+            ofItemAtPath: manifestURL.path
         )
 
         let third = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
@@ -560,12 +784,13 @@ struct FolderSyncTests {
         let sourceContainer = try container()
         let sourceContext = sourceContainer.mainContext
         let work = try insertWork(into: sourceContext, title: title, ao3WorkID: ao3WorkID)
-        return try KudosBackupService.makeDocument(
+        return try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
             readingQueues: [],
             defaults: try testDefaults()
-        ).contents
+        )
     }
+}
 }
