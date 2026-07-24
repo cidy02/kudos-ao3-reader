@@ -310,6 +310,63 @@ struct AO3InboxParseTests {
         }
     }
 
+    /// A page with valid rows *and* one row malformed in a third way — here,
+    /// an id that isn't an integer, so it's neither a normal byline row nor
+    /// the recognized admin-hidden tombstone shape (which still needs a
+    /// parseable id). A sibling row parses fine, so this must not be
+    /// page-level markup drift: the odd row should fold into the same
+    /// "Unavailable" tombstone shape rather than silently vanishing from
+    /// `items` with the count just quietly dropping to 2 (T91-RF6, closed
+    /// one row short of its own guard).
+    @Test func rowMalformedAThirdWayFoldsIntoATombstoneRatherThanVanishing() throws {
+        let html = """
+        <html><body>
+        <h2 class="heading">My Inbox (3 comments, 1 unread)</h2>
+        <ol class="comment index group">
+          <li class="unread comment group even" role="article" id="feedback_comment_9001">
+            <h4 class="heading byline">
+              <a href="/users/reader1/pseuds/ReaderOne">ReaderOne</a> on
+              <a href="/works/123456/comments/9001">My Great Fic</a>
+              <span class="posted datetime">3 days ago</span>
+            </h4>
+            <div class="icon"></div>
+            <blockquote class="userstuff"><p>Loved this chapter so much!</p></blockquote>
+            <ul class="actions" role="menu">
+              <li><label><input type="checkbox" name="inbox_comments[]" value="1">Select</label></li>
+            </ul>
+          </li>
+          <li class="read comment group odd" role="article" id="feedback_comment_">
+            <p>This comment is currently unavailable.</p>
+            <ul class="actions" role="menu">
+              <li><label><input type="checkbox" name="inbox_comments[]" value="2">Select</label></li>
+            </ul>
+          </li>
+          <li class="read comment group even" role="article" id="feedback_comment_9003">
+            <h4 class="heading byline">
+              <a href="/users/tagfan/pseuds/tagfan">tagfan</a> on
+              <a href="/tags/Some%20Tag/comments/9003">Some Tag</a>
+              <span class="posted datetime">2 weeks ago</span>
+            </h4>
+            <div class="icon"></div>
+            <blockquote class="userstuff"><p>Tag comment body</p></blockquote>
+          </li>
+        </ol>
+        </body></html>
+        """
+        let page = try AO3Client.parseInboxPage(html, page: 1)
+
+        // All three rows are represented — the malformed one folded into a
+        // tombstone instead of being silently dropped.
+        #expect(page.items.count == 3)
+
+        let malformedRow = try #require(page.items.first { $0.id < 0 })
+        #expect(malformedRow.isUnavailable)
+        #expect(malformedRow.subjectTitle.isEmpty)
+        #expect(malformedRow.bulkSelectionField?.value == "2")
+
+        #expect(page.items.filter { !$0.isUnavailable }.count == 2)
+    }
+
     @Test func buildsInboxURL() {
         #expect(
             AO3Client.inboxURL(username: "tester", page: 1)?.absoluteString

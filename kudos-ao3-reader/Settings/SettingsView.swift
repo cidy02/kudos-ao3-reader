@@ -496,6 +496,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         #if os(iOS)
         .sheet(isPresented: $showCustomize) {
             CustomizeThemeView()
+                .environment(themeManager)
+                .tint(themeManager.effectiveTint)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
