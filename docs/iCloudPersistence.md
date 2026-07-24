@@ -158,7 +158,7 @@ Core rules:
   metadata or membership activity, and preserve/report ambiguous conflicts.
 - Members of a suppressed queue are dropped with it, never re-homed into Saved
   for Later.
-- Collections are exported in manifest version 6 and restore by UUID with
+- Collections are exported in the manifest (since version 6) and restore by UUID with
   timestamp/tombstone handling. A work explicitly removed from a collection is
   tombstoned too (`.workCollectionMembership`, keyed by a deterministic
   composite of the collection and work IDs, since collection membership has
@@ -207,9 +207,10 @@ whether imported manually or folded in from the Library Sync Folder:
   entry, and 64 GB total. Restore still materializes assets per entry while
   merging, so imports of enormous archives remain bounded by device memory —
   streaming restore is a known deferral.
-- Manifest version 6 includes sync timestamps, progress timestamps, delete state,
-  collection membership, queue membership freshness, `assetIdentifier`, and
-  `SyncTombstone` records, while still decoding versions 1 through 5.
+- Manifest version 7 includes sync timestamps, progress timestamps, delete state,
+  collection membership, queue membership freshness, `assetIdentifier`,
+  `SyncTombstone` records, and Recently Deleted scheduling
+  (`permanentDeletionScheduledAt`), while still decoding versions 1 through 6.
 - Import merges by AO3 work ID, canonical AO3 URL, then UUID.
 - Import does not delete unrelated local records.
 - Tombstones travel with the backup, so a fresh install/reinstall inherits the

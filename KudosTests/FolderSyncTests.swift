@@ -277,7 +277,7 @@ struct FolderSyncTests {
         try context.save()
 
         // The stale manifest: a snapshot from before the removal, still listing the work.
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -300,7 +300,7 @@ struct FolderSyncTests {
         collection.markModified(Date(timeIntervalSince1970: 200))
         try context.save()
 
-        _ = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(staleContents, into: context, defaults: defaults)
 
         let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
         #expect(restored.works.isEmpty)
@@ -333,7 +333,7 @@ struct FolderSyncTests {
         // A newer snapshot (t=300) re-adds the work — newer than the removal, so it wins.
         collection.works.append(work)
         collection.markModified(Date(timeIntervalSince1970: 300))
-        let newerDocument = try KudosBackupService.makeDocument(
+        let newerContents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -345,7 +345,7 @@ struct FolderSyncTests {
         collection.markModified(Date(timeIntervalSince1970: 100))
         try context.save()
 
-        _ = try KudosBackupService.restore(newerDocument.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(newerContents, into: context, defaults: defaults)
 
         let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
         #expect(restored.works.map(\.id) == [work.id])
@@ -366,7 +366,7 @@ struct FolderSyncTests {
         staleCollection.markModified(Date(timeIntervalSince1970: 100))
         sourceContext.insert(staleCollection)
         try sourceContext.save()
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [],
             bookmarks: [],
             fonts: [],
@@ -384,7 +384,7 @@ struct FolderSyncTests {
         ))
         try context.save()
 
-        let summary = try KudosBackupService.restore(staleDocument.contents, into: context, defaults: defaults)
+        let summary = try KudosBackupService.restore(staleContents, into: context, defaults: defaults)
 
         #expect(summary.suppressedCollections == 1)
         #expect(try context.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
@@ -469,13 +469,13 @@ struct FolderSyncTests {
         let sourceContainer = try container()
         let sourceContext = sourceContainer.mainContext
         let work = try insertWork(into: sourceContext, title: "Legacy Survivor", ao3WorkID: 8001)
-        let legacyContents = try KudosBackupService.makeDocument(
+        let legacyContents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
             readingQueues: [],
             defaults: try testDefaults()
-        ).contents
+        )
         let legacyManifestData = try legacyContents.manifestData()
         let legacyURL = folder.appendingPathComponent(FolderSyncService.legacySyncFileName)
         let wrapper = FileWrapper(directoryWithFileWrappers: [
@@ -604,13 +604,13 @@ struct FolderSyncTests {
         let work = try insertWork(into: sourceContext, title: "Late EPUB", ao3WorkID: 9201)
         work.hasEPUB = true
         try sourceContext.save()
-        let contents = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
             readingQueues: [],
             defaults: try testDefaults()
-        ).contents
+        )
         let syncDirectoryURL = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
         let worksDirectory = syncDirectoryURL
             .appendingPathComponent(FolderSyncService.worksSubdirectoryName)
@@ -784,13 +784,13 @@ struct FolderSyncTests {
         let sourceContainer = try container()
         let sourceContext = sourceContainer.mainContext
         let work = try insertWork(into: sourceContext, title: title, ao3WorkID: ao3WorkID)
-        return try KudosBackupService.makeDocument(
+        return try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
             readingQueues: [],
             defaults: try testDefaults()
-        ).contents
+        )
     }
 }
 }

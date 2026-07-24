@@ -347,7 +347,7 @@ enum FolderSyncService {
         in context: ModelContext,
         defaults: UserDefaults
     ) throws -> KudosBackupContents {
-        try KudosBackupService.makeDocument(
+        try KudosBackupService.makeContents(
             works: context.fetch(FetchDescriptor<SavedWork>()),
             bookmarks: context.fetch(FetchDescriptor<Bookmark>()),
             fonts: context.fetch(FetchDescriptor<CustomFont>()),
@@ -355,7 +355,7 @@ enum FolderSyncService {
             readingQueues: context.fetch(FetchDescriptor<ReadingQueue>()),
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
-        ).contents
+        )
     }
 
     /// Reads the pre-archive `KudosLibrary.kudosbackup` directory package, if

@@ -141,7 +141,7 @@ struct WorkSearchIndexTests {
         WorkSearchIndex.reindex(work)
         try sourceContext.save()
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -149,11 +149,11 @@ struct WorkSearchIndexTests {
             defaults: testDefaults()
         )
         // The derived index never travels in the manifest — only real fields do.
-        let manifestJSON = try document.contents.manifestData()
+        let manifestJSON = try contents.manifestData()
         #expect(manifestJSON.range(of: Data("searchText".utf8)) == nil)
 
         let targetContext = try makeContext()
-        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: testDefaults())
+        _ = try KudosBackupService.restore(contents, into: targetContext, defaults: testDefaults())
 
         let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.searchIndexVersion == WorkSearchIndex.currentVersion)
@@ -175,7 +175,7 @@ struct WorkSearchIndexTests {
         WorkSearchIndex.reindex(work)
         try sourceContext.save()
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -183,7 +183,7 @@ struct WorkSearchIndexTests {
             defaults: testDefaults()
         )
         let targetContext = try makeContext()
-        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: testDefaults())
+        _ = try KudosBackupService.restore(contents, into: targetContext, defaults: testDefaults())
 
         // Restore links archived user tags *after* applying the plain fields — the
         // reindex must run after that linking, or the tag text is missing until

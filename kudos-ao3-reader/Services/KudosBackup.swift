@@ -1,7 +1,6 @@
 import Foundation
 import OSLog
 import SwiftData
-import SwiftUI
 import UniformTypeIdentifiers
 
 // Backup archive schema/restore logic is cohesive; avoid behavior refactors for lint.
@@ -22,33 +21,6 @@ extension UTType {
         filenameExtension: "kudosbackup",
         conformingTo: .package
     )!
-}
-
-struct KudosBackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] {
-        [.kudosBackup, .kudosBackupLegacyPackage]
-    }
-
-    let contents: KudosBackupContents
-
-    init(contents: KudosBackupContents) {
-        self.contents = contents
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        if configuration.file.isDirectory {
-            contents = try KudosBackupContents(fileWrapper: configuration.file)
-        } else {
-            guard let data = configuration.file.regularFileContents else {
-                throw KudosBackupError.invalidPackage
-            }
-            contents = try KudosBackupContents(zipData: data)
-        }
-    }
-
-    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: try contents.zipData())
-    }
 }
 
 nonisolated struct KudosBackupContents {
@@ -1001,7 +973,7 @@ nonisolated enum KudosBackupError: LocalizedError {
 @MainActor
 // swiftlint:disable:next type_body_length
 enum KudosBackupService {
-    static func makeDocument(
+    static func makeContents(
         works: [SavedWork],
         bookmarks: [Bookmark],
         fonts: [CustomFont],
@@ -1009,7 +981,7 @@ enum KudosBackupService {
         readingQueues: [ReadingQueue],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
-    ) throws -> KudosBackupDocument {
+    ) throws -> KudosBackupContents {
         var epubFiles: [UUID: Data] = [:]
         for work in works where work.hasEPUB {
             if let data = try? Data(contentsOf: work.fileURL, options: .mappedIfSafe) {
@@ -1036,11 +1008,11 @@ enum KudosBackupService {
             settings: .capture(defaults: defaults),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
-        return KudosBackupDocument(contents: KudosBackupContents(
+        return KudosBackupContents(
             manifest: manifest,
             epubFiles: epubFiles,
             fontFiles: fontFiles
-        ))
+        )
     }
 
     // Restore is transactional and intentionally linear for data-safety review.
