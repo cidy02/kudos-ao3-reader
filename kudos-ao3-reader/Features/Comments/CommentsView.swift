@@ -32,6 +32,7 @@ struct CommentsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
@@ -270,7 +271,7 @@ struct CommentsView: View {
         focusScrollTask?.cancel()
         guard let rootID = model.rootID(containing: commentID), rootID != commentID else {
             // A root comment owns its own List row — address it directly.
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimationUnlessReduced(.easeInOut(duration: 0.3), reduceMotion: reduceMotion) {
                 proxy.scrollTo(commentID, anchor: .center)
             }
             return
@@ -286,7 +287,7 @@ struct CommentsView: View {
         focusScrollTask = Task {
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimationUnlessReduced(.easeInOut(duration: 0.3), reduceMotion: reduceMotion) {
                 proxy.scrollTo(commentID, anchor: .center)
             }
         }
@@ -444,6 +445,10 @@ struct CommentsView: View {
                 }
                 .accessibilityLabel("Sort comments")
                 .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
+                // Sibling controls elsewhere in this file reserve a 44pt hit
+                // target; this Menu trigger's visible chrome was falling short
+                // of it (HIG audit UI-3).
+                .minimumHitTarget()
                 Spacer()
             }
             .font(.footnote)
@@ -595,6 +600,9 @@ struct CommentsView: View {
                     Label("Previous", systemImage: "chevron.left")
                 }
                 .disabled(model.currentPageNumber <= 1)
+                // Matches the 44pt min-frame this file's other controls
+                // reserve (HIG audit UI-3).
+                .minimumHitTarget()
 
                 Spacer()
                 Text("Page \(model.currentPageNumber) of \(page.totalPages)")
@@ -610,6 +618,7 @@ struct CommentsView: View {
                         .labelStyle(.trailingIcon)
                 }
                 .disabled(model.currentPageNumber >= page.totalPages)
+                .minimumHitTarget()
             }
             .buttonStyle(.borderless)
             .font(.subheadline)

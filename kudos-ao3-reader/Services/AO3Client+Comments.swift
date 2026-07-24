@@ -191,16 +191,78 @@ extension AO3Client {
     /// `id=comment_<id>`), then — when it has replies — a *sibling* wrapper `li`
     /// (no id) containing a nested `ol.thread`. So a wrapper's parsed comments
     /// attach as replies of the immediately preceding comment.
-    private static func parseThread(_ thread: Element) throws -> [AO3Comment] {
+    ///
+    /// `parentID` is the enclosing comment this list is nested under (nil at
+    /// the top level) — carried through purely so a deep-thread cutoff node
+    /// (below) can derive a stable identity from it; ordinary comment parsing
+    /// ignores it.
+    private static func parseThread(_ thread: Element, parentID: Int? = nil) throws -> [AO3Comment] {
         var comments: [AO3Comment] = []
         for li in thread.children().array() where li.tagName() == "li" {
-            if li.hasClass("comment"), let comment = try parseComment(li) {
+            // Prefer the immediately preceding sibling within this same list
+            // when one exists (matches the wrapper-attachment rule below);
+            // otherwise fall back to the list's own enclosing parent — a
+            // cutoff node is typically the sole entry of the nested list it
+            // replaces.
+            let effectiveParentID = comments.last?.id ?? parentID
+            if let cutoff = try parseThreadCutoff(li, parentID: effectiveParentID) {
+                comments.append(cutoff)
+            } else if li.hasClass("comment"), let comment = try parseComment(li) {
                 comments.append(comment)
             } else if let nested = try li.select("ol.thread").first(), !comments.isEmpty {
-                comments[comments.count - 1].replies += try parseThread(nested)
+                let lastID = comments[comments.count - 1].id
+                comments[comments.count - 1].replies += try parseThread(nested, parentID: lastID)
             }
         }
         return comments
+    }
+
+    /// AO3's own deep-thread cutoff (CAA-7, `docs/COMMENTS_AO3_API_AUDIT.md`):
+    /// once a thread nests 5+ levels deep with more than one child, otwarchive
+    /// stops rendering the subtree and substitutes
+    /// `<li class="comment"><p>(<a href="/comments/<id>">N more comments in
+    /// this thread</a>)</p></li>` — no `id`, no `role` attribute. Detected
+    /// BEFORE `parseComment`'s generic id-less fallback so it never collapses
+    /// into the shared "(This comment couldn't be read.)" tombstone (whose
+    /// fallback id hashes the empty id attribute, colliding every such node on
+    /// a page onto the same identity). Structurally distinct from a deleted-
+    /// comment tombstone, which keeps its own real `comment_<id>`.
+    private static func parseThreadCutoff(_ li: Element, parentID: Int?) throws -> AO3Comment? {
+        guard li.hasClass("comment"), li.id().isEmpty, !li.hasAttr("role") else { return nil }
+        let children = li.children().array()
+        guard children.count == 1, let paragraph = children.first, paragraph.tagName() == "p" else {
+            return nil
+        }
+        let anchors = try paragraph.select("a").array()
+        guard anchors.count == 1, let link = anchors.first else { return nil }
+        let href = try link.attr("href")
+        guard href.hasPrefix("/comments/"),
+              let last = href.split(separator: "/").last, Int(last) != nil
+        else { return nil }
+
+        var cutoff = AO3Comment(
+            id: cutoffCommentID(parentID: parentID, href: href), author: "", isGuest: false
+        )
+        cutoff.isThreadCutoff = true
+        cutoff.cutoffThreadPath = href
+        let digits = try link.text().prefix { $0.isNumber }
+        cutoff.cutoffCount = Int(digits)
+        return cutoff
+    }
+
+    /// A stable negative id for a deep-thread cutoff node, salted with both its
+    /// enclosing parent's id and its own continuation link — never a hash of
+    /// the (always-empty, for this shape) id attribute alone — so two
+    /// independent cutoffs on the same page never collide as SwiftUI row
+    /// identity the way the generic id-less fallback did.
+    private static func cutoffCommentID(parentID: Int?, href: String) -> Int {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in "cutoff:\(parentID.map(String.init) ?? "root"):\(href)".utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        let magnitude = Int(truncatingIfNeeded: hash & UInt64(Int.max))
+        return -max(1, magnitude)
     }
 
     /// One `li.comment`. Degrades to a tombstone (never drops the node) when the

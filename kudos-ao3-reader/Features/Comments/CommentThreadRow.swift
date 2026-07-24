@@ -58,12 +58,12 @@ enum CommentThreadGeometry {
         // single accumulator also avoids the O(depth²) copying that `[node] +
         // flatten(children)` incurs at every level.
         var stack: [FlattenedReply] = root.replies.reversed().map {
-            FlattenedReply(comment: $0, depth: 1)
+            FlattenedReply(comment: $0, depth: 1, parentAuthor: root.author)
         }
         while let item = stack.popLast() {
             result.append(item)
             for child in item.comment.replies.reversed() {
-                stack.append(FlattenedReply(comment: child, depth: item.depth + 1))
+                stack.append(FlattenedReply(comment: child, depth: item.depth + 1, parentAuthor: item.comment.author))
             }
         }
         return result
@@ -76,11 +76,22 @@ struct FlattenedReply: Identifiable, Equatable {
     let comment: AO3Comment
     /// Logical AO3 depth (1 = direct reply to the root card).
     let depth: Int
+    /// Display name of whoever this reply is directly answering — the root
+    /// card's author at depth 1, or another reply's author deeper in the
+    /// chain. The nesting itself (`CommentThreadGeometry`'s avatar spine) is
+    /// purely visual and `accessibilityHidden`; this is VoiceOver's only
+    /// textual account of "this is a reply, and to whom" (HIG audit UI-2).
+    let parentAuthor: String
 }
 
 /// Shared role chip for native Comments and Inbox notification cards.
 struct CommentParticipantBadge: View {
     let role: AO3CommentParticipantRole
+    /// Set only for a nested reply card (never for a root comment or an Inbox
+    /// notification row, which have no reply structure to announce): who this
+    /// comment directly replies to. The only VoiceOver-visible trace of the
+    /// visual spine/rail, which stays `accessibilityHidden` (HIG audit UI-2).
+    var replyContext: String? = nil
 
     private var isEmphasized: Bool { role == .author || role == .me }
 
@@ -97,11 +108,13 @@ struct CommentParticipantBadge: View {
     }
 
     private var accessibilityLabel: String {
-        switch role {
+        let roleText: String = switch role {
         case .me: "Your comment"
         case .author: "Work author"
         case .user, .guest: role.rawValue
         }
+        guard let replyContext, !replyContext.isEmpty else { return roleText }
+        return "Reply to \(replyContext). \(roleText)"
     }
 }
 
@@ -190,6 +203,7 @@ struct CommentThreadRow: View {
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.commentHighlightID) private var highlightedCommentID
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var forceExpandReplies = false
     /// How many of the (already-expanded) replies are currently rendered. Caps a
@@ -258,12 +272,15 @@ struct CommentThreadRow: View {
                                 comment: item.comment,
                                 workAuthors: workAuthors,
                                 workAuthorIdentities: workAuthorIdentities,
+                                replyToAuthor: item.parentAuthor,
                                 connectsToNext: index < shown.count - 1
                             )
                         }
                     }
                     if shown.count < replies.count {
-                        expandRepliesButton(count: replies.count - shown.count, verb: "more") {
+                        expandRepliesButton(
+                            count: replies.count - shown.count, verb: "more", reduceMotion: reduceMotion
+                        ) {
                             visibleReplyCount += CommentThreadGeometry.repliesChunkSize
                         }
                         .padding(.top, CommentThreadGeometry.postSpacing)
@@ -275,7 +292,7 @@ struct CommentThreadRow: View {
                         )
                     }
                 } else {
-                    expandRepliesButton(count: replies.count, verb: nil) {
+                    expandRepliesButton(count: replies.count, verb: nil, reduceMotion: reduceMotion) {
                         forceExpandReplies = true
                     }
                     .padding(.top, CommentThreadGeometry.postSpacing)
@@ -332,6 +349,10 @@ private struct NestedReplyCard: View {
     let comment: AO3Comment
     let workAuthors: [String]
     let workAuthorIdentities: [AO3AuthorIdentity]
+    /// Display name of the comment this one directly replies to (root card or
+    /// another reply) — threaded down to `SpinePostRow` purely for the
+    /// VoiceOver reply-context announcement (HIG audit UI-2).
+    let replyToAuthor: String
     /// True when another reply card follows in the (possibly chunked) visible
     /// stack. The last rendered card is a dead end: no rail below it.
     let connectsToNext: Bool
@@ -352,7 +373,8 @@ private struct NestedReplyCard: View {
             workAuthors: workAuthors,
             workAuthorIdentities: workAuthorIdentities,
             showChapterBadge: false,
-            drawsSpineBelow: connectsToNext
+            drawsSpineBelow: connectsToNext,
+            replyToAuthor: replyToAuthor
         )
         .id(comment.id)
         // Equal inset on every side so the avatar isn’t pushed down relative
@@ -409,6 +431,10 @@ private struct SpinePostRow: View {
     /// Also reserves `postSpacing` under the body and fills it with rail, so the
     /// next avatar sits on a continuous line.
     let drawsSpineBelow: Bool
+    /// nil for the root card (`CommentThreadRow` passes nothing extra); set to
+    /// the immediate parent's author for a nested reply card, so VoiceOver can
+    /// announce the reply relationship the spine only conveys visually.
+    var replyToAuthor: String? = nil
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -462,7 +488,13 @@ private struct SpinePostRow: View {
 
     @ViewBuilder
     private func commentBody(timestamp: String) -> some View {
-        if comment.isDeleted {
+        if comment.isThreadCutoff {
+            // AO3's own deep-thread cutoff (CAA-7): not a real comment, so no
+            // byline/actions — just its own distinct disclosure pointing at
+            // AO3's continuation link. Never fetched natively; leaving the app
+            // is the whole point of a `Link`.
+            threadCutoffRow
+        } else if comment.isDeleted {
             // Deleted-comment tombstone, presented the way AO3 itself does: just
             // the placeholder text — no byline, no actions (AO3 renders none).
             // The avatar placeholder stays so the reply rail passes through.
@@ -482,6 +514,31 @@ private struct SpinePostRow: View {
                     .padding(.top, 2)
             }
         }
+    }
+
+    /// AO3's deep-thread cutoff, rendered as its own disclosure — never a bare
+    /// "couldn't be read" tombstone. Opens AO3's own continuation page in the
+    /// system browser; Kudos does not fetch it itself (CAA-7).
+    @ViewBuilder
+    private var threadCutoffRow: some View {
+        let label = Label(cutoffText, systemImage: "ellipsis.bubble")
+            .font(.subheadline.weight(.medium))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: CommentThreadGeometry.avatarSize)
+            .contentShape(Rectangle())
+
+        if let url = comment.cutoffThreadURL {
+            Link(destination: url) { label }
+                .minimumHitTarget()
+                .accessibilityHint("Opens the rest of this thread on the AO3 website")
+        } else {
+            label.foregroundStyle(.secondary)
+        }
+    }
+
+    private var cutoffText: String {
+        guard let count = comment.cutoffCount else { return "More comments in this thread" }
+        return "\(count) more \(count == 1 ? "comment" : "comments") in this thread"
     }
 
     private func byline(timestamp: String) -> some View {
@@ -549,7 +606,7 @@ private struct SpinePostRow: View {
                 emphasized: true,
                 onOpenRoute: handlers.onOpenAuthor
             )
-            CommentParticipantBadge(role: participantRole)
+            CommentParticipantBadge(role: participantRole, replyContext: replyToAuthor)
         }
     }
 
@@ -670,6 +727,7 @@ private struct ExpandableCommentBody: View {
     @State private var isExpanded = false
     @State private var clampedHeight: CGFloat = 0
     @State private var fullHeight: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Truncation is a layout fact. A character budget can't know the reader's
     /// Dynamic Type size or the card's width, so it both misses long comments at
@@ -687,7 +745,7 @@ private struct ExpandableCommentBody: View {
 
             if needsExpansion {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -767,16 +825,19 @@ private extension View {
                         .allowsHitTesting(false)
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+            .animation(unlessReduced: .easeInOut(duration: 0.3), value: isHighlighted)
     }
 }
 
 /// `verb` distinguishes the initial collapse ("Show 12 replies", nil) from
 /// revealing another chunk of an already-expanded stack ("Show 20 more
-/// replies").
-private func expandRepliesButton(count: Int, verb: String?, action: @escaping () -> Void) -> some View {
+/// replies"). A free function can't read `@Environment` itself, so the caller
+/// passes its own `\.accessibilityReduceMotion` through explicitly.
+private func expandRepliesButton(
+    count: Int, verb: String?, reduceMotion: Bool, action: @escaping () -> Void
+) -> some View {
     Button {
-        withAnimation(.easeInOut(duration: 0.2), action)
+        withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion, action)
     } label: {
         Label(
             verb.map { "Show \(count) \($0) replies" } ?? "Show \(count) replies",

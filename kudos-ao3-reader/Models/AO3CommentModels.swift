@@ -197,6 +197,20 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
     /// must stay in the tree so its surviving replies hang under the right
     /// parent instead of grafting onto a sibling.
     var isDeleted = false
+    /// AO3's own deep-thread cutoff: past nesting depth 5 with more than one
+    /// child, otwarchive stops rendering the subtree and substitutes a single
+    /// id-less "N more comments in this thread" link instead (CAA-7,
+    /// `docs/COMMENTS_AO3_API_AUDIT.md`). Not a real comment and — despite
+    /// also being id-less in the source markup — not `isDeleted` either: it
+    /// carries its own count/continuation link rather than AO3's deleted-
+    /// comment wording, and must never collapse into that tombstone's shared
+    /// placeholder identity. Never auto-fetched; the UI only represents that
+    /// more replies exist.
+    var isThreadCutoff = false
+    /// The overflow count from AO3's own cutoff text, when it parsed.
+    var cutoffCount: Int?
+    /// AO3's `/comments/<id>` continuation link for a cutoff node.
+    var cutoffThreadPath: String?
     var replies: [AO3Comment] = []
 
     /// Permanent link to this comment's thread page on AO3.
@@ -217,6 +231,7 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
 
     var threadActionURL: URL? { Self.ao3URL(for: threadPath) }
     var parentThreadURL: URL? { Self.ao3URL(for: parentThreadPath) }
+    var cutoffThreadURL: URL? { Self.ao3URL(for: cutoffThreadPath) }
 
     /// The immediate parent's id, parsed from AO3's own "Parent Thread" link —
     /// nil for a top-level comment, or when AO3 didn't render the link. Drives
