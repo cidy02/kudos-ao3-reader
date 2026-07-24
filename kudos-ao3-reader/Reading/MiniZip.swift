@@ -42,12 +42,14 @@ private struct ZipEntry {
 }
 
 /// A tiny, dependency-free ZIP reader/writer good enough for EPUB files and
-/// `.kudosbackup` archives (stored or DEFLATE-compressed entries; no ZIP64, no
-/// encryption). Every entry is fully validated — signature, bounds, method,
-/// size/ratio limits, uniqueness, and path safety — while parsing the central
-/// directory, so a caller that only inspects specific named entries (rather
-/// than extracting every one) sees exactly the same pass/fail verdict as full
-/// extraction would.
+/// `.kudosbackup` archives (stored or DEFLATE-compressed entries, ZIP64
+/// supported, no encryption). Every entry is fully validated — signature,
+/// bounds, method, size/ratio limits, uniqueness, and path safety — while
+/// parsing the central directory, so a caller that only inspects specific
+/// named entries (rather than extracting every one) sees exactly the same
+/// pass/fail verdict as full extraction would. A classic field saturated at
+/// its sentinel (0xFFFF / 0xFFFFFFFF) is never read as a value: it must
+/// resolve through the matching ZIP64 record, or the archive is rejected.
 nonisolated struct MiniZip {
     /// Bounds on what an archive may claim before any allocation trusts it.
     /// Profiles exist because the two archive kinds this app reads have very
@@ -90,13 +92,10 @@ nonisolated struct MiniZip {
     init(data: Data, limits: Limits = .epub) throws {
         self.data = data
         guard let eocd = MiniZip.findEOCD(in: data) else { throw MiniZipError.malformedArchive }
-        guard let countRaw = data.safeU16(eocd + 10),
-              let centralStartRaw = data.safeU32(eocd + 16)
-        else { throw MiniZipError.malformedArchive }
-        let count = Int(countRaw)
+        let directory = try MiniZip.locateCentralDirectory(in: data, eocd: eocd)
+        let count = directory.entryCount
         guard count <= limits.maxEntryCount else { throw MiniZipError.archiveTooLarge }
-        let centralStart = Int(centralStartRaw)
-        guard centralStart >= 0, centralStart <= data.count else { throw MiniZipError.malformedArchive }
+        let centralStart = directory.start
 
         var offset = centralStart
         var parsed: [ZipEntry] = []
@@ -118,8 +117,31 @@ nonisolated struct MiniZip {
                   let localOffsetRaw = data.safeU32(offset + 42)
             else { throw MiniZipError.truncatedRecord }
 
-            let compressedSize = Int(compressedSizeRaw)
-            let uncompressedSize = Int(uncompressedSizeRaw)
+            guard let nameStart = MiniZip.addChecked(offset, 46),
+                  let nameEnd = MiniZip.addChecked(nameStart, Int(nameLenRaw)),
+                  let extraEnd = MiniZip.addChecked(nameEnd, Int(extraLenRaw)),
+                  let recordEnd = MiniZip.addChecked(extraEnd, Int(commentLenRaw)),
+                  recordEnd <= data.count
+            else { throw MiniZipError.truncatedRecord }
+
+            var compressedSize = Int(compressedSizeRaw)
+            var uncompressedSize = Int(uncompressedSizeRaw)
+            var localHeaderOffset = Int(localOffsetRaw)
+            if compressedSizeRaw == 0xFFFF_FFFF || uncompressedSizeRaw == 0xFFFF_FFFF
+                || localOffsetRaw == 0xFFFF_FFFF {
+                let resolved = try MiniZip.parseZip64Extra(
+                    in: data,
+                    start: nameEnd,
+                    end: extraEnd,
+                    needsUncompressedSize: uncompressedSizeRaw == 0xFFFF_FFFF,
+                    needsCompressedSize: compressedSizeRaw == 0xFFFF_FFFF,
+                    needsLocalHeaderOffset: localOffsetRaw == 0xFFFF_FFFF
+                )
+                uncompressedSize = resolved.uncompressedSize ?? uncompressedSize
+                compressedSize = resolved.compressedSize ?? compressedSize
+                localHeaderOffset = resolved.localHeaderOffset ?? localHeaderOffset
+            }
+
             try MiniZip.validateMethodAndSize(
                 method: method,
                 flags: flags,
@@ -131,13 +153,6 @@ nonisolated struct MiniZip {
                   runningTotal <= limits.maxTotalUncompressedSize
             else { throw MiniZipError.archiveTooLarge }
             totalUncompressed = runningTotal
-
-            guard let nameStart = MiniZip.addChecked(offset, 46),
-                  let nameEnd = MiniZip.addChecked(nameStart, Int(nameLenRaw)),
-                  let extraEnd = MiniZip.addChecked(nameEnd, Int(extraLenRaw)),
-                  let recordEnd = MiniZip.addChecked(extraEnd, Int(commentLenRaw)),
-                  recordEnd <= data.count
-            else { throw MiniZipError.truncatedRecord }
 
             let name = String(data: data.subdata(in: nameStart ..< nameEnd), encoding: .utf8) ?? ""
             // Validated here — at construction, not just at `unzip` time — so a
@@ -154,7 +169,7 @@ nonisolated struct MiniZip {
                 method: method,
                 compressedSize: compressedSize,
                 uncompressedSize: uncompressedSize,
-                localHeaderOffset: Int(localOffsetRaw)
+                localHeaderOffset: localHeaderOffset
             ))
             offset = recordEnd
         }
@@ -267,6 +282,115 @@ nonisolated struct MiniZip {
             i -= 1
         }
         return nil
+    }
+
+    private struct CentralDirectoryLocation {
+        let entryCount: Int
+        let start: Int
+    }
+
+    /// Resolves the central directory's entry count and start offset from the
+    /// classic EOCD, or — when the ZIP64 EOCD locator precedes it — from the
+    /// ZIP64 EOCD record it points at. Classic fields stuck at their sentinel
+    /// (0xFFFF / 0xFFFFFFFF) are never read as values: without ZIP64 records
+    /// to resolve them the archive is rejected outright.
+    private static func locateCentralDirectory(
+        in data: Data,
+        eocd: Int
+    ) throws -> CentralDirectoryLocation {
+        guard let count16 = data.safeU16(eocd + 10),
+              let size32 = data.safeU32(eocd + 12),
+              let start32 = data.safeU32(eocd + 16)
+        else { throw MiniZipError.malformedArchive }
+
+        // The ZIP64 EOCD locator, when present, sits immediately before the
+        // classic EOCD. Its record supersedes every classic field.
+        if eocd >= 20, data.safeU32(eocd - 20) == 0x0706_4B50 {
+            let locator = eocd - 20
+            guard let zip64Disk = data.safeU32(locator + 4),
+                  let recordOffsetRaw = data.safeU64(locator + 8),
+                  let totalDisks = data.safeU32(locator + 16),
+                  zip64Disk == 0, totalDisks <= 1,
+                  let record = Int(exactly: recordOffsetRaw),
+                  data.safeU32(record) == 0x0606_4B50,
+                  let diskNumber = data.safeU32(record + 16),
+                  let directoryDisk = data.safeU32(record + 20),
+                  diskNumber == 0, directoryDisk == 0,
+                  let totalEntriesRaw = data.safeU64(record + 32),
+                  let startRaw = data.safeU64(record + 48)
+            else { throw MiniZipError.malformedArchive }
+            guard let entryCount = Int(exactly: totalEntriesRaw),
+                  let start = Int(exactly: startRaw), start <= data.count
+            else { throw MiniZipError.malformedArchive }
+            return CentralDirectoryLocation(entryCount: entryCount, start: start)
+        }
+
+        guard count16 != 0xFFFF, size32 != 0xFFFF_FFFF, start32 != 0xFFFF_FFFF else {
+            throw MiniZipError.malformedArchive
+        }
+        return CentralDirectoryLocation(entryCount: Int(count16), start: Int(start32))
+    }
+
+    private struct Zip64ExtraValues {
+        var uncompressedSize: Int?
+        var compressedSize: Int?
+        var localHeaderOffset: Int?
+    }
+
+    /// Reads the ZIP64 extended-information extra field (header ID 0x0001)
+    /// from a central-directory record's extra area. Called only when at least
+    /// one fixed field is saturated; per spec the block carries values only
+    /// for the saturated fields, always ordered original (uncompressed) size,
+    /// compressed size, then local-header offset. A saturated field the block
+    /// doesn't cover — or no block at all — rejects the archive.
+    private static func parseZip64Extra(
+        in data: Data,
+        start: Int,
+        end: Int,
+        needsUncompressedSize: Bool,
+        needsCompressedSize: Bool,
+        needsLocalHeaderOffset: Bool
+    ) throws -> Zip64ExtraValues {
+        var cursor = start
+        while let fieldsStart = addChecked(cursor, 4), fieldsStart <= end {
+            guard let headerID = data.safeU16(cursor),
+                  let blockSize = data.safeU16(cursor + 2),
+                  let blockEnd = addChecked(fieldsStart, Int(blockSize)),
+                  blockEnd <= end
+            else { throw MiniZipError.truncatedRecord }
+            if headerID == 0x0001 {
+                var values = Zip64ExtraValues()
+                var field = fieldsStart
+                if needsUncompressedSize {
+                    values.uncompressedSize = try readZip64Field(in: data, at: &field, before: blockEnd)
+                }
+                if needsCompressedSize {
+                    values.compressedSize = try readZip64Field(in: data, at: &field, before: blockEnd)
+                }
+                if needsLocalHeaderOffset {
+                    values.localHeaderOffset = try readZip64Field(in: data, at: &field, before: blockEnd)
+                }
+                return values
+            }
+            cursor = blockEnd
+        }
+        throw MiniZipError.malformedArchive
+    }
+
+    /// One 8-byte value inside a ZIP64 extra block, bounds-checked against the
+    /// block and converted to a non-negative Int (fails on values above
+    /// Int.max rather than truncating).
+    private static func readZip64Field(
+        in data: Data,
+        at cursor: inout Int,
+        before end: Int
+    ) throws -> Int {
+        guard let fieldEnd = addChecked(cursor, 8), fieldEnd <= end,
+              let raw = data.safeU64(cursor),
+              let value = Int(exactly: raw)
+        else { throw MiniZipError.malformedArchive }
+        cursor = fieldEnd
+        return value
     }
 
     /// Validates a central-directory entry's method, encryption flag, and
@@ -472,5 +596,17 @@ nonisolated private extension Data {
         guard index >= 0, index + 4 <= count else { return nil }
         return UInt32(self[index]) | (UInt32(self[index + 1]) << 8)
             | (UInt32(self[index + 2]) << 16) | (UInt32(self[index + 3]) << 24)
+    }
+
+    /// Little-endian unsigned 64-bit read at an absolute index, or nil if the
+    /// read would run past the end of the buffer. ZIP64 records are the only
+    /// place the format stores 64-bit values.
+    func safeU64(_ index: Int) -> UInt64? {
+        guard index >= 0, index <= count - 8 else { return nil }
+        var value: UInt64 = 0
+        for byteIndex in 0 ..< 8 {
+            value |= UInt64(self[index + byteIndex]) << (8 * byteIndex)
+        }
+        return value
     }
 }
