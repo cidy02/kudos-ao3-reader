@@ -41,34 +41,60 @@ private struct ZipEntry {
     let localHeaderOffset: Int
 }
 
-/// A tiny, dependency-free ZIP reader good enough for EPUB files (stored or
-/// DEFLATE-compressed entries; no ZIP64, no encryption). Every entry is fully
-/// validated — signature, bounds, method, size/ratio limits, uniqueness, and
-/// path safety — while parsing the central directory, so a caller that only
-/// inspects specific named entries (rather than extracting every one) sees
-/// exactly the same pass/fail verdict as full extraction would.
+/// A tiny, dependency-free ZIP reader/writer good enough for EPUB files and
+/// `.kudosbackup` archives (stored or DEFLATE-compressed entries; no ZIP64, no
+/// encryption). Every entry is fully validated — signature, bounds, method,
+/// size/ratio limits, uniqueness, and path safety — while parsing the central
+/// directory, so a caller that only inspects specific named entries (rather
+/// than extracting every one) sees exactly the same pass/fail verdict as full
+/// extraction would.
 nonisolated struct MiniZip {
-    /// Conservative limits sized for EPUBs (small, text-and-image documents),
-    /// not general-purpose archives — comfortably above anything a real EPUB
-    /// needs, while still bounding a hostile archive's worst case.
-    private static let maxEntryCount = 10_000
-    private static let maxSingleEntryUncompressedSize = 200_000_000
-    private static let maxTotalUncompressedSize = 500_000_000
-    /// DEFLATE's practical single-pass ceiling is ~1032:1; this leaves headroom
-    /// for legitimate, highly-repetitive text while still catching a bomb.
-    private static let maxCompressionRatio = 1100
+    /// Bounds on what an archive may claim before any allocation trusts it.
+    /// Profiles exist because the two archive kinds this app reads have very
+    /// different plausible sizes: a single EPUB versus a whole-library backup.
+    struct Limits {
+        let maxEntryCount: Int
+        let maxSingleEntryUncompressedSize: Int
+        let maxTotalUncompressedSize: Int
+        /// DEFLATE's practical single-pass ceiling is ~1032:1; the profiles
+        /// leave headroom for legitimate, highly-repetitive text while still
+        /// catching a bomb.
+        let maxCompressionRatio: Int
+
+        /// Conservative limits sized for EPUBs (small, text-and-image
+        /// documents), not general-purpose archives — comfortably above
+        /// anything a real EPUB needs, while still bounding a hostile
+        /// archive's worst case.
+        static let epub = Limits(
+            maxEntryCount: 10_000,
+            maxSingleEntryUncompressedSize: 200_000_000,
+            maxTotalUncompressedSize: 500_000_000,
+            maxCompressionRatio: 1100
+        )
+
+        /// Sized for `.kudosbackup` archives: a manifest plus one EPUB per
+        /// library work. The total stays bounded well below anything that
+        /// could be materialized in memory anyway.
+        static let backup = Limits(
+            maxEntryCount: 50_000,
+            maxSingleEntryUncompressedSize: 500_000_000,
+            maxTotalUncompressedSize: 2_000_000_000,
+            maxCompressionRatio: 1100
+        )
+    }
 
     private let data: Data
     private let entries: [ZipEntry]
+    private let entryIndexByName: [String: Int]
 
-    init(data: Data) throws {
+    init(data: Data, limits: Limits = .epub) throws {
         self.data = data
         guard let eocd = MiniZip.findEOCD(in: data) else { throw MiniZipError.malformedArchive }
         guard let countRaw = data.safeU16(eocd + 10),
               let centralStartRaw = data.safeU32(eocd + 16)
         else { throw MiniZipError.malformedArchive }
         let count = Int(countRaw)
-        guard count <= MiniZip.maxEntryCount else { throw MiniZipError.archiveTooLarge }
+        guard count <= limits.maxEntryCount else { throw MiniZipError.archiveTooLarge }
         let centralStart = Int(centralStartRaw)
         guard centralStart >= 0, centralStart <= data.count else { throw MiniZipError.malformedArchive }
 
@@ -98,10 +124,11 @@ nonisolated struct MiniZip {
                 method: method,
                 flags: flags,
                 compressedSize: compressedSize,
-                uncompressedSize: uncompressedSize
+                uncompressedSize: uncompressedSize,
+                limits: limits
             )
             guard let runningTotal = MiniZip.addChecked(totalUncompressed, uncompressedSize),
-                  runningTotal <= MiniZip.maxTotalUncompressedSize
+                  runningTotal <= limits.maxTotalUncompressedSize
             else { throw MiniZipError.archiveTooLarge }
             totalUncompressed = runningTotal
 
@@ -133,6 +160,10 @@ nonisolated struct MiniZip {
         }
         guard !parsed.isEmpty else { throw MiniZipError.malformedArchive }
         entries = parsed
+        entryIndexByName = Dictionary(
+            parsed.enumerated().map { ($0.element.name, $0.offset) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     /// All entry names in the archive.
@@ -143,8 +174,8 @@ nonisolated struct MiniZip {
     /// Extracts a single entry's bytes by exact name, or nil if the name isn't
     /// present or the entry fails validation while extracting.
     func data(named name: String) -> Data? {
-        guard let entry = entries.first(where: { $0.name == name }) else { return nil }
-        return try? extract(entry)
+        guard let index = entryIndexByName[name] else { return nil }
+        return try? extract(entries[index])
     }
 
     /// Unzips every file entry, preserving relative paths. Extraction happens in
@@ -244,7 +275,8 @@ nonisolated struct MiniZip {
         method: UInt16,
         flags: UInt16,
         compressedSize: Int,
-        uncompressedSize: Int
+        uncompressedSize: Int,
+        limits: Limits
     ) throws {
         // Bit 0 of the general-purpose flag marks a Traditional PKWARE (or
         // stronger) encrypted entry, which this reader cannot decrypt or safely
@@ -257,11 +289,11 @@ nonisolated struct MiniZip {
             // Stored entries are their own proof: declared sizes must match.
             guard compressedSize == uncompressedSize else { throw MiniZipError.malformedArchive }
         }
-        guard uncompressedSize <= MiniZip.maxSingleEntryUncompressedSize else {
+        guard uncompressedSize <= limits.maxSingleEntryUncompressedSize else {
             throw MiniZipError.entryTooLarge
         }
         if compressedSize > 0 {
-            guard uncompressedSize / compressedSize <= MiniZip.maxCompressionRatio else {
+            guard uncompressedSize / compressedSize <= limits.maxCompressionRatio else {
                 throw MiniZipError.suspiciousCompressionRatio
             }
         }
@@ -302,7 +334,131 @@ nonisolated struct MiniZip {
     }
 }
 
-private extension Data {
+// MARK: - Minimal ZIP writer
+
+extension MiniZip {
+    /// Builds a ZIP archive from named entries using stored (uncompressed)
+    /// entries only — EPUB payloads are already internally DEFLATE-compressed,
+    /// so re-compressing them buys nothing, and stored entries keep the writer
+    /// trivially verifiable (declared sizes are the real sizes). Entry names
+    /// pass the same `validatedRelativePath` safety rules the reader enforces,
+    /// so everything this writer produces is readable by `MiniZip` and by any
+    /// standard ZIP tool. No ZIP64: entry count, sizes, and offsets must fit
+    /// the classic 16/32-bit fields, which comfortably covers any archive this
+    /// app can materialize in memory anyway.
+    static func archiveData(_ entries: [(name: String, data: Data)]) throws -> Data {
+        guard !entries.isEmpty, entries.count <= 0xFFFF else {
+            throw MiniZipError.malformedArchive
+        }
+
+        var seenNames = Set<String>()
+        var archive = Data()
+        var centralDirectory = Data()
+
+        for (name, payload) in entries {
+            _ = try validatedRelativePath(name)
+            guard seenNames.insert(name).inserted else { throw MiniZipError.malformedArchive }
+            guard let nameBytes = name.data(using: .utf8), nameBytes.count <= 0xFFFF else {
+                throw MiniZipError.pathTraversal
+            }
+            guard payload.count < 0xFFFF_FFFF, archive.count < 0xFFFF_FFFF else {
+                throw MiniZipError.entryTooLarge
+            }
+
+            let crc = crc32(payload)
+            let localHeaderOffset = UInt32(archive.count)
+
+            // Local file header. Flags set only bit 11 (UTF-8 names); the
+            // fixed 1980-01-01 DOS timestamp keeps output deterministic —
+            // `exportedAt` inside the manifest is the meaningful date.
+            archive.appendU32(0x0403_4B50)
+            archive.appendU16(20) // version needed
+            archive.appendU16(0x0800) // flags: UTF-8 names
+            archive.appendU16(0) // method: stored
+            archive.appendU16(0) // DOS time
+            archive.appendU16(0x0021) // DOS date: 1980-01-01
+            archive.appendU32(crc)
+            archive.appendU32(UInt32(payload.count)) // compressed
+            archive.appendU32(UInt32(payload.count)) // uncompressed
+            archive.appendU16(UInt16(nameBytes.count))
+            archive.appendU16(0) // extra length
+            archive.append(nameBytes)
+            archive.append(payload)
+
+            // Matching central-directory record.
+            centralDirectory.appendU32(0x0201_4B50)
+            centralDirectory.appendU16(20) // version made by
+            centralDirectory.appendU16(20) // version needed
+            centralDirectory.appendU16(0x0800) // flags: UTF-8 names
+            centralDirectory.appendU16(0) // method: stored
+            centralDirectory.appendU16(0) // DOS time
+            centralDirectory.appendU16(0x0021) // DOS date
+            centralDirectory.appendU32(crc)
+            centralDirectory.appendU32(UInt32(payload.count))
+            centralDirectory.appendU32(UInt32(payload.count))
+            centralDirectory.appendU16(UInt16(nameBytes.count))
+            centralDirectory.appendU16(0) // extra length
+            centralDirectory.appendU16(0) // comment length
+            centralDirectory.appendU16(0) // disk number
+            centralDirectory.appendU16(0) // internal attributes
+            centralDirectory.appendU32(0) // external attributes
+            centralDirectory.appendU32(localHeaderOffset)
+            centralDirectory.append(nameBytes)
+        }
+
+        let centralDirectoryOffset = archive.count
+        guard centralDirectoryOffset + centralDirectory.count < 0xFFFF_FFFF else {
+            throw MiniZipError.archiveTooLarge
+        }
+        archive.append(centralDirectory)
+
+        // End of central directory.
+        archive.appendU32(0x0605_4B50)
+        archive.appendU16(0) // this disk
+        archive.appendU16(0) // central-directory disk
+        archive.appendU16(UInt16(entries.count))
+        archive.appendU16(UInt16(entries.count))
+        archive.appendU32(UInt32(centralDirectory.count))
+        archive.appendU32(UInt32(centralDirectoryOffset))
+        archive.appendU16(0) // comment length
+        return archive
+    }
+
+    /// Standard CRC-32 (IEEE 802.3, polynomial 0xEDB88320), required by the
+    /// ZIP format for every entry. Table-driven; verified in tests against the
+    /// canonical "123456789" → 0xCBF43926 check value.
+    static func crc32(_ data: Data) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for byte in data {
+            crc = (crc >> 8) ^ Self.crcTable[Int((crc ^ UInt32(byte)) & 0xFF)]
+        }
+        return crc ^ 0xFFFF_FFFF
+    }
+
+    private static let crcTable: [UInt32] = (0 ..< 256).map { index in
+        var value = UInt32(index)
+        for _ in 0 ..< 8 {
+            value = (value & 1) == 1 ? (value >> 1) ^ 0xEDB8_8320 : value >> 1
+        }
+        return value
+    }
+}
+
+nonisolated private extension Data {
+    mutating func appendU16(_ value: UInt16) {
+        append(UInt8(value & 0xFF))
+        append(UInt8(value >> 8))
+    }
+
+    mutating func appendU32(_ value: UInt32) {
+        append(UInt8(value & 0xFF))
+        append(UInt8((value >> 8) & 0xFF))
+        append(UInt8((value >> 16) & 0xFF))
+        append(UInt8(value >> 24))
+    }
+}
+
+nonisolated private extension Data {
     /// Little-endian unsigned 16-bit read at an absolute index, or nil if the
     /// read would run past the end of the buffer.
     func safeU16(_ index: Int) -> UInt16? {

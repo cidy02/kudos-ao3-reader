@@ -3,14 +3,15 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-// Serialized: several tests here and in FolderSyncTests/PersistenceSyncTests exercise
-// PersistenceOperationGate, a process-wide static gate that's meaningfully global in
-// the real app (only one instance ever runs) but can spuriously contend across
-// concurrently-running test suites otherwise.
+// Nested under PersistenceGateSuites (see its doc comment): these tests exercise
+// PersistenceOperationGate, a process-wide static gate, so they must serialize
+// against FolderSyncTests/PersistenceSyncTests/PreservedWorkTests too, not just
+// within this suite.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
-    @Test func packageRoundTripPreservesManifestAndAssets() throws {
+    @Test func archiveRoundTripPreservesManifestAndAssets() throws {
         let defaults = try testDefaults()
         defaults.set("sepia", forKey: "appTheme")
         defaults.set(21.0, forKey: "readerFontPt")
@@ -48,14 +49,14 @@ struct KudosBackupTests {
         let backupURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("kudosbackup")
-        try document.contents.fileWrapper().write(
-            to: backupURL,
-            options: .atomic,
-            originalContentsURL: nil
-        )
+        try document.contents.zipData().write(to: backupURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: backupURL) }
         let decoded = try KudosBackupContents.read(from: backupURL)
 
+        // The `.kudosbackup` on disk is a single regular file — a real ZIP.
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: backupURL.path, isDirectory: &isDirectory))
+        #expect(!isDirectory.boolValue)
         #expect(decoded.manifest.version == KudosBackupManifest.currentVersion)
         #expect(decoded.manifest.works.first?.title == "Backup Work")
         #expect(decoded.manifest.works.first?.userTags == ["Comfort Read"])
@@ -473,10 +474,64 @@ struct KudosBackupTests {
             fonts: [],
             settings: .capture(defaults: try testDefaults())
         )
-        let wrapper = try KudosBackupContents(manifest: manifest).fileWrapper()
+        let zipData = try KudosBackupContents(manifest: manifest).zipData()
 
         #expect(throws: KudosBackupError.self) {
-            _ = try KudosBackupContents(fileWrapper: wrapper)
+            _ = try KudosBackupContents(zipData: zipData)
+        }
+    }
+
+    /// The current writer produces a single ZIP file, but backups exported by
+    /// pre-archive versions are directory packages — those must remain
+    /// importable forever via the same `read(from:)` entry point.
+    @Test func legacyDirectoryPackageBackupRemainsReadable() throws {
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Legacy Work", author: "Archivist")
+        let epub = Data("legacy-epub-data".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let contents = try KudosBackupService.makeDocument(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        ).contents
+
+        // Write the old on-disk shape by hand — production code no longer can.
+        let packageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("kudosbackup")
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: try contents.manifestData()),
+            "Works": FileWrapper(directoryWithFileWrappers: [
+                "\(work.id.uuidString).epub": FileWrapper(regularFileWithContents: epub)
+            ]),
+            "Fonts": FileWrapper(directoryWithFileWrappers: [:])
+        ])
+        try wrapper.write(to: packageURL, options: .atomic, originalContentsURL: nil)
+        defer { try? FileManager.default.removeItem(at: packageURL) }
+
+        let decoded = try KudosBackupContents.read(from: packageURL)
+        #expect(decoded.manifest.works.first?.title == "Legacy Work")
+        #expect(decoded.epubFiles[work.id] == epub)
+    }
+
+    /// A truncated archive — the partially-written state an interrupted copy
+    /// or crash could leave behind — must never decode as a valid backup.
+    @Test func truncatedArchiveIsRejectedAsInvalid() throws {
+        let manifest = KudosBackupManifest(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            settings: .capture(defaults: try testDefaults())
+        )
+        let zipData = try KudosBackupContents(manifest: manifest).zipData()
+
+        let truncated = zipData.prefix(zipData.count / 2)
+        #expect(throws: KudosBackupError.self) {
+            _ = try KudosBackupContents(zipData: Data(truncated))
         }
     }
 
@@ -737,4 +792,5 @@ struct KudosBackupTests {
         defaults.removePersistentDomain(forName: name)
         return defaults
     }
+}
 }

@@ -3,10 +3,10 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-// Serialized: several tests here and in FolderSyncTests/KudosBackupTests exercise
-// PersistenceOperationGate, a process-wide static gate that's meaningfully global in
-// the real app (only one instance ever runs) but can spuriously contend across
-// concurrently-running test suites otherwise.
+// Nested under PersistenceGateSuites (see its doc comment): these tests exercise
+// PersistenceOperationGate, a process-wide static gate, so they must serialize
+// against the other gate-taking suites too, not just within this suite.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct PersistenceSyncTests {
@@ -623,4 +623,5 @@ struct PersistenceSyncTests {
             settings: .capture(defaults: try testDefaults())
         ))
     }
+}
 }

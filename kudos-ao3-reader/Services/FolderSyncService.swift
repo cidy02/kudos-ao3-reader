@@ -3,7 +3,7 @@ import OSLog
 import SwiftData
 
 extension Notification.Name {
-    /// Posted by SettingsView when a UserDefaults value included in the `.kudosbackup`
+    /// Posted by SettingsView when a UserDefaults value included in the backup/sync
     /// manifest (reader/privacy preferences) changes, so ContentView's folder-sync
     /// lifecycle — which only observes SwiftData @Query state directly — knows to mark
     /// the sync folder dirty too.
@@ -39,14 +39,18 @@ struct FolderSyncResult: Equatable {
     }
 
     /// Folds another result's counts into this one — used when a sub-step (e.g. resolving
-    /// File-Provider conflict versions) already accumulated its own `FolderSyncResult` and
-    /// the caller needs those counts reflected in its own total rather than discarded.
+    /// File-Provider conflict versions, or the legacy-package migration fold) already
+    /// accumulated its own `FolderSyncResult` and the caller needs those counts reflected
+    /// in its own total rather than discarded. The read/write flags merge as ORs; the
+    /// outer-level flags (`missingRemoteFile`, `skippedUnchanged`) stay the caller's.
     mutating func absorb(_ other: FolderSyncResult) {
         restoredWorks += other.restoredWorks
         suppressedQueues += other.suppressedQueues
         revivedQueues += other.revivedQueues
         ambiguousQueueConflicts += other.ambiguousQueueConflicts
         foldedConflicts += other.foldedConflicts
+        didReadRemoteFile = didReadRemoteFile || other.didReadRemoteFile
+        didWriteRemoteFile = didWriteRemoteFile || other.didWriteRemoteFile
     }
 }
 
@@ -72,7 +76,21 @@ enum FolderSyncError: LocalizedError, Equatable {
 
 @MainActor
 enum FolderSyncService {
-    static let syncFileName = "KudosLibrary.kudosbackup"
+    /// The live sync payload: a plain directory of per-record files, so iCloud
+    /// Drive uploads/downloads only what actually changed instead of the whole
+    /// library. `manifest.json` is the commit point — assets are written before
+    /// it, so a manifest always describes files that already exist.
+    nonisolated static let syncDirectoryName = "KudosLibrary"
+    nonisolated static let manifestFileName = "manifest.json"
+    nonisolated static let worksSubdirectoryName = "Works"
+    nonisolated static let fontsSubdirectoryName = "Fonts"
+
+    /// The pre-2026 payload: the whole library as one `.kudosbackup` directory
+    /// package. Strictly read-only now — folded into local state during
+    /// sync-down (so not-yet-updated devices' changes still arrive) but never
+    /// written or deleted, which makes the migration idempotent and immune to
+    /// interruption.
+    nonisolated static let legacySyncFileName = "KudosLibrary.kudosbackup"
 
     private static let bookmarkDataKey = "folderSyncBookmarkData"
     private static let folderDisplayNameKey = "folderSyncFolderDisplayName"
@@ -82,6 +100,12 @@ enum FolderSyncService {
     private static let dirtyFlagKey = "hasPendingFolderSyncChanges"
     private static let autoSyncEnabledKey = "folderSyncAutoSyncEnabled"
     private static let lastRestoredRemoteStampKey = "folderSyncLastRestoredRemoteStamp"
+    private static let lastRestoredLegacyStampKey = "folderSyncLastRestoredLegacyStamp"
+    /// Set when a sync-down couldn't fetch every asset the remote manifest
+    /// references (typically not-yet-uploaded iCloud files). While set, the
+    /// skip-unchanged stamp is withheld so the next sync-down retries the
+    /// fetch even though the manifest itself hasn't changed.
+    private static let pendingRemoteAssetsKey = "folderSyncPendingRemoteAssets"
 
     static func snapshot(defaults: UserDefaults = .standard) -> FolderSyncSnapshot {
         let bookmarkData = defaults.data(forKey: bookmarkDataKey)
@@ -130,6 +154,8 @@ enum FolderSyncService {
         defaults.removeObject(forKey: lastErrorKey)
         defaults.removeObject(forKey: dirtyFlagKey)
         defaults.removeObject(forKey: lastRestoredRemoteStampKey)
+        defaults.removeObject(forKey: lastRestoredLegacyStampKey)
+        defaults.removeObject(forKey: pendingRemoteAssetsKey)
     }
 
     @discardableResult
@@ -217,38 +243,68 @@ enum FolderSyncService {
         var result = FolderSyncResult()
         let folderURL = try resolveFolder(defaults: defaults)
         try await withFolderAccess(folderURL) {
-            let syncFileURL = folderURL.appendingPathComponent(syncFileName)
-            guard FileManager.default.fileExists(atPath: syncFileURL.path) else {
-                result.missingRemoteFile = true
+            result.absorb(await foldLegacyPackageIfPresent(
+                in: folderURL,
+                into: context,
+                defaults: defaults
+            ))
+
+            let syncDirectoryURL = folderURL.appendingPathComponent(
+                syncDirectoryName,
+                isDirectory: true
+            )
+            let manifestURL = syncDirectoryURL.appendingPathComponent(manifestFileName)
+            requestDownloadIfNeeded(manifestURL)
+            guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+                // A legacy-only folder isn't "missing" — its fold above already
+                // carried the data; the next sync-up creates the new layout.
+                let legacyURL = folderURL.appendingPathComponent(legacySyncFileName)
+                if !FileManager.default.fileExists(atPath: legacyURL.path) {
+                    result.missingRemoteFile = true
+                }
                 return
             }
-            requestDownloadIfNeeded(syncFileURL)
-            // A full restore loads every EPUB blob into memory, so skip it when the
-            // package hasn't changed since the last successful restore or this device's
-            // own write. Never skip while unresolved conflict versions exist — those can
-            // arrive without the main file's modification date moving.
+            // Skip the restore when the manifest hasn't changed since the last
+            // successful sync-down or this device's own write. Never skip while
+            // asset fetches are still outstanding or unresolved conflict
+            // versions exist — both can need work without the manifest's
+            // modification date moving.
             let remoteStamp = try? await Task.detached {
-                try coordinatedContentModificationDate(of: syncFileURL)
+                try coordinatedContentModificationDate(of: manifestURL)
             }.value
             if let storedStamp = defaults.object(forKey: lastRestoredRemoteStampKey) as? Date,
                let remoteStamp,
                remoteStamp == storedStamp,
-               NSFileVersion.unresolvedConflictVersionsOfItem(at: syncFileURL)?.isEmpty ?? true {
+               !defaults.bool(forKey: pendingRemoteAssetsKey),
+               NSFileVersion.unresolvedConflictVersionsOfItem(at: manifestURL)?.isEmpty ?? true {
                 result.skippedUnchanged = true
                 return
             }
-            let contents = try await Task.detached {
-                try coordinatedReadContents(from: syncFileURL)
+            let manifest = try await Task.detached {
+                try coordinatedReadManifest(from: manifestURL)
+            }.value
+            // Fetch only assets that are missing or changed relative to local
+            // state — unchanged EPUBs never leave disk, unlike the old
+            // whole-package read that materialized every blob in memory.
+            let assets = await Task.detached {
+                readChangedRemoteAssets(in: syncDirectoryURL, manifest: manifest)
             }.value
             result.didReadRemoteFile = true
+            let contents = KudosBackupContents(
+                manifest: manifest,
+                epubFiles: assets.epubFiles,
+                fontFiles: assets.fontFiles
+            )
             let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
             result.absorb(summary)
-            result.absorb(try await foldFileProviderConflicts(
-                at: syncFileURL,
+            result.absorb(try await foldConflictVersions(
+                at: manifestURL,
                 into: context,
-                defaults: defaults
+                defaults: defaults,
+                read: { url in KudosBackupContents(manifest: try coordinatedReadManifest(from: url)) }
             ))
-            if let remoteStamp {
+            defaults.set(assets.missingAssetCount > 0, forKey: pendingRemoteAssetsKey)
+            if assets.missingAssetCount == 0, let remoteStamp {
                 defaults.set(remoteStamp, forKey: lastRestoredRemoteStampKey)
             } else {
                 defaults.removeObject(forKey: lastRestoredRemoteStampKey)
@@ -263,27 +319,34 @@ enum FolderSyncService {
     ) async throws -> FolderSyncResult {
         var result = FolderSyncResult()
         let folderURL = try resolveFolder(defaults: defaults)
-        let document = try makeLocalDocument(in: context, defaults: defaults)
+        let contents = try makeLocalContents(in: context, defaults: defaults)
         try await withFolderAccess(folderURL) {
-            let syncFileURL = folderURL.appendingPathComponent(syncFileName)
-            let contents = document.contents
+            let syncDirectoryURL = folderURL.appendingPathComponent(
+                syncDirectoryName,
+                isDirectory: true
+            )
             try await Task.detached {
-                try coordinatedWriteContents(contents, to: syncFileURL)
+                try coordinatedWriteSyncDirectory(contents, to: syncDirectoryURL)
             }.value
             result.didWriteRemoteFile = true
-            // Stamp our own write so the next sync-down doesn't fully re-restore it.
-            if let stamp = try? syncFileURL.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate {
+            // Stamp our own manifest write so the next sync-down doesn't fully
+            // re-restore it — unless a previous sync-down still has asset
+            // fetches outstanding, in which case the stamp stays withheld so
+            // those fetches retry.
+            let manifestURL = syncDirectoryURL.appendingPathComponent(manifestFileName)
+            if !defaults.bool(forKey: pendingRemoteAssetsKey),
+               let stamp = try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey])
+                   .contentModificationDate {
                 defaults.set(stamp, forKey: lastRestoredRemoteStampKey)
             }
         }
         return result
     }
 
-    private static func makeLocalDocument(
+    private static func makeLocalContents(
         in context: ModelContext,
         defaults: UserDefaults
-    ) throws -> KudosBackupDocument {
+    ) throws -> KudosBackupContents {
         try KudosBackupService.makeDocument(
             works: context.fetch(FetchDescriptor<SavedWork>()),
             bookmarks: context.fetch(FetchDescriptor<Bookmark>()),
@@ -292,20 +355,71 @@ enum FolderSyncService {
             readingQueues: context.fetch(FetchDescriptor<ReadingQueue>()),
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
-        )
+        ).contents
     }
 
-    /// Folds every unresolved File-Provider conflict version of the sync file into
-    /// `context`, one restore per version. Returns the accumulated `FolderSyncResult`
-    /// (not just a bare count) so a caller's own totals — e.g. the counts `SettingsView`
-    /// displays — reflect works/queues restored from a folded conflict instead of
-    /// silently dropping them.
-    private static func foldFileProviderConflicts(
-        at syncFileURL: URL,
+    /// Reads the pre-archive `KudosLibrary.kudosbackup` directory package, if
+    /// one exists, and folds it into local state. The package is strictly
+    /// read-only: not-yet-updated devices keep writing it and their changes
+    /// keep flowing in here, while updated devices only ever write the new
+    /// directory layout — so an interrupted or repeated migration can never
+    /// corrupt or destroy the old data. Failures are logged and swallowed: a
+    /// damaged legacy package must not block syncing of the current layout,
+    /// and with its stamp unset the fold retries on the next sync anyway.
+    private static func foldLegacyPackageIfPresent(
+        in folderURL: URL,
         into context: ModelContext,
         defaults: UserDefaults
+    ) async -> FolderSyncResult {
+        var result = FolderSyncResult()
+        let legacyURL = folderURL.appendingPathComponent(legacySyncFileName)
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else { return result }
+        requestDownloadIfNeeded(legacyURL)
+        let legacyStamp = try? await Task.detached {
+            try coordinatedContentModificationDate(of: legacyURL)
+        }.value
+        if let storedStamp = defaults.object(forKey: lastRestoredLegacyStampKey) as? Date,
+           let legacyStamp,
+           legacyStamp == storedStamp,
+           NSFileVersion.unresolvedConflictVersionsOfItem(at: legacyURL)?.isEmpty ?? true {
+            return result
+        }
+        do {
+            let contents = try await Task.detached {
+                try coordinatedReadLegacyContents(from: legacyURL)
+            }.value
+            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            result.absorb(summary)
+            result.didReadRemoteFile = true
+            result.absorb(try await foldConflictVersions(
+                at: legacyURL,
+                into: context,
+                defaults: defaults,
+                read: coordinatedReadLegacyContents
+            ))
+            if let legacyStamp {
+                defaults.set(legacyStamp, forKey: lastRestoredLegacyStampKey)
+            }
+        } catch {
+            Log.library.notice(
+                "Legacy sync package fold failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+        return result
+    }
+
+    /// Folds every unresolved File-Provider conflict version of a sync file
+    /// into `context`, one restore per version. Returns the accumulated
+    /// `FolderSyncResult` (not just a bare count) so a caller's own totals —
+    /// e.g. the counts `SettingsView` displays — reflect works/queues restored
+    /// from a folded conflict instead of silently dropping them.
+    private static func foldConflictVersions(
+        at url: URL,
+        into context: ModelContext,
+        defaults: UserDefaults,
+        read: @escaping @Sendable (URL) throws -> KudosBackupContents
     ) async throws -> FolderSyncResult {
-        guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: syncFileURL),
+        guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
               !versions.isEmpty
         else { return FolderSyncResult() }
 
@@ -313,7 +427,7 @@ enum FolderSyncService {
         for version in versions {
             let conflictURL = version.url
             let contents = try await Task.detached {
-                try coordinatedReadContents(from: conflictURL)
+                try read(conflictURL)
             }.value
             let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
             result.absorb(summary)
@@ -322,7 +436,7 @@ enum FolderSyncService {
         }
 
         if result.foldedConflicts == versions.count {
-            try? NSFileVersion.removeOtherVersionsOfItem(at: syncFileURL)
+            try? NSFileVersion.removeOtherVersionsOfItem(at: url)
         }
         return result
     }
@@ -366,15 +480,6 @@ enum FolderSyncService {
         Log.library.error("Library folder sync failed: \(message, privacy: .public)")
     }
 
-    private static func requestDownloadIfNeeded(_ url: URL) {
-        let keys: Set<URLResourceKey> = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
-        guard let values = try? url.resourceValues(forKeys: keys),
-              values.isUbiquitousItem == true,
-              values.ubiquitousItemDownloadingStatus != .current
-        else { return }
-        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-    }
-
     private static func bookmarkData(for url: URL) throws -> Data {
         // iOS marks `.withSecurityScope` unavailable for bookmarks; the resolved
         // URL is still accessed with `startAccessingSecurityScopedResource()`.
@@ -412,18 +517,14 @@ enum FolderSyncService {
     }
 }
 
-nonisolated private func coordinatedReadContents(from url: URL) throws -> KudosBackupContents {
-    let wrapper = try coordinatedReadFileWrapper(from: url)
-    return try KudosBackupContents(fileWrapper: wrapper)
-}
-
-nonisolated private func coordinatedReadFileWrapper(from url: URL) throws -> FileWrapper {
+/// Reads the legacy directory-package sync payload (read-only migration path).
+nonisolated private func coordinatedReadLegacyContents(from url: URL) throws -> KudosBackupContents {
     let coordinator = NSFileCoordinator(filePresenter: nil)
     var coordinationError: NSError?
-    var readResult: Result<FileWrapper, Error>?
+    var readResult: Result<KudosBackupContents, Error>?
     coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
         readResult = Result {
-            try FileWrapper(url: coordinatedURL, options: .immediate)
+            try KudosBackupContents(fileWrapper: FileWrapper(url: coordinatedURL, options: .immediate))
         }
     }
     if let coordinationError { throw coordinationError }
@@ -431,46 +532,209 @@ nonisolated private func coordinatedReadFileWrapper(from url: URL) throws -> Fil
     return try readResult.get()
 }
 
-nonisolated private func coordinatedWriteContents(_ contents: KudosBackupContents, to url: URL) throws {
+nonisolated private func coordinatedReadData(from url: URL) throws -> Data {
+    let coordinator = NSFileCoordinator(filePresenter: nil)
+    var coordinationError: NSError?
+    var readResult: Result<Data, Error>?
+    coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
+        readResult = Result {
+            try Data(contentsOf: coordinatedURL, options: .mappedIfSafe)
+        }
+    }
+    if let coordinationError { throw coordinationError }
+    guard let readResult else { throw FolderSyncError.unreadableSyncFile }
+    return try readResult.get()
+}
+
+nonisolated private func coordinatedReadManifest(from url: URL) throws -> KudosBackupManifest {
+    try KudosBackupContents.decodeManifest(coordinatedReadData(from: url))
+}
+
+/// The subset of remote assets a sync-down actually needs to move: files that
+/// are missing locally or differ from the local copy. `missingAssetCount`
+/// tracks manifest-referenced assets that couldn't be fetched (typically not
+/// yet uploaded by the writing device) so the caller can withhold the
+/// skip-unchanged stamp and retry them on the next sync.
+nonisolated private struct RemoteAssetSelection: Sendable {
+    var epubFiles: [UUID: Data] = [:]
+    var fontFiles: [String: Data] = [:]
+    var missingAssetCount = 0
+}
+
+nonisolated private func readChangedRemoteAssets(
+    in syncDirectoryURL: URL,
+    manifest: KudosBackupManifest
+) -> RemoteAssetSelection {
+    let fileManager = FileManager.default
+    let worksDirectory = syncDirectoryURL.appendingPathComponent(
+        FolderSyncService.worksSubdirectoryName,
+        isDirectory: true
+    )
+    let fontsDirectory = syncDirectoryURL.appendingPathComponent(
+        FolderSyncService.fontsSubdirectoryName,
+        isDirectory: true
+    )
+
+    var selection = RemoteAssetSelection()
+    for work in manifest.works where work.hasEPUB {
+        let remoteURL = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        let localURL = Storage.workAssetURL(
+            identifier: work.assetIdentifier ?? "",
+            fallbackID: work.id
+        )
+        // Genuinely absent remotely (not even an iCloud placeholder): nothing
+        // to fetch. The manifest can claim an EPUB that no longer exists
+        // anywhere (`hasEPUB` outliving a lost file) — restore records that
+        // miss locally, exactly like the old whole-package path, rather than
+        // retrying forever. A late upload is picked up when it materializes as
+        // a placeholder or on the next manifest change.
+        guard remoteAssetExists(remoteURL) else { continue }
+        // Size is the change signal: EPUB replacements virtually never keep the
+        // exact byte count, and the restore path re-validates whatever arrives.
+        let localSize = fileSize(of: localURL)
+        if let localSize, let remoteSize = fileSize(of: remoteURL), localSize == remoteSize {
+            continue
+        }
+        requestDownloadIfNeeded(remoteURL)
+        if let data = try? coordinatedReadData(from: remoteURL) {
+            selection.epubFiles[work.id] = data
+        } else {
+            // Exists but not readable yet (typically a not-yet-downloaded
+            // iCloud file): outstanding, so the skip stamp is withheld and the
+            // next sync-down retries the fetch.
+            selection.missingAssetCount += 1
+        }
+    }
+    for font in manifest.fonts where KudosBackupContents.isSafeFileName(font.fileName) {
+        // Font files are immutable once imported (UUID-based names), so only
+        // locally-missing ones ever need fetching.
+        let localURL = Storage.fontsDirectory.appendingPathComponent(font.fileName)
+        guard !fileManager.fileExists(atPath: localURL.path) else { continue }
+        let remoteURL = fontsDirectory.appendingPathComponent(font.fileName)
+        guard remoteAssetExists(remoteURL) else { continue }
+        requestDownloadIfNeeded(remoteURL)
+        if let data = try? coordinatedReadData(from: remoteURL) {
+            selection.fontFiles[font.fileName] = data
+        } else {
+            selection.missingAssetCount += 1
+        }
+    }
+    return selection
+}
+
+/// Whether a remote asset exists in any form — as a materialized file or as a
+/// legacy-style iCloud placeholder (".name.icloud") standing in for content
+/// that hasn't downloaded yet.
+nonisolated private func remoteAssetExists(_ url: URL) -> Bool {
+    let fileManager = FileManager.default
+    if fileManager.fileExists(atPath: url.path) { return true }
+    let placeholder = url.deletingLastPathComponent()
+        .appendingPathComponent(".\(url.lastPathComponent).icloud")
+    return fileManager.fileExists(atPath: placeholder.path)
+}
+
+nonisolated private func coordinatedWriteSyncDirectory(
+    _ contents: KudosBackupContents,
+    to directoryURL: URL
+) throws {
     let coordinator = NSFileCoordinator(filePresenter: nil)
     var coordinationError: NSError?
     var writeResult: Result<Void, Error>?
-    coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { coordinatedURL in
+    coordinator.coordinate(
+        writingItemAt: directoryURL,
+        options: .forMerging,
+        error: &coordinationError
+    ) { coordinatedURL in
         writeResult = Result {
-            let wrapper = try contents.fileWrapper()
-            // Stage into a temp location and swap it in, so a failed write can never
-            // leave the destination missing — the existing package must survive.
-            // itemReplacementDirectory keeps the staging area on the destination's
-            // own volume; a global temp dir would make the swap a cross-volume move
-            // (EXDEV) for sync folders on external drives.
-            let stagingDirectory = (try? FileManager.default.url(
-                for: .itemReplacementDirectory,
-                in: .userDomainMask,
-                appropriateFor: coordinatedURL,
-                create: true
-            )) ?? FileManager.default.temporaryDirectory
-            let tempURL = stagingDirectory
-                .appendingPathComponent(UUID().uuidString, isDirectory: true)
-            do {
-                try wrapper.write(to: tempURL, options: .atomic, originalContentsURL: nil)
-                if FileManager.default.fileExists(atPath: coordinatedURL.path) {
-                    _ = try FileManager.default.replaceItemAt(
-                        coordinatedURL,
-                        withItemAt: tempURL,
-                        backupItemName: nil,
-                        options: []
-                    )
-                } else {
-                    try FileManager.default.moveItem(at: tempURL, to: coordinatedURL)
-                }
-            } catch {
-                try? FileManager.default.removeItem(at: tempURL)
-                throw error
-            }
+            try writeSyncDirectoryContents(contents, at: coordinatedURL)
         }
     }
     if let coordinationError { throw coordinationError }
     try writeResult?.get()
+}
+
+nonisolated private func writeSyncDirectoryContents(
+    _ contents: KudosBackupContents,
+    at directoryURL: URL
+) throws {
+    let fileManager = FileManager.default
+    let worksDirectory = directoryURL.appendingPathComponent(
+        FolderSyncService.worksSubdirectoryName,
+        isDirectory: true
+    )
+    let fontsDirectory = directoryURL.appendingPathComponent(
+        FolderSyncService.fontsSubdirectoryName,
+        isDirectory: true
+    )
+    try fileManager.createDirectory(at: worksDirectory, withIntermediateDirectories: true)
+    try fileManager.createDirectory(at: fontsDirectory, withIntermediateDirectories: true)
+
+    // Assets first, manifest last: the manifest is the commit point, so a
+    // manifest never references an asset file that wasn't already written.
+    // Each write is individually atomic and unchanged files are left alone
+    // entirely (same inode), which is what lets iCloud Drive upload only the
+    // delta. An interruption leaves the previous manifest — and therefore the
+    // previous consistent view — in place.
+    for (id, data) in contents.epubFiles {
+        try writeIfChanged(data, to: worksDirectory.appendingPathComponent("\(id.uuidString).epub"))
+    }
+    for (fileName, data) in contents.fontFiles
+    where KudosBackupContents.isSafeFileName(fileName) {
+        try writeIfChanged(data, to: fontsDirectory.appendingPathComponent(fileName))
+    }
+
+    try contents.manifestData().write(
+        to: directoryURL.appendingPathComponent(FolderSyncService.manifestFileName),
+        options: .atomic
+    )
+
+    // After the commit point: drop asset files no manifest record references
+    // anymore (permanent deletions). Best-effort — a failure is retried by any
+    // later sync-up. A work still listed in the manifest keeps its remote EPUB
+    // even when this device holds no local copy, so one device can never
+    // discard an EPUB another device preserved.
+    removeOrphans(
+        in: worksDirectory,
+        keeping: Set(contents.manifest.works.map { "\($0.id.uuidString).epub" })
+    )
+    removeOrphans(
+        in: fontsDirectory,
+        keeping: Set(contents.manifest.fonts.map(\.fileName))
+    )
+}
+
+nonisolated private func writeIfChanged(_ data: Data, to url: URL) throws {
+    if let existingSize = fileSize(of: url), existingSize == data.count { return }
+    try data.write(to: url, options: .atomic)
+}
+
+nonisolated private func fileSize(of url: URL) -> Int? {
+    (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+}
+
+nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<String>) {
+    let fileManager = FileManager.default
+    guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return }
+    for name in names {
+        // Map iCloud placeholder names (".X.icloud") back to their real name so
+        // a not-yet-downloaded file is never mistaken for an orphan.
+        var realName = name
+        if realName.hasPrefix("."), realName.hasSuffix(".icloud") {
+            realName = String(realName.dropFirst().dropLast(".icloud".count))
+        }
+        guard !realName.hasPrefix(".") else { continue } // other hidden/system files
+        guard !expected.contains(realName) else { continue }
+        try? fileManager.removeItem(at: directory.appendingPathComponent(name))
+    }
+}
+
+nonisolated private func requestDownloadIfNeeded(_ url: URL) {
+    let keys: Set<URLResourceKey> = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
+    guard let values = try? url.resourceValues(forKeys: keys),
+          values.isUbiquitousItem == true,
+          values.ubiquitousItemDownloadingStatus != .current
+    else { return }
+    try? FileManager.default.startDownloadingUbiquitousItem(at: url)
 }
 
 nonisolated private func coordinatedContentModificationDate(of url: URL) throws -> Date? {

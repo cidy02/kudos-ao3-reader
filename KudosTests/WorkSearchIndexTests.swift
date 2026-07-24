@@ -149,9 +149,7 @@ struct WorkSearchIndexTests {
             defaults: testDefaults()
         )
         // The derived index never travels in the manifest — only real fields do.
-        let manifestJSON = try #require(
-            try document.contents.fileWrapper().fileWrappers?["manifest.json"]?.regularFileContents
-        )
+        let manifestJSON = try document.contents.manifestData()
         #expect(manifestJSON.range(of: Data("searchText".utf8)) == nil)
 
         let targetContext = try makeContext()

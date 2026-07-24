@@ -3,9 +3,10 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-// Serialized for the same reason as FolderSyncTests/KudosBackupTests/PersistenceSyncTests:
-// PersistenceOperationGate is a process-wide static lock that can spuriously contend
-// across concurrently-running test suites.
+// Nested under PersistenceGateSuites (see its doc comment): sweepExpired and the
+// two-device convergence test take PersistenceOperationGate, a process-wide static
+// lock, so they must serialize against the other gate-taking suites too.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct PreservedWorkTests {
@@ -491,4 +492,5 @@ struct PreservedWorkTests {
         try context.save()
         return work
     }
+}
 }

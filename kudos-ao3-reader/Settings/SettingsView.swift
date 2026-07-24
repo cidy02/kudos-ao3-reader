@@ -840,7 +840,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private var activeImportContentTypes: [UTType] {
         switch activeImport {
         case .fonts: [.font]
-        case .backup: [.kudosBackup]
+        // Legacy package type keeps directory-form backups from older versions
+        // selectable; `KudosBackupContents.read(from:)` handles both formats.
+        case .backup: [.kudosBackup, .kudosBackupLegacyPackage]
         case .epub: [Self.epubContentType]
         case .syncFolder: [.folder]
         case nil: [.item] // never presented; keeps the modifier well-formed
