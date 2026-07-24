@@ -535,6 +535,60 @@ struct KudosBackupTests {
         }
     }
 
+    /// The streaming exporter (makeExportPlan + writeArchive) must produce an
+    /// archive equivalent to the in-memory path: same entry names in the same
+    /// order, identical asset bytes, and a manifest differing only in its
+    /// `exportedAt` timestamp. Also covers the lenient-asset rule — a work
+    /// whose EPUB file is missing is skipped without failing the export.
+    @Test func streamedExportMatchesTheInMemoryArchive() throws {
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Streamed Work", author: "Archivist")
+        work.hasEPUB = true
+        let epub = Data("streamed-epub-data".utf8)
+        try epub.write(to: work.fileURL)
+        let ghost = SavedWork(title: "Ghost Work", author: "Archivist")
+        ghost.hasEPUB = true // claims an EPUB, but no file exists on disk
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let inMemory = try KudosBackupService.makeDocument(
+            works: [work, ghost],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        ).contents.zipData()
+
+        let plan = try KudosBackupService.makeExportPlan(
+            works: [work, ghost],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("kudosbackup")
+        defer { try? FileManager.default.removeItem(at: destination) }
+        try KudosBackupService.writeArchive(plan, to: destination)
+
+        let streamed = try Data(contentsOf: destination)
+        let inMemoryZip = try MiniZip(data: inMemory, limits: .backup)
+        let streamedZip = try MiniZip(data: streamed, limits: .backup)
+        #expect(streamedZip.names == inMemoryZip.names)
+        for name in streamedZip.names where name != "manifest.json" {
+            #expect(streamedZip.data(named: name) == inMemoryZip.data(named: name))
+        }
+
+        // Same decoded manifest contents (the two exports differ only in
+        // their independently-captured `exportedAt` timestamps).
+        let decoded = try KudosBackupContents.read(from: destination)
+        let reference = try KudosBackupContents(zipData: inMemory)
+        #expect(decoded.manifest.works == reference.manifest.works)
+        #expect(decoded.manifest.settings == reference.manifest.settings)
+        #expect(decoded.epubFiles[work.id] == epub)
+        #expect(decoded.epubFiles[ghost.id] == nil)
+    }
+
     // MARK: - A2-F1: stale-archive tag-merge safety
 
     /// A2-F1 regression: a stale archive (older than the local tag) must never remove
