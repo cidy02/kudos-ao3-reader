@@ -59,7 +59,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var savedWorkMigrationCompleted = 0
     @State private var savedWorkMigrationTotal = 0
     @State private var savedWorkMigrationTask: Task<Void, Never>?
-    @State private var backupDocument: KudosBackupDocument?
+    @State private var backupExportURL: URL?
+    @State private var isPreparingBackupExport = false
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
@@ -268,6 +269,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     }
 
                     BackupSettingsSection(
+                        isPreparingExport: isPreparingBackupExport,
                         onExport: exportBackup,
                         onImport: { activeImport = .backup }
                     )
@@ -426,12 +428,15 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         .onChange(of: activeImport) { _, kind in
             if let kind { lastPresentedImport = kind }
         }
+        // Item-based exporter: the archive is already streamed to a temp file,
+        // so saving is a file copy — the archive never lives in memory.
         .fileExporter(
             isPresented: $exportingBackup,
-            document: backupDocument,
-            contentType: .kudosBackup,
+            item: backupExportURL.map(KudosBackupArchiveFile.init),
+            contentTypes: [.kudosBackup],
             defaultFilename: "Kudos Backup \(Self.backupDateFormatter.string(from: Date()))"
         ) { result in
+            cleanUpBackupExportFile()
             switch result {
             case .success:
                 backupNotice = BackupNotice(
@@ -444,7 +449,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: error.localizedDescription
                 )
             }
-            backupDocument = nil
+        } onCancellation: {
+            cleanUpBackupExportFile()
         }
         .confirmationDialog(
             "Import this backup?",
@@ -614,8 +620,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     // MARK: Backup export / import
 
     private func exportBackup() {
+        guard !isPreparingBackupExport else { return }
+        let plan: KudosBackupExportPlan
         do {
-            backupDocument = try KudosBackupService.makeDocument(
+            plan = try KudosBackupService.makeExportPlan(
                 works: works,
                 bookmarks: bookmarks,
                 fonts: customFonts,
@@ -623,13 +631,44 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 readingQueues: readingQueues,
                 tombstones: syncTombstones
             )
-            exportingBackup = true
         } catch {
             backupNotice = BackupNotice(
                 title: "Couldn't Create Backup",
                 message: error.localizedDescription
             )
+            return
         }
+
+        // The archive streams to a temp file off the main actor — constant
+        // memory and no UI stall, however large the library is. The exporter
+        // sheet is presented only once the file is complete.
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KudosBackupExport-\(UUID().uuidString)")
+            .appendingPathExtension("kudosbackup")
+        isPreparingBackupExport = true
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try KudosBackupService.writeArchive(plan, to: destination) }
+            }.value
+            isPreparingBackupExport = false
+            switch result {
+            case .success:
+                backupExportURL = destination
+                exportingBackup = true
+            case let .failure(error):
+                backupNotice = BackupNotice(
+                    title: "Couldn't Create Backup",
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func cleanUpBackupExportFile() {
+        if let url = backupExportURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        backupExportURL = nil
     }
 
     private func importBackup(_ result: Result<[URL], Error>) {
@@ -870,14 +909,22 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 }
 
 struct BackupSettingsSection: View {
+    var isPreparingExport = false
     let onExport: () -> Void
     let onImport: () -> Void
 
     var body: some View {
         Section {
             Button(action: onExport) {
-                Label("Export Backup…", systemImage: "square.and.arrow.up")
+                HStack {
+                    Label("Export Backup…", systemImage: "square.and.arrow.up")
+                    if isPreparingExport {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
             }
+            .disabled(isPreparingExport)
             Button(action: onImport) {
                 Label("Import Backup…", systemImage: "square.and.arrow.down")
             }
