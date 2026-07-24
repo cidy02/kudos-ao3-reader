@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Shared sizing, shadow, and theme-color tokens for Library/Home carousel cards
 /// (Work, Reading Queue, Collection), so all three read as the same visual weight
@@ -26,16 +31,46 @@ enum CarouselCardMetrics {
 /// user's Dynamic Type setting, preserving its aspect ratio — every compact
 /// carousel card (Work, Reading Queue, Collection) embeds one of these so the
 /// whole card grows together at large accessibility text sizes instead of
-/// only getting taller while staying pinned at 164pt wide. `width`/`height`
-/// use the same `relativeTo: .body` scale curve, so their ratio stays exactly
-/// 164:228 at every Dynamic Type size. `@ScaledMetric` only tracks environment
-/// changes when declared directly on a `DynamicProperty`-conforming type —
-/// it can't be shared via a static helper — so each carousel card view embeds
-/// a plain `var` of this type rather than redeclaring the two `@ScaledMetric`
+/// only getting taller while staying pinned at 164pt wide, but never past the
+/// screen: at extreme accessibility sizes the proportional scale alone can
+/// exceed the device width, clipping the card's trailing edge (confirmed live
+/// on iPhone 17 at accessibility-XXXL). `width`/`height` scale from the same
+/// `relativeTo: .body` curve *before* clamping, then both are multiplied by
+/// the identical `clampRatio` — so the 164:228 ratio holds exactly whether or
+/// not the clamp is actually engaged, rather than only being preserved in the
+/// unclamped case. `@ScaledMetric` only tracks environment changes when
+/// declared directly on a `DynamicProperty`-conforming type — it can't be
+/// shared via a static helper — so each carousel card view embeds a plain
+/// `var` of this type rather than redeclaring the two `@ScaledMetric`
 /// properties itself.
 struct ScaledCarouselCardSize: DynamicProperty {
-    @ScaledMetric(relativeTo: .body) var width: CGFloat = CarouselCardMetrics.width
-    @ScaledMetric(relativeTo: .body) var height: CGFloat = CarouselCardMetrics.height
+    @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat = CarouselCardMetrics.width
+    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = CarouselCardMetrics.height
+
+    /// The widest a card may ever render: the screen/window width minus 16pt
+    /// of padding on each edge (this app's established carousel/grid margin —
+    /// see `WorkCarouselSection`/`LibraryEntityGridView`), so a maximally
+    /// scaled card still leaves visible breathing room rather than touching
+    /// or crossing the screen edge.
+    private var maxWidth: CGFloat {
+        #if os(iOS)
+        UIScreen.main.bounds.width - 32
+        #elseif os(macOS)
+        (NSScreen.main?.frame.width ?? 800) - 32
+        #else
+        800
+        #endif
+    }
+
+    /// 1 when the proportionally scaled width already fits; otherwise the
+    /// factor that brings it down to `maxWidth` — applied to *both*
+    /// dimensions so the aspect ratio survives the clamp too.
+    private var clampRatio: CGFloat {
+        min(1, maxWidth / scaledWidth)
+    }
+
+    var width: CGFloat { scaledWidth * clampRatio }
+    var height: CGFloat { scaledHeight * clampRatio }
 }
 
 extension CarouselCardMetrics {

@@ -290,9 +290,16 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             // by a full row at large accessibility text sizes, since the
             // stats row is a FlowLayout. A single .frame(width:) is proposed
             // identically in every pass, so both queries wrap the same way.
+            //
+            // Deliberately no .fixedSize(vertical:) here (unlike an earlier
+            // version of this fix): that would lock the content to its own
+            // ideal height, decoupling it from a taller `minHeight` floor —
+            // which is exactly what content's trailing Spacer(minLength:)
+            // needs to expand into so the Reading-progress/footer group
+            // pins to the card's true bottom instead of floating wherever
+            // the metadata above it happens to end.
             .frame(width: contentWidth, alignment: .topLeading)
             .padding(12)
-            .fixedSize(horizontal: false, vertical: true)
             .frame(minHeight: cardSize.height, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
