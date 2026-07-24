@@ -163,6 +163,30 @@ final class AppRouter {
         }
     }
 
+    /// An author route requested mid-modal (a Comments sheet's byline or reply-quote
+    /// tap) that must wait for the *current* sheet/full-screen-cover chain to actually
+    /// finish tearing down before it pushes — see `requestAuthorProfileAfterDismiss`.
+    private(set) var pendingAuthorProfileAfterDismiss: AO3AuthorRoute?
+
+    /// Queues an author route to open once the caller's modal presentation reports
+    /// its dismiss animation complete. Callers still call `dismiss()` themselves right
+    /// after; the presenter's own `.sheet`/`.fullScreenCover` `onDismiss` closure must
+    /// call `openPendingAuthorProfileAfterDismiss()` to actually push it — that closure
+    /// only fires once SwiftUI's dismiss transition genuinely finishes, replacing a
+    /// guessed-duration sleep with the real completion signal. See `CommentsSheetModifier`.
+    func requestAuthorProfileAfterDismiss(_ route: AO3AuthorRoute) {
+        pendingAuthorProfileAfterDismiss = route
+    }
+
+    /// Call from a modal presenter's `onDismiss` closure. No-ops if nothing is queued
+    /// (e.g. the presentation the closure belongs to wasn't the one a route was queued
+    /// against) — safe to call from more than one presenter in a nested-sheet chain.
+    func openPendingAuthorProfileAfterDismiss() {
+        guard let route = pendingAuthorProfileAfterDismiss else { return }
+        pendingAuthorProfileAfterDismiss = nil
+        openAuthorProfile(route)
+    }
+
     /// Active tab stack takes the pending route (if any) and clears it.
     func consumePendingAuthorProfile() -> AO3AuthorRoute? {
         let route = pendingAuthorProfile
