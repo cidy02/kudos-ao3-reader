@@ -134,8 +134,7 @@ nonisolated struct MiniZip {
                 || localOffsetRaw == 0xFFFF_FFFF {
                 let resolved = try MiniZip.parseZip64Extra(
                     in: data,
-                    start: nameEnd,
-                    end: extraEnd,
+                    over: nameEnd ..< extraEnd,
                     needsUncompressedSize: uncompressedSizeRaw == 0xFFFF_FFFF,
                     needsCompressedSize: compressedSizeRaw == 0xFFFF_FFFF,
                     needsLocalHeaderOffset: localOffsetRaw == 0xFFFF_FFFF
@@ -348,13 +347,13 @@ nonisolated struct MiniZip {
     /// doesn't cover — or no block at all — rejects the archive.
     private static func parseZip64Extra(
         in data: Data,
-        start: Int,
-        end: Int,
+        over extraField: Range<Int>,
         needsUncompressedSize: Bool,
         needsCompressedSize: Bool,
         needsLocalHeaderOffset: Bool
     ) throws -> Zip64ExtraValues {
-        var cursor = start
+        let end = extraField.upperBound
+        var cursor = extraField.lowerBound
         while let fieldsStart = addChecked(cursor, 4), fieldsStart <= end {
             guard let headerID = data.safeU16(cursor),
                   let blockSize = data.safeU16(cursor + 2),

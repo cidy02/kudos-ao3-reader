@@ -195,9 +195,18 @@ dependency-free `MiniZip` writer, read by its hardened reader) containing
 directory-package backups remain importable read-only. Backups are merge-only,
 whether imported manually or folded in from the Library Sync Folder:
 
-- Export is local and network-independent; the exported archive is written
-  atomically by the document system, so a partially-written archive never
-  replaces a previous backup, and ZIP structure makes truncation detectable.
+- Export is local and network-independent, and streams: the archive is written
+  to a temporary file entry by entry (EPUBs read in bounded chunks, never held
+  in memory whole), then saved as a plain file copy — a partially-written
+  archive never replaces a previous backup, and ZIP structure makes truncation
+  detectable.
+- The writer emits ZIP64 records exactly when a size, count, or offset outgrows
+  its classic 32/16-bit ZIP field, so archives are not capped at 4 GB or
+  65,535 entries. The hardened reader follows ZIP64 records (and rejects
+  saturated fields that lack them), within limits of 250,000 entries, 1 GB per
+  entry, and 64 GB total. Restore still materializes assets per entry while
+  merging, so imports of enormous archives remain bounded by device memory —
+  streaming restore is a known deferral.
 - Manifest version 6 includes sync timestamps, progress timestamps, delete state,
   collection membership, queue membership freshness, `assetIdentifier`, and
   `SyncTombstone` records, while still decoding versions 1 through 5.
