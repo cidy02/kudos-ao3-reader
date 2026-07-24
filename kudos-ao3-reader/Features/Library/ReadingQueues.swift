@@ -147,6 +147,11 @@ struct ReadingQueueDetailView: View {
     /// `WorkReorderDropDelegate.dropEntered` and committed to `ReadingQueueService`
     /// only in `performDrop` — see that type's doc comment for why (A6-F1).
     @State private var pendingCompactOrder: [UUID]?
+    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
+    /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
+    /// tracks a card that's grown wider with Dynamic Type instead of assuming the
+    /// static base width. Not `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
 
     private var isReordering: Bool {
         #if os(iOS)
@@ -348,12 +353,19 @@ struct ReadingQueueDetailView: View {
         #endif
     }
 
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen.
+    private var compactGridColumns: [GridItem] {
+        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+    }
+
     /// Apple Books-style two-up grid — the same cover cards every carousel already
-    /// uses, wrapping down the page instead of scrolling horizontally. Collapses to
-    /// one column at accessibility Dynamic Type sizes (see `compactCardColumns`).
+    /// uses, wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: CarouselCardMetrics.compactCardColumns(for: dynamicTypeSize), spacing: 16) {
+            LazyVGrid(columns: compactGridColumns, spacing: 16) {
                 ForEach(compactDisplayedWorks) { work in
                     compactCard(work)
                 }

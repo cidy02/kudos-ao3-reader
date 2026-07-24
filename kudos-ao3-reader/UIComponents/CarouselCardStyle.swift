@@ -75,25 +75,18 @@ struct ScaledCarouselCardSize: DynamicProperty {
 
 extension CarouselCardMetrics {
     /// Column layout for a wrapping grid of compact cover cards (Work, Reading
-    /// Queue, Collection) — `count` columns normally, collapsing to a single column
-    /// at accessibility Dynamic Type sizes. These cards are much narrower than
-    /// WorkDetail's quick-action tiles, so even two columns is already the failure
-    /// mode: card text wraps character-by-character with nowhere left to grow. One
-    /// column is what actually stays legible. Mirrors the same
-    /// `isAccessibilitySize` pattern as `WorkDetailView.quickActionColumns`.
-    static func compactCardColumns(
-        for dynamicTypeSize: DynamicTypeSize,
-        count: Int = 2,
-        spacing: CGFloat = 16
-    ) -> [GridItem] {
-        let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : count
-        return Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
-    }
-
-    /// Same collapse-to-one-column rule for an adaptive grid, whose column count
-    /// otherwise comes purely from `minimum` width and never accounts for Dynamic
-    /// Type — a card that fits two-up by raw pixel width can still be far too
-    /// narrow for its scaled text once Dynamic Type is at an accessibility size.
+    /// Queue, Collection, Account work/bookmark lists) — column count comes from
+    /// the card's actual *scaled* width (see `ScaledCarouselCardSize`) via
+    /// `.adaptive(minimum:)`, so it tracks every Dynamic Type step continuously
+    /// instead of only collapsing at the five accessibility sizes. A fixed
+    /// `count`-based grid (the previous `compactCardColumns`, removed) still let a
+    /// scaled-wide card overflow its column at ordinary large text sizes — e.g.
+    /// "Extra Large"/"XXL"/"XXXL" — where `isAccessibilitySize` is false but the
+    /// card is already wider than half the screen; `LazyVGrid` doesn't clip an
+    /// oversized child, so the two cards in a row rendered overlapping. At
+    /// accessibility sizes specifically, `.adaptive(minimum:)` alone would still
+    /// fit two cards by raw pixel width even though their scaled text can't, so
+    /// those sizes still collapse to a single column explicitly below.
     static func adaptiveCardColumns(
         for dynamicTypeSize: DynamicTypeSize,
         minimum: CGFloat = CarouselCardMetrics.width,
