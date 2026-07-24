@@ -301,8 +301,15 @@ enum ReaderStylesheet {
         if resolvedStyle.justify {
             blockRules += "text-align: justify !important; -webkit-hyphens: auto; hyphens: auto;"
         }
-        if resolvedStyle.letterSpacing != 0 {
-            blockRules += "letter-spacing: \(resolvedStyle.letterSpacing)em !important;"
+        // Readium (iOS) only accepts non-negative letter-spacing (see
+        // ReadiumReaderStyleMapper.preferences); clamp the same way here so a
+        // shared persisted `readerLetterSpacing` value can't render differently
+        // across platforms (UI-9 — `letterSpacingRange`'s negative half is only
+        // ever reachable via a crafted/legacy value, since every current slider
+        // already restricts entry to the non-negative range).
+        let clampedLetterSpacing = max(0, resolvedStyle.letterSpacing)
+        if clampedLetterSpacing != 0 {
+            blockRules += "letter-spacing: \(clampedLetterSpacing)em !important;"
         }
         if resolvedStyle.wordSpacing != 0 {
             blockRules += "word-spacing: \(resolvedStyle.wordSpacing)em !important;"

@@ -40,4 +40,30 @@ struct ReaderThemeTests {
         #expect(ReaderTheme.light.appBaseBackground == nil)
         #expect(ReaderTheme.light.appElevatedBackground == nil)
     }
+
+    // MARK: - Letter-spacing clamp (UI-9)
+
+    /// Readium (iOS) only accepts non-negative letter-spacing
+    /// (`ReadiumReaderStyleMapper.preferences` clamps with `max(0, ...)`), while
+    /// the shared `letterSpacingRange` constant still spans -0.03...0.12. The CSS
+    /// renderer (macOS's actual rendering path) must clamp the same way so a
+    /// shared persisted `readerLetterSpacing` value can never render differently
+    /// across platforms.
+    @Test func negativeLetterSpacingIsClampedOutOfRenderedCSS() {
+        let style = ReaderTextStyle(customize: true, letterSpacing: -0.02)
+        let css = ReaderStylesheet.css(theme: .light, font: ReaderFontOption.builtIns[0], style: style)
+        #expect(!css.contains("letter-spacing"))
+    }
+
+    @Test func zeroLetterSpacingEmitsNoRule() {
+        let style = ReaderTextStyle(customize: true, letterSpacing: 0)
+        let css = ReaderStylesheet.css(theme: .light, font: ReaderFontOption.builtIns[0], style: style)
+        #expect(!css.contains("letter-spacing"))
+    }
+
+    @Test func positiveLetterSpacingStillRenders() {
+        let style = ReaderTextStyle(customize: true, letterSpacing: 0.04)
+        let css = ReaderStylesheet.css(theme: .light, font: ReaderFontOption.builtIns[0], style: style)
+        #expect(css.contains("letter-spacing: 0.04em !important;"))
+    }
 }

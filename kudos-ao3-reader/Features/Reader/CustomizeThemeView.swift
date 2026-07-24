@@ -11,6 +11,7 @@ import WebKit
 struct CustomizeThemeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
 
     /// The reader's effective theme (mirrors the app theme while linked). Selecting a
@@ -72,7 +73,7 @@ struct CustomizeThemeView: View {
                     }
 
                     Section {
-                        Toggle("Customize", isOn: $customize.animation(.easeInOut(duration: 0.2)))
+                        Toggle("Customize", isOn: $customize.animation(reduceMotion ? nil : .easeInOut(duration: 0.2)))
 
                         Group {
                             sliderRow("Line Spacing", icon: "arrow.up.and.down.text.horizontal",
@@ -166,18 +167,31 @@ struct CustomizeThemeView: View {
             themeManager.readerTheme = option
         } label: {
             VStack(spacing: 7) {
-                ZStack {
-                    Circle().fill(option.backgroundColor)
-                    Text("Aa")
-                        .font(.system(size: 18, weight: .semibold, design: .serif))
-                        .foregroundStyle(option.textColor)
-                }
-                .frame(width: 54, height: 54)
-                .overlay {
-                    Circle().strokeBorder(
-                        selected ? Color.accentColor : Color.primary.opacity(0.12),
-                        lineWidth: selected ? 3 : 1
-                    )
+                ZStack(alignment: .topTrailing) {
+                    ZStack {
+                        Circle().fill(option.backgroundColor)
+                        Text("Aa")
+                            .font(.system(size: 18, weight: .semibold, design: .serif))
+                            .foregroundStyle(option.textColor)
+                            .accessibilityHidden(true)
+                    }
+                    .frame(width: 54, height: 54)
+                    .overlay {
+                        Circle().strokeBorder(
+                            selected ? Color.accentColor : Color.primary.opacity(0.12),
+                            lineWidth: selected ? 3 : 1
+                        )
+                    }
+                    // A non-color selection cue — the accent-ring alone doesn't
+                    // read for color-vision-deficient or VoiceOver users.
+                    if selected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.accentColor)
+                            .background(Circle().fill(.white))
+                            .offset(x: 4, y: -4)
+                    }
                 }
                 Text(option.title)
                     .font(.caption2.weight(selected ? .semibold : .regular))
@@ -187,6 +201,8 @@ struct CustomizeThemeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     // MARK: Sliders
@@ -212,13 +228,19 @@ struct CustomizeThemeView: View {
             }
             .foregroundStyle(customize ? .primary : .secondary)
             Slider(value: value, in: range)
+                // VoiceOver otherwise announces an anonymous slider with a raw
+                // percentage of the range, which can contradict the visible
+                // "1.45"-style readout — give it the same label/value TextSizeSlider
+                // already uses (Text Size, next door).
+                .accessibilityLabel(title)
+                .accessibilityValue(valueLabel ?? String(format: "%.2f", value.wrappedValue))
         }
         .padding(.vertical, 2)
     }
 
     private func reset() {
         // Text Size is a separate primary control now, so Reset Theme leaves it alone.
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion) {
             customize = false
             boldText = false
             fontID = "system"

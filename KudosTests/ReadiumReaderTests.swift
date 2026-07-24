@@ -184,5 +184,82 @@ struct ReadiumReaderTests {
         let viewport = Self.viewport([(Self.readingOrder[2], 0.0 ... 1.0)], total: 0.0 ... 1.0)
         #expect(!ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: []))
     }
+
+    // MARK: - Nested TOC flattening (A7-F8)
+
+    @Test func nestedTOCChildrenBecomeTheirOwnNavigableSections() {
+        let readingOrder: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/part1.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/chapter2.xhtml")
+        ]
+        // A common hierarchical TOC shape: a Part heading with two Chapter
+        // children nested under it, none listed at the top level.
+        let toc: [ReadiumShared.Link] = [
+            ReadiumShared.Link(
+                href: "OEBPS/part1.xhtml",
+                title: "Part One",
+                children: [
+                    ReadiumShared.Link(href: "OEBPS/chapter1.xhtml", title: "Chapter 1"),
+                    ReadiumShared.Link(href: "OEBPS/chapter2.xhtml", title: "Chapter 2")
+                ]
+            )
+        ]
+
+        let sections = ReadiumBook.buildSections(toc: toc, readingOrder: readingOrder)
+
+        #expect(sections.count == 3)
+        #expect(sections.map(\.title) == ["Part One", "Chapter 1", "Chapter 2"])
+        // Before flattening, an unvisited child fell back to `.other` and the
+        // chapter sheet's `.filter { $0.kind != .other }` hid it entirely —
+        // the exact A7-F8 symptom.
+        #expect(sections.allSatisfy { $0.kind != .other })
+    }
+
+    @Test func deeplyNestedTOCFlattensInDocumentOrder() {
+        let readingOrder: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/part1.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/chapter1a.xhtml")
+        ]
+        let toc: [ReadiumShared.Link] = [
+            ReadiumShared.Link(
+                href: "OEBPS/part1.xhtml",
+                title: "Part One",
+                children: [
+                    ReadiumShared.Link(
+                        href: "OEBPS/chapter1.xhtml",
+                        title: "Chapter 1",
+                        children: [
+                            ReadiumShared.Link(href: "OEBPS/chapter1a.xhtml", title: "Chapter 1a")
+                        ]
+                    )
+                ]
+            )
+        ]
+
+        let sections = ReadiumBook.buildSections(toc: toc, readingOrder: readingOrder)
+
+        #expect(sections.map(\.title) == ["Part One", "Chapter 1", "Chapter 1a"])
+    }
+
+    @Test func topLevelOnlyTOCStillWorksUnchanged() {
+        // Regression guard: a flat (non-nested) TOC — the shape every existing
+        // fixture uses — must resolve exactly as before flattening was added.
+        let readingOrder: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/preface.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml")
+        ]
+        let toc: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/preface.xhtml", title: "Preface"),
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml", title: "Chapter 1")
+        ]
+
+        let sections = ReadiumBook.buildSections(toc: toc, readingOrder: readingOrder)
+
+        #expect(sections.map(\.title) == ["Preface", "Chapter 1"])
+        #expect(sections[0].kind == .preface)
+        #expect(sections[1].kind == .chapter)
+    }
 }
 #endif

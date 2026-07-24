@@ -1,8 +1,5 @@
 import SwiftUI
 import WebKit
-#if canImport(UIKit)
-import UIKit
-#endif
 
 // Backs the legacy WKWebView reader (`ReaderView`), which is macOS-only now — iOS
 // uses the Readium navigator. Excluded from iOS builds.
@@ -32,16 +29,14 @@ final class ReaderController: NSObject {
     /// viewport's leading edge, in both scrolled and paged modes. Already gated
     /// against stale loads; see `ReaderBridgeMessage`.
     var onProgressFraction: ((Double) -> Void)?
-
-    #if os(iOS)
-    /// Called when the reading area is tapped (toggles the chrome).
-    var onTap: (() -> Void)?
-    /// Called when a downward scroll should hide the chrome (passes hidden = true).
-    var onChromeHiddenChange: ((Bool) -> Void)?
-    private var chromeHidden = false
-    private var lastScrollY: CGFloat = 0
-    private var scrollObservation: NSKeyValueObservation?
-    #endif
+    /// Called when in-content navigation targets a different spine file than the
+    /// one currently loaded (e.g. a cross-chapter note link). The host resolves
+    /// the URL against its own spine array and returns `true` if it will handle
+    /// the navigation itself (via `load(_:readAccess:...)`) — the raw WebKit
+    /// navigation is then cancelled so `currentIndex` and every state derived
+    /// from it stay authoritative (A7-F5). Same-document fragment links never
+    /// reach this callback; they're allowed to navigate in place.
+    var onCrossSpineNavigation: ((URL) -> Bool)?
 
     private let proxy = ReaderScriptProxy()
     private var loadedURL: URL?
@@ -67,56 +62,8 @@ final class ReaderController: NSObject {
         proxy.controller = self
         configuration.userContentController.add(proxy, name: "reader")
         webView.navigationDelegate = self
-        #if os(macOS)
         webView.setValue(false, forKey: "drawsBackground")
-        #endif
-        #if os(iOS)
-        // The web view runs full-screen; let the EPUB's own CSS env(safe-area-*)
-        // padding handle the insets instead of the scroll view double-insetting.
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        installReaderGestures()
-        #endif
     }
-
-    #if os(iOS)
-    /// Keeps the controller's notion of chrome visibility in sync with the view
-    /// (e.g. after a tap toggle) so scroll-driven hiding doesn't fight it.
-    func syncChromeHidden(_ hidden: Bool) {
-        chromeHidden = hidden
-    }
-
-    /// A tap toggles the chrome; a downward scroll hides it. The recognizer doesn't
-    /// cancel touches, so text selection, links and page swipes still work.
-    private func installReaderGestures() {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleReaderTap))
-        tap.cancelsTouchesInView = false
-        tap.delegate = self
-        webView.addGestureRecognizer(tap)
-
-        scrollObservation = webView.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
-            guard let self else { return }
-            let y = scrollView.contentOffset.y
-            let dy = y - lastScrollY
-            lastScrollY = y
-            // Only a genuine user-driven scroll hides the chrome. Showing the chrome
-            // changes the safe area, which shifts the content and nudges contentOffset;
-            // without this guard the observer read that shift as a downward scroll and
-            // instantly re-hid the chrome, so a tap appeared to "bounce" the page
-            // instead of toggling the controls. Layout shifts aren't during a drag.
-            guard scrollView.isDragging || scrollView.isDecelerating else { return }
-            // Auto-hide only on a deliberate downward scroll; revealing is tap-only,
-            // so a chapter load (offset resets to 0) never flashes the chrome back.
-            if dy > 6, y > 0, !chromeHidden {
-                chromeHidden = true
-                onChromeHiddenChange?(true)
-            }
-        }
-    }
-
-    @objc private func handleReaderTap() {
-        onTap?()
-    }
-    #endif
 
     /// Updates style/layout settings, re-applying immediately if a page is loaded.
     /// `safeTop`/`safeBottom` are the device's fixed safe-area insets (passed from the
@@ -182,6 +129,27 @@ final class ReaderController: NSObject {
                                           generation: generation)
         )
     }
+
+    /// Idempotent teardown: clears every escaping callback and stops any
+    /// in-flight load. The callback closures are what capture `ReaderView`'s
+    /// `@State` storage (which owns this controller) — leaving them set after
+    /// dismissal is what keeps the retain cycle alive across repeated
+    /// open/close (A7-F3). Deliberately leaves `navigationDelegate` and the
+    /// "reader" script message handler alone: `navigationDelegate` is a `weak`
+    /// WKWebView property (doesn't retain, so it isn't part of the cycle), and
+    /// nothing re-installs the handler on a later `.onAppear` — clearing it
+    /// here would silently and permanently break the JS↔host bridge (layout
+    /// injection, external-link routing) if this controller ever became
+    /// visible again without being deallocated.
+    func teardown() {
+        onReachedEnd = nil
+        onReachedStart = nil
+        onReachedScrollBottom = nil
+        onOpenExternalURL = nil
+        onProgressFraction = nil
+        onCrossSpineNavigation = nil
+        webView.stopLoading()
+    }
 }
 
 extension ReaderController: WKNavigationDelegate {
@@ -203,32 +171,36 @@ extension ReaderController: WKNavigationDelegate {
     /// only ever loads local `file://` chapters, so *any* attempt to navigate to a
     /// web URL is a tapped content link — cancel it and hand it off. The app's own
     /// `loadFileURL` and in-chapter anchor jumps (`file://` fragments) keep their
-    /// `file` scheme and proceed in place.
+    /// `file` scheme and proceed in place. A `file://` link to a *different* spine
+    /// file (a cross-chapter note) is handed to `onCrossSpineNavigation` so the
+    /// host can update `currentIndex` before navigating (A7-F5); same-document
+    /// fragments fall through to `.allow` unchanged.
     func webView(_: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if let url = navigationAction.request.url,
-           let scheme = url.scheme?.lowercased(),
-           scheme == "http" || scheme == "https" {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
             decisionHandler(.cancel)
             onOpenExternalURL?(url)
             return
         }
+        if url.scheme == "file", isCrossSpineNavigation(to: url), onCrossSpineNavigation?(url) == true {
+            decisionHandler(.cancel)
+            return
+        }
         decisionHandler(.allow)
     }
-}
 
-#if os(iOS)
-extension ReaderController: UIGestureRecognizerDelegate {
-    /// Let our tap coexist with the web view's own gestures (selection, links, swipes).
-    func gestureRecognizer(
-        _: UIGestureRecognizer,
-        shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
-    ) -> Bool {
-        true
+    /// True when `url` (its fragment ignored, since `URL.path` never includes one)
+    /// points at a different file than the currently loaded chapter.
+    private func isCrossSpineNavigation(to url: URL) -> Bool {
+        guard let loadedURL else { return false }
+        return url.path != loadedURL.path
     }
 }
-#endif
 
 /// Weak forwarder so the web view's content controller doesn't retain the controller.
 private final class ReaderScriptProxy: NSObject, WKScriptMessageHandler {

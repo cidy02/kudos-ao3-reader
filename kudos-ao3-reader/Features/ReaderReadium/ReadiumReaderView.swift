@@ -269,13 +269,15 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     /// Resolves `toc`'s `Link`s to spine indices (by href, fragment/path-insensitive)
     /// and reconciles them against the full `readingOrder` into normalized sections.
-    private static func buildSections(
+    /// Internal (not `private`) so `ReadiumReaderTests` can exercise the nested-TOC
+    /// flattening (A7-F8) directly with synthetic fixtures.
+    static func buildSections(
         toc: [ReadiumShared.Link],
         readingOrder: [ReadiumShared.Link]
     ) -> [ReaderSection] {
         let spineHrefs = readingOrder.map(\.href)
         let spineKeys = spineHrefs.map(ReaderSectionBuilder.hrefKey)
-        let rawTOC: [ReaderSectionBuilder.RawTOCEntry] = toc.compactMap { link in
+        let rawTOC: [ReaderSectionBuilder.RawTOCEntry] = flattenTOC(toc).compactMap { link in
             let key = ReaderSectionBuilder.hrefKey(link.href)
             guard let spineIndex = spineKeys.firstIndex(of: key) else { return nil }
             return ReaderSectionBuilder.RawTOCEntry(
@@ -284,6 +286,19 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             )
         }
         return ReaderSectionBuilder.build(tocEntries: rawTOC, spineHrefs: spineHrefs)
+    }
+
+    /// Readium models a hierarchical TOC (EPUB2 NCX / EPUB3 nav Part→Chapter
+    /// nesting) via `Link.children`; flatten depth-first in document order so a
+    /// chapter nested under a Part heading still gets its own navigable
+    /// `RawTOCEntry` instead of silently disappearing (A7-F8 — the chapter sheet
+    /// only ever iterated the top-level array, so a nested chapter's spine item
+    /// fell back to `.other` and was hidden from the index). Any duplicate spine
+    /// target (e.g. a Part link sharing its first child's href) is already
+    /// resolved correctly by `ReaderSectionBuilder.build`'s own spine-indexed
+    /// dictionary, so no extra dedup is needed here.
+    private static func flattenTOC(_ links: [ReadiumShared.Link]) -> [ReadiumShared.Link] {
+        links.flatMap { [$0] + flattenTOC($0.children) }
     }
 
     // MARK: EPUBNavigatorDelegate
@@ -654,7 +669,7 @@ struct ReadiumReaderView: View {
             .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
             .statusBarHidden(!chromeVisible)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
-            .animation(.easeInOut(duration: 0.25), value: book.chromeHidden)
+            .animation(unlessReduced: .easeInOut(duration: 0.25), value: book.chromeHidden)
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
             .task(id: bookLoadToken) { await openBook() }
@@ -847,7 +862,9 @@ struct ReadiumReaderView: View {
             .monospacedDigit()
             .lineLimit(1)
             .padding(.horizontal, 16)
-            .frame(height: 40)
+            // minHeight (not a fixed height) so the capsule can grow at large
+            // Dynamic Type sizes instead of clipping the scaled footnote text.
+            .frame(minHeight: 40)
             .glassEffect(.regular, in: .capsule)
             .opacity(label.isEmpty ? 0 : 1)
     }
@@ -897,6 +914,7 @@ struct ReadiumReaderView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.scrolls)
         .preferredColorScheme(readerTheme.colorScheme)
     }
 

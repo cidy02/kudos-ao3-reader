@@ -1,9 +1,6 @@
 import OSLog
 import SwiftData
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 // The legacy WKWebView reader is the **macOS** reader implementation only — iOS uses
 // the Readium navigator (see `BookReaderView`), so this whole file is excluded from
@@ -11,8 +8,8 @@ import UIKit
 #if os(macOS)
 
 /// A basic EPUB reader with selectable themes, fonts, and scrolled/paged layout
-/// (including a two-page spread on wide windows, except iPhone). Display options
-/// live in a hideable inspector sidebar.
+/// (including a two-page spread on wide windows). Display options live in a
+/// hideable inspector sidebar.
 struct ReaderView: View {
     @Bindable var work: SavedWork
 
@@ -53,13 +50,6 @@ struct ReaderView: View {
     @State private var availableWidth: CGFloat = 0
     @State private var workActions = AO3WorkActionsModel()
 
-    #if os(iOS)
-    /// Whether the reader "chrome" (top bar + bottom chapter controls) is shown.
-    /// Starts visible, then the reader becomes immersive: a tap toggles it and
-    /// scrolling down hides it (Apple Books–style).
-    @State private var chromeVisible = true
-    #endif
-
     /// Window width at which a two-page spread becomes available.
     private let twoPageThreshold: CGFloat = 820
 
@@ -71,16 +61,9 @@ struct ReaderView: View {
         availableWidth >= twoPageThreshold
     }
 
-    /// Two-page spread is offered on iPad and macOS, but never on iPhone — its
-    /// screen is too narrow for a useful spread. (iPad reports `os(iOS)` too, so this
-    /// is a runtime idiom check, not a compile-time one.)
-    private var twoPageSpreadAvailable: Bool {
-        #if os(iOS)
-        return UIDevice.current.userInterfaceIdiom != .phone
-        #else
-        return true
-        #endif
-    }
+    /// Always true: this legacy reader only ever builds for macOS (iOS uses the
+    /// Readium navigator), where there's no iPhone-width constraint to rule out.
+    private var twoPageSpreadAvailable: Bool { true }
 
     private var columns: Int {
         (readingMode == .paged && twoPageEnabled && twoPageSpreadAvailable && isWideEnough) ? 2 : 1
@@ -90,13 +73,6 @@ struct ReaderView: View {
     private var theme: ReaderTheme {
         themeManager.readerTheme
     }
-
-    #if os(iOS)
-    /// iPhone only (iPad reports `os(iOS)` too): drives the slimmed-down bottom bar.
-    private var isPhone: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
-    }
-    #endif
 
     private var currentFont: ReaderFontOption {
         ReaderFontOption.current(id: fontID, customFonts: customFonts)
@@ -120,20 +96,9 @@ struct ReaderView: View {
         Int(textStyle.resolved.margin)
     }
 
-    /// Applies the current style/layout to the controller, including the device's
-    /// fixed safe-area insets so the full-screen reader pads past the notch / home
-    /// indicator (constant regardless of the chrome).
+    /// Applies the current style/layout to the controller.
     private func configureController() {
-        #if os(iOS)
-        let insets = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?.safeAreaInsets ?? .zero
-        controller.configure(css: css, mode: readingMode, columns: columns, margin: resolvedMargin,
-                             safeTop: Int(insets.top.rounded()), safeBottom: Int(insets.bottom.rounded()))
-        #else
         controller.configure(css: css, mode: readingMode, columns: columns, margin: resolvedMargin)
-        #endif
     }
 
     /// Changes to any of these require re-applying layout to the loaded page.
@@ -156,11 +121,6 @@ struct ReaderView: View {
                 ReaderPageSkeleton()
             } else if document != nil, readRoot != nil, chapterCount > 0 {
                 WebView(webView: controller.webView)
-                    // Full-screen so toggling the chrome (status bar / home indicator /
-                    // nav bar) never resizes the web view — that resize was what made
-                    // paged padding shift and the page "bounce" on tap. The EPUB content
-                    // pads itself past the unsafe areas via env(safe-area-inset-*).
-                    .ignoresSafeArea()
                     .overlay(alignment: .bottom) { bottomControls }
                     .contentShape(Rectangle())
                     .modifier(PageSwipe(next: goNext, prev: goPrevious))
@@ -184,9 +144,6 @@ struct ReaderView: View {
         .preferredColorScheme(theme.colorScheme)
         .ao3WorkActions(workActions, workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0, auth: auth)
         .navigationTitle(work.title)
-        #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
             .toolbar {
                 ActionToolbar {
                     ToolbarIconButton(title: "Chapters", systemImage: "list.bullet") {
@@ -207,21 +164,6 @@ struct ReaderView: View {
                     .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
                 }
             }
-        #if os(iOS)
-            // Chapters / Display open as clean half-height sheets that float over the
-            // text instead of a side inspector that crowds the reading column.
-            .sheet(isPresented: readerInspectorBinding) { readerSheet }
-            // Immersive reading: no tab bar, and the top bar hides while reading and
-            // reappears on tap. The status bar and home indicator follow the chrome.
-            .toolbar(.hidden, for: .tabBar)
-            .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
-            .statusBarHidden(!chromeVisible)
-            .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
-            .animation(.easeInOut(duration: 0.25), value: chromeVisible)
-            // The web view swallows the system edge swipe and immersive mode hides the
-            // nav bar, so add our own left-edge swipe-to-go-back.
-            .edgeSwipeToGoBack { dismiss() }
-        #else
             .inspector(isPresented: readerInspectorBinding) {
                 Group {
                     if router.panel == .readerChapters {
@@ -232,7 +174,6 @@ struct ReaderView: View {
                 }
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-        #endif
             .task(id: work.id) { await load() }
             .onAppear(perform: wireController)
             .onDisappear {
@@ -241,6 +182,10 @@ struct ReaderView: View {
                 flushProgress()
                 try? modelContext.save()
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
+                // Breaks the controller ↔ view retain cycle (A7-F3) — safe if
+                // this instance reappears later, since `wireController()`
+                // re-populates every callback `teardown()` clears.
+                controller.teardown()
                 // Leaving the reader closes its panel so it doesn't linger as state.
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
                     router.panel = .none
@@ -334,38 +279,18 @@ struct ReaderView: View {
         }
     }
 
-    /// The bottom chapter controls. On iOS they're part of the reader chrome and
-    /// only appear when it's revealed (tap); on macOS they stay docked.
-    @ViewBuilder
+    /// The bottom chapter controls; this legacy reader's chrome stays docked
+    /// (macOS-only — no immersive tap-to-hide mode here).
     private var bottomControls: some View {
-        #if os(iOS)
-        if chromeVisible {
-            chapterControls
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-        #else
         chapterControls
-        #endif
     }
 
-    /// iPhone drops the prev/next buttons (navigate by swipe / Chapters list) and uses
-    /// a slimmer pill; iPad and macOS keep the full set of controls.
     private var chapterControls: some View {
         GlassEffectContainer(spacing: 16) {
             HStack(spacing: 12) {
-                #if os(iOS)
-                if !isPhone { navButton(systemName: "chevron.left", action: goPrevious, disabled: prevDisabled) }
-                #else
                 navButton(systemName: "chevron.left", action: goPrevious, disabled: prevDisabled)
-                #endif
-
                 positionPill
-
-                #if os(iOS)
-                if !isPhone { navButton(systemName: "chevron.right", action: goNext, disabled: nextDisabled) }
-                #else
                 navButton(systemName: "chevron.right", action: goNext, disabled: nextDisabled)
-                #endif
             }
         }
         .padding(.bottom, 12)
@@ -383,17 +308,11 @@ struct ReaderView: View {
     }
 
     private var positionPill: some View {
-        // 25% smaller on iPhone, where it stands alone without flanking buttons.
-        #if os(iOS)
-        let compact = isPhone
-        #else
-        let compact = false
-        #endif
-        return Text(positionLabel)
-            .font((compact ? Font.caption2 : Font.footnote).weight(.medium))
+        Text(positionLabel)
+            .font(.footnote.weight(.medium))
             .monospacedDigit()
-            .padding(.horizontal, compact ? 12 : 16)
-            .frame(height: compact ? 33 : 44)
+            .padding(.horizontal, 16)
+            .frame(height: 44)
             .glassEffect(.regular, in: .capsule)
     }
 
@@ -451,35 +370,6 @@ struct ReaderView: View {
         }
     }
 
-    #if os(iOS)
-    /// Chapters / Display, presented as a clean half-height sheet over the text.
-    /// Uses the system's opaque sheet background (not a translucent material) so the
-    /// reader text never bleeds through and the segmented controls keep full contrast.
-    private var readerSheet: some View {
-        NavigationStack {
-            Group {
-                if router.panel == .readerChapters {
-                    List { chapterRows }
-                } else {
-                    ReaderOptionsForm(twoPageAvailable: isWideEnough)
-                }
-            }
-            .navigationTitle(router.panel == .readerChapters ? "Chapters" : "Display & Themes")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { router.panel = .none }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .presentationContentInteraction(.scrolls)
-        // The reader's settings sheet follows the reader theme (dark in Dark, etc.).
-        .preferredColorScheme(theme.colorScheme)
-    }
-    #endif
-
     private func jump(to index: Int) {
         landNextChapterOnLastPage = false
         if index == currentIndex {
@@ -490,9 +380,6 @@ struct ReaderView: View {
         } else {
             currentIndex = index // triggers load via onChange
         }
-        #if os(iOS)
-        router.panel = .none // dismiss the chapters sheet after picking
-        #endif
     }
 
     // MARK: Options sidebar
@@ -537,19 +424,18 @@ struct ReaderView: View {
             progressBridge.recordProgress(fraction)
             persistProgressIfDue()
         }
-        #if os(iOS)
-        controller.onTap = { toggleChrome() }
-        controller.onChromeHiddenChange = { hidden in chromeVisible = !hidden }
-        #endif
+        // A cross-chapter note link resolves against the loaded spine and jumps
+        // there through the authoritative `currentIndex` path (A7-F5) — a raw
+        // in-webview navigation would otherwise leave the pill/TOC/progress/
+        // comments scope pointed at the chapter that was current before the tap.
+        controller.onCrossSpineNavigation = { url in
+            guard let document, let index = document.spineURLs.firstIndex(where: { $0.path == url.path })
+            else { return false }
+            landNextChapterOnLastPage = false
+            currentIndex = index // triggers load via onChange
+            return true
+        }
     }
-
-    #if os(iOS)
-    /// Toggles the reader chrome and keeps the controller's scroll logic in sync.
-    private func toggleChrome() {
-        chromeVisible.toggle()
-        controller.syncChromeHidden(!chromeVisible)
-    }
-    #endif
 
     /// Marks a completed work finished once the reader reaches its end. WIPs and
     /// works of unknown completeness are left for a manual "Mark as Finished", so

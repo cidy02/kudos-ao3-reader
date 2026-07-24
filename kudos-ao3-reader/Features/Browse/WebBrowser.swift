@@ -412,6 +412,17 @@ struct WebView: PlatformViewRepresentable {
     }
 
     func updateNSView(_: WKWebView, context _: Context) {}
+
+    /// Stops any in-flight load when this representable leaves the hierarchy —
+    /// the generic wrapper had no lifecycle hook at all before this (A7-F3).
+    /// Deliberately minimal: it must stay safe for both the reader's
+    /// long-lived controller-owned web view and the browser's tab-persistent
+    /// one, so it only halts loading rather than tearing down delegates —
+    /// callers that own a controller (e.g. `ReaderController.teardown()`)
+    /// still do that part themselves.
+    static func dismantleNSView(_ nsView: WKWebView, coordinator _: ()) {
+        nsView.stopLoading()
+    }
     #else
     func makeUIView(context _: Context) -> WKWebView {
         webView
