@@ -75,56 +75,42 @@ struct ScaledCarouselCardSize: DynamicProperty {
 
 extension CarouselCardMetrics {
     /// Column layout for a wrapping grid of compact cover cards (Work, Reading
-    /// Queue, Collection) — `count` columns normally, collapsing to a single column
-    /// at accessibility Dynamic Type sizes. These cards are much narrower than
-    /// WorkDetail's quick-action tiles, so even two columns is already the failure
-    /// mode: card text wraps character-by-character with nowhere left to grow. One
-    /// column is what actually stays legible. Mirrors the same
-    /// `isAccessibilitySize` pattern as `WorkDetailView.quickActionColumns`.
-    static func compactCardColumns(
-        for dynamicTypeSize: DynamicTypeSize,
-        count: Int = 2,
-        spacing: CGFloat = 16
-    ) -> [GridItem] {
-        let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : count
-        return Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
-    }
-
-    /// Same collapse-to-one-column rule for an adaptive grid, whose column count
-    /// otherwise comes purely from `minimum` width and never accounts for Dynamic
-    /// Type — a card that fits two-up by raw pixel width can still be far too
-    /// narrow for its scaled text once Dynamic Type is at an accessibility size.
+    /// Queue, Collection): as many columns as the *scaled* card width actually
+    /// fits, collapsing to a single column at accessibility Dynamic Type sizes —
+    /// where even two columns is already the failure mode, because these cards are
+    /// much narrower than WorkDetail's quick-action tiles and their text wraps
+    /// character-by-character with nowhere left to grow. Mirrors the same
+    /// `isAccessibilitySize` pattern as
+    /// `WorkDetailOverviewSections.quickActionColumns`.
+    ///
+    /// The rule has to track `minimum` (the card's live
+    /// `ScaledCarouselCardSize.width`) rather than a fixed column *count*, because
+    /// these cards pin their own outer width — `WorkSummaryCardSurface` renders at
+    /// exactly `cardSize.width` (`HomeCards.swift`) — so a fixed `.flexible()`
+    /// column just lets an oversized card overhang and collide with its neighbour:
+    /// at `.xLarge` on a 375pt-wide phone the card is ~183pt inside a 163.5pt
+    /// column, and `isAccessibilitySize` doesn't fire until well past that.
+    /// `.adaptive` is the only variant that reacts to the card growing at the
+    /// large-but-not-accessibility sizes in between.
+    ///
+    /// `tolerance` covers the opposite, sub-pixel case: on a 375pt-wide phone at
+    /// the default text size two 164pt cards plus a 16pt gap need 344pt while the
+    /// padded grid offers 343 — a 1pt miss that would otherwise cost a whole
+    /// column and waste half the screen. Shaving it off `minimum` keeps two-up
+    /// there, and the cards then overhang their column by under 1pt each, which is
+    /// invisible (and is exactly what the previous fixed-2 layout already did at
+    /// that width). Keep it small: it is a rounding allowance, not a lever for
+    /// forcing a column that genuinely does not fit.
     static func adaptiveCardColumns(
         for dynamicTypeSize: DynamicTypeSize,
         minimum: CGFloat = CarouselCardMetrics.width,
-        spacing: CGFloat = 16
+        spacing: CGFloat = 16,
+        tolerance: CGFloat = 2
     ) -> [GridItem] {
         if dynamicTypeSize.isAccessibilitySize {
             return [GridItem(.flexible(), spacing: spacing)]
         }
-        return [GridItem(.adaptive(minimum: minimum), spacing: spacing)]
-    }
-
-    /// The right rule for a full-width "see all" cover-card grid: fixed `count`
-    /// columns on **compact** width (iPhone portrait) so it never drops below its
-    /// intended two-up at a normal text size — `.adaptive(minimum:)` alone falls to
-    /// a single column on 375pt-wide iPhones, where two 164pt columns miss the
-    /// available width by ~1pt — but **adaptive** on regular width (iPad, macOS,
-    /// landscape) so it widens to 3–4 columns instead of leaving two over-wide ones.
-    /// Collapses to one column at accessibility Dynamic Type sizes on either width
-    /// (both delegates already do). Shared so the Home and Reading-Queue see-all
-    /// grids apply one rule instead of drifting.
-    static func responsiveCardColumns(
-        for dynamicTypeSize: DynamicTypeSize,
-        horizontalSizeClass: UserInterfaceSizeClass?,
-        minimum: CGFloat = CarouselCardMetrics.width,
-        count: Int = 2,
-        spacing: CGFloat = 16
-    ) -> [GridItem] {
-        if horizontalSizeClass == .compact {
-            return compactCardColumns(for: dynamicTypeSize, count: count, spacing: spacing)
-        }
-        return adaptiveCardColumns(for: dynamicTypeSize, minimum: minimum, spacing: spacing)
+        return [GridItem(.adaptive(minimum: max(1, minimum - tolerance)), spacing: spacing)]
     }
 }
 

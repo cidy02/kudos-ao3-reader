@@ -11,7 +11,6 @@ struct HomeSectionListView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Mirrors the scaled width the cover cards themselves render at (see
     /// `ScaledCarouselCardSize`), so the see-all grid's adaptive minimum tracks a
     /// card grown wider by Dynamic Type instead of the static 164pt base — same
@@ -206,15 +205,11 @@ struct HomeSectionListView: View {
         .cardList()
     }
 
-    /// Two-up on iPhone (never fewer, even on 375pt widths), widening on
-    /// iPad/macOS, one column at accessibility Dynamic Type sizes (see
-    /// `responsiveCardColumns`).
+    /// As many columns as the live scaled card width fits — two-up on iPhone at
+    /// normal text sizes, wider on iPad/macOS, fewer as the cards grow, one at
+    /// accessibility sizes (see `adaptiveCardColumns`).
     private var compactGridColumns: [GridItem] {
-        CarouselCardMetrics.responsiveCardColumns(
-            for: dynamicTypeSize,
-            horizontalSizeClass: horizontalSizeClass,
-            minimum: cardSize.width
-        )
+        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
     }
 
     /// Apple Books-style grid — the same cover cards every carousel already uses,

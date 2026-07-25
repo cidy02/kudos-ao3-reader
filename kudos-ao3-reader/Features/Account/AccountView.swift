@@ -567,7 +567,8 @@ struct AccountView: View {
 
     /// Three icon cards per row normally; reflows to two at accessibility Dynamic
     /// Type sizes rather than shrinking each tile's text via `minimumScaleFactor`
-    /// into illegibility (mirrors `WorkDetailView.quickActionColumns`' 3→2 idiom).
+    /// into illegibility (mirrors
+    /// `WorkDetailOverviewSections.quickActionColumns`' 3→2 idiom).
     private var shortcutGridColumns: [GridItem] {
         let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
         return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
