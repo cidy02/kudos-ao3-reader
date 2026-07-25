@@ -546,6 +546,91 @@ struct AO3CommentsParseTests {
         #expect(page.comments.first?.replies.isEmpty == true)
     }
 
+    /// CAA-7: past depth 5 with more than one child, otwarchive stops
+    /// rendering the subtree and substitutes a single id-less
+    /// `<li class="comment"><p>(<a href="/comments/<id>">N more comments in
+    /// this thread</a>)</p></li>`. Two independent cutoffs on one page must
+    /// each parse as their own distinct, stable, non-`isDeleted` node with
+    /// their count/link preserved — not collide onto the shared "(This
+    /// comment couldn't be read.)" tombstone identity the generic id-less
+    /// fallback previously gave every such node.
+    @Test func deepThreadCutoffsParseAsDistinctNonCollidingNodes() throws {
+        let html = """
+        <html><body><div id="comments_placeholder"><ol class="thread">
+          <li class="comment" id="comment_1">
+            <h4 class="heading byline"><a href="/users/First/pseuds/First">First</a></h4>
+            <blockquote class="userstuff"><p>Root one.</p></blockquote>
+          </li>
+          <li>
+            <ol class="thread">
+              <li class="comment" id="comment_2">
+                <h4 class="heading byline"><a href="/users/Second/pseuds/Second">Second</a></h4>
+                <blockquote class="userstuff"><p>Reply one.</p></blockquote>
+              </li>
+              <li>
+                <ol class="thread">
+                  <li class="comment">
+                    <p>(<a href="/comments/9001">3 more comments in this thread</a>)</p>
+                  </li>
+                </ol>
+              </li>
+            </ol>
+          </li>
+          <li class="comment" id="comment_3">
+            <h4 class="heading byline"><a href="/users/Third/pseuds/Third">Third</a></h4>
+            <blockquote class="userstuff"><p>Root two.</p></blockquote>
+          </li>
+          <li>
+            <ol class="thread">
+              <li class="comment" id="comment_4">
+                <h4 class="heading byline"><a href="/users/Fourth/pseuds/Fourth">Fourth</a></h4>
+                <blockquote class="userstuff"><p>Reply two.</p></blockquote>
+              </li>
+              <li>
+                <ol class="thread">
+                  <li class="comment">
+                    <p>(<a href="/comments/9002">7 more comments in this thread</a>)</p>
+                  </li>
+                </ol>
+              </li>
+            </ol>
+          </li>
+        </ol></div></body></html>
+        """
+        let page = try AO3Client.parseCommentsPage(html, page: 1)
+        #expect(page.comments.map(\.id) == [1, 3])
+
+        let replyOne = try #require(page.comments.first?.replies.first)
+        let cutoffA = try #require(replyOne.replies.first)
+        let replyTwo = try #require(page.comments.last?.replies.first)
+        let cutoffB = try #require(replyTwo.replies.first)
+
+        // Distinct, stable, always-negative identity — never the shared
+        // empty-id hash both would have collided onto before this fix.
+        #expect(cutoffA.id != cutoffB.id)
+        #expect(cutoffA.id < 0 && cutoffB.id < 0)
+
+        // Neither is misclassified as a deleted-comment tombstone.
+        #expect(!cutoffA.isDeleted && !cutoffB.isDeleted)
+        #expect(cutoffA.isThreadCutoff && cutoffB.isThreadCutoff)
+
+        // Count and continuation link survive instead of being discarded.
+        #expect(cutoffA.cutoffCount == 3)
+        #expect(cutoffB.cutoffCount == 7)
+        #expect(cutoffA.cutoffThreadPath == "/comments/9001")
+        #expect(cutoffB.cutoffThreadPath == "/comments/9002")
+        #expect(cutoffA.cutoffThreadURL?.absoluteString == "https://archiveofourown.org/comments/9001")
+        #expect(cutoffB.cutoffThreadURL?.absoluteString == "https://archiveofourown.org/comments/9002")
+
+        // A cutoff has no replies of its own — AO3 collapsed the rest.
+        #expect(cutoffA.replies.isEmpty && cutoffB.replies.isEmpty)
+
+        // Stable across re-parses of the same page (not process-random).
+        let reparsed = try AO3Client.parseCommentsPage(html, page: 1)
+        let reparsedCutoffA = try #require(reparsed.comments.first?.replies.first?.replies.first)
+        #expect(reparsedCutoffA.id == cutoffA.id)
+    }
+
     // MARK: Avatars
 
     /// AO3 serves its own logo (`/images/skins/iconsets/...`) as the icon for any

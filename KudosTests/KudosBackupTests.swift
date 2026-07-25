@@ -3,14 +3,15 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-// Serialized: several tests here and in FolderSyncTests/PersistenceSyncTests exercise
-// PersistenceOperationGate, a process-wide static gate that's meaningfully global in
-// the real app (only one instance ever runs) but can spuriously contend across
-// concurrently-running test suites otherwise.
+// Nested under PersistenceGateSuites (see its doc comment): these tests exercise
+// PersistenceOperationGate, a process-wide static gate, so they must serialize
+// against FolderSyncTests/PersistenceSyncTests/PreservedWorkTests too, not just
+// within this suite.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
-    @Test func packageRoundTripPreservesManifestAndAssets() throws {
+    @Test func archiveRoundTripPreservesManifestAndAssets() throws {
         let defaults = try testDefaults()
         defaults.set("sepia", forKey: "appTheme")
         defaults.set(21.0, forKey: "readerFontPt")
@@ -38,7 +39,7 @@ struct KudosBackupTests {
             try? FileManager.default.removeItem(at: font.fileURL)
         }
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [bookmark],
             fonts: [font],
@@ -48,14 +49,14 @@ struct KudosBackupTests {
         let backupURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("kudosbackup")
-        try document.contents.fileWrapper().write(
-            to: backupURL,
-            options: .atomic,
-            originalContentsURL: nil
-        )
+        try contents.zipData().write(to: backupURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: backupURL) }
         let decoded = try KudosBackupContents.read(from: backupURL)
 
+        // The `.kudosbackup` on disk is a single regular file — a real ZIP.
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: backupURL.path, isDirectory: &isDirectory))
+        #expect(!isDirectory.boolValue)
         #expect(decoded.manifest.version == KudosBackupManifest.currentVersion)
         #expect(decoded.manifest.works.first?.title == "Backup Work")
         #expect(decoded.manifest.works.first?.userTags == ["Comfort Read"])
@@ -91,7 +92,7 @@ struct KudosBackupTests {
         let persisted = try #require(sourceContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(persisted.verifiedAuthorIdentities == [identity])
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [persisted],
             bookmarks: [],
             fonts: [],
@@ -106,7 +107,7 @@ struct KudosBackupTests {
         let targetContext = ModelContext(targetContainer)
 
         _ = try KudosBackupService.restore(
-            document.contents,
+            contents,
             into: targetContext,
             defaults: try testDefaults()
         )
@@ -114,7 +115,7 @@ struct KudosBackupTests {
         let restored = try #require(targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.author == "Avery Writes")
         #expect(restored.verifiedAuthorIdentities.isEmpty)
-        #expect(document.contents.manifest.version == KudosBackupManifest.currentVersion)
+        #expect(contents.manifest.version == KudosBackupManifest.currentVersion)
     }
 
     @Test func restoreMergesRecordsTagsAssetsAndSettings() throws {
@@ -140,7 +141,7 @@ struct KudosBackupTests {
         )
         defer { try? FileManager.default.removeItem(at: archivedWork.fileURL) }
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archivedWork],
             bookmarks: [archivedBookmark],
             fonts: [],
@@ -166,7 +167,7 @@ struct KudosBackupTests {
         let targetDefaults = try testDefaults()
 
         let summary = try KudosBackupService.restore(
-            document.contents,
+            contents,
             into: context,
             defaults: targetDefaults
         )
@@ -219,7 +220,7 @@ struct KudosBackupTests {
         work.epubPreservationStatus = .preserved
         try sourceContext.save()
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -230,7 +231,7 @@ struct KudosBackupTests {
         let targetContainer = try ModelContainer(for: schema, configurations: [configuration])
         let targetContext = ModelContext(targetContainer)
         let summary = try KudosBackupService.restore(
-            document.contents,
+            contents,
             into: targetContext,
             defaults: try testDefaults()
         )
@@ -266,7 +267,7 @@ struct KudosBackupTests {
         )
         archivedWork.ao3WorkID = 13_579
         archivedWork.markModified(newerArchiveDate)
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archivedWork],
             bookmarks: [],
             fonts: [],
@@ -286,7 +287,7 @@ struct KudosBackupTests {
         context.insert(existing)
 
         _ = try KudosBackupService.restore(
-            document.contents,
+            contents,
             into: context,
             defaults: try testDefaults()
         )
@@ -313,7 +314,7 @@ struct KudosBackupTests {
             sourceURL: "https://archiveofourown.org/downloads/24680/work.epub"
         )
         archivedWork.markModified(newerArchiveDate)
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archivedWork],
             bookmarks: [],
             fonts: [],
@@ -332,7 +333,7 @@ struct KudosBackupTests {
         context.insert(existing)
 
         _ = try KudosBackupService.restore(
-            document.contents,
+            contents,
             into: context,
             defaults: try testDefaults()
         )
@@ -367,7 +368,7 @@ struct KudosBackupTests {
         try? FileManager.default.removeItem(at: work.fileURL)
         try sourceContext.save()
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -378,7 +379,7 @@ struct KudosBackupTests {
         let targetContainer = try ModelContainer(for: schema, configurations: [configuration])
         let targetContext = ModelContext(targetContainer)
         _ = try KudosBackupService.restore(
-            document.contents,
+            contents,
             into: targetContext,
             defaults: try testDefaults()
         )
@@ -473,11 +474,166 @@ struct KudosBackupTests {
             fonts: [],
             settings: .capture(defaults: try testDefaults())
         )
-        let wrapper = try KudosBackupContents(manifest: manifest).fileWrapper()
+        let zipData = try KudosBackupContents(manifest: manifest).zipData()
 
         #expect(throws: KudosBackupError.self) {
-            _ = try KudosBackupContents(fileWrapper: wrapper)
+            _ = try KudosBackupContents(zipData: zipData)
         }
+    }
+
+    /// The current writer produces a single ZIP file, but backups exported by
+    /// pre-archive versions are directory packages — those must remain
+    /// importable forever via the same `read(from:)` entry point.
+    @Test func legacyDirectoryPackageBackupRemainsReadable() throws {
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Legacy Work", author: "Archivist")
+        let epub = Data("legacy-epub-data".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let contents = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+
+        // Write the old on-disk shape by hand — production code no longer can.
+        let packageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("kudosbackup")
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: try contents.manifestData()),
+            "Works": FileWrapper(directoryWithFileWrappers: [
+                "\(work.id.uuidString).epub": FileWrapper(regularFileWithContents: epub)
+            ]),
+            "Fonts": FileWrapper(directoryWithFileWrappers: [:])
+        ])
+        try wrapper.write(to: packageURL, options: .atomic, originalContentsURL: nil)
+        defer { try? FileManager.default.removeItem(at: packageURL) }
+
+        let decoded = try KudosBackupContents.read(from: packageURL)
+        #expect(decoded.manifest.works.first?.title == "Legacy Work")
+        #expect(decoded.epubFiles[work.id] == epub)
+    }
+
+    /// A truncated archive — the partially-written state an interrupted copy
+    /// or crash could leave behind — must never decode as a valid backup.
+    @Test func truncatedArchiveIsRejectedAsInvalid() throws {
+        let manifest = KudosBackupManifest(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            settings: .capture(defaults: try testDefaults())
+        )
+        let zipData = try KudosBackupContents(manifest: manifest).zipData()
+
+        let truncated = zipData.prefix(zipData.count / 2)
+        #expect(throws: KudosBackupError.self) {
+            _ = try KudosBackupContents(zipData: Data(truncated))
+        }
+    }
+
+    /// The streaming exporter (makeExportPlan + writeArchive) must produce an
+    /// archive equivalent to the in-memory path: same entry names in the same
+    /// order, identical asset bytes, and a manifest differing only in its
+    /// `exportedAt` timestamp. Also covers the lenient-asset rule — a work
+    /// whose EPUB file is missing is skipped without failing the export.
+    @Test func streamedExportMatchesTheInMemoryArchive() throws {
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Streamed Work", author: "Archivist")
+        work.hasEPUB = true
+        let epub = Data("streamed-epub-data".utf8)
+        try epub.write(to: work.fileURL)
+        let ghost = SavedWork(title: "Ghost Work", author: "Archivist")
+        ghost.hasEPUB = true // claims an EPUB, but no file exists on disk
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        let inMemory = try KudosBackupService.makeContents(
+            works: [work, ghost],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        ).zipData()
+
+        let plan = try KudosBackupService.makeExportPlan(
+            works: [work, ghost],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("kudosbackup")
+        defer { try? FileManager.default.removeItem(at: destination) }
+        try KudosBackupService.writeArchive(plan, to: destination)
+
+        let streamed = try Data(contentsOf: destination)
+        let inMemoryZip = try MiniZip(data: inMemory, limits: .backup)
+        let streamedZip = try MiniZip(data: streamed, limits: .backup)
+        #expect(streamedZip.names == inMemoryZip.names)
+        for name in streamedZip.names where name != "manifest.json" {
+            #expect(streamedZip.data(named: name) == inMemoryZip.data(named: name))
+        }
+
+        // Same decoded manifest contents (the two exports differ only in
+        // their independently-captured `exportedAt` timestamps).
+        let decoded = try KudosBackupContents.read(from: destination)
+        let reference = try KudosBackupContents(zipData: inMemory)
+        #expect(decoded.manifest.works == reference.manifest.works)
+        #expect(decoded.manifest.settings == reference.manifest.settings)
+        #expect(decoded.epubFiles[work.id] == epub)
+        #expect(decoded.epubFiles[ghost.id] == nil)
+    }
+
+    /// The streaming writer itself has no ceilings (ZIP64), so `writeArchive`
+    /// must refuse — before writing anything — any export the reader's
+    /// `.backup` limits would reject on import: entry count, per-file size,
+    /// and total size all stay symmetric between export and restore.
+    @Test func exportRefusesArchivesTheReaderWouldReject() throws {
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ExportCaps-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        let assetURL = staging.appendingPathComponent("asset.epub")
+        try Data(count: 100).write(to: assetURL)
+        let plan = KudosBackupExportPlan(
+            manifestData: Data(#"{"version":7}"#.utf8),
+            assets: [.init(entryName: "Works/asset.epub", fileURL: assetURL)]
+        )
+        let destination = staging.appendingPathComponent("out.kudosbackup")
+
+        func limits(entries: Int = 10, single: Int = 1_000, total: Int = 1_000) -> MiniZip.Limits {
+            MiniZip.Limits(
+                maxEntryCount: entries,
+                maxSingleEntryUncompressedSize: single,
+                maxTotalUncompressedSize: total,
+                maxCompressionRatio: 1100
+            )
+        }
+
+        // Manifest + 1 asset = 2 entries > 1; the 100-byte asset > 50; and
+        // 13-byte manifest + 100-byte asset > 60.
+        #expect(throws: KudosBackupExportError.self) {
+            try KudosBackupService.writeArchive(plan, to: destination, limits: limits(entries: 1))
+        }
+        #expect(throws: KudosBackupExportError.self) {
+            try KudosBackupService.writeArchive(plan, to: destination, limits: limits(single: 50))
+        }
+        #expect(throws: KudosBackupExportError.self) {
+            try KudosBackupService.writeArchive(plan, to: destination, limits: limits(total: 60))
+        }
+        // Preflight failures never create the destination file at all.
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+
+        // The same plan passes under the real `.backup` limits, and the
+        // resulting archive parses under the same reader profile.
+        try KudosBackupService.writeArchive(plan, to: destination)
+        let written = try MiniZip(data: Data(contentsOf: destination), limits: .backup)
+        #expect(written.names == ["manifest.json", "Works/asset.epub"])
     }
 
     // MARK: - A2-F1: stale-archive tag-merge safety
@@ -501,7 +657,7 @@ struct KudosBackupTests {
         staleWork.markModified(olderArchiveDate)
         sourceContext.insert(staleWork)
         try sourceContext.save()
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [staleWork],
             bookmarks: [],
             fonts: [],
@@ -519,7 +675,7 @@ struct KudosBackupTests {
         try context.save()
 
         _ = try KudosBackupService.restore(
-            staleDocument.contents,
+            staleContents,
             into: context,
             defaults: try testDefaults()
         )
@@ -536,7 +692,7 @@ struct KudosBackupTests {
         ])
         let archivedWork = SavedWork(title: "Idempotent Work", author: "Writer")
         archivedWork.tags = [Tag(name: "found family")]
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archivedWork],
             bookmarks: [],
             fonts: [],
@@ -548,8 +704,8 @@ struct KudosBackupTests {
         let container = try ModelContainer(for: schema, configurations: [configuration])
         let context = ModelContext(container)
 
-        _ = try KudosBackupService.restore(document.contents, into: context, defaults: try testDefaults())
-        _ = try KudosBackupService.restore(document.contents, into: context, defaults: try testDefaults())
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
 
         let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.tags.map(\.name) == ["found family"])
@@ -572,7 +728,7 @@ struct KudosBackupTests {
 
         let sourceWork = SavedWork(id: workID, title: "Corrupted Restore", author: "Writer")
         sourceWork.markModified(olderArchiveDate)
-        let baseDocument = try KudosBackupService.makeDocument(
+        let baseContents = try KudosBackupService.makeContents(
             works: [sourceWork],
             bookmarks: [],
             fonts: [],
@@ -580,7 +736,7 @@ struct KudosBackupTests {
             defaults: try testDefaults()
         )
         let corruptContents = KudosBackupContents(
-            manifest: baseDocument.contents.manifest,
+            manifest: baseContents.manifest,
             epubFiles: [workID: Data("not-an-epub".utf8)],
             fontFiles: [:]
         )
@@ -640,7 +796,7 @@ struct KudosBackupTests {
         let workID = UUID()
 
         let sourceWork = SavedWork(id: workID, title: "Hostile Blob", author: "Writer")
-        let baseDocument = try KudosBackupService.makeDocument(
+        let baseContents = try KudosBackupService.makeContents(
             works: [sourceWork],
             bookmarks: [],
             fonts: [],
@@ -653,7 +809,7 @@ struct KudosBackupTests {
             ]
         )
         let hostileContents = KudosBackupContents(
-            manifest: baseDocument.contents.manifest,
+            manifest: baseContents.manifest,
             epubFiles: [workID: hostileEPUB],
             fontFiles: [:]
         )
@@ -697,7 +853,7 @@ struct KudosBackupTests {
         // itself did — not test setup.
         let staleWork = SavedWork(id: workID, title: "Deleted Work", author: "Writer")
         staleWork.markModified(olderArchiveDate)
-        let baseDocument = try KudosBackupService.makeDocument(
+        let baseContents = try KudosBackupService.makeContents(
             works: [staleWork],
             bookmarks: [],
             fonts: [],
@@ -705,7 +861,7 @@ struct KudosBackupTests {
             defaults: try testDefaults()
         )
         let staleContents = KudosBackupContents(
-            manifest: baseDocument.contents.manifest,
+            manifest: baseContents.manifest,
             epubFiles: [workID: try Data(contentsOf: EPUBTests.sampleEPUB)],
             fontFiles: [:]
         )
@@ -737,4 +893,5 @@ struct KudosBackupTests {
         defaults.removePersistentDomain(forName: name)
         return defaults
     }
+}
 }

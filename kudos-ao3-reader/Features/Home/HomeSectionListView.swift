@@ -11,13 +11,6 @@ struct HomeSectionListView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Mirrors the scaled width the cover cards themselves render at (see
-    /// `ScaledCarouselCardSize`), so the see-all grid's adaptive minimum tracks a
-    /// card grown wider by Dynamic Type instead of the static 164pt base — same
-    /// reasoning as `LibraryEntityGridView.cardSize`. Safe as `private` here
-    /// because this view has an explicit `init` (no synthesized memberwise init to
-    /// drag down to `private`).
-    private var cardSize = ScaledCarouselCardSize()
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
@@ -35,6 +28,11 @@ struct HomeSectionListView: View {
     @State private var showingFilters = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
+    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
+    /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
+    /// tracks a card that's grown wider with Dynamic Type instead of assuming the
+    /// static base width. Not `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
 
     /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
     /// chevron mid-selection doesn't strand the works you'd already picked — without
@@ -205,9 +203,11 @@ struct HomeSectionListView: View {
         .cardList()
     }
 
-    /// As many columns as the live scaled card width fits — two-up on iPhone at
-    /// normal text sizes, wider on iPad/macOS, fewer as the cards grow, one at
-    /// accessibility sizes (see `adaptiveCardColumns`).
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen. Two-up on iPhone at normal text sizes, wider
+    /// on iPad/macOS, fewer as the cards grow, one at accessibility sizes.
     private var compactGridColumns: [GridItem] {
         CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
     }

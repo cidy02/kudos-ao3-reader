@@ -1,38 +1,26 @@
 import Foundation
 import OSLog
 import SwiftData
-import SwiftUI
 import UniformTypeIdentifiers
 
 // Backup archive schema/restore logic is cohesive; avoid behavior refactors for lint.
 // swiftlint:disable file_length
 
 extension UTType {
-    /// A directory-backed document package containing a JSON manifest and assets.
+    /// A single ZIP archive (with the `.kudosbackup` extension) containing a
+    /// JSON manifest and assets.
     static let kudosBackup = UTType(
+        filenameExtension: "kudosbackup",
+        conformingTo: .zip
+    )!
+
+    /// The pre-archive directory-package form of the same extension. Read-only
+    /// legacy support: kept so backups exported by older versions remain
+    /// selectable in the import picker; nothing writes this form anymore.
+    static let kudosBackupLegacyPackage = UTType(
         filenameExtension: "kudosbackup",
         conformingTo: .package
     )!
-}
-
-struct KudosBackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] {
-        [.kudosBackup]
-    }
-
-    let contents: KudosBackupContents
-
-    init(contents: KudosBackupContents) {
-        self.contents = contents
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        contents = try KudosBackupContents(fileWrapper: configuration.file)
-    }
-
-    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
-        try contents.fileWrapper()
-    }
 }
 
 nonisolated struct KudosBackupContents {
@@ -50,6 +38,9 @@ nonisolated struct KudosBackupContents {
         self.fontFiles = fontFiles
     }
 
+    /// Legacy read path for the pre-archive directory-package format. Kept so
+    /// old exported backups and not-yet-migrated sync folders stay readable;
+    /// nothing writes this format anymore.
     nonisolated init(fileWrapper root: FileWrapper) throws {
         guard root.isDirectory, let rootFiles = root.fileWrappers,
               let manifestData = rootFiles["manifest.json"]?.regularFileContents
@@ -83,29 +74,81 @@ nonisolated struct KudosBackupContents {
         fontFiles = fonts
     }
 
+    /// Reads a backup from either physical format: a single `.kudosbackup` ZIP
+    /// archive (current) or a legacy directory package (read-only support).
     nonisolated static func read(from url: URL) throws -> Self {
-        let wrapper = try FileWrapper(url: url, options: .immediate)
-        return try Self(fileWrapper: wrapper)
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        if isDirectory {
+            let wrapper = try FileWrapper(url: url, options: .immediate)
+            return try Self(fileWrapper: wrapper)
+        }
+        return try Self(zipData: Data(contentsOf: url, options: .mappedIfSafe))
     }
 
-    nonisolated func fileWrapper() throws -> FileWrapper {
-        let manifestData = try Self.makeEncoder().encode(manifest)
-        var rootFiles = [
-            "manifest.json": FileWrapper(regularFileWithContents: manifestData)
-        ]
-
-        let works = Dictionary(uniqueKeysWithValues: epubFiles.map { id, data in
-            ("\(id.uuidString).epub", FileWrapper(regularFileWithContents: data))
-        })
-        rootFiles["Works"] = FileWrapper(directoryWithFileWrappers: works)
-
-        var fonts: [String: FileWrapper] = [:]
-        for (fileName, data) in fontFiles where Self.isSafeFileName(fileName) {
-            fonts[fileName] = FileWrapper(regularFileWithContents: data)
+    nonisolated init(zipData: Data) throws {
+        let zip: MiniZip
+        do {
+            zip = try MiniZip(data: zipData, limits: .backup)
+        } catch {
+            throw KudosBackupError.invalidPackage
         }
-        rootFiles["Fonts"] = FileWrapper(directoryWithFileWrappers: fonts)
+        guard let manifestData = zip.data(named: "manifest.json") else {
+            throw KudosBackupError.invalidPackage
+        }
 
-        return FileWrapper(directoryWithFileWrappers: rootFiles)
+        manifest = try Self.makeDecoder().decode(KudosBackupManifest.self, from: manifestData)
+        guard KudosBackupManifest.supportedVersions.contains(manifest.version) else {
+            throw KudosBackupError.unsupportedVersion(manifest.version)
+        }
+
+        var epubs: [UUID: Data] = [:]
+        for work in manifest.works {
+            guard let data = zip.data(named: "Works/\(work.id.uuidString).epub") else { continue }
+            epubs[work.id] = data
+        }
+        epubFiles = epubs
+
+        var fonts: [String: Data] = [:]
+        for font in manifest.fonts {
+            guard Self.isSafeFileName(font.fileName),
+                  let data = zip.data(named: "Fonts/\(font.fileName)")
+            else { continue }
+            fonts[font.fileName] = data
+        }
+        fontFiles = fonts
+    }
+
+    /// Encodes just the manifest — the sync directory's `manifest.json` and
+    /// the archive's first entry share the same bytes.
+    nonisolated func manifestData() throws -> Data {
+        try Self.makeEncoder().encode(manifest)
+    }
+
+    /// Decodes and version-checks a bare manifest (e.g. the sync directory's
+    /// `manifest.json`).
+    nonisolated static func decodeManifest(_ data: Data) throws -> KudosBackupManifest {
+        let manifest = try makeDecoder().decode(KudosBackupManifest.self, from: data)
+        guard KudosBackupManifest.supportedVersions.contains(manifest.version) else {
+            throw KudosBackupError.unsupportedVersion(manifest.version)
+        }
+        return manifest
+    }
+
+    /// The complete backup as a single stored-entry ZIP archive — the bytes of
+    /// a `.kudosbackup` file. Entry order is deterministic (manifest first,
+    /// then assets sorted by name) so identical contents produce identical
+    /// archives.
+    nonisolated func zipData() throws -> Data {
+        let encodedManifest = try manifestData()
+        var entries: [(name: String, data: Data)] = [(name: "manifest.json", data: encodedManifest)]
+        for (id, data) in epubFiles.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            entries.append((name: "Works/\(id.uuidString).epub", data: data))
+        }
+        for (fileName, data) in fontFiles.sorted(by: { $0.key < $1.key })
+        where Self.isSafeFileName(fileName) {
+            entries.append((name: "Fonts/\(fileName)", data: data))
+        }
+        return try MiniZip.archiveData(entries)
     }
 
     // Plain `.iso8601` has no fractional-second support (whole-seconds only), which
@@ -159,7 +202,9 @@ nonisolated struct KudosBackupContents {
         return decoder
     }
 
-    nonisolated private static func isSafeFileName(_ fileName: String) -> Bool {
+    /// Internal (not private): the folder-sync asset writer/reader applies the
+    /// same rule when mapping font file names to sync-directory entries.
+    nonisolated static func isSafeFileName(_ fileName: String) -> Bool {
         !fileName.isEmpty
             && URL(fileURLWithPath: fileName).lastPathComponent == fileName
             && !fileName.contains("/")
@@ -928,7 +973,7 @@ nonisolated enum KudosBackupError: LocalizedError {
 @MainActor
 // swiftlint:disable:next type_body_length
 enum KudosBackupService {
-    static func makeDocument(
+    static func makeContents(
         works: [SavedWork],
         bookmarks: [Bookmark],
         fonts: [CustomFont],
@@ -936,7 +981,7 @@ enum KudosBackupService {
         readingQueues: [ReadingQueue],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
-    ) throws -> KudosBackupDocument {
+    ) throws -> KudosBackupContents {
         var epubFiles: [UUID: Data] = [:]
         for work in works where work.hasEPUB {
             if let data = try? Data(contentsOf: work.fileURL, options: .mappedIfSafe) {
@@ -963,11 +1008,11 @@ enum KudosBackupService {
             settings: .capture(defaults: defaults),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
-        return KudosBackupDocument(contents: KudosBackupContents(
+        return KudosBackupContents(
             manifest: manifest,
             epubFiles: epubFiles,
             fontFiles: fontFiles
-        ))
+        )
     }
 
     // Restore is transactional and intentionally linear for data-safety review.

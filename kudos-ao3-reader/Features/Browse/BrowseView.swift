@@ -10,6 +10,7 @@ struct AO3WebBrowserView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = BrowserModel()
     @State private var banner: String?
 
@@ -144,10 +145,10 @@ struct AO3WebBrowserView: View {
     }
 
     private func show(_ message: String) {
-        withAnimation { banner = message }
+        withAnimationUnlessReduced(reduceMotion: reduceMotion) { banner = message }
         Task {
             try? await Task.sleep(for: .seconds(2.5))
-            withAnimation { banner = nil }
+            withAnimationUnlessReduced(reduceMotion: reduceMotion) { banner = nil }
         }
     }
 }

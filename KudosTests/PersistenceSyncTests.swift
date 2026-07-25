@@ -3,10 +3,10 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-// Serialized: several tests here and in FolderSyncTests/KudosBackupTests exercise
-// PersistenceOperationGate, a process-wide static gate that's meaningfully global in
-// the real app (only one instance ever runs) but can spuriously contend across
-// concurrently-running test suites otherwise.
+// Nested under PersistenceGateSuites (see its doc comment): these tests exercise
+// PersistenceOperationGate, a process-wide static gate, so they must serialize
+// against the other gate-taking suites too, not just within this suite.
+extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct PersistenceSyncTests {
@@ -92,7 +92,7 @@ struct PersistenceSyncTests {
         archived.lastSpineIndex = 1
         archived.lastScrollFraction = 0.2
         archived.markProgressModified(Date(timeIntervalSince1970: 100))
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archived],
             bookmarks: [],
             fonts: [],
@@ -111,7 +111,7 @@ struct PersistenceSyncTests {
         local.markProgressModified(Date(timeIntervalSince1970: 200))
         context.insert(local)
 
-        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults)
 
         let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.lastSpineIndex == 5)
@@ -148,7 +148,7 @@ struct PersistenceSyncTests {
                                  sourceURL: "https://archiveofourown.org/works/444")
         archived.ao3WorkID = 444
         archived.markModified(Date(timeIntervalSince1970: 100))
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archived],
             bookmarks: [],
             fonts: [],
@@ -156,7 +156,7 @@ struct PersistenceSyncTests {
             defaults: defaults
         )
 
-        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults)
 
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
     }
@@ -179,7 +179,7 @@ struct PersistenceSyncTests {
         archived.ao3WorkID = 555
         archived.isFavorite = true
         archived.markModified(Date(timeIntervalSince1970: 100))
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archived],
             bookmarks: [],
             fonts: [],
@@ -191,7 +191,7 @@ struct PersistenceSyncTests {
         local.isFavorite = false
         local.markModified(Date(timeIntervalSince1970: 200))
 
-        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults)
 
         let works = try context.fetch(FetchDescriptor<SavedWork>())
         #expect(works.count == 1)
@@ -228,7 +228,7 @@ struct PersistenceSyncTests {
                                  sourceURL: "https://archiveofourown.org/works/777")
         archived.ao3WorkID = 777
         archived.markModified(Date(timeIntervalSince1970: 200))
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archived],
             bookmarks: [],
             fonts: [],
@@ -236,7 +236,7 @@ struct PersistenceSyncTests {
             defaults: defaults
         )
 
-        _ = try KudosBackupService.restore(document.contents, into: context, defaults: defaults)
+        _ = try KudosBackupService.restore(contents, into: context, defaults: defaults)
 
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
     }
@@ -269,7 +269,7 @@ struct PersistenceSyncTests {
         work.queueMemberships.append(membership)
         try sourceContext.save()
 
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [work],
             bookmarks: [],
             fonts: [],
@@ -284,7 +284,7 @@ struct PersistenceSyncTests {
         targetContext.insert(SyncTombstone(recordID: queueID, recordType: .readingQueue))
         try targetContext.save()
 
-        let summary = try KudosBackupService.restore(document.contents, into: targetContext, defaults: defaults)
+        let summary = try KudosBackupService.restore(contents, into: targetContext, defaults: defaults)
 
         let queues = try targetContext.fetch(FetchDescriptor<ReadingQueue>())
         #expect(queues.allSatisfy { $0.kind == .savedForLater })
@@ -462,7 +462,7 @@ struct PersistenceSyncTests {
         archived.isComplete = true
         archived.markModified(Date(timeIntervalSince1970: 100))
         sourceContext.insert(archived)
-        let document = try KudosBackupService.makeDocument(
+        let contents = try KudosBackupService.makeContents(
             works: [archived],
             bookmarks: [],
             fonts: [],
@@ -473,7 +473,7 @@ struct PersistenceSyncTests {
         let targetContainer = try container()
         let targetContext = targetContainer.mainContext
 
-        _ = try KudosBackupService.restore(document.contents, into: targetContext, defaults: defaults)
+        _ = try KudosBackupService.restore(contents, into: targetContext, defaults: defaults)
 
         let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.isFavorite == true)
@@ -531,7 +531,7 @@ struct PersistenceSyncTests {
 
         // The source device's current backup: the work is already gone, but the
         // tombstone recording its deletion is included.
-        let carrierDocument = try KudosBackupService.makeDocument(
+        let carrierContents = try KudosBackupService.makeContents(
             works: [],
             bookmarks: [],
             fonts: [],
@@ -542,7 +542,7 @@ struct PersistenceSyncTests {
 
         let targetContainer = try container()
         let targetContext = targetContainer.mainContext
-        _ = try KudosBackupService.restore(carrierDocument.contents, into: targetContext, defaults: defaults)
+        _ = try KudosBackupService.restore(carrierContents, into: targetContext, defaults: defaults)
         // The fresh install now has the tombstone, though it never deleted anything itself.
         #expect(try targetContext.fetch(FetchDescriptor<SyncTombstone>()).count == 1)
 
@@ -550,7 +550,7 @@ struct PersistenceSyncTests {
         let staleArchive = SavedWork(title: "Deleted Before Reinstall", author: "Writer",
                                      sourceURL: "https://archiveofourown.org/works/909")
         staleArchive.markModified(Date(timeIntervalSince1970: 100))
-        let staleDocument = try KudosBackupService.makeDocument(
+        let staleContents = try KudosBackupService.makeContents(
             works: [staleArchive],
             bookmarks: [],
             fonts: [],
@@ -558,7 +558,7 @@ struct PersistenceSyncTests {
             defaults: defaults
         )
 
-        _ = try KudosBackupService.restore(staleDocument.contents, into: targetContext, defaults: defaults)
+        _ = try KudosBackupService.restore(staleContents, into: targetContext, defaults: defaults)
 
         #expect(try targetContext.fetch(FetchDescriptor<SavedWork>()).isEmpty)
     }
@@ -623,4 +623,5 @@ struct PersistenceSyncTests {
             settings: .capture(defaults: try testDefaults())
         ))
     }
+}
 }

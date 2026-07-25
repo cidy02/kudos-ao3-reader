@@ -40,17 +40,25 @@ extension AO3Client {
             }
         }
 
-        // Skip a malformed entry rather than failing the page (same convention as
-        // the works-list parsers) — `parseInboxItem` itself already turns AO3's
-        // known admin-hidden/no-byline row shape into a tombstone rather than
-        // throwing, so this only drops entries that are malformed some other
-        // way. If AO3 rendered rows and *none* of them could be represented at
-        // all, that's markup drift beyond the known tombstone shape: fail the
-        // page honestly instead of silently reporting a fabricated empty inbox
-        // (T91-RF6).
-        let items = itemElements.compactMap { try? Self.parseInboxItem($0) }
-        if items.isEmpty, !itemElements.isEmpty {
+        // `parseInboxItem` itself already turns AO3's known admin-hidden/
+        // no-byline row shape into a tombstone rather than throwing. If AO3
+        // rendered rows and *none* of them could be represented at all,
+        // that's markup drift beyond the known tombstone shape: fail the
+        // page honestly instead of silently reporting a fabricated empty
+        // inbox (T91-RF6).
+        let parsedItems = itemElements.map { try? Self.parseInboxItem($0) }
+        if parsedItems.allSatisfy({ $0 == nil }), !itemElements.isEmpty {
             throw AO3Error.parse
+        }
+        // A sibling row parsed fine here, so a row that still fails isn't
+        // page-level markup drift — it's malformed in some *third* way
+        // `parseInboxItem` doesn't already recognize (e.g. an id that isn't
+        // an integer). Fold it into the same "Unavailable" tombstone shape
+        // as the admin-hidden case instead of silently dropping it, so a
+        // real notification never vanishes with no trace (T91-RF6, one row
+        // short of its own guard).
+        let items = zip(itemElements, parsedItems).enumerated().compactMap { index, pair -> AO3InboxItem? in
+            pair.1 ?? (try? Self.parseUnavailableInboxItem(pair.0, id: -(index + 1)))
         }
         // The display page is still useful if AO3 changes an optional management
         // form, but native controls must fail closed rather than inventing fields.

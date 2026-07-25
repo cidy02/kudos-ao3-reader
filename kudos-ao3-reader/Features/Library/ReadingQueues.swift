@@ -120,13 +120,6 @@ struct ReadingQueueDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Mirrors the scaled width the cover cards themselves render at, so the
-    /// see-all grid's adaptive minimum tracks a card grown wider by Dynamic Type
-    /// (same reasoning as `LibraryEntityGridView.cardSize`). Not `private`: this
-    /// view has no explicit init, and a private plain stored property drags the
-    /// synthesized memberwise `init(queue:)` down to private too, breaking its
-    /// `ReadingQueueDetailView(queue:)` call site (the T-136 gotcha).
-    var cardSize = ScaledCarouselCardSize()
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var showingRename = false
     @State private var renameText = ""
@@ -154,6 +147,11 @@ struct ReadingQueueDetailView: View {
     /// `WorkReorderDropDelegate.dropEntered` and committed to `ReadingQueueService`
     /// only in `performDrop` — see that type's doc comment for why (A6-F1).
     @State private var pendingCompactOrder: [UUID]?
+    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
+    /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
+    /// tracks a card that's grown wider with Dynamic Type instead of assuming the
+    /// static base width. Not `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
 
     private var isReordering: Bool {
         #if os(iOS)
@@ -355,10 +353,11 @@ struct ReadingQueueDetailView: View {
         #endif
     }
 
-    /// As many columns as the live scaled card width fits — two-up on iPhone at
-    /// normal text sizes, wider on iPad/macOS, fewer as the cards grow, one at
-    /// accessibility sizes (see `adaptiveCardColumns`) — matches the Home
-    /// "See all" grid and `LibraryEntityGridView`.
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen. Matches the Home "See all" grid and
+    /// `LibraryEntityGridView`.
     private var compactGridColumns: [GridItem] {
         CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
     }
