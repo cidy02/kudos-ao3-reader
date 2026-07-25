@@ -13,11 +13,6 @@ struct AuthorProfileView: View {
     /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
     @State private var showingLoginRequired = false
     @State private var showingLogin = false
-    /// Set by the "Log In" alert button; consumed by `onChange(of: showingLoginRequired)`
-    /// once that binding actually reports the alert dismissed — presenting the login
-    /// sheet on that state transition instead of in the button's own action closure,
-    /// since flipping both in the same pass can drop the sheet on some iOS versions.
-    @State private var presentsLoginAfterAlertDismiss = false
     /// Resume after the login sheet succeeds (cleared on cancel / failed login).
     @State private var pendingAuthAction: PendingAuthAction?
     /// Nav bar title. Account's **My Dashboard** reuses this surface for the
@@ -62,19 +57,29 @@ struct AuthorProfileView: View {
             .alert("Log in to AO3", isPresented: $showingLoginRequired) {
                 Button("Cancel", role: .cancel) { pendingAuthAction = nil }
                 Button("Log In") {
-                    // Flag it; `onChange(of: showingLoginRequired)` below presents the
-                    // login sheet once that binding actually reports the alert gone —
-                    // simultaneous alert-dismiss + sheet-present can drop the sheet on
-                    // some iOS versions before the user ever submits credentials.
-                    presentsLoginAfterAlertDismiss = true
+                    // Present the login sheet after the alert finishes dismissing.
+                    // Simultaneous alert-dismiss + sheet-present can drop the sheet
+                    // on some iOS versions before the user ever submits credentials.
+                    //
+                    // This sleep is deliberately NOT convertible to a completion
+                    // signal, unlike the Comments sheet cases in this same wave
+                    // (T-139/UI-8). `.sheet`/`.fullScreenCover` take an `onDismiss:`
+                    // closure that fires when the dismiss transition genuinely
+                    // finishes; `.alert` has no such parameter, and there is no
+                    // other SwiftUI event for "this alert is gone". `onChange` on
+                    // the alert's own `isPresented` binding is NOT a substitute —
+                    // SwiftUI clears that binding to *begin* the dismissal, so the
+                    // handler runs about a frame after the tap with the alert still
+                    // animating away, i.e. it removes the wait rather than deriving
+                    // it. That was tried here and reverted. Until a real signal
+                    // exists, the tested duration stays.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        showingLogin = true
+                    }
                 }
             } message: {
                 Text("This action requires an AO3 account, log in first.")
-            }
-            .onChange(of: showingLoginRequired) { _, isPresented in
-                guard !isPresented, presentsLoginAfterAlertDismiss else { return }
-                presentsLoginAfterAlertDismiss = false
-                showingLogin = true
             }
             .confirmationDialog(
                 "Unsubscribe from \(model.route.username)?",

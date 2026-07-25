@@ -82,6 +82,78 @@ struct AppRouterTests {
         #expect(router.selection == .home)
     }
 
+    // MARK: - Deferred author push (T-139 / UI-8)
+    //
+    // The queue replaces the per-view `isOpening…` booleans the 350ms sleeps used to
+    // reset, so these cover the states those guards used to hold: one push per tap,
+    // no double-push, no latch, no stale route surviving into a later presentation.
+
+    @Test func queuedAuthorRouteOpensOnceWhenTheDismissCompletes() throws {
+        let router = AppRouter()
+        let route = try #require(AO3AuthorRoute(username: "someone"))
+
+        #expect(router.requestAuthorProfileAfterDismiss(route))
+        // Queuing must not push on its own — the modal is still dismissing.
+        #expect(router.pendingAuthorProfile == nil)
+        #expect(router.authorProfileNavigationEpoch == 0)
+
+        router.openPendingAuthorProfileAfterDismiss()
+        #expect(router.pendingAuthorProfile == route)
+        #expect(router.authorProfileNavigationEpoch == 1)
+
+        // Every presenter in a nested chain drains, so a second drain must no-op
+        // rather than push a duplicate.
+        router.openPendingAuthorProfileAfterDismiss()
+        #expect(router.authorProfileNavigationEpoch == 1)
+    }
+
+    @Test func secondTapMidDismissIsRefusedRatherThanOverwritingTheFirst() throws {
+        let router = AppRouter()
+        let first = try #require(AO3AuthorRoute(username: "first"))
+        let second = try #require(AO3AuthorRoute(username: "second"))
+
+        #expect(router.requestAuthorProfileAfterDismiss(first))
+        // First tap wins: the caller is told it did not queue, and must leave its
+        // own presentation alone instead of dismissing a second time.
+        #expect(router.requestAuthorProfileAfterDismiss(second) == false)
+
+        router.openPendingAuthorProfileAfterDismiss()
+        #expect(router.pendingAuthorProfile == first)
+        #expect(router.authorProfileNavigationEpoch == 1)
+    }
+
+    @Test func drainingClearsTheQueueSoLaterTapsStillWork() throws {
+        let router = AppRouter()
+        let first = try #require(AO3AuthorRoute(username: "first"))
+        let second = try #require(AO3AuthorRoute(username: "second"))
+
+        #expect(router.requestAuthorProfileAfterDismiss(first))
+        router.openPendingAuthorProfileAfterDismiss()
+        _ = router.consumePendingAuthorProfile()
+
+        // The guard must not latch — a later, unrelated byline tap has to queue.
+        #expect(router.requestAuthorProfileAfterDismiss(second))
+        router.openPendingAuthorProfileAfterDismiss()
+        #expect(router.pendingAuthorProfile == second)
+        #expect(router.authorProfileNavigationEpoch == 2)
+    }
+
+    @Test func cancellingDropsAStrandedRouteInsteadOfPushingItLater() throws {
+        let router = AppRouter()
+        let route = try #require(AO3AuthorRoute(username: "someone"))
+
+        #expect(router.requestAuthorProfileAfterDismiss(route))
+        // A Comments presentation opening clears whatever was left behind, so simply
+        // closing that presentation cannot push a profile the user never asked for.
+        router.cancelPendingAuthorProfileAfterDismiss()
+
+        router.openPendingAuthorProfileAfterDismiss()
+        #expect(router.pendingAuthorProfile == nil)
+        #expect(router.authorProfileNavigationEpoch == 0)
+        // Cancelling also releases the guard.
+        #expect(router.requestAuthorProfileAfterDismiss(route))
+    }
+
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {
         #expect(AppRouter.authorRoute(
             for: URL(string: "https://archiveofourown.org/users/login")!
