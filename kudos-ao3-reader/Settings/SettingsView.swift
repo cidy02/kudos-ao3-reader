@@ -61,6 +61,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var savedWorkMigrationTask: Task<Void, Never>?
     @State private var backupExportURL: URL?
     @State private var isPreparingBackupExport = false
+    @State private var isImportingBackup = false
     @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
@@ -270,6 +271,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
                     BackupSettingsSection(
                         isPreparingExport: isPreparingBackupExport,
+                        isImporting: isImportingBackup,
                         onExport: exportBackup,
                         onImport: { activeImport = .backup }
                     )
@@ -434,7 +436,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             isPresented: $exportingBackup,
             item: backupExportURL.map(KudosBackupArchiveFile.init),
             contentTypes: [.kudosBackup],
-            defaultFilename: "Kudos Backup \(Self.backupDateFormatter.string(from: Date()))"
+            // Derived from the archive's own filename so the two can never
+            // disagree — that URL is what this exporter actually presents.
+            defaultFilename: backupExportURL?.deletingPathExtension().lastPathComponent
         ) { result in
             cleanUpBackupExportFile()
             switch result {
@@ -452,20 +456,40 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         } onCancellation: {
             cleanUpBackupExportFile()
         }
-        .confirmationDialog(
-            "Import this backup?",
-            isPresented: $showImportConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Import and Merge") { restorePendingBackup() }
-            Button("Cancel", role: .cancel) { pendingBackup = nil }
-        } message: {
-            if let backup = pendingBackup {
-                Text(
-                    "This backup contains \(backup.manifest.works.count) Library records, "
-                        + "\(backup.manifest.bookmarks.count) saved links, and "
-                        + "\(backup.manifest.fonts.count) custom fonts. Existing items won't "
-                        + "be deleted."
+        // An `.alert`, not a `.confirmationDialog`: importing merges into the
+        // user's whole library, so it wants a modal centred decision with both
+        // choices spelled out. Presented from a List row, a confirmationDialog
+        // renders as an anchored popover on iPhone and its `.cancel` button is
+        // dropped entirely (dismiss-by-tapping-outside is the only way out) —
+        // an alert always renders Cancel explicitly.
+        // ONE alert modifier for this whole screen. SwiftUI honours only a
+        // single `.alert` per view: this chain previously carried three
+        // (import-confirmation, `backupNotice`, `epubNotice`), so the extras
+        // were silently dropped and *no* backup ever reported its result —
+        // export and import both looked like they had done nothing. Everything
+        // is funnelled through `activeAlert` instead, so adding a future alert
+        // means adding a case here rather than another competing modifier.
+        .alert(item: activeAlertBinding) { alert in
+            switch alert {
+            case let .notice(notice):
+                Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            case let .confirmImport(backup):
+                Alert(
+                    title: Text("Import this backup?"),
+                    message: Text(
+                        "This backup contains \(backup.manifest.works.count) Library records, "
+                            + "\(backup.manifest.bookmarks.count) saved links, and "
+                            + "\(backup.manifest.fonts.count) custom fonts. Existing items "
+                            + "won't be deleted."
+                    ),
+                    primaryButton: .default(Text("Import and Merge")) {
+                        restorePendingBackup(backup)
+                    },
+                    secondaryButton: .cancel { pendingBackup = nil }
                 )
             }
         }
@@ -483,20 +507,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 "Kudos will add existing saved works to the native Saved for Later queue. "
                     + "It keeps their current saved state and preserves EPUBs one at a time, "
                     + "with a pause between AO3 requests."
-            )
-        }
-        .alert(item: $backupNotice) { notice in
-            Alert(
-                title: Text(notice.title),
-                message: Text(notice.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-        .alert(item: $epubNotice) { notice in
-            Alert(
-                title: Text(notice.title),
-                message: Text(notice.message),
-                dismissButton: .default(Text("OK"))
             )
         }
         #if os(iOS)
@@ -644,9 +654,29 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         // The archive streams to a temp file off the main actor — constant
         // memory and no UI stall, however large the library is. The exporter
         // sheet is presented only once the file is complete.
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("KudosBackupExport-\(UUID().uuidString)")
+        //
+        // The temp file is given the name the user should see in the save
+        // sheet, because the item-based `fileExporter` takes the presented
+        // filename from the exported file's URL — `defaultFilename:` below is
+        // not consulted for it. The UUID therefore lives in a wrapping
+        // *directory* rather than in the filename, so concurrent or same-day
+        // exports still can't collide while the file itself stays readable.
+        let exportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KudosBackupExport-\(UUID().uuidString)", isDirectory: true)
+        let destination = exportDirectory
+            .appendingPathComponent("Kudos Backup \(Self.backupDateFormatter.string(from: Date()))")
             .appendingPathExtension("kudosbackup")
+        do {
+            try FileManager.default.createDirectory(
+                at: exportDirectory, withIntermediateDirectories: true
+            )
+        } catch {
+            backupNotice = BackupNotice(
+                title: "Couldn't Create Backup",
+                message: error.localizedDescription
+            )
+            return
+        }
         isPreparingBackupExport = true
         Task {
             let result = await Task.detached(priority: .userInitiated) {
@@ -668,7 +698,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
     private func cleanUpBackupExportFile() {
         if let url = backupExportURL {
-            try? FileManager.default.removeItem(at: url)
+            // Removes the per-export wrapping directory, not just the archive
+            // inside it (see `exportBackup()`), so nothing is left behind in tmp.
+            try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         }
         backupExportURL = nil
     }
@@ -688,8 +720,17 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    private func restorePendingBackup() {
-        guard let backup = pendingBackup else { return }
+    /// Runs the merge and reports what changed.
+    ///
+    /// Deliberately hops through a `Task` before doing any work. The call site
+    /// is the confirmation alert's own button, and setting `backupNotice`
+    /// straight from there raced that alert's dismissal — SwiftUI dropped the
+    /// second presentation, so the "Backup Imported" summary silently never
+    /// appeared and an import looked like it had done nothing. Yielding once
+    /// lets the confirmation finish dismissing, after which the result alert
+    /// presents reliably. The hop also gives the progress indicator on the
+    /// Import row a chance to render before the merge begins.
+    private func restorePendingBackup(_ backup: KudosBackupContents) {
         pendingBackup = nil
         guard PersistenceOperationGate.begin(.backupImport) else {
             backupNotice = BackupNotice(
@@ -699,22 +740,27 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             )
             return
         }
-        defer { PersistenceOperationGate.end(.backupImport) }
-        do {
-            let summary = try KudosBackupService.restore(backup, into: context)
-            applyRestoredTheme(backup.manifest.settings)
-            let conflictMessage = summary.conflictMessage
-            backupNotice = BackupNotice(
-                title: "Backup Imported",
-                message: "Merged \(summary.works) Library records, "
-                    + "\(summary.bookmarks) saved links, and \(summary.fonts) custom fonts."
-                    + (conflictMessage.isEmpty ? "" : " \(conflictMessage)")
-            )
-        } catch {
-            backupNotice = BackupNotice(
-                title: "Couldn't Import Backup",
-                message: error.localizedDescription
-            )
+        isImportingBackup = true
+        Task { @MainActor in
+            defer {
+                PersistenceOperationGate.end(.backupImport)
+                isImportingBackup = false
+            }
+            do {
+                let summary = try KudosBackupService.restore(backup, into: context)
+                applyRestoredTheme(backup.manifest.settings)
+                let conflictMessage = summary.conflictMessage
+                backupNotice = BackupNotice(
+                    title: "Backup Imported",
+                    message: "Merged into your library:\n\(summary.changeMessage)"
+                        + (conflictMessage.isEmpty ? "" : "\n\n\(conflictMessage)")
+                )
+            } catch {
+                backupNotice = BackupNotice(
+                    title: "Couldn't Import Backup",
+                    message: error.localizedDescription
+                )
+            }
         }
     }
 
@@ -876,14 +922,61 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         let message: String
     }
 
+    /// Every alert this screen can present, so they share one `.alert` modifier
+    /// (see the call site — SwiftUI drops all but one per view).
+    private enum SettingsAlert: Identifiable {
+        case notice(BackupNotice)
+        case confirmImport(KudosBackupContents)
+
+        var id: String {
+            switch self {
+            case let .notice(notice): "notice-\(notice.id)"
+            case .confirmImport: "confirm-import"
+            }
+        }
+    }
+
+    /// Projects the individual alert states onto the single modifier, newest
+    /// decision first. Writing `nil` back (the user dismissed) clears whichever
+    /// state produced the alert, so the existing call sites keep setting
+    /// `backupNotice`/`epubNotice`/`showImportConfirmation` exactly as before.
+    private var activeAlertBinding: Binding<SettingsAlert?> {
+        Binding(
+            get: {
+                if showImportConfirmation, let pendingBackup {
+                    return .confirmImport(pendingBackup)
+                }
+                if let backupNotice { return .notice(backupNotice) }
+                if let epubNotice { return .notice(epubNotice) }
+                return nil
+            },
+            set: { newValue in
+                guard newValue == nil else { return }
+                if showImportConfirmation {
+                    showImportConfirmation = false
+                } else if backupNotice != nil {
+                    backupNotice = nil
+                } else {
+                    epubNotice = nil
+                }
+            }
+        )
+    }
+
     private enum FileImportKind { case fonts, backup, epub, syncFolder }
 
     private var activeImportContentTypes: [UTType] {
         switch activeImport {
         case .fonts: [.font]
-        // Legacy package type keeps directory-form backups from older versions
-        // selectable; `KudosBackupContents.read(from:)` handles both formats.
-        case .backup: [.kudosBackup, .kudosBackupLegacyPackage]
+        // `.folder` keeps the pre-archive directory-form backups from older
+        // versions selectable — `KudosBackupContents.read(from:)` handles both
+        // formats, and a plain directory is exactly what such a backup resolves
+        // to. It cannot be narrowed to a package type: nothing declares
+        // `.kudosbackup` as a package, so the system types those directories as
+        // `public.folder` (verified on a real legacy backup). The previous
+        // `UTType(filenameExtension:conformingTo: .package)` matched neither
+        // them nor anything else, so legacy import was silently broken too.
+        case .backup: [.kudosBackup, .folder]
         case .epub: [Self.epubContentType]
         case .syncFolder: [.folder]
         case nil: [.item] // never presented; keeps the modifier well-formed
@@ -912,8 +1005,11 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
 struct BackupSettingsSection: View {
     var isPreparingExport = false
+    var isImporting = false
     let onExport: () -> Void
     let onImport: () -> Void
+
+    private var isBusy: Bool { isPreparingExport || isImporting }
 
     var body: some View {
         Section {
@@ -926,9 +1022,25 @@ struct BackupSettingsSection: View {
                     }
                 }
             }
-            .disabled(isPreparingExport)
+            .disabled(isBusy)
             Button(action: onImport) {
-                Label("Import Backup…", systemImage: "square.and.arrow.down")
+                HStack {
+                    Label("Import Backup…", systemImage: "square.and.arrow.down")
+                    if isImporting {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isBusy)
+            // A full-width bar while either side is working. Indeterminate on
+            // purpose: neither `writeArchive` nor `restore` reports per-record
+            // progress today, and a bar that invented a percentage would be
+            // lying about how far along the merge actually is.
+            if isBusy {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .accessibilityLabel(isImporting ? "Importing backup" : "Preparing backup")
             }
         } header: {
             Text("Backup")

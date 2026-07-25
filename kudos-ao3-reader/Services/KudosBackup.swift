@@ -9,18 +9,23 @@ import UniformTypeIdentifiers
 extension UTType {
     /// A single ZIP archive (with the `.kudosbackup` extension) containing a
     /// JSON manifest and assets.
-    static let kudosBackup = UTType(
-        filenameExtension: "kudosbackup",
-        conformingTo: .zip
-    )!
-
-    /// The pre-archive directory-package form of the same extension. Read-only
-    /// legacy support: kept so backups exported by older versions remain
-    /// selectable in the import picker; nothing writes this form anymore.
-    static let kudosBackupLegacyPackage = UTType(
-        filenameExtension: "kudosbackup",
-        conformingTo: .package
-    )!
+    ///
+    /// Resolved by the identifier the app *declares* in its Info.plist (see the
+    /// `UTExportedTypeDeclarations` injection in the "Inject Info.plist keys"
+    /// build phase), not derived from the extension at runtime. That matters:
+    /// `UTType(filenameExtension:conformingTo:)` on an undeclared extension
+    /// mints a synthetic `dyn.…` identifier encoding the conformance you asked
+    /// for, while the system independently types a real file on disk from the
+    /// extension alone — a *different* synthetic identifier. The two never
+    /// compare or conform equal, which greyed out every backup in the import
+    /// picker. A declared type gives both sides one stable identifier.
+    ///
+    /// The lookup is deliberately non-trapping (unlike `UTType(exportedAs:)`,
+    /// which requires the declaration and aborts without it): if the injection
+    /// phase is ever skipped, falling back to the extension-derived type keeps
+    /// the app running with the old behaviour instead of crashing on launch.
+    static let kudosBackup = UTType("com.cidy02.Kudos.backup")
+        ?? UTType(filenameExtension: "kudosbackup")!
 }
 
 nonisolated struct KudosBackupContents {
@@ -918,6 +923,34 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var revivedCollections: Int = 0
     var ambiguousCollectionConflicts: Int = 0
     var skippedInvalidEPUBs: Int = 0
+
+    /// Everything the merge actually changed, one item per line, for the
+    /// post-import confirmation. Separate from `conflictMessage`, which reports
+    /// only the caveats — this is the "what landed" half, and it deliberately
+    /// lists zero counts too so the reader can tell "nothing of this kind was in
+    /// the backup" apart from "this kind was skipped".
+    var changeMessage: String {
+        func line(_ count: Int, _ singular: String, _ plural: String) -> String {
+            "• \(count) \(count == 1 ? singular : plural)"
+        }
+        var parts = [
+            line(works, "Library record", "Library records"),
+            line(bookmarks, "saved link", "saved links"),
+            line(fonts, "custom font", "custom fonts")
+        ]
+        if revivedQueues > 0 {
+            parts.append(line(revivedQueues, "restored Reading Queue", "restored Reading Queues"))
+        }
+        if restoredRevivedQueueMemberships > 0 {
+            parts.append(
+                line(restoredRevivedQueueMemberships, "queue membership", "queue memberships")
+            )
+        }
+        if revivedCollections > 0 {
+            parts.append(line(revivedCollections, "restored Collection", "restored Collections"))
+        }
+        return parts.joined(separator: "\n")
+    }
 
     var conflictMessage: String {
         var parts: [String] = []

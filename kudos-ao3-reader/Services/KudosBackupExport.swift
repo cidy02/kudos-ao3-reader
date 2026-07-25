@@ -57,6 +57,15 @@ nonisolated struct KudosBackupArchiveFile: Transferable {
         FileRepresentation(exportedContentType: .kudosBackup) {
             SentTransferredFile($0.url, allowAccessingOriginalFile: true)
         }
+        // Required, not cosmetic: without a suggested name the item-based
+        // `fileExporter` hands `NSFileWrapper` an empty `preferredFilename`,
+        // which raises `NSInvalidArgumentException` ("preferredFilename cannot
+        // be empty") and kills the app the instant Export Backup is tapped.
+        // The `defaultFilename:` argument at the call site does NOT feed this
+        // path. The name the user actually sees comes from the exported file's
+        // own URL (see `exportBackup()`, which names the temp file for exactly
+        // that reason); this value is the fallback that keeps the wrapper legal.
+        .suggestedFileName("Kudos Backup.kudosbackup")
     }
 }
 
