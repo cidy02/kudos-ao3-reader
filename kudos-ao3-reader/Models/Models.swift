@@ -44,6 +44,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// deterministic composite of the collection and work IDs — see
     /// `SyncTombstone.collectionMembershipID(collectionID:workID:)`.
     case workCollectionMembership
+    /// An in-book bookmark / highlight / note the user deleted. Without this a
+    /// restore from an older archive would silently resurrect it, the same way
+    /// queue memberships needed their own tombstones.
+    case readingAnnotation
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat

@@ -71,6 +71,7 @@ extension KudosBackupService {
         fonts: [CustomFont],
         collections: [WorkCollection] = [],
         readingQueues: [ReadingQueue],
+        annotations: [ReadingAnnotation] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupExportPlan {
@@ -83,6 +84,7 @@ extension KudosBackupService {
             collections: collections.map(KudosBackupCollection.init),
             readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
             readingQueueMemberships: queueMemberships,
+            annotations: annotations.compactMap(KudosBackupAnnotation.init),
             settings: .capture(defaults: defaults),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )

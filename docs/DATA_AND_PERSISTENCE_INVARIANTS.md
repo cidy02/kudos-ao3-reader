@@ -4,7 +4,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 
 ## Never lose
 
-- A saved work's **EPUB file**, **reading progress** (`readiumLocator`, `lastSpineIndex`, `lastScrollFraction`, `progressModifiedAt`), user flags (`isFavorite`/`isSaved`/`isFinished`), tags, queues, collections, bookmarks.
+- A saved work's **EPUB file**, **reading progress** (`readiumLocator`, `lastSpineIndex`, `lastScrollFraction`, `progressModifiedAt`), user flags (`isFavorite`/`isSaved`/`isFinished`), tags, queues, collections, bookmarks, **in-book annotations** (`ReadingAnnotation`: bookmarks/highlights/notes, anchored by a Readium `Locator` string plus a `selectedText` snapshot so the mark survives a dangling anchor).
 - **No network outcome may delete local data.** AO3 404 → set `ao3Unavailable = true`, keep everything (`WorkTags.refreshFromAO3`). 429/403/5xx/offline → keep prior state; list refreshes keep previously loaded content on failure.
 - Deletion is user-initiated only, and lands in **Recently Deleted for 90 days** first (`PreservedWorkService.softDelete` — sets `isPendingDeletion`/`deletedAt`/`permanentDeletionScheduledAt`, records a tombstone, keeps the EPUB). Only `sweepExpired`/explicit "Delete Permanently" hard-deletes (`WorkLifecycle.hardDelete`). Sweep is gated behind `PersistenceOperationGate`.
 
@@ -15,7 +15,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 | SwiftData store (`Models.swift`) + EPUB files (`Storage.workAssetURL`) | **Source of truth** | Application Support; included in device backups. |
 | `searchText`/`searchIndexVersion` | Derived, rebuildable | Never in backups (test-asserted); `reindex` never calls `markModified`; version-stamped launch rebuild (`WorkSearchIndex.rebuildIfNeeded`). |
 | `authorIdentitiesJSON` | AO3-derived enrichment | Additive default-empty SwiftData field. Persist only identities parsed from AO3 links; never infer from `SavedWork.author`. Intentionally omitted from `.kudosbackup`, so restored legacy text remains visible but non-tappable until a later AO3 refresh. |
-| `.kudosbackup` archive | Transport/backup | Single ZIP (stored entries via `MiniZip`, ZIP64 when a size/count/offset outgrows its classic field): manifest v7 + EPUB/font blobs; legacy directory packages stay importable read-only. Export streams to a temp file (constant memory, any archive size); the reader accepts up to 250k entries / 1 GB per entry / 64 GB total. Carries source-of-truth fields incl. progress, flags, tombstones, settings, collections, queues+memberships. Versioned decode v1–v7; **fractional-second date encoder with whole-second decode fallback** — never regress either side. |
+| `.kudosbackup` archive | Transport/backup | Single ZIP (stored entries via `MiniZip`, ZIP64 when a size/count/offset outgrows its classic field): manifest v8 + EPUB/font blobs; legacy directory packages stay importable read-only. Export streams to a temp file (constant memory, any archive size); the reader accepts up to 250k entries / 1 GB per entry / 64 GB total. Carries source-of-truth fields incl. progress, flags, tombstones, settings, collections, queues+memberships. Versioned decode v1–v8 (v8 adds in-book `annotations`; older archives decode them as empty); **fractional-second date encoder with whole-second decode fallback** — never regress either side. |
 | Folder sync (`FolderSyncService`) | Transport over iCloud Drive | Same manifest schema, one plain `KudosLibrary/` directory in a user-picked folder, written incrementally (assets first, `manifest.json` last as the commit point; security-scoped bookmark in UserDefaults — dies on reinstall, files survive). Legacy `KudosLibrary.kudosbackup` package folded read-only, never written/deleted. No CloudKit/entitlements. `lastTagRefreshAttemptAt` is deliberately device-local (not in backups). |
 
 ## Identity & duplicates
@@ -30,7 +30,8 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Timestamp-aware: `incomingWins` = `SyncMerge.shouldApplyIncoming(local:incoming:)`; new records always adopt archive values.
 - Booleans (`isFavorite`, `isSaved`, `isFinished`, `isComplete`, `isPendingDeletion`) are `incomingWins`-gated — never OR/AND-merged blindly.
 - Tombstones travel in the manifest, merge before conflict resolution, suppress resurrection with a newer-snapshot escape hatch; `restore()` **retracts** the tombstone rather than racing timestamps.
-- Membership removal has tombstones too (`.readingQueueMembership`, `.workCollectionMembership` with composite ID `SyncTombstone.collectionMembershipID`).
+- Membership removal has tombstones too (`.readingQueueMembership`, `.workCollectionMembership` with composite ID `SyncTombstone.collectionMembershipID`). Deleting an in-book annotation tombstones it as `.readingAnnotation`, so an older archive cannot resurrect it.
+- Annotations merge by record id under the same `SyncMerge.shouldApplyIncoming` rule; one whose work is absent from the restore is skipped, never orphaned (its anchor is meaningless without the book).
 - Restore reindexes each restored work; suppressed works' EPUBs are never written (no orphans from suppression).
 
 ## Folder sync safety

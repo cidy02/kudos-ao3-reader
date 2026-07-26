@@ -71,7 +71,8 @@ struct KudosBackupTests {
     @Test func authorIdentityPersistsLocallyWithoutChangingBackupSchema() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let sourceContainer = try ModelContainer(
@@ -151,7 +152,8 @@ struct KudosBackupTests {
 
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -199,7 +201,8 @@ struct KudosBackupTests {
     @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let sourceContainer = try ModelContainer(for: schema, configurations: [configuration])
@@ -254,7 +257,8 @@ struct KudosBackupTests {
     @Test func restoreMergesByAO3WorkIDBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let olderLocalDate = Date(timeIntervalSince1970: 100)
@@ -302,7 +306,8 @@ struct KudosBackupTests {
     @Test func restoreMergesByCanonicalAO3URLBeforeUUID() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let olderLocalDate = Date(timeIntervalSince1970: 100)
@@ -348,7 +353,8 @@ struct KudosBackupTests {
     @Test func restorePreservedStatusWithMissingEPUBBecomesMissingFile() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let sourceContainer = try ModelContainer(for: schema, configurations: [configuration])
@@ -430,7 +436,8 @@ struct KudosBackupTests {
         let contents = try KudosBackupContents(fileWrapper: wrapper)
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -644,7 +651,8 @@ struct KudosBackupTests {
     @Test func staleArchiveWithoutTagsDoesNotRemoveNewerLocalTag() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let olderArchiveDate = Date(timeIntervalSince1970: 100)
         let newerLocalDate = Date(timeIntervalSince1970: 200)
@@ -688,7 +696,8 @@ struct KudosBackupTests {
     @Test func repeatedRestoreOfArchiveTagsIsIdempotent() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let archivedWork = SavedWork(title: "Idempotent Work", author: "Writer")
         archivedWork.tags = [Tag(name: "found family")]
@@ -720,7 +729,8 @@ struct KudosBackupTests {
     @Test func invalidBackupEPUBLeavesValidLocalEPUBUnchanged() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let workID = UUID()
         let olderArchiveDate = Date(timeIntervalSince1970: 100)
@@ -791,7 +801,8 @@ struct KudosBackupTests {
     @Test func backupEPUBWithUnreferencedHostileEntryLeavesValidLocalEPUBUnchanged() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let workID = UUID()
 
@@ -842,7 +853,8 @@ struct KudosBackupTests {
     @Test func tombstoneSuppressedWorkDoesNotWriteEPUBBlob() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
-            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
         ])
         let workID = UUID()
         let olderArchiveDate = Date(timeIntervalSince1970: 100)

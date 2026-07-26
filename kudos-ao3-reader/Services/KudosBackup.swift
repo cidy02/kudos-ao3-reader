@@ -216,8 +216,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     // v7 adds permanentDeletionScheduledAt (Recently Deleted / 90-day recovery) to
     // works, collections, and reading queues, plus isDeleted/deletedAt for reading
     // queues (previously never carried in the manifest at all).
-    static let currentVersion = 7
-    static let supportedVersions: Set<Int> = [1, 2, 3, 4, 5, 6, currentVersion]
+    static let currentVersion = 8
+    static let supportedVersions: Set<Int> = [1, 2, 3, 4, 5, 6, 7, currentVersion]
 
     let version: Int
     let exportedAt: Date
@@ -227,6 +227,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     let collections: [KudosBackupCollection]
     let readingQueues: [KudosBackupReadingQueue]
     let readingQueueMemberships: [KudosBackupReadingQueueMembership]
+    /// In-book bookmarks / highlights / notes (manifest v8+). Decoded as empty
+    /// for v1-v7 archives, which predate the feature.
+    let annotations: [KudosBackupAnnotation]
     let settings: KudosBackupSettings
     // Carrying tombstones with the backup means a fresh install/reinstall restoring
     // this file inherits the source device's deletion history, instead of having zero
@@ -242,6 +245,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         collections: [KudosBackupCollection] = [],
         readingQueues: [KudosBackupReadingQueue] = [],
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
+        annotations: [KudosBackupAnnotation] = [],
         settings: KudosBackupSettings,
         tombstones: [KudosBackupTombstone] = []
     ) {
@@ -253,6 +257,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.collections = collections
         self.readingQueues = readingQueues
         self.readingQueueMemberships = readingQueueMemberships
+        self.annotations = annotations
         self.settings = settings
         self.tombstones = tombstones
     }
@@ -266,6 +271,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case collections
         case readingQueues
         case readingQueueMemberships
+        case annotations
         case settings
         case tombstones
     }
@@ -288,6 +294,10 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingQueueMemberships = try container.decodeIfPresent(
             [KudosBackupReadingQueueMembership].self,
             forKey: .readingQueueMemberships
+        ) ?? []
+        annotations = try container.decodeIfPresent(
+            [KudosBackupAnnotation].self,
+            forKey: .annotations
         ) ?? []
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         tombstones = try container.decodeIfPresent(
@@ -671,6 +681,50 @@ nonisolated struct KudosBackupReadingQueueMembership: Codable, Equatable {
     }
 }
 
+/// One in-book bookmark / highlight / note in transport form.
+///
+/// The anchor is the Readium `Locator` string — the same encoding used for
+/// reading progress (`SavedWork.readiumLocator`), so a restored annotation
+/// resolves through exactly one locator path. `selectedText` travels with it
+/// because a locator can dangle if the EPUB is re-downloaded or the author
+/// edits a posted chapter; the snapshot keeps the annotation meaningful (and
+/// listable) even then.
+nonisolated struct KudosBackupAnnotation: Codable, Equatable {
+    let id: UUID
+    let workID: UUID
+    let kindRaw: String
+    let colorRaw: String
+    let locatorString: String
+    let selectedText: String
+    let note: String
+    let progression: Double
+    let spineIndex: Int
+    let chapterTitle: String
+    let createdAt: Date
+    let lastModifiedAt: Date?
+    let deletedAt: Date?
+    let isPendingDeletion: Bool
+
+    @MainActor
+    init?(annotation: ReadingAnnotation) {
+        guard let workID = annotation.work?.id else { return nil }
+        id = annotation.id
+        self.workID = workID
+        kindRaw = annotation.kindRaw
+        colorRaw = annotation.colorRaw
+        locatorString = annotation.locatorString
+        selectedText = annotation.selectedText
+        note = annotation.note
+        progression = annotation.progression
+        spineIndex = annotation.spineIndex
+        chapterTitle = annotation.chapterTitle
+        createdAt = annotation.createdAt
+        lastModifiedAt = annotation.lastModifiedAt
+        deletedAt = annotation.deletedAt
+        isPendingDeletion = annotation.isPendingDeletion
+    }
+}
+
 nonisolated struct KudosBackupSettings: Codable, Equatable {
     private static let defaultReaderFontSizePt: Double = 18
     private static let defaultReaderLineHeight: Double = 1.65
@@ -918,6 +972,7 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var revivedCollections: Int = 0
     var ambiguousCollectionConflicts: Int = 0
     var skippedInvalidEPUBs: Int = 0
+    var suppressedAnnotations: Int = 0
 
     var conflictMessage: String {
         var parts: [String] = []
@@ -979,6 +1034,7 @@ enum KudosBackupService {
         fonts: [CustomFont],
         collections: [WorkCollection] = [],
         readingQueues: [ReadingQueue],
+        annotations: [ReadingAnnotation] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -1005,6 +1061,7 @@ enum KudosBackupService {
             collections: collections.map(KudosBackupCollection.init),
             readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
             readingQueueMemberships: queueMemberships,
+            annotations: annotations.compactMap(KudosBackupAnnotation.init),
             settings: .capture(defaults: defaults),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
@@ -1238,6 +1295,7 @@ enum KudosBackupService {
         var revivedQueueIDs: Set<UUID> = []
         var suppressedQueues = 0
         var suppressedQueueMemberships = 0
+        var suppressedAnnotations = 0
         var revivedQueues = 0
         var restoredRevivedQueueMemberships = 0
         var ambiguousQueueConflicts = 0
@@ -1405,6 +1463,14 @@ enum KudosBackupService {
         }
         ReadingQueueService.normalizeAllQueuedWorks(in: context)
 
+        restoreAnnotations(
+            contents: contents,
+            context: context,
+            tombstones: tombstones,
+            restoredWorksByArchivedID: restoredWorksByArchivedID,
+            suppressed: &suppressedAnnotations
+        )
+
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
             existingBookmarks.map { ($0.urlString, $0) },
@@ -1470,7 +1536,8 @@ enum KudosBackupService {
             suppressedCollections: suppressedCollections,
             revivedCollections: revivedCollections,
             ambiguousCollectionConflicts: ambiguousCollectionConflicts,
-            skippedInvalidEPUBs: skippedInvalidEPUBs
+            skippedInvalidEPUBs: skippedInvalidEPUBs,
+            suppressedAnnotations: suppressedAnnotations
         )
     }
 
@@ -1482,6 +1549,79 @@ enum KudosBackupService {
     /// membership tombstones use the same timestamp-aware policy: newer queue or
     /// membership activity revives older tombstones, while older stale snapshots stay
     /// suppressed.
+    /// Merges archived in-book bookmarks / highlights / notes into the store.
+    ///
+    /// Same rules the rest of restore follows (`DATA_AND_PERSISTENCE_INVARIANTS`):
+    /// an explicit local delete wins over an older archive via the annotation
+    /// tombstone; an existing record only takes archive values when the archive
+    /// is newer (`SyncMerge.shouldApplyIncoming`); a new record adopts them
+    /// wholesale. Annotations whose work isn't in this restore are skipped
+    /// rather than orphaned — the anchor is meaningless without its book.
+    private static func restoreAnnotations(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        restoredWorksByArchivedID: [UUID: SavedWork],
+        suppressed: inout Int
+    ) {
+        guard !contents.manifest.annotations.isEmpty else { return }
+        let existing = (try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        for archived in contents.manifest.annotations {
+            guard let work = restoredWorksByArchivedID[archived.workID] else { continue }
+            let incomingModifiedAt = archived.lastModifiedAt ?? archived.createdAt
+
+            switch tombstones.annotationResolution(id: archived.id, incomingModifiedAt: incomingModifiedAt) {
+            case .suppressStaleData:
+                // Deleted here on purpose — an older archive must not revive it.
+                suppressed += 1
+                continue
+            case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                break
+            }
+
+            if let local = byID[archived.id] {
+                guard SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: local.lastModifiedAt,
+                    incomingModifiedAt: incomingModifiedAt
+                ) else { continue }
+                local.kindRaw = archived.kindRaw
+                local.colorRaw = archived.colorRaw
+                local.locatorString = archived.locatorString
+                local.selectedText = archived.selectedText
+                local.note = archived.note
+                local.progression = archived.progression
+                local.spineIndex = archived.spineIndex
+                local.chapterTitle = archived.chapterTitle
+                local.createdAt = min(local.createdAt, archived.createdAt)
+                local.lastModifiedAt = incomingModifiedAt
+                local.deletedAt = archived.deletedAt
+                local.isPendingDeletion = archived.isPendingDeletion
+                continue
+            }
+
+            let restored = ReadingAnnotation(
+                id: archived.id,
+                work: work,
+                kind: ReadingAnnotationKind(rawValue: archived.kindRaw) ?? .bookmark,
+                locatorString: archived.locatorString,
+                selectedText: archived.selectedText,
+                note: archived.note,
+                color: ReadingAnnotationColor(rawValue: archived.colorRaw) ?? .yellow,
+                progression: archived.progression,
+                spineIndex: archived.spineIndex,
+                chapterTitle: archived.chapterTitle,
+                createdAt: archived.createdAt
+            )
+            restored.lastModifiedAt = incomingModifiedAt
+            restored.deletedAt = archived.deletedAt
+            restored.isPendingDeletion = archived.isPendingDeletion
+            context.insert(restored)
+            byID[archived.id] = restored
+        }
+    }
+
     private struct TombstoneIndex {
         private var savedWorkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var savedWorkTombstonesByAO3WorkID: [Int: SyncTombstone] = [:]
@@ -1490,6 +1630,7 @@ enum KudosBackupService {
         private var queueTombstonesByID: [UUID: SyncTombstone] = [:]
         private var membershipTombstonesByID: [UUID: SyncTombstone] = [:]
         private var collectionMembershipTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var annotationTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -1513,6 +1654,8 @@ enum KudosBackupService {
                     indexNewest(tombstone, byMembershipID: tombstone.recordID)
                 case .workCollectionMembership:
                     indexNewest(tombstone, byCollectionMembershipID: tombstone.recordID)
+                case .readingAnnotation:
+                    indexNewest(tombstone, byAnnotationID: tombstone.recordID)
                 }
             }
         }
@@ -1562,6 +1705,14 @@ enum KudosBackupService {
             membershipTombstonesByID[id] = tombstone
         }
 
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byAnnotationID id: UUID) {
+            if let existing = annotationTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            annotationTombstonesByID[id] = tombstone
+        }
+
         private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionMembershipID id: UUID) {
             if let existing = collectionMembershipTombstonesByID[id],
                existing.lastModifiedAt >= tombstone.lastModifiedAt {
@@ -1598,6 +1749,13 @@ enum KudosBackupService {
             SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: queueTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func annotationResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: annotationTombstonesByID[id]?.lastModifiedAt
             )
         }
 

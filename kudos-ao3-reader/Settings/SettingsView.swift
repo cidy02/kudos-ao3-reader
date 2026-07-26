@@ -27,6 +27,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @Query(sort: \WorkCollection.dateAdded) private var collections: [WorkCollection]
     @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
     @Query private var syncTombstones: [SyncTombstone]
+    @Query(sort: \ReadingAnnotation.createdAt) private var readingAnnotations: [ReadingAnnotation]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -631,6 +632,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 fonts: customFonts,
                 collections: collections,
                 readingQueues: readingQueues,
+                annotations: readingAnnotations,
                 tombstones: syncTombstones
             )
         } catch {
