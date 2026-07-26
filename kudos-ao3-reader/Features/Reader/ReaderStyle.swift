@@ -243,7 +243,11 @@ struct ReaderTextStyle: Equatable {
     static let fontSizeRange = 12.0 ... 34.0
     static let fontSizeStep = 1.0
     static let lineHeightRange = 1.2 ... 2.4
-    static let letterSpacingRange = -0.03 ... 0.12
+    /// Non-negative: Readium's `letterSpacing` preference rejects negative values
+    /// (`ReadiumReaderStyleMapper.preferences`), so the negative half this range
+    /// used to advertise could never render on iOS and is now clamped away on
+    /// macOS too — a slider offering it would move and do nothing.
+    static let letterSpacingRange = 0.0 ... 0.12
     static let wordSpacingRange = 0.0 ... 0.6
     static let marginRange = 8.0 ... 64.0
 
@@ -304,9 +308,11 @@ enum ReaderStylesheet {
         // Readium (iOS) only accepts non-negative letter-spacing (see
         // ReadiumReaderStyleMapper.preferences); clamp the same way here so a
         // shared persisted `readerLetterSpacing` value can't render differently
-        // across platforms (UI-9 — `letterSpacingRange`'s negative half is only
-        // ever reachable via a crafted/legacy value, since every current slider
-        // already restricts entry to the non-negative range).
+        // across platforms (UI-9). `letterSpacingRange` is now non-negative too,
+        // so this guard's only remaining job is a value that never came from a
+        // slider: `KudosBackupSettings` restores `readerLetterSpacing` as a raw
+        // `Double` with no range validation, so a legacy or hand-edited backup
+        // can still carry the old negative half.
         let clampedLetterSpacing = max(0, resolvedStyle.letterSpacing)
         if clampedLetterSpacing != 0 {
             blockRules += "letter-spacing: \(clampedLetterSpacing)em !important;"

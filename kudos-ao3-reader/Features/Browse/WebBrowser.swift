@@ -403,6 +403,15 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
 }
 
 /// Thin SwiftUI wrapper that hosts the shared WKWebView on macOS and iOS.
+///
+/// Deliberately has **no** `dismantleNSView`/`dismantleUIView` hook: the web view
+/// is owned by the caller (`BrowserModel`, `AO3AuthService.loginWebView`, the
+/// launch prewarm, `ReaderController`), not by this wrapper, and it leaves the
+/// hierarchy for reasons that are not teardown — a macOS tab switch, or the
+/// reader swapping in its loading skeleton. Anything stopped here would be
+/// stopped for those cases too, silently killing an in-flight Browse load the
+/// user expects to find still running when they come back. Owners that need a
+/// teardown do it themselves (see `ReaderController.teardown()`).
 struct WebView: PlatformViewRepresentable {
     let webView: WKWebView
 
@@ -412,17 +421,6 @@ struct WebView: PlatformViewRepresentable {
     }
 
     func updateNSView(_: WKWebView, context _: Context) {}
-
-    /// Stops any in-flight load when this representable leaves the hierarchy —
-    /// the generic wrapper had no lifecycle hook at all before this (A7-F3).
-    /// Deliberately minimal: it must stay safe for both the reader's
-    /// long-lived controller-owned web view and the browser's tab-persistent
-    /// one, so it only halts loading rather than tearing down delegates —
-    /// callers that own a controller (e.g. `ReaderController.teardown()`)
-    /// still do that part themselves.
-    static func dismantleNSView(_ nsView: WKWebView, coordinator _: ()) {
-        nsView.stopLoading()
-    }
     #else
     func makeUIView(context _: Context) -> WKWebView {
         webView

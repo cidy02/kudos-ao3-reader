@@ -44,11 +44,11 @@ struct ReaderThemeTests {
     // MARK: - Letter-spacing clamp (UI-9)
 
     /// Readium (iOS) only accepts non-negative letter-spacing
-    /// (`ReadiumReaderStyleMapper.preferences` clamps with `max(0, ...)`), while
-    /// the shared `letterSpacingRange` constant still spans -0.03...0.12. The CSS
-    /// renderer (macOS's actual rendering path) must clamp the same way so a
-    /// shared persisted `readerLetterSpacing` value can never render differently
-    /// across platforms.
+    /// (`ReadiumReaderStyleMapper.preferences` clamps with `max(0, ...)`), and
+    /// `letterSpacingRange` is now non-negative too — so a negative value can only
+    /// reach the CSS renderer from a legacy/hand-edited backup, which
+    /// `KudosBackupSettings` restores without range validation. The renderer must
+    /// still clamp it, or macOS would render what iOS structurally cannot.
     @Test func negativeLetterSpacingIsClampedOutOfRenderedCSS() {
         let style = ReaderTextStyle(customize: true, letterSpacing: -0.02)
         let css = ReaderStylesheet.css(theme: .light, font: ReaderFontOption.builtIns[0], style: style)
@@ -65,5 +65,11 @@ struct ReaderThemeTests {
         let style = ReaderTextStyle(customize: true, letterSpacing: 0.04)
         let css = ReaderStylesheet.css(theme: .light, font: ReaderFontOption.builtIns[0], style: style)
         #expect(css.contains("letter-spacing: 0.04em !important;"))
+    }
+
+    /// The slider range must not advertise a half the renderers structurally
+    /// discard — otherwise the control moves and nothing changes.
+    @Test func letterSpacingRangeOffersOnlyValuesThatCanRender() {
+        #expect(ReaderTextStyle.letterSpacingRange.lowerBound == 0)
     }
 }

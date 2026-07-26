@@ -29,14 +29,17 @@ final class ReaderController: NSObject {
     /// viewport's leading edge, in both scrolled and paged modes. Already gated
     /// against stale loads; see `ReaderBridgeMessage`.
     var onProgressFraction: ((Double) -> Void)?
-    /// Called when in-content navigation targets a different spine file than the
-    /// one currently loaded (e.g. a cross-chapter note link). The host resolves
-    /// the URL against its own spine array and returns `true` if it will handle
-    /// the navigation itself (via `load(_:readAccess:...)`) — the raw WebKit
-    /// navigation is then cancelled so `currentIndex` and every state derived
-    /// from it stay authoritative (A7-F5). Same-document fragment links never
+    /// Asks the host whether `url` is another item in the loaded spine. **Must be
+    /// a pure lookup**: it runs while a WebKit navigation decision is still
+    /// outstanding, so it must not start a load or mutate reader state — that's
+    /// `onCrossSpineNavigation`'s job, and it runs afterwards.
+    var recognizesSpineURL: ((URL) -> Bool)?
+    /// Hands a recognized cross-chapter target (e.g. a note link into another
+    /// chapter) to the host, which navigates via its own `currentIndex` path so
+    /// the pill/TOC/progress/comments scope all follow (A7-F5). Called only after
+    /// the WebKit decision has been finalized. Same-document fragment links never
     /// reach this callback; they're allowed to navigate in place.
-    var onCrossSpineNavigation: ((URL) -> Bool)?
+    var onCrossSpineNavigation: ((URL) -> Void)?
 
     private let proxy = ReaderScriptProxy()
     private var loadedURL: URL?
@@ -147,6 +150,7 @@ final class ReaderController: NSObject {
         onReachedScrollBottom = nil
         onOpenExternalURL = nil
         onProgressFraction = nil
+        recognizesSpineURL = nil
         onCrossSpineNavigation = nil
         webView.stopLoading()
     }
@@ -187,8 +191,16 @@ extension ReaderController: WKNavigationDelegate {
             onOpenExternalURL?(url)
             return
         }
-        if url.scheme == "file", isCrossSpineNavigation(to: url), onCrossSpineNavigation?(url) == true {
+        if url.scheme?.lowercased() == "file", isCrossSpineNavigation(to: url),
+           recognizesSpineURL?(url) == true {
+            // Finalize the decision *before* handing off. The host's handler sets
+            // `currentIndex`, which re-enters `loadCurrentChapter()` →
+            // `webView.loadFileURL(...)`; starting a navigation while a decision is
+            // still outstanding is undefined per WebKit's contract (and can log
+            // "Completion handler … was not called"). Hence the split into a pure
+            // `recognizesSpineURL` query and this action.
             decisionHandler(.cancel)
+            onCrossSpineNavigation?(url)
             return
         }
         decisionHandler(.allow)
@@ -198,7 +210,17 @@ extension ReaderController: WKNavigationDelegate {
     /// points at a different file than the currently loaded chapter.
     private func isCrossSpineNavigation(to url: URL) -> Bool {
         guard let loadedURL else { return false }
-        return url.path != loadedURL.path
+        return Self.fileKey(url) != Self.fileKey(loadedURL)
+    }
+
+    /// Symlink-normalized identity for a local chapter file, shared with
+    /// `ReaderView`'s own spine lookup so both sides compare the same way. macOS
+    /// hands out both `/var/…` and `/private/var/…` for the same file; comparing
+    /// raw `path` strings would let that difference read as "same file" here (or
+    /// as "unresolvable" there) and silently fall back to an uncorrected
+    /// in-webview navigation — straight back to A7-F5, with no signal.
+    static func fileKey(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
     }
 }
 

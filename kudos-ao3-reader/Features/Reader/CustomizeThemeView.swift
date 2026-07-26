@@ -30,10 +30,6 @@ struct CustomizeThemeView: View {
     @AppStorage("readerMargin") private var pageMargin: Double = ReaderTextStyle.defaultMargin
     @AppStorage("readerJustify") private var justify = false
 
-    /// Readium accepts only non-negative letter spacing. Keep this branch's iOS
-    /// control honest instead of displaying values the navigator must clamp.
-    private let supportedLetterSpacingRange = 0.0 ... ReaderTextStyle.letterSpacingRange.upperBound
-
     /// The sheet's full height, so the preview can scale to a generous fraction of it.
     @State private var sheetHeight: CGFloat = 0
 
@@ -73,6 +69,12 @@ struct CustomizeThemeView: View {
                     }
 
                     Section {
+                        // Hand-rolled rather than the shared `ReduceMotion` helpers:
+                        // this animates through a *Binding*, and both helpers are
+                        // shaped for the other two forms (a `withAnimation` call
+                        // site and a `.animation(_:value:)` modifier). SwiftUI's
+                        // own `Binding.animation(_:)` already takes an optional, so
+                        // passing nil is the documented way to opt out.
                         Toggle("Customize", isOn: $customize.animation(reduceMotion ? nil : .easeInOut(duration: 0.2)))
 
                         Group {
@@ -80,7 +82,7 @@ struct CustomizeThemeView: View {
                                       value: $lineHeight, range: ReaderTextStyle.lineHeightRange,
                                       valueLabel: String(format: "%.2f", lineHeight))
                             sliderRow("Character Spacing", icon: "textformat.abc",
-                                      value: $letterSpacing, range: supportedLetterSpacingRange)
+                                      value: $letterSpacing, range: ReaderTextStyle.letterSpacingRange)
                             sliderRow("Word Spacing", icon: "line.3.horizontal",
                                       value: $wordSpacing, range: ReaderTextStyle.wordSpacingRange)
                             sliderRow("Margins", icon: "rectangle.inset.filled",
@@ -182,17 +184,22 @@ struct CustomizeThemeView: View {
                             lineWidth: selected ? 3 : 1
                         )
                     }
-                    // A non-color selection cue — the accent-ring alone doesn't
-                    // read for color-vision-deficient or VoiceOver users.
+                    // A non-color selection cue — the accent ring alone doesn't
+                    // read for color-vision-deficient users. Laid out normally
+                    // (no `.offset`), so it stays inside the swatch's own bounds
+                    // and can't be clipped by the row or spill onto a neighbour.
+                    // Palette rendering fills the badge's circle with the accent
+                    // colour, so it needs no backing shape — the hardcoded white
+                    // one it used to have read as a bright ring in Dark/OLED.
                     if selected {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 16))
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, Color.accentColor)
-                            .background(Circle().fill(.white))
-                            .offset(x: 4, y: -4)
                     }
                 }
+                // Keeps the badge from crowding the neighbouring swatch.
+                .padding(4)
                 Text(option.title)
                     .font(.caption2.weight(selected ? .semibold : .regular))
                     .foregroundStyle(selected ? .primary : .secondary)

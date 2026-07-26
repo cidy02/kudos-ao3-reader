@@ -243,6 +243,60 @@ struct ReadiumReaderTests {
         #expect(sections.map(\.title) == ["Part One", "Chapter 1", "Chapter 1a"])
     }
 
+    /// A grouping node with no page of its own — "Part One" pointing at its first
+    /// chapter's file — is an ordinary EPUB2 NCX shape. Flattening emits both it and
+    /// that child for the same spine index, and `ReaderSectionBuilder.build` is
+    /// last-write-wins, so without the outermost-wins dedup in `buildSections` the
+    /// child would rename that spine item (here: "Part One" → "Chapter 1"), which is
+    /// a behavior change beyond A7-F8's scope.
+    @Test func partSharingItsFirstChildsHrefKeepsTheOutermostTitle() {
+        let readingOrder: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/chapter2.xhtml")
+        ]
+        let toc: [ReadiumShared.Link] = [
+            ReadiumShared.Link(
+                href: "OEBPS/chapter1.xhtml",
+                title: "Part One",
+                children: [
+                    ReadiumShared.Link(href: "OEBPS/chapter1.xhtml", title: "Chapter 1"),
+                    ReadiumShared.Link(href: "OEBPS/chapter2.xhtml", title: "Chapter 2")
+                ]
+            )
+        ]
+
+        let sections = ReadiumBook.buildSections(toc: toc, readingOrder: readingOrder)
+
+        #expect(sections.count == 2)
+        #expect(sections.map(\.title) == ["Part One", "Chapter 2"])
+        // Chapter numbering must stay 1,2 — one section per spine item, no duplicate
+        // consuming an extra story-chapter number.
+        #expect(sections.map(\.storyChapterIndex) == [1, 2])
+    }
+
+    /// The same collision, but where the two titles classify differently: an
+    /// "Afterword" parent losing to a chapter child would turn back matter into a
+    /// numbered story chapter and shift the count.
+    @Test func classificationDoesNotFlipWhenAParentSharesAChildsHref() {
+        let readingOrder: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml"),
+            ReadiumShared.Link(href: "OEBPS/after.xhtml")
+        ]
+        let toc: [ReadiumShared.Link] = [
+            ReadiumShared.Link(href: "OEBPS/chapter1.xhtml", title: "Chapter 1"),
+            ReadiumShared.Link(
+                href: "OEBPS/after.xhtml",
+                title: "Afterword",
+                children: [ReadiumShared.Link(href: "OEBPS/after.xhtml", title: "Chapter 2")]
+            )
+        ]
+
+        let sections = ReadiumBook.buildSections(toc: toc, readingOrder: readingOrder)
+
+        #expect(sections.map(\.kind) == [.chapter, .afterword])
+        #expect(sections.storyChapterCount == 1)
+    }
+
     @Test func topLevelOnlyTOCStillWorksUnchanged() {
         // Regression guard: a flat (non-nested) TOC — the shape every existing
         // fixture uses — must resolve exactly as before flattening was added.

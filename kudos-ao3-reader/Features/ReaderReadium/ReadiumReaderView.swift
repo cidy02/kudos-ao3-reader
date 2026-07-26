@@ -277,9 +277,24 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     ) -> [ReaderSection] {
         let spineHrefs = readingOrder.map(\.href)
         let spineKeys = spineHrefs.map(ReaderSectionBuilder.hrefKey)
+        // Outermost-entry-wins on a duplicate spine target. A grouping node with no
+        // page of its own (a "Part One" heading whose href is just its first
+        // chapter's file) is an ordinary EPUB2 NCX shape, and flattening now emits
+        // both it and that child. `ReaderSectionBuilder.build` resolves duplicates
+        // last-write-wins, so without this the child would overwrite its parent and
+        // silently rename that spine item — a behavior change beyond A7-F8's scope,
+        // and one that can shift story-chapter numbering when the two titles
+        // classify differently (e.g. an "Afterword" parent losing to a chapter
+        // child). Dropping the deeper duplicate keeps exactly the title that won
+        // before flattening, so this wave only *adds* the previously-missing
+        // children. `build`'s own last-wins contract is shared with the macOS
+        // pipeline and is deliberately left alone.
+        var claimedSpineIndices: Set<Int> = []
         let rawTOC: [ReaderSectionBuilder.RawTOCEntry] = flattenTOC(toc).compactMap { link in
             let key = ReaderSectionBuilder.hrefKey(link.href)
-            guard let spineIndex = spineKeys.firstIndex(of: key) else { return nil }
+            guard let spineIndex = spineKeys.firstIndex(of: key),
+                  claimedSpineIndices.insert(spineIndex).inserted
+            else { return nil }
             return ReaderSectionBuilder.RawTOCEntry(
                 title: link.title ?? "Section \(spineIndex + 1)",
                 spineIndex: spineIndex
@@ -293,10 +308,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// chapter nested under a Part heading still gets its own navigable
     /// `RawTOCEntry` instead of silently disappearing (A7-F8 — the chapter sheet
     /// only ever iterated the top-level array, so a nested chapter's spine item
-    /// fell back to `.other` and was hidden from the index). Any duplicate spine
-    /// target (e.g. a Part link sharing its first child's href) is already
-    /// resolved correctly by `ReaderSectionBuilder.build`'s own spine-indexed
-    /// dictionary, so no extra dedup is needed here.
+    /// fell back to `.other` and was hidden from the index). Duplicate spine
+    /// targets this introduces are resolved by the caller — see the
+    /// outermost-wins note in `buildSections`.
     private static func flattenTOC(_ links: [ReadiumShared.Link]) -> [ReadiumShared.Link] {
         links.flatMap { [$0] + flattenTOC($0.children) }
     }
@@ -839,6 +853,12 @@ struct ReadiumReaderView: View {
         // visibly correct itself, which reads as the pill jumping up before sliding
         // down. A fixed offset has no such ambiguity.
         progressPill
+            // Bounds the capsule's *width*: this padding reduces the proposal the
+            // pill receives, so at large Dynamic Type sizes it can never grow past
+            // the screen edge (the enclosing frame proposes the full width, and the
+            // pill would otherwise size purely to its own single-line text). 16pt
+            // per edge is this app's established screen margin.
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             // Sit as close to the bottom edge as the Dynamic Island is to the top.
             .padding(.bottom, 11)
@@ -861,6 +881,10 @@ struct ReadiumReaderView: View {
             .font(.footnote.weight(.medium))
             .monospacedDigit()
             .lineLimit(1)
+            // Shrink a little before truncating, so the longest reading
+            // ("100%  ·  12/12  ·  Pg. 10/10") stays fully legible inside the
+            // width `bottomBar` bounds it to at large Dynamic Type sizes.
+            .minimumScaleFactor(0.75)
             .padding(.horizontal, 16)
             // minHeight (not a fixed height) so the capsule can grow at large
             // Dynamic Type sizes instead of clipping the scaled footnote text.

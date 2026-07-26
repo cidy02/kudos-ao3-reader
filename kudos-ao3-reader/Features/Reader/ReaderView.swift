@@ -428,13 +428,25 @@ struct ReaderView: View {
         // there through the authoritative `currentIndex` path (A7-F5) — a raw
         // in-webview navigation would otherwise leave the pill/TOC/progress/
         // comments scope pointed at the chapter that was current before the tap.
+        // The lookup is split from the jump so the controller can finalize
+        // WebKit's navigation decision before this starts a new load.
+        controller.recognizesSpineURL = { url in
+            spineIndex(for: url) != nil
+        }
         controller.onCrossSpineNavigation = { url in
-            guard let document, let index = document.spineURLs.firstIndex(where: { $0.path == url.path })
-            else { return false }
+            guard let index = spineIndex(for: url) else { return }
             landNextChapterOnLastPage = false
             currentIndex = index // triggers load via onChange
-            return true
         }
+    }
+
+    /// The spine position `url` refers to, if any — normalized through
+    /// `ReaderController.fileKey` so both sides of the comparison treat macOS's
+    /// `/var` vs `/private/var` symlinking identically.
+    private func spineIndex(for url: URL) -> Int? {
+        guard let document else { return nil }
+        let key = ReaderController.fileKey(url)
+        return document.spineURLs.firstIndex { ReaderController.fileKey($0) == key }
     }
 
     /// Marks a completed work finished once the reader reaches its end. WIPs and
