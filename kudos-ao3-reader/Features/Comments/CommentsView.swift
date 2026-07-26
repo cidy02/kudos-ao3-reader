@@ -208,6 +208,14 @@ struct CommentsView: View {
                     dismissCommentsView: isModal ? dismiss : nil
                 )
             }
+            .onChange(of: model.composerContext != nil) { _, presented in
+                // Same rising-edge strand clear as `CommentsSheetModifier`, for the
+                // one queuing path that modifier can't cover: a *pushed* (non-modal)
+                // CommentsView opens no outer sheet, so nothing else would clear a
+                // route stranded before the composer's reply-quote byline is tapped.
+                // Queuing only happens on the way out, so this cannot race the drain.
+                if presented { router.cancelPendingAuthorProfileAfterDismiss() }
+            }
             .sheet(isPresented: $showingChapterPicker) {
                 chapterPicker
             }
