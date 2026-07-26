@@ -207,6 +207,22 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                                page: page, pageCount: pageCount)
     }
 
+    /// The current chapter's Readium positions, in reading order — the slider's
+    /// seek targets (`positionsByReadingOrder[chapterIndex]`).
+    var currentChapterPositions: [Locator]? {
+        guard let pos = readingPosition, positionsByReadingOrder.indices.contains(pos.chapter - 1)
+        else { return nil }
+        return positionsByReadingOrder[pos.chapter - 1]
+    }
+
+    /// Remaining Readium positions in the current chapter and across the whole
+    /// publication — feeds `ReaderTimeEstimate` for the position card's time labels.
+    var remainingPositions: (chapter: Int, work: Int)? {
+        guard let pos = readingPosition, let globalPos = currentLocator?.locations.position else { return nil }
+        let totalPositions = positionsByReadingOrder.reduce(0) { $0 + $1.count }
+        return (chapter: max(0, pos.pageCount - pos.page), work: max(0, totalPositions - globalPos))
+    }
+
     /// Opens the work's EPUB and builds the navigator at `initialLocator` with the
     /// given configuration (preferences + custom-font declarations). The file
     /// already lives in the app sandbox, so (unlike the POC) it's opened in place.
@@ -257,6 +273,12 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
 
     func go(to link: ReadiumShared.Link) {
         Task { @MainActor in await navigator?.go(to: link) }
+    }
+
+    /// Navigates directly to a `Locator` — used by the position card's slider to
+    /// seek within the current chapter's Readium positions.
+    func go(to locator: Locator) {
+        Task { @MainActor in await navigator?.go(to: locator, options: NavigatorGoOptions()) }
     }
 
     /// Navigates to a spine position directly — needed for `ReaderSection`s (like
@@ -505,6 +527,7 @@ struct ReadiumReaderView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -537,6 +560,24 @@ struct ReadiumReaderView: View {
     }
     @State private var dismissDragOffset: CGFloat = 0
     @State private var isDismissingByDrag = false
+
+    // MARK: Chrome state
+
+    @State private var fanMenuOpen = false
+    /// Which tab the Contents sheet opens on — the fan's "Contents" and
+    /// "Bookmarks & Notes" pills both route here, differing only in this.
+    @State private var contentsSegment: ReaderContentsSegment = .chapters
+    /// Chapter-relative seek fraction (0...1) shown by the position card's slider.
+    /// Driven from `book.readingPosition` while not being dragged; only pushed to
+    /// the navigator on editing-ended, so it never fights `locationDidChange`.
+    @State private var sliderValue: Double = 0
+    @State private var isEditingSlider = false
+    /// Session-only "kudos left" flag — there's no persisted per-work kudos state
+    /// (AO3 doesn't expose one to check), so this reflects only this reading
+    /// session's own successful tap, same honesty rule as `AO3WorkActionsModel`.
+    @State private var kudosGiven = false
+    @State private var kudosWorking = false
+    @State private var kudosBanner: String?
 
     private var isPhone: Bool {
         UIDevice.current.userInterfaceIdiom == .phone
@@ -615,33 +656,26 @@ struct ReadiumReaderView: View {
         content
             .modifier(ReaderInteractiveDismissStyle(offset: dismissDragOffset,
                                                     reduceMotion: reduceMotion))
-            // The pill sits outside the dismiss-style transform (not inside `content`)
-            // so it's immune to the swipe-to-dismiss pan's scale/offset/clip — including
-            // its brief spring-back when an ordinary tap's incidental finger movement
-            // crosses the pan's own latch threshold without becoming a real dismiss.
-            // That spring-back is a legitimate, real animation (not a no-op), so it
-            // can't be skipped; keeping the pill out of the transformed subtree means
-            // it never rides along with it, whatever the cause.
-            .overlay(alignment: .bottom) { bottomBar }
+            // Every floating chrome layer sits outside the dismiss-style transform (not
+            // inside `content`) so it's immune to the swipe-to-dismiss pan's scale/
+            // offset/clip — including its brief spring-back when an ordinary tap's
+            // incidental finger movement crosses the pan's own latch threshold without
+            // becoming a real dismiss. That spring-back is a legitimate, real animation
+            // (not a no-op), so it can't be skipped; keeping the chrome out of the
+            // transformed subtree means it never rides along with it, whatever the cause.
+            //
+            // Each layer sizes to its own content (no infinite-frame hit-test area), so
+            // taps in the empty space between them still reach the page and toggle
+            // chrome via Readium's own `didTapAt`, exactly as before.
+            .overlay(alignment: .top) { topBarLayer }
+            .overlay(alignment: .topTrailing) { fanMenuLayer }
+            .overlay(alignment: .bottom) { positionCardLayer }
             .background(readerTheme.backgroundColor)
             .preferredColorScheme(readerTheme.colorScheme)
             .navigationTitle(work.title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ActionToolbar {
-                    if ao3WorkID != nil {
-                        ToolbarIconButton(title: "Comments", systemImage: "bubble.left.and.bubble.right") {
-                            showingComments = true
-                        }
-                    }
-                    ToolbarIconButton(title: "Chapters", systemImage: "list.bullet") {
-                        router.toggle(.readerChapters)
-                    }
-                    ToolbarIconButton(title: "Display Options", systemImage: "textformat.size") {
-                        router.toggle(.readerDisplay)
-                    }
-                }
-            }
+            // The floating top bar replaces the system nav bar entirely.
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: readerPanelBinding) { readerSheet }
             .commentsSheet(
                 isPresented: $showingComments,
@@ -649,9 +683,13 @@ struct ReadiumReaderView: View {
                 context: .init(savedWork: work),
                 initialChapterPosition: currentAO3Chapter
             )
-            // Immersive reading: hide the tab bar; the nav/status bars follow the chrome.
+            .alert("AO3", isPresented: kudosBannerPresented) {
+                Button("OK", role: .cancel) { kudosBanner = nil }
+            } message: {
+                Text(kudosBanner ?? "")
+            }
+            // Immersive reading: hide the tab bar; the status bar follows the chrome.
             .toolbar(.hidden, for: .tabBar)
-            .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
             .statusBarHidden(!chromeVisible)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
             .animation(.easeInOut(duration: 0.25), value: book.chromeHidden)
@@ -663,6 +701,9 @@ struct ReadiumReaderView: View {
             // behind-the-sheet onChange can be missed, so re-apply when it closes.
             .onChange(of: router.panel) { _, panel in
                 if panel == .none { book.submit(preferences) }
+            }
+            .onChange(of: book.readingPosition) { _, newValue in
+                syncSliderFromPosition(newValue)
             }
             .onChange(of: scenePhase) { _, phase in
                 // Force-quit safety: flush when leaving the foreground so a
@@ -807,87 +848,205 @@ struct ReadiumReaderView: View {
 
     // MARK: Chrome
 
-    /// iOS navigation is gesture-based (swipe / tap zones), so the bar shows only
-    /// the position pill — no prev/next buttons.
-    private var bottomBar: some View {
-        // A full-bleed, non-interactive layer that bottom-aligns the pill against the
-        // true screen edge (the overlay otherwise stops at the home-indicator safe
-        // area). Hit testing is off so taps still reach the page to toggle chrome.
-        //
-        // Always present (not conditionally inserted via `if chromeVisible`) and
-        // shown/hidden with a fixed offset + opacity rather than
-        // `.transition(.move(edge:))`: that transition computes its off-screen
-        // distance from this view's own resolved frame, which is ambiguous here — a
-        // `.frame(maxHeight: .infinity)` inside a container whose nav bar/status bar
-        // visibility is *also* animating at the same moment. SwiftUI can get that
-        // computation wrong for the transition's first frame or two and then
-        // visibly correct itself, which reads as the pill jumping up before sliding
-        // down. A fixed offset has no such ambiguity.
-        progressPill
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            // Sit as close to the bottom edge as the Dynamic Island is to the top.
-            .padding(.bottom, 11)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-            .offset(y: chromeVisible ? 0 : 120)
-            .opacity(chromeVisible ? 1 : 0)
+    private var topBarLayer: some View {
+        ReaderChromeTopBar(
+            title: work.title, author: work.author,
+            tint: themeManager.effectiveTint, onClose: dismissReader
+        )
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .allowsHitTesting(chromeVisible)
+        .opacity(chromeVisible ? 1 : 0)
     }
 
-    private var progressPill: some View {
-        // Just the essentials: overall percent, chapter, and page within the chapter.
-        let label = if let pos = book.readingPosition {
-            "\(pos.percent)%  ·  \(sectionLabel(for: pos))  ·  Pg. \(pos.page)/\(pos.pageCount)"
-        } else if let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) {
-            "\(percent)%"
-        } else {
-            ""
+    private var fanMenuLayer: some View {
+        ReaderFanMenu(isOpen: $fanMenuOpen, pills: fanPills, shareURL: shareURL,
+                      roundActions: fanRoundActions, reduceMotion: reduceMotion)
+            .padding(.trailing, 12)
+            .padding(.top, 8)
+            .allowsHitTesting(chromeVisible)
+            .opacity(chromeVisible ? 1 : 0)
+            // Close the fan when the chrome itself hides (tap-to-hide) so it can't
+            // reopen invisibly-but-tappable underneath the chrome's next show.
+            .onChange(of: chromeVisible) { _, visible in if !visible { fanMenuOpen = false } }
+    }
+
+    private var positionCardLayer: some View {
+        Group {
+            if let summary = positionSummary {
+                ReaderPositionCard(
+                    pageLabel: summary.pageLabel,
+                    chapterTimeLabel: summary.chapterTimeLabel,
+                    workLine: summary.workLine,
+                    tint: themeManager.effectiveTint,
+                    sliderValue: $sliderValue,
+                    sliderEnabled: (book.currentChapterPositions?.count ?? 0) > 1,
+                    onEditingChanged: handleSliderEditingChanged
+                )
+            }
         }
-        return Text(label)
-            .font(.footnote.weight(.medium))
-            .monospacedDigit()
-            .lineLimit(1)
-            .padding(.horizontal, 16)
-            .frame(height: 40)
-            .glassEffect(.regular, in: .capsule)
-            .opacity(label.isEmpty ? 0 : 1)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 28)
+        .allowsHitTesting(chromeVisible)
+        .opacity(chromeVisible ? 1 : 0)
+    }
+
+    /// The fan's labelled menu pills: Contents, Bookmarks & Notes, Find in Work,
+    /// Comments (AO3-backed works only — not in the reference design's four, but
+    /// dropping it would lose an existing feature, which the brief forbids), and
+    /// Themes & Settings.
+    private var fanPills: [ReaderFanMenuPill] {
+        var pills: [ReaderFanMenuPill] = [
+            ReaderFanMenuPill(id: "contents", title: contentsPillTitle, systemImage: "list.bullet") {
+                contentsSegment = .chapters
+                router.panel = .readerChapters
+            },
+            ReaderFanMenuPill(id: "bookmarks", title: "Bookmarks & Notes", systemImage: "bookmark") {
+                contentsSegment = .bookmarks
+                router.panel = .readerChapters
+            },
+            // Find in Work: shown per the layout, disabled until the Readium
+            // search integration lands (see TASKS.md) — no fake search box.
+            ReaderFanMenuPill(id: "find", title: "Find in Work", systemImage: "magnifyingglass", isEnabled: false) {}
+        ]
+        if ao3WorkID != nil {
+            pills.append(ReaderFanMenuPill(
+                id: "comments", title: "Comments", systemImage: "bubble.left.and.bubble.right"
+            ) {
+                showingComments = true
+            })
+        }
+        pills.append(ReaderFanMenuPill(id: "settings", title: "Themes & Settings", systemImage: "textformat.size") {
+            router.panel = .readerDisplay
+        })
+        return pills
+    }
+
+    private var contentsPillTitle: String {
+        guard let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) else { return "Contents" }
+        return "Contents · \(percent)%"
+    }
+
+    /// The work's page on AO3 — the `ShareLink` target in the fan's round row.
+    private var shareURL: URL? {
+        ao3WorkID.map(AO3AuthService.workURL)
+    }
+
+    /// The fan's round action row (after the native `ShareLink` slot): kudos is
+    /// wired to the existing native write action; read aloud and in-book
+    /// bookmarking are shown per the layout but disabled until their capabilities
+    /// land (TASKS.md) rather than faked.
+    private var fanRoundActions: [ReaderFanRoundAction] {
+        var actions: [ReaderFanRoundAction] = []
+        if let ao3WorkID {
+            actions.append(ReaderFanRoundAction(
+                id: "kudos", systemImage: kudosGiven ? "heart.fill" : "heart",
+                tint: kudosGiven ? .pink : .primary,
+                accessibilityLabel: kudosGiven ? "Kudos given" : "Give kudos",
+                isEnabled: !kudosWorking && !kudosGiven
+            ) {
+                giveKudos(workID: ao3WorkID)
+            })
+        }
+        actions.append(ReaderFanRoundAction(
+            id: "readAloud", systemImage: "waveform", tint: .primary,
+            accessibilityLabel: "Read aloud", isEnabled: false
+        ) {})
+        actions.append(ReaderFanRoundAction(
+            id: "bookmark", systemImage: "bookmark", tint: .primary,
+            accessibilityLabel: "Add bookmark", isEnabled: false
+        ) {})
+        return actions
     }
 
     /// The AO3 story chapter the reader is currently on, for the chapter-aware
-    /// Comments button. `pos.chapter - 1` is the current spine index (same basis the
-    /// pill uses); the section list normalizes it past Preface/Summary/Afterword.
-    /// nil (→ open on All comments) until a position and built sections both exist.
+    /// Comments entry and the position card's chapter line. `pos.chapter - 1` is
+    /// the current spine index; the section list normalizes it past Preface/
+    /// Summary/Afterword. nil (→ Comments opens on All) until a position and
+    /// built sections both exist.
     private var currentAO3Chapter: Int? {
         guard let pos = book.readingPosition, !book.sections.isEmpty else { return nil }
         return book.sections.ao3StoryChapter(forSpineIndex: pos.chapter - 1)
     }
 
-    /// The pill's chapter segment, normalized against AO3 front/back matter
-    /// (`ReaderSection`) instead of a raw spine position — "P"/"S"/"A", or
-    /// "<index>/<total>" for a real story chapter, preferring AO3's own posted
-    /// chapter total over one derived purely from the section list. Falls back to
-    /// the raw "Ch. x/x" reading if sections haven't been built (shouldn't happen
-    /// once `.ready`, but a locator can theoretically outrace it).
-    private func sectionLabel(for pos: ReadiumBook.ReadingPosition) -> String {
-        guard book.sections.indices.contains(pos.chapter - 1) else {
-            return "Ch. \(pos.chapter)/\(pos.chapterCount)"
-        }
-        let storyTotal = SavedWork.totalChapterCount(from: work.chapters) ?? book.sections.storyChapterCount
-        let label = book.sections[pos.chapter - 1].pillLabel(storyChapterTotal: storyTotal)
-        return label.isEmpty ? "Ch. \(pos.chapter)/\(pos.chapterCount)" : label
+    /// The position card's label lines, built from `book.readingPosition` +
+    /// `book.remainingPositions` — no new requests, no new persistence.
+    private var positionSummary: ReaderPositionSummary? {
+        guard let pos = book.readingPosition else { return nil }
+        let remaining = book.remainingPositions
+        return ReaderPositionSummary(
+            page: pos.page, pageCount: pos.pageCount, percent: pos.percent,
+            place: currentPlace(for: pos),
+            remainingInChapter: remaining?.chapter, remainingInWork: remaining?.work
+        )
     }
 
-    // MARK: Chapters / Display sheet
+    /// Where the card says the reader is. `pos.chapter - 1` is the current spine
+    /// index; the normalized section list keeps AO3's Preface/Summary/Afterword
+    /// from being numbered as story chapters. Falls back to the raw spine reading
+    /// if sections haven't been built (shouldn't happen once `.ready`, but a
+    /// locator can theoretically outrace them).
+    private func currentPlace(for pos: ReadiumBook.ReadingPosition) -> ReaderPositionSummary.Place {
+        guard book.sections.indices.contains(pos.chapter - 1) else {
+            return .chapter(index: pos.chapter, total: pos.chapterCount)
+        }
+        return ReaderPositionSummary.Place(
+            section: book.sections[pos.chapter - 1],
+            storyChapterTotal: SavedWork.totalChapterCount(from: work.chapters)
+                ?? book.sections.storyChapterCount
+        )
+    }
+
+    /// Pushes the slider to the reader's live position while the user isn't
+    /// dragging it, so it tracks normal reading without fighting the drag.
+    private func syncSliderFromPosition(_ pos: ReadiumBook.ReadingPosition?) {
+        guard !isEditingSlider, let pos else { return }
+        sliderValue = pos.pageCount > 1 ? Double(pos.page - 1) / Double(pos.pageCount - 1) : 0
+    }
+
+    /// Only navigates when the drag ends — the slider drives itself freely while
+    /// being dragged, and `syncSliderFromPosition` is suppressed meanwhile so the
+    /// navigator's own `locationDidChange` can't snap the thumb back mid-drag.
+    private func handleSliderEditingChanged(_ editing: Bool) {
+        isEditingSlider = editing
+        guard !editing, let positions = book.currentChapterPositions, !positions.isEmpty else { return }
+        let index = min(positions.count - 1, max(0, Int((sliderValue * Double(positions.count - 1)).rounded())))
+        book.go(to: positions[index])
+    }
+
+    private func giveKudos(workID: Int) {
+        guard !kudosWorking, !kudosGiven else { return }
+        kudosWorking = true
+        Task {
+            do {
+                kudosBanner = try await auth.giveKudos(workID: workID)
+                kudosGiven = true
+            } catch {
+                kudosBanner = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            kudosWorking = false
+        }
+    }
+
+    private var kudosBannerPresented: Binding<Bool> {
+        Binding(get: { kudosBanner != nil }, set: { if !$0 { kudosBanner = nil } })
+    }
+
+    // MARK: Contents / Display sheet
 
     private var readerSheet: some View {
         NavigationStack {
             Group {
                 if router.panel == .readerChapters {
-                    List { chapterRows }
+                    ReaderContentsSheet(segment: $contentsSegment, sections: book.sections) { section in
+                        book.go(toSpineIndex: section.spineIndex)
+                        router.panel = .none
+                    }
                 } else {
                     ReaderOptionsForm()
                 }
             }
-            .navigationTitle(router.panel == .readerChapters ? "Chapters" : "Display & Themes")
+            .navigationTitle(router.panel == .readerChapters ? "Contents" : "Display & Themes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -898,24 +1057,6 @@ struct ReadiumReaderView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .preferredColorScheme(readerTheme.colorScheme)
-    }
-
-    private var chapterRows: some View {
-        // .other sections have no navigable heading of their own (AO3/Calibre
-        // never gave them one) and aren't part of the story — not shown here,
-        // matching the reader index's documented Preface/Summary/Chapter/
-        // Afterword-only contract. Still reachable by normal page-turning.
-        ForEach(book.sections.filter { $0.kind != .other }) { section in
-            Button {
-                book.go(toSpineIndex: section.spineIndex)
-                router.panel = .none
-            } label: {
-                Text(section.title)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-            }
-            .buttonStyle(.plain)
-        }
     }
 
     // MARK: Loading + progress
