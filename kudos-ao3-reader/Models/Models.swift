@@ -694,6 +694,114 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     }
 }
 
+/// What a `ReadingAnnotation` is. One model covers all three because they share an
+/// identical anchor (a Readium `Locator`) and lifecycle — only the presence of a
+/// highlight range, a colour, and a note body differ.
+nonisolated enum ReadingAnnotationKind: String, Codable, CaseIterable {
+    /// A place the reader marked to come back to. No selected text required.
+    case bookmark
+    /// A highlighted passage, optionally with a note attached.
+    case highlight
+}
+
+/// The highlight tint. Stored as a string rather than a raw colour so the palette
+/// can be re-themed (and so Sepia can warm them) without migrating stored data.
+nonisolated enum ReadingAnnotationColor: String, Codable, CaseIterable {
+    case yellow, green, blue, pink, purple, underline
+}
+
+/// One in-book bookmark, highlight, or note, anchored by a Readium `Locator`.
+///
+/// The anchor is `Locator.persistenceString` — exactly how reading progress is
+/// stored (`SavedWork.readiumLocator`), so there is one locator-encoding path in
+/// the app and no second format to keep in step. `selectedText` is a snapshot of
+/// what the passage said when it was highlighted: EPUBs can be re-downloaded and
+/// AO3 authors edit posted chapters, so a locator can drift or dangle — the
+/// snapshot keeps the annotation meaningful (and listable) even then.
+///
+/// Additive, default-valued fields only, per the migration rules in
+/// `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`. Note the deliberate absence of any
+/// property named `isDeleted` (CoreData collision).
+@Model final class ReadingAnnotation {
+    var id: UUID = UUID()
+    var kindRaw: String = ReadingAnnotationKind.bookmark.rawValue
+    var colorRaw: String = ReadingAnnotationColor.yellow.rawValue
+    /// Readium `Locator` JSON — the anchor. Same encoding as `readiumLocator`.
+    var locatorString: String = ""
+    /// The passage as it read when annotated; empty for a plain bookmark.
+    var selectedText: String = ""
+    /// The reader's own note. Empty means "no note" — a highlight without one.
+    var note: String = ""
+    /// `totalProgression` at creation (0...1), so lists can sort in book order
+    /// without re-decoding every locator.
+    var progression: Double = 0
+    /// Spine index at creation, for grouping a list by chapter cheaply.
+    var spineIndex: Int = 0
+    /// Chapter title at creation, so the list reads well even if the section
+    /// list isn't loaded (the annotations sheet can open before the book does).
+    var chapterTitle: String = ""
+    var createdAt: Date = Date()
+    var lastModifiedAt: Date = Date()
+    var deletedAt: Date?
+    var isPendingDeletion: Bool = false
+    var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
+
+    var work: SavedWork?
+
+    init(
+        id: UUID = UUID(),
+        work: SavedWork,
+        kind: ReadingAnnotationKind,
+        locatorString: String,
+        selectedText: String = "",
+        note: String = "",
+        color: ReadingAnnotationColor = .yellow,
+        progression: Double = 0,
+        spineIndex: Int = 0,
+        chapterTitle: String = "",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.work = work
+        kindRaw = kind.rawValue
+        colorRaw = color.rawValue
+        self.locatorString = locatorString
+        self.selectedText = selectedText
+        self.note = note
+        self.progression = progression
+        self.spineIndex = spineIndex
+        self.chapterTitle = chapterTitle
+        self.createdAt = createdAt
+        lastModifiedAt = createdAt
+    }
+
+    var kind: ReadingAnnotationKind {
+        get { ReadingAnnotationKind(rawValue: kindRaw) ?? .bookmark }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var color: ReadingAnnotationColor {
+        get { ReadingAnnotationColor(rawValue: colorRaw) ?? .yellow }
+        set { colorRaw = newValue.rawValue }
+    }
+
+    var syncStatus: SyncRecordStatus {
+        get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    /// True when this carries a reader-written note — the Notes list's filter.
+    /// A highlight with no note belongs only under Highlights.
+    var hasNote: Bool {
+        !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func markModified(_ date: Date = Date()) {
+        lastModifiedAt = date
+        if syncStatus == .synced { syncStatus = .pending }
+    }
+}
+
 extension SavedWork {
     /// Parses AO3's "5/10" chapter stat into the posted-chapter count (the "5" side).
     /// Shared by `postedChapterCount` and the queue's metadata baseline.

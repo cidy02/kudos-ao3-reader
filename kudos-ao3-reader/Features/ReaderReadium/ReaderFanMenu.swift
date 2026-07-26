@@ -28,6 +28,19 @@ struct ReaderFanRoundAction: Identifiable {
 /// The top-right "more" button that fans open into labelled menu pills plus a row
 /// of round quick actions, all right-aligned below it. Modeled on Apple Books' own
 /// reading-options glyph (three list bars over three dots).
+///
+/// As in Apple Books, the button is *replaced by* the menu rather than sitting
+/// above it: opening hides the button and the pills take its place, and closing
+/// brings it back. Dismissal therefore can't come from the button — the host
+/// supplies a tap-anywhere-else backdrop (`ReaderFanMenu.dismissBackdrop`), and
+/// VoiceOver uses the standard escape action below.
+///
+/// The open/close transition is the system's own Liquid Glass morph, not a
+/// fade: a `GlassEffectContainer` plus a shared `glassEffectID` per row lets the
+/// button's glass shape flow outward into the pills and pour back into the
+/// button on dismiss, which is the effect Apple Books uses. Everything inside a
+/// container is one glass system, so neighbouring shapes also blend as they
+/// separate instead of popping in independently.
 struct ReaderFanMenu: View {
     @Binding var isOpen: Bool
     let pills: [ReaderFanMenuPill]
@@ -37,14 +50,30 @@ struct ReaderFanMenu: View {
     let roundActions: [ReaderFanRoundAction]
     let reduceMotion: Bool
 
+    /// Ties the button's glass to the pills' so the system morphs between them
+    /// rather than cross-fading two unrelated shapes.
+    @Namespace private var glassNamespace
+
     var body: some View {
+        GlassEffectContainer(spacing: 9) {
+            content
+        }
+        // With the button gone while open there is no control to close the menu,
+        // so give VoiceOver the standard dismiss gesture (two-finger scrub) it
+        // would otherwise get from that button.
+        .accessibilityAction(.escape) { close() }
+    }
+
+    private var content: some View {
         VStack(alignment: .trailing, spacing: 9) {
-            toggleButton
+            if !isOpen {
+                toggleButton
+            }
 
             if isOpen {
                 ForEach(pills) { pill in
                     Button {
-                        isOpen = false
+                        close()
                         pill.action()
                     } label: {
                         HStack(spacing: 12) {
@@ -66,6 +95,11 @@ struct ReaderFanMenu: View {
                     // foreground — the default button style tints it with the accent.
                     .buttonStyle(.plain)
                     .glassEffect(.regular, in: .capsule)
+                    // The first pill inherits the button's glass identity, so the
+                    // button morphs into it; the rest get their own so they read as
+                    // separating out of that same shape.
+                    .glassEffectID(pill.id == pills.first?.id ? Self.rootGlassID : pill.id,
+                                   in: glassNamespace)
                     .disabled(!pill.isEnabled)
                     .accessibilityLabel(pill.title)
                     .accessibilityHint(pill.isEnabled ? "" : "Coming soon")
@@ -82,6 +116,7 @@ struct ReaderFanMenu: View {
                         }
                         .buttonStyle(.plain)
                         .glassEffect(.regular, in: .capsule)
+                        .glassEffectID("share", in: glassNamespace)
                         .accessibilityLabel("Share")
                     }
                     ForEach(roundActions) { action in
@@ -94,6 +129,7 @@ struct ReaderFanMenu: View {
                         }
                         .buttonStyle(.plain)
                         .glassEffect(.regular, in: .capsule)
+                        .glassEffectID(action.id, in: glassNamespace)
                         .disabled(!action.isEnabled)
                         .accessibilityLabel(action.accessibilityLabel)
                         .accessibilityHint(action.isEnabled ? "" : "Coming soon")
@@ -101,14 +137,37 @@ struct ReaderFanMenu: View {
                 }
             }
         }
+        // With the button gone while open there is no control to close the menu,
+        // so give VoiceOver the standard dismiss gesture (two-finger scrub) it
+        // would otherwise get from that button.
+        .accessibilityAction(.escape) { close() }
+    }
+
+    /// The glass morph's curve. A gently damped spring, not a linear fade — the
+    /// shapes should look like they flow apart and back together. Shared by every
+    /// open/close path so the two directions always match.
+    static let morph: Animation = .spring(response: 0.34, dampingFraction: 0.82)
+
+    /// Closes the menu, matching the open animation (and skipping it under
+    /// Reduce Motion). Shared by the escape action and the host's backdrop.
+    static func close(isOpen: Binding<Bool>, reduceMotion: Bool) {
+        if reduceMotion {
+            isOpen.wrappedValue = false
+        } else {
+            withAnimation(morph) { isOpen.wrappedValue = false }
+        }
+    }
+
+    private func close() {
+        Self.close(isOpen: $isOpen, reduceMotion: reduceMotion)
     }
 
     private var toggleButton: some View {
         Button {
             if reduceMotion {
-                isOpen.toggle()
+                isOpen = true
             } else {
-                withAnimation(.easeInOut(duration: 0.2)) { isOpen.toggle() }
+                withAnimation(Self.morph) { isOpen = true }
             }
         } label: {
             VStack(spacing: 3) {
@@ -130,7 +189,32 @@ struct ReaderFanMenu: View {
         }
         .buttonStyle(.plain)
         .glassEffect(.regular, in: Circle())
-        .accessibilityLabel(isOpen ? "Close menu" : "More")
+        .glassEffectID(Self.rootGlassID, in: glassNamespace)
+        // Only ever rendered while closed, so the label is unconditional.
+        .accessibilityLabel("More")
+    }
+
+    /// Shared by the closed button and the first open pill — the identity the
+    /// system morphs along.
+    private static let rootGlassID = "reader-fan-root"
+}
+
+extension ReaderFanMenu {
+    /// A full-screen, invisible tap target that closes the open menu — the
+    /// dismissal path that the toggle button used to provide before it started
+    /// hiding itself (Apple Books' tap-anywhere-else behaviour). Closing the menu
+    /// this way leaves the surrounding chrome up, unlike a tap on the page, which
+    /// Readium turns into a chrome toggle.
+    ///
+    /// Host it *beneath* the menu and above the other chrome layers so the first
+    /// tap outside the menu dismisses it instead of hitting a control behind it.
+    /// Hidden from VoiceOver — a screen-sized invisible button is noise there, and
+    /// the menu's own `.escape` action covers dismissal.
+    static func dismissBackdrop(isOpen: Binding<Bool>, reduceMotion: Bool) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture { close(isOpen: isOpen, reduceMotion: reduceMotion) }
+            .accessibilityHidden(true)
     }
 }
 #endif

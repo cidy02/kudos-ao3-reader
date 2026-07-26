@@ -110,4 +110,25 @@ extension ReaderPositionSummary.Place {
             self = .chapter(index: section.storyChapterIndex ?? 1, total: storyChapterTotal)
         }
     }
+
+    /// Resolves the place for a 1-based chapter position against the normalized
+    /// section list. `chapter - 1` is the spine index the position sits in.
+    ///
+    /// `postedChapterTotal` is AO3's own "Chapters: X/Y" total when known;
+    /// otherwise the count of real story chapters in `sections` is used. Falls
+    /// back to a raw spine reading when `sections` doesn't cover the index —
+    /// shouldn't happen once the book is `.ready`, but a locator can in theory
+    /// outrace the section build.
+    static func resolve(
+        chapter: Int, chapterCount: Int,
+        sections: [ReaderSection], postedChapterTotal: Int?
+    ) -> Self {
+        guard sections.indices.contains(chapter - 1) else {
+            return .chapter(index: chapter, total: chapterCount)
+        }
+        return Self(
+            section: sections[chapter - 1],
+            storyChapterTotal: postedChapterTotal ?? sections.storyChapterCount
+        )
+    }
 }

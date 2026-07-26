@@ -421,6 +421,6 @@ private struct WebKitPrewarmView: View {
         .modelContainer(for: [
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self
+            SavedSearch.self, ReadingAnnotation.self
         ], inMemory: true)
 }

@@ -8,6 +8,10 @@ struct ReaderChromeTopBar: View {
     let title: String
     let author: String
     let tint: Color
+    /// Hidden while the fan menu is open: the menu replaces its own button and so
+    /// expands into this row, which would otherwise truncate the title to a word
+    /// or two behind the first menu pill. The close button stays put.
+    var titleHidden = false
     let onClose: () -> Void
 
     var body: some View {
@@ -29,7 +33,9 @@ struct ReaderChromeTopBar: View {
             .accessibilityLabel("Close reader")
 
             Spacer(minLength: 0)
-            titlePill
+            if !titleHidden {
+                titlePill
+            }
             Spacer(minLength: 0)
 
             // Reserves the fan button's own width so the pill above stays centred

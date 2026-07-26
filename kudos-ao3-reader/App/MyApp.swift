@@ -11,7 +11,7 @@ import SwiftUI
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
         ])
         do {
             return try ModelContainer(for: schema)

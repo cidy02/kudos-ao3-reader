@@ -5,6 +5,7 @@ import SwiftUI
 import ReadiumNavigator
 import ReadiumShared
 import UIKit
+import WebKit
 #endif
 
 /// Platform router for the book reader. iOS/iPadOS use the new Readium navigator;
@@ -348,15 +349,80 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         chromeHidden.toggle()
     }
 
+    /// Injects the one CSS safeguard Readium CSS has no preference for, matching
+    /// what the legacy reader's own stylesheet already does (see
+    /// `ReaderStylesheet.css`): let a "word" break only when it cannot fit on a
+    /// line by itself.
+    ///
+    /// Without it a long unbreakable token — AO3 prose is full of them, e.g.
+    /// `'Control...you...can't...ritual.'`, where ellipses join words with no
+    /// break opportunity, plus bare URLs — overflows its page box horizontally,
+    /// spills into the adjacent column, and leaves a fragment of itself visible
+    /// on the following page.
+    ///
+    /// `overflow-wrap: break-word` leaves ordinary words intact; `word-break`
+    /// would split them mid-character as a side effect, which is why the legacy
+    /// stylesheet rejected it too. Applied at document level as a user script
+    /// because `EPUBPreferences`/`CSSRSProperties` expose no equivalent knob.
+    func navigator(_: EPUBNavigatorViewController, setupUserScripts controller: WKUserContentController) {
+        let css = """
+        html, body, p, div, span, li, blockquote, td, th, h1, h2, h3, h4, h5, h6, a {
+            overflow-wrap: break-word;
+        }
+        """
+        let source = """
+        (function() {
+            var id = 'kudos-overflow-guard';
+            function inject() {
+                if (!document.head || document.getElementById(id)) return;
+                var style = document.createElement('style');
+                style.id = id;
+                style.textContent = \(Self.javaScriptStringLiteral(css));
+                document.head.appendChild(style);
+            }
+            inject();
+            // Readium swaps resources into the same web view, so a document that
+            // had no <head> yet at injection time still gets the rule.
+            document.addEventListener('DOMContentLoaded', inject);
+        })();
+        """
+        controller.addUserScript(WKUserScript(
+            source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false
+        ))
+    }
+
+    /// Encodes a string as a JavaScript literal via JSON, so quotes, newlines and
+    /// backslashes in the CSS can't break out of it.
+    private static func javaScriptStringLiteral(_ value: String) -> String {
+        (try? String(data: JSONEncoder().encode(value), encoding: .utf8)) ?? "\"\""
+    }
+
     /// Trims Readium's default reflowable content insets. The navigator treats
     /// iPhone portrait as the `.regular` vertical size class and reserves 62 pt
     /// top and bottom, which left a large empty band beneath the last line in
-    /// paged mode. Keep the top clear of the status bar / Dynamic Island, but let
-    /// the text run close to the bottom edge.
+    /// paged mode. Keep the top clear of the status bar / Dynamic Island, and the
+    /// bottom just clear of the screen edge — no more than that.
+    ///
+    /// In paged mode this inset sizes the page box (`bottomConstraint` in
+    /// Readium's `EPUBReflowableSpreadView`) and the navigator runs full-screen
+    /// under `.ignoresSafeArea()`, so the bottom value trades off two visible
+    /// faults: too small and the last line lays out past the screen edge and is
+    /// sliced in half; too large (e.g. the full ~34 pt home-indicator inset) and
+    /// every page carries a dead band, because paged fragmentation *already*
+    /// leaves up to a line of slack when the next line won't fit.
+    /// `bottomPageInset` is the tuned middle: enough that a line never straddles
+    /// the edge, little enough that the slack stays close to fragmentation's own.
+    ///
+    /// Read from `window` rather than the navigator's own view precisely because
+    /// that view ignores the safe area and so reports insets of zero.
     func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
         let safeTop = (navigator as? UIViewController)?.view.window?.safeAreaInsets.top ?? 0
-        return UIEdgeInsets(top: safeTop, left: 0, bottom: 16, right: 0)
+        return UIEdgeInsets(top: safeTop, left: 0, bottom: Self.bottomPageInset, right: 0)
     }
+
+    /// Tuned by eye against both faults described above — owner's call on the
+    /// final value. Kept as one named constant so it can be nudged in one place.
+    static let bottomPageInset: CGFloat = 7
 
     @discardableResult
     func routeWebURLToBrowse(_ url: URL) -> Bool {
@@ -668,8 +734,12 @@ struct ReadiumReaderView: View {
             // taps in the empty space between them still reach the page and toggle
             // chrome via Readium's own `didTapAt`, exactly as before.
             .overlay(alignment: .top) { topBarLayer }
-            .overlay(alignment: .topTrailing) { fanMenuLayer }
             .overlay(alignment: .bottom) { positionCardLayer }
+            // Between the other chrome and the fan: while the fan is open, the
+            // first tap anywhere outside it closes it rather than reaching the
+            // control behind, and the fan itself stays hit-testable above this.
+            .overlay { fanDismissBackdropLayer }
+            .overlay(alignment: .topTrailing) { fanMenuLayer }
             .background(readerTheme.backgroundColor)
             .preferredColorScheme(readerTheme.colorScheme)
             .navigationTitle(work.title)
@@ -851,12 +921,22 @@ struct ReadiumReaderView: View {
     private var topBarLayer: some View {
         ReaderChromeTopBar(
             title: work.title, author: work.author,
-            tint: themeManager.effectiveTint, onClose: dismissReader
+            tint: themeManager.effectiveTint, titleHidden: fanMenuOpen,
+            onClose: dismissReader
         )
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .allowsHitTesting(chromeVisible)
         .opacity(chromeVisible ? 1 : 0)
+    }
+
+    /// Present only while the fan is open — otherwise a screen-sized tap target
+    /// would swallow every tap meant for the page's own chrome toggle.
+    @ViewBuilder
+    private var fanDismissBackdropLayer: some View {
+        if fanMenuOpen, chromeVisible {
+            ReaderFanMenu.dismissBackdrop(isOpen: $fanMenuOpen, reduceMotion: reduceMotion)
+        }
     }
 
     private var fanMenuLayer: some View {
@@ -976,24 +1056,10 @@ struct ReadiumReaderView: View {
         let remaining = book.remainingPositions
         return ReaderPositionSummary(
             page: pos.page, pageCount: pos.pageCount, percent: pos.percent,
-            place: currentPlace(for: pos),
+            place: .resolve(chapter: pos.chapter, chapterCount: pos.chapterCount,
+                            sections: book.sections,
+                            postedChapterTotal: SavedWork.totalChapterCount(from: work.chapters)),
             remainingInChapter: remaining?.chapter, remainingInWork: remaining?.work
-        )
-    }
-
-    /// Where the card says the reader is. `pos.chapter - 1` is the current spine
-    /// index; the normalized section list keeps AO3's Preface/Summary/Afterword
-    /// from being numbered as story chapters. Falls back to the raw spine reading
-    /// if sections haven't been built (shouldn't happen once `.ready`, but a
-    /// locator can theoretically outrace them).
-    private func currentPlace(for pos: ReadiumBook.ReadingPosition) -> ReaderPositionSummary.Place {
-        guard book.sections.indices.contains(pos.chapter - 1) else {
-            return .chapter(index: pos.chapter, total: pos.chapterCount)
-        }
-        return ReaderPositionSummary.Place(
-            section: book.sections[pos.chapter - 1],
-            storyChapterTotal: SavedWork.totalChapterCount(from: work.chapters)
-                ?? book.sections.storyChapterCount
         )
     }
 
