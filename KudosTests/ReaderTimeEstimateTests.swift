@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Kudos
@@ -144,6 +145,49 @@ struct ReaderTimeEstimateTests {
                 == .chapter(index: 4, total: 10)
         )
     }
+
+    // MARK: - Paged page-box snapping
+
+    #if os(iOS)
+    /// The two properties that keep paged mode from slicing its last line: the
+    /// inset never drops below the minimum clearance, and the height it leaves
+    /// behind is always an exact multiple of the line height (so a line box can
+    /// never straddle the bottom edge).
+    @Test(arguments: [
+        // viewHeight, safeTop, lineHeight
+        (956.0, 59.0, 29.7), (956.0, 59.0, 19.8), (956.0, 59.0, 56.1),
+        (874.0, 47.0, 29.7), (667.0, 20.0, 22.0), (1366.0, 24.0, 39.6)
+    ])
+    func snappedInsetLeavesAWholeNumberOfLines(_ input: (Double, Double, Double)) {
+        let (viewHeight, safeTop, lineHeight) = input
+        let minimum: CGFloat = 8
+        let inset = ReadiumBook.snappedBottomInset(
+            viewHeight: CGFloat(viewHeight), safeTop: CGFloat(safeTop),
+            lineHeight: CGFloat(lineHeight), minimum: minimum
+        )
+
+        #expect(inset >= minimum)
+        // Never eats more than the minimum plus one line's worth of slack.
+        #expect(inset < minimum + CGFloat(lineHeight))
+
+        let remainingHeight = CGFloat(viewHeight) - CGFloat(safeTop) - inset
+        let lines = remainingHeight / CGFloat(lineHeight)
+        #expect(abs(lines - lines.rounded()) < 0.0001,
+                "remaining height \(remainingHeight) is not a whole number of \(lineHeight)pt lines")
+    }
+
+    @Test func snappedInsetFallsBackToTheMinimumOnDegenerateInput() {
+        // A zero/unknown line height, or a view too short to hold even one line,
+        // must not divide by zero or return something nonsensical.
+        #expect(ReadiumBook.snappedBottomInset(viewHeight: 956, safeTop: 59, lineHeight: 0) == 8)
+        #expect(ReadiumBook.snappedBottomInset(viewHeight: 0, safeTop: 0, lineHeight: 29.7) == 8)
+        // 20 - 0 - 8 = 12 pt available, less than one 29.7 pt line.
+        #expect(ReadiumBook.snappedBottomInset(viewHeight: 20, safeTop: 0, lineHeight: 29.7) == 8)
+        // Not degenerate: a view with room for exactly one line keeps that line
+        // rather than collapsing to the bare minimum (40 - 10.3 == 29.7 == 1 line).
+        #expect(ReadiumBook.snappedBottomInset(viewHeight: 40, safeTop: 0, lineHeight: 29.7) > 8)
+    }
+    #endif
 
     @Test func chapterSectionMissingItsIndexFallsBackToOne() {
         // `.chapter` always carries a storyChapterIndex from the builder; the

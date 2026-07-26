@@ -159,6 +159,14 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Toggled by tapping the page; the view hides/shows its chrome on this.
     var chromeHidden = false
 
+    /// The body's rendered line height in points — font size × the line-height
+    /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
+    /// preferences are submitted. `navigatorContentInset` uses it to end the
+    /// paged page box on a whole line; it must track the *effective* style
+    /// (`.resolved`), since the Customize toggle can override the multiplier.
+    var renderedLineHeightPoints: Double =
+        ReaderTextStyle.defaultFontSizePt * ReaderTextStyle.defaultLineHeight
+
     /// Fires on every position change. The view records this for the progress
     /// pill and feeds a debounced persistence path — it must not force a
     /// SwiftData save on every call (scrolled-mode hang). Completion is
@@ -397,32 +405,61 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         (try? String(data: JSONEncoder().encode(value), encoding: .utf8)) ?? "\"\""
     }
 
-    /// Trims Readium's default reflowable content insets. The navigator treats
+    /// Trims Readium's default reflowable content insets (the navigator treats
     /// iPhone portrait as the `.regular` vertical size class and reserves 62 pt
-    /// top and bottom, which left a large empty band beneath the last line in
-    /// paged mode. Keep the top clear of the status bar / Dynamic Island, and the
-    /// bottom just clear of the screen edge — no more than that.
+    /// top and bottom, a large dead band) and — the part that matters in paged
+    /// mode — sizes the page box so it ends exactly on a line boundary.
     ///
-    /// In paged mode this inset sizes the page box (`bottomConstraint` in
-    /// Readium's `EPUBReflowableSpreadView`) and the navigator runs full-screen
-    /// under `.ignoresSafeArea()`, so the bottom value trades off two visible
-    /// faults: too small and the last line lays out past the screen edge and is
-    /// sliced in half; too large (e.g. the full ~34 pt home-indicator inset) and
-    /// every page carries a dead band, because paged fragmentation *already*
-    /// leaves up to a line of slack when the next line won't fit.
-    /// `bottomPageInset` is the tuned middle: enough that a line never straddles
-    /// the edge, little enough that the slack stays close to fragmentation's own.
+    /// In paged mode this inset is what sets the page box height
+    /// (`bottomConstraint` in Readium's `EPUBReflowableSpreadView`), and the
+    /// navigator runs full-screen under `.ignoresSafeArea()`. A *fixed* bottom
+    /// inset therefore can't be right: whether the box happens to end mid-line
+    /// depends on `(available height) mod (line height)`, so one constant slices
+    /// the last line in half at some text sizes and leaves a dead band at others
+    /// — and the reader changes line height every time they touch Text Size.
     ///
-    /// Read from `window` rather than the navigator's own view precisely because
-    /// that view ignores the safe area and so reports insets of zero.
+    /// So compute it instead: take the largest whole number of lines that fits
+    /// above `minimumBottomInset`, and give the remainder back as the inset. The
+    /// box then always ends on a line boundary (no sliced line at any text size)
+    /// while the leftover stays under one line — the least dead space this layout
+    /// can have, since paged fragmentation already moves a line that won't fit.
+    ///
+    /// Falls back to the plain minimum when the line height or view height isn't
+    /// usable, which is never worse than the fixed-inset behaviour it replaces.
+    ///
+    /// Read the safe area from `window`, not the navigator's own view: that view
+    /// ignores the safe area and so reports insets of zero.
     func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
-        let safeTop = (navigator as? UIViewController)?.view.window?.safeAreaInsets.top ?? 0
-        return UIEdgeInsets(top: safeTop, left: 0, bottom: Self.bottomPageInset, right: 0)
+        let view = (navigator as? UIViewController)?.view
+        let safeTop = view?.window?.safeAreaInsets.top ?? 0
+        return UIEdgeInsets(top: safeTop, left: 0,
+                            bottom: snappedBottomInset(viewHeight: view?.bounds.height ?? 0,
+                                                       safeTop: safeTop),
+                            right: 0)
     }
 
-    /// Tuned by eye against both faults described above — owner's call on the
-    /// final value. Kept as one named constant so it can be nudged in one place.
-    static let bottomPageInset: CGFloat = 7
+    /// Clearance kept below the last line even after snapping, so text never sits
+    /// flush against the screen edge / home indicator.
+    static let minimumBottomInset: CGFloat = 8
+
+    /// The remainder left over after fitting whole lines into the available
+    /// height. Pure arithmetic, so `ReaderPageBoxTests` can pin the two rules
+    /// that matter: the result is never below the minimum, and the height it
+    /// leaves is always an exact multiple of the line height.
+    nonisolated static func snappedBottomInset(
+        viewHeight: CGFloat, safeTop: CGFloat, lineHeight: CGFloat,
+        minimum: CGFloat = minimumBottomInset
+    ) -> CGFloat {
+        let available = viewHeight - safeTop - minimum
+        guard lineHeight > 0, available > lineHeight else { return minimum }
+        let remainder = available.truncatingRemainder(dividingBy: lineHeight)
+        return minimum + remainder
+    }
+
+    private func snappedBottomInset(viewHeight: CGFloat, safeTop: CGFloat) -> CGFloat {
+        Self.snappedBottomInset(viewHeight: viewHeight, safeTop: safeTop,
+                                lineHeight: CGFloat(renderedLineHeightPoints))
+    }
 
     @discardableResult
     func routeWebURLToBrowse(_ url: URL) -> Bool {
@@ -765,12 +802,18 @@ struct ReadiumReaderView: View {
             .animation(.easeInOut(duration: 0.25), value: book.chromeHidden)
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
-            .task(id: bookLoadToken) { await openBook() }
-            .onChange(of: preferencesToken) { _, _ in book.submit(preferences) }
+            .task(id: bookLoadToken) {
+                // Seed the line height before the navigator exists: its first
+                // content-inset query happens during setup, well before any
+                // preference change would otherwise supply it.
+                book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
+                await openBook()
+            }
+            .onChange(of: preferencesToken) { _, _ in applyReaderPreferences() }
             // The Display / Customize controls live in a sheet over the reader; a
             // behind-the-sheet onChange can be missed, so re-apply when it closes.
             .onChange(of: router.panel) { _, panel in
-                if panel == .none { book.submit(preferences) }
+                if panel == .none { applyReaderPreferences() }
             }
             .onChange(of: book.readingPosition) { _, newValue in
                 syncSliderFromPosition(newValue)
@@ -860,6 +903,17 @@ struct ReadiumReaderView: View {
                 dismissDragOffset = 0
             }
         }
+    }
+
+    /// Submits the mapped preferences and keeps the page-box line height in step,
+    /// so `navigatorContentInset`'s whole-line snap follows every Text Size /
+    /// line-spacing change instead of snapping against a stale value. Readium
+    /// re-queries the inset from `applySettings()` on submit, so the two always
+    /// land together. `textStyle` is already `.resolved`, so this is the height
+    /// actually rendered rather than the raw stored setting.
+    private func applyReaderPreferences() {
+        book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
+        book.submit(preferences)
     }
 
     private func dismissReader() {
