@@ -81,13 +81,19 @@ nonisolated enum AO3CommentTimestamp {
             return "Yesterday at \(timeText(for: date, calendar: localCalendar, timeZone: timeZone, locale: locale))"
         }
 
+        // Older than yesterday: the date alone. AO3 archives span years, so the
+        // date genuinely matters — but the minute and time zone a comment was
+        // posted two years ago do not, and spelling them out ("7/7/2026 at
+        // 2:26 PM EDT") turned every byline into a line of noise above the
+        // prose people actually came to read. Anything recent enough for the
+        // time of day to mean something is already handled above, as relative
+        // text or "Yesterday at …".
         let dateFormatter = DateFormatter()
         dateFormatter.locale = locale
         dateFormatter.calendar = localCalendar
         dateFormatter.timeZone = timeZone
-        dateFormatter.setLocalizedDateFormatFromTemplate("yMd")
-        return "\(dateFormatter.string(from: date)) at "
-            + timeText(for: date, calendar: localCalendar, timeZone: timeZone, locale: locale)
+        dateFormatter.setLocalizedDateFormatFromTemplate("yMMMd")
+        return dateFormatter.string(from: date)
     }
 
     nonisolated private static func timeText(

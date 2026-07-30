@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import Kudos
 
@@ -361,33 +362,137 @@ struct AO3CommentsParseTests {
         #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    /// The rail must pass through the centre of EVERY avatar. Reply cards inset
-    /// their avatars by their own `nestedCardPadding`, so the root post and the
-    /// bridges take the same `railInset` — otherwise the spine misses each reply
-    /// avatar by exactly that padding.
-    @Test func rootAndReplyAvatarsShareOneRailColumn() {
-        #expect(CommentThreadGeometry.avatarSize == 40)
-        #expect(CommentThreadGeometry.avatarColumnWidth == 40)
-        #expect(CommentThreadGeometry.railInset == CommentThreadGeometry.nestedCardPadding)
-
-        let halfAvatar = CommentThreadGeometry.avatarColumnWidth / 2
-        // Root post: inset by railInset inside the card's content edge.
-        let rootAvatarCenterX = CommentThreadGeometry.railInset + halfAvatar
-        // Reply card: sits at the content edge, insets its avatar by its own padding.
-        let replyAvatarCenterX = CommentThreadGeometry.nestedCardPadding + halfAvatar
-        #expect(rootAvatarCenterX == replyAvatarCenterX)
-        #expect(CommentThreadGeometry.railCenterX == rootAvatarCenterX)
-
-        #expect(CommentThreadGeometry.postSpacing > 0)
-        #expect(CommentThreadGeometry.spineWidth == 2)
-        #expect(CommentThreadGeometry.collapsedBodyLineLimit == 5)
+    /// Depth has to be *visible*. The previous card-based layout computed a
+    /// `depth` for every reply and then never used it for layout, so a
+    /// reply-to-a-reply rendered identically to a direct reply. Indent and rail
+    /// colour are now the only things carrying that information.
+    /// The indent depends on the container width and the text size, so a test has
+    /// to pin both. 390pt is the canonical iPhone width the simulator gate uses.
+    private func indent(
+        _ depth: Int,
+        style: CommentConnectorStyle = .elbow,
+        width: CGFloat = 390,
+        typeSize: DynamicTypeSize = .large
+    ) -> CGFloat {
+        CommentThreadGeometry.indent(
+            forDepth: depth, availableWidth: width, typeSize: typeSize, style: style
+        )
     }
 
-    /// Comment cards must not drift from the app-wide card language.
-    @Test func commentCardsUseTheSharedCardRadiusAndGap() {
-        #expect(CommentThreadGeometry.cardCornerRadius == CardListMetrics.cornerRadius)
-        #expect(CommentThreadGeometry.nestedCardCornerRadius == CardListMetrics.cornerRadius)
-        #expect(CommentThreadGeometry.nestedCardSpacing == CardListMetrics.interCardSpacing)
+    /// Width the indent may never eat into, for the pinned defaults above.
+    private var indentBudget: CGFloat {
+        390 - CommentThreadGeometry.sideMargin * 2
+            - CommentThreadGeometry.minimumContentWidth(for: .large)
+    }
+
+    @Test func nestingDepthIsVisuallyDistinct() {
+        // Indent grows per level...
+        #expect(indent(0) == 0)
+        #expect(indent(1) > indent(0))
+        #expect(indent(2) > indent(1))
+
+        // ...but never past what the screen can spare, or a deep AO3 chain
+        // indents itself off-screen. AO3 does not cap reply nesting, so this must
+        // hold for absurd depths, and for either connector style. The straight
+        // style gets half the budget because it spends the same indent on the
+        // trailing edge too, so both styles leave `minimumContentWidth` intact.
+        #expect(indent(400) == indentBudget)
+        #expect(indent(400, style: .straight) == indentBudget / 2)
+
+        // For the straight style that half-budget is the whole story, because its
+        // trailing inset *is* this same value — so the content column survives at
+        // any depth. (The elbow's trailing inset comes from the unclamped
+        // `nestedInset` instead, so no equivalent end-to-end floor holds there.)
+        let straightContent = 390 - CommentThreadGeometry.sideMargin * 2
+            - indent(400, style: .straight) * 2
+        #expect(straightContent >= CommentThreadGeometry.minimumContentWidth(for: .large))
+
+        // Adjacent levels must never share a rail colour, at any depth — that
+        // colour is the only cue distinguishing two neighbouring levels once the
+        // indent has been clamped.
+        for depth in 0 ..< 40 {
+            #expect(
+                CommentThreadGeometry.railColor(forDepth: depth)
+                    != CommentThreadGeometry.railColor(forDepth: depth + 1)
+            )
+        }
+    }
+
+    /// The straight connector's whole reason for a narrower step: a reply is inset
+    /// by the same amount on the left as on the right, so it reads as sitting
+    /// squarely inside its parent. The elbow deliberately is *not* symmetric — it
+    /// steps in by the parent's avatar column so its turn can run forward into the
+    /// card — so this pins the difference between the two, not one shared rule.
+    @Test func straightConnectorIndentsSymmetrically() {
+        for depth in 1 ... 4 {
+            #expect(indent(depth, style: .straight) == CommentThreadGeometry.nestedInset(forLevel: depth))
+            #expect(indent(depth, style: .elbow) > CommentThreadGeometry.nestedInset(forLevel: depth))
+        }
+
+        // The straight trunk runs down the middle of that same one-`cardPadding`
+        // band, so the band has to stay wider than the rail — otherwise the line
+        // touches a card edge instead of sitting in the gap between two.
+        #expect(CommentThreadGeometry.cardPadding > CommentThreadGeometry.railWidth)
+    }
+
+    /// A thread line has to reach a reply whose parent is *not* the row directly
+    /// above — separated from it by an earlier sibling's whole subtree. Every row
+    /// in between has to be told to keep that ancestor's line running, or the line
+    /// stops at the first nested card and the later sibling reads as unparented.
+    ///
+    /// Depth-first row order for root(A) with replies B and D, where B has a child
+    /// C, is A, B, C, D — so D's connector has to survive two intervening rows.
+    @Test func aLaterSiblingsLineIsCarriedPastTheSubtreeBetween() {
+        let grandchild = AO3Comment(id: 3, author: "C", isGuest: false)
+        var firstReply = AO3Comment(id: 2, author: "B", isGuest: false)
+        firstReply.replies = [grandchild]
+        let secondReply = AO3Comment(id: 4, author: "D", isGuest: false)
+        var root = AO3Comment(id: 1, author: "A", isGuest: false)
+        root.replies = [firstReply, secondReply]
+
+        let rows = CommentConversationBuilder.rows(
+            roots: [root],
+            repliesByRoot: [root.id: CommentThreadGeometry.flattenedReplies(from: root)],
+            expandedRootIDs: [],
+            visibleReplyCounts: [:]
+        )
+
+        #expect(rows.map(\.depth) == [0, 1, 2, 1])
+        #expect(rows.map(\.item.id) == ["post-1", "post-2", "post-3", "post-4"])
+
+        // B has a peer still to come, so its own row runs the line past its card
+        // rather than ending at it; D is last, so its row ends the line there.
+        #expect(rows[1].isLastSibling == false)
+        #expect(rows[3].isLastSibling == true)
+
+        // C is the only row deep enough to need an *ancestor* line, and it must
+        // request one for level 0 — that is the segment that carries the root's
+        // line down past B's subtree to reach D.
+        #expect(rows[2].ancestorLines == [true])
+        #expect(rows[0].ancestorLines.isEmpty)
+        #expect(rows[1].ancestorLines.isEmpty)
+        #expect(rows[3].ancestorLines.isEmpty)
+
+        // `nextDepth` drives where each enclosing card closes; a row's own card
+        // closes exactly when nothing deeper follows it.
+        #expect(rows.map(\.nextDepth) == [1, 2, 1, nil])
+
+        // D is the one reply no connector reaches — C sits between it and its
+        // parent — so it is the one row that names its parent in text. B and C
+        // both follow their own parent directly, and a root has no parent.
+        #expect(rows.map(\.showsParentAttribution) == [false, false, false, true])
+    }
+
+    /// A negative depth can only come from a bug upstream, but it must not crash
+    /// the palette lookup or produce a negative indent.
+    @Test func negativeDepthIsClamped() {
+        #expect(indent(-3) == 0)
+        #expect(indent(-3, style: .straight) == 0)
+        #expect(CommentThreadGeometry.railColor(forDepth: -3) == CommentThreadGeometry.railColor(forDepth: 0))
+    }
+
+    @Test func commentBodyStaysClampedToFiveLines() {
+        #expect(CommentThreadGeometry.collapsedBodyLineLimit == 5)
     }
 
     /// Expanding renders every descendant, so the collapse threshold must count
@@ -789,7 +894,9 @@ struct AO3CommentsParseTests {
         #expect(AO3CommentTimestamp.displayText(
             rawText: "", date: older, relativeTo: now,
             calendar: calendar, timeZone: zone, locale: locale
-        ) == "7/7/2026 at 2:26 PM EDT")
+        // Date only past yesterday: an archive comment's minute and zone are
+        // noise, and the recent cases above still carry a time.
+        ) == "Jul 7, 2026")
     }
 
     @Test func under24HoursWinsAcrossLocalMidnightAndInvalidTextFallsBack() throws {

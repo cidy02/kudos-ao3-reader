@@ -90,6 +90,20 @@ final class CommentsModel {
     /// direct-reply tree so the view can render replies recursively inside the
     /// specific comment they answer.
     private(set) var displayThreads: [AO3Comment] = []
+    /// Depth-first replies per root, computed once per page rebuild. Read by the
+    /// row builder so rendering never walks a reply tree — see
+    /// `rebuildDisplayThreads`.
+    private(set) var flattenedRepliesByRoot: [Int: [FlattenedReply]] = [:]
+    /// The page flattened to one entry per rendered row, rebuilt only when the
+    /// threads or the expansion state actually change. The view renders this
+    /// directly so its `body` allocates nothing per pass — see
+    /// `CommentConversationRowItem` for why that matters to swipe smoothness.
+    private(set) var conversationRows: [CommentConversationRowItem] = []
+    /// Threads the reader expanded, plus how much of each is revealed. Owned
+    /// here rather than by the view so `conversationRows` can be rebuilt at the
+    /// moment they change instead of being recomputed while rendering.
+    private var expandedRootIDs: Set<Int> = []
+    private var visibleReplyCounts: [Int: Int] = [:]
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
@@ -216,7 +230,7 @@ final class CommentsModel {
         authContext = current
         guard hadContext else { return true }
         page = nil
-        displayThreads = []
+        clearRenderedThreads()
         chapters = []
         chaptersFailureMessage = nil
         scope = .all
@@ -260,9 +274,22 @@ final class CommentsModel {
     /// the skeleton for the new context instead of the previous scope's comments.
     func resetForContextChange() {
         page = nil
-        displayThreads = []
+        clearRenderedThreads()
         phase = .idle
         currentPageNumber = 1
+    }
+
+    /// Drops the rendered page and everything derived from it. `conversationRows`
+    /// is what the list actually renders, so clearing `displayThreads` alone
+    /// would leave the previous scope's — or the previous *account's* — comments
+    /// on screen. Expansion state goes too: it's keyed by root id, which means
+    /// nothing once the threads are gone.
+    private func clearRenderedThreads() {
+        displayThreads = []
+        flattenedRepliesByRoot = [:]
+        conversationRows = []
+        expandedRootIDs = []
+        visibleReplyCounts = [:]
     }
 
     /// The screen's first load. With no preselected chapter it's a plain All load;
@@ -633,12 +660,60 @@ final class CommentsModel {
 
     private func rebuildDisplayThreads() {
         guard let page else {
-            displayThreads = []
+            clearRenderedThreads()
             return
         }
         displayThreads = Self.orderedDisplayThreads(
             from: page.comments, newestFirst: newestFirst
         )
+        // Walk each reply tree once, here, rather than in the view. The rows
+        // only ever slice this for chunking, but computing it in `body` meant
+        // every layout pass — including every frame of a swipe — re-walked and
+        // re-allocated the whole tree for every visible thread.
+        flattenedRepliesByRoot = Dictionary(
+            uniqueKeysWithValues: displayThreads.map {
+                ($0.id, CommentThreadGeometry.flattenedReplies(from: $0))
+            }
+        )
+        rebuildConversationRows()
+    }
+
+    private func rebuildConversationRows() {
+        conversationRows = CommentConversationBuilder.rows(
+            roots: displayThreads,
+            repliesByRoot: flattenedRepliesByRoot,
+            expandedRootIDs: expandedRootIDs,
+            visibleReplyCounts: visibleReplyCounts
+        )
+    }
+
+    /// "Show N replies" on a collapsed thread opens it; a later tap on "Show N
+    /// more" reveals the next chunk. One entry point for both, since the
+    /// expander row can't tell which case it is.
+    func expandReplies(rootID: Int) {
+        if expandedRootIDs.contains(rootID) {
+            visibleReplyCounts[rootID] =
+                (visibleReplyCounts[rootID] ?? CommentThreadGeometry.repliesChunkSize)
+                    + CommentThreadGeometry.repliesChunkSize
+        } else {
+            expandedRootIDs.insert(rootID)
+        }
+        rebuildConversationRows()
+    }
+
+    /// Forces a thread fully open so a "Thread"/"Parent Thread" jump can't land
+    /// on a reply that collapsing — or chunking — has left out of the row list.
+    /// `scrollTo` silently no-ops on an id that was never materialized, so this
+    /// lifts the chunk cap as well as expanding, which is what the old
+    /// `startsExpanded` flag did.
+    func forceExpand(rootID: Int) {
+        let total = flattenedRepliesByRoot[rootID]?.count ?? 0
+        let alreadyFullyShown = expandedRootIDs.contains(rootID)
+            && (visibleReplyCounts[rootID] ?? CommentThreadGeometry.repliesChunkSize) >= total
+        guard !alreadyFullyShown else { return }
+        expandedRootIDs.insert(rootID)
+        visibleReplyCounts[rootID] = max(total, CommentThreadGeometry.repliesChunkSize)
+        rebuildConversationRows()
     }
 
     /// Root-thread display order for a fetched page. Newest-first reverses only
@@ -660,6 +735,26 @@ final class CommentsModel {
     /// Pure lookup over a display-thread list (testable without a live load).
     nonisolated static func rootID(containing commentID: Int, in threads: [AO3Comment]) -> Int? {
         threads.first { $0.contains(commentID: commentID) }?.id
+    }
+
+    /// The comment itself, wherever it sits in the loaded page — the subtree that
+    /// "Thread" pushes. AO3's own Thread / Parent Thread pages are rooted at the
+    /// chosen comment, not at its top-level ancestor, so this returns the node
+    /// rather than the root that owns it.
+    ///
+    /// No request: the target is always already on the fetched page, which is why
+    /// the pushed screen can render straight from the model.
+    func comment(withID commentID: Int) -> AO3Comment? {
+        Self.comment(withID: commentID, in: displayThreads)
+    }
+
+    /// Pure lookup over a display-thread list (testable without a live load).
+    nonisolated static func comment(withID commentID: Int, in threads: [AO3Comment]) -> AO3Comment? {
+        for thread in threads {
+            if thread.id == commentID { return thread }
+            if let found = comment(withID: commentID, in: thread.replies) { return found }
+        }
+        return nil
     }
 
     /// One page, via cache unless stale/bypassed. Returns nil after setting a
