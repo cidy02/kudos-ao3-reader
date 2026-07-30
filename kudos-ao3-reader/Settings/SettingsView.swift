@@ -231,6 +231,12 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         : "Choose how pages turn while reading.")
                 }
 
+                #if os(iOS)
+                // Voice / rate / pitch for the Readium read-aloud mini player.
+                // macOS still uses the legacy WKWebView reader without TTS.
+                ReaderSpeechSettingsSection()
+                #endif
+
                 Section("Font") {
                     ForEach(fontOptions) { option in
                         Button {

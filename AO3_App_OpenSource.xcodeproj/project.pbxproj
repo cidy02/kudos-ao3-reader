@@ -283,6 +283,9 @@
 				"    /usr/libexec/PlistBuddy -c \"Delete :UIBackgroundModes\" \"$PLIST\" 2>/dev/null || true",
 				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes array\" \"$PLIST\"",
 				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:0 string fetch\" \"$PLIST\"",
+				"    # audio: reader TTS / Now Playing while the app is backgrounded with",
+				"    # the reader still open. Leaving a work still stops speech in-app.",
+				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:1 string audio\" \"$PLIST\"",
 				"",
 				"    /usr/libexec/PlistBuddy -c \"Delete :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" 2>/dev/null || true",
 				"    /usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers array\" \"$PLIST\"",
@@ -502,6 +505,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
+				PRODUCT_MODULE_NAME = Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -555,6 +559,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
+				PRODUCT_MODULE_NAME = Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;

@@ -39,7 +39,10 @@ struct WorkDetailHeroCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.title2.weight(.semibold))
+                // `.title3`, matching the Comments info card that mirrors this
+                // same overview-card pattern — `.title2` sat a full step above
+                // every other screen's card heading.
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -48,6 +51,14 @@ struct WorkDetailHeroCard: View {
                 // A real Label (not a hand-rolled HStack) so the icon lines up
                 // with the Fandoms Label right below it — a raw HStack can't
                 // reproduce Label's exact icon size/gap/baseline alignment.
+                //
+                // The `.font` has to be on the Label, not just inside the
+                // byline: a Label sizes its icon from the *ambient* font, so
+                // passing `.subheadline` only to `AO3AuthorBylineView` left this
+                // icon rendering at `.body` while the Fandoms icon below used
+                // `.subheadline` — two different glyph sizes on two different
+                // baselines, which is exactly the column alignment the comment
+                // above was trying to guarantee.
                 Label {
                     AO3AuthorBylineView(
                         names: authors,
@@ -59,6 +70,7 @@ struct WorkDetailHeroCard: View {
                     Image(systemName: "person")
                         .foregroundStyle(.secondary)
                 }
+                .font(.subheadline)
             }
 
             if !fandoms.isEmpty {

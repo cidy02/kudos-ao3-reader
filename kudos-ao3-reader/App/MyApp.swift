@@ -2,6 +2,12 @@ import SwiftData
 import SwiftUI
 
 @main struct MyApp: App {
+    #if os(iOS)
+    /// Only reason for a delegate: iOS asks it which interface orientations are
+    /// supported, which is how the reader's rotation lock takes effect.
+    @UIApplicationDelegateAdaptor(KudosAppDelegate.self) private var appDelegate
+    #endif
+
     /// Built explicitly (rather than via the `.modelContainer(for:)` scene-modifier
     /// convenience) so the same container can also be handed to
     /// `FolderSyncBackgroundTask.register(container:)`, which — per Apple's

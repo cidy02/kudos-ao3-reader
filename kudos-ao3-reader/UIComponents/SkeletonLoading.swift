@@ -187,6 +187,33 @@ struct ReaderPageSkeleton: View {
     }
 }
 
+#if os(iOS)
+/// Glass bottom-card wireframe so reader chrome layout is stable while the EPUB
+/// opens and before the first locator arrives (page / time / work lines).
+struct ReaderPositionCardSkeleton: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                SkeletonTextLine(height: 15, width: 118)
+                Spacer(minLength: 8)
+                SkeletonTextLine(height: 12, width: 108)
+            }
+            SkeletonBlock(height: 5, cornerRadius: 3)
+                .frame(maxWidth: .infinity)
+            SkeletonTextLine(height: 12, width: 200)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 13)
+        .padding(.bottom, 15)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .skeletonShimmer()
+        .accessibilityHidden(true)
+    }
+}
+#endif
+
 // MARK: - Inline rows
 
 /// A single placeholder list row (one text line) for inline loading states inside

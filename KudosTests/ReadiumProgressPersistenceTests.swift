@@ -128,6 +128,38 @@ struct ReadiumProgressPersistenceTests {
         #expect(writes.isEmpty)
     }
 
+    @Test func firstDifferentLocatorAfterSeedCanWrite() {
+        // Known risk: seed() clears lastPersistedProgression, so the first post-open
+        // note only has progression on the "latest" side. isMeaningfullyChanged must
+        // fall through to string inequality (not require a progression delta against
+        // a nil baseline) so the first real move after open still persists.
+        let bridge = persistence()
+        let start = Date(timeIntervalSinceReferenceDate: 8_000)
+        var writes: [String] = []
+        bridge.onDebouncedWrite = { writes.append($0) }
+        let opened = locator(total: 0.25)
+        bridge.seed(persistedLocatorString: opened)
+
+        let moved = locator(total: 0.40)
+        // No prior markPersisted — seed leaves lastPersistAt nil so the interval is open.
+        bridge.note(locatorString: moved, totalProgression: 0.40, at: start)
+        #expect(writes == [moved])
+        #expect(bridge.locatorForFlush() == nil)
+    }
+
+    @Test func identicalStringAfterSeedDoesNotWriteEvenWithProgression() {
+        // Counterpart to firstDifferentLocatorAfterSeedCanWrite: replaying the
+        // open locator (common on the first locationDidChange) must stay quiet.
+        let bridge = persistence()
+        var writes: [String] = []
+        bridge.onDebouncedWrite = { writes.append($0) }
+        let opened = locator(total: 0.25)
+        bridge.seed(persistedLocatorString: opened)
+        bridge.note(locatorString: opened, totalProgression: 0.25, at: Date())
+        #expect(writes.isEmpty)
+        #expect(bridge.locatorForFlush() == nil)
+    }
+
     // MARK: SavedWork stamp split
 
     @Test func debouncedLocatorDoesNotThrashLastReadDateOrLastModified() {
@@ -183,7 +215,17 @@ struct ReadiumProgressPersistenceTests {
         let moved = locator(total: 0.35)
         bridge.note(locatorString: moved, totalProgression: 0.35, at: start.addingTimeInterval(0.2))
         #expect(writes.isEmpty) // still inside window
-        try? await Task.sleep(nanoseconds: 2_200_000_000)
+
+        // The trailing write is delivered by a real ~2 s timer. Poll for it
+        // rather than sleeping a fixed 2.2 s and asserting once: a loaded
+        // machine can delay that timer past any single fixed sleep (this failed
+        // exactly that way while a device build ran alongside it, then passed
+        // in isolation). What's under test is "a meaningful change eventually
+        // arms a trailing write" — not that it lands inside a 2.2 s budget.
+        let deadline = Date().addingTimeInterval(10)
+        while writes.isEmpty, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
         #expect(writes == [moved])
     }
 }

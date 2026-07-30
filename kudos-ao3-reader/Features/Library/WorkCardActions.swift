@@ -92,8 +92,18 @@ private struct LocalWorkReaderDestination: View {
     private var restorationView: some View {
         switch phase {
         case .opening, .restoring:
-            ProgressView(phase == .restoring ? "Restoring EPUB…" : "Opening…")
+            // Match the reader open experience — skeleton page, not a spinner —
+            // and fill the screen so Library chrome can't bleed through.
+            ReaderPageSkeleton()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #if os(macOS)
+                .background(Color(nsColor: .windowBackgroundColor))
+                #else
+                .background(Color(uiColor: .systemBackground))
+                .navigationBarBackButtonHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
+                #endif
+                .accessibilityLabel(phase == .restoring ? "Restoring EPUB" : "Opening")
         case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't Open Reader", systemImage: "exclamationmark.triangle")
@@ -367,6 +377,55 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Inline, not a modifier taking `existingLocalWork` as a parameter.
+            // That lookup builds a `WorkIdentityIndex` over the *entire* library
+            // (three dictionaries, with URL parsing per work), and passing it as
+            // a parameter forced it to run for every visible card on every body
+            // pass. Referenced only inside these closures it keeps the same
+            // deferred cost profile `.contextMenu` below already relies on.
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                // Full swipe takes the first action. Save is the common intent
+                // from a listing, and it's what the local rows put here too.
+                if existingLocalWork?.isSaved != true {
+                    Button(action: save) {
+                        Label("Save", systemImage: "bookmark")
+                    }
+                    .tint(.blue)
+                    .disabled(working)
+                }
+
+                Button(action: toggleSavedForLater) {
+                    let labels = WorkActionLabels.savedForLater(
+                        isQueued: existingLocalWork?.isInSavedForLaterQueue == true
+                    )
+                    Label(labels.title, systemImage: labels.systemImage)
+                }
+                .tint(.indigo)
+                .disabled(working)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                // Delete only exists once the work is actually in the library —
+                // there is nothing to delete for a listing not taken yet. Full
+                // swipe stays off so a flick can't destroy a saved work.
+                if let existingLocalWork, existingLocalWork.isSaved {
+                    Button(role: .destructive) {
+                        if confirmBeforeDelete {
+                            pendingDelete = existingLocalWork
+                        } else {
+                            PreservedWorkService.softDelete(existingLocalWork, in: context)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(working)
+                }
+
+                Button(action: addToQueue) {
+                    Label("Add to Queue", systemImage: "list.bullet.rectangle")
+                }
+                .tint(.orange)
+                .disabled(working)
+            }
             .contextMenu {
                 Button {
                     read()

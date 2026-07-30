@@ -13,6 +13,8 @@ struct ReaderChromeTopBar: View {
     /// or two behind the first menu pill. The close button stays put.
     var titleHidden = false
     let onClose: () -> Void
+    /// Opens work details for this book (title pill tap).
+    var onOpenDetails: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -46,27 +48,55 @@ struct ReaderChromeTopBar: View {
                 .frame(width: 44, height: 44)
                 .allowsHitTesting(false)
         }
+        // Matches `ReadiumReaderView.chromeInset`; the host layer adds none of
+        // its own, so the back button lines up with the fan button opposite it.
         .padding(.horizontal, 12)
     }
 
+    @ViewBuilder
     private var titlePill: some View {
-        VStack(spacing: 1) {
+        let content = VStack(spacing: 1) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
             if !author.isEmpty {
-                Text(author)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                authorLine
             }
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
         .frame(maxWidth: 260)
         .glassEffect(.regular, in: .capsule)
+        .contentShape(.capsule)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(onOpenDetails == nil ? [] : [.isButton])
+        .accessibilityHint(onOpenDetails == nil ? "" : "Opens work details")
+
+        if let onOpenDetails {
+            Button(action: onOpenDetails) {
+                content
+            }
+            .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    /// Person glyph + author name under the title.
+    private var authorLine: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "person.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(author)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(author)
     }
 }
 #endif

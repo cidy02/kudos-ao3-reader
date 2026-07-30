@@ -712,6 +712,17 @@ nonisolated enum ReadingAnnotationKind: String, Codable, CaseIterable {
 /// can be re-themed (and so Sepia can warm them) without migrating stored data.
 nonisolated enum ReadingAnnotationColor: String, Codable, CaseIterable {
     case yellow, green, blue, pink, purple, underline
+
+    var title: String {
+        switch self {
+        case .yellow: "Yellow"
+        case .green: "Green"
+        case .blue: "Blue"
+        case .pink: "Pink"
+        case .purple: "Purple"
+        case .underline: "Underline"
+        }
+    }
 }
 
 /// One in-book bookmark, highlight, or note, anchored by a Readium `Locator`.

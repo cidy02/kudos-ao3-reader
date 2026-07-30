@@ -33,6 +33,106 @@ struct ReaderTimeEstimateTests {
         #expect(ReaderTimeEstimate.minutes(forPositions: 60) == 55)
     }
 
+    @Test func secondsScaleWithTheDocumentedConstant() {
+        #expect(ReaderTimeEstimate.seconds(forPositions: 0) == 0)
+        #expect(ReaderTimeEstimate.seconds(forPositions: 1) == 55)
+        #expect(ReaderTimeEstimate.seconds(forPositions: 12) == 660)
+        #expect(ReaderTimeEstimate.seconds(forPositions: -3) == 0)
+    }
+
+    @Test func nowPlayingTimingExposesDurationAndElapsed() throws {
+        // 100 positions total, 25 remaining → 75 elapsed.
+        // Unwrap via #require first rather than chaining `timing?.duration ==`:
+        // comparing through optional-member-access read as a genuine formula
+        // bug under Swift Testing's macro-captured diagnostics (both sides
+        // *displayed* as equal — "5500.0 == 5500" — yet the expectation still
+        // failed); isolating the arithmetic in a standalone script confirmed
+        // the formula itself is exactly correct, so this was the macro
+        // expansion, not `nowPlayingTiming`.
+        let timing = try #require(ReaderTimeEstimate.nowPlayingTiming(
+            totalPositions: 100,
+            remainingPositions: 25
+        ))
+        #expect(timing.duration == 100 * 55)
+        #expect(timing.elapsed == 75 * 55)
+    }
+
+    @Test func nowPlayingTimingNilWhenTotalUnknown() {
+        #expect(ReaderTimeEstimate.nowPlayingTiming(totalPositions: 0, remainingPositions: 0) == nil)
+    }
+
+    @Test func nowPlayingTimingClampsOverRemaining() throws {
+        let timing = try #require(ReaderTimeEstimate.nowPlayingTiming(
+            totalPositions: 10,
+            remainingPositions: 50
+        ))
+        #expect(timing.duration == 10 * 55)
+        #expect(timing.elapsed == 0)
+    }
+
+    // MARK: - TTS-paced timing (distinct from the silent-reading model above)
+
+    // 200 wpm silent-reading calibration × 55 s ÷ 60, then ÷160 wpm × 60 — the
+    // intermediate 11000/60 isn't exactly representable in binary floating
+    // point, so comparisons below use a tight epsilon rather than `==`
+    // (matches the existing tolerance pattern for the page-box snap tests).
+    private func expectApproximatelyEqual(
+        _ lhs: Double, _ rhs: Double, tolerance: Double = 0.0001,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) {
+        #expect(abs(lhs - rhs) < tolerance, "\(lhs) is not within \(tolerance) of \(rhs)", sourceLocation: sourceLocation)
+    }
+
+    @Test func ttsSecondsPerPositionAtDefaultRateIsSlowerThanSilentReading() {
+        // Spoken word is slower than the app's ~200 wpm silent-reading pace, so
+        // the default (1.0x) TTS rate must take *longer* per position, not the
+        // same 55 s the position card's silent estimate uses.
+        expectApproximatelyEqual(ReaderTimeEstimate.ttsSecondsPerPosition(rate: 1.0), 68.75)
+        #expect(
+            ReaderTimeEstimate.ttsSecondsPerPosition(rate: 1.0) > ReaderTimeEstimate.secondsPerPosition
+        )
+    }
+
+    @Test func ttsSecondsPerPositionScalesInverselyWithRate() {
+        // Faster read-aloud rate → fewer seconds per position, and vice versa.
+        expectApproximatelyEqual(ReaderTimeEstimate.ttsSecondsPerPosition(rate: 1.5), 68.75 / 1.5)
+        expectApproximatelyEqual(ReaderTimeEstimate.ttsSecondsPerPosition(rate: 0.5), 137.5)
+    }
+
+    @Test func ttsNowPlayingTimingExposesDurationAndElapsedAtDefaultRate() throws {
+        let timing = try #require(ReaderTimeEstimate.ttsNowPlayingTiming(
+            totalPositions: 100, remainingPositions: 25, rate: 1.0
+        ))
+        expectApproximatelyEqual(timing.duration, 100 * 68.75)
+        expectApproximatelyEqual(timing.elapsed, 75 * 68.75)
+    }
+
+    @Test func ttsNowPlayingTimingNilWhenTotalUnknown() {
+        #expect(
+            ReaderTimeEstimate.ttsNowPlayingTiming(totalPositions: 0, remainingPositions: 0, rate: 1.0) == nil
+        )
+    }
+
+    @Test func ttsNowPlayingTimingClampsOverRemaining() throws {
+        let timing = try #require(ReaderTimeEstimate.ttsNowPlayingTiming(
+            totalPositions: 10, remainingPositions: 50, rate: 1.0
+        ))
+        expectApproximatelyEqual(timing.duration, 10 * 68.75)
+        #expect(timing.elapsed == 0)
+    }
+
+    @Test func ttsNowPlayingTimingFasterRateShortensDuration() throws {
+        // Same book, same progress — only the read-aloud speed changed, so the
+        // estimated total time must shrink, not stay pinned to the silent model.
+        let normal = try #require(ReaderTimeEstimate.ttsNowPlayingTiming(
+            totalPositions: 100, remainingPositions: 0, rate: 1.0
+        ))
+        let faster = try #require(ReaderTimeEstimate.ttsNowPlayingTiming(
+            totalPositions: 100, remainingPositions: 0, rate: 1.5
+        ))
+        #expect(faster.duration < normal.duration)
+    }
+
     // MARK: - durationLabel(minutes:)
 
     @Test func durationUnderAnHourIsMinutesOnly() {
@@ -186,6 +286,56 @@ struct ReaderTimeEstimateTests {
         // Not degenerate: a view with room for exactly one line keeps that line
         // rather than collapsing to the bare minimum (40 - 10.3 == 29.7 == 1 line).
         #expect(ReadiumBook.snappedBottomInset(viewHeight: 40, safeTop: 0, lineHeight: 29.7) > 8)
+    }
+
+    /// C2: vertical page box uses full safe area (Readium pageMargins are
+    /// horizontal-only) and snaps the real text band to whole line heights.
+    @Test func pageBoxInsetsUseFullSafeAreaAndSnapTextBand() {
+        let viewH: CGFloat = 956
+        let safeTop: CGFloat = 59
+        let safeBottom: CGFloat = 34
+        let lineH: CGFloat = 29.7
+
+        let insets = ReadiumBook.pageBoxContentInsets(
+            viewHeight: viewH, safeTop: safeTop, safeBottom: safeBottom,
+            lineHeight: lineH
+        )
+
+        // First ink at content inset = full island clearance (not safe − margin).
+        #expect(insets.top == safeTop)
+        #expect(insets.bottom >= safeBottom)
+
+        let textBand = viewH - insets.top - insets.bottom
+        let lines = textBand / lineH
+        #expect(abs(lines - lines.rounded()) < 0.0001,
+                "text band \(textBand) is not a whole number of \(lineH)pt lines")
+        #expect(insets.bottom < safeBottom + lineH)
+
+        // Larger text size → different remainder (snap follows line height).
+        let largeType = ReadiumBook.pageBoxContentInsets(
+            viewHeight: viewH, safeTop: safeTop, safeBottom: safeBottom,
+            lineHeight: 56.1
+        )
+        #expect(largeType.top == safeTop)
+        let largeBand = viewH - largeType.top - largeType.bottom
+        #expect(abs(largeBand / 56.1 - (largeBand / 56.1).rounded()) < 0.0001)
+    }
+
+    @Test func pageBoxInsetsMatchLegacySnapShape() {
+        let viewH: CGFloat = 874
+        let safeTop: CGFloat = 47
+        let safeBottom: CGFloat = 34
+        let lineH: CGFloat = 22
+        let box = ReadiumBook.pageBoxContentInsets(
+            viewHeight: viewH, safeTop: safeTop, safeBottom: safeBottom,
+            lineHeight: lineH
+        )
+        #expect(box.top == safeTop)
+        let legacy = ReadiumBook.snappedBottomInset(
+            viewHeight: viewH, safeTop: safeTop, lineHeight: lineH,
+            minimum: max(8, safeBottom)
+        )
+        #expect(box.bottom == legacy)
     }
     #endif
 

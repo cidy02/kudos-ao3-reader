@@ -86,6 +86,13 @@ struct AO3WorkRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(expanded ? nil : 3)
                     .multilineTextAlignment(.leading)
+                    // Belt-and-braces against an *ancestor* animation: the
+                    // toggle itself no longer animates, but if any caller ever
+                    // wraps `expandAll` in a `withAnimation`, this keeps the
+                    // reflow out of it. SwiftUI can't interpolate one text
+                    // layout into another — it cross-fades the clamped and full
+                    // renderings, and the glyphs visibly ghost past each other.
+                    .animation(nil, value: expanded)
             }
 
             // Categorized tags appear when expanded — they can be numerous on AO3.
@@ -119,7 +126,13 @@ struct AO3WorkRow: View {
     /// navigation link.
     private var expandButton: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            // No `withAnimation`: these rows live in a `List`, and animating a
+            // row's height change makes it composite a snapshot of the old cell
+            // over the new one. The two layouts differ in height, so every
+            // element — title, byline, fandom, stats — ghosts over the expanded
+            // summary and chips for the duration. Toggling instantly relayouts
+            // in one frame with nothing to cross-fade.
+            expanded.toggle()
         } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))

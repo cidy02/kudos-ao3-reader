@@ -11,7 +11,66 @@ nonisolated enum ReaderTimeEstimate {
 
     /// Minutes remaining for `count` positions, rounded to the nearest minute.
     static func minutes(forPositions count: Int) -> Int {
-        max(0, Int((Double(max(0, count)) * secondsPerPosition / 60).rounded()))
+        max(0, Int((seconds(forPositions: count) / 60).rounded()))
+    }
+
+    /// Exact second estimate for `count` positions (no rounding). Used by Now
+    /// Playing duration/elapsed; the card still shows rounded minutes.
+    static func seconds(forPositions count: Int) -> TimeInterval {
+        Double(max(0, count)) * secondsPerPosition
+    }
+
+    /// Whole-work Now Playing timing from the same position model as the card.
+    /// - Parameters:
+    ///   - totalPositions: Readium positions in the publication.
+    ///   - remainingPositions: positions still ahead (`total − current`).
+    /// - Returns: `(duration, elapsed)` in seconds, or `nil` when total is unknown.
+    static func nowPlayingTiming(
+        totalPositions: Int,
+        remainingPositions: Int
+    ) -> (duration: TimeInterval, elapsed: TimeInterval)? {
+        guard totalPositions > 0 else { return nil }
+        let duration = seconds(forPositions: totalPositions)
+        let remaining = seconds(forPositions: min(max(0, remainingPositions), totalPositions))
+        let elapsed = max(0, duration - remaining)
+        return (duration, elapsed)
+    }
+
+    /// `AVSpeechUtteranceDefaultSpeechRate` (the reader's `rate == 1.0`) reads
+    /// commonly-cited English speech at roughly this pace — noticeably slower
+    /// than the `secondsPerPosition` **silent**-reading estimate above, which
+    /// intentionally stays untouched: it backs the position card's own labels.
+    static let ttsWordsPerMinuteAtDefaultRate = 160.0
+
+    /// Words per Readium position, backed out from the silent-reading
+    /// calibration this file already documents (~200 wpm × `secondsPerPosition`
+    /// seconds ≈ 1 KB of content), so the two models agree on "how much text is
+    /// in a position" and differ only in how fast that text is consumed.
+    private static let wordsPerPosition = 200.0 * secondsPerPosition / 60.0
+
+    /// Seconds to *speak* one position at read-aloud `rate` (the app's 0.5–1.5
+    /// multiplier on `AVSpeechUtteranceDefaultSpeechRate`, see
+    /// `ReaderSpeechPreferences.rate`) — distinct from `secondsPerPosition`,
+    /// which paces *silent* reading and must not be reused for TTS.
+    static func ttsSecondsPerPosition(rate: Double) -> Double {
+        let wordsPerMinute = max(0.01, ttsWordsPerMinuteAtDefaultRate * rate)
+        return wordsPerPosition / wordsPerMinute * 60
+    }
+
+    /// Same shape as `nowPlayingTiming`, but paced by the live TTS `rate`
+    /// instead of the silent-reading constant — this is the one Now Playing
+    /// should actually use while a read-aloud session is active.
+    static func ttsNowPlayingTiming(
+        totalPositions: Int,
+        remainingPositions: Int,
+        rate: Double
+    ) -> (duration: TimeInterval, elapsed: TimeInterval)? {
+        guard totalPositions > 0 else { return nil }
+        let perPosition = ttsSecondsPerPosition(rate: rate)
+        let duration = Double(totalPositions) * perPosition
+        let remaining = Double(min(max(0, remainingPositions), totalPositions)) * perPosition
+        let elapsed = max(0, duration - remaining)
+        return (duration, elapsed)
     }
 
     /// "12 min" / "1 hr 5 min" — the bare duration, no "left" suffix.

@@ -1598,6 +1598,11 @@ enum KudosBackupService {
                 local.lastModifiedAt = incomingModifiedAt
                 local.deletedAt = archived.deletedAt
                 local.isPendingDeletion = archived.isPendingDeletion
+                // Re-home onto the work this restore just resolved — usually a
+                // no-op (stable UUIDs), but a dedup-by-canonical-URL match can
+                // land archived.workID on a *different* local SavedWork record
+                // than `local.work` still points to, silently orphaning the mark.
+                local.work = work
                 continue
             }
 
@@ -1619,6 +1624,47 @@ enum KudosBackupService {
             restored.isPendingDeletion = archived.isPendingDeletion
             context.insert(restored)
             byID[archived.id] = restored
+        }
+
+        dedupeSamePassageAnnotations(context: context)
+    }
+
+    /// ANN-8: two devices creating the "same" highlight/bookmark offline
+    /// produce two different UUIDs, so id-keyed merging above never notices.
+    /// After the restore merge, collapse any still-live annotations that
+    /// share (work, kind, **exact** locator string) — same-kind only, never a
+    /// fuzzy text match. The most recently modified one wins; a non-empty
+    /// note on the loser is salvaged onto the winner if the winner has none.
+    private static func dedupeSamePassageAnnotations(context: ModelContext) {
+        let live = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
+            .filter { !$0.isPendingDeletion && $0.deletedAt == nil }
+
+        var groups: [String: [ReadingAnnotation]] = [:]
+        for annotation in live {
+            guard let workID = annotation.work?.id else { continue }
+            let key = "\(workID.uuidString)|\(annotation.kindRaw)|\(annotation.locatorString)"
+            groups[key, default: []].append(annotation)
+        }
+
+        for group in groups.values where group.count > 1 {
+            let ranked = group.sorted {
+                if $0.lastModifiedAt != $1.lastModifiedAt { return $0.lastModifiedAt > $1.lastModifiedAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            guard let winner = ranked.first else { continue }
+            for loser in ranked.dropFirst() {
+                if winner.note.isEmpty, !loser.note.isEmpty {
+                    winner.note = loser.note
+                    // Salvaging is a real content edit: without stamping it, the
+                    // winner keeps its old `lastModifiedAt`, and the very next
+                    // merge would see a "newer" remote copy of the winner (which
+                    // still has an empty note) and overwrite the rescued note —
+                    // silently undoing the salvage this dedup just performed.
+                    winner.markModified()
+                }
+                SyncTombstones.recordDeletion(of: loser, in: context, reason: "samePassageDeduped")
+                context.delete(loser)
+            }
         }
     }
 

@@ -111,7 +111,7 @@ final class AppRouter {
     var panel: Panel = .none
 
     enum Panel: Equatable {
-        case none, searchFilters, libraryFilters, readerChapters, readerDisplay
+        case none, searchFilters, libraryFilters, readerChapters, readerDisplay, readerFind
     }
 
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.

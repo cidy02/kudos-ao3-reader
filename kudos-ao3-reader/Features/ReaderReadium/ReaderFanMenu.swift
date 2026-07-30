@@ -22,6 +22,10 @@ struct ReaderFanRoundAction: Identifiable {
     let tint: Color
     let accessibilityLabel: String
     var isEnabled = true
+    /// When true, the capsule is filled with `tint` and the glyph uses a
+    /// contrasting colour so on/off is obvious at a glance (rotation lock).
+    /// Outline-vs-fill alone is too subtle for some symbols.
+    var isEmphasized = false
     let action: () -> Void
 }
 
@@ -48,16 +52,41 @@ struct ReaderFanMenu: View {
     /// slot. nil for works with no AO3 origin (imported EPUBs) — the slot is omitted.
     let shareURL: URL?
     let roundActions: [ReaderFanRoundAction]
+    /// The reader theme's own control colour (`ThemeManager.effectiveTint`), so an
+    /// active toggle and any system-tinted chrome inside the menu read as the
+    /// current theme — Sepia's warm brown rather than the raw AO3 red.
+    let accentColor: Color
     let reduceMotion: Bool
 
     /// Ties the button's glass to the pills' so the system morphs between them
     /// rather than cross-fading two unrelated shapes.
     @Namespace private var glassNamespace
 
+    private static let roundActionWidth: CGFloat = 52
+    private static let roundActionHeight: CGFloat = 46
+    private static let rowSpacing: CGFloat = 9
+
+    /// How many circles the bottom row actually renders (the share slot only
+    /// exists for AO3-backed works).
+    private var roundActionCount: Int {
+        roundActions.count + (shareURL == nil ? 0 : 1)
+    }
+
+    /// Pills span exactly the width of the circle row beneath them, so the menu
+    /// reads as one block with flush edges instead of two stacks of different
+    /// widths. Derived rather than hardcoded so adding or removing a circle keeps
+    /// the two in step.
+    private var pillWidth: CGFloat {
+        let count = max(roundActionCount, 1)
+        return CGFloat(count) * Self.roundActionWidth
+            + CGFloat(count - 1) * Self.rowSpacing
+    }
+
     var body: some View {
-        GlassEffectContainer(spacing: 9) {
+        GlassEffectContainer(spacing: Self.rowSpacing) {
             content
         }
+        .tint(accentColor)
         // With the button gone while open there is no control to close the menu,
         // so give VoiceOver the standard dismiss gesture (two-finger scrub) it
         // would otherwise get from that button.
@@ -65,7 +94,7 @@ struct ReaderFanMenu: View {
     }
 
     private var content: some View {
-        VStack(alignment: .trailing, spacing: 9) {
+        VStack(alignment: .trailing, spacing: Self.rowSpacing) {
             if !isOpen {
                 toggleButton
             }
@@ -77,15 +106,18 @@ struct ReaderFanMenu: View {
                         pill.action()
                     } label: {
                         HStack(spacing: 12) {
+                            // Text stays primary; only icons take the theme tint.
                             Text(pill.title)
                                 .font(.system(size: 15.5))
                                 .foregroundStyle(pill.isEnabled ? .primary : .secondary)
                             Spacer(minLength: 8)
                             Image(systemName: pill.systemImage)
-                                .foregroundStyle(pill.isEnabled ? .primary : .secondary)
+                                .foregroundStyle(
+                                    pill.isEnabled ? accentColor : accentColor.opacity(0.4)
+                                )
                         }
                         .padding(.horizontal, 18)
-                        .frame(width: 264, height: 46)
+                        .frame(width: pillWidth, height: Self.roundActionHeight)
                         // .plain draws no background of its own, so without this the
                         // only tappable parts are the glyphs themselves and taps in
                         // between fall through to the page.
@@ -105,13 +137,13 @@ struct ReaderFanMenu: View {
                     .accessibilityHint(pill.isEnabled ? "" : "Coming soon")
                 }
 
-                HStack(spacing: 9) {
+                HStack(spacing: Self.rowSpacing) {
                     if let shareURL {
                         ShareLink(item: shareURL) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 17))
-                                .foregroundStyle(.primary)
-                                .frame(width: 52, height: 46)
+                                .foregroundStyle(accentColor)
+                                .frame(width: Self.roundActionWidth, height: Self.roundActionHeight)
                                 .contentShape(.capsule)
                         }
                         .buttonStyle(.plain)
@@ -120,19 +152,7 @@ struct ReaderFanMenu: View {
                         .accessibilityLabel("Share")
                     }
                     ForEach(roundActions) { action in
-                        Button(action: action.action) {
-                            Image(systemName: action.systemImage)
-                                .font(.system(size: 17))
-                                .foregroundStyle(action.isEnabled ? action.tint : Color.secondary)
-                                .frame(width: 52, height: 46)
-                                .contentShape(.capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular, in: .capsule)
-                        .glassEffectID(action.id, in: glassNamespace)
-                        .disabled(!action.isEnabled)
-                        .accessibilityLabel(action.accessibilityLabel)
-                        .accessibilityHint(action.isEnabled ? "" : "Coming soon")
+                        roundActionButton(action)
                     }
                 }
             }
@@ -143,10 +163,70 @@ struct ReaderFanMenu: View {
         .accessibilityAction(.escape) { close() }
     }
 
+    /// One round action: glass + theme glyph by default; when `isEmphasized`, a
+    /// solid theme fill with a light glyph so locked/unlocked (etc.) is obvious.
+    @ViewBuilder
+    private func roundActionButton(_ action: ReaderFanRoundAction) -> some View {
+        // Glyph: contrasting on a filled capsule; theme tint (or dimmed) otherwise.
+        // `.replace` is the Control Center-style morph for lock/heart/bookmark swaps.
+        let glyphColor: Color = {
+            if action.isEmphasized { return Color.white }
+            return action.isEnabled ? action.tint : action.tint.opacity(0.45)
+        }()
+
+        Button(action: action.action) {
+            roundActionGlyph(action, color: glyphColor)
+                .frame(width: Self.roundActionWidth, height: Self.roundActionHeight)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .background {
+            if action.isEmphasized {
+                Capsule().fill(action.tint)
+            }
+        }
+        // Solid fill replaces glass while emphasized so the theme colour reads
+        // as a true selected state; glassEffectID stays so the fan morph still
+        // has a stable identity for this slot.
+        .glassEffect(action.isEmphasized ? .clear : .regular, in: .capsule)
+        .glassEffectID(action.id, in: glassNamespace)
+        .disabled(!action.isEnabled)
+        .accessibilityLabel(action.accessibilityLabel)
+        .accessibilityHint(action.isEnabled ? "" : "Coming soon")
+        .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
+    }
+
+    /// Symbol + transitions. Rotation lock also spins the circular arrows once
+    /// per toggle (Control Center’s arrow motion on `lock.rotation` symbols).
+    @ViewBuilder
+    private func roundActionGlyph(_ action: ReaderFanRoundAction, color: Color) -> some View {
+        let image = Image(systemName: action.systemImage)
+            .font(.system(size: 17))
+            .foregroundStyle(color)
+            .contentTransition(.symbolEffect(.replace))
+
+        if action.id == "rotationLock", !reduceMotion {
+            // Discrete one-shot: arrows rotate around the lock when the state
+            // flips. `byLayer` keeps the padlock body still and only turns the
+            // ring layers the symbol authors for this effect.
+            image
+                .symbolEffect(
+                    .rotate.byLayer,
+                    options: .nonRepeating,
+                    value: action.isEmphasized
+                )
+        } else {
+            image
+        }
+    }
+
     /// The glass morph's curve. A gently damped spring, not a linear fade — the
     /// shapes should look like they flow apart and back together. Shared by every
     /// open/close path so the two directions always match.
-    static let morph: Animation = .spring(response: 0.34, dampingFraction: 0.82)
+    ///
+    /// Tuned a touch slower/softer than a snappy spring so the fan reads closer
+    /// to Apple Books' calm open (was response 0.34 / damping 0.82).
+    static let morph: Animation = .spring(response: 0.44, dampingFraction: 0.88)
 
     /// Closes the menu, matching the open animation (and skipping it under
     /// Reduce Motion). Shared by the escape action and the host's backdrop.
@@ -180,7 +260,7 @@ struct ReaderFanMenu: View {
                     ForEach(0 ..< 3, id: \.self) { _ in Circle().frame(width: 2.6, height: 2.6) }
                 }
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(accentColor)
             .frame(width: 44, height: 44)
             // The glyph is thin bars and small dots; without an explicit content
             // shape a .plain button only accepts taps that land on the strokes,

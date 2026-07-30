@@ -183,6 +183,132 @@ struct ReadingAnnotationBackupTests {
         #expect(merged.selectedText == "new snapshot")
     }
 
+    @Test func sameChapterHighlightFromTwoDevicesCollapsesToOneOnRestore() throws {
+        // Two devices, offline, each highlight the exact same passage — same
+        // work, same kind, byte-identical locator string — but with different
+        // UUIDs since neither knew about the other's mark. A sync/restore must
+        // recognize this as one highlight, not stack duplicates forever.
+        let schema = schema()
+        let sharedWorkID = UUID()
+
+        let source = try context(schema)
+        let sourceWork = SavedWork(id: sharedWorkID, title: "Annotated Work", author: "Marginalia")
+        sourceWork.isSaved = true
+        source.insert(sourceWork)
+        let deviceBHighlight = ReadingAnnotation(
+            work: sourceWork, kind: .highlight, locatorString: Self.locator,
+            selectedText: "the lantern guttered", color: .green,
+            createdAt: Date(timeIntervalSince1970: 500)
+        )
+        deviceBHighlight.lastModifiedAt = Date(timeIntervalSince1970: 9000)
+        source.insert(deviceBHighlight)
+        try source.save()
+
+        let contents = try KudosBackupService.makeContents(
+            works: [sourceWork], bookmarks: [], fonts: [], readingQueues: [],
+            annotations: [deviceBHighlight], defaults: try testDefaults()
+        )
+
+        let target = try context(schema)
+        let targetWork = SavedWork(id: sharedWorkID, title: "Annotated Work", author: "Marginalia")
+        targetWork.isSaved = true
+        target.insert(targetWork)
+        let deviceAHighlight = ReadingAnnotation(
+            work: targetWork, kind: .highlight, locatorString: Self.locator,
+            note: "device A's note", color: .yellow,
+            createdAt: Date(timeIntervalSince1970: 1000)
+        )
+        deviceAHighlight.lastModifiedAt = Date(timeIntervalSince1970: 1500)
+        target.insert(deviceAHighlight)
+        try target.save()
+
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
+
+        let all = try target.fetch(FetchDescriptor<ReadingAnnotation>())
+        #expect(all.count == 1)
+        let survivor = try #require(all.first)
+        // Device B's copy is more recently modified, so it wins the passage...
+        #expect(survivor.id == deviceBHighlight.id)
+        #expect(survivor.color == .green)
+        // ...but device A's note is salvaged since the winner had none.
+        #expect(survivor.note == "device A's note")
+
+        // The loser is tombstoned, not silently dropped — an older archive
+        // that still lists it must not resurrect a duplicate later.
+        let tombstones = try target.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombstones.contains { $0.recordID == deviceAHighlight.id })
+    }
+
+    @Test func differentKindOrLocatorNeverCollapses() throws {
+        // A highlight and a bookmark at the same passage are different marks
+        // (ANN-8 is same-*kind* only); a highlight one chapter over is a
+        // different passage. Neither should ever be treated as a duplicate.
+        let schema = schema()
+        let target = try context(schema)
+        let work = makeWork()
+        target.insert(work)
+        let highlight = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: Self.locator, createdAt: Date()
+        )
+        let bookmarkSamePassage = ReadingAnnotation(
+            work: work, kind: .bookmark, locatorString: Self.locator, createdAt: Date()
+        )
+        let otherLocator = Self.locator.replacingOccurrences(of: "0.42", with: "0.55")
+        let highlightElsewhere = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: otherLocator, createdAt: Date()
+        )
+        target.insert(highlight)
+        target.insert(bookmarkSamePassage)
+        target.insert(highlightElsewhere)
+        try target.save()
+
+        // Re-archiving and restoring the work's own state (a self-referential
+        // round trip) still runs the dedup pass over all live local
+        // annotations — none of these three should be mistaken for a match.
+        let contents = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            annotations: [highlight], defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
+
+        #expect(try target.fetch(FetchDescriptor<ReadingAnnotation>()).count == 3)
+    }
+
+    /// ANN-9: `ReadingAnnotation.work` is a plain optional with no
+    /// `@Relationship` cascade, so SwiftData's default `.nullify` would leave
+    /// every mark behind when its book is hard-deleted — orphaned rows that no
+    /// list can show (they all filter on `work?.id`) and that no tombstone
+    /// protects, so a later restore of an older archive could resurrect them.
+    ///
+    /// Lives here rather than in `PersistenceSyncTests` deliberately: that
+    /// suite's schema omits `ReadingAnnotation`, so `hardDelete`'s fetch throws
+    /// there and is swallowed by `try?` — a cascade test written against that
+    /// container would pass no matter what the cascade did.
+    @Test func hardDeletingAWorkTombstonesAndRemovesItsAnnotations() throws {
+        let schema = schema()
+        let context = try context(schema)
+        let work = makeWork()
+        context.insert(work)
+        let highlight = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: Self.locator,
+            selectedText: "the lantern guttered", note: "keep me honest"
+        )
+        let bookmark = ReadingAnnotation(
+            work: work, kind: .bookmark, locatorString: Self.locator
+        )
+        context.insert(highlight)
+        context.insert(bookmark)
+        try context.save()
+
+        WorkLifecycle.hardDelete(work, in: context)
+
+        #expect(try context.fetch(FetchDescriptor<ReadingAnnotation>()).isEmpty)
+        let annotationTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+            .filter { $0.recordType == .readingAnnotation }
+        #expect(annotationTombstones.count == 2)
+        #expect(Set(annotationTombstones.map(\.recordID)) == Set([highlight.id, bookmark.id]))
+    }
+
     private func testDefaults() throws -> UserDefaults {
         let name = "ReadingAnnotationBackupTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))

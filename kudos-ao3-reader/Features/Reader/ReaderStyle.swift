@@ -352,9 +352,18 @@ enum ReaderStylesheet {
             margin-left: auto;
             margin-right: auto;
         }
-        p, div, span, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, em, strong, a {
+        /* Universal, not an enumerated tag list: AO3's Summary/Notes/End Notes
+           blocks (`<blockquote class="userstuff">`) carry the site's own
+           `.userstuff { font-family: serif }` rule, and author notes commonly
+           use legacy inline-formatting tags (`<i>`, `<b>`, `<u>`) that weren't
+           in the old list — those don't reliably inherit past the browser's
+           own user-agent default for that tag. `*` with `!important` closes
+           every such gap in one rule instead of chasing tags one at a time. */
+        * {
             color: \(theme.textHex) !important;
             font-family: \(family) !important;
+        }
+        p, div, span, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, em, strong, a {
             /* Only break a "word" when it can't fit on a line by itself (long URLs),
                so the content can't overflow horizontally. `overflow-wrap: break-word`
                leaves normal words intact — unlike `word-break`, which split words

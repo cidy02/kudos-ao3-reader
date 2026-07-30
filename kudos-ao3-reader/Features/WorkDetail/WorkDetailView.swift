@@ -29,13 +29,20 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     let source: Source
+    /// True only for the title-pill sheet the reader itself presents (A2).
+    /// That sheet's `WorkDetailView` is always the reader's *own* work, so
+    /// `read()` has nothing useful to push — it dismisses back to the live
+    /// reader underneath instead of stacking a second reader on top of it.
+    private let openedFromReader: Bool
 
-    init(work: SavedWork) {
+    init(work: SavedWork, openedFromReader: Bool = false) {
         source = .saved(work)
+        self.openedFromReader = openedFromReader
     }
 
     init(remote: AO3WorkSummary) {
         source = .remote(remote)
+        openedFromReader = false
     }
 
     @Environment(\.modelContext) var context
@@ -841,6 +848,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Opens the reader for this work. Imports a remote work first, and re-downloads a
     /// freed history entry, before pushing the reader — it never opens another detail.
     func read() {
+        if openedFromReader {
+            // Already reading this exact work one screen down — reopening it
+            // here would stack a second reader over the live one (A2).
+            dismiss()
+            return
+        }
         withLocalWork { work in
             if WorkReaderPreparation.hasReadableEPUB(for: work) { readerWork = work; return }
             // Freed history entry: re-download into the existing record, keeping its id
