@@ -24,59 +24,19 @@ import SwiftUI
 /// card apart and made the rail break at every boundary. It also restores
 /// information that layout silently dropped — replies used to render identically
 /// at every depth, so a reply-to-a-reply looked exactly like a direct reply.
-/// How a reply is joined to its parent. A/B while the two are compared on
-/// device; one of them should win and the other be deleted.
-enum CommentConnectorStyle: String, CaseIterable, Identifiable {
-    /// Trunk drops from the parent's avatar and turns into the reply's middle.
-    case elbow
-    /// Trunk drops straight down the padding band between a card and the reply
-    /// nested inside it. The reply steps in by exactly that band, so it is inset
-    /// equally on the left and the right — see `CommentThreadGeometry.indent`.
-    case straight
-    /// No nested cards at all: **one card per conversation**, replies as flat rows
-    /// inside it, and a thin generational rail per level in the leading gutter.
-    ///
-    /// The other two styles nest a card per comment, which costs indent on *both*
-    /// sides and needs a fill that differs from its parent — and there are only a
-    /// couple of usable fill steps before a card washes out. Both costs scale with
-    /// depth, and real threads go deep (The Queen's Mercy's epilogue carries a
-    /// ~10-reply chain), which is also exactly where readers engage most.
-    ///
-    /// A gutter rail costs one small indent step and no fill difference whatsoever,
-    /// and it only has to be distinguishable from its immediate neighbours — which
-    /// `railColor`'s 4-way cycle already achieves, because adjacent rails are
-    /// adjacent columns. So this gets *cheaper* with depth where nesting gets
-    /// dearer. It is also what every mature comment client does.
-    case flat
-    /// The `AO3 Comments.dc.html` concept: **the list is depth-bounded.** A
-    /// conversation shows its root and at most two direct replies; everything
-    /// deeper is reached through a "Continue thread" row that pushes
-    /// `CommentThreadScreen`.
-    ///
-    /// This is the idea the other three lack, and it is structural rather than
-    /// cosmetic: they all try to render an arbitrarily deep tree inline, and every
-    /// problem this design went through — the width squeeze, the fill ladder
-    /// washing out, the six-rail gutter — came from that. Bounding the list means
-    /// only one nesting level is ever drawn, so the hard cases stop existing
-    /// instead of being tuned.
-    case threads
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .elbow: "Elbow"
-        case .straight: "Straight"
-        case .flat: "Flat"
-        case .threads: "Threads"
-        }
-    }
-
-    /// Whether the list stops at one level of replies and pushes the rest.
-    var boundsConversations: Bool { self == .threads }
-
-    static let storageKey = "commentConnectorStyle"
-}
+/// Comment threads are **depth-bounded in the list**: a conversation shows its
+/// root and at most two direct replies, and everything deeper is reached through
+/// a "Continue thread" row that pushes `CommentThreadScreen`.
+///
+/// That bound is the design's central idea, and it is structural rather than
+/// cosmetic. Three earlier styles (elbow, straight, and a flat one-card-per-
+/// conversation variant) all tried to render an arbitrarily deep tree inline, and
+/// every problem this screen went through — the width squeeze at depth, the fill
+/// ladder washing out, a six-rail gutter — came from that single decision. Real
+/// AO3 threads go deep (The Queen's Mercy's epilogue carries a ~10-reply chain),
+/// and that is exactly where readers engage most. Bounding the list means only one
+/// nesting level is ever drawn, so the hard cases stop existing instead of being
+/// tuned. The other three were compared on device and dropped; see T-151.
 
 enum CommentThreadGeometry {
     static let cardPadding: CGFloat = 14
@@ -173,66 +133,30 @@ enum CommentThreadGeometry {
     }
 
 
-    /// Leading indent for a nesting level, clamped to what the screen can spare.
+    /// Leading indent for a reply, clamped to what the screen can spare.
     ///
-    /// **Elbow** steps in by the parent's whole avatar column — card padding,
-    /// avatar, avatar gap — so a reply begins exactly where the words it answers
-    /// do, and the trunk (which drops from the parent's avatar centre) stays to
-    /// the *left* of the child's card edge, so the turn always runs forward into
-    /// the card rather than doubling back on itself. Avatars shrink with depth,
-    /// so that step is computed per level rather than being one constant.
+    /// The *list* never renders past depth 1 — anything deeper sits behind
+    /// "Continue thread" — so the depth cap only ever binds on the thread screen,
+    /// which walks a real tree. Three levels there, then it holds: at 48pt a step a
+    /// deep chain would otherwise spend the screen on indent before a word is
+    /// drawn, and past a few levels depth stops being information anyone acts on.
     ///
-    /// **Straight** steps in by one `cardPadding` — exactly what `nestedInset`
-    /// takes off the trailing edge — so a reply is inset by the same amount on
-    /// both sides and reads as sitting squarely inside its parent, instead of
-    /// carrying a 64pt gap on the left against 14pt on the right. It can afford
-    /// the narrower step because its trunk drops down that padding band rather
-    /// than having to clear the parent's avatar. The tradeoff is deliberate:
-    /// nesting is far subtler than the elbow's, so depth leans on the rail, the
-    /// avatar step-down and the per-level surface shading to carry what the
-    /// indent no longer says by itself.
-    ///
-    /// Both are then clamped, because avatars and padding are fixed point values
-    /// and text is not: a fixed step keeps its width while the words inside a
-    /// card grow, starving a nested card until its content spills. Keying that
-    /// off an accessibility-size *category* wasn't enough — the sizes just below
-    /// the threshold starve the card just as badly. So the ideal indent is
-    /// computed first, then clamped so the content column never drops under
-    /// `minimumContentWidth`. Nesting gives up width before legibility does, and
-    /// it adapts to the real container, which also makes wider screens (iPad,
-    /// landscape) keep the full indent.
+    /// Then clamped, because avatars and padding are fixed point values and text is
+    /// not: a fixed step keeps its width while the words inside a card grow,
+    /// starving a nested card until its content spills. Keying that off an
+    /// accessibility-size *category* wasn't enough — the sizes just below the
+    /// threshold starve the card just as badly. So the ideal indent is computed
+    /// first, then clamped so the content column never drops under
+    /// `minimumContentWidth`. Nesting gives up width before legibility does, and it
+    /// adapts to the real container, so wider screens (iPad, landscape) keep the
+    /// full indent.
     static func indent(
         forDepth depth: Int,
         availableWidth: CGFloat,
-        typeSize: DynamicTypeSize,
-        style: CommentConnectorStyle = .elbow
+        typeSize: DynamicTypeSize
     ) -> CGFloat {
-        var ideal: CGFloat = 0
-        var budget = availableWidth - sideMargin * 2 - minimumContentWidth(for: typeSize)
-        switch style {
-        case .threads:
-            // The *list* never renders past depth 1 — anything deeper is behind
-            // "Continue thread" — so this cap only ever binds on the thread screen,
-            // which walks a real tree. Three levels there, then it holds: at 48pt a
-            // step, a deep chain would otherwise spend the screen on indent, and
-            // the lesson from the other styles is that past a few levels depth
-            // stops being information anyone acts on.
-            ideal = threadsIndentStep * CGFloat(min(max(0, depth), threadsMaxIndentedDepth))
-        case .flat:
-            ideal = flatIndentStep * CGFloat(min(max(0, depth), flatMaxIndentedDepth))
-        case .straight:
-            ideal = CGFloat(max(0, depth)) * cardPadding
-            // Symmetry means this indent comes off the *trailing* edge as well
-            // (`CommentRowChrome.nestedInset`), so it may only spend half the
-            // budget — spending all of it would starve the content column to
-            // twice the depth the clamp believes it is protecting against.
-            budget /= 2
-        case .elbow:
-            for level in 0 ..< max(0, depth) {
-                let step = cardPadding + avatarSize(forDepth: level) + avatarContentSpacing
-                ideal += level >= maxIndentedDepth ? compactIndentStep : step
-            }
-        }
+        let ideal = threadsIndentStep * CGFloat(min(max(0, depth), threadsMaxIndentedDepth))
+        let budget = availableWidth - sideMargin * 2 - minimumContentWidth(for: typeSize)
         return max(0, min(ideal, budget))
     }
 
@@ -575,55 +499,49 @@ struct CommentConversationRowItem: Identifiable {
     var id: String { item.id }
 }
 
-/// The elbow-and-trunk lines that join a reply to its parent.
+/// The elbow that joins a reply to the comment it answers.
 ///
-/// One shape per row, drawn in the row's *background* alongside the card, so
-/// nothing crosses a row boundary and a swipe still moves only its own comment.
-/// Consecutive rows touch, so the trunk segments read as one continuous line.
+/// One shape per row, drawn in the row's background alongside the card, so nothing
+/// crosses a row boundary and a swipe moves only its own comment. Consecutive rows
+/// touch, so the segments read as one continuous line.
 struct ThreadConnectors: Shape {
     let depth: Int
     let isLastSibling: Bool
     let ancestorLines: [Bool]
     let leadingInset: CGFloat
-    /// The reply card's own top/bottom insets within the row, so the elbow can
-    /// meet the card's vertical middle — the trunk then reads as running from
-    /// just under the parent down into the centre of the reply it points at.
+    /// This card's own top/bottom insets within the row, so the elbow can meet the
+    /// card's vertical middle — the line then reads as running from the comment
+    /// above down into the centre of the reply it points at.
     let cardTopInset: CGFloat
     let cardBottomInset: CGFloat
     /// A row with a reply directly beneath it draws the *start* of that reply's
-    /// trunk itself, from under its own avatar to its bottom edge. The line has
-    /// to begin inside the parent — a row can only paint within its own bounds,
-    /// so the reply's row picks it up at its top edge and the two segments meet.
+    /// trunk itself, from its own bottom edge to the row's edge. The line has to
+    /// begin inside the parent — a row can only paint within its own bounds — so
+    /// the reply's row picks it up at its top edge and the two segments meet.
     let hasChildBelow: Bool
-    /// Centre of this row's avatar, where that descender starts — *behind* the
-    /// picture, not below it. `CommentRowChrome.avatarBacking` paints an opaque
-    /// disc over this stretch, so the line emerges tangent to the circle's lowest
-    /// point with no gap, as if it ran out from under the picture.
-    let avatarCenterY: CGFloat
-    /// Resolved indent per level, handed down from the chrome. Recomputing it
-    /// here would risk the lines and the cards disagreeing about where an edge
-    /// is the moment either formula changes.
+    /// Resolved indent per level, handed down from the chrome. Recomputing it here
+    /// would risk the lines and the cards disagreeing about where an edge is the
+    /// moment either formula changes.
     let indents: [CGFloat]
-    let style: CommentConnectorStyle
     /// Draw only the segments belonging to this nesting level.
     ///
-    /// A row can carry lines for several levels at once — an ancestor's trunk,
-    /// its own elbow, and the start of its child's trunk — and a `Shape` takes a
-    /// single stroke colour. Emitting them all as one path meant a row painted
-    /// every line in *its* colour, so one continuous trunk changed colour each
-    /// time it crossed into a differently-nested row. The caller now strokes one
-    /// filtered shape per level, each in that level's own colour.
+    /// A row can carry lines for several levels at once — an ancestor's trunk, its
+    /// own elbow, and the start of its child's trunk — and a `Shape` takes a single
+    /// stroke colour. Emitting them as one path meant a row painted every line in
+    /// *its* colour, so one continuous trunk changed colour each time it crossed
+    /// into a differently-nested row. The caller strokes one filtered shape per
+    /// level, each in that level's own colour.
     let level: Int
     let cornerRadius: CGFloat
 
-    /// Horizontal centre of the trunk that joins a comment at `parentDepth` to
-    /// its replies — the centre of that parent's avatar, so the line drops out
-    /// of the picture rather than out of the margin beside it.
     private func indent(forLevel level: Int) -> CGFloat {
         guard level >= 0, level < indents.count else { return indents.last ?? 0 }
         return indents[level]
     }
 
+    /// Horizontal centre of the trunk joining a comment at `parentDepth` to its
+    /// replies — its avatar's column, which is also comfortably left of the reply
+    /// card's leading edge, so the elbow always runs *forward* into the card.
     private func trunkX(parentDepth: Int) -> CGFloat {
         leadingInset
             + indent(forLevel: parentDepth)
@@ -634,31 +552,14 @@ struct ThreadConnectors: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
 
-        // The flat style draws no connectors at all — `CommentRowChrome` never asks
-        // it to. One rail per generation stacked six-deep in a single gutter is a
-        // barcode, not structure, and painting it in the *accent* made the loudest
-        // thing on screen the least meaningful. A hairline divider and reading
-        // order do the job instead.
-
-        // Descender into the reply below: starts at this comment's avatar centre,
-        // on the column that reply's own connector will rise from. The stretch
-        // from there to the circle's lowest point is hidden by the avatar backing,
-        // so the line reads as running out from underneath the picture.
+        // Descender into the reply below, leaving from this card's **bottom edge**.
+        // Cards here are self-contained rather than nested, so a line starting at
+        // the avatar would run the whole height of the card — past the body and the
+        // actions row — before it got anywhere, and that reads as something
+        // crossing the comment rather than leaving it.
         if hasChildBelow, level == depth {
             let childX = trunkX(parentDepth: depth)
-            // Threads leaves from the card's **bottom edge**, not from under the
-            // avatar. Its cards are self-contained rather than nested, so a line
-            // starting at the avatar has to run the whole height of the card —
-            // past the body and the actions row — before it gets anywhere, and
-            // that reads as something crossing the comment rather than leaving it.
-            // The nesting styles keep the avatar origin: there the line is a trunk
-            // the reply hangs off, and it belongs to the card it starts in.
-            let startY = style == .threads
-                ? rect.maxY - cardBottomInset
-                : rect.minY + avatarCenterY
-            // A row shorter than its own avatar column would otherwise emit a
-            // segment running backwards, or a zero-length one — which a round cap
-            // renders as a filled dot rather than as nothing at all.
+            let startY = rect.maxY - cardBottomInset
             if startY < rect.maxY {
                 path.move(to: CGPoint(x: childX, y: startY))
                 path.addLine(to: CGPoint(x: childX, y: rect.maxY))
@@ -667,16 +568,10 @@ struct ThreadConnectors: Shape {
 
         guard depth > 0 else { return path }
 
-        // An ancestor that still has siblings below keeps a straight line
-        // running the full height of this row.
-        //
-        // For the straight style this stretch is what carries a line *past* an
-        // earlier sibling's whole subtree to reach the next peer. It runs at that
-        // ancestor's own avatar column, which this style's one-`cardPadding` indent
-        // leaves inside the cards it passes — it is not drawn over them, because
-        // `CommentRowChrome` paints each level's card in front of the lines
-        // belonging to shallower levels. It is hidden behind the cards it passes
-        // and reappears in the gaps between them.
+        // An ancestor that still has siblings below keeps a line running the full
+        // height of this row, carrying it past an earlier sibling's whole subtree to
+        // reach the next peer. Only reachable on the thread screen: the list is
+        // depth-bounded, so it never renders a row deep enough to need one.
         if level < depth - 1, level < ancestorLines.count, ancestorLines[level] {
             let x = trunkX(parentDepth: level)
             path.move(to: CGPoint(x: x, y: rect.minY))
@@ -684,21 +579,6 @@ struct ThreadConnectors: Shape {
         }
 
         guard level == depth - 1 else { return path }
-
-        // Straight style: no turn. Down from the row's top edge to the top edge of
-        // this reply's own card, where the descender the parent drew from under its
-        // avatar meets it — so the finished line reads as one segment from the
-        // bottom of the parent's picture to the top of the reply. Nothing is cut
-        // short to avoid the card: the card is painted in front of this line, so
-        // the stretch that passes behind it is masked, including the stroke's round
-        // cap. A middle sibling keeps the line running to the next peer instead of
-        // ending at its own card.
-        if style == .straight {
-            let x = trunkX(parentDepth: depth - 1)
-            path.move(to: CGPoint(x: x, y: rect.minY))
-            path.addLine(to: CGPoint(x: x, y: isLastSibling ? rect.minY + cardTopInset : rect.maxY))
-            return path
-        }
 
         // This row's own level: down from the top, then a rounded turn into the
         // card's leading edge.
@@ -711,10 +591,7 @@ struct ThreadConnectors: Shape {
             to: CGPoint(x: x + cornerRadius, y: y),
             control: CGPoint(x: x, y: y)
         )
-        path.addLine(to: CGPoint(
-            x: leadingInset + indent(forLevel: depth),
-            y: y
-        ))
+        path.addLine(to: CGPoint(x: leadingInset + indent(forLevel: depth), y: y))
 
         // A middle child's trunk carries on down to the next sibling's elbow.
         if !isLastSibling {
@@ -1001,6 +878,14 @@ private func continueThreadButton(count: Int, action: @escaping () -> Void) -> s
 
 /// Frames a comment row: the app's card, plus the hairline that separates one
 /// top-level conversation from the next.
+/// Frames a comment row: its own card, the connector joining it to its parent,
+/// and the rule that separates one top-level conversation from the next.
+///
+/// Cards sit **beside** each other with an indent, never inside each other. That
+/// one decision removes everything the earlier nested designs needed — corner
+/// open/close logic, per-level fills, seam handling, card masking, z-order
+/// interleaving across a stack — because nothing is shared between rows and so
+/// nothing can seam, bleed or tear.
 private struct CommentRowChrome: ViewModifier {
     let depth: Int
     let isLastSibling: Bool
@@ -1010,317 +895,96 @@ private struct CommentRowChrome: ViewModifier {
     /// extra air above it and a rule, so consecutive conversations don't read as
     /// one long run of identical cards.
     let startsConversation: Bool
-    /// The work author's own comments get an accent-tinted card, not just a
-    /// tinted rail. Their replies are what readers scan a comment section for,
-    /// and a card you can pick out at arm's length beats a 3pt stripe. Kept to a
-    /// low opacity so body text stays readable on every theme, including OLED's
-    /// true black and Sepia's warm paper.
+    /// The work author's own comments get an accent-tinted card. Their replies are
+    /// what readers scan a comment section for, and a card you can pick out at
+    /// arm's length beats a stripe. Kept to a low opacity so body text stays
+    /// readable on every theme, including OLED's true black and Sepia's warm paper.
     let isWorkAuthor: Bool
     let half: CGFloat
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.commentsContentWidth) private var contentWidth
-    @AppStorage(CommentConnectorStyle.storageKey) private var connectorStyleRaw = CommentConnectorStyle.elbow.rawValue
 
-    private var connectorStyle: CommentConnectorStyle {
-        CommentConnectorStyle(rawValue: connectorStyleRaw) ?? .elbow
-    }
-
-    /// Indent for every level this row draws, resolved once so the cards and
-    /// the connectors are guaranteed to agree.
+    /// Indent for every level this row draws, resolved once so the card and the
+    /// connectors are guaranteed to agree.
     private var indents: [CGFloat] {
         (0 ... max(0, depth)).map {
             CommentThreadGeometry.indent(
-                forDepth: $0, availableWidth: contentWidth,
-                typeSize: dynamicTypeSize, style: connectorStyle
+                forDepth: $0, availableWidth: contentWidth, typeSize: dynamicTypeSize
             )
         }
     }
+
+    private var indent: CGFloat { indents[min(depth, indents.count - 1)] }
 
     private var topGap: CGFloat {
         startsConversation ? CommentThreadGeometry.conversationGap : half
     }
 
-    private var indent: CGFloat { indents[min(depth, indents.count - 1)] }
-
-    /// Trailing (and bottom) inset for a level's card.
-    ///
-    /// `CommentThreadGeometry.nestedInset` is the general rule. The straight style
-    /// mirrors its own *resolved* leading indent instead, so the two edges stay
-    /// equal even at the depths where the width clamp shortens the indent and the
-    /// two formulas would otherwise drift apart — which is the whole point of
-    /// that style's narrower step.
-    private func nestedInset(forLevel level: Int) -> CGFloat {
-        switch connectorStyle {
-        // One card for the whole conversation, so there is no nesting to inset
-        // from: every row reaches the card's own trailing edge.
-        case .flat: 0
-        // Cards sit *beside* each other with an indent, never inside each other,
-        // so a reply's card reaches the same trailing edge its parent's does.
-        case .threads: 0
-        case .straight: indents[min(max(0, level), indents.count - 1)]
-        case .elbow: CommentThreadGeometry.nestedInset(forLevel: level)
-        }
-    }
-
-    /// Vertical inset of this row's own card, so the connector can find the
-    /// card's middle rather than the row's — the row also carries the gap above
-    /// and below the card.
+    /// Vertical inset of this row's card. Every card is self-contained, so each one
+    /// takes its own gap above and below — there is no "continued by the row below"
+    /// case to ask about.
     private var cardTopInset: CGFloat { topGap }
-    private var cardBottomInset: CGFloat {
-        // Threads cards are never continued by the row below, so every one takes
-        // its own bottom gap — `closesCard` is a containment question that doesn't
-        // apply. Getting this wrong leaves the actions row hanging below its card.
-        if connectorStyle == .threads { return half }
-        return closesCard(atLevel: depth)
-            ? half + nestedInset(forLevel: depth)
-            : 0
-    }
-
-    private var avatarSize: CGFloat { CommentThreadGeometry.avatarSize(forDepth: depth) }
-
-    /// Centre of this row's avatar, measured from the row's top and leading edge.
-    private var avatarCenterY: CGFloat {
-        topGap + CommentThreadGeometry.cardPadding + avatarSize / 2
-    }
-
-    private var avatarCenterX: CGFloat {
-        CommentThreadGeometry.sideMargin + indent + CommentThreadGeometry.cardPadding + avatarSize / 2
-    }
-
-    /// An opaque disc exactly where this row's avatar sits, in the card's own
-    /// colour, drawn after every connector line.
-    ///
-    /// The descender now starts *behind* the avatar rather than below it, so
-    /// something has to hide that stretch — and the avatar itself cannot. Its
-    /// fallback backing is `.quaternary.opacity(0.5)` (`CommentAvatar`), so the
-    /// line would show through for every guest and every icon that hasn't loaded
-    /// yet. Filling this disc with the same stack the card already paints there
-    /// makes it invisible in its own right: it changes no pixel except the ones
-    /// the line would have covered.
-    @ViewBuilder
-    private var avatarBacking: some View {
-        let disc = Circle().frame(width: avatarSize, height: avatarSize)
-        if connectorStyle == .threads {
-            // Must match `standaloneCard`, which fills from `cardSurface` with no
-            // nesting tint — `cardFill` would add one at odd depths and leave a
-            // visibly different disc sitting on the card.
-            disc
-                .foregroundStyle(theme.appTheme.cardSurface)
-                .overlay {
-                    if isWorkAuthor {
-                        Circle()
-                            .fill(theme.effectiveTint.opacity(0.12))
-                            .frame(width: avatarSize, height: avatarSize)
-                    }
-                }
-                .position(x: avatarCenterX, y: avatarCenterY)
-        } else {
-            cardFill(Circle(), forLevel: depth)
-                .frame(width: avatarSize, height: avatarSize)
-                .position(x: avatarCenterX, y: avatarCenterY)
-        }
-    }
-
-    /// The exact fill stack a level's card paints: surface, depth step, and the
-    /// work-author tint. Shared by the card and by `avatarBacking`, so the disc
-    /// that hides the connector can't drift out of colour with the card round it.
-    @ViewBuilder
-    private func cardFill(_ shape: some Shape, forLevel level: Int) -> some View {
-        shape
-            .fill(surface(forLevel: level))
-            .overlay { shape.fill(nestingTint(forLevel: level)) }
-            .overlay {
-                // The author tint belongs to the author's *own* card, so it keys
-                // off `level == depth`, never an ancestor. An author's reply sits
-                // inside its parent's card too, and tinting by row alone painted
-                // the shared outer card accent for just that row — a red band down
-                // one slice of an otherwise plain conversation.
-                if isWorkAuthor, level == depth {
-                    shape.fill(theme.effectiveTint.opacity(0.12))
-                }
-            }
-    }
-
-    private func connectorLine(forLevel level: Int) -> some View {
-        ThreadConnectors(
-            depth: depth,
-            isLastSibling: isLastSibling,
-            ancestorLines: ancestorLines,
-            leadingInset: CommentThreadGeometry.sideMargin,
-            cardTopInset: cardTopInset,
-            cardBottomInset: cardBottomInset,
-            hasChildBelow: nextDepth == depth + 1,
-            avatarCenterY: avatarCenterY,
-            indents: indents,
-            style: connectorStyle,
-            level: level,
-            cornerRadius: CommentThreadGeometry.elbowRadius
-        )
-        .stroke(
-            CommentThreadGeometry.railColor(forDepth: level),
-            style: StrokeStyle(lineWidth: CommentThreadGeometry.railWidth, lineCap: .round)
-        )
-    }
+    private var cardBottomInset: CGFloat { half }
 
     func body(content: Content) -> some View {
         content
             .listRowInsets(EdgeInsets(
                 top: topGap,
                 leading: CommentThreadGeometry.sideMargin + indent,
-                // Must match the card's own bottom inset exactly. The card is
-                // drawn in the row *background* and pulls its bottom edge up by
-                // `nestedInset` so it sits inside its parent — content insets
-                // that stop at `half` leave the actions row hanging that far
-                // below the card it belongs to.
+                // Must match the card's own bottom inset exactly, or the actions row
+                // hangs that far below the card it belongs to.
                 bottom: cardBottomInset,
-                // Keeps a nested card *within* its parent's padding on both sides
-                // rather than running flush to the parent's right edge and
-                // reading as an overlap.
-                trailing: CommentThreadGeometry.sideMargin + nestedInset(forLevel: depth)
+                trailing: CommentThreadGeometry.sideMargin
             ))
             // The card is the row's *background*, matching `.cardRow()` in every
-            // other card list. It stops a swipe tearing a card that spans several
-            // rows: background and content translate together, so the card moves
-            // as one piece with its comment instead of the text sliding out of it.
+            // other card list.
             //
-            // **It does not hold the card still.** An earlier version of this
-            // comment claimed a swipe "translates content only" and left the
-            // background anchored; observed on device (iOS 26.5), the whole row —
-            // background included — translates. Anything in here that has to line
-            // up with a *neighbouring* row therefore breaks mid-swipe: the swiped
-            // row's connector slides away while the unswiped row's stays.
-            //
-            // **Accepted, 2026-07-29 (owner call) — see TASKS.md.** The only fix
-            // that keeps cross-row lines is replacing `.swipeActions` with a custom
-            // gesture, so the lines can sit outside the translated layer; that
-            // means re-implementing full-swipe, snap points, haptics and VoiceOver
-            // rotor integration, whose failure modes are worse than the cosmetic
-            // problem. Note it is a cost of cross-row connectors *specifically*:
-            // the flat style draws none, so it doesn't have the issue at all.
-            .listRowBackground(enclosingCards)
+            // **It does not hold the card still under a swipe.** An earlier comment
+            // here claimed a swipe "translates content only"; observed on device
+            // (iOS 26.5), the whole row — background included — translates. So a
+            // connector lines up with its neighbour at rest and desyncs mid-swipe.
+            // Accepted 2026-07-29 (owner call, see TASKS.md): the only fix that
+            // keeps cross-row connectors is hand-rolling the gesture, whose failure
+            // modes are worse than the cosmetic problem.
+            .listRowBackground(rowBackground)
             .listRowSeparator(.hidden)
     }
 
-    /// Every card enclosing this row, outermost first, with each level's connector
-    /// line drawn directly on top of that level's card.
-    ///
-    /// A comment is its own `List` row (so it can carry swipe actions), which
-    /// means a parent card can't *contain* its replies as subviews. Instead each
-    /// row paints the whole stack of cards it sits inside: the level-`j` card is
-    /// rounded at the top only on the ancestor's own row, rounded at the bottom
-    /// only on the last row of that ancestor's subtree, and square between —
-    /// consecutive rows touch, so the fills join into one continuous enclosing
-    /// card. Same visual nesting as true subview nesting, without giving up the
-    /// per-comment swipe that subview nesting makes impossible.
-    ///
-    /// **The interleaving is load-bearing, not tidiness.** Card and line alternate
-    /// per level, so the level-`j` line sits *above* the level-`j` card and *below*
-    /// the level-`j+1` card. That is what lets a thread line run a row's full
-    /// height and still never appear over a nested card: the card in front masks
-    /// the stretch it passes behind, and it re-emerges in the gaps between cards.
-    /// The straight style depends on it — its lines run down their own level's
-    /// avatar column, which its one-`cardPadding` indent leaves *inside* the next
-    /// level's card. Painting every line over every card (the previous
-    /// `ZStack { cards; lines }`) drew them straight across the replies; cutting
-    /// them short to compensate instead severed a reply from a parent further up.
-    ///
-    /// **The flat style takes none of this.** It paints one card for the whole
-    /// conversation — level 0 only, which the same open/close rules already spread
-    /// across every row of it — and its rails sit in a gutter column no content
-    /// occupies. So no card stack, no interleaving, no avatar occlusion: the entire
-    /// apparatus above exists to serve nesting a card per comment.
-    @ViewBuilder
-    private var enclosingCards: some View {
+    private var rowBackground: some View {
         ZStack {
-            if connectorStyle == .threads {
-                // Interleaved for the same reason the nesting styles are, with one
-                // card instead of a stack. The elbow *into* this card is drawn
-                // first so the card masks where the arm meets its edge; the
-                // descender *out of* this comment is drawn after, because it runs
-                // down over its own card from under the avatar.
-                if depth > 0 { connectorLine(forLevel: depth - 1) }
-                standaloneCard
-                // No `avatarBacking`: nothing runs behind the avatar in this style
-                // now that the line leaves from the card's bottom edge, so there is
-                // nothing to occlude.
-                connectorLine(forLevel: depth)
-            } else if connectorStyle == .flat {
-                card(forLevel: 0)
-                rowDivider
-            } else {
-                ForEach(0 ... depth, id: \.self) { level in
-                    card(forLevel: level)
-                    connectorLine(forLevel: level)
-                }
-                avatarBacking
-            }
+            // The elbow *into* this card is drawn first so the card masks where its
+            // arm meets the edge; the descender *out of* this comment is drawn after
+            // so it is not masked by the card it leaves from.
+            if depth > 0 { connectorLine(forLevel: depth - 1) }
+            card
+            connectorLine(forLevel: depth)
         }
-        // Confines every line and card to this row.
-        //
-        // 1. **Stroke caps.** A line that spans the row runs `minY`…`maxY`, and a
-        //    round cap extends half a line width past each end — a 3pt circle of
-        //    rail colour sitting just outside the row. On a masked line that stray
-        //    cap is the *only* part that shows, so it reads as a red dot floating
-        //    beside a card. Clipping trims the caps flat exactly at the boundary,
-        //    where the next row's segment continues, while endpoints *inside* the
-        //    row (a descender starting under an avatar) keep their round cap.
-        // 2. **Card shadows** at a seam. A card continuing into the next row has no
-        //    bottom padding, so its shadow fell across the join — a dark band
-        //    through the middle of what should read as one unbroken card.
+        // Confines card and connectors to this row. A line spanning the row runs
+        // `minY`…`maxY`, and a round cap extends half a line width past each end —
+        // on a masked stretch that stray cap is the only part that shows, and it
+        // reads as a dot floating beside a card on the neighbouring row.
         .clipped()
         .accessibilityHidden(true)
         .overlay(alignment: .top) {
-            // Sits in the gap above the card, not on it, so it reads as a
-            // divider between conversations rather than a card border.
-            //
-            // Neutral `.primary`, not `cardBorder`: that token is **`.clear` on
-            // Dark and OLED**, where the card's own contrast normally does the
-            // separating — so this rule, whose whole job is to separate two cards
-            // from each other, was invisible on exactly the themes where cards sit
-            // closest in tone. Same trap as the nested-reply fill.
-            if startsConversation {
-                Rectangle()
-                    .fill(Color.primary.opacity(0.12))
-                    .frame(height: 0.5)
-                    .padding(.horizontal, CommentThreadGeometry.sideMargin)
-                    // Centred in the *empty band* between the two cards, which is
-                    // not the same as half this row's top gap. The previous
-                    // conversation's card closes `half` above the row boundary
-                    // (its level-0 bottom inset), and this one opens `topGap`
-                    // below it — so the gap runs from `-half` to `+topGap` and its
-                    // middle is `(topGap - half) / 2`, below the boundary rather
-                    // than above it. Offsetting by `-topGap / 2` put the rule 13pt
-                    // *up* into a card that ends 6pt up, drawing it across the
-                    // previous comment instead of between the two.
-                    .offset(y: (topGap - half) / 2)
-                    .accessibilityHidden(true)
-            }
+            if startsConversation { conversationRule }
         }
     }
 
-    /// One self-contained card for this comment alone, stepped in by its depth.
+    /// One self-contained card for this comment, stepped in by its depth.
     ///
-    /// No containment, so none of the open/close corner logic applies: a card is
-    /// never continued by the row below it, so it is simply rounded on all four
-    /// sides and always takes its own top and bottom gap. That is the whole reason
-    /// this style avoids the machinery the nesting ones need — nothing is shared
-    /// across rows, so nothing can seam, mask, or tear.
-    ///
-    /// Definition comes from an inset hairline rather than the shadow: the shadow
-    /// is `.clear` on Dark and OLED, where a nested card previously had nothing at
-    /// all distinguishing it.
-    private var standaloneCard: some View {
+    /// Rounded on all four sides and always taking its own top and bottom gap: no
+    /// card is ever continued by the row below, so none of the containment
+    /// questions apply. Definition comes from an inset hairline rather than the
+    /// shadow, which is `.clear` on Dark and OLED.
+    private var card: some View {
         let shape = RoundedRectangle(
             cornerRadius: CommentThreadGeometry.cardCornerRadius, style: .continuous
         )
         return shape
             .fill(theme.appTheme.cardSurface)
             .overlay {
-                // Keyed on `isWorkAuthor` alone, not `level == depth` as the nested
-                // styles need: a standalone card is only ever its own comment's, so
-                // there is no ancestor card here to tint by mistake.
                 if isWorkAuthor { shape.fill(theme.effectiveTint.opacity(0.12)) }
             }
             .overlay {
@@ -1342,123 +1006,44 @@ private struct CommentRowChrome: ViewModifier {
             )
     }
 
-    /// Hairline between consecutive comments inside a conversation card.
+    /// The rule between two top-level conversations.
     ///
-    /// With no nested cards and no rails, this is the only thing marking where one
-    /// comment ends and the next begins — and that is the whole point: a divider's
-    /// job is to be found when looked for and ignored otherwise. Inset to the
-    /// content column, in a neutral `.primary` tint rather than the accent, so it
-    /// reads as furniture. `cardBorder` can't be used: it is `.clear` on Dark and
-    /// OLED, where the card's own contrast normally does that work.
+    /// Neutral `.primary`, not `theme.appTheme.cardBorder`: that token is **`.clear`
+    /// on Dark and OLED**, where a card's own contrast normally does the
+    /// separating — so the one rule whose job is separating two cards was invisible
+    /// on exactly the themes where cards sit closest in tone.
     ///
-    /// Every row after a conversation's first is a reply, so `depth > 0` is the
-    /// whole test. Consecutive *root* comments are separate conversations, hence
-    /// separate cards, and already separated by the gap between them.
-    @ViewBuilder
-    private var rowDivider: some View {
-        if depth > 0 {
-            Rectangle()
-                .fill(Color.primary.opacity(0.12))
-                .frame(height: 0.5)
-                .padding(.leading, CommentThreadGeometry.sideMargin
-                    + CommentThreadGeometry.cardPadding + indent)
-                .padding(.trailing, CommentThreadGeometry.sideMargin
-                    + CommentThreadGeometry.cardPadding)
-                .frame(maxHeight: .infinity, alignment: .top)
-        }
+    /// Centred in the *empty band* between the cards, which is not half this row's
+    /// top gap: the previous card closes `half` above the row boundary and this one
+    /// opens `topGap` below it, so the band runs `-half`…`+topGap` and its middle is
+    /// below the boundary, not above. Offsetting by `-topGap / 2` drew the rule
+    /// inside the card above it.
+    private var conversationRule: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.12))
+            .frame(height: 0.5)
+            .padding(.horizontal, CommentThreadGeometry.sideMargin)
+            .offset(y: (topGap - half) / 2)
+            .accessibilityHidden(true)
     }
 
-    private func card(forLevel level: Int) -> some View {
-        cardFill(cardShape(forLevel: level), forLevel: level)
-                    .overlay {
-                        // Only the outermost card is stroked. The nested levels
-                        // read as depth through their surface alone, which also
-                        // sidesteps drawing a border that would have to skip its
-                        // own top or bottom edge to avoid seaming between rows.
-                        if level == 0 {
-                            cardShape(forLevel: 0)
-                                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                        }
-                        if isWorkAuthor, level == depth {
-                            cardShape(forLevel: level)
-                                .strokeBorder(theme.effectiveTint.opacity(0.55), lineWidth: 1)
-                        }
-                    }
-                    .padding(.leading, CommentThreadGeometry.sideMargin + indents[min(level, indents.count - 1)])
-                    .padding(.trailing, CommentThreadGeometry.sideMargin + nestedInset(forLevel: level))
-                    .padding(.top, level == depth ? topGap : (opensCard(atLevel: level) ? topGap : 0))
-                    // A nested card has to stop short of the card it sits
-                    // inside, or the two share a bottom edge and the inner one
-                    // reads as breaking out of its parent. Deeper levels take
-                    // proportionally more bottom inset, mirroring the leading
-                    // and trailing indent.
-                    .padding(.bottom, closesCard(atLevel: level)
-                        ? half + nestedInset(forLevel: level)
-                        : 0)
-                    // Only the outermost card carries the drop shadow. It encloses
-                    // every nested card on this row — widest on both sides, and
-                    // spanning the row's full height whenever it isn't the level
-                    // opening or closing — so its rect *is* the silhouette the
-                    // shadow was previously cast from when it wrapped the whole
-                    // stack. Casting per level instead would stack shadows inside
-                    // the card, and the shadow can no longer wrap the stack now
-                    // that the stack contains the connector lines.
-                    .shadow(
-                        color: level == 0 ? theme.appTheme.cardShadow.color : .clear,
-                        radius: theme.appTheme.cardShadow.radius,
-                        x: 0, y: theme.appTheme.cardShadow.y
-                    )
-    }
-
-    /// This row is where the level-`j` card starts — true only on the ancestor's
-    /// own row, which is the row whose depth *is* `j`.
-    private func opensCard(atLevel level: Int) -> Bool { depth == level }
-
-    /// The level-`j` card ends here when nothing deeper follows it.
-    private func closesCard(atLevel level: Int) -> Bool {
-        guard let nextDepth else { return true }
-        return nextDepth <= level
-    }
-
-    private func cardShape(forLevel level: Int) -> UnevenRoundedRectangle {
-        let radius = level == 0
-            ? CommentThreadGeometry.cardCornerRadius
-            : CommentThreadGeometry.nestedCardCornerRadius
-        let top = opensCard(atLevel: level) ? radius : 0
-        let bottom = closesCard(atLevel: level) ? radius : 0
-        return UnevenRoundedRectangle(
-            topLeadingRadius: top,
-            bottomLeadingRadius: bottom,
-            bottomTrailingRadius: bottom,
-            topTrailingRadius: top,
-            style: .continuous
+    private func connectorLine(forLevel level: Int) -> some View {
+        ThreadConnectors(
+            depth: depth,
+            isLastSibling: isLastSibling,
+            ancestorLines: ancestorLines,
+            leadingInset: CommentThreadGeometry.sideMargin,
+            cardTopInset: cardTopInset,
+            cardBottomInset: cardBottomInset,
+            hasChildBelow: nextDepth == depth + 1,
+            indents: indents,
+            level: level,
+            cornerRadius: CommentThreadGeometry.elbowRadius
         )
-    }
-
-    /// Every card starts from the one card surface; `nestingTint` supplies the
-    /// alternation on top of it.
-    private func surface(forLevel level: Int) -> Color {
-        theme.appTheme.cardSurface
-    }
-
-    /// The odd levels' half of the alternation, for the themes whose surface
-    /// tokens can't supply it.
-    ///
-    /// Light and Sepia deliberately resolve `nestedCardSurface` to `cardSurface`
-    /// and separate cards by elevation instead — but a nested card casts no shadow
-    /// of its own here (the shadow comes from the outermost card's silhouette,
-    /// which encloses every nested one) and only level 0 is stroked. So on those
-    /// themes the two tones were the same colour and a direct reply did not read
-    /// as a card at all. This is the step they can't get from the tokens.
-    ///
-    /// Dark and OLED do get a real second tone from `nestedCardSurface`, and take
-    /// this on top of it — one tint on one parity, so the two-tone gap stays the
-    /// same at every depth rather than accumulating.
-    ///
-    /// Derived from `.primary`, so it darkens on the light themes and lightens on
-    /// the dark ones instead of baking in a grey.
-    private func nestingTint(forLevel level: Int) -> Color {
-        Color.primary.opacity(level.isMultiple(of: 2) ? 0 : 0.05)
+        .stroke(
+            CommentThreadGeometry.railColor(forDepth: level),
+            style: StrokeStyle(lineWidth: CommentThreadGeometry.railWidth, lineCap: .round)
+        )
     }
 }
 
@@ -1503,22 +1088,51 @@ private struct CommentPostRow: View {
     }
 
     var body: some View {
-        // Formatted once and handed to both byline candidates: `ViewThatFits` builds
-        // every candidate in order to measure it, and the date formatting isn't free.
+        // Resolved once here rather than inside the byline: date formatting isn't
+        // free, and this runs on every body pass.
         let timestamp = comment.postedText.isEmpty
             ? ""
             : AO3CommentTimestamp.displayText(
                 rawText: comment.postedText, date: comment.postedAt
             )
 
-        return HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
-            // A leading column again, not inline in the byline. A 40pt avatar has
-            // no text baseline to align to, so sitting it inside the byline's
-            // `.firstTextBaseline` row dragged the name and role chip out of
-            // line with each other — the misalignment this is fixing.
-            authorAvatarControl
-            commentBody(timestamp: timestamp)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        return Group {
+            if comment.isThreadCutoff || comment.isDeleted {
+                // Neither has a byline to host the avatar, so both keep the leading
+                // column. A 40pt avatar has no text baseline to align to, which is
+                // why it sits in a column rather than inside a byline row.
+                HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
+                    authorAvatarControl
+                    commentBody(timestamp: timestamp)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                fullWidthBody(timestamp: timestamp)
+            }
+        }
+    }
+
+    /// Avatar in the byline row only; prose and actions span the card beneath it.
+    ///
+    /// The column under the avatar used to be reserved for a trunk running from the
+    /// avatar down to the reply hanging off it. The connector leaves from the card's
+    /// bottom edge now, so that column is dead space — reclaiming it gives roughly
+    /// 50pt back on every line of every comment.
+    ///
+    /// Not applied to the deleted tombstone or AO3's thread-cutoff row: neither has
+    /// a byline to host the avatar, so both keep the leading column.
+    private func fullWidthBody(timestamp: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: CommentThreadGeometry.avatarContentSpacing) {
+                authorAvatarControl
+                byline(timestamp: timestamp)
+            }
+            parentAttribution
+            if !comment.bodyText.isEmpty {
+                ExpandableCommentBody(text: comment.bodyText)
+            }
+            actionsRow
+                .padding(.top, 2)
         }
     }
 
@@ -1602,40 +1216,19 @@ private struct CommentPostRow: View {
         }
     }
 
+    /// Author and role badge, with the timestamp on its own line beneath.
+    ///
+    /// Always two lines, no longer a `ViewThatFits` between a one-line and a
+    /// wrapped variant. Two reasons it can be fixed now: the prose runs the full
+    /// width of the card, so the byline no longer has to earn its horizontal space
+    /// back for the text below it; and the avatar beside it is 40pt tall, which a
+    /// single line of byline left half empty. Dropping the `ViewThatFits` also
+    /// stops SwiftUI building and measuring a candidate layout it then discards on
+    /// every pass.
+    ///
+    /// Baseline-aligned, not `.top`: `.top` pinned the chapter badge to the top of
+    /// the name's 28pt hit box, which sits above the name's own cap height.
     private func byline(timestamp: String) -> some View {
-        // Prefer author + timestamp on one line; when the timestamp won't fit
-        // next to the name (long names, Author/Guest + chapter badge), drop it
-        // onto the line under the author.
-        ViewThatFits(in: .horizontal) {
-            bylineSingleLine(timestamp: timestamp)
-            bylineWrappedTimestamp(timestamp: timestamp)
-        }
-    }
-
-    /// Author, role badge, and timestamp on one row (preferred when space allows).
-    ///
-    /// Baseline-aligned, matching `authorIdentity`'s own alignment. Centring
-    /// here instead meant the name + role chip were baseline-aligned *to each
-    /// other* and then centred as a block against the timestamp and chapter
-    /// badge — and since that block is taller than its text (the byline's 28pt
-    /// hit box), the chapter badge could never sit on the name's baseline.
-    private func bylineSingleLine(timestamp: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            authorIdentity
-            if !timestamp.isEmpty {
-                timestampText(timestamp)
-            }
-            Spacer(minLength: 4)
-            chapterBadge
-            collapseControl
-        }
-    }
-
-    /// Timestamp under the author when the single-line layout is too wide.
-    ///
-    /// Also baseline-aligned: `.top` pinned the chapter badge to the top of the
-    /// name's hit box, which sits above the name's own cap height.
-    private func bylineWrappedTimestamp(timestamp: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
                 authorIdentity

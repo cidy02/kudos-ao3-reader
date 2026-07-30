@@ -370,12 +370,11 @@ struct AO3CommentsParseTests {
     /// to pin both. 390pt is the canonical iPhone width the simulator gate uses.
     private func indent(
         _ depth: Int,
-        style: CommentConnectorStyle = .elbow,
         width: CGFloat = 390,
         typeSize: DynamicTypeSize = .large
     ) -> CGFloat {
         CommentThreadGeometry.indent(
-            forDepth: depth, availableWidth: width, typeSize: typeSize, style: style
+            forDepth: depth, availableWidth: width, typeSize: typeSize
         )
     }
 
@@ -391,21 +390,15 @@ struct AO3CommentsParseTests {
         #expect(indent(1) > indent(0))
         #expect(indent(2) > indent(1))
 
-        // ...but never past what the screen can spare, or a deep AO3 chain
-        // indents itself off-screen. AO3 does not cap reply nesting, so this must
-        // hold for absurd depths, and for either connector style. The straight
-        // style gets half the budget because it spends the same indent on the
-        // trailing edge too, so both styles leave `minimumContentWidth` intact.
-        #expect(indent(400) == indentBudget)
-        #expect(indent(400, style: .straight) == indentBudget / 2)
+        // ...and then holds. AO3 does not cap reply nesting, so a deep chain would
+        // otherwise indent itself off-screen — this must hold for absurd depths.
+        #expect(indent(400) == indent(CommentThreadGeometry.threadsMaxIndentedDepth))
 
-        // For the straight style that half-budget is the whole story, because its
-        // trailing inset *is* this same value — so the content column survives at
-        // any depth. (The elbow's trailing inset comes from the unclamped
-        // `nestedInset` instead, so no equivalent end-to-end floor holds there.)
-        let straightContent = 390 - CommentThreadGeometry.sideMargin * 2
-            - indent(400, style: .straight) * 2
-        #expect(straightContent >= CommentThreadGeometry.minimumContentWidth(for: .large))
+        // The content column survives that cap at any depth. Only the leading edge
+        // is indented — cards sit beside each other rather than inside each other,
+        // so nothing comes off the trailing edge to compound it.
+        let content = 390 - CommentThreadGeometry.sideMargin * 2 - indent(400)
+        #expect(content >= CommentThreadGeometry.minimumContentWidth(for: .large))
 
         // Adjacent levels must never share a rail colour, at any depth — that
         // colour is the only cue distinguishing two neighbouring levels once the
@@ -418,21 +411,22 @@ struct AO3CommentsParseTests {
         }
     }
 
-    /// The straight connector's whole reason for a narrower step: a reply is inset
-    /// by the same amount on the left as on the right, so it reads as sitting
-    /// squarely inside its parent. The elbow deliberately is *not* symmetric — it
-    /// steps in by the parent's avatar column so its turn can run forward into the
-    /// card — so this pins the difference between the two, not one shared rule.
-    @Test func straightConnectorIndentsSymmetrically() {
-        for depth in 1 ... 4 {
-            #expect(indent(depth, style: .straight) == CommentThreadGeometry.nestedInset(forLevel: depth))
-            #expect(indent(depth, style: .elbow) > CommentThreadGeometry.nestedInset(forLevel: depth))
-        }
+    /// The connector drops from the parent's avatar centre and has to run *forward*
+    /// into the reply's card. If the indent were ever narrower than that column, the
+    /// elbow would double back on itself to reach the card it points at — which is
+    /// exactly what a 30pt step did, and why this one is 48.
+    @Test func indentClearsTheColumnTheConnectorDropsFrom() {
+        let trunkOffsetInCard = CommentThreadGeometry.cardPadding
+            + CommentThreadGeometry.avatarSize(forDepth: 0) / 2
+        #expect(CommentThreadGeometry.threadsIndentStep > trunkOffsetInCard)
 
-        // The straight trunk runs down the middle of that same one-`cardPadding`
-        // band, so the band has to stay wider than the rail — otherwise the line
-        // touches a card edge instead of sitting in the gap between two.
-        #expect(CommentThreadGeometry.cardPadding > CommentThreadGeometry.railWidth)
+        // Restated end to end: a reply's leading edge sits right of its parent's
+        // trunk at every level the indent actually steps.
+        for depth in 1 ... CommentThreadGeometry.threadsMaxIndentedDepth {
+            let trunk = indent(depth - 1) + CommentThreadGeometry.cardPadding
+                + CommentThreadGeometry.avatarSize(forDepth: depth - 1) / 2
+            #expect(indent(depth) > trunk)
+        }
     }
 
     /// A thread line has to reach a reply whose parent is *not* the row directly
@@ -559,7 +553,6 @@ struct AO3CommentsParseTests {
     /// the palette lookup or produce a negative indent.
     @Test func negativeDepthIsClamped() {
         #expect(indent(-3) == 0)
-        #expect(indent(-3, style: .straight) == 0)
         #expect(CommentThreadGeometry.railColor(forDepth: -3) == CommentThreadGeometry.railColor(forDepth: 0))
     }
 

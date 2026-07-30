@@ -56,9 +56,6 @@ struct CommentsView: View {
     /// The thread being pushed, if any. AO3 gives Thread / Parent Thread their own
     /// isolated-thread pages, so these navigate rather than scrolling in place.
     @State private var pushedThread: CommentThreadRoute?
-    // A/B for the reply connector while the two are compared on device.
-    @AppStorage(CommentConnectorStyle.storageKey)
-    private var connectorStyleRaw = CommentConnectorStyle.elbow.rawValue
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -125,14 +122,6 @@ struct CommentsView: View {
             // so a row can't measure itself in time. Measure once here.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { commentsWidth = $0 }
             .environment(\.commentsContentWidth, commentsWidth)
-            // The presentation style decides whether a conversation stops at its
-            // first replies, and the model builds the rows — so the preference has
-            // to reach it. `onChange(initial:)` covers both the first build and a
-            // live switch from the picker.
-            .onChange(of: connectorStyleRaw, initial: true) {
-                let style = CommentConnectorStyle(rawValue: connectorStyleRaw) ?? .elbow
-                model.setBoundsConversations(style.boundsConversations)
-            }
             .navigationTitle("Comments")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -463,13 +452,6 @@ struct CommentsView: View {
     private var sortSection: some View {
         Section {
             HStack(spacing: 4) {
-                Picker("Connector", selection: $connectorStyleRaw) {
-                    ForEach(CommentConnectorStyle.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-
                 Menu {
                     Button {
                         model.newestFirst = false

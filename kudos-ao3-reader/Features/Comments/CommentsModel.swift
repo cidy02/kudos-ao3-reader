@@ -109,11 +109,6 @@ final class CommentsModel {
     /// to auto-expand was never in that set, so it had no state to turn off and no
     /// way to be closed again.
     private var collapsedRootIDs: Set<Int> = []
-    /// Whether the list shows only a conversation's first replies and defers the
-    /// rest to a thread screen. Driven by the presentation style — the view owns
-    /// that preference, so it pushes the value down rather than the model reading
-    /// `UserDefaults` behind its back.
-    private(set) var boundsConversations = false
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
@@ -696,18 +691,10 @@ final class CommentsModel {
             expandedRootIDs: expandedRootIDs,
             visibleReplyCounts: visibleReplyCounts,
             collapsedRootIDs: collapsedRootIDs,
-            bounded: boundsConversations
+            // The list always stops at a conversation's first replies; the thread
+            // screen is the only caller that renders a subtree in full.
+            bounded: true
         )
-    }
-
-    /// Switches the list between showing every reply inline and stopping at a
-    /// conversation's first few. Rebuilds only on a real change — this is called
-    /// from the view whenever the presentation style is read, including on every
-    /// appearance.
-    func setBoundsConversations(_ bounded: Bool) {
-        guard bounded != boundsConversations else { return }
-        boundsConversations = bounded
-        rebuildConversationRows()
     }
 
     /// Folds a whole conversation shut, or opens it again.
