@@ -125,14 +125,16 @@ is the test that will tell you what you broke.
 - `Models.swift` and `KudosBackup.swift` — untouched on purpose, so this task
   cannot collide with the annotations v8 work at the tip. All schema/format
   changes are T-155's.
-- The two pre-existing lint **errors**, which you deferred:
-  `ReadiumReaderView.swift` (2500 non-comment lines vs a 1400 limit, from the
-  reader redesign) and `CommentsModel.swift:13` (a 903-line class body vs a 900
-  limit, from T-151 — a 3-line overage). I first reported only the reader one,
-  because I had read the baseline lint output from its tail; there are two.
-  **`Scripts/verify.sh` therefore still fails at stage 2/5 on this branch, exactly
-  as it did before this work started** — every new file added here is
-  swiftlint-clean, verified per file, and neither offending file was touched.
+- ~~The two pre-existing lint **errors**~~ — **since fixed as T-156**, after you
+  started the spun-off task. `CommentsModel.swift` lost three static methods to a
+  new `CommentsErrorMessages.swift` extension (903 → 867 class-body lines), and
+  `ReadiumReaderView.swift` was split into `ReadiumBook.swift`,
+  `ReaderDismissDrag.swift` and `ReadiumNavigatorContainer.swift` (3585 → 1731
+  lines). Verified as pure movement: both trees normalize to 2475 code lines, with
+  exactly five differing lines — the five visibility widenings the split forced,
+  each documented where it landed. `Scripts/verify.sh` now passes all five stages
+  on this branch, which had not been true for any branch on this stack.
+  See T-156 in `TASKS.md`.
 
 ---
 
