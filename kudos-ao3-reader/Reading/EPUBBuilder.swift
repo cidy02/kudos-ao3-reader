@@ -72,6 +72,27 @@ nonisolated struct EPUBBuilder {
     /// and every manifest href is relative to its directory.
     private static let opfPath = "OEBPS/content.opf"
     private static let navPath = "OEBPS/nav.xhtml"
+    private static let stylesheetPath = "OEBPS/style.css"
+
+    /// Minimal stylesheet. Deliberately says nothing about fonts, sizes or colours
+    /// for body text — the reader owns typography, and a converted work must not
+    /// fight the app's themes or Dynamic Type.
+    ///
+    /// It exists only to make an author's note *look* like apparatus rather than
+    /// prose. `currentColor` and `em` units keep it inside whatever the reader has
+    /// chosen, and the class name is stable so a reader-injected rule can dim or hide
+    /// notes later without the EPUB changing.
+    private static let stylesheet = """
+    .author-note {
+      font-size: 0.9em;
+      font-style: italic;
+      border-inline-start: 3px solid currentColor;
+      padding-inline-start: 0.75em;
+      margin: 1em 0;
+      opacity: 0.75;
+    }
+    .author-note p { margin: 0.4em 0; }
+    """
 
     /// Builds the complete `.epub` archive bytes.
     ///
@@ -93,7 +114,8 @@ nonisolated struct EPUBBuilder {
             ("mimetype", Data("application/epub+zip".utf8)),
             ("META-INF/container.xml", Data(containerXML().utf8)),
             (opfPath, Data(packageDocument(metadata, names: names, chapters: chapters, modified: modified).utf8)),
-            (navPath, Data(navigationDocument(metadata, names: names, chapters: chapters).utf8))
+            (navPath, Data(navigationDocument(metadata, names: names, chapters: chapters).utf8)),
+            (stylesheetPath, Data(stylesheet.utf8))
         ]
         for (index, chapter) in chapters.enumerated() {
             entries.append((
@@ -157,6 +179,7 @@ nonisolated struct EPUBBuilder {
           </metadata>
           <manifest>
             <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+            <item id="style" href="style.css" media-type="text/css"/>
         \(manifestItems.joined(separator: "\n"))
           </manifest>
           <spine>
@@ -200,13 +223,18 @@ nonisolated struct EPUBBuilder {
 
     private static func chapterDocument(_ chapter: Chapter, language: String) -> String {
         let lang = escaped(language.isEmpty ? "en" : language)
+        // The `epub:` prefix must be declared here or a chapter carrying an
+        // `epub:type="note"` aside is not well-formed XHTML and strict parsers reject
+        // the whole file.
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE html>
-        <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="\(lang)">
+        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"\
+         xml:lang="\(lang)">
           <head>
             <meta charset="utf-8"/>
             <title>\(escaped(chapter.title))</title>
+            <link rel="stylesheet" type="text/css" href="style.css"/>
           </head>
           <body>
             <h1>\(escaped(chapter.title))</h1>
