@@ -18,6 +18,7 @@ struct ContentView: View {
     @Query private var folderSyncMemberships: [ReadingQueueMembership]
     @Query private var folderSyncTombstones: [SyncTombstone]
     @State private var router = AppRouter()
+    @State private var externalImport = ExternalFileImport()
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
@@ -142,6 +143,34 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
                 FolderSyncService.markDirty()
                 scheduleFolderSyncUp()
+            }
+            // "Open in Kudos" from Files, Safari, Reddit, AirDrop — the way a
+            // community-redistributed copy actually reaches the app. Converts
+            // non-EPUB formats on the way in; see ExternalFileImport.
+            .onOpenURL { url in
+                Task { await externalImport.handle(url, in: modelContext) }
+            }
+            .alert(
+                externalImport.notice?.title ?? "",
+                isPresented: Binding(
+                    get: { externalImport.notice != nil },
+                    set: { if !$0 { externalImport.notice = nil } }
+                ),
+                presenting: externalImport.notice
+            ) { notice in
+                // Switches tabs rather than deep-linking to the work: there is no
+                // by-id work route today, and every tab owns its own navigation
+                // stack, so inventing one here would be a much larger change than
+                // this alert deserves.
+                if notice.workID != nil {
+                    Button("Show in Library") {
+                        externalImport.notice = nil
+                        router.selection = .library
+                    }
+                }
+                Button("OK", role: .cancel) { externalImport.notice = nil }
+            } message: { notice in
+                Text(notice.message)
             }
             // Shake the device to report a bug, from anywhere in the app (iOS).
             .onShake {
