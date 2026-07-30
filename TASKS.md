@@ -307,6 +307,21 @@ _UI-2 … UI-9 are T-115's confirmed HIG findings (all adversarially verified ag
 - **AO3 authentication — decided:** native account UI drives AO3's real form in
   a hidden WebView; mechanism failures reveal the same WebView as a fallback.
   Sessions, never passwords, are stored device-only in Keychain.
+- **Comment connectors moving under a swipe — decided (2026-07-29, owner call):**
+  **live with it. Do not hand-roll the swipe.** Observed on device (iOS 26.5):
+  `.swipeActions` translates the *whole* row, `listRowBackground` included — there
+  is no per-row layer that stays put, so any connector that has to line up with a
+  neighbouring row visibly desyncs mid-swipe (the swiped row's segment slides, the
+  unswiped one doesn't). This also falsifies the older claim, now corrected in
+  `CommentRowChrome.body`, that a swipe "translates content only".
+  The only fix that keeps cross-row lines is replacing `.swipeActions` with a
+  custom gesture so the lines can sit outside the translated layer (which is what
+  the `AO3 Comments.dc.html` concept does). **Rejected:** it means re-implementing
+  full-swipe, snap points, haptics and the VoiceOver rotor integration that
+  `.swipeActions` provides for free, and the failure modes there are worse than
+  the cosmetic one being fixed. Note this is a cost of **cross-row connectors
+  specifically** — the Flat style has none, so choosing Flat closes the issue
+  outright rather than tolerating it. Do not re-litigate without new information.
 - **Team ID in `project.pbxproj` — decided (2026-07-19, Wave 0):** keep
   `DEVELOPMENT_TEAM = NQH85H7343` as-is (2 of 4 build configs; the other 2 are
   already `""`). Owner call: the exposure is low-value (identifies the Apple
