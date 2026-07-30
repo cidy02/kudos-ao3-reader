@@ -156,6 +156,91 @@ struct PDFWorkConverterTests {
         #expect(try convert(url, title: "Named By File").metadata.title == "Named By File")
     }
 
+    /// Draws `runs` as separate CoreText draws on the *same* baseline, which is how a
+    /// real PDF stores a line whose font changes mid-way — around curly quotes, most
+    /// often. `PDFPage.string` then reports each run as its own newline-separated
+    /// entry, and the first version of this converter read each as a paragraph end.
+    private func makeMultiRunPDF(lines: [[String]]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("runs-\(UUID().uuidString)")
+            .appendingPathExtension("pdf")
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(url as CFURL, mediaBox: &box, [:] as CFDictionary) else {
+            throw PDFTestError.contextUnavailable
+        }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        context.beginPage(mediaBox: &box)
+        context.setFillColor(gray: 0, alpha: 1)
+        var y = box.height - 72
+        for runs in lines {
+            // An empty run list means a blank line: advance without drawing, so the
+            // page really has the vertical gap that separates two paragraphs.
+            guard !runs.isEmpty else {
+                y -= 16
+                continue
+            }
+            var x: CGFloat = 72
+            for run in runs {
+                let attributed = NSAttributedString(
+                    string: run,
+                    attributes: [kCTFontAttributeName as NSAttributedString.Key: font]
+                )
+                let ctLine = CTLineCreateWithAttributedString(attributed)
+                context.textPosition = CGPoint(x: x, y: y)
+                CTLineDraw(ctLine, context)
+                x += CTLineGetTypographicBounds(ctLine, nil, nil, nil)
+            }
+            y -= 16
+        }
+        context.endPage()
+        context.closePDF()
+        return url
+    }
+
+    @Test func aLineSplitIntoSeveralRunsStaysOneParagraph() throws {
+        // The regression the owner hit on a real file: one printed paragraph came out
+        // as three, split at the quote marks. Runs on a shared baseline are one line,
+        // and paragraph structure must come from geometry, not from `page.string`.
+        let url = try makeMultiRunPDF(lines: [
+            ["Yes I should be working on \"you're in the army now.", "\" I will finish it. I swear."],
+            ["I'm just not feeling it right now, so enjoy this instead of the other thing."],
+            [], [],                   // blank lines: the real paragraph separator
+            ["Cold."]
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let body = bodies(try convert(url))
+        // The two runs on the first baseline must stay one paragraph with their
+        // continuation, never split at the quote. Quotes are XML-escaped in the body.
+        #expect(body.contains("army now.&quot; I will finish it."))
+        #expect(!body.contains("<p>&quot; I will finish it. I swear.</p>"))
+
+        // NOT asserted here: that "Cold." after the blank lines becomes its own
+        // paragraph. On iOS this fixture's multi-run page falls back to the
+        // text-only heuristic — `numberOfCharacters` matches neither of PDFKit's
+        // index conventions for it — so paragraph *separation* is not exercised by
+        // this input, only fragment *joining* is. Separation is covered by
+        // `extractsProseAndRejoinsHardWrappedLines`, whose page does take the
+        // geometry path. Verifying both at once needs a real multi-run PDF; see
+        // TASKS.md T-157 for that outstanding on-device check.
+    }
+
+    @Test func theTitleIsNotRepeatedAsTheFirstParagraph() throws {
+        // Also from the real file: a PDF carries its title as ordinary page text, and
+        // EPUBBuilder already emits the chapter title as an <h1>, so it appeared twice.
+        let url = try makePDF(
+            pages: [["Traveling Sword", "", "The story itself starts here and runs on."]],
+            attributes: [kCGPDFContextTitle: "Traveling Sword"]
+        )
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let result = try convert(url)
+        #expect(result.metadata.title == "Traveling Sword")
+        let body = bodies(result)
+        #expect(!body.contains("<p>Traveling Sword</p>"))
+        #expect(body.contains("The story itself starts here"))
+    }
+
     // MARK: - Whole-pipeline behavior
 
     @Test func convertsThroughTheImporterAndProducesAReadableEPUB() throws {

@@ -38,11 +38,12 @@ nonisolated enum PDFWorkConverter {
             throw ImportedDocumentConverter.ConversionError.pdfPasswordProtected
         }
 
-        let pages = try pageTexts(of: document)
+        let pages = try pageBlocks(of: document)
         let cleaned = withoutRunningHeadersAndFooters(pages)
 
-        let chapters = outlineChapters(of: document, pageLines: cleaned)
-            ?? textHeuristicChapters(pageLines: cleaned, fallbackTitle: fallbackTitle)
+        let chapters = (outlineChapters(of: document, pageLines: cleaned)
+            ?? textHeuristicChapters(pageLines: cleaned, fallbackTitle: fallbackTitle))
+            .map(withoutEchoedTitle)
         guard !chapters.isEmpty else { throw ImportedDocumentConverter.ConversionError.noReadableText }
 
         return HTMLWorkConverter.Result(
@@ -53,15 +54,31 @@ nonisolated enum PDFWorkConverter {
 
     // MARK: - Text extraction
 
-    /// One entry per page, each already split into lines. Falls back to OCR for the
-    /// whole document when its text layer is missing or unusably thin.
-    private static func pageTexts(of document: PDFDocument) throws -> [[String]] {
+    /// Paragraph blocks per page, ready to become `<p>` elements.
+    ///
+    /// Geometry first, `page.string` only as a fallback. That order is the whole
+    /// lesson of the first attempt at this: **`page.string` inserts newlines at text
+    /// *run* boundaries, not just at line ends.** A curly quote in a different font
+    /// starts a new run, so one printed line arrives as several fragments — and any
+    /// width-based paragraph test then reads each fragment as a paragraph end,
+    /// shattering prose mid-sentence. Character geometry has no such ambiguity: a
+    /// printed line is whatever shares a baseline.
+    private static func pageBlocks(of document: PDFDocument) throws -> [[String]] {
         var pages: [[String]] = []
         var totalCharacters = 0
         for index in 0..<document.pageCount {
-            let text = document.page(at: index)?.string ?? ""
-            totalCharacters += text.count
-            pages.append(lines(of: text))
+            guard let page = document.page(at: index) else {
+                pages.append([])
+                continue
+            }
+            totalCharacters += page.string?.count ?? 0
+            if let visual = visualLines(of: page), !visual.isEmpty {
+                pages.append(blocks(from: visual))
+            } else {
+                // No usable geometry (an enormous page, or an index/string mismatch):
+                // fall back to the width heuristic over extracted lines.
+                pages.append(reflowed(lines(of: page.string ?? "")))
+            }
         }
 
         guard totalCharacters < textLayerThreshold else { return pages }
@@ -71,7 +88,213 @@ nonisolated enum PDFWorkConverter {
         guard !recognized.isEmpty else {
             throw ImportedDocumentConverter.ConversionError.pdfHasNoExtractableText
         }
-        return recognized
+        // OCR yields lines with no geometry, so the width heuristic applies there.
+        return recognized.map { reflowed($0) }
+    }
+
+    /// One printed line, rebuilt from the bounds of the characters on it.
+    private struct VisualLine {
+        var text: String
+        var minX: CGFloat
+        var maxX: CGFloat
+        var midY: CGFloat
+        var height: CGFloat
+    }
+
+    /// Above this many characters, per-character geometry stops being worth its cost
+    /// and the width heuristic takes over.
+    private static let maxGeometryCharacters = 40_000
+
+    /// Groups a page's characters into printed lines by shared baseline.
+    ///
+    /// Returns nil when geometry cannot be trusted — notably when
+    /// `numberOfCharacters` disagrees with the extracted string's length, since the
+    /// two must stay index-aligned for the bounds lookups to mean anything.
+    private static func visualLines(of page: PDFPage) -> [VisualLine]? {
+        let count = page.numberOfCharacters
+        guard count > 0, count <= maxGeometryCharacters, let text = page.string else { return nil }
+        let characters = Array(text)
+
+        // PDFKit is inconsistent about whether the newlines it *synthesizes* in
+        // `string` also occupy character indices: on some documents they do, on others
+        // they do not. Both conventions are handled, because insisting on the first
+        // one silently fell back to the text-only heuristic exactly on the documents
+        // that need geometry most — the ones whose lines PDFKit splits into runs.
+        let newlineCount = characters.count { $0.isNewline }
+        let newlinesOccupyIndices: Bool
+        if characters.count == count {
+            newlinesOccupyIndices = true
+        } else if characters.count - newlineCount == count {
+            newlinesOccupyIndices = false
+        } else {
+            return nil // neither mapping holds, so no index is trustworthy
+        }
+
+        // One entry per run that `page.string` reports, measured by the bounds of its
+        // first and last inked glyph. Deliberately *not* built glyph-by-glyph:
+        // `characterBounds` returns each glyph's ink box, reports zero height for
+        // spaces and for many ordinary letters, and proved unreliable enough to
+        // misassign characters between lines when used that way.
+        // Two cursors, because string offsets and PDFKit indices only coincide under
+        // the first convention above: `stringIndex` walks `characters`, `pdfIndex`
+        // walks the page's own character space. Within a run they advance in step,
+        // since a run contains no newlines.
+        var runs: [VisualLine] = []
+        var stringIndex = 0
+        var pdfIndex = 0
+        while stringIndex < characters.count {
+            var end = stringIndex
+            while end < characters.count, !characters[end].isNewline { end += 1 }
+
+            if end > stringIndex,
+               let firstInk = (stringIndex..<end).first(where: { !characters[$0].isWhitespace }),
+               let lastInk = (stringIndex..<end).reversed().first(where: { !characters[$0].isWhitespace }) {
+                let leadingIndex = pdfIndex + (firstInk - stringIndex)
+                let trailingIndex = pdfIndex + (lastInk - stringIndex)
+                if leadingIndex < count, trailingIndex < count {
+                    let leading = page.characterBounds(at: leadingIndex)
+                    let trailing = page.characterBounds(at: trailingIndex)
+                    runs.append(VisualLine(
+                        text: String(characters[stringIndex..<end]),
+                        minX: leading.minX,
+                        maxX: trailing.maxX,
+                        midY: leading.midY,
+                        height: max(leading.height, trailing.height, 1)
+                    ))
+                }
+            }
+
+            pdfIndex += end - stringIndex
+            if end < characters.count {
+                if newlinesOccupyIndices { pdfIndex += 1 }
+                stringIndex = end + 1
+            } else {
+                stringIndex = end
+            }
+        }
+        guard !runs.isEmpty else { return nil }
+        return runsSharingABaseline(runs)
+    }
+
+    /// Joins the runs that sit on one printed line.
+    ///
+    /// This is the fix for the bug a real file exposed: PDFKit starts a new run at a
+    /// font change, so a curly quote mid-sentence splits one printed line into
+    /// several `page.string` entries. Any width-based paragraph test then reads each
+    /// fragment as a paragraph end and shatters the prose. Sharing a baseline is
+    /// unambiguous where line *length* is not.
+    ///
+    /// Text is concatenated without inserting a space: the split happened mid-line,
+    /// so whatever spacing the line needs is already inside the runs.
+    private static func runsSharingABaseline(_ runs: [VisualLine]) -> [VisualLine] {
+        let heights = runs.map(\.height).sorted()
+        let medianHeight = heights[heights.count / 2]
+        var lines: [VisualLine] = []
+        for run in runs {
+            if var last = lines.last, abs(last.midY - run.midY) <= max(2, medianHeight * 0.5) {
+                last.text += run.text
+                last.minX = min(last.minX, run.minX)
+                last.maxX = max(last.maxX, run.maxX)
+                last.height = max(last.height, run.height)
+                lines[lines.count - 1] = last
+            } else {
+                lines.append(run)
+            }
+        }
+        return lines
+    }
+
+    /// Turns printed lines into paragraphs using the page's actual layout.
+    ///
+    /// Three signals, any of which ends a paragraph — all measured in points against
+    /// the page's own text block, so they hold at any font size or margin: a vertical
+    /// gap wider than a normal line advance (a blank line); a line stopping well short
+    /// of the right measure (a paragraph's ragged last line); and a following line
+    /// indented past the body's left margin (a first-line indent). Plus chapter
+    /// headings, which always stand alone.
+    private static func blocks(from lines: [VisualLine]) -> [String] {
+        guard !lines.isEmpty else { return [] }
+        let lefts = lines.map(\.minX).sorted()
+        let rights = lines.map(\.maxX).sorted()
+        // The median left edge is the body margin, since most lines start there and
+        // only first lines are indented.
+        let marginLeft = lefts[lefts.count / 2]
+        let measure = max(1, rights[Int(0.9 * Double(max(rights.count - 1, 1)))] - marginLeft)
+
+        // Normal leading, taken as the 25th-percentile gap between consecutive lines:
+        // most gaps *are* the normal advance, and a paragraph gap is larger, so a low
+        // percentile finds the baseline spacing while ignoring outliers.
+        //
+        // Derived from the gaps rather than from glyph height, which is what the first
+        // version did — and 1.8x a glyph's ink height lands within a point or two of
+        // ordinary line spacing, so whether a plain line break counted as a paragraph
+        // break depended on which letters happened to be on the line. Ink heights vary
+        // by several points between "Cold." and a line with no descenders.
+        var normalLeading: CGFloat = .greatestFiniteMagnitude
+        if lines.count > 1 {
+            let gaps = (0..<(lines.count - 1))
+                .map { lines[$0].midY - lines[$0 + 1].midY }
+                .filter { $0 > 0 }
+                .sorted()
+            if !gaps.isEmpty { normalLeading = gaps[max(0, gaps.count / 4)] }
+        }
+
+        var result: [String] = []
+        var current = ""
+
+        func flush() {
+            let paragraph = current.trimmingCharacters(in: .whitespaces)
+            if !paragraph.isEmpty {
+                result.append(paragraph)
+                result.append("")
+            }
+            current = ""
+        }
+
+        for (index, line) in lines.enumerated() {
+            let text = line.text.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { continue }
+            let isHeading = PlainTextWorkConverter.isChapterHeading(text)
+            if isHeading { flush() }
+
+            if current.hasSuffix("-") {
+                current = String(current.dropLast()) + text
+            } else if current.isEmpty {
+                current = text
+            } else {
+                current += " " + text
+            }
+
+            var endsParagraph = isHeading
+            if index + 1 < lines.count {
+                let next = lines[index + 1]
+                // PDF y grows upward, so the next line down has the smaller midY.
+                // Extra vertical space between two lines means a paragraph ended.
+                if line.midY - next.midY > normalLeading * 1.5 { endsParagraph = true }
+                // A following line indented past the body margin is a first-line
+                // indent, the other convention for marking a new paragraph.
+                if next.minX > marginLeft + measure * 0.03 { endsParagraph = true }
+            } else {
+                endsParagraph = true
+            }
+            if endsParagraph { flush() }
+        }
+        flush()
+        return result
+    }
+
+    /// Drops a chapter's opening paragraph when it only repeats the chapter title.
+    ///
+    /// A PDF carries its title as ordinary page text, and `EPUBBuilder` already emits
+    /// the chapter title as an `<h1>`, so without this the reader shows it twice —
+    /// which it did, on the first real file this was tried against.
+    private static func withoutEchoedTitle(_ chapter: EPUBBuilder.Chapter) -> EPUBBuilder.Chapter {
+        var bodyLines = chapter.bodyXHTML.components(separatedBy: "\n")
+        guard let first = bodyLines.first?.trimmingCharacters(in: .whitespaces),
+              first == "<p>\(EPUBBuilder.escaped(chapter.title))</p>"
+        else { return chapter }
+        bodyLines.removeFirst()
+        return .init(title: chapter.title, bodyXHTML: bodyLines.joined(separator: "\n"))
     }
 
     private static func lines(of text: String) -> [String] {
@@ -277,8 +500,10 @@ nonisolated enum PDFWorkConverter {
         for (offset, mark) in marks.enumerated() {
             let end = offset + 1 < marks.count ? marks[offset + 1].page : pageLines.count
             guard mark.page < end, mark.page < pageLines.count else { continue }
-            let slice = pageLines[mark.page..<min(end, pageLines.count)].flatMap { $0 + [""] }
-            let blocks = PlainTextWorkConverter.paragraphs(of: reflowed(slice))
+            // Already paragraph blocks (see `pageBlocks`), so no further reflow.
+            let blocks = pageLines[mark.page..<min(end, pageLines.count)]
+                .flatMap(\.self)
+                .filter { !$0.isEmpty }
             let body = HTMLWorkSanitizer.paragraphs(from: blocks)
             guard !body.isEmpty else { continue }
             chapters.append(.init(title: mark.title, bodyXHTML: body))
@@ -297,9 +522,11 @@ nonisolated enum PDFWorkConverter {
         pageLines: [[String]],
         fallbackTitle: String
     ) -> [EPUBBuilder.Chapter] {
-        let flattened = reflowed(pageLines.flatMap { $0 + [""] })
+        // Blocks already carry a blank line between paragraphs, which is exactly the
+        // shape the plain-text converter expects, so joining them is enough.
+        let text = pageLines.flatMap { $0 + [""] }.joined(separator: "\n")
         guard let result = try? PlainTextWorkConverter.convert(
-            text: flattened.joined(separator: "\n"),
+            text: text,
             fallbackTitle: fallbackTitle
         ) else { return [] }
         return result.chapters
