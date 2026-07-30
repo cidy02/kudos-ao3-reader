@@ -124,11 +124,27 @@ struct WorkCoverCard: View {
 
     private var stateBadges: [(text: String, symbol: String)] {
         var badges: [(text: String, symbol: String)] = []
+        // Preservation first: "this is the last copy in existence" outranks every
+        // other thing a badge could say about a work.
+        if let preservation = work.preservationState.badgeLabel {
+            badges.append((text: preservation, symbol: work.preservationState.badgeSymbol))
+        }
+        // Origin is shown only when it *isn't* AO3. Labelling every card "AO3" in an
+        // AO3 reader is noise; the exceptions are what carry information, because they
+        // behave differently — no live page to refresh from, no kudos to give.
+        let origin = work.origin
+        if origin != .archiveOfOurOwn {
+            badges.append((text: origin.shortLabel, symbol: origin.symbolName))
+        }
         if work.isInSavedForLaterQueue { badges.append((text: "Later", symbol: "bookmark.fill")) }
         if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
         if work.hasEPUB { badges.append((text: "Offline", symbol: "arrow.down.circle.fill")) }
         if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
-        return badges
+        // Capped because a carousel card is a fixed height: six badges wrap to three
+        // rows and squeeze the progress bar out. The order above is the priority — a
+        // work that is the last copy in existence says so before it says "Favorite" —
+        // and Work Details lists every one of these in full.
+        return Array(badges.prefix(4))
     }
 
     private var footerSymbol: String {

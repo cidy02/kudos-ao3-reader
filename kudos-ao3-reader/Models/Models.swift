@@ -271,6 +271,29 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// login-gated page, which returns content (no tags) and stays retryable.
     var ao3Unavailable: Bool = false
 
+    /// Which site this work came from, derived from `sourceURL`.
+    ///
+    /// Derived rather than stored, so it needs no migration and no backup bump — see
+    /// `WorkOrigin`. An AO3 work id is trusted over the URL, since a work downloaded
+    /// natively always has one and its `sourceURL` may be a `/downloads/` link.
+    var origin: WorkOrigin {
+        if ao3WorkID != nil { return .archiveOfOurOwn }
+        return WorkOrigin.detect(sourceURL: sourceURL)
+    }
+
+    /// How this copy stands relative to the site it came from.
+    ///
+    /// The point of the whole preservation feature made visible: a work AO3 has
+    /// deleted, whose file we still hold, is the last copy the user will ever get.
+    /// It should not look like every other row in the Library.
+    var preservationState: WorkPreservationState {
+        // `ao3Unavailable` is set only when AO3 answered 404 for this work — deleted
+        // or hidden. A locked or merely failing page leaves it false and retryable,
+        // so this never mistakes a network problem for a deletion.
+        guard ao3Unavailable else { return .available }
+        return hasEPUB ? .preservedLastCopy : .goneWithNoCopy
+    }
+
     /// True once the type-split Work Tags are available (after an AO3 refresh).
     var hasCategorizedWorkTags: Bool {
         !(workFandoms.isEmpty && workCharacters.isEmpty

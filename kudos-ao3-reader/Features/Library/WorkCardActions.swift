@@ -154,6 +154,14 @@ enum WorkActionLabels {
             ? ("Unfavorite", "star.slash")
             : ("Favorite", "star")
     }
+
+    /// "Saved" keeps a work's EPUB from ever being freed. Distinct from Delete, which
+    /// removes the work — the two used to share one menu slot.
+    static func saved(isSaved: Bool) -> (title: String, systemImage: String) {
+        isSaved
+            ? ("Remove from Saved", "bookmark.slash")
+            : ("Save", "bookmark")
+    }
 }
 
 enum WorkReaderPreparation {
@@ -244,22 +252,17 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     }
                 }
 
-                if work.isSaved {
-                    Button(role: .destructive) {
-                        if confirmBeforeDelete {
-                            pendingDelete = work
-                        } else {
-                            PreservedWorkService.softDelete(work, in: context)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                } else {
-                    Button {
-                        WorkLifecycle.setSaved(work, true, in: context)
-                    } label: {
-                        Label("Save", systemImage: "bookmark")
-                    }
+                // Save and Delete are different axes, so both are always offered.
+                // Previously this was an either/or — saved works got Delete, unsaved
+                // works got Save — which meant a work the user had never explicitly
+                // saved (an imported file, say) had **no way to delete it from this
+                // menu at all**. Delete now lives at the bottom, where a destructive
+                // action belongs.
+                Button {
+                    WorkLifecycle.setSaved(work, !work.isSaved, in: context)
+                } label: {
+                    let labels = WorkActionLabels.saved(isSaved: work.isSaved)
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
 
                 Button {
@@ -297,6 +300,18 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
                 NavigationLink(value: LocalWorkDestination.detail(work)) {
                     Label("Work Details", systemImage: "info.circle")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    if confirmBeforeDelete {
+                        pendingDelete = work
+                    } else {
+                        PreservedWorkService.softDelete(work, in: context)
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
             .sheet(isPresented: $showingAddToQueue) {
