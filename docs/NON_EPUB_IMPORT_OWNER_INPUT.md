@@ -125,11 +125,14 @@ is the test that will tell you what you broke.
 - `Models.swift` and `KudosBackup.swift` — untouched on purpose, so this task
   cannot collide with the annotations v8 work at the tip. All schema/format
   changes are T-155's.
-- The pre-existing `ReadiumReaderView.swift` lint error (2500 non-comment lines vs
-  a 1400 limit). You deferred it; there is a ⚠️ NOTE row in `TASKS.md` and a
-  spun-off task chip. **`Scripts/verify.sh` therefore still fails at stage 2/5 on
-  this branch, exactly as it did before this work started** — every new file added
-  here is swiftlint-clean, which I verified per file.
+- The two pre-existing lint **errors**, which you deferred:
+  `ReadiumReaderView.swift` (2500 non-comment lines vs a 1400 limit, from the
+  reader redesign) and `CommentsModel.swift:13` (a 903-line class body vs a 900
+  limit, from T-151 — a 3-line overage). I first reported only the reader one,
+  because I had read the baseline lint output from its tail; there are two.
+  **`Scripts/verify.sh` therefore still fails at stage 2/5 on this branch, exactly
+  as it did before this work started** — every new file added here is
+  swiftlint-clean, verified per file, and neither offending file was touched.
 
 ---
 
@@ -138,8 +141,8 @@ is the test that will tell you what you broke.
 | Gate | Result |
 |---|---|
 | `check-invariants.sh` | passes |
-| `lint.sh` | fails **only** on the inherited `ReadiumReaderView.swift` error; all 8 new files clean |
-| iOS test suite | passes, including 40 new tests across 3 new suites |
+| `lint.sh` | fails on the two inherited errors above and nothing else; all 8 new files clean |
+| iOS test suite | 778 tests / 71 suites pass (baseline was 738 / 68 — the 40 new tests are this task's) |
 | `build-macos.sh` | passes |
 | Document types | verified in the built `Kudos.app` Info.plist, not just in the script |
 
