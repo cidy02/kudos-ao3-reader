@@ -398,7 +398,14 @@ struct AccountInboxItemRow: View {
 
     /// Uses the same paced avatar pipeline as native comment cards.
     private var avatar: some View {
-        CommentAvatar(isGuest: item.isGuest, avatarURL: item.avatarURL, size: 40)
+        CommentAvatar(
+            isGuest: item.isGuest,
+            avatarURL: item.avatarURL,
+            // Same initial fallback the thread cards use, so an inbox of
+            // icon-less commenters doesn't read as one repeated glyph either.
+            name: item.commenterName,
+            size: 40
+        )
     }
 
     private var moreActionsMenu: some View {
