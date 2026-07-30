@@ -157,7 +157,18 @@ enum CommentThreadGeometry {
     /// and cycling, so adjacent levels are always distinguishable without
     /// introducing colours the theme doesn't own.
     static func railColor(forDepth depth: Int) -> Color {
-        let opacities: [Double] = [1.0, 0.68, 0.44, 0.28]
+        // Muted, and deliberately so. At full strength the accent made a hairline
+        // of *furniture* the loudest thing on the screen, competing with the prose
+        // it was only supposed to be joining — the same mistake as accenting every
+        // commenter's name. The top of this ramp lands near the reference design's
+        // own rail (`#5A1A1E`, which is this accent at ~37% over a near-black
+        // page), so a connector reads as structure you can follow when you look
+        // for it and ignore when you don't.
+        //
+        // The cycle still only has to separate *adjacent* levels, so the range is
+        // tighter than it was: each step is roughly 1.4× its neighbour, which stays
+        // legible without any of them shouting.
+        let opacities: [Double] = [0.38, 0.28, 0.20, 0.14]
         return Color.accentColor.opacity(opacities[max(0, depth) % opacities.count])
     }
 
@@ -635,7 +646,16 @@ struct ThreadConnectors: Shape {
         // so the line reads as running out from underneath the picture.
         if hasChildBelow, level == depth {
             let childX = trunkX(parentDepth: depth)
-            let startY = rect.minY + avatarCenterY
+            // Threads leaves from the card's **bottom edge**, not from under the
+            // avatar. Its cards are self-contained rather than nested, so a line
+            // starting at the avatar has to run the whole height of the card —
+            // past the body and the actions row — before it gets anywhere, and
+            // that reads as something crossing the comment rather than leaving it.
+            // The nesting styles keep the avatar origin: there the line is a trunk
+            // the reply hangs off, and it belongs to the card it starts in.
+            let startY = style == .threads
+                ? rect.maxY - cardBottomInset
+                : rect.minY + avatarCenterY
             // A row shorter than its own avatar column would otherwise emit a
             // segment running backwards, or a zero-length one — which a round cap
             // renders as a filled dot rather than as nothing at all.
@@ -1222,8 +1242,10 @@ private struct CommentRowChrome: ViewModifier {
                 // down over its own card from under the avatar.
                 if depth > 0 { connectorLine(forLevel: depth - 1) }
                 standaloneCard
+                // No `avatarBacking`: nothing runs behind the avatar in this style
+                // now that the line leaves from the card's bottom edge, so there is
+                // nothing to occlude.
                 connectorLine(forLevel: depth)
-                avatarBacking
             } else if connectorStyle == .flat {
                 card(forLevel: 0)
                 rowDivider
@@ -1263,7 +1285,16 @@ private struct CommentRowChrome: ViewModifier {
                     .fill(Color.primary.opacity(0.12))
                     .frame(height: 0.5)
                     .padding(.horizontal, CommentThreadGeometry.sideMargin)
-                    .offset(y: -topGap / 2)
+                    // Centred in the *empty band* between the two cards, which is
+                    // not the same as half this row's top gap. The previous
+                    // conversation's card closes `half` above the row boundary
+                    // (its level-0 bottom inset), and this one opens `topGap`
+                    // below it — so the gap runs from `-half` to `+topGap` and its
+                    // middle is `(topGap - half) / 2`, below the boundary rather
+                    // than above it. Offsetting by `-topGap / 2` put the rule 13pt
+                    // *up* into a card that ends 6pt up, drawing it across the
+                    // previous comment instead of between the two.
+                    .offset(y: (topGap - half) / 2)
                     .accessibilityHidden(true)
             }
         }
@@ -1676,6 +1707,14 @@ private struct CommentPostRow: View {
                 font: .subheadline,
                 compact: true,
                 emphasized: true,
+                // Only the work's own author. Accenting every commenter spent the
+                // app's loudest colour on its most repeated element, so the tint
+                // marked "a person" rather than "worth reading first" — and the
+                // author's reply, which is the thing people scan a comment section
+                // for, looked like everything else. `.me` keeps plain text too: it
+                // already carries a badge, and highlighting your own name tells you
+                // nothing you don't know.
+                tinted: participantRole == .author,
                 onOpenRoute: handlers.onOpenAuthor
             )
             CommentParticipantBadge(role: participantRole)
