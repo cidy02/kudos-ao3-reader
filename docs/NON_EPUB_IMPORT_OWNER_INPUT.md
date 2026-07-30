@@ -9,12 +9,48 @@ Ordered by how likely you are to disagree.
 
 ---
 
+## 0. PDF conversion is lossy in a specific, reviewable way (added with T-157)
+
+**What I did.** PDFs now convert. Text layer via PDFKit, Vision OCR when there is
+no text layer, the PDF's own outline for chapters when it has one, and the
+plain-text chapter rules when it does not.
+
+**The judgement call worth your review** is paragraph reconstruction. A PDF records
+*no paragraph breaks at all* — I verified this rather than assuming it: PDFKit's
+extracted text drops blank lines entirely, so the prose arrives as a flat list of
+display lines. Boundaries have to be inferred. I use the ragged right edge: body
+lines run to the full measure, so a line under 85% of the 90th-percentile line
+width ends its paragraph.
+
+- **90th percentile, not median** — a median is dragged down by the very short
+  paragraph-final lines we are trying to detect. Not the maximum either, so one
+  bare URL cannot inflate the measure.
+- **Rejected**: "a line ending in `.`/`!`/`?` ends a paragraph." Fanfic is
+  dialogue-heavy and that rule gives every sentence its own paragraph.
+- **Chapter headings always stand alone**, or "Chapter 2" glues to the following
+  sentence and the split then mistakes that whole sentence for the chapter title.
+
+**Where it will get things wrong:** poetry and song lyrics (every line is ragged, so
+every line becomes a paragraph — which is arguably correct anyway), multi-column
+layouts (PDFKit interleaves the columns and no post-processing can fix that), and
+tables. If a converted PDF reads oddly, this heuristic is the first place to look.
+
+**OCR is capped at 60 pages** so a 600-page scan cannot hang the import for
+minutes; pages past the cap are dropped and the drop is logged rather than passed
+off as a complete conversion.
+
+**Not covered by a test, deliberately:** the *successful* OCR path. Generating a
+page image that Vision reliably reads is not something a unit test can promise, so
+the test asserts the OCR path runs and then fails honestly on an unreadable scan.
+A real scanned PDF on-device is the check that matters, and it is recorded as
+outstanding in `TASKS.md`.
+
 ## 1. Deferred formats are *claimed* in the document types, but fail with a message
 
-**What I did.** The app now appears in "Open in Kudos" for PDF, DOCX and RTF even
-though T-153 is what actually converts them. Opening one produces: *"PDF import is
+**What I did.** The app appears in "Open in Kudos" for DOCX and RTF even though
+their conversion is still to come. Opening one produces: *"Word document import is
 coming in a later update. For now, convert it to EPUB (calibre, or Word's Save as)
-and import that."*
+and import that."* PDF was in this group until T-157 and now converts for real.
 
 **Why.** A file that simply cannot be opened teaches the user nothing. A named
 format plus a workaround is a better dead end than a greyed-out row.

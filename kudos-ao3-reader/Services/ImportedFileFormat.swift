@@ -51,8 +51,8 @@ nonisolated enum ImportedFileFormat: String, CaseIterable, Sendable {
     /// True for formats this task can turn into an EPUB today.
     var isConvertible: Bool {
         switch self {
-        case .epub, .html, .plainText, .zip: true
-        case .docx, .odt, .pdf, .rtf, .mobi, .rar, .sevenZip, .unknown: false
+        case .epub, .html, .plainText, .zip, .pdf: true
+        case .docx, .odt, .rtf, .mobi, .rar, .sevenZip, .unknown: false
         }
     }
 

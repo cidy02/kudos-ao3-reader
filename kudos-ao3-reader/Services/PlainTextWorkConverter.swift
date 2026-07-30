@@ -82,7 +82,11 @@ nonisolated enum PlainTextWorkConverter {
         return chapters
     }
 
-    private static func isChapterHeading(_ line: String) -> Bool {
+    /// Internal so `PDFWorkConverter` can reuse it: a PDF gives no blank lines, so
+    /// recognizing a heading is the only way to stop one being glued to the
+    /// paragraph that follows it. One definition of "looks like a chapter heading",
+    /// shared by both converters.
+    static func isChapterHeading(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.count <= 100 else { return false }
         return chapterHeadingPatterns.contains { pattern in
@@ -103,7 +107,10 @@ nonisolated enum PlainTextWorkConverter {
     /// Blank-line-separated blocks become paragraphs. Single newlines inside a
     /// block are joined with a space, because hard-wrapped exports would otherwise
     /// produce one paragraph per display line and read terribly when reflowed.
-    private static func paragraphs(of lines: [String]) -> [String] {
+    ///
+    /// Internal rather than private because `PDFWorkConverter` needs exactly this
+    /// behavior: extracted PDF text is hard-wrapped per display line too.
+    static func paragraphs(of lines: [String]) -> [String] {
         var paragraphs: [String] = []
         var current: [String] = []
 

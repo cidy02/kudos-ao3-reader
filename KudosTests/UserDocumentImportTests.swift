@@ -184,10 +184,12 @@ struct UserDocumentImportTests {
 
     @Test func anUnsupportedFormatFailsWithoutCreatingAWork() async throws {
         let context = try makeContext()
-        let source = try write("%PDF-1.7\nnot handled yet", "pdf")
+        // RTF rather than PDF: PDF converts since T-157, so it no longer exercises
+        // the "format we cannot read yet" path.
+        let source = try write("{\\rtf1\\ansi Not handled yet}", "rtf")
         defer { try? FileManager.default.removeItem(at: source) }
 
-        await #expect(throws: ImportedDocumentConverter.ConversionError.notYetSupported(.pdf)) {
+        await #expect(throws: ImportedDocumentConverter.ConversionError.notYetSupported(.rtf)) {
             _ = try await UserDocumentImport.perform(source, into: context)
         }
         let works = try context.fetch(FetchDescriptor<SavedWork>())

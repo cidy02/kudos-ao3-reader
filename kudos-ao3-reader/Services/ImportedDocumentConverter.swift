@@ -16,12 +16,18 @@ nonisolated enum ImportedDocumentConverter {
         /// A zip with nothing importable inside.
         case archiveHasNoReadableFiles
         case noReadableText
+        /// PDFKit could not open the file at all.
+        case pdfUnreadable
+        /// Encrypted and still locked — its pages would extract as blank.
+        case pdfPasswordProtected
+        /// No text layer and OCR found nothing either.
+        case pdfHasNoExtractableText
 
         var errorDescription: String? {
             switch self {
             case let .notYetSupported(format):
                 switch format {
-                case .docx, .odt, .pdf, .rtf:
+                case .docx, .odt, .rtf:
                     "\(format.displayName) import is coming in a later update. For now, convert it "
                         + "to EPUB (calibre, or Word's \"Save as\") and import that."
                 case .mobi:
@@ -38,6 +44,13 @@ nonisolated enum ImportedDocumentConverter {
                 "This archive has no EPUB, HTML, or text files inside it."
             case .noReadableText:
                 "This file has no readable text to import."
+            case .pdfUnreadable:
+                "This PDF couldn't be opened. It may be corrupt or incomplete."
+            case .pdfPasswordProtected:
+                "This PDF is password-protected. Remove the password and import it again."
+            case .pdfHasNoExtractableText:
+                "No text could be read from this PDF, even after scanning the pages as images. "
+                    + "It may be a picture-only scan of handwriting."
             }
         }
     }
@@ -68,7 +81,9 @@ nonisolated enum ImportedDocumentConverter {
             return .converted(try convertPlainText(at: url), from: .plainText)
         case .zip:
             return try convertArchive(at: url)
-        case .docx, .odt, .pdf, .rtf, .mobi, .rar, .sevenZip, .unknown:
+        case .pdf:
+            return .converted(try convertPDF(at: url), from: .pdf)
+        case .docx, .odt, .rtf, .mobi, .rar, .sevenZip, .unknown:
             throw ConversionError.notYetSupported(format)
         }
     }
@@ -84,6 +99,11 @@ nonisolated enum ImportedDocumentConverter {
     private static func convertPlainText(at url: URL) throws -> Data {
         let raw = try text(at: url)
         let result = try PlainTextWorkConverter.convert(text: raw, fallbackTitle: fallbackTitle(for: url))
+        return try EPUBBuilder.archive(metadata: result.metadata, chapters: result.chapters)
+    }
+
+    private static func convertPDF(at url: URL) throws -> Data {
+        let result = try PDFWorkConverter.convert(fileAt: url, fallbackTitle: fallbackTitle(for: url))
         return try EPUBBuilder.archive(metadata: result.metadata, chapters: result.chapters)
     }
 

@@ -79,13 +79,26 @@ struct ImportedDocumentConverterTests {
     }
 
     @Test func deferredFormatsFailWithAnActionableMessage() throws {
-        let url = try write("%PDF-1.7\nstuff", "pdf")
-        #expect(throws: ImportedDocumentConverter.ConversionError.notYetSupported(.pdf)) {
+        // RTF, not PDF: PDF converts for real since T-157, so it is no longer an
+        // example of a deferred format. A dead end must still name the format and
+        // say what to do about it.
+        let url = try write("{\\rtf1\\ansi Some text}", "rtf")
+        #expect(throws: ImportedDocumentConverter.ConversionError.notYetSupported(.rtf)) {
             _ = try ImportedDocumentConverter.convert(fileAt: url)
         }
-        let message = ImportedDocumentConverter.ConversionError.notYetSupported(.pdf).errorDescription ?? ""
-        #expect(message.contains("PDF"))
+        let message = ImportedDocumentConverter.ConversionError.notYetSupported(.rtf).errorDescription ?? ""
+        #expect(message.contains("RTF"))
         #expect(message.lowercased().contains("epub"))
+    }
+
+    @Test func pdfIsNoLongerTreatedAsADeferredFormat() throws {
+        // Guards the T-157 contract change from being silently reverted.
+        #expect(ImportedFileFormat.pdf.isConvertible)
+        let url = try write("%PDF-1.7\nnot a real pdf body", "pdf")
+        // A corrupt PDF now fails as a *PDF* problem rather than "come back later".
+        #expect(throws: ImportedDocumentConverter.ConversionError.pdfUnreadable) {
+            _ = try ImportedDocumentConverter.convert(fileAt: url)
+        }
     }
 
     @Test func anEPUBIsImportedUnconvertedRatherThanRebuilt() throws {
