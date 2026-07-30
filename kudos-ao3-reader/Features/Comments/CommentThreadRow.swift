@@ -1237,6 +1237,20 @@ private struct CommentPostRow: View {
                 }
             }
             .layoutPriority(1)
+            // The name gave up its own 28pt hit box (it was top-aligned, so it grew
+            // downward and showed as a gap above the timestamp). The block reclaims
+            // that target and then some: the timestamp carries no action of its own,
+            // so the whole name-and-date column can open the profile — taller than
+            // the 28pt box ever was, and the full width of the column rather than
+            // just the glyphs. `including:` keeps a guest's block inert instead of
+            // swallowing taps for a route that doesn't exist.
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                TapGesture().onEnded {
+                    if let authorRoute { handlers.onOpenAuthor?(authorRoute) }
+                },
+                including: authorRoute == nil ? .subviews : .all
+            )
             Spacer(minLength: 4)
             chapterBadge
             collapseControl
@@ -1308,6 +1322,13 @@ private struct CommentPostRow: View {
                 // already carries a badge, and highlighting your own name tells you
                 // nothing you don't know.
                 tinted: participantRole == .author,
+                // The name sits directly above the timestamp here, so the 28pt hit
+                // box — top-aligned, growing downward — showed up as a gap between
+                // the two. A guest's name has no such box, so registered and guest
+                // bylines were spaced differently for no reason a reader could name.
+                // Safe to drop because the 40pt avatar beside it opens the same
+                // profile: the large target for this destination is still there.
+                expandsHitTarget: false,
                 onOpenRoute: handlers.onOpenAuthor
             )
             CommentParticipantBadge(role: participantRole)
@@ -1353,6 +1374,18 @@ private struct CommentPostRow: View {
     private var commentIdentity: AO3AuthorIdentity? {
         guard !comment.isGuest, let path = comment.userPath else { return nil }
         return AO3AuthorIdentity(displayName: comment.author, href: path)
+    }
+
+    /// The profile this byline opens, resolved through the same resolver
+    /// `AO3AuthorBylineView` uses internally rather than a second derivation — so
+    /// the block-wide tap target and the name's own can never disagree about where
+    /// they go, or about whether there is anywhere to go at all.
+    private var authorRoute: AO3AuthorRoute? {
+        AO3AuthorBylineResolver.tokens(
+            names: [comment.author],
+            identities: commentIdentity.map { [$0] } ?? [],
+            fallbackText: comment.author
+        ).first?.route
     }
 
     /// Compact bottom strip: Reply bottom-leading, overflow bottom-trailing.

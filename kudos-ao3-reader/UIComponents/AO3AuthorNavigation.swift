@@ -67,6 +67,16 @@ struct AO3AuthorBylineView: View {
     /// own author. The name stays tappable either way — avatar, hit box and the
     /// button trait are unchanged.
     var tinted = true
+    /// Whether a navigable name carries its own 28pt hit target.
+    ///
+    /// Defaults to true. Set false only where something else already offers a
+    /// large target for the same destination *and* the extra box would be visible
+    /// as layout: the frame is top-aligned so it grows downward, which is invisible
+    /// beside inline text but shows as a gap under a name that has something
+    /// stacked beneath it. A guest's name takes the non-navigable branch and has no
+    /// such frame, so leaving this on makes registered and guest bylines sit
+    /// differently for no reason a reader could name.
+    var expandsHitTarget = true
     private let onOpenRoute: ((AO3AuthorRoute) -> Void)?
 
     @Environment(AppRouter.self) private var router
@@ -85,6 +95,7 @@ struct AO3AuthorBylineView: View {
         compact: Bool = false,
         emphasized: Bool = false,
         tinted: Bool = true,
+        expandsHitTarget: Bool = true,
         onOpenRoute: ((AO3AuthorRoute) -> Void)? = nil
     ) {
         self.names = names
@@ -95,6 +106,7 @@ struct AO3AuthorBylineView: View {
         self.compact = compact
         self.emphasized = emphasized
         self.tinted = tinted
+        self.expandsHitTarget = expandsHitTarget
         self.onOpenRoute = onOpenRoute
     }
 
@@ -159,7 +171,11 @@ struct AO3AuthorBylineView: View {
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
                         .foregroundStyle(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                        .frame(minWidth: 28, minHeight: 28, alignment: .top)
+                        .frame(
+                            minWidth: expandsHitTarget ? 28 : 0,
+                            minHeight: expandsHitTarget ? 28 : 0,
+                            alignment: .top
+                        )
                         .contentShape(Rectangle())
                         .highPriorityGesture(TapGesture().onEnded { activate(route) })
                         .accessibilityLabel(token.name)
