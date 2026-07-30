@@ -55,7 +55,7 @@ enum CommentThreadGeometry {
     ///
     /// Wider than the concept's 30, and the difference is load-bearing rather than
     /// taste. The connector drops from the parent's avatar centre, which sits
-    /// `cardPadding + avatarSize/2` = 34pt inside the parent's card; at 30 the
+    /// `cardPadding + avatarSize(forDepth: 0)/2` = 34pt inside the parent's card; at 30 the
     /// reply's leading edge lands at 30, *left* of that, so the elbow would have to
     /// double back on itself to reach the card it points at. (The concept dodges
     /// this by running its rail in a fixed gutter instead — and then its arm stops
@@ -63,29 +63,23 @@ enum CommentThreadGeometry {
     /// forward arm, and the list only ever draws one level of it.
     static let threadsIndentStep: CGFloat = 48
     /// Threads style: levels of indent on the thread screen before it holds.
+    ///
+    /// A cap at all is a legibility budget, not a width one. Depth past a couple of
+    /// levels is not information a reader acts on: nobody needs to distinguish the
+    /// ninth reply from the tenth. A ten-deep AO3 chain is two people talking, and it
+    /// should look like two people talking, in reading order.
+    ///
+    /// Rendering the real tree was the mistake behind every artefact this design went
+    /// through — the width squeeze, the fill ladder that washed out, the six-stripe
+    /// gutter. Structure past this depth is carried by
+    /// `CommentPostRow.parentAttribution`, in words, and only on the replies where
+    /// reading order doesn't already make it obvious.
     static let threadsMaxIndentedDepth = 3
-    /// Flat style: content indent for a reply.
-    static let flatIndentStep: CGFloat = 16
-    /// Flat style: the depth at which indenting stops. **Two.**
-    ///
-    /// Not a width budget — a legibility one. Depth past a couple of levels is not
-    /// information a reader acts on: nobody needs to distinguish the ninth reply
-    /// from the tenth. A ten-deep AO3 chain is two people talking, and it should
-    /// look like two people talking, in reading order.
-    ///
-    /// Rendering the real tree was the mistake behind every artefact this design
-    /// went through — the width squeeze, the fill ladder that washed out, and the
-    /// six-stripe gutter. Those were all symptoms of drawing a structure instead of
-    /// designing for what someone reading a comment section does. Structure past
-    /// this depth is carried by `CommentPostRow.parentAttribution`, in words, only
-    /// on the replies where reading order doesn't already make it obvious.
-    static let flatMaxIndentedDepth = 2
     /// Deep AO3 chains would otherwise indent themselves off-screen; past this
     /// the rail opacity keeps changing but the indent stops growing.
     static let maxIndentedDepth = 2
     static let railWidth: CGFloat = 3
     static let railSpacing: CGFloat = 10
-    static let avatarSize: CGFloat = 40
     /// Radius of the turn where a trunk elbows into its reply.
     static let elbowRadius: CGFloat = 10
     /// Inner cards sit a touch tighter than the outer conversation card.
@@ -170,11 +164,10 @@ enum CommentThreadGeometry {
 
     /// Inset applied to a nested card's trailing and bottom edges per level.
     ///
-    /// Deliberately *not* the elbow style's leading indent: mirroring a 64pt
-    /// avatar-column step on both sides would starve a deep reply of width. It
-    /// only has to read as sitting inside its parent. The straight style meets it
-    /// from the other direction instead — its leading step *is* this inset, so
-    /// there the two edges match. See `indent(forDepth:availableWidth:typeSize:style:)`.
+    /// Deliberately smaller than the leading indent: mirroring a 48pt avatar-column
+    /// step on both sides would starve a deep reply of width, and this inset only has
+    /// to read as sitting inside its parent. See
+    /// `indent(forDepth:availableWidth:typeSize:)`.
     static func nestedInset(forLevel level: Int) -> CGFloat {
         CGFloat(max(0, level)) * cardPadding
     }

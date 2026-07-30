@@ -60,7 +60,9 @@ nonisolated enum Storage {
     /// alphanumerics survive, so an attacker-supplied name cannot escape the
     /// directory or add path components.
     static func originalDocumentURL(for id: UUID, fileExtension: String) -> URL {
-        let cleaned = fileExtension.lowercased().filter(\.isLetter)
+        // Alphanumerics, not letters only: stripping digits turned "azw3" into "azw"
+        // and "7z" into "z", so two unrelated originals could land on one name.
+        let cleaned = fileExtension.lowercased().filter { $0.isLetter || $0.isNumber }
         let suffix = cleaned.isEmpty ? "bin" : String(cleaned.prefix(12))
         return originalsDirectory.appendingPathComponent("\(id.uuidString).\(suffix)")
     }

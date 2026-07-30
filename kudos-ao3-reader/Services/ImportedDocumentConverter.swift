@@ -228,7 +228,17 @@ nonisolated enum ImportedDocumentConverter {
     /// UTF-8, then UTF-16 (Windows "Save As" default), then Latin-1 as the
     /// never-fails fallback. Rescued fanfic has been through a lot of editors.
     private static func decode(_ data: Data) -> String? {
-        for encoding: String.Encoding in [.utf8, .utf16, .windowsCP1252, .isoLatin1] {
+        // UTF-16 is tried **only** behind a byte-order mark, and before the
+        // single-byte encodings. Without the BOM check, `String(data:encoding:.utf16)`
+        // succeeds on almost any even-length byte sequence and returns CJK-looking
+        // mojibake, so an ordinary Latin-1 file with an even byte count would import
+        // as garbage rather than falling through to an encoding that fits it.
+        let bom = Array(data.prefix(2))
+        if bom == [0xFF, 0xFE] || bom == [0xFE, 0xFF],
+           let text = String(data: data, encoding: .utf16), !text.isEmpty {
+            return text
+        }
+        for encoding: String.Encoding in [.utf8, .windowsCP1252, .isoLatin1] {
             if let text = String(data: data, encoding: encoding), !text.isEmpty {
                 return text
             }
