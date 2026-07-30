@@ -57,6 +57,16 @@ struct AO3AuthorBylineView: View {
     var font: Font = .subheadline
     var compact = false
     var emphasized = false
+    /// Whether a navigable name takes the accent.
+    ///
+    /// Defaults to true, which is right where a byline names *the* author of the
+    /// thing on screen — one accented name, and it means something. It is wrong in
+    /// a comment section: accenting every commenter puts the loudest colour in the
+    /// app on the most repeated element, so the tint stops marking importance and
+    /// just marks "a person". Comments pass false for everyone except the work's
+    /// own author. The name stays tappable either way — avatar, hit box and the
+    /// button trait are unchanged.
+    var tinted = true
     private let onOpenRoute: ((AO3AuthorRoute) -> Void)?
 
     @Environment(AppRouter.self) private var router
@@ -74,6 +84,7 @@ struct AO3AuthorBylineView: View {
         font: Font = .subheadline,
         compact: Bool = false,
         emphasized: Bool = false,
+        tinted: Bool = true,
         onOpenRoute: ((AO3AuthorRoute) -> Void)? = nil
     ) {
         self.names = names
@@ -83,6 +94,7 @@ struct AO3AuthorBylineView: View {
         self.font = font
         self.compact = compact
         self.emphasized = emphasized
+        self.tinted = tinted
         self.onOpenRoute = onOpenRoute
     }
 
@@ -146,7 +158,7 @@ struct AO3AuthorBylineView: View {
                     // so the enlarged hit box only grows downward, off the baseline.
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                         .frame(minWidth: 28, minHeight: 28, alignment: .top)
                         .contentShape(Rectangle())
                         .highPriorityGesture(TapGesture().onEnded { activate(route) })
