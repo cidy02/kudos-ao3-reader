@@ -104,6 +104,16 @@ final class CommentsModel {
     /// moment they change instead of being recomputed while rendering.
     private var expandedRootIDs: Set<Int> = []
     private var visibleReplyCounts: [Int: Int] = [:]
+    /// Conversations the reader has folded shut. Separate from `expandedRootIDs`,
+    /// which tracks how much of an *open* thread is revealed: a thread short enough
+    /// to auto-expand was never in that set, so it had no state to turn off and no
+    /// way to be closed again.
+    private var collapsedRootIDs: Set<Int> = []
+    /// Whether the list shows only a conversation's first replies and defers the
+    /// rest to a thread screen. Driven by the presentation style — the view owns
+    /// that preference, so it pushes the value down rather than the model reading
+    /// `UserDefaults` behind its back.
+    private(set) var boundsConversations = false
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
@@ -290,6 +300,7 @@ final class CommentsModel {
         conversationRows = []
         expandedRootIDs = []
         visibleReplyCounts = [:]
+        collapsedRootIDs = []
     }
 
     /// The screen's first load. With no preselected chapter it's a plain All load;
@@ -683,8 +694,36 @@ final class CommentsModel {
             roots: displayThreads,
             repliesByRoot: flattenedRepliesByRoot,
             expandedRootIDs: expandedRootIDs,
-            visibleReplyCounts: visibleReplyCounts
+            visibleReplyCounts: visibleReplyCounts,
+            collapsedRootIDs: collapsedRootIDs,
+            bounded: boundsConversations
         )
+    }
+
+    /// Switches the list between showing every reply inline and stopping at a
+    /// conversation's first few. Rebuilds only on a real change — this is called
+    /// from the view whenever the presentation style is read, including on every
+    /// appearance.
+    func setBoundsConversations(_ bounded: Bool) {
+        guard bounded != boundsConversations else { return }
+        boundsConversations = bounded
+        rebuildConversationRows()
+    }
+
+    /// Folds a whole conversation shut, or opens it again.
+    ///
+    /// Collapsing also drops any "show more" progress for that root: reopening a
+    /// thread the reader had walked deep into and dumping them back at reply 40
+    /// is worse than starting it fresh.
+    func toggleCollapsed(rootID: Int) {
+        if collapsedRootIDs.contains(rootID) {
+            collapsedRootIDs.remove(rootID)
+        } else {
+            collapsedRootIDs.insert(rootID)
+            expandedRootIDs.remove(rootID)
+            visibleReplyCounts[rootID] = nil
+        }
+        rebuildConversationRows()
     }
 
     /// "Show N replies" on a collapsed thread opens it; a later tap on "Show N
@@ -709,8 +748,12 @@ final class CommentsModel {
     func forceExpand(rootID: Int) {
         let total = flattenedRepliesByRoot[rootID]?.count ?? 0
         let alreadyFullyShown = expandedRootIDs.contains(rootID)
+            && !collapsedRootIDs.contains(rootID)
             && (visibleReplyCounts[rootID] ?? CommentThreadGeometry.repliesChunkSize) >= total
         guard !alreadyFullyShown else { return }
+        // A jump into a folded conversation has to open it, or `scrollTo` lands on
+        // an id that was never materialized and silently does nothing.
+        collapsedRootIDs.remove(rootID)
         expandedRootIDs.insert(rootID)
         visibleReplyCounts[rootID] = max(total, CommentThreadGeometry.repliesChunkSize)
         rebuildConversationRows()

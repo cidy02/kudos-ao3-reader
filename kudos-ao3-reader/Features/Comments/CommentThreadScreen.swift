@@ -51,7 +51,12 @@ struct CommentThreadScreen: View {
                             isLastSibling: row.isLastSibling,
                             ancestorLines: row.ancestorLines,
                             nextDepth: row.nextDepth,
-                            showsParentAttribution: row.showsParentAttribution
+                            showsParentAttribution: row.showsParentAttribution,
+                            // No caret here. This screen exists to show one thread
+                            // in full; folding its root would leave a page with a
+                            // single comment on it and no way to read what you
+                            // navigated here for.
+                            collapse: nil
                         )
                         .commentSwipeActions(comment: row.item.actionableComment)
                     }

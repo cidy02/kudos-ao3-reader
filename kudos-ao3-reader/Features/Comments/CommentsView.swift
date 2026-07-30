@@ -125,6 +125,14 @@ struct CommentsView: View {
             // so a row can't measure itself in time. Measure once here.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { commentsWidth = $0 }
             .environment(\.commentsContentWidth, commentsWidth)
+            // The presentation style decides whether a conversation stops at its
+            // first replies, and the model builds the rows — so the preference has
+            // to reach it. `onChange(initial:)` covers both the first build and a
+            // live switch from the picker.
+            .onChange(of: connectorStyleRaw, initial: true) {
+                let style = CommentConnectorStyle(rawValue: connectorStyleRaw) ?? .elbow
+                model.setBoundsConversations(style.boundsConversations)
+            }
             .navigationTitle("Comments")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -599,7 +607,10 @@ struct CommentsView: View {
                         ancestorLines: row.ancestorLines,
                         nextDepth: row.nextDepth,
                         showsParentAttribution: row.showsParentAttribution,
-                        onExpand: { model.expandReplies(rootID: row.rootID) }
+                        collapse: row.collapse,
+                        onExpand: { model.expandReplies(rootID: row.rootID) },
+                        onContinueThread: { openThread(row.rootID) },
+                        onToggleCollapse: { model.toggleCollapsed(rootID: row.rootID) }
                     )
                     .commentSwipeActions(comment: row.item.actionableComment)
                 }

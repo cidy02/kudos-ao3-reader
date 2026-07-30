@@ -483,6 +483,78 @@ struct AO3CommentsParseTests {
         #expect(rows.map(\.showsParentAttribution) == [false, false, false, true])
     }
 
+    /// A root with few *direct* replies but a deep subtree under them is the case
+    /// the concept's own mock gets wrong: it gates "Continue thread" on
+    /// `kids.length > 2`, so two replies carrying eight grandchildren show no
+    /// affordance and the grandchildren vanish. The count has to be descendants.
+    @Test func boundedListCountsDescendantsNotDirectChildren() {
+        // Two direct replies; the first carries a chain of three more.
+        var deep = AO3Comment(id: 5, author: "E", isGuest: false)
+        for id in [4, 3] {
+            var parent = AO3Comment(id: id, author: "N\(id)", isGuest: false)
+            parent.replies = [deep]
+            deep = parent
+        }
+        var firstReply = AO3Comment(id: 2, author: "B", isGuest: false)
+        firstReply.replies = [deep]
+        let secondReply = AO3Comment(id: 6, author: "F", isGuest: false)
+        var root = AO3Comment(id: 1, author: "A", isGuest: false)
+        root.replies = [firstReply, secondReply]
+
+        let replies = CommentThreadGeometry.flattenedReplies(from: root)
+        #expect(replies.count == 5)
+        #expect(root.replies.count == 2)
+
+        let items = CommentConversationBuilder.boundedItems(root: root, replies: replies)
+
+        // Root + both direct replies + the continue row. Nothing deeper is drawn.
+        #expect(items.count == 4)
+        #expect(items.compactMap(\.actionableComment).map(\.id) == [1, 2, 6])
+
+        guard case let .continueThread(rootID, hiddenCount) = items[3] else {
+            Issue.record("expected a Continue thread row, got \(items[3])")
+            return
+        }
+        #expect(rootID == 1)
+        // Five descendants, two shown — three hidden. Counting direct children
+        // would have given zero and dropped the row entirely.
+        #expect(hiddenCount == 3)
+    }
+
+    /// Only a root that has replies gets a caret, and it must report every
+    /// descendant it would reveal — "Show 2" on a thread that opens to five rows
+    /// is a promise the reader catches being broken.
+    @Test func onlyRootsWithRepliesOfferCollapse() {
+        var reply = AO3Comment(id: 2, author: "B", isGuest: false)
+        reply.replies = [AO3Comment(id: 3, author: "C", isGuest: false)]
+        var root = AO3Comment(id: 1, author: "A", isGuest: false)
+        root.replies = [reply]
+        let childless = AO3Comment(id: 4, author: "D", isGuest: false)
+
+        let repliesByRoot = [
+            root.id: CommentThreadGeometry.flattenedReplies(from: root),
+            childless.id: CommentThreadGeometry.flattenedReplies(from: childless),
+        ]
+        let rows = CommentConversationBuilder.rows(
+            roots: [root, childless],
+            repliesByRoot: repliesByRoot,
+            expandedRootIDs: [], visibleReplyCounts: [:]
+        )
+
+        #expect(rows[0].collapse == CommentCollapseState(isCollapsed: false, replyCount: 2))
+        // Replies never carry their own caret, and a childless root has nothing
+        // to fold.
+        #expect(rows.dropFirst().allSatisfy { $0.collapse == nil })
+
+        // Folded, the conversation is one row — and the caret says what it hides.
+        let collapsed = CommentConversationBuilder.rows(
+            roots: [root], repliesByRoot: repliesByRoot,
+            expandedRootIDs: [], visibleReplyCounts: [:], collapsedRootIDs: [root.id]
+        )
+        #expect(collapsed.count == 1)
+        #expect(collapsed[0].collapse?.label == "Show 2")
+    }
+
     /// A negative depth can only come from a bug upstream, but it must not crash
     /// the palette lookup or produce a negative indent.
     @Test func negativeDepthIsClamped() {
