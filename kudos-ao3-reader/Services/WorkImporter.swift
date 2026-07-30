@@ -63,7 +63,10 @@ func importEPUB(
         } else {
             Log.library.info("Import merged into existing “\(existing.title)”")
         }
-        Task { await WorkTags.refreshFromAO3(for: existing, in: context) }
+        // Verifies the work still exists on AO3 as well as refreshing its tags —
+        // one request, and it is what makes the Library's "Last Copy" badge accurate
+        // from the moment of import. See `WorkAvailability`.
+        Task { await WorkAvailability.verify(existing, in: context) }
         return existing
     }
 
@@ -109,7 +112,7 @@ func importEPUB(
 
     // Refresh the work's tags from AO3's live page in the background; the EPUB
     // tags set above stand in until (and if) that succeeds.
-    Task { await WorkTags.refreshFromAO3(for: work, in: context) }
+    Task { await WorkAvailability.verify(work, in: context) }
 
     return work
 }
@@ -257,7 +260,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
             duplicate.markModified()
             WorkSearchIndex.reindex(duplicate)
             try? context.save()
-            Task { await WorkTags.refreshFromAO3(for: duplicate, in: context) }
+            Task { await WorkAvailability.verify(duplicate, in: context) }
             return .restored(duplicate)
         }
         duplicate.markModified()
@@ -285,7 +288,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     try? context.save()
     Log.library.info("Imported user EPUB “\(work.title)”")
 
-    Task { await WorkTags.refreshFromAO3(for: work, in: context) }
+    Task { await WorkAvailability.verify(work, in: context) }
     return .imported(work)
 }
 
