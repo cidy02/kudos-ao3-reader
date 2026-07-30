@@ -85,6 +85,13 @@ enum WorkLifecycle {
         }
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
+        // A converted import keeps the original file it came from. Only permanent
+        // deletion removes it — deliberately *not* `freeEPUB`, which exists to
+        // reclaim space for works that can be re-downloaded from AO3, and the
+        // original of a community copy is the one artifact that cannot.
+        if let original = Storage.existingOriginalDocumentURL(for: work.id) {
+            try? FileManager.default.removeItem(at: original)
+        }
         context.delete(work)
         context.saveBestEffort(reason: "Saving work deletion failed")
     }
