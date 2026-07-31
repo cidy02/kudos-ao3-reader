@@ -167,124 +167,12 @@ struct WorkCoverCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Status and origin")
-        // No `presentationCompactAdaptation(.popover)`: forcing a popover on iPhone
-        // pinned this to a small fixed box that **clipped** the text, which is exactly
-        // what the owner hit. Left to adapt, iPhone gets a sheet — which is the right
-        // container for several paragraphs — while iPad and macOS keep the popover.
-        .popover(isPresented: $showingStatus) {
-            statusPopover
-                .presentationDetents([.medium, .large])
+        // A sheet in the app's own idiom (`WorkStatusSheet`) rather than a bare popover.
+        // The first version was a hand-rolled VStack of Text, which both clipped its
+        // content and looked nothing like the rest of Kudos.
+        .sheet(isPresented: $showingStatus) {
+            WorkStatusSheet(work: work)
         }
-    }
-
-    /// The ⓘ panel. Verbose on purpose: it costs no card space, so it explains
-    /// provenance in sentences rather than compressing it into chips the way the card
-    /// had to. Everything here is a fact about *this* work — nothing is inferred for
-    /// the sake of filling the panel.
-    private var statusPopover: some View {
-        // Scrollable because this text grows: several provenance notes at an
-        // accessibility text size will exceed any fixed container, and silently cutting
-        // an explanation off is worse than making it scroll.
-        ScrollView {
-            statusPopoverContent
-        }
-    }
-
-    private var statusPopoverContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label {
-                Text(provenanceSentence)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: work.origin.symbolName)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !work.sourceURL.isEmpty {
-                // The original posting. For a work its site has since deleted this is
-                // often the only citation that still exists, so it is shown in full
-                // rather than hidden behind the word "source".
-                Text(work.sourceURL)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .lineLimit(3)
-            }
-
-            ForEach(provenanceNotes, id: \.self) { note in
-                Text(note)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !allStatuses.isEmpty {
-                Divider()
-                ForEach(allStatuses, id: \.text) { badge in
-                    WorkStateBadge(text: badge.text, symbol: badge.symbol)
-                }
-            }
-        }
-        .font(.caption2)
-        .padding(14)
-        .frame(maxWidth: 280, alignment: .leading)
-    }
-
-    /// True for names iOS invents when a file is shared rather than picked — a bare
-    /// UUID, which tells a reader nothing about the file it came from.
-    private static func looksLikeGeneratedName(_ name: String) -> Bool {
-        let base = (name as NSString).deletingPathExtension
-        return UUID(uuidString: base) != nil
-    }
-
-    /// One sentence saying where this work came from.
-    private var provenanceSentence: String {
-        switch work.origin {
-        case .archiveOfOurOwn:
-            "From Archive of Our Own."
-        case .importedFile:
-            "Imported from a file. It records no source site, so where it was first "
-                + "posted is unknown."
-        case .archiveOfOurOwnMirror:
-            "Imported work, originally posted on Archive of Our Own and saved through "
-                + "a mirror."
-        default:
-            "Imported work, originally posted on \(work.origin.displayName)."
-        }
-    }
-
-    /// Everything else worth saying, in the order someone would want to read it.
-    private var provenanceNotes: [String] {
-        var notes: [String] = []
-        if let candidate = WorkReconversion.candidate(for: work) {
-            let format = ImportedFileFormat(rawValue: candidate.record.format)?.displayName
-                ?? candidate.record.format
-            // iOS names a shared file with a bare UUID, and printing that adds nothing —
-            // the owner's card read "(C8E89916-3E56-49B2-96FE-498B7B147EFE.pdf)".
-            let name = candidate.record.originalFileName
-            let named = Self.looksLikeGeneratedName(name)
-                ? "The original file"
-                : "The original file (\(name))"
-            notes.append("Converted from \(format) on import. \(named) is kept alongside it, "
-                + "so this work can be rebuilt without downloading anything.")
-            if candidate.isStale {
-                notes.append("A newer converter is available — rebuilding from the original would "
-                    + "improve how this work reads.")
-            }
-        }
-        if let explanation = work.preservationState.explanation(origin: work.origin) {
-            notes.append(explanation)
-        }
-        if !work.origin.supportsLiveLookup {
-            // Says plainly what the app cannot do, rather than leaving a reader to
-            // wonder why tags never fill in and kudos is missing.
-            notes.append("Kudos can't reach \(work.origin == .importedFile ? "its source" : work.origin.displayName), "
-                + "so tags, stats and availability aren't refreshed for this work, and kudos and "
-                + "comments aren't available.")
-        }
-        return notes
     }
 
     /// Every status worth reporting, uncapped — the popover has room, so the

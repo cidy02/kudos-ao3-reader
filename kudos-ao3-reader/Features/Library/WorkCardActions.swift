@@ -226,6 +226,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     @State private var showingAddToCollection = false
     @State private var showingComments = false
     @State private var rebuildError: String?
+    @State private var confirmingRebuild = false
     @State private var pendingDelete: SavedWork?
 
     private var commentsWorkID: Int? {
@@ -299,12 +300,17 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     Label("Add to Collection", systemImage: "square.stack")
                 }
 
-                // Only for a converted import an improved converter would now handle
-                // better. Surfaced here as well as in Work Details because a rebuild is
-                // otherwise two taps deep, behind that screen's Library tab.
-                if WorkReconversion.candidate(for: work)?.isStale == true {
+                // Offered for any converted import, not just a stale one: a rebuild also
+                // applies *importer* fixes the converter version cannot know about, so an
+                // up-to-date work still has a reason to be rebuilt. A redundant rebuild
+                // asks first, since it costs time and changes the file.
+                if let rebuildable = WorkReconversion.candidate(for: work) {
                     Button {
-                        Task { await rebuildFromOriginal() }
+                        if rebuildable.isStale {
+                            Task { await rebuildFromOriginal() }
+                        } else {
+                            confirmingRebuild = true
+                        }
                     } label: {
                         Label("Rebuild from Original", systemImage: "arrow.triangle.2.circlepath")
                     }
@@ -344,6 +350,18 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: { PreservedWorkService.softDelete($0, in: context) }
             )
+            .confirmationDialog(
+                "Rebuild this work?",
+                isPresented: $confirmingRebuild,
+                titleVisibility: .visible
+            ) {
+                Button("Rebuild") { Task { await rebuildFromOriginal() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This work was already built with the latest converter, so its text is "
+                    + "unlikely to change. Rebuilding re-reads everything from the original file, "
+                    + "which is worth doing if its details look wrong.")
+            }
             .alert(
                 "Couldn't Rebuild This Work",
                 isPresented: Binding(

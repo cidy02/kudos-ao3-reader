@@ -292,6 +292,31 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     return .imported(work)
 }
 
+/// Re-reads the EPUB already stored for `work` and applies its metadata.
+///
+/// Needed by `WorkReconversion`: rebuilding replaced the file but left every field on
+/// the `SavedWork` untouched, so a rebuild produced better *text* and none of the better
+/// *metadata* — the owner rebuilt a work and its source site was still unknown
+/// afterwards, which is the bug this closes.
+///
+/// `fillOnly: false` by default, deliberately: the point of a rebuild is that the new
+/// conversion knows more than the old one did, so its values should win. `assign` skips
+/// empty strings, so a field the new EPUB has nothing to say about is never blanked. User
+/// data — tags, collections, queues, progress — is not metadata and is never touched here.
+@MainActor
+func applyStoredEPUBMetadata(to work: SavedWork, in context: ModelContext, fillOnly: Bool = false) async {
+    let url = work.fileURL
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    let inspection = await Task.detached(priority: .userInitiated) {
+        try? UserEPUBInspection.inspect(url)
+    }.value
+    guard let inspection, work.modelContext != nil else { return }
+    applyUserImportMetadata(inspection, to: work, fillOnly: fillOnly)
+    work.markModified()
+    WorkSearchIndex.reindex(work)
+    context.saveBestEffort(reason: "Saving re-read EPUB metadata failed")
+}
+
 /// Maps an EPUB `dc:language` code (e.g. "en") to a human-readable name, reusing
 /// the search filter's language table. Falls back to the raw value so unusual
 /// codes still display something; AO3's refresh later replaces it with the

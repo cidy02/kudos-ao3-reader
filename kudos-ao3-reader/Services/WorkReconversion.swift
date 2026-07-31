@@ -108,6 +108,12 @@ enum WorkReconversion {
         WorkSearchIndex.reindex(work)
         context.saveBestEffort(reason: "Saving the re-converted work failed")
 
+        // The rebuilt EPUB usually knows *more* than the old one — a recovered source
+        // URL, a rating, a word count, real fandoms — so its metadata is applied too.
+        // Without this a rebuild swapped the text and left every field as it was, and
+        // the work still claimed its origin was unknown.
+        await applyStoredEPUBMetadata(to: work, in: context)
+
         let updated = WorkConversionRecord(
             format: candidate.record.format,
             originalFileName: candidate.record.originalFileName
