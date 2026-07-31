@@ -119,7 +119,6 @@ struct ReadingQueueDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var showingRename = false
     @State private var renameText = ""
@@ -147,6 +146,11 @@ struct ReadingQueueDetailView: View {
     /// `WorkReorderDropDelegate.dropEntered` and committed to `ReadingQueueService`
     /// only in `performDrop` — see that type's doc comment for why (A6-F1).
     @State private var pendingCompactOrder: [UUID]?
+    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
+    /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
+    /// tracks a card that's grown wider with Dynamic Type instead of assuming the
+    /// static base width. Not `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
 
     private var isReordering: Bool {
         #if os(iOS)
@@ -348,12 +352,20 @@ struct ReadingQueueDetailView: View {
         #endif
     }
 
-    /// Apple Books-style two-up grid — the same cover cards every carousel already
-    /// uses, wrapping down the page instead of scrolling horizontally. Collapses to
-    /// one column at accessibility Dynamic Type sizes (see `compactCardColumns`).
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen. Matches the Home "See all" grid and
+    /// `LibraryEntityGridView`.
+    private var compactGridColumns: [GridItem] {
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
+    }
+
+    /// Apple Books-style grid — the same cover cards every carousel already uses,
+    /// wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: CarouselCardMetrics.compactCardColumns(for: dynamicTypeSize), spacing: 16) {
+            LazyVGrid(columns: compactGridColumns, spacing: 16) {
                 ForEach(compactDisplayedWorks) { work in
                     compactCard(work)
                 }

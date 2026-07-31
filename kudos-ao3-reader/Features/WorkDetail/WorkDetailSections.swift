@@ -80,9 +80,13 @@ extension WorkDetailView {
         if let id = ao3WorkID {
             Section {
                 Group {
-                    NavigationLink {
-                        CommentsView(workID: id, context: commentsWorkContext)
-                    } label: {
+                    // Value-based, not `NavigationLink { CommentsView(…) }`: a
+                    // destination-based link would sit outside the stack's path and be
+                    // discarded by the author-byline push made from inside Comments.
+                    // See `AO3CommentsRoute`.
+                    NavigationLink(
+                        value: AO3CommentsRoute(workID: id, context: commentsWorkContext)
+                    ) {
                         HStack {
                             Label("All Comments", systemImage: "bubble.left.and.bubble.right")
                             Spacer()
@@ -98,22 +102,22 @@ extension WorkDetailView {
                     // A single-chapter work has no per-chapter view worth opening;
                     // unknown totals ("5/?") keep the entry available.
                     if SavedWork.totalChapterCount(from: displayChapters) != 1 {
-                        NavigationLink {
-                            CommentsView(
+                        NavigationLink(
+                            value: AO3CommentsRoute(
                                 workID: id, context: commentsWorkContext,
-                                initialFocusesChapter: true
+                                focusesChapter: true
                             )
-                        } label: {
+                        ) {
                             Label("Chapter Comments", systemImage: "book")
                         }
                     }
 
-                    NavigationLink {
-                        CommentsView(
+                    NavigationLink(
+                        value: AO3CommentsRoute(
                             workID: id, context: commentsWorkContext,
-                            initialComposes: true
+                            composes: true
                         )
-                    } label: {
+                    ) {
                         Label("Write a Comment", systemImage: "pencil")
                     }
                 }

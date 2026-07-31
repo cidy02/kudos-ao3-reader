@@ -14,7 +14,6 @@ struct LibraryEntityGridView<Item: Identifiable & Hashable, Card: View, NewCard:
     @ViewBuilder let newCard: () -> NewCard
 
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mirrors the same scaled width the cards themselves render at (see
     /// `ScaledCarouselCardSize`), so the grid's minimum column width tracks a
     /// card that's grown wider with Dynamic Type instead of assuming the
@@ -30,7 +29,7 @@ struct LibraryEntityGridView<Item: Identifiable & Hashable, Card: View, NewCard:
     /// still fit two cards by raw pixel width even though their scaled text can't
     /// (see `CarouselCardMetrics.adaptiveCardColumns`).
     private var columns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     var body: some View {

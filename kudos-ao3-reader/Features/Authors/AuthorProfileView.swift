@@ -60,6 +60,19 @@ struct AuthorProfileView: View {
                     // Present the login sheet after the alert finishes dismissing.
                     // Simultaneous alert-dismiss + sheet-present can drop the sheet
                     // on some iOS versions before the user ever submits credentials.
+                    //
+                    // This sleep is deliberately NOT convertible to a completion
+                    // signal, unlike the Comments sheet cases in this same wave
+                    // (T-139/UI-8). `.sheet`/`.fullScreenCover` take an `onDismiss:`
+                    // closure that fires when the dismiss transition genuinely
+                    // finishes; `.alert` has no such parameter, and there is no
+                    // other SwiftUI event for "this alert is gone". `onChange` on
+                    // the alert's own `isPresented` binding is NOT a substitute —
+                    // SwiftUI clears that binding to *begin* the dismissal, so the
+                    // handler runs about a frame after the tap with the alert still
+                    // animating away, i.e. it removes the wait rather than deriving
+                    // it. That was tried here and reverted. Until a real signal
+                    // exists, the tested duration stays.
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(350))
                         showingLogin = true

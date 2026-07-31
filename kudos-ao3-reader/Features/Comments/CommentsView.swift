@@ -3,6 +3,22 @@ import SwiftUI
 import AppKit
 #endif
 
+/// A pushed (non-modal) Comments destination.
+///
+/// Value-based on purpose: a destination-based `NavigationLink { CommentsView(…) }`
+/// puts the pushed view *outside* the enclosing stack's `NavigationPath`, so a later
+/// `path.append` — an author byline push, say — discards Comments instead of stacking
+/// on top of it. That surfaced two ways: Back from the pushed profile skipped Comments
+/// entirely, and when the append also raced a dismissing composer sheet the push was
+/// dropped with no profile at all. Routing through the path makes it a plain append.
+/// See T-139 / `AO3AuthorNavigationModifier`.
+nonisolated struct AO3CommentsRoute: Hashable {
+    let workID: Int
+    let context: AO3CommentsWorkContext
+    var focusesChapter = false
+    var composes = false
+}
+
 /// Native AO3 comments for a work: all comments or per-chapter, threaded, with
 /// reply/compose and the per-comment actions AO3 actually exposes. Pushed from
 /// Work Detail and presented as a sheet from the reader's actions menu.
@@ -32,6 +48,7 @@ struct CommentsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var model: CommentsModel
     @State private var showingChapterPicker = false
@@ -48,10 +65,6 @@ struct CommentsView: View {
     @State private var forceExpandedRootIDs: Set<Int> = []
     @State private var focusScrollTask: Task<Void, Never>?
     @State private var didApplyInitialFocus = false
-    /// Guards the deferred dismiss-then-push in `openAuthor` — without it, two
-    /// fast taps on an avatar/byline each schedule their own 350ms push, landing
-    /// the same profile twice on the nav stack.
-    @State private var isOpeningModalAuthorProfile = false
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -196,11 +209,29 @@ struct CommentsView: View {
                 highlightClearTask?.cancel()
                 focusScrollTask?.cancel()
             }
-            .sheet(isPresented: composerBinding) {
+            .sheet(isPresented: composerBinding, onDismiss: {
+                // When this CommentsView is itself modal, the outer sheet/full-screen
+                // presenter (`CommentsSheetModifier`) is the one that fires a queued
+                // parent-author push — consuming it here too would land it while that
+                // outer presentation is still mid-dismiss (silently buried, see
+                // `openParentAuthor`). Non-modal (pushed) CommentsView has no outer
+                // sheet, so the composer's own dismiss is the real completion signal.
+                if !isModal {
+                    router.openPendingAuthorProfileAfterDismiss()
+                }
+            }) {
                 CommentComposerSheet(
                     model: model, isModal: isModal,
                     dismissCommentsView: isModal ? dismiss : nil
                 )
+            }
+            .onChange(of: model.composerContext != nil) { _, presented in
+                // Same rising-edge strand clear as `CommentsSheetModifier`, for the
+                // one queuing path that modifier can't cover: a *pushed* (non-modal)
+                // CommentsView opens no outer sheet, so nothing else would clear a
+                // route stranded before the composer's reply-quote byline is tapped.
+                // Queuing only happens on the way out, so this cannot race the drain.
+                if presented { router.cancelPendingAuthorProfileAfterDismiss() }
             }
             .sheet(isPresented: $showingChapterPicker) {
                 chapterPicker
@@ -270,7 +301,7 @@ struct CommentsView: View {
         focusScrollTask?.cancel()
         guard let rootID = model.rootID(containing: commentID), rootID != commentID else {
             // A root comment owns its own List row — address it directly.
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimationUnlessReduced(.easeInOut(duration: 0.3), reduceMotion: reduceMotion) {
                 proxy.scrollTo(commentID, anchor: .center)
             }
             return
@@ -286,7 +317,7 @@ struct CommentsView: View {
         focusScrollTask = Task {
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimationUnlessReduced(.easeInOut(duration: 0.3), reduceMotion: reduceMotion) {
                 proxy.scrollTo(commentID, anchor: .center)
             }
         }
@@ -444,6 +475,10 @@ struct CommentsView: View {
                 }
                 .accessibilityLabel("Sort comments")
                 .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
+                // Sibling controls elsewhere in this file reserve a 44pt hit
+                // target; this Menu trigger's visible chrome was falling short
+                // of it (HIG audit UI-3).
+                .minimumHitTarget()
                 Spacer()
             }
             .font(.footnote)
@@ -555,17 +590,20 @@ struct CommentsView: View {
 
     private func openAuthor(_ route: AO3AuthorRoute) {
         if isModal {
-            // A second tap while the first is still mid-dismiss must not schedule
-            // its own push — that's how the same profile lands twice on the stack.
-            guard !isOpeningModalAuthorProfile else { return }
-            isOpeningModalAuthorProfile = true
-            // Let the comments sheet finish dismissing before pushing profile.
+            // Queue the push and let the comments sheet finish dismissing; the
+            // presenting `CommentsSheetModifier`'s onDismiss fires it once the
+            // dismiss animation actually completes (real completion signal, not
+            // a guessed duration).
+            //
+            // The queue itself is the re-entrancy guard: a second tap while the
+            // first is still mid-dismiss is refused here (first tap wins) rather
+            // than landing the same profile on the stack twice. It lives on the
+            // router, not in local @State, so it also catches a second tap coming
+            // from the composer's reply-quote byline — a different View struct
+            // that cannot see this one's state — and it cannot latch, since the
+            // router clears it when the push is consumed.
+            guard router.requestAuthorProfileAfterDismiss(route) else { return }
             dismiss()
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(350))
-                router.openAuthorProfile(route)
-                isOpeningModalAuthorProfile = false
-            }
         } else {
             router.openAuthorProfile(route)
         }
@@ -595,6 +633,9 @@ struct CommentsView: View {
                     Label("Previous", systemImage: "chevron.left")
                 }
                 .disabled(model.currentPageNumber <= 1)
+                // Matches the 44pt min-frame this file's other controls
+                // reserve (HIG audit UI-3).
+                .minimumHitTarget()
 
                 Spacer()
                 Text("Page \(model.currentPageNumber) of \(page.totalPages)")
@@ -610,6 +651,7 @@ struct CommentsView: View {
                         .labelStyle(.trailingIcon)
                 }
                 .disabled(model.currentPageNumber >= page.totalPages)
+                .minimumHitTarget()
             }
             .buttonStyle(.borderless)
             .font(.subheadline)
@@ -846,6 +888,8 @@ private struct CommentsSheetModifier: ViewModifier {
     let context: AO3CommentsWorkContext
     var initialChapterPosition: Int?
 
+    @Environment(AppRouter.self) private var router
+
     #if !os(macOS)
     @State private var isFullScreen = false
     @State private var pendingExpand = false
@@ -855,13 +899,24 @@ private struct CommentsSheetModifier: ViewModifier {
         #if os(macOS)
         // macOS has no fullScreenCover concept (sheets already resize to the
         // window); present as a plain sheet with no expand affordance.
-        content.sheet(isPresented: $isPresented) {
+        content.sheet(isPresented: $isPresented, onDismiss: {
+            // Real completion signal for an author byline/reply-quote tap queued by
+            // the presented CommentsView — see `requestAuthorProfileAfterDismiss`.
+            router.openPendingAuthorProfileAfterDismiss()
+        }) {
             NavigationStack {
                 CommentsView(
                     workID: workID, context: context, initialChapterPosition: initialChapterPosition,
                     isModal: true
                 )
             }
+        }
+        .onChange(of: isPresented) { _, presented in
+            // Rising edge only: a route can only ever be queued on the way *out* of a
+            // presentation, so clearing as one opens cannot race the drain above — it
+            // just guarantees a route stranded by some future unhooked presenter can't
+            // survive to push a profile the user never asked for.
+            if presented { router.cancelPendingAuthorProfileAfterDismiss() }
         }
         #else
         content
@@ -873,6 +928,10 @@ private struct CommentsSheetModifier: ViewModifier {
                     pendingExpand = false
                     isFullScreen = true
                 }
+                // Real completion signal for an author byline/reply-quote tap queued
+                // by the presented CommentsView — see `requestAuthorProfileAfterDismiss`.
+                // No-ops during an expand handoff (nothing queued in that flow).
+                router.openPendingAuthorProfileAfterDismiss()
             }) {
                 NavigationStack {
                     CommentsView(
@@ -885,13 +944,24 @@ private struct CommentsSheetModifier: ViewModifier {
                     )
                 }
             }
-            .fullScreenCover(isPresented: $isFullScreen) {
+            .fullScreenCover(isPresented: $isFullScreen, onDismiss: {
+                router.openPendingAuthorProfileAfterDismiss()
+            }) {
                 NavigationStack {
                     CommentsView(
                         workID: workID, context: context, initialChapterPosition: initialChapterPosition,
                         isModal: true
                     )
                 }
+            }
+            .onChange(of: isPresented) { _, presented in
+                // Rising edge only: a route can only ever be queued on the way *out* of
+                // a presentation, so clearing as one opens cannot race either drain
+                // above — it just guarantees a route stranded by some future unhooked
+                // presenter can't survive to push a profile the user never asked for.
+                // (The expand handoff re-enters through this same sheet binding, and
+                // queues nothing of its own, so it is unaffected.)
+                if presented { router.cancelPendingAuthorProfileAfterDismiss() }
             }
         #endif
     }
@@ -930,7 +1000,6 @@ struct CommentComposerSheet: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var draftSaveTask: Task<Void, Never>?
-    @State private var isOpeningParentAuthor = false
     @FocusState private var editorFocused: Bool
 
     private var isReply: Bool { model.composerParent != nil }
@@ -1112,21 +1181,19 @@ struct CommentComposerSheet: View {
     }
 
     private func openParentAuthor(_ route: AO3AuthorRoute) {
-        guard !isOpeningParentAuthor else { return }
-        isOpeningParentAuthor = true
-        // Dismiss the composer — and, when Comments itself is presented modally,
-        // the whole modal chain — before opening the profile after the sheets
-        // finish tearing down. Dismissing only the composer would leave the
-        // profile pushed onto the tab stack silently behind a still-open
-        // Comments sheet; simultaneous dismiss + push can also drop the profile
-        // on some iOS versions (same scar tissue as nested login sheets).
+        // Queue the push, then dismiss the composer — and, when Comments itself is
+        // presented modally, the whole modal chain — before it fires. Pushing before
+        // the sheets finish tearing down would leave the profile pushed onto the tab
+        // stack silently behind a still-open Comments sheet; the actual completion
+        // signal is whichever presenter's `onDismiss` fires last (the outer
+        // `CommentsSheetModifier` when modal, this sheet's own `onDismiss` otherwise
+        // — see their `openPendingAuthorProfileAfterDismiss()` calls), not a guessed
+        // duration (same scar tissue as nested login sheets).
+        //
+        // Queuing doubles as the re-entrancy guard (first tap wins) — see `openAuthor`.
+        guard router.requestAuthorProfileAfterDismiss(route) else { return }
         dismiss()
         dismissCommentsView?()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            router.openAuthorProfile(route)
-            isOpeningParentAuthor = false
-        }
     }
 
     private func replyContext(for parent: AO3Comment) -> String {

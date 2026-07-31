@@ -500,10 +500,19 @@ struct AccountShortcutGridTile: View {
 struct AccountWorksCompactGrid: View {
     let entries: [CanonicalWork]
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
-    ]
+    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
+    /// render at (see `ScaledCarouselCardSize`), so the column count tracks a card
+    /// that's grown wider with Dynamic Type instead of assuming the static base
+    /// width. Not `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
+
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen.
+    private var columns: [GridItem] {
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
+    }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
@@ -536,10 +545,19 @@ struct AccountWorksCompactGrid: View {
 struct AccountBookmarksCompactGrid: View {
     let bookmarks: [AO3AuthorBookmark]
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
-    ]
+    /// Mirrors the scaled width `AO3WorkCoverCard` actually renders at (see
+    /// `ScaledCarouselCardSize`), so the column count tracks a card that's grown
+    /// wider with Dynamic Type instead of assuming the static base width. Not
+    /// `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
+
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen.
+    private var columns: [GridItem] {
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
+    }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {

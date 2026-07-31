@@ -10,7 +10,6 @@ struct HomeSectionListView: View {
     @Environment(\.modelContext) private var context
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
@@ -28,6 +27,11 @@ struct HomeSectionListView: View {
     @State private var showingFilters = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
+    /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
+    /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
+    /// tracks a card that's grown wider with Dynamic Type instead of assuming the
+    /// static base width. Not `private` — see `LibraryEntityGridView.cardSize`.
+    var cardSize = ScaledCarouselCardSize()
 
     /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
     /// chevron mid-selection doesn't strand the works you'd already picked — without
@@ -198,12 +202,20 @@ struct HomeSectionListView: View {
         .cardList()
     }
 
-    /// Apple Books-style two-up grid — the same cover cards every carousel already
-    /// uses, wrapping down the page instead of scrolling horizontally. Collapses to
-    /// one column at accessibility Dynamic Type sizes (see `compactCardColumns`).
+    /// Column count tracks the actual scaled card width at every Dynamic Type step
+    /// (not just an accessibility-size on/off gate — see
+    /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
+    /// cards never overlap on screen. Two-up on iPhone at normal text sizes, wider
+    /// on iPad/macOS, fewer as the cards grow, one at accessibility sizes.
+    private var compactGridColumns: [GridItem] {
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
+    }
+
+    /// Apple Books-style grid — the same cover cards every carousel already uses,
+    /// wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: CarouselCardMetrics.compactCardColumns(for: dynamicTypeSize), spacing: 16) {
+            LazyVGrid(columns: compactGridColumns, spacing: 16) {
                 ForEach(visibleItems) { work in
                     if isSelecting {
                         SensitiveWorkCoverCard(

@@ -130,4 +130,71 @@ struct AO3InboxPaginationFailureTests {
         #expect(model.currentPage == 2)
         #expect(model.totalComments == 20)
     }
+
+    /// F5/F6: unlike the two tests above (which always let one `load()` run to
+    /// completion before issuing the next), this one actually overlaps two
+    /// requests — the exact path `requestedPage`/`.paginationFailed` exist for.
+    /// `goToPage(3)` while page 2 is still in flight cancels page 2's `Task`
+    /// via `launch()`'s `activeTask?.cancel()`. A real, cancelled `URLSession`
+    /// request resolves with `URLError(.cancelled)`, not `CancellationError` —
+    /// this gated `pageLoader` mirrors that exactly. Before the F5 fix, `load()`
+    /// only caught `CancellationError` in this chain, so the superseded page-2
+    /// task fell into the generic `catch` and overwrote the already-landed
+    /// page-3 state with a bogus `.paginationFailed(requestedPage: 2, …)`.
+    @Test func supersededPage2CancellationCannotOverwriteAnAlreadyLandedPage3() async throws {
+        let auth = Self.makeAuthService()
+        await auth.login(username: "alice", password: "password")
+
+        let page2Entered = Signal()
+        let page2Release = Signal()
+        let model = AO3InboxModel(pageLoader: { url, _, _, _, _ in
+            if url.query?.contains("page=2") == true {
+                await page2Entered.fire()
+                await page2Release.wait()
+                // By the time this resumes, `goToPage(3)` below has already
+                // cancelled this request's `Task`. Assert that rather than
+                // assume it, so a broken harness fails loudly instead of
+                // silently degrading into a non-overlapping test again.
+                guard Task.isCancelled else { return Self.page(Self.inboxHTML(total: 2)) }
+                throw URLError(.cancelled)
+            }
+            let total = url.query?.contains("page=3") == true ? 30 : 5
+            return Self.page(Self.inboxHTML(total: total))
+        })
+
+        model.syncAuthenticationContext(auth: auth)
+        let page1 = Task { await model.refresh(auth: auth) }
+        await page1.value
+        #expect(model.phase == .loaded)
+        #expect(model.currentPage == 1)
+
+        model.goToPage(2, auth: auth)
+        await page2Entered.wait()
+
+        // Tap "Next" again before page 2 answers — this cancels page 2's task
+        // and starts page 3's, which is free to complete immediately.
+        model.goToPage(3, auth: auth)
+        let page3Deadline = ContinuousClock.now + Duration.seconds(2)
+        while model.currentPage != 3, ContinuousClock.now < page3Deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(model.currentPage == 3)
+        #expect(model.phase == .loaded)
+        #expect(model.totalComments == 30)
+
+        // Now let the superseded page-2 request resolve as a cancellation.
+        await page2Release.fire()
+
+        // Give its (cancelled) continuation a bounded window to run its catch
+        // handling before asserting the final state never regressed.
+        let settleDeadline = ContinuousClock.now + Duration.seconds(1)
+        while ContinuousClock.now < settleDeadline {
+            if case .paginationFailed = model.phase { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(model.phase == .loaded)
+        #expect(model.currentPage == 3)
+        #expect(model.totalComments == 30)
+    }
 }

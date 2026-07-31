@@ -215,6 +215,18 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
             .navigationDestination(for: AO3SeriesSummary.self) { series in
                 AO3SeriesDetailView(series: series)
             }
+            // Registered here for the same reason as the two above: every root stack
+            // gets it once. Comments specifically MUST be path-based rather than a
+            // destination-based link, or the author push below discards it — see
+            // `AO3CommentsRoute`.
+            .navigationDestination(for: AO3CommentsRoute.self) { route in
+                CommentsView(
+                    workID: route.workID,
+                    context: route.context,
+                    initialFocusesChapter: route.focusesChapter,
+                    initialComposes: route.composes
+                )
+            }
             // Observe the epoch (not the Optional route): @Observable + Optional
             // equality skips same-route re-taps. Epoch always changes; only the
             // selected tab consumes.

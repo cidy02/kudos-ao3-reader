@@ -163,6 +163,58 @@ final class AppRouter {
         }
     }
 
+    /// An author route requested mid-modal (a Comments sheet's byline or reply-quote
+    /// tap) that must wait for the *current* sheet/full-screen-cover chain to actually
+    /// finish tearing down before it pushes — see `requestAuthorProfileAfterDismiss`.
+    ///
+    /// At most one is ever queued: it doubles as the app-wide "an author push is
+    /// already in flight" flag, so a second byline tap mid-dismiss is dropped rather
+    /// than landing the same profile on the stack twice — including when the two taps
+    /// come from *different* views (a comment byline and the composer's reply-quote
+    /// byline are separate `View` structs and cannot see each other's local state).
+    private(set) var pendingAuthorProfileAfterDismiss: AO3AuthorRoute?
+
+    /// Queues an author route to open once the caller's modal presentation reports
+    /// its dismiss animation complete. Callers still call `dismiss()` themselves right
+    /// after; the presenter's own `.sheet`/`.fullScreenCover` `onDismiss` closure must
+    /// call `openPendingAuthorProfileAfterDismiss()` to actually push it — that closure
+    /// only fires once SwiftUI's dismiss transition genuinely finishes, replacing a
+    /// guessed-duration sleep with the real completion signal. See `CommentsSheetModifier`.
+    ///
+    /// **Presenter contract:** every modal presenter that can host a view calling this
+    /// must drain it from its own `onDismiss` (draining is a no-op when nothing is
+    /// queued, so over-hooking is safe — *under*-hooking is the hazard: a route queued
+    /// under a presenter that never drains would strand here and then fire on some
+    /// later, unrelated dismissal). `CommentsSheetModifier` additionally cancels any
+    /// stale route when it opens, so a strand cannot outlive one Comments presentation.
+    ///
+    /// - Returns: `false` when a route is already queued, in which case nothing is
+    ///   overwritten and the caller should leave its own presentation alone — first
+    ///   tap wins, matching the re-entrancy guard this replaced.
+    @discardableResult
+    func requestAuthorProfileAfterDismiss(_ route: AO3AuthorRoute) -> Bool {
+        guard pendingAuthorProfileAfterDismiss == nil else { return false }
+        pendingAuthorProfileAfterDismiss = route
+        return true
+    }
+
+    /// Call from a modal presenter's `onDismiss` closure. No-ops if nothing is queued
+    /// (e.g. the presentation the closure belongs to wasn't the one a route was queued
+    /// against) — safe to call from more than one presenter in a nested-sheet chain.
+    func openPendingAuthorProfileAfterDismiss() {
+        guard let route = pendingAuthorProfileAfterDismiss else { return }
+        pendingAuthorProfileAfterDismiss = nil
+        openAuthorProfile(route)
+    }
+
+    /// Drops a queued route without opening it. Called when a Comments presentation
+    /// *begins* so a route left over from an earlier presentation can never push a
+    /// profile the user didn't ask for. Safe by construction: queuing only ever
+    /// happens on the way out of a presentation, never as one opens.
+    func cancelPendingAuthorProfileAfterDismiss() {
+        pendingAuthorProfileAfterDismiss = nil
+    }
+
     /// Active tab stack takes the pending route (if any) and clears it.
     func consumePendingAuthorProfile() -> AO3AuthorRoute? {
         let route = pendingAuthorProfile

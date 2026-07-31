@@ -224,4 +224,54 @@ struct MiniZipHostileTests {
             _ = try MiniZip(data: archive)
         }
     }
+
+    // MARK: - 10. Writer (`.kudosbackup` archives)
+
+    /// The stored-entry writer's output must be readable by the same hardened
+    /// reader, byte-for-byte, under both limit profiles.
+    @Test func writerOutputRoundTripsThroughTheReader() throws {
+        let entries: [(name: String, data: Data)] = [
+            (name: "manifest.json", data: Data(#"{"version":7}"#.utf8)),
+            (name: "Works/AB.epub", data: Data((0 ..< 4096).map { UInt8($0 % 251) })),
+            (name: "Fonts/café.ttf", data: Data("utf8-name-payload".utf8)),
+            (name: "empty.bin", data: Data())
+        ]
+        let archive = try MiniZip.archiveData(entries)
+
+        for limits in [MiniZip.Limits.epub, .backup] {
+            let zip = try MiniZip(data: archive, limits: limits)
+            #expect(zip.names == entries.map(\.name))
+            for entry in entries {
+                #expect(zip.data(named: entry.name) == entry.data)
+            }
+        }
+    }
+
+    /// CRC-32 against the canonical check value — the one field a
+    /// same-code-both-ways round trip could not catch if it were wrong,
+    /// because `MiniZip` doesn't verify CRCs on read but external tools do.
+    @Test func crc32MatchesTheCanonicalCheckValue() {
+        #expect(MiniZip.crc32(Data("123456789".utf8)) == 0xCBF4_3926)
+        #expect(MiniZip.crc32(Data()) == 0)
+    }
+
+    /// The writer enforces the same name-safety rules as the reader, plus
+    /// structural invariants (non-empty, unique names).
+    @Test func writerRejectsUnsafeOrInconsistentInput() {
+        #expect(throws: MiniZipError.self) {
+            _ = try MiniZip.archiveData([])
+        }
+        #expect(throws: MiniZipError.pathTraversal) {
+            _ = try MiniZip.archiveData([(name: "../escape.txt", data: Data())])
+        }
+        #expect(throws: MiniZipError.pathTraversal) {
+            _ = try MiniZip.archiveData([(name: "/absolute.txt", data: Data())])
+        }
+        #expect(throws: MiniZipError.malformedArchive) {
+            _ = try MiniZip.archiveData([
+                (name: "dupe.txt", data: Data("first".utf8)),
+                (name: "dupe.txt", data: Data("second".utf8))
+            ])
+        }
+    }
 }
