@@ -40,6 +40,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     private(set) var phase: Phase = .loading
+    /// True once the first spread has delivered a location — used to keep the
+    /// page skeleton over the navigator so Readium's built-in activity spinner
+    /// never shows between "opening" and readable text.
+    private(set) var hasPresentedFirstPage = false
+    /// Bumped on every `open` so a stale first-page safety timeout from a prior
+    /// open (font reload / re-open) cannot lift the skeleton early.
+    private var firstPagePresentationGeneration = 0
     /// Flat table of contents (falls back to the reading order / spine).
     private(set) var toc: [ReadiumShared.Link] = []
     /// The full spine, in reading order — kept so synthesized `ReaderSection`s
@@ -132,7 +139,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         isDismissInteractionActive || isDismissExitLatched
     }
     /// Toggled by tapping the page; the view hides/shows its chrome on this.
-    var chromeHidden = false
+    ///
+    /// Starts **hidden**: a work opens straight into the page, the way a book does,
+    /// and one tap brings the bars back. Nothing resets this per open, so it also
+    /// persists for as long as the book object lives.
+    var chromeHidden = true
 
     /// The body's rendered line height in points — font size × the line-height
     /// multiplier, mirrored from the view's `ReaderTextStyle` whenever
@@ -471,6 +482,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     func open(fileURL: URL, initialLocator: Locator?, fallbackSpineIndex: Int? = nil,
               config: EPUBNavigatorViewController.Configuration) async {
         phase = .loading
+        hasPresentedFirstPage = false
+        firstPagePresentationGeneration += 1
+        let presentationGeneration = firstPagePresentationGeneration
         // Drop previous work's locator/metrics so the position card never shows
         // another book's last page while this EPUB is still opening.
         currentLocator = nil
@@ -501,17 +515,41 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             positionsByReadingOrder = await (try? publication.positionsByReadingOrder().get()) ?? []
             sections = Self.buildSections(toc: toc, readingOrder: readingOrder)
             // Seed locator for chapter/percent; page line waits for swipe-scale measure.
+            // Do **not** set `hasPresentedFirstPage` here — seeding is not a rendered
+            // spread. Readium still shows its centered activity indicator until the
+            // first WebView spread loads; the view keeps the skeleton over the
+            // navigator until `locationDidChange` (or the safety timeout below).
             if let initial {
                 currentLocator = initial
             }
             phase = .ready
             // Single owner of open pageCount: delayed WKWebView measures.
             schedulePageBarRemeasure()
+            scheduleFirstPagePresentationTimeout(generation: presentationGeneration)
             Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
         } catch {
+            // Nothing to wait for — drop the skeleton so the failure UI can show.
+            hasPresentedFirstPage = true
             phase = .failed(error.localizedDescription)
             Log.epub.error("Couldn't open EPUB (Readium): \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// If Readium never delivers `locationDidChange` (corrupt resource, stuck
+    /// load), still lift the skeleton so the user isn't trapped on a wireframe.
+    private func scheduleFirstPagePresentationTimeout(generation: Int) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard let self else { return }
+            guard self.firstPagePresentationGeneration == generation else { return }
+            guard !self.hasPresentedFirstPage else { return }
+            self.hasPresentedFirstPage = true
+        }
+    }
+
+    private func markFirstPagePresentedIfNeeded() {
+        guard !hasPresentedFirstPage else { return }
+        hasPresentedFirstPage = true
     }
 
     func submit(_ preferences: EPUBPreferences) {
@@ -601,6 +639,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // through successful dismiss teardown so a late settle cannot corrupt
         // the flushed resume point.
         guard !isLocatorIngestionBlocked else { return }
+        // First post-open settle: the spread has painted enough for Readium to
+        // report a location — lift the skeleton that was covering its spinner.
+        markFirstPagePresentedIfNeeded()
         let previousHref = currentLocator.map { ReaderSectionBuilder.hrefKey($0.href.string) }
         let newHref = ReaderSectionBuilder.hrefKey(locator.href.string)
         if previousHref != newHref {

@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 // Reusable wireframe skeletons for the first-load state of remote/AO3-backed content.
 // Perceived-performance only: skeletons never trigger or change any AO3 request — they
@@ -157,33 +160,132 @@ struct FandomRowSkeleton: View {
 // MARK: - Reader
 
 /// A reading-page wireframe for the reader's "opening" state: a chapter heading and
-/// several paragraphs of justified-looking text lines, so opening a work shows the
-/// shape of a page instead of a centered spinner.
+/// enough paragraphs of justified-looking text lines to fill the available height,
+/// so opening a work shows the shape of a full page instead of a short stub or a
+/// centered spinner.
+///
+/// The reader host often zeroes SwiftUI safe-area regions (full-bleed page box),
+/// so this skeleton pads from the **window** safe area itself — Dynamic Island /
+/// status bar on top, home indicator on bottom — rather than relying on parent
+/// insets that may be zero.
 struct ReaderPageSkeleton: View {
-    /// Line widths per paragraph (last line of each is short, like real prose).
-    private let paragraphs: [[CGFloat?]] = [
-        [nil, nil, nil, 180],
-        [nil, nil, nil, nil, 120],
-        [nil, nil, 210],
-        [nil, nil, nil, 160]
-    ]
+    static let headingHeight: CGFloat = 22
+    static let lineHeight: CGFloat = 13
+    static let lineSpacing: CGFloat = 9
+    static let paragraphSpacing: CGFloat = 20
+    /// Extra content margin beyond the window safe area (not a substitute for it).
+    private static let contentTopPad: CGFloat = 12
+    private static let contentBottomPad: CGFloat = 16
+    private static let shortLineEnds: [CGFloat] = [180, 120, 210, 160, 140, 200]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            SkeletonTextLine(height: 22, width: 220) // chapter heading
-                .padding(.bottom, 4)
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, widths in
-                VStack(alignment: .leading, spacing: 9) {
-                    ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
-                        SkeletonTextLine(height: 13, width: width)
+        GeometryReader { proxy in
+            let (safeTop, safeBottom) = Self.windowVerticalSafeInsets
+            let topPad = safeTop + Self.contentTopPad
+            let bottomPad = safeBottom + Self.contentBottomPad
+            let contentHeight = max(0, proxy.size.height - topPad - bottomPad)
+            let paragraphs = Self.paragraphs(filling: contentHeight)
+
+            VStack(alignment: .leading, spacing: Self.paragraphSpacing) {
+                SkeletonTextLine(height: Self.headingHeight, width: 220)
+                    .padding(.bottom, 4)
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, widths in
+                    VStack(alignment: .leading, spacing: Self.lineSpacing) {
+                        ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
+                            SkeletonTextLine(height: Self.lineHeight, width: width)
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 28)
+            .padding(.top, topPad)
+            .padding(.bottom, bottomPad)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .skeletonShimmer()
+    }
+
+    /// Window safe-area top/bottom. Parent readers may zero SwiftUI safe regions
+    /// (peel host / full-bleed page), so GeometryReader insets alone are wrong.
+    private static var windowVerticalSafeInsets: (top: CGFloat, bottom: CGFloat) {
+        #if os(iOS)
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
+            ?? scenes.flatMap(\.windows).first
+        let insets = window?.safeAreaInsets ?? .zero
+        return (insets.top, insets.bottom)
+        #else
+        return (0, 0)
+        #endif
+    }
+
+    /// True height of a paragraph with `lineCount` lines (gaps only *between* lines).
+    static func paragraphHeight(lineCount: Int) -> CGFloat {
+        CGFloat(lineCount) * lineHeight + CGFloat(max(0, lineCount - 1)) * lineSpacing
+    }
+
+    /// Enough paragraph blocks to fill `height` (already exclusive of safe-area
+    /// and content pads). Last line of each paragraph is short, like real prose.
+    /// Internal (not `private`) so `ReaderPageSkeletonTests` can pin the fill
+    /// arithmetic without a rendered view.
+    static func paragraphs(filling height: CGFloat) -> [[CGFloat?]] {
+        // Heading + its 4pt bottom pad + the VStack's own `paragraphSpacing` gap
+        // beneath it all sit above the body paragraphs. That last term is easy to
+        // miss — `spacingBefore` below is 0 for the first paragraph because the
+        // heading, not a paragraph, is what precedes it — and omitting it made the
+        // fill overshoot by 20pt and clip its own last line.
+        var remaining = max(0, height - headingHeight - 4 - paragraphSpacing)
+        var result: [[CGFloat?]] = []
+        var shortIndex = 0
+        while remaining >= lineHeight {
+            let spacingBefore = result.isEmpty ? 0 : paragraphSpacing
+            let budget = remaining - spacingBefore
+            guard budget >= lineHeight else { break }
+
+            // Largest 1…5 line count that fits under the true height formula.
+            var lineCount = 1
+            while lineCount < 5, paragraphHeight(lineCount: lineCount + 1) <= budget {
+                lineCount += 1
+            }
+
+            var widths: [CGFloat?] = Array(repeating: nil, count: max(0, lineCount - 1))
+            widths.append(shortLineEnds[shortIndex % shortLineEnds.count])
+            result.append(widths)
+            remaining -= spacingBefore + paragraphHeight(lineCount: lineCount)
+            shortIndex += 1
+            if result.count > 40 { break }
+        }
+        return result.isEmpty ? [[nil, nil, 160]] : result
+    }
+}
+
+/// Full-screen reader open/restore/download placeholder: page skeleton on the
+/// **reader** theme background (not `.systemBackground`, which flashes Light/Dark
+/// OLED black under Sepia and other reader themes during the push handoff).
+struct ReaderOpeningSkeleton: View {
+    @Environment(ThemeManager.self) private var themeManager
+    var accessibilityLabel: String = "Opening"
+
+    private var theme: ReaderTheme { themeManager.readerTheme }
+
+    var body: some View {
+        ReaderPageSkeleton()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(theme.backgroundColor)
+            // Full-bleed on purpose. `ReaderPageSkeleton` pads from the *window*
+            // safe area itself, which is right inside the reader (the peel host
+            // sets `host.safeAreaRegions = []`) but would be a second inset on top
+            // of this pushed screen's own — the skeleton then started ~59pt down
+            // and stopped ~34pt short. Matching the reader's full-bleed page box
+            // means one skeleton renders identically on both paths.
+            .ignoresSafeArea()
+            .preferredColorScheme(theme.colorScheme)
+            #if os(iOS)
+            .navigationBarBackButtonHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
+            #endif
+            .accessibilityLabel(accessibilityLabel)
     }
 }
 

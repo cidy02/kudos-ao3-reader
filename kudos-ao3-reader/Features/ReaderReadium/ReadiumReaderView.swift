@@ -26,6 +26,21 @@ struct BookReaderView: View {
     }
 }
 
+/// Full-bleed page skeleton on a solid reader-theme fill — used by the open
+/// path and as a cover over Readium until the first spread paints.
+///
+/// Background is `SwiftUI.Color` explicitly: this file also imports
+/// `ReadiumNavigator`, which defines its own `Color` type.
+private struct ReaderPageSkeletonFill: View {
+    let background: SwiftUI.Color
+
+    var body: some View {
+        ReaderPageSkeleton()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(background)
+    }
+}
+
 #if os(iOS)
 
 /// The Readium-backed reader screen. Mirrors the legacy `ReaderView`'s chrome
@@ -169,8 +184,10 @@ struct ReadiumReaderView: View {
     }
 
     /// Reader chrome (bars) visibility — driven by tapping the page.
+    /// Hidden until the first spread has painted so open is skeleton-only
+    /// (no spinner, no half-ready position card over empty WebView).
     private var chromeVisible: Bool {
-        !book.chromeHidden
+        !book.chromeHidden && book.hasPresentedFirstPage
     }
 
     /// Collapses colour-bar dismiss triggers into one `onChange` dependency so
@@ -451,9 +468,7 @@ struct ReadiumReaderView: View {
         case .loading:
             // Opaque page skeleton so the Library toolbar/menu can't show through
             // during the push transition, and so opening matches the rest of the app.
-            ReaderPageSkeleton()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(readerTheme.backgroundColor)
+            ReaderPageSkeletonFill(background: readerTheme.backgroundColor)
         case let .failed(message):
             ContentUnavailableView("Couldn't open this EPUB", systemImage: "exclamationmark.triangle",
                                    description: Text(message))
@@ -461,23 +476,33 @@ struct ReadiumReaderView: View {
                 .background(readerTheme.backgroundColor)
         case .ready:
             if let navigator = book.navigator {
-                ReadiumNavigatorContainer(
-                    controller: navigator,
-                    readingMode: readingMode,
-                    dismissSurface: dismissSurface,
-                    reduceMotion: reduceMotion,
-                    onDismissInteractionActiveChange: handleDismissInteractionActiveChange,
-                    onDismissDragEnded: handleDismissDragEnded,
-                    onHighlight: { createAnnotationFromSelection(withNote: false) },
-                    onAddNote: { createAnnotationFromSelection(withNote: true) }
-                )
-                .ignoresSafeArea()
+                // Navigator must be in the hierarchy to load spreads, but Readium
+                // draws a centered UIActivityIndicator until the first WebView
+                // paints. Keep the same page skeleton on top until
+                // `hasPresentedFirstPage` so the user never sees that spinner
+                // after the destination/open skeleton handoff.
+                ZStack {
+                    ReadiumNavigatorContainer(
+                        controller: navigator,
+                        readingMode: readingMode,
+                        dismissSurface: dismissSurface,
+                        reduceMotion: reduceMotion,
+                        onDismissInteractionActiveChange: handleDismissInteractionActiveChange,
+                        onDismissDragEnded: handleDismissDragEnded,
+                        onHighlight: { createAnnotationFromSelection(withNote: false) },
+                        onAddNote: { createAnnotationFromSelection(withNote: true) }
+                    )
+                    .ignoresSafeArea()
+                    if !book.hasPresentedFirstPage {
+                        ReaderPageSkeletonFill(background: readerTheme.backgroundColor)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(unlessReduced: .easeOut(duration: 0.15), value: book.hasPresentedFirstPage)
             } else {
                 // Keep a full-size host even if the navigator is momentarily nil
                 // so chrome overlays never re-collapse to a zero-size anchor.
-                ReaderPageSkeleton()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(readerTheme.backgroundColor)
+                ReaderPageSkeletonFill(background: readerTheme.backgroundColor)
             }
         }
     }
@@ -900,8 +925,9 @@ struct ReadiumReaderView: View {
     /// Page + floating chrome as one surface, so drag-to-dismiss moves the whole
     /// reader (not only the EPUB text) — Apple Books card behaviour.
     ///
-    /// Host must always fill the screen: while `.loading`, bare `content` would
-    /// be a centred ProgressView and chrome overlays would flash mid-screen.
+    /// Host must always fill the screen: while `.loading` (and until the first
+    /// spread paints), `content` is a themed page skeleton so Library chrome
+    /// and Readium's own activity indicator never flash mid-screen.
     /// Sheets / lifecycle modifiers stay *outside* this tree so they are not
     /// scaled/offset with the card.
     private var dismissableReaderCard: some View {

@@ -92,18 +92,11 @@ private struct LocalWorkReaderDestination: View {
     private var restorationView: some View {
         switch phase {
         case .opening, .restoring:
-            // Match the reader open experience — skeleton page, not a spinner —
-            // and fill the screen so Library chrome can't bleed through.
-            ReaderPageSkeleton()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                #if os(macOS)
-                .background(Color(nsColor: .windowBackgroundColor))
-                #else
-                .background(Color(uiColor: .systemBackground))
-                .navigationBarBackButtonHidden(true)
-                .toolbar(.hidden, for: .navigationBar)
-                #endif
-                .accessibilityLabel(phase == .restoring ? "Restoring EPUB" : "Opening")
+            // Same themed page skeleton as Readium's open path — never
+            // `.systemBackground`, which flashes Light/Dark under Sepia/OLED.
+            ReaderOpeningSkeleton(
+                accessibilityLabel: phase == .restoring ? "Restoring EPUB" : "Opening"
+            )
         case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't Open Reader", systemImage: "exclamationmark.triangle")
@@ -171,18 +164,9 @@ struct RemoteWorkReaderDestination: View {
                     }
                 }
             } else {
-                // The same skeleton a local open shows, so an import and a restore
-                // look identical from the outside.
-                ReaderPageSkeleton()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    #if os(macOS)
-                    .background(Color(nsColor: .windowBackgroundColor))
-                    #else
-                    .background(Color(uiColor: .systemBackground))
-                    .navigationBarBackButtonHidden(true)
-                    .toolbar(.hidden, for: .navigationBar)
-                    #endif
-                    .accessibilityLabel("Downloading work")
+                // Same themed skeleton a local open / restore shows, so import,
+                // restore, and Readium open hand off without a theme flash.
+                ReaderOpeningSkeleton(accessibilityLabel: "Downloading work")
             }
         }
         .task(id: summary) { await resolve() }
