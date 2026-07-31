@@ -134,6 +134,74 @@ private struct LocalWorkReaderDestination: View {
     }
 }
 
+/// Pushed when a card for a work the library does not have yet should *read* it:
+/// import it from AO3 first, then open the reader.
+///
+/// The Account tab's lists (bookmarks, subscriptions, the account works lists) are the
+/// caller. A card there was a route to Work Details, which meant reading something you
+/// had bookmarked took two screens and a second decision; tapping the card now does the
+/// obvious thing instead. Importing on tap is a real side effect — the work joins the
+/// library — but that is what "open this" has to mean for a work stored on AO3.
+struct RemoteWorkReaderRoute: Hashable {
+    let work: AO3WorkSummary
+}
+
+/// Resolves `RemoteWorkReaderRoute` to a local work, then hands off to the same reader
+/// destination a local card uses, so restore/skeleton/failure behaviour is shared
+/// rather than reimplemented for remote works.
+struct RemoteWorkReaderDestination: View {
+    let summary: AO3WorkSummary
+
+    @Environment(\.modelContext) private var context
+    @State private var resolved: SavedWork?
+    @State private var failure: String?
+
+    var body: some View {
+        Group {
+            if let resolved {
+                LocalWorkDestinationView(destination: .reader(resolved))
+            } else if let failure {
+                ContentUnavailableView {
+                    Label("Couldn't Open Work", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(failure)
+                } actions: {
+                    NavigationLink(value: summary) {
+                        Label("Work Details", systemImage: "info.circle")
+                    }
+                }
+            } else {
+                // The same skeleton a local open shows, so an import and a restore
+                // look identical from the outside.
+                ReaderPageSkeleton()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #if os(macOS)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    #else
+                    .background(Color(uiColor: .systemBackground))
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar(.hidden, for: .navigationBar)
+                    #endif
+                    .accessibilityLabel("Downloading work")
+            }
+        }
+        .task(id: summary) { await resolve() }
+    }
+
+    @MainActor
+    private func resolve() async {
+        guard resolved == nil, failure == nil else { return }
+        do {
+            // Reuses the queue's importer, so a work opened this way is indexed,
+            // deduplicated against an existing copy, and preserved exactly like one
+            // added through any other path.
+            resolved = try await ReadingQueueService.resolveLocalWork(for: summary, in: context)
+        } catch {
+            failure = WorkCardActionError.message(for: error)
+        }
+    }
+}
+
 /// Label/icon pairs for work-lifecycle toggles duplicated across card context
 /// menus, work detail, and the bulk-action bar.
 enum WorkActionLabels {

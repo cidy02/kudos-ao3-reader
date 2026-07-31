@@ -134,13 +134,20 @@ struct AccountView: View {
                     case .privacy: PrivacyDataView()
                     }
                 }
-                .navigationDestination(for: AO3AccountWorksList.Kind.self) { AO3AccountWorksList(kind: $0) }
+                .navigationDestination(for: AO3AccountWorksList.Kind.self) {
+                    AO3AccountWorksList(kind: $0, openMode: .reader)
+                }
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 // The work cards on this tab carry an ⓘ that pushes
                 // `LocalWorkDestination.detail`; without this handler it would be
                 // an inert control here while working everywhere else.
                 .navigationDestination(for: LocalWorkDestination.self) {
                     LocalWorkDestinationView(destination: $0)
+                }
+                // Tapping a card on this tab reads the work, importing it first when
+                // the library does not have it yet.
+                .navigationDestination(for: RemoteWorkReaderRoute.self) {
+                    RemoteWorkReaderDestination(summary: $0.work)
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: AccountInboxThreadDestination.self) { destination in
@@ -289,6 +296,7 @@ struct AccountView: View {
                     expandAll: expandAll,
                     displayMode: .compact,
                     layout: .scroll,
+                    openMode: .reader,
                     reloadToken: listReloadToken,
                     onAdultContentVisibilityChange: adultContentVisibilityHandler(
                         for: matureContentScope
@@ -301,6 +309,7 @@ struct AccountView: View {
                     expandAll: expandAll,
                     displayMode: .compact,
                     layout: .scroll,
+                    openMode: .reader,
                     reloadToken: listReloadToken,
                     onAdultContentVisibilityChange: adultContentVisibilityHandler(
                         for: matureContentScope
@@ -334,6 +343,7 @@ struct AccountView: View {
                     expandAll: expandAll,
                     displayMode: .compact,
                     layout: .scroll,
+                    openMode: .reader,
                     reloadToken: listReloadToken,
                     onAdultContentVisibilityChange: adultContentVisibilityHandler(
                         for: matureContentScope
@@ -680,6 +690,7 @@ struct AccountView: View {
                 kind: .markedForLater,
                 expandAll: expandAll,
                 displayMode: displayMode,
+                openMode: .reader,
                 reloadToken: listReloadToken,
                 onAdultContentVisibilityChange: adultContentVisibilityHandler(
                     for: matureContentScope
@@ -691,6 +702,7 @@ struct AccountView: View {
                 kind: .subscriptions,
                 expandAll: expandAll,
                 displayMode: displayMode,
+                openMode: .reader,
                 reloadToken: listReloadToken,
                 onAdultContentVisibilityChange: adultContentVisibilityHandler(
                     for: matureContentScope
@@ -771,6 +783,7 @@ struct AccountView: View {
                 kind: .history,
                 expandAll: expandAll,
                 displayMode: displayMode,
+                openMode: .reader,
                 reloadToken: listReloadToken,
                 onAdultContentVisibilityChange: adultContentVisibilityHandler(
                     for: matureContentScope

@@ -499,6 +499,11 @@ struct AccountShortcutGridTile: View {
 /// `NavigationLink`s in a single List cell re-breaks tap targeting.
 struct AccountWorksCompactGrid: View {
     let entries: [CanonicalWork]
+    /// What a tap does. `.detail` (the default) is what the author profile wants — it
+    /// is a place for *reading about* works. The Account tab passes `.reader`: a work
+    /// you have bookmarked or subscribed to is one you mean to read, so a tap opens it,
+    /// downloading it first if the library does not have it yet.
+    var openMode: LocalWorkRowOpenMode = .detail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
@@ -524,20 +529,43 @@ struct AccountWorksCompactGrid: View {
         .padding(16)
     }
 
+    private func localValue(for work: SavedWork) -> AnyHashable { openMode.value(for: work) }
+    private func remoteValue(for remote: AO3WorkSummary) -> AnyHashable { openMode.value(for: remote) }
+
     @ViewBuilder
     private func compactCard(for entry: CanonicalWork) -> some View {
         if let work = entry.local {
-            // Account destinations use `SavedWork` → WorkDetailView (not LocalWorkDestination).
-            NavigationLink(value: work) {
+            NavigationLink(value: localValue(for: work)) {
                 SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
-            NavigationLink(value: remote) {
-                AO3WorkCoverCard(work: remote)
+            NavigationLink(value: remoteValue(for: remote)) {
+                AO3WorkCoverCard(work: remote, showsDetailButton: openMode == .reader)
             }
             .buttonStyle(.plain)
+        }
+    }
+}
+
+/// A card tap's destination value for each open mode.
+///
+/// `.detail` keeps the plain-model values Account/author-profile stacks already
+/// register (`SavedWork` → Work Details, `AO3WorkSummary` → Work Details). `.reader`
+/// uses the routes that open the work, importing a remote one on the way.
+extension LocalWorkRowOpenMode {
+    func value(for work: SavedWork) -> AnyHashable {
+        switch self {
+        case .detail: work
+        case .reader: LocalWorkDestination.reader(work)
+        }
+    }
+
+    func value(for remote: AO3WorkSummary) -> AnyHashable {
+        switch self {
+        case .detail: remote
+        case .reader: RemoteWorkReaderRoute(work: remote)
         }
     }
 }
@@ -545,6 +573,8 @@ struct AccountWorksCompactGrid: View {
 /// Compact two-up grid for bookmark lists — Library-style `NavigationLink` labels.
 struct AccountBookmarksCompactGrid: View {
     let bookmarks: [AO3AuthorBookmark]
+    /// See `AccountWorksCompactGrid.openMode`.
+    var openMode: LocalWorkRowOpenMode = .detail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mirrors the scaled width `AO3WorkCoverCard` actually renders at (see
@@ -564,8 +594,8 @@ struct AccountBookmarksCompactGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             ForEach(bookmarks) { bookmark in
-                NavigationLink(value: bookmark.work) {
-                    AO3WorkCoverCard(work: bookmark.work)
+                NavigationLink(value: openMode.value(for: bookmark.work)) {
+                    AO3WorkCoverCard(work: bookmark.work, showsDetailButton: openMode == .reader)
                 }
                 .buttonStyle(.plain)
             }
@@ -625,6 +655,10 @@ struct AccountWorksInlineSection: View {
     var expandAll: Bool
     var displayMode: WorkListDisplayMode = .detailed
     var layout: AccountWorksLayout = .list
+    /// See `AccountWorksCompactGrid.openMode`. The inline previews and the full list
+    /// they push must agree, or the same work opens differently depending on which
+    /// copy of it you tapped.
+    var openMode: LocalWorkRowOpenMode = .detail
     /// Bumped by the host's pull-to-refresh; a change forces a cache bypass.
     var reloadToken: Int
     /// Reports whether this page's rendered canonical entries include a local
@@ -803,7 +837,7 @@ struct AccountWorksInlineSection: View {
     @ViewBuilder
     private func rows(useCardRow: Bool) -> some View {
         if displayMode == .compact {
-            AccountWorksCompactGrid(entries: entries)
+            AccountWorksCompactGrid(entries: entries, openMode: openMode)
             if totalPages > 1 {
                 SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
                     launch(page: page)
@@ -817,11 +851,14 @@ struct AccountWorksInlineSection: View {
                     // internally (MatureContent.swift) for its non-blurred, non-selecting
                     // branch — re-wrapping it stacks a second, unhidden, real-titled
                     // NavigationLink behind the blurred branch's reveal gate.
-                    SensitiveWorkRow(work: work, expandAll: expandAll)
+                    SensitiveWorkRow(work: work, expandAll: expandAll, openMode: openMode)
                         .modifier(OptionalCardRow(enabled: useCardRow))
                 } else if let remote = entry.remote {
                     AO3WorkRow(work: remote, expandAll: expandAll)
-                        .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                        .cardNavigation(
+                            to: openMode.value(for: remote),
+                            accessibilityLabel: remote.title
+                        )
                         .modifier(OptionalCardRow(enabled: useCardRow))
                 }
             }

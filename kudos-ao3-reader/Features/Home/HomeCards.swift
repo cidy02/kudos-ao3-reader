@@ -253,17 +253,25 @@ struct WorkCoverCard: View {
 /// the same self-contained summary shape as local Library/Home work cards.
 struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
+    /// Shows an ⓘ that opens Work Details. Off by default and on only where tapping the
+    /// card does something else — the Account tab, where a tap reads the work. Elsewhere
+    /// the card itself already pushes Work Details, and a second control to the same
+    /// place would teach that the two are interchangeable, which they are not.
+    var showsDetailButton = false
 
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(work.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(3)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    // Matches the local card's grouping — see `WorkCoverCard`.
-                    .padding(.bottom, 3)
+                HStack(alignment: .top, spacing: 6) {
+                    Text(work.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(3)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if showsDetailButton { detailButton }
+                }
+                // Matches the local card's grouping — see `WorkCoverCard`.
+                .padding(.bottom, 3)
 
                 if let author = work.authors.first, !author.isEmpty {
                     CardMetaLabel(text: author, symbol: "person", accessibilityLabel: "Author: \(author)")
@@ -293,6 +301,22 @@ struct AO3WorkCoverCard: View {
             }
         }
         .remoteWorkContextMenu(work: work)
+    }
+
+    /// ⓘ → Work Details for the remote work. Same placement and target size as the
+    /// local card's (see `WorkCoverCard.statusButton`).
+    private var detailButton: some View {
+        NavigationLink(value: work) {
+            Image(systemName: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28, alignment: .topTrailing)
+                .contentShape(Rectangle())
+                .padding(.top, -4)
+                .padding(.trailing, -6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Work details")
     }
 
     private var cardStats: some View {
