@@ -10,7 +10,6 @@ struct HomeSectionListView: View {
     @Environment(\.modelContext) private var context
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
@@ -209,7 +208,7 @@ struct HomeSectionListView: View {
     /// cards never overlap on screen. Two-up on iPhone at normal text sizes, wider
     /// on iPad/macOS, fewer as the cards grow, one at accessibility sizes.
     private var compactGridColumns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     /// Apple Books-style grid — the same cover cards every carousel already uses,

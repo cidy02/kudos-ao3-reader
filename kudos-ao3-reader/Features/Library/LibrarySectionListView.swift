@@ -14,7 +14,6 @@ struct LibrarySectionListView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
@@ -276,7 +275,7 @@ struct LibrarySectionListView: View {
     /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
     /// cards never overlap on screen.
     private var compactGridColumns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     /// Apple Books-style two-up grid — the same cover cards every carousel already

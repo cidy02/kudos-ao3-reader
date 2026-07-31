@@ -119,7 +119,6 @@ struct ReadingQueueDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var showingRename = false
     @State private var renameText = ""
@@ -359,7 +358,7 @@ struct ReadingQueueDetailView: View {
     /// cards never overlap on screen. Matches the Home "See all" grid and
     /// `LibraryEntityGridView`.
     private var compactGridColumns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     /// Apple Books-style grid — the same cover cards every carousel already uses,

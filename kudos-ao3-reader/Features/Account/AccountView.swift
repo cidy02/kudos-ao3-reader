@@ -15,6 +15,7 @@ struct AccountView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query private var localWorks: [SavedWork]
 
     @State private var path = NavigationPath()
@@ -565,13 +566,16 @@ struct AccountView: View {
 
     // MARK: Overview — identity hub
 
-    /// Three icon cards per row normally; reflows to two at accessibility Dynamic
-    /// Type sizes rather than shrinking each tile's text via `minimumScaleFactor`
-    /// into illegibility (mirrors
-    /// `WorkDetailOverviewSections.quickActionColumns`' 3→2 idiom).
+    /// Three icon cards per row. On a **compact** width (iPhone) that drops to two
+    /// at accessibility Dynamic Type sizes, so the tile labels reflow instead of
+    /// being crushed by `minimumScaleFactor` (mirrors
+    /// `WorkDetailOverviewSections.quickActionColumns`' 3→2 idiom). A **regular**
+    /// width (iPad, macOS) keeps all three even at those sizes — it has the room,
+    /// and dropping a column there just leaves two over-wide tiles and wasted space
+    /// (owner-reported).
     private var shortcutGridColumns: [GridItem] {
-        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
-        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+        let isCramped = dynamicTypeSize.isAccessibilitySize && horizontalSizeClass == .compact
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: isCramped ? 2 : 3)
     }
 
     @ViewBuilder

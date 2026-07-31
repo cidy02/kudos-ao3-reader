@@ -500,7 +500,6 @@ struct AccountShortcutGridTile: View {
 struct AccountWorksCompactGrid: View {
     let entries: [CanonicalWork]
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
     /// render at (see `ScaledCarouselCardSize`), so the column count tracks a card
     /// that's grown wider with Dynamic Type instead of assuming the static base
@@ -512,7 +511,7 @@ struct AccountWorksCompactGrid: View {
     /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
     /// cards never overlap on screen.
     private var columns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     var body: some View {
@@ -546,7 +545,6 @@ struct AccountWorksCompactGrid: View {
 struct AccountBookmarksCompactGrid: View {
     let bookmarks: [AO3AuthorBookmark]
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mirrors the scaled width `AO3WorkCoverCard` actually renders at (see
     /// `ScaledCarouselCardSize`), so the column count tracks a card that's grown
     /// wider with Dynamic Type instead of assuming the static base width. Not
@@ -558,7 +556,7 @@ struct AccountBookmarksCompactGrid: View {
     /// `CarouselCardMetrics.adaptiveCardColumns`), so two columns of scaled-wide
     /// cards never overlap on screen.
     private var columns: [GridItem] {
-        CarouselCardMetrics.adaptiveCardColumns(for: dynamicTypeSize, minimum: cardSize.width)
+        CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
     var body: some View {

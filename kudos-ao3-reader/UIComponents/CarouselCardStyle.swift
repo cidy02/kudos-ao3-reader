@@ -85,10 +85,18 @@ extension CarouselCardMetrics {
     /// card is already wider than half the screen; `LazyVGrid` doesn't clip an
     /// oversized child, so the two cards in a row rendered overlapping. (These
     /// cards pin their own outer width: `WorkSummaryCardSurface` renders at
-    /// exactly `cardSize.width`, `HomeCards.swift`.) At accessibility sizes
-    /// specifically, `.adaptive(minimum:)` alone would still fit two cards by raw
-    /// pixel width even though their scaled text can't, so those sizes still
-    /// collapse to a single column explicitly below.
+    /// exactly `cardSize.width`, `HomeCards.swift`.)
+    ///
+    /// There is deliberately **no** `isAccessibilitySize` special case. An earlier
+    /// version collapsed to one column at those sizes, inherited from the
+    /// fixed-count era when a column could be narrower than the card it held. That
+    /// can't happen now — every column is at least `minimum`, the card's own scaled
+    /// width — so the special case only did harm: on a regular width (iPad) it
+    /// forced one enormous card per row when three or four fit comfortably
+    /// (owner-reported). Deriving the count purely from the scaled width gets both
+    /// ends right on its own, because the width already encodes Dynamic Type: on a
+    /// phone the card grows until `ScaledCarouselCardSize`'s screen clamp pins it
+    /// near the full width and the grid resolves to one column anyway.
     ///
     /// `tolerance` covers the opposite, sub-pixel case: on a 375pt-wide phone at
     /// the default text size two 164pt cards plus a 16pt gap need 344pt while the
@@ -100,15 +108,11 @@ extension CarouselCardMetrics {
     /// rounding allowance, not a lever for forcing a column that genuinely does
     /// not fit — the overlap case above is what happens when a column is forced.
     static func adaptiveCardColumns(
-        for dynamicTypeSize: DynamicTypeSize,
         minimum: CGFloat = CarouselCardMetrics.width,
         spacing: CGFloat = 16,
         tolerance: CGFloat = 2
     ) -> [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            return [GridItem(.flexible(), spacing: spacing)]
-        }
-        return [GridItem(.adaptive(minimum: max(1, minimum - tolerance)), spacing: spacing)]
+        [GridItem(.adaptive(minimum: max(1, minimum - tolerance)), spacing: spacing)]
     }
 }
 
