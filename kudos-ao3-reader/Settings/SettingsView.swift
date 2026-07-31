@@ -70,6 +70,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var isFolderSyncing = false
     @State private var showingSyncDetails = false
+    @State private var showingAvailabilitySweep = false
     @State private var lastFolderSyncResult: FolderSyncResult?
 
     /// All selectable fonts: built-ins followed by imported ones.
@@ -301,6 +302,23 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     )
 
                     Section {
+                        Button {
+                            showingAvailabilitySweep = true
+                        } label: {
+                            Label("Check Availability…", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                    } header: {
+                        Text("Preservation")
+                    } footer: {
+                        // Deliberately a button, never a background task: it is one AO3
+                        // request per work and AO3 offers no "what changed" feed, so the
+                        // user decides when that cost is worth paying.
+                        Text("Asks AO3 which of your saved works still exist, so deleted ones are "
+                            + "marked as the last copy you have. One request per work, sent slowly — "
+                            + "start it when it suits you.")
+                    }
+
+                    Section {
                         NavigationLink {
                             ReadingQueueStorageView()
                         } label: {
@@ -437,6 +455,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         // Item-based exporter: the archive is already streamed to a temp file,
         // so saving is a file copy — the archive never lives in memory.
+        .sheet(isPresented: $showingAvailabilitySweep) {
+            AvailabilitySweepView()
+        }
         .fileExporter(
             isPresented: $exportingBackup,
             item: backupExportURL.map(KudosBackupArchiveFile.init),
