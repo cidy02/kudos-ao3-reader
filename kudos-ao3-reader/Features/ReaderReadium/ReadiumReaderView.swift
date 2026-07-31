@@ -2,6 +2,7 @@ import OSLog
 import SwiftData
 import SwiftUI
 #if os(iOS)
+import QuickLook
 import ReadiumNavigator
 import ReadiumShared
 import UIKit
@@ -73,6 +74,9 @@ struct ReadiumReaderView: View {
     @State private var progressPersistence = ReadiumProgressPersistence()
     /// Native comments sheet over the reader (only for AO3-backed works).
     @State private var showingComments = false
+    /// Non-nil while the archived original is being previewed by QuickLook.
+    @State private var previewingOriginal: URL?
+    @State private var rebuildError: String?
 
     /// The afterword's own AO3 boilerplate — "Please drop by the Archive and
     /// comment…" — links straight at `/works/<id>/comments/new`, which this
@@ -958,6 +962,32 @@ struct ReadiumReaderView: View {
             .padding(.top, book.pageBoxChromeSafeTop + 8)
             .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
+            // QuickLook renders the archived original in place — a PDF stays a PDF, so
+            // the reader can compare the conversion against the source, including the
+            // images conversion drops.
+            .quickLookPreview($previewingOriginal)
+            .alert(
+                "Couldn't Rebuild This Work",
+                isPresented: Binding(
+                    get: { rebuildError != nil },
+                    set: { if !$0 { rebuildError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { rebuildError = nil }
+            } message: {
+                Text(rebuildError ?? "")
+            }
+    }
+
+    /// Re-runs conversion from the archived original, in place. Surfaced in the reader
+    /// because that is where a reader notices the conversion is wrong.
+    @MainActor
+    private func rebuildFromOriginal() async {
+        do {
+            try await WorkReconversion.reconvert(work, in: modelContext)
+        } catch {
+            rebuildError = error.localizedDescription
+        }
     }
 
     /// Bottom chrome stack:
@@ -1131,52 +1161,6 @@ struct ReadiumReaderView: View {
         return ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
     }
 
-    /// The fan's labelled menu pills: Contents, Bookmarks & Highlights, Find in Work,
-    /// Comments (AO3-backed works only — not in the reference design's four, but
-    /// dropping it would lose an existing feature, which the brief forbids), and
-    /// Themes & Settings.
-    private var fanPills: [ReaderFanMenuPill] {
-        var pills: [ReaderFanMenuPill] = [
-            ReaderFanMenuPill(id: "contents", title: contentsPillTitle, systemImage: "list.bullet") {
-                contentsSegment = .chapters
-                router.panel = .readerChapters
-            },
-            ReaderFanMenuPill(id: "bookmarks", title: "Bookmarks & Highlights", systemImage: "bookmark") {
-                contentsSegment = .bookmarks
-                router.panel = .readerChapters
-            },
-            ReaderFanMenuPill(
-                id: "find", title: "Find in Work", systemImage: "magnifyingglass",
-                // Readium synthesises a content search service for EPUBs; if this
-                // publication somehow has none, dim the control rather than open a
-                // box that can never return anything.
-                isEnabled: ReaderSearchModel.isSearchable(book.publication)
-            ) {
-                router.panel = .readerFind
-            }
-        ]
-        if ao3WorkID != nil {
-            pills.append(ReaderFanMenuPill(
-                id: "comments", title: "Comments", systemImage: "bubble.left.and.bubble.right"
-            ) {
-                showingComments = true
-            })
-        }
-        pills.append(ReaderFanMenuPill(id: "settings", title: "Themes & Settings", systemImage: "textformat.size") {
-            router.panel = .readerDisplay
-        })
-        return pills
-    }
-
-    private var contentsPillTitle: String {
-        guard let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) else { return "Contents" }
-        return "Contents · \(percent)%"
-    }
-
-    /// The work's page on AO3 — the `ShareLink` target in the fan's round row.
-    private var shareURL: URL? {
-        ao3WorkID.map(AO3AuthService.workURL)
-    }
 
     /// The fan's round action row (after the native `ShareLink` slot): kudos is
     /// wired to the existing native write action; read aloud and in-book
@@ -1724,6 +1708,105 @@ extension ReadiumReaderView {
 
     private var kudosBannerPresented: Binding<Bool> {
         Binding(get: { kudosBanner != nil }, set: { if !$0 { kudosBanner = nil } })
+    }
+}
+
+
+// MARK: - Fan menu items
+
+/// The fan menu's labelled pills and its share target.
+///
+/// An extension purely so `ReadiumReaderView`'s own body stays inside SwiftLint's
+/// `type_body_length` limit — adding the two conversion pills pushed it past the
+/// error threshold. Kept in this file so it can still reach the view's `private`
+/// state (Swift allows that for same-file extensions), which means no visibility
+/// had to widen. Pure code movement.
+extension ReadiumReaderView {
+    /// The fan's labelled menu pills: Contents, Bookmarks & Highlights, Find in Work,
+    /// Comments (AO3-backed works only — not in the reference design's four, but
+    /// dropping it would lose an existing feature, which the brief forbids), and
+    /// Themes & Settings.
+    private var fanPills: [ReaderFanMenuPill] {
+        var pills: [ReaderFanMenuPill] = [
+            ReaderFanMenuPill(id: "contents", title: contentsPillTitle, systemImage: "list.bullet") {
+                contentsSegment = .chapters
+                router.panel = .readerChapters
+            },
+            ReaderFanMenuPill(id: "bookmarks", title: "Bookmarks & Highlights", systemImage: "bookmark") {
+                contentsSegment = .bookmarks
+                router.panel = .readerChapters
+            },
+            ReaderFanMenuPill(
+                id: "find", title: "Find in Work", systemImage: "magnifyingglass",
+                // Readium synthesises a content search service for EPUBs; if this
+                // publication somehow has none, dim the control rather than open a
+                // box that can never return anything.
+                isEnabled: ReaderSearchModel.isSearchable(book.publication)
+            ) {
+                router.panel = .readerFind
+            }
+        ]
+        if ao3WorkID != nil {
+            pills.append(ReaderFanMenuPill(
+                id: "comments", title: "Comments", systemImage: "bubble.left.and.bubble.right"
+            ) {
+                showingComments = true
+            })
+        }
+        // Converted imports only, and they are exactly the works whose menu is
+        // otherwise thin. Seeing the source page matters here in a way it never does
+        // for an AO3 EPUB: conversion is lossy — images are dropped, layout is
+        // reflowed — so being able to check the original is how a reader tells a
+        // conversion artefact from something the author actually wrote.
+        if originalDocumentURL != nil {
+            pills.append(ReaderFanMenuPill(
+                id: "original", title: "Original File", systemImage: "doc.text.magnifyingglass"
+            ) {
+                previewingOriginal = originalDocumentURL
+            })
+        }
+        if WorkReconversion.candidate(for: work)?.isStale == true {
+            pills.append(ReaderFanMenuPill(
+                id: "rebuild", title: "Rebuild from Original", systemImage: "arrow.triangle.2.circlepath"
+            ) {
+                Task { await rebuildFromOriginal() }
+            })
+        }
+        pills.append(ReaderFanMenuPill(id: "settings", title: "Themes & Settings", systemImage: "textformat.size") {
+            router.panel = .readerDisplay
+        })
+        return pills
+    }
+
+    private var contentsPillTitle: String {
+        guard let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) else { return "Contents" }
+        return "Contents · \(percent)%"
+    }
+
+    /// What the fan's `ShareLink` slot offers, best available first.
+    ///
+    /// This used to be `ao3WorkID.map(AO3AuthService.workURL)`, so a work with no AO3
+    /// id had no share slot at all — and a non-AO3 work's menu is already the sparse
+    /// one, since Kudos and Comments cannot apply to it. There is always *something*
+    /// worth sharing:
+    ///
+    /// 1. the AO3 page, when the work has one;
+    /// 2. the original posting on whatever site it came from (a fanfiction.net story
+    ///    link, say), which for a deleted work is often the only citation left;
+    /// 3. failing any link, the EPUB itself — which is the whole point of a
+    ///    community copy, and the only way to hand it on.
+    private var shareURL: URL? {
+        if let ao3WorkID { return AO3AuthService.workURL(ao3WorkID) }
+        if let source = URL(string: work.sourceURL), source.scheme?.hasPrefix("http") == true {
+            return source
+        }
+        return WorkReaderPreparation.hasReadableEPUB(for: work) ? work.fileURL : nil
+    }
+
+    /// The file this work was converted from, when it was converted and the original is
+    /// still archived. Drives the "Original File" pill.
+    private var originalDocumentURL: URL? {
+        WorkReconversion.candidate(for: work)?.originalURL
     }
 }
 
