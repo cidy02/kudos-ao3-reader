@@ -36,7 +36,10 @@ nonisolated enum ImportedDocumentConverter {
     ///       PDFKit glyph geometry, which had produced five defects including silently
     ///       relocating prose. Verified character-identical to PDFKit's extraction on a
     ///       171-page reference PDF, but correctly ordered and grouped.
-    static let converterVersion = 7
+    /// - 8 — the EPUB now states its own word count (`calibre:word_count`), so imported
+    ///       works show a length on the card. Nothing else could supply it: word count
+    ///       normally comes from AO3's stats page, which a non-AO3 work never has.
+    static let converterVersion = 8
 
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.

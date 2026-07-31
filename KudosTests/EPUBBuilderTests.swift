@@ -133,6 +133,28 @@ struct EPUBBuilderTests {
         #expect(document.chapters.map(\.title) == ["Ch 1: A & B <c>"])
     }
 
+    @Test func theArchiveStatesItsOwnWordCount() throws {
+        // Nothing downstream can otherwise know an imported work's length: word count
+        // normally comes from AO3's stats page, which a non-AO3 work never has, so it
+        // stayed 0 and the card omitted it.
+        let url = try write(try sampleArchive(chapters: [
+            .init(title: "One", bodyXHTML: "<p>One two three four five.</p>"),
+            .init(title: "Two", bodyXHTML: "<p>Six seven</p><p>eight nine ten.</p>")
+        ]))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(try EPUBDocument.metadata(ofEPUBAt: url).wordCount == 10)
+    }
+
+    @Test func markupDoesNotInflateTheWordCount() throws {
+        // Tags are stripped first, so a heavily marked-up paragraph is not counted as
+        // longer than it reads.
+        let url = try write(try sampleArchive(chapters: [
+            .init(title: "One", bodyXHTML: "<p><em>Two</em> <strong>words</strong></p>")
+        ]))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(try EPUBDocument.metadata(ofEPUBAt: url).wordCount == 2)
+    }
+
     @Test func emptyChapterListIsRejected() {
         #expect(throws: EPUBBuilder.BuildError.noChapters) {
             _ = try EPUBBuilder.archive(metadata: .init(title: "Empty"), chapters: [])

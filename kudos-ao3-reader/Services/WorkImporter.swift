@@ -363,6 +363,13 @@ private func applyEPUBMetadata(
     if let words = extracted.groups.words, words > 0, !fillOnly || work.wordCount == 0 {
         work.wordCount = words
     }
+    // A work with no AO3 identity never gets a stats refresh, so without this its
+    // length stayed 0 and the card simply omitted it. `EPUBBuilder` states the count it
+    // wrote, and calibre states its own, so both converted imports and calibre EPUBs
+    // now report a length. AO3's own figure wins when present, being authoritative.
+    if let words = meta.wordCount, words > 0, work.wordCount == 0 {
+        work.wordCount = words
+    }
     if !extracted.groups.chapters.isEmpty {
         assign(extracted.groups.chapters, to: \.chapters, on: work, fillOnly: fillOnly)
     } else if let localChapterCount, localChapterCount > 0, work.chapters.isEmpty {

@@ -70,6 +70,20 @@ struct UserDocumentImportTests {
         #expect(package.readableItemCount == 2)
     }
 
+    @Test func anImportedWorkGetsAWordCount() async throws {
+        // The owner's report: converted works showed no length on the card.
+        let context = try makeContext()
+        let source = try write("Chapter 1: Start\n\nOne two three four five six seven.", "txt")
+        defer { try? FileManager.default.removeItem(at: source) }
+
+        let work = try await UserDocumentImport.perform(source, into: context).outcome.work
+        defer { cleanUp(work) }
+
+        // Counts the prose, not the chapter heading, which becomes an <h1> rather than
+        // body text.
+        #expect(work.wordCount == 7, "expected the converted text's word count, got \(work.wordCount)")
+    }
+
     @Test func theOriginalFileIsKeptBesideTheConvertedEPUB() async throws {
         // A community copy is often the last copy in existence and conversion is
         // lossy, so the exact bytes handed to us are archived.

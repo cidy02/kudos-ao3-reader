@@ -169,6 +169,16 @@ nonisolated struct EPUBBuilder {
         if !metadata.sourceURL.isEmpty {
             metadataLines.append("    <dc:source>\(escaped(metadata.sourceURL))</dc:source>")
         }
+        // Word count, stated because nothing downstream can otherwise know it: a
+        // converted work has no AO3 stats page, and the Library card and filters read
+        // `SavedWork.wordCount`, which stayed 0 for every import. Counted from the text
+        // actually being written, so it describes this EPUB rather than the source
+        // file's own claim. `calibre:word_count` is the key calibre uses, so real
+        // calibre EPUBs are understood by the same reader code.
+        let words = wordCount(of: chapters)
+        if words > 0 {
+            metadataLines.append("    <meta name=\"calibre:word_count\" content=\"\(words)\"/>")
+        }
         metadataLines.append(contentsOf: subjects)
 
         return """
@@ -245,6 +255,22 @@ nonisolated struct EPUBBuilder {
     }
 
     // MARK: - Helpers
+
+    /// Counts words across a work's chapter bodies.
+    ///
+    /// Tags are stripped first, so markup never inflates the number, and the count is
+    /// whitespace-separated runs — the same thing AO3 reports, closely enough that the
+    /// two are comparable on the same card.
+    private static func wordCount(of chapters: [Chapter]) -> Int {
+        chapters.reduce(0) { total, chapter in
+            let stripped = chapter.bodyXHTML.replacingOccurrences(
+                of: "<[^>]+>",
+                with: " ",
+                options: .regularExpression
+            )
+            return total + stripped.split(whereSeparator: \.isWhitespace).count
+        }
+    }
 
     /// XML text escaping. Deliberately escapes quotes too, so the same helper is
     /// safe in attribute position (`href`, `xml:lang`) as well as element text.
