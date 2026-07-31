@@ -96,8 +96,51 @@ Two findings worth keeping, both encoded in the script:
 - **The two archives must be merged per slice** (`libtool -static`), since
   `-create-xcframework` accepts one library per platform.
 
-Sizes: ~64 MB per merged slice, ~190 MB for the xcframework. **Do not commit it** —
-build locally or attach it to a release.
+### Size — measured, not estimated
+
+The owner's first reaction to a 190 MB xcframework was that it is a lot to add for one
+feature. It is, and it is also the wrong number: a static library is **linked**, not
+embedded, so the app pays for the objects the linker keeps. Most of MuPDF's bulk is
+bundled CJK/Noto fonts compiled in as byte arrays, plus parsers for formats Kudos never
+opens.
+
+| | Default build | With the script's size flags |
+|---|---|---|
+| `libmupdf.a` | 54 MB | **6.4 MB** |
+| `libmupdf-third.a` | 9.8 MB | 9.4 MB |
+| merged slice | ~64 MB | **~16 MB** |
+| xcframework (3 slices) | ~190 MB | ~48 MB |
+| **dead-stripped executable that opens a PDF and walks its structured text** | — | **6.1 MB** |
+
+So the honest app cost is **around 6 MB**, and that 6.1 MB is an entire standalone
+binary including what the C runtime pulls in, so the delta inside an app that already
+links Readium, GCDWebServer, CryptoSwift and SwiftSoup is smaller again.
+
+**Extraction is unaffected by the stripping**, which was verified rather than assumed:
+structured text on the reference PDF returns the same paragraph blocks, with the clause
+that defect 5 lost still intact. The dropped fonts are only needed to *render* glyphs;
+extraction reads the PDF's own encoding and `ToUnicode` tables. Base-14 fonts are kept
+because some documents rely on their metrics.
+
+Even so, **do not commit the xcframework** — build it locally or attach it to a
+release.
+
+### Is anything smaller?
+
+Nothing that actually solves the problem:
+
+- **PDFium** (BSD) — comparable size once linked, but exposes per-character positions
+  like PDFKit, so every defect above would remain. Smaller *and* useless is not smaller.
+- **poppler** (GPL-2/3) — no smaller in practice; needs freetype, and `pdftohtml`'s
+  positioned-HTML output still has to be re-paragraphed by hand.
+- **Vision OCR** (0 bytes, system framework) — genuinely free, and does give reliable
+  reading order and boxes. Rejected because it *re-transcribes* text we already have
+  exactly, introducing OCR errors into a preservation app. It stays where it belongs:
+  the fallback for pages with no text layer at all.
+- **PDFKit** (0 bytes) — the thing that produced the five defects.
+
+MuPDF at ~6 MB linked is the smallest dependency that removes the guesswork rather
+than relocating it.
 
 ## Licence obligations — an owner decision, not a technical one
 
