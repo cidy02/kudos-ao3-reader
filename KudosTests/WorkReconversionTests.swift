@@ -87,6 +87,31 @@ struct WorkReconversionTests {
         #expect(WorkReconversion.staleWorks(in: context).count == 1)
     }
 
+    @Test func aWorkImportedBeforeVersioningExistedIsOfferedARebuild() async throws {
+        // The case that made this feature invisible when it shipped: everything already
+        // in the Library has an archived original but no record, and those are exactly
+        // the works an improved converter should be re-run over.
+        let context = try makeContext()
+        let source = try write("Chapter 1: One\n\nProse.", "txt")
+        defer { try? FileManager.default.removeItem(at: source) }
+
+        let work = try await UserDocumentImport.perform(source, into: context).outcome.work
+        defer { cleanUp(work) }
+
+        // Simulate a pre-versioning import: original kept, no record written.
+        WorkConversionRecord.delete(for: work.id)
+        #expect(WorkConversionRecord.read(for: work.id) == nil)
+
+        let candidate = try #require(WorkReconversion.candidate(for: work))
+        #expect(candidate.record.converterVersion == 0)
+        #expect(candidate.isStale)
+        #expect(WorkReconversion.staleWorks(in: context).count == 1)
+
+        // And rebuilding it writes the record, so it stops asking.
+        try await WorkReconversion.reconvert(work, in: context)
+        #expect(WorkConversionRecord.read(for: work.id)?.isStale == false)
+    }
+
     @Test func aWorkAtTheCurrentVersionIsNotStale() async throws {
         let context = try makeContext()
         let source = try write("Just prose.", "txt")

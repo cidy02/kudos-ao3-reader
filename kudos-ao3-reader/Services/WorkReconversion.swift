@@ -23,13 +23,24 @@ enum WorkReconversion {
         var isStale: Bool { record.isStale }
     }
 
-    /// Nil when the work was not converted, or its original is gone (the file is what
-    /// makes this possible; without it there is nothing honest to offer).
+    /// Nil when the work has no archived original — the file is what makes a rebuild
+    /// possible, so without it there is nothing honest to offer.
+    ///
+    /// A work whose original exists but has **no record** is treated as version 0, i.e.
+    /// stale. That is not an edge case: every work imported before conversion
+    /// versioning existed is in exactly that state, and those are the works most in need
+    /// of a rebuild. Requiring a record first made the feature invisible to all of them.
     static func candidate(for work: SavedWork) -> Candidate? {
-        guard let record = WorkConversionRecord.read(for: work.id),
-              let original = Storage.existingOriginalDocumentURL(for: work.id),
+        guard let original = Storage.existingOriginalDocumentURL(for: work.id),
               FileManager.default.fileExists(atPath: original.path)
         else { return nil }
+        let record = WorkConversionRecord.read(for: work.id)
+            ?? WorkConversionRecord(
+                converterVersion: 0,
+                format: ImportedFileFormat.detect(at: original).rawValue,
+                originalFileName: original.lastPathComponent,
+                convertedAt: work.dateAdded
+            )
         return Candidate(work: work, record: record, originalURL: original)
     }
 

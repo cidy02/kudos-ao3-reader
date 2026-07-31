@@ -225,6 +225,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
     @State private var showingComments = false
+    @State private var rebuildError: String?
     @State private var pendingDelete: SavedWork?
 
     private var commentsWorkID: Int? {
@@ -298,6 +299,17 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     Label("Add to Collection", systemImage: "square.stack")
                 }
 
+                // Only for a converted import an improved converter would now handle
+                // better. Surfaced here as well as in Work Details because a rebuild is
+                // otherwise two taps deep, behind that screen's Library tab.
+                if WorkReconversion.candidate(for: work)?.isStale == true {
+                    Button {
+                        Task { await rebuildFromOriginal() }
+                    } label: {
+                        Label("Rebuild from Original", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+
                 NavigationLink(value: LocalWorkDestination.detail(work)) {
                     Label("Work Details", systemImage: "info.circle")
                 }
@@ -332,6 +344,29 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: { PreservedWorkService.softDelete($0, in: context) }
             )
+            .alert(
+                "Couldn't Rebuild This Work",
+                isPresented: Binding(
+                    get: { rebuildError != nil },
+                    set: { if !$0 { rebuildError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { rebuildError = nil }
+            } message: {
+                Text(rebuildError ?? "")
+            }
+    }
+
+    /// Rebuilds the EPUB from the archived original. Failure is surfaced through the
+    /// same notice the card's other actions use rather than swallowed — a rebuild that
+    /// silently did nothing would be worse than one that says why it could not.
+    @MainActor
+    private func rebuildFromOriginal() async {
+        do {
+            try await WorkReconversion.reconvert(work, in: context)
+        } catch {
+            rebuildError = WorkCardActionError.message(for: error)
+        }
     }
 
     @MainActor
