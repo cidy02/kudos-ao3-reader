@@ -521,6 +521,7 @@ struct AccountWorksCompactGrid: View {
             }
         }
         .padding(16)
+        .uniformWorkCardHeights()
     }
 
     @ViewBuilder
@@ -568,6 +569,7 @@ struct AccountBookmarksCompactGrid: View {
             }
         }
         .padding(16)
+        .uniformWorkCardHeights()
     }
 }
 

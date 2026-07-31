@@ -43,6 +43,7 @@ struct LibraryEntityGridView<Item: Identifiable & Hashable, Card: View, NewCard:
                 }
             }
             .padding(16)
+            .uniformWorkCardHeights()
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .navigationTitle(title)

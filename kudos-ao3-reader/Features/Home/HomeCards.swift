@@ -393,6 +393,10 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     /// large Dynamic Type sizes instead of only getting taller.
     var cardSize = ScaledCarouselCardSize()
 
+    /// Set by the enclosing carousel/grid so every card there matches the tallest.
+    /// `nil` in a container that doesn't coordinate — the card keeps its own floor.
+    @Environment(\.uniformWorkCardHeight) private var uniformHeight
+
     /// The card's scaled outer width minus the symmetric 12pt padding applied
     /// below — the exact width the content itself renders at.
     private var contentWidth: CGFloat {
@@ -424,7 +428,19 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             // the metadata above it happens to end.
             .frame(width: contentWidth, alignment: .topLeading)
             .padding(12)
-            .frame(minHeight: cardSize.height, alignment: .topLeading)
+            // The floor is the card tile, or the container's resolved height once it
+            // has measured every card — see `uniformWorkCardHeights()`. A floor, not
+            // a clamp: content taller than it still reports its real height below,
+            // which is what lets one render both display and measure.
+            .frame(minHeight: max(cardSize.height, uniformHeight ?? 0), alignment: .topLeading)
+            .background(
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: WorkCardHeightPreferenceKey.self,
+                        value: geometry.size.height
+                    )
+                }
+            )
             .background(
                 RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)

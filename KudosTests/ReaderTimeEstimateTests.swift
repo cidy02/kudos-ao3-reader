@@ -266,17 +266,10 @@ struct ReaderTimeEstimateTests {
             lineHeight: CGFloat(lineHeight), minimum: minimum
         )
 
-        // The bottom is now the *floor* itself: the line-snap leftover moved to the
-        // top so the page never grows an empty band under the last line.
         #expect(inset >= minimum)
         #expect(inset < minimum + CGFloat(lineHeight))
 
-        let insets = ReadiumBook.pageBoxContentInsets(
-            viewHeight: CGFloat(viewHeight), safeTop: CGFloat(safeTop),
-            safeBottom: minimum, lineHeight: CGFloat(lineHeight),
-            sideMargin: minimum, minimumEdge: minimum
-        )
-        let remainingHeight = CGFloat(viewHeight) - insets.top - insets.bottom
+        let remainingHeight = CGFloat(viewHeight) - CGFloat(safeTop) - inset
         let lines = remainingHeight / CGFloat(lineHeight)
         #expect(abs(lines - lines.rounded()) < 0.0001,
                 "remaining height \(remainingHeight) is not a whole number of \(lineHeight)pt lines")
@@ -289,16 +282,9 @@ struct ReaderTimeEstimateTests {
         #expect(ReadiumBook.snappedBottomInset(viewHeight: 0, safeTop: 0, lineHeight: 29.7) == 8)
         // 20 - 0 - 8 = 12 pt available, less than one 29.7 pt line.
         #expect(ReadiumBook.snappedBottomInset(viewHeight: 20, safeTop: 0, lineHeight: 29.7) == 8)
-        // Not degenerate, but the bottom stays at the floor either way now: the
-        // leftover that used to inflate it (40 - 8 = 32, one 29.7pt line + 2.3pt)
-        // is applied to the top edge instead.
-        #expect(ReadiumBook.snappedBottomInset(viewHeight: 40, safeTop: 0, lineHeight: 29.7) == 8)
-        let oneLine = ReadiumBook.pageBoxContentInsets(
-            viewHeight: 40, safeTop: 0, safeBottom: 8, lineHeight: 29.7,
-            sideMargin: 8, minimumEdge: 8
-        )
-        #expect(oneLine.top > 0, "the 2.3pt leftover belongs on the top edge")
-        #expect(abs((40 - oneLine.top - oneLine.bottom) - 29.7) < 0.0001, "one whole line survives")
+        // Not degenerate: a view with room for exactly one line keeps that line
+        // rather than collapsing to the bare minimum (40 - 10.3 == 29.7 == 1 line).
+        #expect(ReadiumBook.snappedBottomInset(viewHeight: 40, safeTop: 0, lineHeight: 29.7) > 8)
     }
 
     /// C2: the page box clears the island at the top and snaps the text band to
@@ -317,15 +303,16 @@ struct ReaderTimeEstimateTests {
             lineHeight: lineH, sideMargin: sideMargin
         )
 
-        // Bottom breathing room matches the side margin rather than the safe area:
-        // a 34pt inset plus a line of snap remainder left a visibly empty band
-        // under the last line while the sides sat at ~20pt (owner-reported).
-        #expect(insets.bottom <= sideMargin)
-        #expect(insets.bottom < safeBottom)
-        // The island is still cleared — the snap remainder is what pushes first
-        // ink further down, and it can never exceed one line.
-        #expect(insets.top >= safeTop)
-        #expect(insets.top < safeTop + lineH)
+        // The bottom rests on the *side margin* rather than the safe area, so the
+        // page has the same room under the last line as beside every line, plus the
+        // snap leftover that has to live somewhere.
+        #expect(insets.bottom >= sideMargin)
+        #expect(insets.bottom < sideMargin + lineH)
+        #expect(insets.bottom < safeBottom + lineH)
+        // First ink stays at exactly the island clearance. Moving the leftover up
+        // here was tried and rejected: it relocated the dead space rather than
+        // removing it, and it reads worse at the top.
+        #expect(insets.top == safeTop)
 
         let textBand = viewH - insets.top - insets.bottom
         let lines = textBand / lineH
@@ -338,11 +325,21 @@ struct ReaderTimeEstimateTests {
             viewHeight: viewH, safeTop: safeTop, safeBottom: safeBottom,
             lineHeight: 56.1, sideMargin: sideMargin
         )
-        #expect(largeType.bottom == insets.bottom)
-        #expect(largeType.top >= safeTop)
-        #expect(largeType.top < safeTop + 56.1)
+        #expect(largeType.top == safeTop)
+        #expect(largeType.bottom >= sideMargin)
         let largeBand = viewH - largeType.top - largeType.bottom
         #expect(abs(largeBand / 56.1 - (largeBand / 56.1).rounded()) < 0.0001)
+    }
+
+    /// Scrolled mode: no page box, so no line-grid snapping and no padding for it.
+    /// The page gets exactly its margins — the Books behaviour the owner compared to.
+    @Test func scrolledModeGetsExactMarginsWithNoSnapPadding() {
+        let insets = ReadiumBook.pageBoxContentInsets(
+            viewHeight: 956, safeTop: 59, safeBottom: 34, lineHeight: 29.7,
+            sideMargin: 20, snapsToLineGrid: false
+        )
+        #expect(insets.top == 59, "first ink still clears the island")
+        #expect(insets.bottom == 20, "bottom is the side margin exactly — no snap slack")
     }
 
     @Test func pageBoxInsetsMatchLegacySnapShape() {
@@ -355,10 +352,9 @@ struct ReaderTimeEstimateTests {
             viewHeight: viewH, safeTop: safeTop, safeBottom: safeBottom,
             lineHeight: lineH, sideMargin: sideMargin
         )
-        // Both APIs put the snap leftover on the top edge and leave the bottom at
-        // its floor, so the shapes still agree — the floor is just the side margin
-        // now instead of the safe area.
-        #expect(box.top >= safeTop)
+        // Same shape as before; only the floor under the bottom changed, from the
+        // safe area to the side margin.
+        #expect(box.top == safeTop)
         let legacy = ReadiumBook.snappedBottomInset(
             viewHeight: viewH, safeTop: safeTop, lineHeight: lineH,
             minimum: sideMargin

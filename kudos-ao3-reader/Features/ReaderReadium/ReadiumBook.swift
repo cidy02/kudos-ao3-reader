@@ -1168,7 +1168,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             lineHeight: CGFloat(renderedLineHeightPoints),
             // The live horizontal gutter, so bottom breathing room tracks the
             // margin the reader is actually rendering with (Customize → Margins).
-            sideMargin: CGFloat(renderedPageMarginPoints)
+            sideMargin: CGFloat(renderedPageMarginPoints),
+            // Read from the same defaults key the reader's `@AppStorage("readerMode")`
+            // uses rather than mirrored onto this object, so the two cannot drift.
+            snapsToLineGrid: UserDefaults.standard.string(forKey: "readerMode")
+                == ReadingMode.paged.rawValue
         )
         return UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
     }
@@ -1229,7 +1233,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         safeBottom: CGFloat,
         lineHeight: CGFloat,
         sideMargin: CGFloat = CGFloat(ReaderTextStyle.defaultMargin),
-        minimumEdge: CGFloat = minimumBottomInset
+        minimumEdge: CGFloat = minimumBottomInset,
+        snapsToLineGrid: Bool = true
     ) -> (top: CGFloat, bottom: CGFloat) {
         // The bottom is capped at the *side* margin, so the page has the same
         // breathing room under the last line as it does beside every line.
@@ -1244,16 +1249,29 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         let bottom = max(minimumEdge, min(safeBottom, sideMargin))
         let top = max(0, safeTop)
         let availableForText = viewHeight - top - bottom
-        guard lineHeight > 0, availableForText > lineHeight else {
+        // Scrolled mode has no page box to fit lines into — text runs continuously,
+        // so there is no fold for a half line to peek at and nothing to snap to.
+        // Snapping there was pure waste: it padded the bottom by up to a full line
+        // for a constraint that does not exist, which is the dead space the owner
+        // reported (Books, scrolling, has exactly its margins and nothing more).
+        guard snapsToLineGrid, lineHeight > 0, availableForText > lineHeight else {
             return (top, bottom)
         }
-        // Whole-line snapping still matters in paged mode (no half line peeking
-        // at the fold), and the leftover has to live at one end or the other.
-        // It goes to the **top** now: pushing first ink down by up to a line is
-        // far less visible than a growing gap at the bottom, which is the thing
-        // being fixed.
+        // Whole-line snapping still matters in paged mode (no half line peeking at
+        // the fold), and the leftover has to live at one end or the other: the band
+        // is a whole number of lines, so `top + bottom` is fixed for a given view
+        // height and line height. Moving it to the top was tried and rejected — it
+        // just relocated the dead space to between the island and the first line,
+        // where it is *more* obvious. So it stays at the bottom, and the win comes
+        // from the floor underneath it dropping from `max(8, safeBottom)` (34pt on a
+        // home-indicator phone) to the side margin (~20pt).
+        //
+        // Removing the leftover altogether means making the band divide evenly by
+        // nudging the *line height* a fraction of a percent instead of padding the
+        // box — invisible to a reader, but it moves page counts and time estimates,
+        // so it is its own change rather than a tweak here.
         let remainder = availableForText.truncatingRemainder(dividingBy: lineHeight)
-        return (top + remainder, bottom)
+        return (top, bottom + remainder)
     }
 
     /// Legacy name kept for existing page-box tests. Bottom snap with

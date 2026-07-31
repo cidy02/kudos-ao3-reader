@@ -41,6 +41,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                 if hasItems {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 14) { cards() }
+                            .uniformWorkCardHeights()
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
                     }
