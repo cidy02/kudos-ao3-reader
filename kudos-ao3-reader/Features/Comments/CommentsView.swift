@@ -3,6 +3,22 @@ import SwiftUI
 import AppKit
 #endif
 
+/// A pushed (non-modal) Comments destination.
+///
+/// Value-based on purpose: a destination-based `NavigationLink { CommentsView(…) }`
+/// puts the pushed view *outside* the enclosing stack's `NavigationPath`, so a later
+/// `path.append` — an author byline push, say — discards Comments instead of stacking
+/// on top of it. That surfaced two ways: Back from the pushed profile skipped Comments
+/// entirely, and when the append also raced a dismissing composer sheet the push was
+/// dropped with no profile at all. Routing through the path makes it a plain append.
+/// See T-139 / `AO3AuthorNavigationModifier`.
+nonisolated struct AO3CommentsRoute: Hashable {
+    let workID: Int
+    let context: AO3CommentsWorkContext
+    var focusesChapter = false
+    var composes = false
+}
+
 /// Native AO3 comments for a work: all comments or per-chapter, threaded, with
 /// reply/compose and the per-comment actions AO3 actually exposes. Pushed from
 /// Work Detail and presented as a sheet from the reader's actions menu.
