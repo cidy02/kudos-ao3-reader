@@ -23,16 +23,26 @@ struct LocalWorkDestinationView: View {
     /// is never mistaken for a fresh, possibly-spurious push.
     @State private var appearedAt: Date?
 
+    /// The card this screen was opened from — the other half of the zoom pair.
+    private var sourceWorkID: UUID {
+        switch destination {
+        case let .reader(work), let .detail(work): work.id
+        }
+    }
+
     var body: some View {
         Group {
             switch destination {
             case let .reader(work):
                 LocalWorkReaderDestination(work: work, onOpen: onReaderOpen)
-                    .workCardZoomDestination(work.id, in: zoomNamespace)
             case let .detail(work):
                 WorkDetailView(work: work)
             }
         }
+        // On the *pushed view as a whole*, not inside the switch: the transition
+        // describes this screen's own push, so a modifier buried on one branch of a
+        // `Group` never registers it.
+        .workCardZoomDestination(sourceWorkID, in: zoomNamespace)
         // Author byline taps can also activate the row NavigationLink. Dismiss must
         // be async — SwiftUI often ignores dismiss() inside the same navigation
         // transaction as the push (profile stayed buried until the user pressed Back).

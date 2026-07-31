@@ -141,9 +141,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
-                // One namespace for this stack: the card and the screen it
-                // pushes both read it, which is what pairs them for the zoom.
-                .environment(\.workCardTransitionNamespace, cardZoomNamespace)
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
                 .navigationDestination(for: LibrarySectionKind.self) { kind in
                     LibrarySectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
@@ -215,6 +212,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     path = NavigationPath()
                 }
         }
+        // Declared on the stack itself so the cards inside it and the screens
+        // pushed from it resolve the same namespace — that pairing is what the
+        // zoom transition matches on.
+        .environment(\.workCardTransitionNamespace, cardZoomNamespace)
     }
 
     // MARK: Dashboard
