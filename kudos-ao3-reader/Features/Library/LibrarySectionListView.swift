@@ -306,7 +306,7 @@ struct LibrarySectionListView: View {
                 }
                 if showsMarkedForLater {
                     ForEach(visibleMarkedForLater) { work in
-                        NavigationLink(value: work) {
+                        NavigationLink(value: WorkCardTap.destination(for: work)) {
                             AO3WorkCoverCard(work: work)
                         }
                         .buttonStyle(.plain)

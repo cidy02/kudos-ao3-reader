@@ -304,7 +304,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     localCarouselCard(work: work, footer: nil, progress: nil)
                 }
                 ForEach(mfl.prefix(12)) { work in
-                    NavigationLink(value: work) { AO3WorkCoverCard(work: work) }
+                    NavigationLink(value: WorkCardTap.destination(for: work)) {
+                        AO3WorkCoverCard(work: work)
+                    }
                         .buttonStyle(.plain)
                 }
             }

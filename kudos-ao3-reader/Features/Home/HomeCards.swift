@@ -198,9 +198,11 @@ struct WorkCoverCard: View {
     private var statusButton: some View {
         NavigationLink(value: LocalWorkDestination.detail(work)) {
             Image(systemName: "info.circle")
-                .font(.caption)
+                // Body size, matching the same ⓘ in the card's long-press menu — at
+                // .caption it read as decoration rather than a control.
+                .font(.body)
                 .foregroundStyle(.secondary)
-                // 28pt of tappable area around a 13pt glyph. Still under the 44pt
+                // 30pt of tappable area around a 17pt glyph. Still under the 44pt
                 // guideline, deliberately: a larger target on a compact carousel card
                 // would eat the title's width, and Work Details is also reachable by
                 // long-pressing the card.
@@ -210,7 +212,7 @@ struct WorkCoverCard: View {
                 // slack between a 28pt target and a 13pt glyph left the ⓘ floating
                 // roughly 19pt inside the corner instead of sitting in it. The tap
                 // target keeps its full 28pt — only the layout moves.
-                .frame(width: 28, height: 28, alignment: .topTrailing)
+                .frame(width: 30, height: 30, alignment: .topTrailing)
                 .contentShape(Rectangle())
                 .padding(.top, -4)
                 .padding(.trailing, -6)
@@ -253,11 +255,6 @@ struct WorkCoverCard: View {
 /// the same self-contained summary shape as local Library/Home work cards.
 struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
-    /// Shows an ⓘ that opens Work Details. Off by default and on only where tapping the
-    /// card does something else — the Account tab, where a tap reads the work. Elsewhere
-    /// the card itself already pushes Work Details, and a second control to the same
-    /// place would teach that the two are interchangeable, which they are not.
-    var showsDetailButton = false
 
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
@@ -268,7 +265,7 @@ struct AO3WorkCoverCard: View {
                         .lineLimit(3)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if showsDetailButton { detailButton }
+                    detailButton
                 }
                 // Matches the local card's grouping — see `WorkCoverCard`.
                 .padding(.bottom, 3)
@@ -308,9 +305,11 @@ struct AO3WorkCoverCard: View {
     private var detailButton: some View {
         NavigationLink(value: work) {
             Image(systemName: "info.circle")
-                .font(.caption)
+                // Body size, matching the same ⓘ in the card's long-press menu — at
+                // .caption it read as decoration rather than a control.
+                .font(.body)
                 .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28, alignment: .topTrailing)
+                .frame(width: 30, height: 30, alignment: .topTrailing)
                 .contentShape(Rectangle())
                 .padding(.top, -4)
                 .padding(.trailing, -6)

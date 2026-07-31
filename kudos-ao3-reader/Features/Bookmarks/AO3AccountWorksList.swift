@@ -106,10 +106,6 @@ struct AO3AccountWorksList: View {
     }
 
     let kind: Kind
-    /// What a tap on a work does here. `.reader` from the Account tab, where these
-    /// lists are things you mean to read; `.detail` from Home's Subscriptions push,
-    /// which is unchanged.
-    var openMode: LocalWorkRowOpenMode = .detail
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -252,7 +248,7 @@ struct AO3AccountWorksList: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         if showPagination { paginationBar }
-                        AccountWorksCompactGrid(entries: visibleEntries, openMode: openMode)
+                        AccountWorksCompactGrid(entries: visibleEntries)
                         if showPagination { paginationBar }
                     }
                     .padding(.vertical, 8)
@@ -271,13 +267,10 @@ struct AO3AccountWorksList: View {
                                 // non-selecting branch — re-wrapping it stacks a second,
                                 // unhidden, real-titled NavigationLink behind the blurred
                                 // branch's reveal gate.
-                                SensitiveWorkRow(work: work, expandAll: expandAll, openMode: openMode)
+                                SensitiveWorkRow(work: work, expandAll: expandAll)
                             } else if let remote = entry.remote {
                                 AO3WorkRow(work: remote, expandAll: expandAll)
-                                    .cardNavigation(
-                                        to: openMode.value(for: remote),
-                                        accessibilityLabel: remote.title
-                                    )
+                                    .cardNavigation(to: remote, accessibilityLabel: remote.title)
                             }
                         }
                         .cardRow()

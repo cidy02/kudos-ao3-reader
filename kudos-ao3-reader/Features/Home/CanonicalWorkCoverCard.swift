@@ -19,7 +19,7 @@ struct CanonicalWorkCoverCard: View {
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
             // AO3WorkCoverCard applies the remote context menu itself.
-            NavigationLink(value: remote) {
+            NavigationLink(value: WorkCardTap.destination(for: remote)) {
                 AO3WorkCoverCard(work: remote)
             }
             .buttonStyle(.plain)

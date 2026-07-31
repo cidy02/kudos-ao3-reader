@@ -202,6 +202,23 @@ struct RemoteWorkReaderDestination: View {
     }
 }
 
+/// A compact work card's tap: open the work.
+///
+/// One rule app-wide, not a per-screen choice — a card in a carousel, on the Account
+/// tab, or on an author profile all do the same thing, and the ⓘ in the corner is how
+/// you get to Work Details from any of them. A remote work is imported on the way.
+///
+/// Note the concrete types. An earlier version returned an `AnyHashable` so one
+/// `NavigationLink` could cover both a detail and a reader destination, and every card
+/// stopped opening: `navigationDestination(for:)` matches on the value's **static**
+/// type, so an erased value matches nothing and the tap silently does nothing.
+enum WorkCardTap {
+    static func destination(for work: SavedWork) -> LocalWorkDestination { .reader(work) }
+    static func destination(for remote: AO3WorkSummary) -> RemoteWorkReaderRoute {
+        RemoteWorkReaderRoute(work: remote)
+    }
+}
+
 /// Label/icon pairs for work-lifecycle toggles duplicated across card context
 /// menus, work detail, and the bulk-action bar.
 enum WorkActionLabels {

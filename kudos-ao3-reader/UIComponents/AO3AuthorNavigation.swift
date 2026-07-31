@@ -243,6 +243,14 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
             .navigationDestination(for: AO3SeriesSummary.self) { series in
                 AO3SeriesDetailView(series: series)
             }
+            // Compact work cards open the work everywhere in the app, downloading it
+            // first when the library does not have it. Registered here because every
+            // tab's stack applies this modifier, and a card can appear in any of them
+            // (carousels, Account's lists, an author profile pushed from anywhere) —
+            // a stack that missed the registration would leave those cards inert.
+            .navigationDestination(for: RemoteWorkReaderRoute.self) { route in
+                RemoteWorkReaderDestination(summary: route.work)
+            }
             // Observe the epoch (not the Optional route): @Observable + Optional
             // equality skips same-route re-taps. Epoch always changes; only the
             // selected tab consumes.
