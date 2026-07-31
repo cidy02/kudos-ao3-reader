@@ -39,7 +39,11 @@ nonisolated enum ImportedDocumentConverter {
     /// - 8 — the EPUB now states its own word count (`calibre:word_count`), so imported
     ///       works show a length on the card. Nothing else could supply it: word count
     ///       normally comes from AO3's stats page, which a non-AO3 work never has.
-    static let converterVersion = 8
+    /// - 9 — the preface carries an AO3-style `dt`/`dd` tag block, so the importer's
+    ///       existing scanner fills in rating, fandom, status, words and chapters for
+    ///       converted works. Ratings are mapped to AO3's spelling (FFN's "M" →
+    ///       "Mature"), which is what the rating lookup matches against.
+    static let converterVersion = 9
 
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.

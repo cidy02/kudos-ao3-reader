@@ -67,11 +67,28 @@ nonisolated enum PDFWorkConverter {
             work = front.merged(into: work)
             // Re-render the preface from the parsed fields: the raw block is a label
             // list that reads badly as prose, and every value in it is now metadata.
+            // The tag block is what `AO3EPUBMetadataScanner` reads on import to fill in
+            // rating, fandom, status, words and chapters — fields that were empty on
+            // every converted work, because only AO3's own markup ever populated them.
+            // It has to be emitted whichever chapter strategy ran: a PDF with no
+            // outline has no Preface to put it in, and a first draft of this only
+            // handled the outline case, so a calibre export without an outline still
+            // recovered nothing.
+            let block = front.ao3StyleTagBlockXHTML()
             if let first = finalChapters.first, first.title == prefaceTitle {
-                let body = HTMLWorkSanitizer.paragraphs(from: front.prefaceBlocks())
+                let prose = HTMLWorkSanitizer.paragraphs(from: front.prefaceBlocks())
+                let body = [block, prose].filter { !$0.isEmpty }.joined(separator: "\n")
                 if !body.isEmpty {
                     finalChapters[0] = .init(title: prefaceTitle, bodyXHTML: body)
                 }
+            } else if !block.isEmpty, let first = finalChapters.first {
+                // No preface: the metadata page's text is already inside the first
+                // chapter as prose, so only the block is prepended — re-adding the
+                // prose would print it twice.
+                finalChapters[0] = .init(
+                    title: first.title,
+                    bodyXHTML: block + "\n" + first.bodyXHTML
+                )
             }
         }
 

@@ -101,6 +101,42 @@ struct WorkCoverCard: View {
         }
     }
 
+    private var cardStats: some View {
+        CoverCardStatsRow(
+            ratingShort: WorkStat.ratingShort(work.rating),
+            ratingFull: work.rating.isEmpty ? nil : work.rating,
+            chapters: work.chapters.isEmpty ? nil : work.chapters,
+            completion: completionStatus.map { ($0, work.isComplete ? "checkmark.seal" : "circle.dashed") },
+            wordCount: work.wordCount > 0 ? work.wordCount : nil
+        )
+    }
+
+    private var progressValue: Double? {
+        if let progress { return min(1, max(0, progress)) }
+        if work.isFinished { return 1 }
+        return work.readingProgress.map { min(1, max(0, $0)) }
+    }
+
+    private var progressText: String {
+        // The bar's trailing label already shows the percent, so don't echo a footer
+        // that's itself a percentage (the Readium reading-progress label) — that's the
+        // duplicate. A chapter footer ("Ch 3") carries different info and is kept.
+        if let footer, !footer.hasSuffix("%") { return footer }
+        guard let progressValue else { return "Progress" }
+        return progressValue >= 1 ? "Finished" : "Reading"
+    }
+
+    private var completionStatus: String? {
+        // An AO3 work always has a known status. A converted import only has one when
+        // its source stated it, which the metadata page now carries through — so
+        // "Complete" is shown when we actually know, and nothing is shown when we do
+        // not, rather than defaulting a non-AO3 work to "WIP" and being wrong about it.
+        if work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil {
+            return work.isComplete ? "Complete" : "WIP"
+        }
+        return work.isComplete ? "Complete" : nil
+    }
+
     /// ⓘ in the card's top-right corner.
     ///
     /// A plain `Button` is safe here even though the whole card navigates: the card's
@@ -129,57 +165,93 @@ struct WorkCoverCard: View {
         }
     }
 
+    /// The ⓘ panel. Verbose on purpose: it costs no card space, so it explains
+    /// provenance in sentences rather than compressing it into chips the way the card
+    /// had to. Everything here is a fact about *this* work — nothing is inferred for
+    /// the sake of filling the panel.
     private var statusPopover: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(allStatuses, id: \.text) { badge in
-                WorkStateBadge(text: badge.text, symbol: badge.symbol)
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(provenanceSentence)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: work.origin.symbolName)
+                    .foregroundStyle(.secondary)
             }
-            // Named for every work here, AO3 included: the card suppresses "AO3" as
-            // noise, but someone who opened this panel is asking where the work is from.
-            Divider()
-            Label("From \(work.origin.displayName)", systemImage: work.origin.symbolName)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let explanation = work.preservationState.explanation(origin: work.origin) {
-                Text(explanation)
+
+            if !work.sourceURL.isEmpty {
+                // The original posting. For a work its site has since deleted this is
+                // often the only citation that still exists, so it is shown in full
+                // rather than hidden behind the word "source".
+                Text(work.sourceURL)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+            }
+
+            ForEach(provenanceNotes, id: \.self) { note in
+                Text(note)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if !allStatuses.isEmpty {
+                Divider()
+                ForEach(allStatuses, id: \.text) { badge in
+                    WorkStateBadge(text: badge.text, symbol: badge.symbol)
+                }
+            }
         }
         .font(.caption2)
         .padding(14)
-        .frame(maxWidth: 260, alignment: .leading)
+        .frame(maxWidth: 280, alignment: .leading)
     }
 
-    private var cardStats: some View {
-        CoverCardStatsRow(
-            ratingShort: WorkStat.ratingShort(work.rating),
-            ratingFull: work.rating.isEmpty ? nil : work.rating,
-            chapters: work.chapters.isEmpty ? nil : work.chapters,
-            completion: completionStatus.map { ($0, work.isComplete ? "checkmark.seal" : "circle.dashed") },
-            wordCount: work.wordCount > 0 ? work.wordCount : nil
-        )
+    /// One sentence saying where this work came from.
+    private var provenanceSentence: String {
+        switch work.origin {
+        case .archiveOfOurOwn:
+            "From Archive of Our Own."
+        case .importedFile:
+            "Imported from a file. It records no source site, so where it was first "
+                + "posted is unknown."
+        case .archiveOfOurOwnMirror:
+            "Imported work, originally posted on Archive of Our Own and saved through "
+                + "a mirror."
+        default:
+            "Imported work, originally posted on \(work.origin.displayName)."
+        }
     }
 
-    private var progressValue: Double? {
-        if let progress { return min(1, max(0, progress)) }
-        if work.isFinished { return 1 }
-        return work.readingProgress.map { min(1, max(0, $0)) }
-    }
-
-    private var progressText: String {
-        // The bar's trailing label already shows the percent, so don't echo a footer
-        // that's itself a percentage (the Readium reading-progress label) — that's the
-        // duplicate. A chapter footer ("Ch 3") carries different info and is kept.
-        if let footer, !footer.hasSuffix("%") { return footer }
-        guard let progressValue else { return "Progress" }
-        return progressValue >= 1 ? "Finished" : "Reading"
-    }
-
-    private var completionStatus: String? {
-        guard work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil else { return nil }
-        return work.isComplete ? "Complete" : "WIP"
+    /// Everything else worth saying, in the order someone would want to read it.
+    private var provenanceNotes: [String] {
+        var notes: [String] = []
+        if let candidate = WorkReconversion.candidate(for: work) {
+            let format = ImportedFileFormat(rawValue: candidate.record.format)?.displayName
+                ?? candidate.record.format
+            notes.append("Converted from \(format) on import. The original file "
+                + "(\(candidate.record.originalFileName)) is kept alongside it, so this work can be "
+                + "rebuilt without downloading anything.")
+            if candidate.isStale {
+                notes.append("A newer converter is available — rebuilding from the original would "
+                    + "improve how this work reads.")
+            }
+        }
+        if let explanation = work.preservationState.explanation(origin: work.origin) {
+            notes.append(explanation)
+        }
+        if !work.origin.supportsLiveLookup {
+            // Says plainly what the app cannot do, rather than leaving a reader to
+            // wonder why tags never fill in and kudos is missing.
+            notes.append("Kudos can't reach \(work.origin == .importedFile ? "its source" : work.origin.displayName), "
+                + "so tags, stats and availability aren't refreshed for this work, and kudos and "
+                + "comments aren't available.")
+        }
+        return notes
     }
 
     /// Every status worth reporting, uncapped — the popover has room, so the

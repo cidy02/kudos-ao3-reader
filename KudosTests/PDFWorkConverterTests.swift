@@ -241,6 +241,48 @@ struct PDFWorkConverterTests {
         #expect(body.contains("The story itself starts here"))
     }
 
+    @Test func aCalibreMetadataPageFillsInRatingStatusAndFandom() throws {
+        // The owner's report was that imported works showed only title, author and a
+        // chapter count. Everything else comes from AO3's `dt`/`dd` markup, which a
+        // synthesized EPUB had none of — so the preface now emits that block and the
+        // importer's existing scanner reads it.
+        let url = try makePDF(pages: [
+            [
+                "A Rescued Fic",
+                "Story: A Rescued Fic",
+                "Storylink: https://www.fanfiction.net/s/12345/1/",
+                "Category: Frozen",
+                "Genre: Romance/Fantasy",
+                "Rating: M",
+                "Status: Complete",
+                "Words: 112438",
+                "Content: Chapter 1 to 31 of 31 chapters",
+                "Summary: The only copy left."
+            ],
+            ["Chapter 1: Start", "", "The story itself begins here and runs on for a while."]
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let result = try convert(url)
+        let body = bodies(result)
+        // Rating is mapped to AO3's spelling, which is what the importer matches on:
+        // an unmapped "M" was dropped entirely.
+        #expect(body.contains("<dt>Rating:</dt>"))
+        #expect(body.contains("Mature"))
+        #expect(body.contains("<dt>Status:</dt>"))
+        #expect(body.contains("Complete"))
+        #expect(body.contains("<dt>Fandom:</dt>"))
+        #expect(body.contains("Frozen"))
+        #expect(body.contains("<dt>Chapters:</dt>"))
+        #expect(body.contains("31/31"))
+        // The story link survives as dc:source, which is what makes the origin badge
+        // read FFN rather than "Imported".
+        #expect(result.metadata.sourceURL == "https://www.fanfiction.net/s/12345/1/")
+        // And the raw rating is not also dumped into the tag list, where it showed up
+        // as a stray "M" freeform.
+        #expect(!result.metadata.subjects.contains("M"))
+    }
+
     // MARK: - Whole-pipeline behavior
 
     @Test func convertsThroughTheImporterAndProducesAReadableEPUB() throws {

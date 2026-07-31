@@ -134,7 +134,8 @@ nonisolated struct EPUBDocument {
             author: parser.author,
             summary: parser.summary,
             subjects: parser.subjects,
-            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText) ?? "",
+            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText)
+                ?? parser.sources.first(where: { $0.lowercased().hasPrefix("http") }) ?? "",
             seriesTitle: parser.seriesTitle,
             seriesIndex: parser.seriesIndex,
             rating: EPUBMetadata.rating(in: parser.subjects),
@@ -251,7 +252,8 @@ nonisolated struct EPUBDocument {
             author: parser.author,
             summary: parser.summary,
             subjects: parser.subjects,
-            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText) ?? "",
+            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText)
+                ?? parser.sources.first(where: { $0.lowercased().hasPrefix("http") }) ?? "",
             seriesTitle: parser.seriesTitle,
             seriesIndex: parser.seriesIndex,
             rating: EPUBMetadata.rating(in: parser.subjects),
