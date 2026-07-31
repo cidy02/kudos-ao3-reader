@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Shared first-launch onboarding scaffold — theme-aware background, a scrolling
-/// intro area, and a bottom action bar with matching padding/width. Used by
-/// `WelcomeView` and `SyncFolderOnboardingView`.
+/// Shared first-launch onboarding scaffold — a scrolling intro area over a
+/// themed base background, and a bottom action bar on the themed raised surface
+/// with matching padding/width. Both surfaces follow the app theme (including
+/// Sepia). Used by `WelcomeView` and `SyncFolderOnboardingView`.
 struct OnboardingScaffold<Content: View, Footer: View>: View {
     @ViewBuilder var content: Content
     @ViewBuilder var footer: Footer
@@ -27,7 +28,20 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
                 .padding(.bottom, 22)
                 .frame(maxWidth: 540)
                 .frame(maxWidth: .infinity)
-                .background(.bar)
+                // The themed raised surface, not `.bar`: a system material resolves
+                // to its own near-white chrome and ignores the app theme entirely,
+                // so under Sepia this bar rendered solid white against the warm
+                // cream page above it (owner-reported). `cardSurface` is the
+                // codebase's existing token for exactly this — its
+                // `appElevatedBackground` doc calls out "list/form cells, bars,
+                // popovers" — and it keeps the same one-step lift over
+                // `backgroundColor` that `.bar` provided, while falling back to
+                // `secondarySystemGroupedBackground`/`controlBackgroundColor` on
+                // Light/Dark where no custom theme colour exists. Nothing is lost
+                // by dropping the material: this footer is a sibling *below* the
+                // ScrollView in the VStack, never an overlay, so no content ever
+                // scrolls behind it for the blur to reveal.
+                .background(theme.appTheme.cardSurface)
         }
         .background(backgroundColor.ignoresSafeArea())
     }

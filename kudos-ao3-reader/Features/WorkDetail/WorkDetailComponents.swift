@@ -26,6 +26,7 @@ enum WorkDetailTab: String, CaseIterable, Identifiable {
 /// author byline, fandoms, and the at-a-glance stat row. The full summary, tag
 /// chips, and personal library state live in their sections, not here.
 struct WorkDetailHeroCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let authors: [String]
     let identities: [AO3AuthorIdentity]
@@ -61,10 +62,14 @@ struct WorkDetailHeroCard: View {
             }
 
             if !fandoms.isEmpty {
+                // Capped at 3 lines for density normally, but let the fandoms wrap
+                // in full at accessibility Dynamic Type sizes — the title above
+                // already wraps unlimited, and a 3-line clamp on scaled-up text
+                // truncates fandom names to uselessness (HIG review UI-4, §5).
                 Label(fandoms.joined(separator: ", "), systemImage: "books.vertical")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
             }
 
             FlowLayout(spacing: 10, rowSpacing: 6) {

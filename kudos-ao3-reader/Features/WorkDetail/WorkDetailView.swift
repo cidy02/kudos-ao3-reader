@@ -220,14 +220,38 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private var sectionPickerSection: some View {
         Section {
-            Picker("Work Details Section", selection: $selectedTab) {
-                ForEach(WorkDetailTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
+            sectionPicker
+                .accountControlCardRow()
+        }
+    }
+
+    /// The four-segment section control. A native `.segmented` picker caps its
+    /// labels' Dynamic Type scaling rather than reflowing, so at accessibility
+    /// sizes four words ("Overview"/"Discussion"/…) become unreadably clipped
+    /// (runtime-confirmed, HIG review §5). At those sizes fall back to a `.menu`
+    /// picker — the same `dynamicTypeSize.isAccessibilitySize` reflow idiom
+    /// `WorkDetailOverviewSections.quickActionColumns` uses — which keeps every
+    /// label at full size behind a compact tappable row. The picker's content is
+    /// built once so the two styles can't drift.
+    ///
+    /// Both branches keep `.labelsHidden()`: "Work Details Section" is an
+    /// accessibility/identity string, not product copy, and a `.menu` picker
+    /// renders its label as a visible leading title — so dropping the modifier on
+    /// that branch alone would surface internal naming to anyone running an
+    /// accessibility text size. `.labelsHidden()` only hides the label visually;
+    /// VoiceOver still announces it, and the menu still shows the selected tab as
+    /// its value, matching the segmented control's information density.
+    @ViewBuilder
+    private var sectionPicker: some View {
+        let picker = Picker("Work Details Section", selection: $selectedTab) {
+            ForEach(WorkDetailTab.allCases) { tab in
+                Text(tab.rawValue).tag(tab)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accountControlCardRow()
+        }
+        if dynamicTypeSize.isAccessibilitySize {
+            picker.pickerStyle(.menu).labelsHidden()
+        } else {
+            picker.pickerStyle(.segmented).labelsHidden()
         }
     }
 

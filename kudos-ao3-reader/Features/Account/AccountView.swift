@@ -14,6 +14,8 @@ struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query private var localWorks: [SavedWork]
 
     @State private var path = NavigationPath()
@@ -564,17 +566,23 @@ struct AccountView: View {
 
     // MARK: Overview — identity hub
 
-    private static let shortcutGridColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
+    /// Three icon cards per row. On a **compact** width (iPhone) that drops to two
+    /// at accessibility Dynamic Type sizes, so the tile labels reflow instead of
+    /// being crushed by `minimumScaleFactor` (mirrors
+    /// `WorkDetailOverviewSections.quickActionColumns`' 3→2 idiom). A **regular**
+    /// width (iPad, macOS) keeps all three even at those sizes — it has the room,
+    /// and dropping a column there just leaves two over-wide tiles and wasted space
+    /// (owner-reported).
+    private var shortcutGridColumns: [GridItem] {
+        let isCramped = dynamicTypeSize.isAccessibilitySize && horizontalSizeClass == .compact
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: isCramped ? 2 : 3)
+    }
 
     @ViewBuilder
     private var overviewSections: some View {
         Section {
             // 3×2 of individual icon cards (not one shared panel).
-            LazyVGrid(columns: Self.shortcutGridColumns, spacing: 10) {
+            LazyVGrid(columns: shortcutGridColumns, spacing: 10) {
                 shortcutGridButton(
                     title: "My Dashboard",
                     systemImage: "square.grid.2x2"

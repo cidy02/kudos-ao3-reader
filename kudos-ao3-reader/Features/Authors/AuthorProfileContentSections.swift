@@ -322,17 +322,25 @@ struct AO3AuthorWorksSection: View {
     }
 
     private func selectableWorkRow(_ work: AO3WorkSummary) -> some View {
-        Button { onToggleSelection(work) } label: {
+        let isSelected = selection.contains(work.id)
+        return Button { onToggleSelection(work) } label: {
             AO3WorkRow(
                 work: work,
                 expandAll: expandAll,
                 isSelecting: true,
-                isSelected: selection.contains(work.id)
+                isSelected: isSelected
             )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(work.title)
-        .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        // Matches `SelectableAO3WorkRow` (`RemoteWorkSelection.swift`) exactly —
+        // this row is a deliberately separate component (its own doc comment:
+        // "AuthorProfileView keeps its own rows"), not a stale duplicate, so
+        // the fix is these two modifiers here rather than a controller-based
+        // consolidation (HIG audit UI-2/UI-3).
+        .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

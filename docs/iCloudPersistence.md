@@ -3,7 +3,8 @@
 Kudos is local-first. The app must remain usable offline, and AO3 refreshes,
 folder-provider delays, or sync conflicts must never delete user-owned data.
 Manual `.kudosbackup` export/import remains available as a secondary escape
-hatch; the automatic path uses the same backup package format.
+hatch; the automatic path shares the same manifest schema and merge rules but
+uses a plain, incrementally-synced directory rather than an archive.
 
 ## Current Persistence Architecture
 
@@ -18,9 +19,13 @@ Inspected files/classes:
   Support, reader unzip scratch data and AO3 metadata cache in Caches, and temp
   downloads in Caches/Downloads.
 - `kudos-ao3-reader/Services/KudosBackup.swift` exports/imports `.kudosbackup`
-  packages containing a JSON manifest plus `Works/` EPUBs and `Fonts/` files.
+  archives (single ZIP files, written by `MiniZip`) containing a JSON manifest
+  plus `Works/` EPUBs and `Fonts/` files; legacy directory-package backups stay
+  readable.
 - `kudos-ao3-reader/Services/FolderSyncService.swift` reads and writes one
-  coordinated `KudosLibrary.kudosbackup` package in a user-chosen folder.
+  coordinated `KudosLibrary/` directory (manifest + per-asset files) in a
+  user-chosen folder, and folds a legacy `KudosLibrary.kudosbackup` package
+  read-only if one is still present.
 - `kudos-ao3-reader/Services/PersistenceSync.swift` owns the local migration,
   sync timestamps, tombstones, merge helpers, and operation gate.
 - `kudos-ao3-reader/Settings/SettingsView.swift` exposes manual backup controls,
@@ -36,14 +41,27 @@ Chosen approach: no-entitlement folder sync.
 
 - The user chooses a Library Sync Folder in Settings, usually inside iCloud
   Drive. Kudos stores a security-scoped bookmark to that folder.
-- Kudos reads and writes exactly one package in that folder:
-  `KudosLibrary.kudosbackup`.
-- Reads and writes use `NSFileCoordinator` so file-provider updates and package
-  replacement are coordinated with the system.
-- Sync down restores the remote package with the same merge rules as manual
-  backup import. Sync up writes the current local library as a fresh package.
-- File-provider conflict versions are folded by restoring each unresolved
-  conflict package, then resolving the conflict version after a successful merge.
+- Kudos reads and writes exactly one directory in that folder:
+  `KudosLibrary/`, holding `manifest.json` plus `Works/` and `Fonts/` asset
+  files. A plain directory (never an archive) keeps iCloud Drive sync
+  incremental: unchanged EPUBs keep their files untouched, so only deltas
+  upload/download.
+- Reads and writes use `NSFileCoordinator` so file-provider updates and
+  replacement are coordinated with the system. Sync up writes assets first and
+  `manifest.json` last (each write individually atomic) — the manifest is the
+  commit point, so an interrupted write leaves the previous consistent view in
+  place; orphaned asset files are cleaned up only after the manifest commit.
+- Sync down stats `manifest.json` for the skip-unchanged stamp, restores the
+  manifest with the same merge rules as manual backup import, and fetches only
+  assets that are missing or size-changed locally. Assets that exist remotely
+  but aren't readable yet (undownloaded iCloud files) withhold the stamp so the
+  next sync retries them.
+- File-provider conflict versions of `manifest.json` are folded by restoring
+  each unresolved conflict manifest, then resolving the version after a
+  successful merge.
+- Migration: a legacy `KudosLibrary.kudosbackup` directory package is folded
+  read-only on sync down (never written, never deleted), so not-yet-updated
+  devices keep working and an interrupted migration cannot corrupt old data.
 - There is a process-wide persistence operation gate, so migration, backup
   import, and folder sync do not interleave.
 
@@ -140,7 +158,7 @@ Core rules:
   metadata or membership activity, and preserve/report ambiguous conflicts.
 - Members of a suppressed queue are dropped with it, never re-homed into Saved
   for Later.
-- Collections are exported in manifest version 6 and restore by UUID with
+- Collections are exported in the manifest (since version 6) and restore by UUID with
   timestamp/tombstone handling. A work explicitly removed from a collection is
   tombstoned too (`.workCollectionMembership`, keyed by a deterministic
   composite of the collection and work IDs, since collection membership has
@@ -164,18 +182,35 @@ Current implementation remains local-first:
 - Missing files are marked recoverable and can be restored by existing
   re-download/preservation paths where AO3/source data permits.
 - Imported EPUBs are copied into local storage and do not depend on AO3 metadata.
-- Folder sync writes EPUB bytes into `KudosLibrary.kudosbackup` when they are
-  present locally; missing EPUB bytes leave metadata intact on restore.
+- Folder sync writes EPUB bytes into `KudosLibrary/Works/` when they are
+  present locally; missing EPUB bytes leave metadata intact on restore, and a
+  work still listed in the manifest keeps its remote EPUB even when this device
+  holds no local copy.
 
 ## `.kudosbackup`
 
-Backups are merge-only, whether imported manually or transported by the Library
-Sync Folder:
+A `.kudosbackup` is a single ZIP archive (stored entries, written by the
+dependency-free `MiniZip` writer, read by its hardened reader) containing
+`manifest.json`, `Works/<uuid>.epub`, and `Fonts/<file>`. Pre-archive
+directory-package backups remain importable read-only. Backups are merge-only,
+whether imported manually or folded in from the Library Sync Folder:
 
-- Export is local and network-independent.
-- Manifest version 6 includes sync timestamps, progress timestamps, delete state,
-  collection membership, queue membership freshness, `assetIdentifier`, and
-  `SyncTombstone` records, while still decoding versions 1 through 5.
+- Export is local and network-independent, and streams: the archive is written
+  to a temporary file entry by entry (EPUBs read in bounded chunks, never held
+  in memory whole), then saved as a plain file copy — a partially-written
+  archive never replaces a previous backup, and ZIP structure makes truncation
+  detectable.
+- The writer emits ZIP64 records exactly when a size, count, or offset outgrows
+  its classic 32/16-bit ZIP field, so archives are not capped at 4 GB or
+  65,535 entries. The hardened reader follows ZIP64 records (and rejects
+  saturated fields that lack them), within limits of 250,000 entries, 1 GB per
+  entry, and 64 GB total. Restore still materializes assets per entry while
+  merging, so imports of enormous archives remain bounded by device memory —
+  streaming restore is a known deferral.
+- Manifest version 7 includes sync timestamps, progress timestamps, delete state,
+  collection membership, queue membership freshness, `assetIdentifier`,
+  `SyncTombstone` records, and Recently Deleted scheduling
+  (`permanentDeletionScheduledAt`), while still decoding versions 1 through 6.
 - Import merges by AO3 work ID, canonical AO3 URL, then UUID.
 - Import does not delete unrelated local records.
 - Tombstones travel with the backup, so a fresh install/reinstall inherits the
@@ -184,7 +219,7 @@ Sync Folder:
   newer than the newest matching deletion.
 - Older backup progress cannot overwrite newer local progress. The same timestamp
   rule guards `isFavorite`, `isSaved`, `isFinished`, and `isComplete`.
-- EPUB files in the package restore the local asset when present; missing EPUBs
+- EPUB files in the archive restore the local asset when present; missing EPUBs
   leave metadata intact and mark preserved items as `missingFile`.
 
 ## User-Facing Status
@@ -234,8 +269,9 @@ Simulator-verifiable:
 
 Requires manual device testing:
 
-- choose an iCloud Drive folder in Settings and confirm
-  `KudosLibrary.kudosbackup` appears;
+- choose an iCloud Drive folder in Settings and confirm the `KudosLibrary/`
+  directory appears (and that a pre-existing `KudosLibrary.kudosbackup` package
+  is folded in but left untouched);
 - install on a second device, choose the same folder, and confirm works,
   progress, collections, queues, bookmarks, fonts, settings, and tombstones merge;
 - edit on both devices while offline, reconnect, and confirm conflict versions

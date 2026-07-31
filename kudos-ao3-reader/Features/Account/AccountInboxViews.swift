@@ -236,10 +236,10 @@ struct AccountInboxItemRow: View {
                 Button("Reply") { onReply() }
             }
             Button("Copy Link") { copyLink() }
-            if canToggleReadState {
+            if canToggleReadState && !isPerformingAction {
                 Button(item.isUnread ? "Mark Read" : "Mark Unread") { onToggleReadState() }
             }
-            if canDeleteFromInbox {
+            if canDeleteFromInbox && !isPerformingAction {
                 Button("Delete From Inbox", role: .destructive) { confirmDelete = true }
             }
         }

@@ -546,6 +546,16 @@ final class AO3InboxModel {
             phase = .loaded
         } catch is CancellationError {
             return
+        } catch let error as URLError where error.code == .cancelled {
+            // A superseded page request (e.g. Next tapped twice before the
+            // first response lands) surfaces its `URLSession` cancellation as
+            // `URLError(.cancelled)`, not `CancellationError`. `isCurrent`
+            // above only distinguishes account/session scope — identical for
+            // two same-session page loads — so without this it would fall to
+            // the generic `catch` below and overwrite a newer page's already-
+            // loaded state with a bogus failure for the page that lost the
+            // race (F5). Drop it silently instead.
+            return
         } catch AO3Error.authenticationRequired {
             guard isCurrent(expected, auth) else { return }
             reset()
