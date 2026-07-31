@@ -94,7 +94,11 @@ struct WorkCoverCard: View {
                 HStack(alignment: .top, spacing: 6) {
                     Text(work.title)
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(3)
+                        // Two lines, then "…". A third line costs real card height
+                        // for a fraction of a title, and long fandom titles are
+                        // common enough that they decided the card's size more often
+                        // than the metadata below them did.
+                        .lineLimit(2)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     statusButton
@@ -262,7 +266,8 @@ struct AO3WorkCoverCard: View {
                 HStack(alignment: .top, spacing: 6) {
                     Text(work.title)
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(3)
+                        // Matches the local card — see `WorkCoverCard`.
+                        .lineLimit(2)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     detailButton

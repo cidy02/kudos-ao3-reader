@@ -1165,7 +1165,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             safeBottom: frozenPageBoxSafeBottom > 0
                 ? frozenPageBoxSafeBottom
                 : (window?.safeAreaInsets.bottom ?? 0),
-            lineHeight: CGFloat(renderedLineHeightPoints)
+            lineHeight: CGFloat(renderedLineHeightPoints),
+            // The live horizontal gutter, so bottom breathing room tracks the
+            // margin the reader is actually rendering with (Customize → Margins).
+            sideMargin: CGFloat(renderedPageMarginPoints)
         )
         return UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
     }
@@ -1225,16 +1228,32 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         safeTop: CGFloat,
         safeBottom: CGFloat,
         lineHeight: CGFloat,
+        sideMargin: CGFloat = CGFloat(ReaderTextStyle.defaultMargin),
         minimumEdge: CGFloat = minimumBottomInset
     ) -> (top: CGFloat, bottom: CGFloat) {
+        // The bottom is capped at the *side* margin, so the page has the same
+        // breathing room under the last line as it does beside every line.
+        //
+        // It used to be `max(minimumEdge, safeBottom)` plus the line remainder —
+        // on a home-indicator phone that is 34pt of safe area plus up to a full
+        // line, so the text stopped 60pt+ above the edge while the sides sat at
+        // ~20pt. It read as a large empty band (owner-reported). Text under the
+        // home indicator is fine — it is a thin translucent bar, not a bezel, and
+        // this is what Books does — so the safe area is a *ceiling* here, not a
+        // floor.
+        let bottom = max(minimumEdge, min(safeBottom, sideMargin))
         let top = max(0, safeTop)
-        let minBottom = max(minimumEdge, safeBottom)
-        let availableForText = viewHeight - top - minBottom
+        let availableForText = viewHeight - top - bottom
         guard lineHeight > 0, availableForText > lineHeight else {
-            return (top, minBottom)
+            return (top, bottom)
         }
+        // Whole-line snapping still matters in paged mode (no half line peeking
+        // at the fold), and the leftover has to live at one end or the other.
+        // It goes to the **top** now: pushing first ink down by up to a line is
+        // far less visible than a growing gap at the bottom, which is the thing
+        // being fixed.
         let remainder = availableForText.truncatingRemainder(dividingBy: lineHeight)
-        return (top, minBottom + remainder)
+        return (top + remainder, bottom)
     }
 
     /// Legacy name kept for existing page-box tests. Bottom snap with
@@ -1248,6 +1267,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             safeTop: safeTop,
             safeBottom: minimum,
             lineHeight: lineHeight,
+            sideMargin: minimum,
             minimumEdge: minimum
         ).bottom
     }
