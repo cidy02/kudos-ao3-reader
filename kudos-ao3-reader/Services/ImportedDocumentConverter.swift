@@ -31,7 +31,12 @@ nonisolated enum ImportedDocumentConverter {
     ///       maxX *below* their own minX, collapsing the page measure), and the
     ///       first-line-indent test gained an absolute 12pt floor so a few points of
     ///       glyph jitter can no longer read as an indent.
-    static let converterVersion = 6
+    /// - 7 — PDF layout analysis replaced by MuPDF structured text. Paragraphs now come
+    ///       from the engine's own blocks rather than from ~250 lines of heuristics over
+    ///       PDFKit glyph geometry, which had produced five defects including silently
+    ///       relocating prose. Verified character-identical to PDFKit's extraction on a
+    ///       171-page reference PDF, but correctly ordered and grouped.
+    static let converterVersion = 7
 
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.

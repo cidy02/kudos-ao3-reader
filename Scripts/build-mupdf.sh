@@ -55,15 +55,18 @@ SIZE_FLAGS="-DTOFU_CJK -DTOFU_CJK_EXT -DTOFU_CJK_LANG -DTOFU_NOTO -DTOFU_SIL -DT
  -DFZ_ENABLE_XPS=0 -DFZ_ENABLE_SVG=0 -DFZ_ENABLE_HTML=0 -DFZ_ENABLE_EPUB=0 \
  -DFZ_ENABLE_JS=0 -DFZ_ENABLE_OCR=0"
 
-# Each slice builds from a *pristine* tree.
+# Each slice overrides **both** CC and CXX, and builds from a pristine tree.
 #
-# This is not belt-and-braces: building slices in sequence into different `OUT`
-# directories still produced a mixed-platform archive. A HarfBuzz object
-# (`VARC.o`) kept its MACOS build tag inside the simulator's
-# `libmupdf-third.a`, because some third-party objects are written outside `OUT`,
-# and `xcodebuild -create-xcframework` then rejects the library with "binaries
-# with multiple platforms are not supported". `git clean -xfd` between slices is
-# what makes each archive single-platform.
+# CXX is the one that actually matters, and it cost two failed attempts to find.
+# Overriding only CC leaves MuPDF's C++ third-party sources — HarfBuzz is C++ — to be
+# compiled by the *host* compiler, so `libmupdf-third.a` ends up holding
+# macOS-tagged objects (`VARC.o` was the tell) inside an iOS archive, and
+# `xcodebuild -create-xcframework` rejects it with "binaries with multiple platforms
+# are not supported". The first theory — stale objects surviving between builds — was
+# wrong: the contamination is produced fresh every time by the unset CXX.
+#
+# `git clean -xfd` stays anyway, because a tree that has already built one platform
+# should not be trusted to rebuild another.
 build_slice() {
   slice_name="$1"; sdk="$2"; min_flag="$3"
   echo "== building $slice_name =="
@@ -77,6 +80,7 @@ build_slice() {
     build=release \
     OUT="build/$slice_name" \
     CC="$(xcrun -f clang) -arch arm64 -isysroot $sysroot $min_flag" \
+    CXX="$(xcrun -f clang++) -arch arm64 -isysroot $sysroot $min_flag" \
     AR="$(xcrun -f ar)" RANLIB="$(xcrun -f ranlib)" >"$OUT/$slice_name.log" 2>&1
 
   # One archive per slice: -create-xcframework takes a single library per platform.

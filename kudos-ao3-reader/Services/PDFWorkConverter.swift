@@ -42,7 +42,7 @@ nonisolated enum PDFWorkConverter {
             throw ImportedDocumentConverter.ConversionError.pdfPasswordProtected
         }
 
-        let pages = try pageBlocks(of: document)
+        let pages = try pageBlocks(of: document, path: url.path)
         let cleaned = withoutRunningHeadersAndFooters(pages)
 
         let chapters = (outlineChapters(of: document, pageLines: cleaned)
@@ -61,7 +61,8 @@ nonisolated enum PDFWorkConverter {
         // through paragraph reflow, which merges this page's short ragged label lines
         // into one blob — and the parser then read `Storylink:` as part of `Story:`'s
         // value and produced junk like a rating of "MStatus: Complete".
-        let rawFirstPage = lines(of: document.page(at: 0)?.string ?? "")
+        let rawFirstPage = KudosMuPDF.linesPerPage(forPDFAtPath: url.path)?.first
+            ?? lines(of: document.page(at: 0)?.string ?? "")
         if let front = CalibreMetadataPage.parse(lines: rawFirstPage) {
             work = front.merged(into: work)
             // Re-render the preface from the parsed fields: the raw block is a label
@@ -88,40 +89,53 @@ nonisolated enum PDFWorkConverter {
     /// width-based paragraph test then reads each fragment as a paragraph end,
     /// shattering prose mid-sentence. Character geometry has no such ambiguity: a
     /// printed line is whatever shares a baseline.
-    private static func pageBlocks(of document: PDFDocument) throws -> [[String]] {
-        var pages: [[String]] = []
-        var totalCharacters = 0
-        for index in 0..<document.pageCount {
-            guard let page = document.page(at: index) else {
-                pages.append([])
-                continue
+    /// Paragraph blocks per page, ready to become `<p>` elements.
+    ///
+    /// MuPDF's structured text does the layout analysis: one *block* is one paragraph,
+    /// and its lines are wrapped display lines. This replaced ~250 lines of geometry
+    /// heuristics built on `PDFPage.string` + `characterBounds`, which is a text API
+    /// rather than a layout one — it guarantees no reading order and returns
+    /// unusable glyph boxes often enough to have produced five separate defects,
+    /// the last of which silently moved prose into the wrong paragraph.
+    ///
+    /// Verified on a 171-page reference PDF: 493,826 non-whitespace characters,
+    /// matching PDFKit's count for every single character (4,395 commas either way),
+    /// but correctly ordered and grouped. See docs/PDF_ENGINE_MUPDF.md.
+    ///
+    /// PDFKit is still used for two things it is good at: document attributes, and
+    /// rasterizing pages for the OCR fallback.
+    private static func pageBlocks(of document: PDFDocument, path: String) throws -> [[String]] {
+        guard let extracted = KudosMuPDF.paragraphsPerPage(forPDFAtPath: path), !extracted.isEmpty else {
+            // MuPDF could not open it at all. PDFKit already opened it (the caller
+            // checked), so the document exists but has no text MuPDF can reach —
+            // treat it as a scan and let OCR decide.
+            Log.library.notice("MuPDF returned no pages; falling back to OCR")
+            let recognized = try ocrPages(of: document)
+            guard !recognized.isEmpty else {
+                throw ImportedDocumentConverter.ConversionError.pdfHasNoExtractableText
             }
-            totalCharacters += page.string?.count ?? 0
-            if let visual = visualLines(of: page), !visual.isEmpty {
-                pages.append(blocks(from: visual))
-            } else {
-                // No usable geometry (an enormous page, or an index/string mismatch):
-                // fall back to the width heuristic over extracted lines.
-                pages.append(reflowed(lines(of: page.string ?? "")))
-            }
+            return recognized.map { ocrParagraphs($0) }
         }
 
-        if totalCharacters >= textLayerThreshold {
-            // The document has a text layer overall — but a single page can still be an
-            // image: a scanned title page, or a cover exported as a picture. The
-            // document-wide threshold above cannot see that, so any page that came back
-            // empty on its own is OCR'd individually. Without this such a page imports
-            // as nothing at all, silently.
-            return withOCRForEmptyPages(pages, of: document)
+        let pages = extracted.map { page in
+            page.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        let totalCharacters = pages.reduce(0) { $0 + $1.reduce(0) { $0 + $1.count } }
+
+        guard totalCharacters >= textLayerThreshold else {
+            Log.library.info("PDF has no usable text layer (\(totalCharacters) chars); trying OCR")
+            let recognized = try ocrPages(of: document)
+            guard !recognized.isEmpty else {
+                throw ImportedDocumentConverter.ConversionError.pdfHasNoExtractableText
+            }
+            return recognized.map { ocrParagraphs($0) }
         }
 
-        Log.library.info("PDF has no usable text layer (\(totalCharacters) chars); trying OCR")
-        let recognized = try ocrPages(of: document)
-        guard !recognized.isEmpty else {
-            throw ImportedDocumentConverter.ConversionError.pdfHasNoExtractableText
-        }
-        // OCR yields lines with no geometry, so the width heuristic applies there.
-        return recognized.map { reflowed($0) }
+        // A document can carry text on most pages and an image on one — a scanned
+        // title page, or a cover exported as a picture. Those pages are OCR'd
+        // individually; without this they import as nothing at all, silently.
+        return withOCRForEmptyPages(pages, of: document)
     }
 
     /// Fills in pages that yielded no text of their own by OCR'ing just those pages.
@@ -147,220 +161,15 @@ nonisolated enum PDFWorkConverter {
             let recognized = recognizeText(in: image)
             guard !recognized.isEmpty else { continue }
             Log.library.info("Recovered page \(index + 1) of the PDF by OCR")
-            filled[index] = reflowed(recognized)
+            filled[index] = ocrParagraphs(recognized)
         }
         return filled
     }
 
-    /// One printed line, rebuilt from the bounds of the characters on it.
-    private struct VisualLine {
-        var text: String
-        var minX: CGFloat
-        var maxX: CGFloat
-        var midY: CGFloat
-        var height: CGFloat
-    }
-
-    /// Above this many characters, per-character geometry stops being worth its cost
-    /// and the width heuristic takes over.
-    private static let maxGeometryCharacters = 40_000
-
-    /// Groups a page's characters into printed lines by shared baseline.
-    ///
-    /// Returns nil when geometry cannot be trusted — notably when
-    /// `numberOfCharacters` disagrees with the extracted string's length, since the
-    /// two must stay index-aligned for the bounds lookups to mean anything.
-    private static func visualLines(of page: PDFPage) -> [VisualLine]? {
-        let count = page.numberOfCharacters
-        guard count > 0, count <= maxGeometryCharacters, let text = page.string else { return nil }
-        let characters = Array(text)
-
-        // PDFKit is inconsistent about whether the newlines it *synthesizes* in
-        // `string` also occupy character indices: on some documents they do, on others
-        // they do not. Both conventions are handled, because insisting on the first
-        // one silently fell back to the text-only heuristic exactly on the documents
-        // that need geometry most — the ones whose lines PDFKit splits into runs.
-        let newlineCount = characters.count { $0.isNewline }
-        let newlinesOccupyIndices: Bool
-        if characters.count == count {
-            newlinesOccupyIndices = true
-        } else if characters.count - newlineCount == count {
-            newlinesOccupyIndices = false
-        } else {
-            return nil // neither mapping holds, so no index is trustworthy
-        }
-
-        // One entry per run that `page.string` reports, measured by the bounds of its
-        // first and last inked glyph. Deliberately *not* built glyph-by-glyph:
-        // `characterBounds` returns each glyph's ink box, reports zero height for
-        // spaces and for many ordinary letters, and proved unreliable enough to
-        // misassign characters between lines when used that way.
-        // Two cursors, because string offsets and PDFKit indices only coincide under
-        // the first convention above: `stringIndex` walks `characters`, `pdfIndex`
-        // walks the page's own character space. Within a run they advance in step,
-        // since a run contains no newlines.
-        var runs: [VisualLine] = []
-        var stringIndex = 0
-        var pdfIndex = 0
-        while stringIndex < characters.count {
-            var end = stringIndex
-            while end < characters.count, !characters[end].isNewline { end += 1 }
-
-            if end > stringIndex,
-               let firstInk = (stringIndex..<end).first(where: { !characters[$0].isWhitespace }),
-               let lastInk = (stringIndex..<end).reversed().first(where: { !characters[$0].isWhitespace }) {
-                let leadingIndex = pdfIndex + (firstInk - stringIndex)
-                let trailingIndex = pdfIndex + (lastInk - stringIndex)
-                if leadingIndex < count, trailingIndex < count {
-                    let leading = page.characterBounds(at: leadingIndex)
-                    let trailing = page.characterBounds(at: trailingIndex)
-                    // The right edge is sampled over the last few inked glyphs rather
-                    // than read off the final one. PDFKit routinely reports a
-                    // degenerate box for a trailing glyph — a real body line came back
-                    // with maxX (85.9) *less than* its own minX (86.5) — which made the
-                    // page measure collapse from ~370pt to 39pt and the indent test in
-                    // `blocks(from:)` fire on ordinary glyph jitter, splitting
-                    // paragraphs mid-sentence.
-                    var rightEdge = max(trailing.maxX, leading.maxX)
-                    var probe = trailingIndex
-                    var sampled = 0
-                    while sampled < 3, probe > leadingIndex {
-                        probe -= 1
-                        sampled += 1
-                        rightEdge = max(rightEdge, page.characterBounds(at: probe).maxX)
-                    }
-                    runs.append(VisualLine(
-                        text: String(characters[stringIndex..<end]),
-                        minX: leading.minX,
-                        maxX: max(rightEdge, leading.minX + 1),
-                        midY: leading.midY,
-                        height: max(leading.height, trailing.height, 1)
-                    ))
-                }
-            }
-
-            pdfIndex += end - stringIndex
-            if end < characters.count {
-                if newlinesOccupyIndices { pdfIndex += 1 }
-                stringIndex = end + 1
-            } else {
-                stringIndex = end
-            }
-        }
-        guard !runs.isEmpty else { return nil }
-        return runsSharingABaseline(runs)
-    }
-
-    /// Joins the runs that sit on one printed line.
-    ///
-    /// This is the fix for the bug a real file exposed: PDFKit starts a new run at a
-    /// font change, so a curly quote mid-sentence splits one printed line into
-    /// several `page.string` entries. Any width-based paragraph test then reads each
-    /// fragment as a paragraph end and shatters the prose. Sharing a baseline is
-    /// unambiguous where line *length* is not.
-    ///
-    /// Text is concatenated without inserting a space: the split happened mid-line,
-    /// so whatever spacing the line needs is already inside the runs.
-    private static func runsSharingABaseline(_ runs: [VisualLine]) -> [VisualLine] {
-        let heights = runs.map(\.height).sorted()
-        let medianHeight = heights[heights.count / 2]
-        var lines: [VisualLine] = []
-        for run in runs {
-            if var last = lines.last, abs(last.midY - run.midY) <= max(2, medianHeight * 0.5) {
-                last.text += run.text
-                last.minX = min(last.minX, run.minX)
-                last.maxX = max(last.maxX, run.maxX)
-                last.height = max(last.height, run.height)
-                lines[lines.count - 1] = last
-            } else {
-                lines.append(run)
-            }
-        }
-        return lines
-    }
-
-    /// Turns printed lines into paragraphs using the page's actual layout.
-    ///
-    /// Three signals, any of which ends a paragraph — all measured in points against
-    /// the page's own text block, so they hold at any font size or margin: a vertical
-    /// gap wider than a normal line advance (a blank line); a line stopping well short
-    /// of the right measure (a paragraph's ragged last line); and a following line
-    /// indented past the body's left margin (a first-line indent). Plus chapter
-    /// headings, which always stand alone.
-    private static func blocks(from lines: [VisualLine]) -> [String] {
-        guard !lines.isEmpty else { return [] }
-        let lefts = lines.map(\.minX).sorted()
-        let rights = lines.map(\.maxX).sorted()
-        // The median left edge is the body margin, since most lines start there and
-        // only first lines are indented.
-        let marginLeft = lefts[lefts.count / 2]
-        let measure = max(1, rights[Int(0.9 * Double(max(rights.count - 1, 1)))] - marginLeft)
-
-        // Normal leading, taken as the 25th-percentile gap between consecutive lines:
-        // most gaps *are* the normal advance, and a paragraph gap is larger, so a low
-        // percentile finds the baseline spacing while ignoring outliers.
-        //
-        // Derived from the gaps rather than from glyph height, which is what the first
-        // version did — and 1.8x a glyph's ink height lands within a point or two of
-        // ordinary line spacing, so whether a plain line break counted as a paragraph
-        // break depended on which letters happened to be on the line. Ink heights vary
-        // by several points between "Cold." and a line with no descenders.
-        var normalLeading: CGFloat = .greatestFiniteMagnitude
-        if lines.count > 1 {
-            let gaps = (0..<(lines.count - 1))
-                .map { lines[$0].midY - lines[$0 + 1].midY }
-                .filter { $0 > 0 }
-                .sorted()
-            if !gaps.isEmpty { normalLeading = gaps[max(0, gaps.count / 4)] }
-        }
-
-        var result: [String] = []
-        var current = ""
-
-        func flush() {
-            let paragraph = current.trimmingCharacters(in: .whitespaces)
-            if !paragraph.isEmpty {
-                result.append(paragraph)
-                result.append("")
-            }
-            current = ""
-        }
-
-        for (index, line) in lines.enumerated() {
-            let text = line.text.trimmingCharacters(in: .whitespaces)
-            guard !text.isEmpty else { continue }
-            let isHeading = PlainTextWorkConverter.isChapterHeading(text)
-            if isHeading { flush() }
-
-            if current.hasSuffix("-") {
-                current = String(current.dropLast()) + text
-            } else if current.isEmpty {
-                current = text
-            } else {
-                current += " " + text
-            }
-
-            var endsParagraph = isHeading
-            if index + 1 < lines.count {
-                let next = lines[index + 1]
-                // PDF y grows upward, so the next line down has the smaller midY.
-                // Extra vertical space between two lines means a paragraph ended.
-                if line.midY - next.midY > normalLeading * 1.5 { endsParagraph = true }
-                // A following line indented past the body margin is a first-line
-                // indent, the other convention for marking a new paragraph.
-                // A real first-line indent is a typographic decision — a quarter inch
-                // or more. The absolute floor matters because a line's measured minX
-                // jitters by several points with the glyph it starts on (86.5 vs 91.5
-                // vs 90.1 on consecutive body lines of one real page), and a
-                // percentage-only threshold read that jitter as an indent.
-                if next.minX > marginLeft + max(12, measure * 0.03) { endsParagraph = true }
-            } else {
-                endsParagraph = true
-            }
-            if endsParagraph { flush() }
-        }
-        flush()
-        return result
+    private static func lines(of text: String) -> [String] {
+        text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
     }
 
     /// Drops a chapter's opening paragraph when it only repeats the chapter title.
@@ -377,10 +186,37 @@ nonisolated enum PDFWorkConverter {
         return .init(title: chapter.title, bodyXHTML: bodyLines.joined(separator: "\n"))
     }
 
-    private static func lines(of text: String) -> [String] {
-        text.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .components(separatedBy: "\n")
+    /// Drops page numbers and running headers/footers.
+    ///
+    /// These are the difference between a readable conversion and one with a stray
+    /// title line every few paragraphs. A line is dropped when it appears at the
+    /// top or bottom of many pages, or is bare digits — frequency is the signal,
+    /// because a running header repeats by definition and prose does not.
+    private static func withoutRunningHeadersAndFooters(_ pages: [[String]]) -> [[String]] {
+        guard pages.count >= 4 else { return pages }
+
+        var edgeCounts: [String: Int] = [:]
+        for page in pages {
+            let meaningful = page.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            guard !meaningful.isEmpty else { continue }
+            for candidate in Set([meaningful.first, meaningful.last].compactMap(\.self)) {
+                edgeCounts[candidate, default: 0] += 1
+            }
+        }
+
+        // Repeating on a third of the pages is a header, not a coincidence.
+        let threshold = max(3, pages.count / 3)
+        let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
+
+        return pages.map { page in
+            page.filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty { return true }
+                if repeated.contains(trimmed) { return false }
+                // Bare page numbers, with or without decoration ("- 12 -", "12.").
+                return trimmed.range(of: #"^[\-–—\s]*\d{1,4}[.\-–—\s]*$"#, options: .regularExpression) == nil
+            }
+        }
     }
 
     // MARK: - OCR
@@ -452,48 +288,15 @@ nonisolated enum PDFWorkConverter {
         return observations.compactMap { $0.topCandidates(1).first?.string }
     }
 
-    // MARK: - Cleanup
-
-    /// Drops page numbers and running headers/footers.
+    /// Joins OCR'd lines into paragraphs.
     ///
-    /// These are the difference between a readable conversion and one with a stray
-    /// title line every few paragraphs. A line is dropped when it appears at the
-    /// top or bottom of many pages, or is bare digits — frequency is the signal,
-    /// because a running header repeats by definition and prose does not.
-    private static func withoutRunningHeadersAndFooters(_ pages: [[String]]) -> [[String]] {
-        guard pages.count >= 4 else { return pages }
-
-        var edgeCounts: [String: Int] = [:]
-        for page in pages {
-            let meaningful = page.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            guard !meaningful.isEmpty else { continue }
-            for candidate in Set([meaningful.first, meaningful.last].compactMap(\.self)) {
-                edgeCounts[candidate, default: 0] += 1
-            }
-        }
-
-        // Repeating on a third of the pages is a header, not a coincidence.
-        let threshold = max(3, pages.count / 3)
-        let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
-
-        return pages.map { page in
-            page.filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty { return true }
-                if repeated.contains(trimmed) { return false }
-                // Bare page numbers, with or without decoration ("- 12 -", "12.").
-                return trimmed.range(of: #"^[\-–—\s]*\d{1,4}[.\-–—\s]*$"#, options: .regularExpression) == nil
-            }
-        }
-    }
-
-    /// Rebuilds paragraph boundaries, which a PDF does not record.
+    /// Only the OCR path needs this now. MuPDF hands over real paragraph blocks, but
+    /// Vision returns bare lines with no block structure, so a width heuristic is
+    /// still the best available signal *there*: recognized body lines fill the
+    /// measure, and a noticeably shorter line ends its paragraph.
     ///
-    /// This is the crux of PDF conversion quality. `PDFPage.string` yields one entry
-    /// per *display* line and — crucially — no blank lines, because a PDF separates
-    /// paragraphs with vertical space rather than with any character. Treating each
-    /// line as a paragraph produces unreadable output; joining everything produces
-    /// one giant wall.
+    /// This is deliberately the *only* surviving piece of the old heuristic stack.
+    /// The geometry-based version of it is gone — see `pageBlocks`.
     ///
     /// The signal used is the ragged right edge: body lines run to the full measure,
     /// so a line **noticeably shorter than the page's typical line** is the end of
@@ -503,7 +306,7 @@ nonisolated enum PDFWorkConverter {
     /// Chosen over the obvious alternative — "a line ending in `.`/`!`/`?` ends a
     /// paragraph" — because fanfic is dialogue-heavy, and that rule turns every
     /// sentence into its own paragraph.
-    private static func reflowed(_ lines: [String]) -> [String] {
+    private static func ocrParagraphs(_ lines: [String]) -> [String] {
         let trimmed = lines.map { $0.trimmingCharacters(in: .whitespaces) }
         let widths = trimmed.filter { !$0.isEmpty }.map(\.count).sorted()
         guard !widths.isEmpty else { return [] }

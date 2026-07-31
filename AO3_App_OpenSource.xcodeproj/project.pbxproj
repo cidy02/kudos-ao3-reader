@@ -11,6 +11,7 @@
 		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000310000000 /* ReadiumShared */; };
 		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000320000000 /* ReadiumStreamer */; };
 		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
+		000000000000000410000000 /* MuPDF.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000400000000 /* MuPDF.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,6 +27,7 @@
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Kudos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000400000000 /* MuPDF.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MuPDF.xcframework; path = Vendor/MuPDF.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +51,7 @@
 				000000000000000311000000 /* ReadiumShared in Frameworks */,
 				000000000000000321000000 /* ReadiumStreamer in Frameworks */,
 				000000000000000331000000 /* ReadiumNavigator in Frameworks */,
+				000000000000000410000000 /* MuPDF.xcframework in Frameworks */,
 			);
 		};
 		000000000000000530000000 /* Frameworks */ = {
@@ -531,6 +534,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -585,6 +590,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -624,6 +631,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos.KudosTests;
@@ -645,6 +654,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos.KudosTests;
