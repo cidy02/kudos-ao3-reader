@@ -89,11 +89,63 @@ nonisolated enum AuthorNoteDetector {
             "not my characters", "no copyright infringement"
         ]),
 
+        // MARK: Sign-offs — the pen name that closes a note.
+        //
+        // The strongest marker in the FanFiction.net PDFs seen so far, and the one whose
+        // absence prompted this section: every chapter of "In the Service of the Queen"
+        // ends `~Malthazar LOS`, 29 times, and the whole 8,000-line document contains no
+        // other line that opens with a tilde. Trusted `.anywhere` on that evidence —
+        // a tilde never opens a paragraph of prose — and because PDF chapter splitting
+        // glues the sign-off to the next chapter's marker, so it can land at the top of
+        // a chapter as easily as the bottom.
+        //
+        // A `~~~~` scene divider is wrapped as a note by this, which is a cosmetic loss
+        // and the reason the letter requirement is here rather than a bare prefix check.
+        Indicator("tilde-signature", .anywhere) { text in
+            guard text.hasPrefix("~") else { return false }
+            let name = text.dropFirst().trimmingCharacters(in: .whitespaces)
+            return name.count <= 60 && name.contains(where: \.isLetter)
+        },
+        // Same shape with a dash, which other sources use. Kept to the edges and to a
+        // shorter name: an em dash *does* open lines of prose in some typesetting.
+        Indicator("dash-signature", .edges) { text in
+            guard let first = text.first, first == "—" || first == "–" else { return false }
+            let name = text.dropFirst().trimmingCharacters(in: .whitespaces)
+            return name.count <= 40 && name.contains(where: \.isLetter)
+        },
+
         // MARK: Review/engagement asks — fanfic apparatus, never narration.
         .phrase("review-ask", .edges, [
             "please review", "read and review", "r&r", "leave a review", "leave a comment",
             "thanks for the reviews", "thanks for reading", "thank you for reading",
-            "kudos and comments", "comments and kudos", "let me know what you think"
+            "kudos and comments", "comments and kudos", "let me know what you think",
+            "and review!", "appreciate the reviews"
+        ]),
+
+        // A short question aimed at the reader. Trusted `.anywhere` *because* of the
+        // length limit: "So..thoughts?" is a note wherever it appears, while the word
+        // "thoughts?" inside a paragraph of narration is not.
+        Indicator("reader-question", .anywhere) { text in
+            guard text.count <= 60, text.hasSuffix("?") else { return false }
+            let lowered = text.lowercased()
+            return ["thoughts?", "opinions?", "what do you think", "any guesses"]
+                .contains { lowered.contains($0) }
+        },
+        .phrase("reader-question-long", .edges, [
+            "how many of you", "would you be interested", "anyone out there know"
+        ]),
+
+        // MARK: Talking to the readership rather than about the story.
+        // Leading spaces are deliberate: bare "yall" is a substring of "royally".
+        .phrase("direct-reader-address", .edges, [
+            " you guys", " yall", " y'all", " ya go", "my readers", "great readers",
+            "hope you all", "you all enjoyed"
+        ]),
+        .phrase("more-to-come", .edges, [
+            "more to come", "more soon", "till next time", "till next chapter"
+        ]),
+        .phrase("stopping-point", .edges, [
+            "good place to end", "good place to stop", "seemed like a good place"
         ]),
 
         // MARK: Meta talk about the writing itself — plausible narration, so edges only.
@@ -102,7 +154,8 @@ nonisolated enum AuthorNoteDetector {
             "hiatus", "writer's block", "writer’s block"
         ]),
         .phrase("next-chapter-talk", .edges, [
-            "next chapter", "this chapter", "last chapter", "the next update", "new chapter"
+            "next chapter", "this chapter", "last chapter", "the next update", "new chapter",
+            "short chapter"
         ]),
         .phrase("other-work-talk", .edges, [
             "my other story", "my other fic", "should be working on", "i will finish it",

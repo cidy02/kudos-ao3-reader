@@ -81,6 +81,11 @@ struct ContentView: View {
             .onChange(of: theme.appTheme, initial: true) { _, appTheme in
                 applySegmentedControlAppearance(for: appTheme)
             }
+            // The *fallback* tint, for anything that renders without inheriting the
+            // `.tint` above. See `applyWindowTint` for why that happens at all.
+            .onChange(of: theme.effectiveTint, initial: true) { _, tint in
+                applyWindowTint(tint)
+            }
             .task {
                 await auth.restoreSession()
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
@@ -286,6 +291,38 @@ struct ContentView: View {
     /// every Sepia Form/List row — instead of restating their RGB values here, so
     /// this proxy can never silently drift out of sync with the rest of the Sepia
     /// palette.
+    /// Pushes the theme tint down to UIKit, which is where SwiftUI resolves an accent
+    /// colour when the `.tint` environment value does not reach a view.
+    ///
+    /// Symptom this fixes: an icon that turns **system blue** after you interact with
+    /// it — tap a button, dismiss the confirmation, and its symbol comes back in the
+    /// wrong colour while the label beside it stays themed. It is not random. The app
+    /// had *no* accent colour of its own: no `AccentColor` asset, no
+    /// `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`, so its default tint was the
+    /// system's blue and the 39 `.tint(...)` call sites were the only thing painting
+    /// over it. Anything re-rendered outside one of those subtrees — which is what a
+    /// presentation being dismissed causes — falls back to the default and shows blue.
+    ///
+    /// Two layers now, because one is not enough:
+    /// - the `AccentColor` asset makes the *compiled-in* default AO3 red rather than
+    ///   blue, covering every path, including ones not yet found;
+    /// - this makes the running default the *current* theme, since Sepia's warm brown
+    ///   and a user-chosen accent are not knowable at build time.
+    ///
+    /// `tintColor` inherits down the whole UIKit hierarchy that SwiftUI hosts render
+    /// into, so setting it on the window reaches views the environment misses.
+    private func applyWindowTint(_ tint: Color) {
+        #if canImport(UIKit)
+        let color = UIColor(tint)
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                window.tintColor = color
+            }
+        }
+        #endif
+    }
+
     private func applySegmentedControlAppearance(for readerTheme: ReaderTheme) {
         #if canImport(UIKit)
         let proxy = UISegmentedControl.appearance()

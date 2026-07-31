@@ -127,6 +127,63 @@ struct AuthorNoteDetectorTests {
         #expect(AuthorNoteDetector.noteIndices(in: ["", "   ", "\n"]).isEmpty)
     }
 
+    // MARK: - FanFiction.net sign-offs ("In the Service of the Queen", 2026-07-31)
+
+    /// Every chapter of that work ends with the author's pen name on its own line, and
+    /// none of it was detected — the lines the owner reported as prose.
+    @Test func aTildeSignOffIsANote() {
+        #expect(names(["prose", "So..thoughts?", "~Malthazar LOS"])
+            == ["reader-question", "tilde-signature"])
+        // Spacing and a trailing period both occur in the same document.
+        #expect(names(["~ Malthazar LOS"]) == ["tilde-signature"])
+        #expect(names(["~Malthazar LOS."]) == ["tilde-signature"])
+    }
+
+    /// The sign-off survives PDF chapter splitting gluing it to the next chapter's
+    /// marker, which is why the rule is trusted mid-document rather than at the edges.
+    @Test func aSignOffIsStillANoteAwayFromTheEdges() {
+        let blocks = [
+            "Prose one that runs on for a good while and says nothing about writing.",
+            "Prose two, likewise entirely story.",
+            "Prose three, still story.",
+            "~Malthazar LOS*Chapter 2*: A Queens Gratitude",
+            "Prose four, where the story picks up again.",
+            "Prose five.",
+            "Prose six."
+        ]
+        #expect(AuthorNoteDetector.noteIndices(in: blocks) == [3])
+    }
+
+    /// Real closing notes from that document, each at a chapter end.
+    @Test func closingNotesFromARealFanFictionPDF() {
+        let cases = [
+            "I actually already had more planned out…but it's 2:30 in the morning and "
+                + "this seemed like a good place to end for now.",
+            "Here ya go people. More to come!",
+            "Next chapter for yall great readers. I appreciate the reviews. They spur me to keep writing.",
+            "There it is, Chapter 10. I hope you all enjoyed it, we're finally getting places,lol",
+            "Also a Happy Easter to all my readers.",
+            "Painfully short chapter….but no worries people. The next will make up for it I promise!",
+            "How many of you would be interested in another fic, a collection of oneshots?"
+        ]
+        for note in cases {
+            #expect(!names(["story", "story", "story", note]).isEmpty, "undetected: \(note)")
+        }
+    }
+
+    /// The failure mode that matters. These are narration, and a chatty-sounding
+    /// sentence must not be demoted just because it sits near a chapter edge.
+    @Test func realProseIsNotMistakenForASignOff() {
+        #expect(names(["\"Goodnight…\""]).isEmpty)
+        #expect(names(["She mumbled quietly."]).isEmpty)
+        // "yall" is a substring of "royally" — the reason those phrases carry a space.
+        #expect(names(["She bowed, royally unimpressed with the whole affair."]).isEmpty)
+        // A question in narration is not a question to the reader.
+        #expect(names(["How long had she been staring at the queen, lost in her thoughts?"]).isEmpty)
+        // A scene divider is not a signature, though a tilde-led one is (documented).
+        #expect(names(["* * *"]).isEmpty)
+    }
+
     // MARK: - Output shape
 
     @Test func notesBecomeAsidesAndProseStaysParagraphs() throws {
