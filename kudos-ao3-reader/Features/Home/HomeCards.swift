@@ -64,14 +64,29 @@ struct CoverCardStatsRow: View {
     }
 }
 
+/// A short centred hairline between a card's attribution (author, fandom) and its
+/// counted stats.
+///
+/// Spacing alone had to carry that split before, and at the card's 7pt rhythm the two
+/// groups still read as one list. Inset well short of the card's width and drawn in
+/// `.quaternary` so it reads as a breath rather than a rule — the same treatment the
+/// progress track uses, so it inherits the theme instead of hard-coding a grey.
+struct CardMetaSeparator: View {
+    var body: some View {
+        Capsule()
+            .fill(.quaternary)
+            .frame(width: 48, height: 1)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityHidden(true)
+    }
+}
+
 /// Standard carousel card: a compact AO3 work summary surface with the title, author,
 /// status, metadata, and reading progress all inside the tappable card.
 struct WorkCoverCard: View {
     let work: SavedWork
     var footer: String?
     var progress: Double?
-
-    @State private var showingStatus = false
 
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
@@ -82,10 +97,16 @@ struct WorkCoverCard: View {
                         .lineLimit(3)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if !allStatuses.isEmpty {
-                        statusButton
-                    }
+                    statusButton
                 }
+                // Three groups on this card — what it is, who wrote it, what it
+                // measures — and the uniform 7pt rhythm ran them together. The extra
+                // space sits on the *title* rather than on the author row so the gap
+                // survives a work with no author, and on `cardStats` so the counted
+                // stats read as their own block below the attribution. Both are
+                // absorbed by the trailing `Spacer(minLength:)`, so the card stays at
+                // its height floor and carousel cards stay uniform.
+                .padding(.bottom, 3)
 
                 if !work.author.isEmpty {
                     CardMetaLabel(text: work.author, symbol: "person", accessibilityLabel: "Author: \(work.author)")
@@ -95,6 +116,10 @@ struct WorkCoverCard: View {
                 if let fandom = work.workFandoms.first, !fandom.isEmpty {
                     CardMetaLabel(text: fandom, symbol: "books.vertical", accessibilityLabel: "Fandom: \(fandom)")
                         .font(.caption2)
+                }
+
+                if !work.author.isEmpty || !(work.workFandoms.first ?? "").isEmpty {
+                    CardMetaSeparator()
                 }
 
                 cardStats
@@ -158,23 +183,27 @@ struct WorkCoverCard: View {
         return work.isComplete ? "Complete" : nil
     }
 
-    /// ⓘ in the card's top-right corner.
+    /// ⓘ in the card's top-right corner: pushes Work Details.
     ///
-    /// A plain `Button` is safe here even though the whole card navigates: the card's
-    /// `NavigationLink` lives in the *background* (see `CardNavigationModifier`), so a
+    /// Shown on **every** card. It used to appear only when the work had a badge worth
+    /// showing, because it opened a sheet that would otherwise have been empty; now that
+    /// it goes to Work Details — which always has something to say — a card without one
+    /// would just be a card missing its shortcut.
+    ///
+    /// A foreground `NavigationLink` is safe even though the whole card navigates: the
+    /// card's own link lives in the *background* (see `CardNavigationModifier`), so a
     /// foreground control is hit-tested first and takes its own taps. That is precisely
-    /// why the link is in the background rather than wrapping the content.
+    /// why the card's link is in the background rather than wrapping the content. The
+    /// card opens the reader; this opens the work.
     private var statusButton: some View {
-        Button {
-            showingStatus = true
-        } label: {
+        NavigationLink(value: LocalWorkDestination.detail(work)) {
             Image(systemName: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 // 28pt of tappable area around a 13pt glyph. Still under the 44pt
                 // guideline, deliberately: a larger target on a compact carousel card
-                // would eat the title's width, and the same information is a long-press
-                // away in Work Details.
+                // would eat the title's width, and Work Details is also reachable by
+                // long-pressing the card.
                 //
                 // The glyph is pinned to the box's own top-trailing corner, and the
                 // box is then pulled into the card's 12pt padding. Without both, the
@@ -187,47 +216,7 @@ struct WorkCoverCard: View {
                 .padding(.trailing, -6)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Status and origin")
-        // A sheet in the app's own idiom (`WorkStatusSheet`) rather than a bare popover.
-        // The first version was a hand-rolled VStack of Text, which both clipped its
-        // content and looked nothing like the rest of Kudos.
-        .sheet(isPresented: $showingStatus) {
-            WorkStatusSheet(work: work)
-        }
-    }
-
-    /// Every status worth reporting, uncapped — the popover has room, so the
-    /// four-badge cap the card needed is gone.
-    private var allStatuses: [(text: String, symbol: String)] {
-        var badges: [(text: String, symbol: String)] = []
-        // Preservation first: "this is the last copy in existence" outranks every
-        // other thing a badge could say about a work.
-        if let preservation = work.preservationState.badgeLabel {
-            badges.append((text: preservation, symbol: work.preservationState.badgeSymbol))
-        }
-        // A chip only for non-AO3 origins: the popover names the source in full on its
-        // own row, so an "AO3" chip would just repeat it. The exceptions earn a chip
-        // because they behave differently — no live page to refresh, no kudos to give.
-        let origin = work.origin
-        if origin != .archiveOfOurOwn {
-            badges.append((text: origin.shortLabel, symbol: origin.symbolName))
-        }
-        if work.isInSavedForLaterQueue { badges.append((text: "Later", symbol: "bookmark.fill")) }
-        if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
-        if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
-        // The *absence* of a downloaded file is what carries information, so this is
-        // deliberately not an "Offline" badge.
-        //
-        // Every shelf except History filters on `hasEPUB`, and saved/favorited/queued
-        // works are never freed (`isProtected` covers them), so "Offline" was true on
-        // effectively every card that could show it — a badge on everything says
-        // nothing. A work whose file was freed appears only in History, and *that* is
-        // worth labelling. `goneWithNoCopy` already covers the freed-and-deleted case
-        // above, so this does not double up with it.
-        if !work.hasEPUB, !work.ao3Unavailable {
-            badges.append((text: "Not downloaded", symbol: "arrow.down.circle"))
-        }
-        return badges
+        .accessibilityLabel("Work details")
     }
 
     private var footerSymbol: String {
@@ -273,6 +262,8 @@ struct AO3WorkCoverCard: View {
                     .lineLimit(3)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // Matches the local card's grouping — see `WorkCoverCard`.
+                    .padding(.bottom, 3)
 
                 if let author = work.authors.first, !author.isEmpty {
                     CardMetaLabel(text: author, symbol: "person", accessibilityLabel: "Author: \(author)")
@@ -285,6 +276,10 @@ struct AO3WorkCoverCard: View {
                         accessibilityLabel: "Fandom: \(fandom)"
                     )
                     .font(.caption2)
+                }
+
+                if work.authors.first?.isEmpty == false || work.fandoms.first?.isEmpty == false {
+                    CardMetaSeparator()
                 }
 
                 cardStats

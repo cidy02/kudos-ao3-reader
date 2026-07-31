@@ -1,20 +1,23 @@
 import SwiftData
 import SwiftUI
 
-/// The ⓘ panel: where a work came from, what state it is in, and what can be done about
-/// it.
+/// Where a work came from, what state it is in, and what can be done about it —
+/// as sections of Work Details rather than a sheet of its own.
 ///
-/// Built as a `Form` of `Section`s with `.cardRow()`, `.appThemedScroll()` and
-/// `.appThemedRows()` — the same construction as Settings and Work Details. The first
-/// version was a bare `VStack` of `Text`, which read as a different app; grouped rows are
-/// what every other explanatory surface here uses, and they also solve the clipping the
-/// hand-rolled layout had.
-struct WorkStatusSheet: View {
+/// This began as `WorkStatusSheet`, presented by the card's ⓘ button. That was one
+/// screen too many: Work Details is already the place that answers "what is this
+/// work", so provenance belongs beside the publication and stats cards instead of in
+/// a parallel surface reachable only from a carousel. The ⓘ now pushes Work Details,
+/// which also makes it useful on *every* card rather than only on works that happened
+/// to have a badge worth showing.
+///
+/// Built to the same construction as the rest of Work Details — `Section` +
+/// `.cardRow()` — so it inherits that screen's chrome and theming rather than
+/// carrying its own.
+struct WorkProvenanceSections: View {
     let work: SavedWork
 
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-    @Environment(ThemeManager.self) private var theme
 
     @State private var rebuilding = false
     @State private var rebuildError: String?
@@ -22,51 +25,9 @@ struct WorkStatusSheet: View {
     @State private var confirmingRedundantRebuild = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Group {
-                    originSection
-                    if !statuses.isEmpty { statusSection }
-                    if candidate != nil { conversionSection }
-                }
-                .appThemedRows()
-            }
-            .formStyle(.grouped)
-            .appThemedScroll()
-            .navigationTitle("Work Info")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .confirmationDialog(
-                "Rebuild this work?",
-                isPresented: $confirmingRedundantRebuild,
-                titleVisibility: .visible
-            ) {
-                Button("Rebuild") { Task { await rebuild() } }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This work was already built with the latest converter, so the text is "
-                    + "unlikely to change. Rebuilding is still useful if its details look wrong — "
-                    + "it re-reads everything from the original file.")
-            }
-            .alert(
-                "Couldn't Rebuild",
-                isPresented: Binding(
-                    get: { rebuildError != nil },
-                    set: { if !$0 { rebuildError = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) { rebuildError = nil }
-            } message: {
-                Text(rebuildError ?? "")
-            }
-        }
-        .tint(theme.effectiveTint)
+        originSection
+        if !statuses.isEmpty { statusSection }
+        if candidate != nil { conversionSection }
     }
 
     private var candidate: WorkReconversion.Candidate? {
@@ -80,15 +41,14 @@ struct WorkStatusSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label {
                     Text(originSentence)
-                        .font(.subheadline)
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: work.origin.symbolName)
                         .foregroundStyle(.secondary)
                 }
                 if !work.sourceURL.isEmpty {
-                    // Selectable and shown in full: for a work its site has deleted, this
-                    // is often the only citation that still exists.
+                    // Selectable and shown in full: for a work its site has deleted,
+                    // this is often the only citation that still exists.
                     Text(work.sourceURL)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
@@ -139,17 +99,6 @@ struct WorkStatusSheet: View {
                     if !isGeneratedName(candidate.record.originalFileName) {
                         LabeledContent("Original file", value: candidate.record.originalFileName)
                     }
-                    Text("The original file is kept alongside this work, so it can be rebuilt "
-                        + "without downloading anything.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Always offered, never conditional on staleness. A rebuild is also
-                    // how a work picks up an *importer* fix — recovered metadata, for
-                    // instance — which the converter version cannot know about, so
-                    // hiding the button on an up-to-date work took away the only way to
-                    // apply those. An already-current work asks for confirmation instead.
                     if !candidate.isStale, !rebuilt {
                         LabeledContent("Conversion", value: "Up to date")
                     }
@@ -158,6 +107,17 @@ struct WorkStatusSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Text("The original file is kept alongside this work, so it can be rebuilt "
+                        + "without downloading anything.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Always offered, never conditional on staleness. A rebuild is also
+                    // how a work picks up an *importer* fix — recovered metadata, for
+                    // instance — which the converter version cannot describe, so hiding
+                    // the button on an up-to-date work took away the only way to apply
+                    // those. An already-current work asks for confirmation instead.
                     Button {
                         if candidate.isStale {
                             Task { await rebuild() }
@@ -170,6 +130,7 @@ struct WorkStatusSheet: View {
                             systemImage: "arrow.triangle.2.circlepath"
                         )
                     }
+                    .buttonStyle(.borderless)
                     .disabled(rebuilding)
                     Text(candidate.isStale
                         ? "A newer converter is available. Rebuilding re-reads the original file "
@@ -180,6 +141,29 @@ struct WorkStatusSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .cardRow()
+                .confirmationDialog(
+                    "Rebuild this work?",
+                    isPresented: $confirmingRedundantRebuild,
+                    titleVisibility: .visible
+                ) {
+                    Button("Rebuild") { Task { await rebuild() } }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This work was already built with the latest converter, so the text is "
+                        + "unlikely to change. Rebuilding is still useful if its details look "
+                        + "wrong — it re-reads everything from the original file.")
+                }
+                .alert(
+                    "Couldn't Rebuild",
+                    isPresented: Binding(
+                        get: { rebuildError != nil },
+                        set: { if !$0 { rebuildError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) { rebuildError = nil }
+                } message: {
+                    Text(rebuildError ?? "")
+                }
             } header: {
                 Text("Conversion")
             }
@@ -206,7 +190,7 @@ struct WorkStatusSheet: View {
         work.origin == .importedFile ? "its source" : work.origin.displayName
     }
 
-    /// Every status worth reporting. Uncapped — a sheet has room, unlike the card.
+    /// Every status worth reporting. Uncapped — a full screen has room, unlike the card.
     private var statuses: [(text: String, symbol: String)] {
         var badges: [(text: String, symbol: String)] = []
         if let preservation = work.preservationState.badgeLabel {

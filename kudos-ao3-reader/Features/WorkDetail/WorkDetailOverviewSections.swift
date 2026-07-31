@@ -15,6 +15,10 @@ extension WorkDetailView {
         publicationCardSection
         workInfoCardSection
         statsCardSection
+        // Local-only: a remote work has no origin to report and nothing converted.
+        if let work = localWork {
+            WorkProvenanceSections(work: work)
+        }
         seriesSection
     }
 
