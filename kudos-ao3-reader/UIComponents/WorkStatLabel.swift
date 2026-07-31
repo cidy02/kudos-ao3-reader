@@ -87,16 +87,21 @@ struct WorkListStatsRow: View {
 }
 
 enum WorkStat {
-    /// AO3 rating → a one/two-letter badge for tight spaces (cover cards). Full
-    /// rating text stays on the wide rows.
-    static func ratingShort(_ rating: String) -> String? {
+    /// AO3 rating → a short but readable name for cover cards.
+    ///
+    /// These were single letters ("M", "E") while the cards packed several stats onto
+    /// one wrapped row and had no width to spare. Now that each stat gets its own row
+    /// there is room to say what the letter meant — "M" told a reader nothing unless
+    /// they already knew AO3's scheme. The wide list rows keep the full AO3 name
+    /// ("Teen And Up Audiences"); this is the middle length, chosen to fit a 164pt card.
+    static func ratingName(_ rating: String) -> String? {
         switch rating {
-        case "General Audiences": "G"
-        case "Teen And Up Audiences": "T"
-        case "Mature": "M"
-        case "Explicit": "E"
-        case "Not Rated": "NR"
-        default: rating.isEmpty ? nil : String(rating.prefix(1)).uppercased()
+        case "General Audiences": "General"
+        case "Teen And Up Audiences": "Teen"
+        case "Mature": "Mature"
+        case "Explicit": "Explicit"
+        case "Not Rated": "Not Rated"
+        default: rating.isEmpty ? nil : rating
         }
     }
 }

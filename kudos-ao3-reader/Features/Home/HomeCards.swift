@@ -1,38 +1,49 @@
 import SwiftData
 import SwiftUI
 
-/// The rating/chapters/completion/word-count stat row on a compact cover card.
+/// The rating/chapters/completion/word-count stats on a compact cover card.
 /// Shared by `WorkCoverCard` (local `SavedWork`) and `AO3WorkCoverCard` (remote
 /// `AO3WorkSummary`) — each derives these already-formatted, already-nil-checked
 /// values from its own model shape and hands them here.
+///
+/// **One stat per row.** This was a `FlowLayout` that packed as many stats onto a line
+/// as fit, which is why the values were abbreviated to the point of being cryptic ("M",
+/// "112K", "WIP"). The status badges that used to compete for the same space now live
+/// behind the card's ⓘ button, so the vertical room exists and each stat can say what
+/// it means. A column also removes the two-pass sizing hazard `WorkSummaryCardSurface`
+/// documents: a `VStack`'s height does not depend on the width it is proposed, so it
+/// cannot wrap differently between the ideal-size query and placement.
 struct CoverCardStatsRow: View {
-    var ratingShort: String?
-    /// The full rating name ("Teen And Up Audiences"), announced instead of the
-    /// visible one/two-letter `ratingShort` badge — "T" alone is meaningless to
-    /// VoiceOver.
+    var ratingName: String?
+    /// The full AO3 rating ("Teen And Up Audiences"), announced in place of the visible
+    /// shortened name.
     var ratingFull: String?
     var chapters: String?
     var completion: (text: String, symbol: String)?
     var wordCount: Int?
 
     var body: some View {
-        FlowLayout(spacing: 8, rowSpacing: 5) {
-            if let ratingShort {
+        VStack(alignment: .leading, spacing: 5) {
+            if let ratingName {
                 WorkStatLabel(
-                    text: ratingShort,
+                    text: ratingName,
                     symbol: "checkmark.shield",
-                    accessibilityLabel: ratingFull ?? ratingShort
+                    accessibilityLabel: ratingFull ?? ratingName
                 )
             }
             if let chapters {
-                WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
+                WorkStatLabel(
+                    text: chapterText(chapters),
+                    symbol: "book",
+                    accessibilityLabel: "Chapters \(chapters)"
+                )
             }
             if let completion {
                 WorkStatLabel(text: completion.text, symbol: completion.symbol)
             }
             if let wordCount {
                 WorkStatLabel(
-                    text: wordCount.formatted(.number.notation(.compactName)),
+                    text: wordText(wordCount),
                     symbol: "textformat.size",
                     accessibilityLabel: "\(wordCount.formatted()) words"
                 )
@@ -40,6 +51,16 @@ struct CoverCardStatsRow: View {
         }
         .font(.caption2)
         .foregroundStyle(.tertiary)
+    }
+
+    /// A bare "31/31" or "112K" leaves the icon as the only clue to what is being
+    /// counted. The noun is cheap now that the row is not shared.
+    private func chapterText(_ chapters: String) -> String {
+        chapters == "1" ? "1 chapter" : "\(chapters) chapters"
+    }
+
+    private func wordText(_ count: Int) -> String {
+        count == 1 ? "1 word" : "\(count.formatted(.number.notation(.compactName))) words"
     }
 }
 
@@ -103,7 +124,7 @@ struct WorkCoverCard: View {
 
     private var cardStats: some View {
         CoverCardStatsRow(
-            ratingShort: WorkStat.ratingShort(work.rating),
+            ratingName: WorkStat.ratingName(work.rating),
             ratingFull: work.rating.isEmpty ? nil : work.rating,
             chapters: work.chapters.isEmpty ? nil : work.chapters,
             completion: completionStatus.map { ($0, work.isComplete ? "checkmark.seal" : "circle.dashed") },
@@ -130,9 +151,9 @@ struct WorkCoverCard: View {
         // An AO3 work always has a known status. A converted import only has one when
         // its source stated it, which the metadata page now carries through — so
         // "Complete" is shown when we actually know, and nothing is shown when we do
-        // not, rather than defaulting a non-AO3 work to "WIP" and being wrong about it.
+        // not, rather than defaulting a non-AO3 work to In Progress and being wrong about it.
         if work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil {
-            return work.isComplete ? "Complete" : "WIP"
+            return work.isComplete ? "Complete" : "In Progress"
         }
         return work.isComplete ? "Complete" : nil
     }
@@ -281,11 +302,11 @@ struct AO3WorkCoverCard: View {
 
     private var cardStats: some View {
         CoverCardStatsRow(
-            ratingShort: WorkStat.ratingShort(work.rating),
+            ratingName: WorkStat.ratingName(work.rating),
             ratingFull: work.rating.isEmpty ? nil : work.rating,
             chapters: work.chapters.isEmpty ? nil : work.chapters,
             completion: work.isComplete.map {
-                ($0 ? "Complete" : "WIP", $0 ? "checkmark.seal" : "circle.dashed")
+                ($0 ? "Complete" : "In Progress", $0 ? "checkmark.seal" : "circle.dashed")
             },
             wordCount: work.words
         )
@@ -361,13 +382,15 @@ private struct WorkSummaryCardSurface<Content: View>: View {
             // asking for its ideal height, rather than letting an outer
             // .frame(minWidth:maxWidth:) negotiate width across two separate
             // passes (once for the ideal-size query, once for placement).
-            // FlowLayout's sizeThatFits reads whatever width it's proposed —
-            // if the two passes disagree even slightly, it can wrap a
-            // different number of rows in each, undershooting the reported
-            // ideal height (and thus the floor .frame(minHeight:) grows to)
-            // by a full row at large accessibility text sizes, since the
-            // stats row is a FlowLayout. A single .frame(width:) is proposed
+            // Wrapping content reads whatever width it's proposed — if the two
+            // passes disagree even slightly, it can wrap a different number of
+            // lines in each, undershooting the reported ideal height (and thus
+            // the floor .frame(minHeight:) grows to) by a full line at large
+            // accessibility text sizes. A single .frame(width:) is proposed
             // identically in every pass, so both queries wrap the same way.
+            // Originally written for the stats row's FlowLayout; that is a
+            // fixed-line VStack now, but the wrapping title has the same
+            // property, so the frame stays.
             //
             // Deliberately no .fixedSize(vertical:) here (unlike an earlier
             // version of this fix): that would lock the content to its own
