@@ -462,6 +462,54 @@ fails the build if any pinned package identity has no entry here.
 
 ------------------------------------------------------------------------------
 
+MuPDF (vendored binary, not a Swift package)
+
+   https://mupdf.com — https://github.com/ArtifexSoftware/mupdf
+   Built from source by Scripts/build-mupdf.sh; see docs/PDF_ENGINE_MUPDF.md.
+   License: GNU Affero General Public License, version 3 or later (AGPL-3.0+)
+
+   Copyright (C) 2004-2025 Artifex Software, Inc.
+
+   MuPDF is free software: you can redistribute it and/or modify it under the
+   terms of the GNU Affero General Public License as published by the Free
+   Software Foundation, either version 3 of the License, or (at your option)
+   any later version.
+
+   MuPDF is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+   more details.
+
+   You should have received a copy of the GNU Affero General Public License
+   along with MuPDF. If not, see <https://www.gnu.org/licenses/>.
+
+   WHAT THIS MEANS FOR KUDOS
+   -------------------------
+   Kudos is GPL-3.0. GPL-3 section 13 expressly permits combining GPL-3 work
+   with AGPL-3 work, so this combination is allowed — but the resulting
+   binary as a whole is governed by the AGPL's terms, including the
+   obligation to make the complete corresponding source available to anyone
+   who receives it. That source is this repository plus the unmodified MuPDF
+   revision the build script fetches.
+
+   MuPDF is not modified. It is built from an unmodified upstream checkout
+   with feature flags that only *omit* components (bundled CJK fonts, and the
+   XPS/SVG/HTML/EPUB/JavaScript/OCR handlers Kudos never uses).
+
+   Artifex also sells a commercial licence for projects that cannot accept
+   the AGPL. Kudos does not need it, being AGPL-compatible already.
+
+   WHY IT IS HERE
+   --------------
+   PDF import needs paragraph structure, and Apple's PDFKit exposes a text
+   API rather than a layout one: it does not guarantee reading order and
+   returns unusable glyph geometry often enough to relocate prose silently.
+   MuPDF's structured text provides ordered paragraph blocks. Verified on a
+   171-page reference PDF: 493,826 non-whitespace characters, identical to
+   PDFKit's character-by-character count, but correctly ordered and grouped.
+
+------------------------------------------------------------------------------
+
 Kudos itself is copyright its contributors and licensed under the GNU
 General Public License v3.0 (see LICENSE.txt). Kudos is an unofficial,
 personal project. It is not affiliated with or endorsed by the

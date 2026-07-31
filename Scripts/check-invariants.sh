@@ -112,6 +112,21 @@ elif [ -f "$RESOLVED" ]; then
   done
 fi
 
+# The app must own an accent colour. Without one, its default tint is the *system*
+# blue, and any view that renders without inheriting an explicit `.tint(...)` — which
+# is what happens when a presentation is dismissed and rows re-render — shows a blue
+# icon next to themed text. Both halves are required: the asset, and the build setting
+# that makes it the global accent.
+ACCENT="$ROOT/kudos-ao3-reader/Assets.xcassets/AccentColor.colorset/Contents.json"
+if [ ! -f "$ACCENT" ]; then
+  fail "kudos-ao3-reader/Assets.xcassets/AccentColor.colorset is missing" \
+    "Without it the app's default tint is the system blue; icons revert to it on re-render. See ContentView.applyWindowTint."
+elif ! grep -q "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;" \
+  "$ROOT/AO3_App_OpenSource.xcodeproj/project.pbxproj"; then
+  fail "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME is not set to AccentColor" \
+    "The asset exists but is not wired as the global accent, so the default tint is still the system blue."
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "check-invariants: FAILED"
   exit 1

@@ -11,6 +11,7 @@
 		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000310000000 /* ReadiumShared */; };
 		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000320000000 /* ReadiumStreamer */; };
 		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
+		000000000000000410000000 /* MuPDF.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000400000000 /* MuPDF.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,6 +27,7 @@
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Kudos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000400000000 /* MuPDF.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MuPDF.xcframework; path = Vendor/MuPDF.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +51,7 @@
 				000000000000000311000000 /* ReadiumShared in Frameworks */,
 				000000000000000321000000 /* ReadiumStreamer in Frameworks */,
 				000000000000000331000000 /* ReadiumNavigator in Frameworks */,
+				000000000000000410000000 /* MuPDF.xcframework in Frameworks */,
 			);
 		};
 		000000000000000530000000 /* Frameworks */ = {
@@ -305,12 +308,58 @@
 				"fi",
 				"echo \"Injected UTExportedTypeDeclarations (com.cidy02.Kudos.backup) into Info.plist.\"",
 				"",
+				"# --- Document types (all platforms) ---",
+				"# Makes \"Open in Kudos\" appear in Files, Safari's download menu, Reddit,",
+				"# Discord and AirDrop — the way community-redistributed copies actually",
+				"# travel. CFBundleDocumentTypes is an array of dictionaries, which the",
+				"# INFOPLIST_KEY_* mechanism cannot express at all, hence PlistBuddy.",
+				"# LSHandlerRank Alternate, not Owner: Kudos reads these formats but does",
+				"# not own them, and claiming Owner for .txt/.html/.zip would rudely make",
+				"# an ebook reader the system default for all three.",
+				"/usr/libexec/PlistBuddy -c \"Delete :CFBundleDocumentTypes\" \"$PLIST\" 2>/dev/null || true",
+				"/usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes array\" \"$PLIST\"",
+				"add_doc_type() { # $1 = index, $2 = display name, $3.. = content type ids",
+				"  IDX=\"$1\"; NAME=\"$2\"; shift 2",
+				"  /usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes:${IDX} dict\" \"$PLIST\"",
+				"  /usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes:${IDX}:CFBundleTypeName string ${NAME}\" \"$PLIST\"",
+				"  /usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes:${IDX}:CFBundleTypeRole string Viewer\" \"$PLIST\"",
+				"  /usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes:${IDX}:LSHandlerRank string Alternate\" \"$PLIST\"",
+				"  /usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes:${IDX}:LSItemContentTypes array\" \"$PLIST\"",
+				"  TYPE_INDEX=0",
+				"  for TYPE in \"$@\"; do",
+				"    /usr/libexec/PlistBuddy -c \"Add :CFBundleDocumentTypes:${IDX}:LSItemContentTypes:${TYPE_INDEX} string ${TYPE}\" \"$PLIST\"",
+				"    TYPE_INDEX=$((TYPE_INDEX + 1))",
+				"  done",
+				"}",
+				"add_doc_type 0 \"EPUB Book\" org.idpf.epub-container",
+				"add_doc_type 1 \"Web Page\" public.html",
+				"add_doc_type 2 \"Text Document\" public.plain-text net.daringfireball.markdown",
+				"add_doc_type 3 \"Archive\" public.zip-archive",
+				"# Claimed even though conversion lands in a later task: the app answers with",
+				"# a message naming the format and what to do, which beats the file being",
+				"# unopenable with no explanation.",
+				"add_doc_type 4 \"Document\" com.adobe.pdf org.openxmlformats.wordprocessingml.document public.rtf",
+				"",
+				"# Opened documents are copied into Documents/Inbox, which requires this key;",
+				"# without it the system hands over a URL the app cannot read.",
+				"/usr/libexec/PlistBuddy -c \"Delete :LSSupportsOpeningDocumentsInPlace\" \"$PLIST\" 2>/dev/null || true",
+				"/usr/libexec/PlistBuddy -c \"Add :LSSupportsOpeningDocumentsInPlace bool false\" \"$PLIST\"",
+				"",
+				"if ! /usr/libexec/PlistBuddy -c \"Print :CFBundleDocumentTypes:0:LSItemContentTypes:0\" \"$PLIST\" >/dev/null 2>&1; then",
+				"  echo \"error: failed to inject CFBundleDocumentTypes into $PLIST\"",
+				"  exit 1",
+				"fi",
+				"echo \"Injected CFBundleDocumentTypes into Info.plist.\"",
+				"",
 				"# --- Background modes (iOS only) ---",
 				"case \"${PLATFORM_NAME}\" in",
 				"  iphoneos|iphonesimulator)",
 				"    /usr/libexec/PlistBuddy -c \"Delete :UIBackgroundModes\" \"$PLIST\" 2>/dev/null || true",
 				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes array\" \"$PLIST\"",
 				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:0 string fetch\" \"$PLIST\"",
+				"    # audio: reader TTS / Now Playing while the app is backgrounded with",
+				"    # the reader still open. Leaving a work still stops speech in-app.",
+				"    /usr/libexec/PlistBuddy -c \"Add :UIBackgroundModes:1 string audio\" \"$PLIST\"",
 				"",
 				"    /usr/libexec/PlistBuddy -c \"Delete :BGTaskSchedulerPermittedIdentifiers\" \"$PLIST\" 2>/dev/null || true",
 				"    /usr/libexec/PlistBuddy -c \"Add :BGTaskSchedulerPermittedIdentifiers array\" \"$PLIST\"",
@@ -495,6 +544,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Kudos;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -513,6 +563,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -530,6 +582,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
+				PRODUCT_MODULE_NAME = Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -548,6 +601,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Kudos;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -566,6 +620,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -583,6 +639,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos;
+				PRODUCT_MODULE_NAME = Kudos;
 				PRODUCT_NAME = Kudos;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -604,6 +661,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos.KudosTests;
@@ -625,6 +684,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/MuPDF.xcframework/ios-arm64/Headers";
+				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MACOSX_DEPLOYMENT_TARGET = 26.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cidy02.Kudos.KudosTests;

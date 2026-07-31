@@ -1,0 +1,285 @@
+import Foundation
+import OSLog
+
+/// Converts a user-supplied document of any supported format into EPUB bytes.
+///
+/// The single entry point for the "community redistributed the last known copy as
+/// whatever file they had" case. Callers hand over a local file and get back
+/// either an EPUB to import or a typed error naming the format, so the whole
+/// import path downstream stays EPUB-only.
+nonisolated enum ImportedDocumentConverter {
+    /// Version of the conversion *output*. Recorded per work in
+    /// `WorkConversionRecord`, so a work converted by an older version can be rebuilt
+    /// from its archived original instead of being deleted and imported again.
+    ///
+    /// **Bump this whenever conversion output changes for the same input** — a new
+    /// format, better chapter splitting, different paragraph handling, new metadata
+    /// recovered. Do *not* bump for refactors, error-message wording, or anything a
+    /// reader could not notice.
+    ///
+    /// History, so the number means something to whoever reads it next:
+    /// - 1 — first release: HTML, plain text, and ZIP archives.
+    /// - 2 — PDF support (PDFKit text layer, Vision OCR for scans).
+    /// - 3 — PDF paragraphs rebuilt from page geometry rather than line width, and a
+    ///       chapter's title no longer repeated as its first paragraph.
+    /// - 4 — author's notes marked as `<aside class="author-note">`.
+    /// - 5 — PDF front matter kept as a "Preface" (it was silently dropped when an
+    ///       outline started on page 2), and calibre/FanFicFare's metadata page parsed
+    ///       for the story link, fandom, genre, rating and summary.
+    /// - 6 — PDF paragraphs no longer split mid-sentence. A line's right edge is now
+    ///       sampled over several glyphs (PDFKit reported some trailing glyphs with a
+    ///       maxX *below* their own minX, collapsing the page measure), and the
+    ///       first-line-indent test gained an absolute 12pt floor so a few points of
+    ///       glyph jitter can no longer read as an indent.
+    /// - 7 — PDF layout analysis replaced by MuPDF structured text. Paragraphs now come
+    ///       from the engine's own blocks rather than from ~250 lines of heuristics over
+    ///       PDFKit glyph geometry, which had produced five defects including silently
+    ///       relocating prose. Verified character-identical to PDFKit's extraction on a
+    ///       171-page reference PDF, but correctly ordered and grouped.
+    /// - 8 — the EPUB now states its own word count (`calibre:word_count`), so imported
+    ///       works show a length on the card. Nothing else could supply it: word count
+    ///       normally comes from AO3's stats page, which a non-AO3 work never has.
+    /// - 9 — the preface carries an AO3-style `dt`/`dd` tag block, so the importer's
+    ///       existing scanner fills in rating, fandom, status, words and chapters for
+    ///       converted works. Ratings are mapped to AO3's spelling (FFN's "M" →
+    ///       "Mature"), which is what the rating lookup matches against.
+    static let converterVersion = 9
+
+    enum ConversionError: LocalizedError, Equatable {
+        /// A format a later task in this series will handle.
+        case notYetSupported(ImportedFileFormat)
+        /// Detected as text/HTML but the bytes could not be decoded at all.
+        case unreadableText
+        /// A zip with nothing importable inside.
+        case archiveHasNoReadableFiles
+        case noReadableText
+        /// PDFKit could not open the file at all.
+        case pdfUnreadable
+        /// Encrypted and still locked — its pages would extract as blank.
+        case pdfPasswordProtected
+        /// No text layer and OCR found nothing either.
+        case pdfHasNoExtractableText
+
+        var errorDescription: String? {
+            switch self {
+            case let .notYetSupported(format):
+                switch format {
+                case .docx, .odt, .rtf:
+                    "\(format.displayName) import is coming in a later update. For now, convert it "
+                        + "to EPUB (calibre, or Word's \"Save as\") and import that."
+                case .mobi:
+                    "Kindle files aren't supported yet. Convert it to EPUB with calibre and import that."
+                case .rar, .sevenZip:
+                    "\(format.displayName)s aren't supported yet. Unpack it first, then import the "
+                        + "files inside."
+                default:
+                    "This file isn't a format Kudos can read. Try an EPUB, HTML, or text file."
+                }
+            case .unreadableText:
+                "This file's text couldn't be decoded. It may be corrupt or in an unusual encoding."
+            case .archiveHasNoReadableFiles:
+                "This archive has no EPUB, HTML, or text files inside it."
+            case .noReadableText:
+                "This file has no readable text to import."
+            case .pdfUnreadable:
+                "This PDF couldn't be opened. It may be corrupt or incomplete."
+            case .pdfPasswordProtected:
+                "This PDF is password-protected. Remove the password and import it again."
+            case .pdfHasNoExtractableText:
+                "No text could be read from this PDF, even after scanning the pages as images. "
+                    + "It may be a picture-only scan of handwriting."
+            }
+        }
+    }
+
+    /// What conversion produced.
+    enum Outcome {
+        /// The file already was an EPUB — import it unchanged, no conversion.
+        case alreadyEPUB
+        /// Freshly built EPUB bytes, plus the format they were converted from.
+        case converted(Data, from: ImportedFileFormat)
+    }
+
+    /// Reads `url` and returns EPUB bytes, or throws a message worth showing.
+    ///
+    /// Not `@MainActor`: unzipping, parsing and re-serializing a whole work is
+    /// heavy enough that the caller must keep it off the main actor, the same way
+    /// `importEPUB` already detaches its metadata read.
+    static func convert(fileAt url: URL) throws -> Outcome {
+        let format = ImportedFileFormat.detect(at: url)
+        Log.library.info("Import sniffed \(format.rawValue, privacy: .public) for \(url.lastPathComponent, privacy: .public)")
+
+        switch format {
+        case .epub:
+            return .alreadyEPUB
+        case .html:
+            return .converted(try convertHTML(at: url), from: .html)
+        case .plainText:
+            return .converted(try convertPlainText(at: url), from: .plainText)
+        case .zip:
+            return try convertArchive(at: url)
+        case .pdf:
+            return .converted(try convertPDF(at: url), from: .pdf)
+        case .docx, .odt, .rtf, .mobi, .rar, .sevenZip, .unknown:
+            throw ConversionError.notYetSupported(format)
+        }
+    }
+
+    // MARK: - Single documents
+
+    private static func convertHTML(at url: URL) throws -> Data {
+        let html = try text(at: url)
+        let result = try HTMLWorkConverter.convert(html: html, fallbackTitle: fallbackTitle(for: url))
+        return try EPUBBuilder.archive(metadata: result.metadata, chapters: result.chapters)
+    }
+
+    private static func convertPlainText(at url: URL) throws -> Data {
+        let raw = try text(at: url)
+        let result = try PlainTextWorkConverter.convert(text: raw, fallbackTitle: fallbackTitle(for: url))
+        return try EPUBBuilder.archive(metadata: result.metadata, chapters: result.chapters)
+    }
+
+    private static func convertPDF(at url: URL) throws -> Data {
+        let result = try PDFWorkConverter.convert(fileAt: url, fallbackTitle: fallbackTitle(for: url))
+        return try EPUBBuilder.archive(metadata: result.metadata, chapters: result.chapters)
+    }
+
+    // MARK: - Archives
+
+    /// Three shapes of zip show up in practice, in this order of preference:
+    /// an EPUB nested inside (extract and import it as-is, no conversion loss);
+    /// a pile of per-chapter HTML/text files (one chapter each, natural-sorted);
+    /// anything else is a failure that says so.
+    ///
+    /// A zip that *is* an EPUB never reaches here — `ImportedFileFormat.detect`
+    /// already resolves that to `.epub`.
+    private static func convertArchive(at url: URL) throws -> Outcome {
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        let zip = try MiniZip(data: data)
+
+        if let nested = nestedEPUB(in: zip) {
+            return .converted(nested, from: .epub)
+        }
+
+        let members = readableMembers(of: zip)
+        guard !members.isEmpty else { throw ConversionError.archiveHasNoReadableFiles }
+
+        var chapters: [EPUBBuilder.Chapter] = []
+        var metadata = EPUBBuilder.Metadata(title: fallbackTitle(for: url))
+        for member in members {
+            guard let converted = try? chaptersFromMember(member) else { continue }
+            // The first member that knows the work's title and author wins; later
+            // ones only fill gaps, so a stray "readme.txt" cannot rename the work.
+            if metadata.author.isEmpty { metadata.author = converted.metadata.author }
+            if metadata.summary.isEmpty { metadata.summary = converted.metadata.summary }
+            if metadata.sourceURL.isEmpty { metadata.sourceURL = converted.metadata.sourceURL }
+            if metadata.subjects.isEmpty { metadata.subjects = converted.metadata.subjects }
+            chapters.append(contentsOf: converted.chapters)
+        }
+        guard !chapters.isEmpty else { throw ConversionError.noReadableText }
+        return .converted(
+            try EPUBBuilder.archive(metadata: metadata, chapters: chapters),
+            from: .zip
+        )
+    }
+
+    /// An EPUB packaged inside a zip — the most common shape, because forums and
+    /// chat apps refuse `.epub` attachments and people zip them to get around it.
+    private static func nestedEPUB(in zip: MiniZip) -> Data? {
+        let candidates = zip.names
+            .filter { $0.lowercased().hasSuffix(".epub") && !localName($0).hasPrefix(".") }
+            .sorted(by: naturalOrder)
+        for name in candidates {
+            guard let payload = zip.data(named: name),
+                  // Verify it really is one before handing it to the importer,
+                  // rather than trusting the extension inside an untrusted zip.
+                  let inner = try? MiniZip(data: payload),
+                  inner.names.contains("mimetype") || inner.names.contains("META-INF/container.xml")
+            else { continue }
+            return payload
+        }
+        return nil
+    }
+
+    private struct ArchiveMember {
+        let name: String
+        let data: Data
+        let format: ImportedFileFormat
+    }
+
+    /// Entries worth reading, in natural order so `chapter-2` precedes
+    /// `chapter-10`. macOS resource forks (`__MACOSX`) and dotfiles are skipped —
+    /// they are present in most zips made on a Mac and contain no story text.
+    private static func readableMembers(of zip: MiniZip) -> [ArchiveMember] {
+        zip.names
+            .filter { name in
+                let leaf = localName(name)
+                return !name.hasPrefix("__MACOSX")
+                    && !leaf.hasPrefix(".")
+                    && !name.hasSuffix("/")
+                    && ["html", "htm", "xhtml", "txt", "text", "md", "markdown"]
+                        .contains((name as NSString).pathExtension.lowercased())
+            }
+            .sorted(by: naturalOrder)
+            .compactMap { name in
+                guard let data = zip.data(named: name) else { return nil }
+                let format: ImportedFileFormat = ["html", "htm", "xhtml"]
+                    .contains((name as NSString).pathExtension.lowercased()) ? .html : .plainText
+                return ArchiveMember(name: name, data: data, format: format)
+            }
+    }
+
+    private static func chaptersFromMember(_ member: ArchiveMember) throws -> HTMLWorkConverter.Result {
+        guard let text = decode(member.data) else { throw ConversionError.unreadableText }
+        let title = (localName(member.name) as NSString).deletingPathExtension
+        switch member.format {
+        case .html:
+            return try HTMLWorkConverter.convert(html: text, fallbackTitle: title)
+        default:
+            return try PlainTextWorkConverter.convert(text: text, fallbackTitle: title)
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// Sorts `chapter-2` before `chapter-10`, which plain string ordering does not.
+    /// Community chapter dumps are numbered without zero padding almost every time.
+    static func naturalOrder(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.localizedStandardCompare(rhs) == .orderedAscending
+    }
+
+    /// The file name, minus its extension, as a last-resort title. Community files
+    /// are named things like `Fic Name - Author (complete).txt`, so this is often
+    /// the *only* title information in the file — T-155 adds the parser that
+    /// splits author and cruft out of it.
+    private static func fallbackTitle(for url: URL) -> String {
+        url.deletingPathExtension().lastPathComponent
+    }
+
+    private static func text(at url: URL) throws -> String {
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        guard let text = decode(data) else { throw ConversionError.unreadableText }
+        return text
+    }
+
+    /// UTF-8, then UTF-16 (Windows "Save As" default), then Latin-1 as the
+    /// never-fails fallback. Rescued fanfic has been through a lot of editors.
+    private static func decode(_ data: Data) -> String? {
+        // UTF-16 is tried **only** behind a byte-order mark, and before the
+        // single-byte encodings. Without the BOM check, `String(data:encoding:.utf16)`
+        // succeeds on almost any even-length byte sequence and returns CJK-looking
+        // mojibake, so an ordinary Latin-1 file with an even byte count would import
+        // as garbage rather than falling through to an encoding that fits it.
+        let bom = Array(data.prefix(2))
+        if bom == [0xFF, 0xFE] || bom == [0xFE, 0xFF],
+           let text = String(data: data, encoding: .utf16), !text.isEmpty {
+            return text
+        }
+        for encoding: String.Encoding in [.utf8, .windowsCP1252, .isoLatin1] {
+            if let text = String(data: data, encoding: encoding), !text.isEmpty {
+                return text
+            }
+        }
+        return nil
+    }
+}

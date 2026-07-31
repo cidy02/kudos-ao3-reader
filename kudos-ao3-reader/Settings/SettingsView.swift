@@ -27,6 +27,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @Query(sort: \WorkCollection.dateAdded) private var collections: [WorkCollection]
     @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
     @Query private var syncTombstones: [SyncTombstone]
+    @Query(sort: \ReadingAnnotation.createdAt) private var readingAnnotations: [ReadingAnnotation]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -70,6 +71,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var isFolderSyncing = false
     @State private var showingSyncDetails = false
+    @State private var showingAvailabilitySweep = false
     @State private var lastFolderSyncResult: FolderSyncResult?
 
     /// All selectable fonts: built-ins followed by imported ones.
@@ -231,6 +233,12 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         : "Choose how pages turn while reading.")
                 }
 
+                #if os(iOS)
+                // Voice / rate / pitch for the Readium read-aloud mini player.
+                // macOS still uses the legacy WKWebView reader without TTS.
+                ReaderSpeechSettingsSection()
+                #endif
+
                 Section("Font") {
                     ForEach(fontOptions) { option in
                         Button {
@@ -294,6 +302,23 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         progressText: epubImportProgress,
                         onImport: { activeImport = .epub }
                     )
+
+                    Section {
+                        Button {
+                            showingAvailabilitySweep = true
+                        } label: {
+                            Label("Check Availability…", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                    } header: {
+                        Text("Preservation")
+                    } footer: {
+                        // Deliberately a button, never a background task: it is one AO3
+                        // request per work and AO3 offers no "what changed" feed, so the
+                        // user decides when that cost is worth paying.
+                        Text("Asks AO3 which of your saved works still exist, so deleted ones are "
+                            + "marked as the last copy you have. One request per work, sent slowly — "
+                            + "start it when it suits you.")
+                    }
 
                     Section {
                         NavigationLink {
@@ -432,6 +457,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         // Item-based exporter: the archive is already streamed to a temp file,
         // so saving is a file copy — the archive never lives in memory.
+        .sheet(isPresented: $showingAvailabilitySweep) {
+            AvailabilitySweepView()
+        }
         .fileExporter(
             isPresented: $exportingBackup,
             item: backupExportURL.map(KudosBackupArchiveFile.init),
@@ -619,8 +647,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 epubImportProgress = "Waiting for iCloud Drive… (\(index + 1) of \(urls.count))"
                 try await waitForUbiquitousDownload(of: url)
                 epubImportProgress = "Importing \(index + 1) of \(urls.count)…"
-                let outcome = try await importUserEPUB(url, into: context)
-                summary.record(outcome)
+                // Accepts any supported format, converting non-EPUBs on the way in.
+                let result = try await UserDocumentImport.perform(url, into: context)
+                summary.record(result.outcome, convertedFrom: result.convertedFrom)
             } catch {
                 summary.recordFailure(fileName: url.lastPathComponent, message: error.localizedDescription)
             }
@@ -641,6 +670,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 fonts: customFonts,
                 collections: collections,
                 readingQueues: readingQueues,
+                annotations: readingAnnotations,
                 tombstones: syncTombstones
             )
         } catch {
@@ -977,7 +1007,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         // `UTType(filenameExtension:conformingTo: .package)` matched neither
         // them nor anything else, so legacy import was silently broken too.
         case .backup: [.kudosBackup, .folder]
-        case .epub: [Self.epubContentType]
+        case .epub: Self.workImportContentTypes
         case .syncFolder: [.folder]
         case nil: [.item] // never presented; keeps the modifier well-formed
         }
@@ -1001,6 +1031,30 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         UTType(filenameExtension: "epub")
             ?? UTType(importedAs: "org.idpf.epub-container", conformingTo: .data)
     }()
+
+    /// Everything the work importer can read. Wider than the formats T-152
+    /// converts on purpose: a community copy arrives as whatever someone had, and
+    /// a picker that greys the file out is a dead end, whereas letting it through
+    /// produces a message naming the format and what to do about it.
+    ///
+    /// `.zip` matters more than it looks — forums and chat apps reject `.epub`
+    /// attachments, so zipping the file is the normal way fanfic gets passed
+    /// around, and `.data` catches the extensionless files Discord leaves behind.
+    private static let workImportContentTypes: [UTType] = [
+        epubContentType,
+        .html,
+        .plainText,
+        .text,
+        .zip,
+        .pdf,
+        .rtf,
+        UTType(filenameExtension: "xhtml") ?? .html,
+        UTType(filenameExtension: "md") ?? .plainText,
+        UTType(filenameExtension: "docx") ?? .data,
+        UTType(filenameExtension: "mobi") ?? .data,
+        UTType(filenameExtension: "azw3") ?? .data,
+        .data
+    ]
 }
 
 struct BackupSettingsSection: View {
@@ -1213,23 +1267,25 @@ struct EPUBImportSettingsSection: View {
     var body: some View {
         Section {
             Button(action: onImport) {
-                Label("Import EPUB", systemImage: "doc.badge.plus")
+                Label("Import Files", systemImage: "doc.badge.plus")
             }
             .disabled(isImporting)
-            .accessibilityLabel("Import EPUB")
+            .accessibilityLabel("Import files")
 
             if isImporting {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text(progressText ?? "Importing EPUB…")
+                    Text(progressText ?? "Importing…")
                         .foregroundStyle(.secondary)
                 }
             }
         } header: {
-            Text("EPUB")
+            Text("Import")
         } footer: {
-            Text("Import AO3 EPUB files into your local Library. Files are copied "
-                + "into Kudos storage and remain readable offline.")
+            Text("Import EPUB, HTML, or text files — including zipped chapters — into your "
+                + "local Library. Anything that isn't already an EPUB is converted to one, "
+                + "and the original file is kept alongside it. Files are copied into Kudos "
+                + "storage and remain readable offline.")
         }
     }
 }
@@ -1238,15 +1294,19 @@ private struct EPUBImportNoticeSummary {
     var imported = 0
     var restored = 0
     var duplicates = 0
+    /// How many files were converted to EPUB on the way in, by source format, so
+    /// the notice can say what happened rather than silently changing the file.
+    var converted: [ImportedFileFormat: Int] = [:]
     var failures: [(fileName: String, message: String)] = []
 
     var title: String {
-        failures.isEmpty ? "EPUB Import Complete" : "EPUB Import Finished"
+        failures.isEmpty ? "Import Complete" : "Import Finished"
     }
 
     var message: String {
         var parts: [String] = []
         if imported > 0 { parts.append("Imported \(imported.formatted()).") }
+        if !converted.isEmpty { parts.append(conversionSentence) }
         if restored > 0 {
             parts.append("Restored \(restored.formatted()) existing Library file\(restored == 1 ? "" : "s").")
         }
@@ -1254,17 +1314,27 @@ private struct EPUBImportNoticeSummary {
             parts.append("Skipped \(duplicates.formatted()) duplicate\(duplicates == 1 ? "" : "s").")
         }
         if failures.isEmpty {
-            return parts.isEmpty ? "No EPUB files were selected." : parts.joined(separator: " ")
+            return parts.isEmpty ? "No files were selected." : parts.joined(separator: " ")
         }
         let failureText = failures.prefix(3)
             .map { "\($0.fileName): \($0.message)" }
             .joined(separator: "\n")
         let extra = failures.count > 3 ? "\n…and \(failures.count - 3) more." : ""
-        return (parts.isEmpty ? "No EPUBs were imported." : parts.joined(separator: " "))
+        return (parts.isEmpty ? "Nothing was imported." : parts.joined(separator: " "))
             + "\n\n" + failureText + extra
     }
 
-    mutating func record(_ outcome: UserEPUBImportOutcome) {
+    /// "Converted 2 from HTML, 1 from plain text." Formats are sorted by name so
+    /// the sentence is stable rather than dictionary-ordered.
+    private var conversionSentence: String {
+        let clauses = converted
+            .sorted { $0.key.displayName < $1.key.displayName }
+            .map { "\($0.value.formatted()) from \($0.key.displayName)" }
+        return "Converted \(clauses.joined(separator: ", ")). The original file\(converted.count == 1 ? "" : "s")"
+            + " \(converted.values.reduce(0, +) == 1 ? "was" : "were") kept."
+    }
+
+    mutating func record(_ outcome: UserEPUBImportOutcome, convertedFrom format: ImportedFileFormat? = nil) {
         switch outcome {
         case .imported:
             imported += 1
@@ -1272,6 +1342,11 @@ private struct EPUBImportNoticeSummary {
             restored += 1
         case .duplicate:
             duplicates += 1
+        }
+        // A duplicate is not counted as a conversion: nothing new was stored, so
+        // claiming "the original was kept" would be a lie.
+        if let format, case .imported = outcome {
+            converted[format, default: 0] += 1
         }
     }
 

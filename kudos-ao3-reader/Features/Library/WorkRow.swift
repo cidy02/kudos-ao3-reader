@@ -102,6 +102,9 @@ struct WorkRow: View {
                 }
                 .font(.caption)
                 .lineLimit(expandedBinding.wrappedValue ? nil : 1)
+                // Snap the reflow — see AO3WorkRow: guards against an ancestor
+                // animation cross-fading two different text layouts.
+                .animation(nil, value: expandedBinding.wrappedValue)
             }
 
             if !summaryText.isEmpty {
@@ -110,6 +113,9 @@ struct WorkRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(expandedBinding.wrappedValue ? nil : 3)
                     .multilineTextAlignment(.leading)
+                    // Snap the reflow — see AO3WorkRow: guards against an
+                    // ancestor animation cross-fading two text layouts.
+                    .animation(nil, value: expandedBinding.wrappedValue)
             }
 
             if !warnings.isEmpty {
@@ -118,6 +124,9 @@ struct WorkRow: View {
                     .foregroundStyle(.secondary)
                     .labelStyle(.titleAndIcon)
                     .lineLimit(expandedBinding.wrappedValue ? nil : 1)
+                    // Snap the reflow — see AO3WorkRow: guards against an
+                    // ancestor animation cross-fading two text layouts.
+                    .animation(nil, value: expandedBinding.wrappedValue)
             }
 
             // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
@@ -190,7 +199,13 @@ struct WorkRowExpandButton: View {
 
     var body: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            // No `withAnimation`: these rows live in a `List`, and animating a
+            // row's height change makes it composite a snapshot of the old cell
+            // over the new one. The two layouts differ in height, so every
+            // element — title, byline, fandom, stats — ghosts over the expanded
+            // summary and chips for the duration. Toggling instantly relayouts
+            // in one frame with nothing to cross-fade.
+            expanded.toggle()
         } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))

@@ -14,6 +14,11 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
     var updatedDate = ""
     var seriesTitle = ""
     var seriesIndex: Int?
+    /// Word count, when the OPF states one. calibre writes
+    /// `<meta name="calibre:word_count">`, and `EPUBBuilder` writes the same key for
+    /// converted imports — the only place a non-AO3 work's length can come from,
+    /// since AO3's stats block is what normally supplies it.
+    var wordCount: Int?
     var metaContents: [String] = []
     var manifest: [String: String] = [:] // item id -> href
     var manifestMedia: [String: String] = [:] // item id -> media-type
@@ -67,6 +72,10 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
             case "calibre:series_index":
                 if let content = attributes["content"], let value = Double(content) {
                     seriesIndex = Int(value) // calibre writes "1" or "1.0"
+                }
+            case "calibre:word_count":
+                if let content = attributes["content"], let value = Int(content.filter(\.isNumber)) {
+                    wordCount = value
                 }
             default: break
             }

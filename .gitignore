@@ -40,3 +40,9 @@ artifacts/
 *.log
 scratch/
 tmp/
+
+# MuPDF build output (see Scripts/build-mupdf.sh) — ~190 MB, never committed.
+build-mupdf/
+
+# Vendored MuPDF binaries — build with Scripts/build-mupdf.sh (~48 MB).
+Vendor/

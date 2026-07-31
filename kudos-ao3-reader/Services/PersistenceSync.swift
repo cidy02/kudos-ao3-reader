@@ -347,6 +347,17 @@ enum SyncTombstones {
         ))
     }
 
+    static func recordDeletion(
+        of annotation: ReadingAnnotation, in context: ModelContext, reason: String = "workDeleted"
+    ) {
+        context.insert(SyncTombstone(
+            recordID: annotation.id,
+            recordType: .readingAnnotation,
+            deletedOnDeviceID: PersistenceDevice.currentID(),
+            deletionReason: reason
+        ))
+    }
+
     /// Records that `work` was explicitly removed from `collection`, so a stale sync
     /// file (an older manifest that still lists this work in the collection) can't
     /// silently re-add it on the next merge — the same class of bug tombstones already

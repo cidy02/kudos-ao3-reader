@@ -15,6 +15,10 @@ extension WorkDetailView {
         publicationCardSection
         workInfoCardSection
         statsCardSection
+        // Local-only: a remote work has no origin to report and nothing converted.
+        if let work = localWork {
+            WorkProvenanceSections(work: work)
+        }
         seriesSection
     }
 
@@ -199,6 +203,25 @@ extension WorkDetailView {
                             "Added",
                             value: work.dateAdded.formatted(date: .abbreviated, time: .shortened)
                         )
+                        // Always named here, AO3 included: the card suppresses "AO3"
+                        // as noise, but on a details screen the reader is asking where
+                        // this came from, so answering is the point.
+                        LabeledContent("Source", value: work.origin.displayName)
+
+                        if let explanation = work.preservationState.explanation(origin: work.origin) {
+                            Label {
+                                Text(explanation)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } icon: {
+                                Image(systemName: work.preservationState.badgeSymbol)
+                                    .foregroundStyle(
+                                        work.preservationState == .goneWithNoCopy ? .orange : .secondary
+                                    )
+                            }
+                            .labelStyle(.titleAndIcon)
+                            .padding(.top, 2)
+                        }
                     }
                 }
                 .cardRow()

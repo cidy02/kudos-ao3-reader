@@ -58,6 +58,9 @@ nonisolated struct EPUBMetadata {
     /// Best-effort date strings from OPF metadata. Kept as text because EPUBs vary.
     var publishedDate: String
     var updatedDate: String
+    /// Word count when the OPF states one; nil otherwise. An imported work has no AO3
+    /// stats page to read a length from, so this is where it comes from.
+    var wordCount: Int?
 
     /// The AO3 ratings, in the exact spelling AO3 writes into EPUB subjects.
     private static let ratings: Set<String> = [
@@ -131,13 +134,15 @@ nonisolated struct EPUBDocument {
             author: parser.author,
             summary: parser.summary,
             subjects: parser.subjects,
-            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText) ?? "",
+            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText)
+                ?? parser.sources.first(where: { $0.lowercased().hasPrefix("http") }) ?? "",
             seriesTitle: parser.seriesTitle,
             seriesIndex: parser.seriesIndex,
             rating: EPUBMetadata.rating(in: parser.subjects),
             language: parser.language,
             publishedDate: parser.publishedDate,
-            updatedDate: parser.updatedDate
+            updatedDate: parser.updatedDate,
+            wordCount: parser.wordCount
         )
         chapters = EPUBDocument.tableOfContents(parser: parser, opfDir: opfDir, spineCount: spineURLs.count)
     }
@@ -247,13 +252,15 @@ nonisolated struct EPUBDocument {
             author: parser.author,
             summary: parser.summary,
             subjects: parser.subjects,
-            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText) ?? "",
+            sourceURL: EPUBMetadata.canonicalAO3WorkURL(in: parser.metadataSearchText)
+                ?? parser.sources.first(where: { $0.lowercased().hasPrefix("http") }) ?? "",
             seriesTitle: parser.seriesTitle,
             seriesIndex: parser.seriesIndex,
             rating: EPUBMetadata.rating(in: parser.subjects),
             language: parser.language,
             publishedDate: parser.publishedDate,
-            updatedDate: parser.updatedDate
+            updatedDate: parser.updatedDate,
+            wordCount: parser.wordCount
         )
         return EPUBPackageInspection(metadata: metadata, readableItemCount: readableItemCount)
     }

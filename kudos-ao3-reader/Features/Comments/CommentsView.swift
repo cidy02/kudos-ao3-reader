@@ -62,9 +62,12 @@ struct CommentsView: View {
     @State private var highlightClearTask: Task<Void, Never>?
     /// Roots forced open by a "Thread"/"Parent Thread" jump, so a collapsed reply
     /// stack can't hide the comment being scrolled to.
-    @State private var forceExpandedRootIDs: Set<Int> = []
     @State private var focusScrollTask: Task<Void, Never>?
     @State private var didApplyInitialFocus = false
+    @State private var commentsWidth: CGFloat = 390
+    /// The thread being pushed, if any. AO3 gives Thread / Parent Thread their own
+    /// isolated-thread pages, so these navigate rather than scrolling in place.
+    @State private var pushedThread: CommentThreadRoute?
 
     init(
         workID: Int, context: AO3CommentsWorkContext, initialChapterPosition: Int? = nil,
@@ -126,10 +129,25 @@ struct CommentsView: View {
                 }
             }
             .cardList()
+            // Rows need the container width to size their indent, but indent
+            // feeds `listRowInsets` — which is resolved before a row lays out,
+            // so a row can't measure itself in time. Measure once here.
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { commentsWidth = $0 }
+            .environment(\.commentsContentWidth, commentsWidth)
             .navigationTitle("Comments")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+            .navigationDestination(item: $pushedThread) { route in
+                CommentThreadScreen(
+                    rootID: route.commentID,
+                    model: model,
+                    handlers: threadHandlers(scrollProxy: proxy),
+                    // A "Parent Thread" pointing above the pushed subtree pops back
+                    // here; the list is the only place that can resolve it.
+                    onFocusOutsideSubtree: { scrollToComment($0, proxy: proxy) }
+                )
+            }
             .hidesFloatingTabBar()
             .safeAreaInset(edge: .bottom) { writeCommentBar }
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
@@ -283,13 +301,24 @@ struct CommentsView: View {
         onResolveWorkContext?(model.workContext)
     }
 
-    /// Scrolls to and briefly highlights `commentID` within the currently-loaded
-    /// list ("Thread"/"Parent Thread" — the native equivalent of AO3's own
-    /// isolated-thread page, no extra request since the target is always already
-    /// on this same fetched page). Nested replies live inside the root List row,
-    /// so we first scroll to the owning root (materializes the tall cell) and
-    /// then to the nested `.id`.
-    private func focusThread(_ commentID: Int, proxy: ScrollViewProxy) {
+    /// Pushes AO3's own isolated-thread page for `commentID`.
+    ///
+    /// This used to scroll to the comment in place and call that "the native
+    /// equivalent" of AO3's thread page. It isn't: AO3 navigates, and a comment
+    /// carries a real `threadPath` to navigate *to*. Matching that is also what
+    /// lets the list stay shallow — deep chains have somewhere to go.
+    private func openThread(_ commentID: Int) {
+        pushedThread = CommentThreadRoute(commentID: commentID)
+    }
+
+    /// Scrolls to and briefly highlights `commentID` in this list. Still used for
+    /// the Inbox deep link, which lands on a comment *in context* — pushing a
+    /// thread screen over a list the reader hasn't seen yet would bury it.
+    ///
+    /// Every comment is its own List row, so the target is directly addressable —
+    /// but a *collapsed* thread doesn't render its replies at all, so a reply still
+    /// needs its root expanded and a layout pass before `scrollTo` can resolve it.
+    private func scrollToComment(_ commentID: Int, proxy: ScrollViewProxy) {
         highlightedCommentID = commentID
         highlightClearTask?.cancel()
         highlightClearTask = Task {
@@ -307,12 +336,12 @@ struct CommentsView: View {
             return
         }
 
-        // The target is a nested reply inside `rootID`'s row. Expand that root if
-        // it's collapsed (its nested `.id` wouldn't exist in the view tree at all)
-        // and scroll the row in first. `scrollTo` silently no-ops on an id that
-        // isn't laid out yet, so the nested id needs a layout pass before we can
-        // address it — hence the yield rather than a second call in this same pass.
-        forceExpandedRootIDs.insert(rootID)
+        // The target is a reply under `rootID`. Expand that thread if it's
+        // collapsed (its row wouldn't be in the view tree at all) and scroll the
+        // root in first. `scrollTo` silently no-ops on an id that isn't laid out
+        // yet, so the newly inserted reply rows need a layout pass before we can
+        // address one — hence the yield rather than a second call in this pass.
+        model.forceExpand(rootID: rootID)
         proxy.scrollTo(rootID, anchor: .center)
         focusScrollTask = Task {
             try? await Task.sleep(for: .milliseconds(50))
@@ -331,7 +360,7 @@ struct CommentsView: View {
         didApplyInitialFocus = true
         try? await Task.sleep(for: .milliseconds(80))
         guard !Task.isCancelled else { return }
-        focusThread(commentID, proxy: proxy)
+        scrollToComment(commentID, proxy: proxy)
     }
 
     private func threadHandlers(scrollProxy: ScrollViewProxy) -> CommentThreadHandlers {
@@ -346,7 +375,7 @@ struct CommentsView: View {
                 )
             },
             onCopyLink: { copyLink($0) },
-            onFocusThread: { focusThread($0, proxy: scrollProxy) },
+            onFocusThread: { openThread($0) },
             onRequestLogin: { showingLogin = true },
             onOpenAuthor: openAuthor
         )
@@ -382,6 +411,12 @@ struct CommentsView: View {
                         Image(systemName: "person")
                             .foregroundStyle(.secondary)
                     }
+                    // A Label sizes its icon from the *ambient* font, so the
+                    // `.subheadline` passed to the byline alone left this glyph
+                    // at `.body` — bigger than, and off the baseline of, the
+                    // Fandoms icon below. Same fix as `WorkIdentityCard`, which
+                    // this card deliberately mirrors.
+                    .font(.subheadline)
                 }
 
                 if !model.workContext.fandoms.isEmpty {
@@ -569,15 +604,27 @@ struct CommentsView: View {
                 }
                 .cardRow()
             } else {
-                ForEach(model.displayThreads) { comment in
-                    CommentThreadRow(
-                        comment: comment,
+                // One flat, lazy ForEach over rows the model already resolved —
+                // no nested ForEach and no per-pass allocation, so a swipe
+                // re-evaluating this body stays cheap.
+                ForEach(model.conversationRows) { row in
+                    CommentConversationRow(
+                        item: row.item,
                         workAuthors: model.workAuthors,
                         workAuthorIdentities: model.workAuthorIdentities,
                         showChapterBadge: model.scope == .all,
-                        startsExpanded: forceExpandedRootIDs.contains(comment.id)
+                        startsConversation: row.startsConversation,
+                        depth: row.depth,
+                        isLastSibling: row.isLastSibling,
+                        ancestorLines: row.ancestorLines,
+                        nextDepth: row.nextDepth,
+                        showsParentAttribution: row.showsParentAttribution,
+                        collapse: row.collapse,
+                        onExpand: { model.expandReplies(rootID: row.rootID) },
+                        onContinueThread: { openThread(row.rootID) },
+                        onToggleCollapse: { model.toggleCollapsed(rootID: row.rootID) }
                     )
-                    .id(comment.id)
+                    .commentSwipeActions(comment: row.item.actionableComment)
                 }
                 .environment(\.commentHighlightID, highlightedCommentID)
                 .environment(\.commentThreadHandlers, threadHandlers(scrollProxy: scrollProxy))

@@ -337,10 +337,52 @@ extension WorkDetailView {
                         value: WorkDetailPresentation.preservationStatusLabel(work.epubPreservationStatus)
                     )
                 }
+                conversionRows(for: work)
             }
             .cardRow()
         } header: {
             Text("Storage")
+        }
+    }
+
+    /// Shown only for converted imports, which are the only works with an original
+    /// file to rebuild from.
+    @ViewBuilder
+    private func conversionRows(for work: SavedWork) -> some View {
+        if let candidate = WorkReconversion.candidate(for: work) {
+            LabeledContent("Converted from", value: candidate.record.originalFileName)
+            if candidate.isStale {
+                // The whole point of versioning the converter: rebuild in place instead
+                // of deleting the work and importing the file again, which would lose
+                // its progress, tags, collections and queue memberships.
+                Button {
+                    Task { await reconvert(work) }
+                } label: {
+                    Label(
+                        working ? "Rebuilding…" : "Rebuild with the Improved Converter",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                    .font(.subheadline)
+                }
+                .disabled(working)
+                Text("This work was converted by an earlier version. Rebuilding uses the "
+                    + "original file that was kept alongside it, so nothing is re-downloaded "
+                    + "and your progress and tags stay put.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                LabeledContent("Conversion", value: "Up to date")
+            }
+        }
+    }
+
+    private func reconvert(_ work: SavedWork) async {
+        working = true
+        defer { working = false }
+        do {
+            _ = try await WorkReconversion.reconvert(work, in: context)
+        } catch {
+            loadError = error.localizedDescription
         }
     }
 

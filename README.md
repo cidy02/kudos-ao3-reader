@@ -1,8 +1,16 @@
 # Kudos — AO3 Reader
 
 A native macOS / iOS / iPadOS reader for Archive of Our Own with a polished
-Liquid Glass experience. Personal and open-source (GPL-3.0), built with SwiftUI
+Liquid Glass experience. Personal and open-source (GPL-3.0 / AGPL-3.0 — see below), built with SwiftUI
 and SwiftData.
+
+> **Licence note.** Kudos itself is GPL-3.0. PDF import links
+> [MuPDF](https://mupdf.com) (AGPL-3.0) for text-layout analysis, which GPL-3 §13
+> expressly permits — so the **distributed binary as a whole is governed by the
+> AGPL**, including its obligation to offer complete corresponding source. MuPDF is
+> used unmodified; `Scripts/build-mupdf.sh` fetches and builds it, and
+> `kudos-ao3-reader/Legal/ThirdPartyNotices.txt` carries its notice. Building without
+> PDF support would remove that obligation; see `docs/PDF_ENGINE_MUPDF.md`.
 
 ## Features
 

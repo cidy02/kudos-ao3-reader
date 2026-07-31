@@ -2,9 +2,11 @@ import OSLog
 import SwiftData
 import SwiftUI
 #if os(iOS)
+import QuickLook
 import ReadiumNavigator
 import ReadiumShared
 import UIKit
+import WebKit
 #endif
 
 /// Platform router for the book reader. iOS/iPadOS use the new Readium navigator;
@@ -26,505 +28,6 @@ struct BookReaderView: View {
 
 #if os(iOS)
 
-/// Converts the app's point/em-based reader settings into Readium's percentage
-/// and factor-based preferences. Keeping the calibration here makes the mapping
-/// testable and prevents the SwiftUI view from accumulating magic numbers.
-enum ReadiumReaderStyleMapper {
-    /// Readium CSS starts from the browser's 16 px root size.
-    private static let readiumBaseFontSize = 16.0
-
-    static func preferences(
-        style: ReaderTextStyle,
-        theme: ReaderTheme,
-        fontFamily: FontFamily?,
-        readingMode: ReadingMode,
-        columnCount: ColumnCount?
-    ) -> EPUBPreferences {
-        EPUBPreferences(
-            backgroundColor: ReadiumNavigator.Color(hex: theme.backgroundHex),
-            // Only set a column count in paged mode. Forcing `.one` in scroll mode makes
-            // Readium lay the text out in screen-height columns (page breaks mid-text +
-            // dead space top/bottom) instead of one continuous flow.
-            columnCount: readingMode == .scroll ? nil : columnCount,
-            fontFamily: fontFamily,
-            // Legacy CSS emits the selected point size as px. Readium expects a
-            // percentage of its 16 px root, so 18 pt becomes 112.5%.
-            fontSize: max(0.1, style.fontSizePt / readiumBaseFontSize),
-            // Legacy bold is 600. Readium multiplies this value by its 400
-            // normal weight, so 1.5 produces the same result.
-            fontWeight: style.bold ? 1.5 : nil,
-            // Readium CSS divides this preference by two before emitting rem.
-            // Compensate so the positive half of the app's em slider is exact.
-            letterSpacing: max(0, style.letterSpacing * 2),
-            lineHeight: style.lineHeight,
-            // The navigator configuration uses a 1 px base gutter, turning
-            // Readium's factor into the app's absolute point/px margin.
-            pageMargins: max(0, style.margin),
-            // The legacy reader always overrides the EPUB's base typography.
-            // Advanced Readium settings require publisher styles to be off.
-            publisherStyles: false,
-            scroll: readingMode == .scroll,
-            textAlign: style.justify ? .justify : nil,
-            textColor: ReadiumNavigator.Color(hex: theme.textHex),
-            theme: theme.readiumTheme,
-            wordSpacing: max(0, style.wordSpacing)
-        )
-    }
-
-    static var readingSystemProperties: CSSRSProperties {
-        CSSRSProperties(pageGutter: CSSPxLength(1))
-    }
-
-    static func fontFamily(for option: ReaderFontOption) -> FontFamily? {
-        if option.isCustom {
-            // The selection id contains ":" and ".". Prefix it with a space-
-            // containing family name so Readium quotes it in the CSS custom
-            // property instead of emitting an invalid bare CSS identifier.
-            return FontFamily(rawValue: "Kudos User Font \(option.id)")
-        }
-        return fontStack(in: option.cssFamily).first
-    }
-
-    /// Declares both imported files and the fallback stacks for the built-in
-    /// choices. Readium otherwise emits only the first family name, losing the
-    /// legacy reader's carefully chosen fallbacks.
-    static func fontFamilyDeclarations(
-        options: [ReaderFontOption]
-    ) -> [AnyHTMLFontFamilyDeclaration] {
-        options.compactMap { option in
-            guard let family = fontFamily(for: option) else { return nil }
-            let stack = fontStack(in: option.cssFamily)
-            let alternates = stack.filter { $0 != family }
-            let faces: [CSSFontFace] = if let file = option.customFileURL?.fileURL {
-                // Readium serves imported files through a separate custom-scheme
-                // host. Preloading that URL trips WebKit's cross-origin check;
-                // allowing the @font-face rule to request it normally works.
-                [CSSFontFace(file: file)]
-            } else {
-                []
-            }
-            return CSSFontFamilyDeclaration(
-                fontFamily: family,
-                alternates: alternates,
-                fontFaces: faces
-            ).eraseToAnyHTMLFontFamilyDeclaration()
-        }
-    }
-
-    private static func fontStack(in cssFamily: String) -> [FontFamily] {
-        cssFamily
-            .split(separator: ",")
-            .map {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: " '\""))
-            }
-            .filter { !$0.isEmpty }
-            .map(FontFamily.init(rawValue:))
-    }
-}
-
-/// Owns a Readium `EPUBNavigatorViewController` for one work: opens the EPUB,
-/// builds the navigator, applies preferences live, and reports position + taps.
-@Observable
-@MainActor
-final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
-    enum Phase: Equatable {
-        case loading
-        case ready
-        case failed(String)
-    }
-
-    private(set) var phase: Phase = .loading
-    /// Flat table of contents (falls back to the reading order / spine).
-    private(set) var toc: [ReadiumShared.Link] = []
-    /// The full spine, in reading order — kept so synthesized `ReaderSection`s
-    /// (e.g. AO3's un-navigable Summary page) can still be navigated to via
-    /// `go(toSpineIndex:)`, not just the entries `toc` itself lists.
-    private(set) var readingOrder: [ReadiumShared.Link] = []
-    /// `toc`/`readingOrder` reconciled into AO3-aware sections (Preface/Summary/
-    /// Chapter/Afterword), one per spine item. See `ReaderSection`.
-    private(set) var sections: [ReaderSection] = []
-    private(set) var currentLocator: Locator?
-    /// Whether the viewport's trailing edge rests at the very end of the final
-    /// reading-order resource — the only state that may auto-finish a work.
-    /// See `ReadiumReaderCompletion`. Kept as a boolean (not the full viewport)
-    /// so scroll-driven viewport updates don't thrash `@Observable` dependents
-    /// on every settle.
-    private(set) var isAtPublicationEnd = false
-    private(set) var navigator: EPUBNavigatorViewController?
-    /// Readium's static position list grouped by reading-order item (chapter).
-    /// Drives the progress pill's "Ch. x/x · Pg. x/x" without any extra requests.
-    private(set) var positionsByReadingOrder: [[Locator]] = []
-    /// Toggled by tapping the page; the view hides/shows its chrome on this.
-    var chromeHidden = false
-
-    /// Fires on every position change. The view records this for the progress
-    /// pill and feeds a debounced persistence path — it must not force a
-    /// SwiftData save on every call (scrolled-mode hang). Completion is
-    /// signaled separately by `onReachedPublicationEnd`.
-    var onLocatorChange: ((Locator) -> Void)?
-    /// Fires once each time the viewport newly reaches the publication's true
-    /// end (`ReadiumReaderCompletion.isAtEnd`) — used to auto-finish completed
-    /// works. Never fired for intermediate progressions such as 0.99/0.999.
-    var onReachedPublicationEnd: (() -> Void)?
-    /// Hands web links in EPUB content to the app's in-app Browse tab.
-    var onOpenExternalURL: ((URL) -> Void)?
-
-    /// Fraction through the whole publication (0...1), when known.
-    var totalProgression: Double? {
-        currentLocator?.locations.totalProgression
-    }
-
-    /// A compact reading position for the progress pill: overall percent plus the
-    /// current chapter and the page within it. Pages are Readium "positions"
-    /// (~1 KB of content each), so they stay stable across font-size changes.
-    struct ReadingPosition: Equatable {
-        let percent: Int
-        let chapter: Int
-        let chapterCount: Int
-        let page: Int
-        let pageCount: Int
-    }
-
-    var readingPosition: ReadingPosition? {
-        guard let locator = currentLocator,
-              let globalPos = locator.locations.position,
-              !positionsByReadingOrder.isEmpty
-        else { return nil }
-        // Find the chapter whose global position range contains the current spot.
-        guard let chapterIndex = positionsByReadingOrder.firstIndex(where: { chapter in
-            guard let first = chapter.first?.locations.position,
-                  let last = chapter.last?.locations.position else { return false }
-            return globalPos >= first && globalPos <= last
-        }) else { return nil }
-        let chapterPositions = positionsByReadingOrder[chapterIndex]
-        let pageCount = max(1, chapterPositions.count)
-        let firstPos = chapterPositions.first?.locations.position ?? globalPos
-        let page = min(pageCount, max(1, globalPos - firstPos + 1))
-        let percent = Int(((locator.locations.totalProgression ?? 0) * 100).rounded())
-        return ReadingPosition(percent: percent,
-                               chapter: chapterIndex + 1, chapterCount: positionsByReadingOrder.count,
-                               page: page, pageCount: pageCount)
-    }
-
-    /// Opens the work's EPUB and builds the navigator at `initialLocator` with the
-    /// given configuration (preferences + custom-font declarations). The file
-    /// already lives in the app sandbox, so (unlike the POC) it's opened in place.
-    /// `fallbackSpineIndex` migrates legacy progress: when there's no saved Readium
-    /// `Locator`, resume at the start of that reading-order item (the work's last
-    /// chapter from the old WKWebView reader). Intra-chapter offset isn't recovered.
-    func open(fileURL: URL, initialLocator: Locator?, fallbackSpineIndex: Int? = nil,
-              config: EPUBNavigatorViewController.Configuration) async {
-        phase = .loading
-        do {
-            let publication = try await ReadiumPublicationLoader.openEPUB(at: fileURL)
-            var initial = initialLocator
-            if initial == nil, let index = fallbackSpineIndex,
-               publication.readingOrder.indices.contains(index) {
-                initial = await publication.locate(publication.readingOrder[index])
-            }
-            let navigator = try EPUBNavigatorViewController(
-                publication: publication,
-                initialLocation: initial,
-                config: config
-            )
-            navigator.delegate = self
-            let tocLinks = await (try? publication.tableOfContents().get()) ?? []
-            self.navigator = navigator
-            readingOrder = publication.readingOrder
-            toc = tocLinks.isEmpty ? readingOrder : tocLinks
-            positionsByReadingOrder = await (try? publication.positionsByReadingOrder().get()) ?? []
-            sections = Self.buildSections(toc: toc, readingOrder: readingOrder)
-            phase = .ready
-            Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
-        } catch {
-            phase = .failed(error.localizedDescription)
-            Log.epub.error("Couldn't open EPUB (Readium): \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    func submit(_ preferences: EPUBPreferences) {
-        navigator?.submitPreferences(preferences)
-    }
-
-    func goForward() {
-        Task { @MainActor in await navigator?.goForward() }
-    }
-
-    func goBackward() {
-        Task { @MainActor in await navigator?.goBackward() }
-    }
-
-    func go(to link: ReadiumShared.Link) {
-        Task { @MainActor in await navigator?.go(to: link) }
-    }
-
-    /// Navigates to a spine position directly — needed for `ReaderSection`s (like
-    /// AO3's synthesized Summary) that have no TOC `Link` of their own to pass to
-    /// `go(to:)`.
-    func go(toSpineIndex index: Int) {
-        guard readingOrder.indices.contains(index) else { return }
-        go(to: readingOrder[index])
-    }
-
-    /// Resolves `toc`'s `Link`s to spine indices (by href, fragment/path-insensitive)
-    /// and reconciles them against the full `readingOrder` into normalized sections.
-    /// Internal (not `private`) so `ReadiumReaderTests` can exercise the nested-TOC
-    /// flattening (A7-F8) directly with synthetic fixtures.
-    static func buildSections(
-        toc: [ReadiumShared.Link],
-        readingOrder: [ReadiumShared.Link]
-    ) -> [ReaderSection] {
-        let spineHrefs = readingOrder.map(\.href)
-        let spineKeys = spineHrefs.map(ReaderSectionBuilder.hrefKey)
-        // Outermost-entry-wins on a duplicate spine target. A grouping node with no
-        // page of its own (a "Part One" heading whose href is just its first
-        // chapter's file) is an ordinary EPUB2 NCX shape, and flattening now emits
-        // both it and that child. `ReaderSectionBuilder.build` resolves duplicates
-        // last-write-wins, so without this the child would overwrite its parent and
-        // silently rename that spine item — a behavior change beyond A7-F8's scope,
-        // and one that can shift story-chapter numbering when the two titles
-        // classify differently (e.g. an "Afterword" parent losing to a chapter
-        // child). Dropping the deeper duplicate keeps exactly the title that won
-        // before flattening, so this wave only *adds* the previously-missing
-        // children. `build`'s own last-wins contract is shared with the macOS
-        // pipeline and is deliberately left alone.
-        var claimedSpineIndices: Set<Int> = []
-        let rawTOC: [ReaderSectionBuilder.RawTOCEntry] = flattenTOC(toc).compactMap { link in
-            let key = ReaderSectionBuilder.hrefKey(link.href)
-            guard let spineIndex = spineKeys.firstIndex(of: key),
-                  claimedSpineIndices.insert(spineIndex).inserted
-            else { return nil }
-            return ReaderSectionBuilder.RawTOCEntry(
-                title: link.title ?? "Section \(spineIndex + 1)",
-                spineIndex: spineIndex
-            )
-        }
-        return ReaderSectionBuilder.build(tocEntries: rawTOC, spineHrefs: spineHrefs)
-    }
-
-    /// Readium models a hierarchical TOC (EPUB2 NCX / EPUB3 nav Part→Chapter
-    /// nesting) via `Link.children`; flatten depth-first in document order so a
-    /// chapter nested under a Part heading still gets its own navigable
-    /// `RawTOCEntry` instead of silently disappearing (A7-F8 — the chapter sheet
-    /// only ever iterated the top-level array, so a nested chapter's spine item
-    /// fell back to `.other` and was hidden from the index). Duplicate spine
-    /// targets this introduces are resolved by the caller — see the
-    /// outermost-wins note in `buildSections`.
-    private static func flattenTOC(_ links: [ReadiumShared.Link]) -> [ReadiumShared.Link] {
-        links.flatMap { [$0] + flattenTOC($0.children) }
-    }
-
-    // MARK: EPUBNavigatorDelegate
-
-    func navigator(_: Navigator, locationDidChange locator: Locator) {
-        currentLocator = locator
-        onLocatorChange?(locator)
-    }
-
-    /// True-end completion check only. Readium updates `viewport` with
-    /// `currentLocation`; we derive a boolean and only publish it when the
-    /// end state flips so scrolled settles don't invalidate SwiftUI for free.
-    /// Rising-edge only for `onReachedPublicationEnd`.
-    func navigator(_: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
-        let atEnd = ReadiumReaderCompletion.isAtEnd(viewport: viewport, readingOrder: readingOrder)
-        let wasAtEnd = isAtPublicationEnd
-        if atEnd != wasAtEnd {
-            isAtPublicationEnd = atEnd
-        }
-        if atEnd, !wasAtEnd {
-            onReachedPublicationEnd?()
-        }
-    }
-
-    /// The only delegate method without a default implementation.
-    func navigator(_: Navigator, presentError error: NavigatorError) {
-        phase = .failed(error.localizedDescription)
-    }
-
-    /// Readium's default implementation opens every external URL in the system
-    /// browser. Keep HTTP(S) links inside Kudos, matching the legacy reader, while
-    /// preserving the system behavior for schemes such as `mailto:`.
-    func navigator(_: Navigator, presentExternalURL url: URL) {
-        if !routeWebURLToBrowse(url) {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    func navigator(_: VisualNavigator, didTapAt _: CGPoint) {
-        chromeHidden.toggle()
-    }
-
-    /// Trims Readium's default reflowable content insets. The navigator treats
-    /// iPhone portrait as the `.regular` vertical size class and reserves 62 pt
-    /// top and bottom, which left a large empty band beneath the last line in
-    /// paged mode. Keep the top clear of the status bar / Dynamic Island, but let
-    /// the text run close to the bottom edge.
-    func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
-        let safeTop = (navigator as? UIViewController)?.view.window?.safeAreaInsets.top ?? 0
-        return UIEdgeInsets(top: safeTop, left: 0, bottom: 16, right: 0)
-    }
-
-    @discardableResult
-    func routeWebURLToBrowse(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              let onOpenExternalURL
-        else { return false }
-        onOpenExternalURL(url)
-        return true
-    }
-}
-
-/// Thin SwiftUI host for an already-built `EPUBNavigatorViewController`. Adds a
-/// downward swipe gesture on top of Readium so the reader can be dismissed without
-/// interfering with the navigator's built-in page turns.
-struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
-    let controller: EPUBNavigatorViewController
-    let readingMode: ReadingMode
-    let onDismissDragChanged: (CGFloat) -> Void
-    let onDismissDragEnded: (Bool) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIViewController(context: Context) -> EPUBNavigatorViewController {
-        context.coordinator.update(readingMode: readingMode,
-                                   onDismissDragChanged: onDismissDragChanged,
-                                   onDismissDragEnded: onDismissDragEnded)
-        context.coordinator.install(on: controller)
-        return controller
-    }
-
-    func updateUIViewController(_ controller: EPUBNavigatorViewController, context: Context) {
-        context.coordinator.update(readingMode: readingMode,
-                                   onDismissDragChanged: onDismissDragChanged,
-                                   onDismissDragEnded: onDismissDragEnded)
-        context.coordinator.install(on: controller)
-    }
-
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        private var readingMode: ReadingMode = .scroll
-        private var onDismissDragChanged: (CGFloat) -> Void = { _ in }
-        private var onDismissDragEnded: (Bool) -> Void = { _ in }
-        private weak var installedView: UIView?
-        private var dismissPan: UIPanGestureRecognizer?
-        /// Latched once a drag is recognized as a downward dismiss, so minor sideways
-        /// wobble mid-drag doesn't snap the sheet back to rest (the old jank source).
-        private var dismissLatched = false
-
-        func update(
-            readingMode: ReadingMode,
-            onDismissDragChanged: @escaping (CGFloat) -> Void,
-            onDismissDragEnded: @escaping (Bool) -> Void
-        ) {
-            self.readingMode = readingMode
-            self.onDismissDragChanged = onDismissDragChanged
-            self.onDismissDragEnded = onDismissDragEnded
-        }
-
-        func install(on controller: EPUBNavigatorViewController) {
-            guard let view = controller.view else { return }
-            guard installedView !== view else { return }
-
-            if let dismissPan {
-                dismissPan.view?.removeGestureRecognizer(dismissPan)
-            }
-
-            let dismissPan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan))
-            dismissPan.cancelsTouchesInView = false
-            dismissPan.delegate = self
-            view.addGestureRecognizer(dismissPan)
-            self.dismissPan = dismissPan
-
-            installedView = view
-        }
-
-        // MARK: Swipe-down dismiss
-
-        @objc private func handleDismissPan(_ gesture: UIPanGestureRecognizer) {
-            guard let view = gesture.view else { return }
-            let translation = gesture.translation(in: view)
-            let velocity = gesture.velocity(in: view)
-
-            switch gesture.state {
-            case .began:
-                dismissLatched = false
-            case .changed:
-                if !dismissLatched {
-                    // Latch as a dismiss once a clearly downward, vertical-dominant drag
-                    // starts (and, in scroll mode, only from the top of the page).
-                    let startsDismiss = translation.y > 12
-                        && translation.y > abs(translation.x) * 1.1
-                        && (readingMode != .scroll || isAtTop(in: view))
-                    guard startsDismiss else { return }
-                    dismissLatched = true
-                }
-                onDismissDragChanged(rubberBandedDistance(max(0, translation.y)))
-            case .ended:
-                guard dismissLatched else { onDismissDragEnded(false); return }
-                let passesDistance = translation.y > 110
-                let passesVelocity = translation.y > 40 && velocity.y > 900
-                onDismissDragEnded(passesDistance || passesVelocity)
-                dismissLatched = false
-            case .cancelled, .failed:
-                onDismissDragEnded(false)
-                dismissLatched = false
-            default:
-                break
-            }
-        }
-
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
-                  let view = pan.view else { return true }
-            let velocity = pan.velocity(in: view)
-            let translation = pan.translation(in: view)
-
-            // Dismiss pan: downward, vertical-dominant, top-of-page in scroll mode.
-            let downwardIntent = velocity.y > 0 || translation.y > 0
-            let verticalVelocity = abs(velocity.y) > abs(velocity.x) * 1.25
-            let verticalTranslation = translation.y > abs(translation.x) * 1.25
-            guard downwardIntent, verticalVelocity || verticalTranslation else { return false }
-            return readingMode != .scroll || isAtTop(in: view)
-        }
-
-        func gestureRecognizer(
-            _: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
-        ) -> Bool {
-            true
-        }
-
-        private func rubberBandedDistance(_ distance: CGFloat) -> CGFloat {
-            guard distance > 150 else { return distance }
-            return 150 + (distance - 150) * 0.5
-        }
-
-        private func isAtTop(in view: UIView) -> Bool {
-            guard let scrollView = primaryScrollView(in: view) else { return true }
-            let top = -scrollView.adjustedContentInset.top
-            return scrollView.contentOffset.y <= top + 18
-        }
-
-        private func primaryScrollView(in view: UIView) -> UIScrollView? {
-            let scrollViews = collectScrollViews(in: view)
-            return scrollViews.first {
-                !$0.isHidden && $0.alpha > 0 && $0.contentSize.height > $0.bounds.height + 1
-            } ?? scrollViews.first
-        }
-
-        private func collectScrollViews(in view: UIView) -> [UIScrollView] {
-            var result = (view as? UIScrollView).map { [$0] } ?? []
-            for subview in view.subviews {
-                result.append(contentsOf: collectScrollViews(in: subview))
-            }
-            return result
-        }
-    }
-}
-
 /// The Readium-backed reader screen. Mirrors the legacy `ReaderView`'s chrome
 /// (immersive page, tap-to-toggle bars, Chapters / Display sheets) but renders
 /// with `EPUBNavigatorViewController` and drives Readium's `EPUBPreferences` from
@@ -534,12 +37,17 @@ struct ReadiumReaderView: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
+    /// Every annotation in the store; narrowed to this work by `annotations`.
+    /// A `#Predicate` can't compare an optional relationship's id, so the filter
+    /// is done in Swift — the list is small (per-reader marks, not the library).
+    @Query(sort: \ReadingAnnotation.progression) private var allAnnotations: [ReadingAnnotation]
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("readerFontID") private var fontID: String = "system"
@@ -553,6 +61,12 @@ struct ReadiumReaderView: View {
     @AppStorage("readerWordSpacing") private var wordSpacing: Double = 0
     @AppStorage("readerMargin") private var pageMargin: Double = ReaderTextStyle.defaultMargin
     @AppStorage("readerJustify") private var justifyText = false
+    /// Voice id only — rate/pitch are read live from UserDefaults per utterance.
+    @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var speechVoiceID = ""
+
+    /// The reader-scoped rotation lock. Shared (not per-view) because iOS asks
+    /// the app delegate, not this view, which orientations are supported.
+    private var orientationLock: ReaderOrientationLock { .shared }
 
     @State private var book = ReadiumBook()
     /// Debounces SwiftData writes for the Readium locator stream (see
@@ -560,12 +74,85 @@ struct ReadiumReaderView: View {
     @State private var progressPersistence = ReadiumProgressPersistence()
     /// Native comments sheet over the reader (only for AO3-backed works).
     @State private var showingComments = false
+    /// Non-nil while the archived original is being previewed by QuickLook.
+    @State private var previewingOriginal: URL?
+    @State private var rebuildError: String?
+
+    /// The afterword's own AO3 boilerplate — "Please drop by the Archive and
+    /// comment…" — links straight at `/works/<id>/comments/new`, which this
+    /// work's native comments sheet already covers. Opens that instead of the
+    /// AO3 web form when the URL is for *this* work.
+    ///
+    /// The link itself is untouched (nothing removed from the EPUB) and every
+    /// other URL — including this same link for a different work, or if this
+    /// check simply doesn't match — still falls through to the normal
+    /// `router.openAO3Link` path below, so the original in-app-browser fallback
+    /// is never lost.
+    private func openCommentsLinkIfMatching(_ url: URL) -> Bool {
+        guard let ao3WorkID, (url.host ?? "").contains("archiveofourown.org") else { return false }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 3, parts[0] == "works", Int(parts[1]) == ao3WorkID, parts[2] == "comments"
+        else { return false }
+        showingComments = true
+        return true
+    }
 
     private var ao3WorkID: Int? {
         work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
     }
-    @State private var dismissDragOffset: CGFloat = 0
+    /// UIKit peel surface — interactive samples never touch SwiftUI state.
+    @State private var dismissSurface = ReaderDismissDragSurface()
     @State private var isDismissingByDrag = false
+
+    // MARK: Chrome state
+
+    /// One inset for every floating chrome layer. The back button, the fan
+    /// button, and the position card all sit exactly this far from the screen
+    /// edge — previously the top bar double-padded (layer + its own internal
+    /// padding), so the back button sat twice as far in as the fan button.
+    /// The card uses it on all three of its free edges, so its bottom gap
+    /// matches its sides.
+    private static let chromeInset: CGFloat = 12
+
+    @State private var fanMenuOpen = false
+    @State private var searchModel = ReaderSearchModel()
+    /// The highlight whose note is being written, if the editor is open.
+    @State private var editingNote: ReadingAnnotation?
+    /// Note editor queued from inside the Contents sheet, opened only once that
+    /// sheet has finished dismissing (see the `onDismiss` on the panel sheet).
+    @State private var pendingNoteAfterPanelDismiss: ReadingAnnotation?
+    /// Annotation that just got a **Highlight** and still has the floating
+    /// colour bar up — nil when the bar is dismissed.
+    @State private var colorBarAnnotationID: UUID?
+    /// Title-pill → work details, as a sheet over the live reader (see the
+    /// `.sheet(isPresented: $showingWorkDetail)` below for why — not a push).
+    @State private var showingWorkDetail = false
+    @State private var speech = ReaderSpeechController()
+    /// Which tab the Contents sheet opens on — the fan's "Contents" and
+    /// "Bookmarks & Highlights" pills both route here, differing only in this.
+    @State private var contentsSegment: ReaderContentsSegment = .chapters
+    /// Chapter-relative seek fraction (0...1) shown by the position card's slider.
+    /// Driven from `book.readingPosition` while not being dragged; only pushed to
+    /// the navigator on editing-ended, so it never fights `locationDidChange`.
+    @State private var sliderValue: Double = 0
+    @State private var isEditingSlider = false
+    /// Last page live-seeked to during the current drag, so `handleScrubSeek`
+    /// fires once per page crossed rather than once per slider sample.
+    @State private var lastScrubSeekPage: Int?
+    /// Session was playing when hold-seek began — resume speaking on release.
+    /// (Kept here with the other stored state; the hold-seek *methods* live in
+    /// the speech/scrub extension below, which can't hold stored properties.)
+    @State private var speechSeekWasPlaying = false
+    /// True while a hold-seek is in progress (suppresses page-follow thrash).
+    @State private var speechSeekHolding = false
+    /// 0…1 thumb position when the chapter slider scrub began — origin `|` tick.
+    @State private var sliderScrubOrigin: Double?
+    /// Session-only "kudos left" flag — there's no persisted per-work kudos state
+    /// (AO3 doesn't expose one to check), so this reflects only this reading
+    /// session's own successful tap, same honesty rule as `AO3WorkActionsModel`.
+    @State private var kudosGiven = false
+    @State private var kudosWorking = false
+    @State private var kudosBanner: String?
 
     private var isPhone: Bool {
         UIDevice.current.userInterfaceIdiom == .phone
@@ -584,6 +171,14 @@ struct ReadiumReaderView: View {
     /// Reader chrome (bars) visibility — driven by tapping the page.
     private var chromeVisible: Bool {
         !book.chromeHidden
+    }
+
+    /// Collapses colour-bar dismiss triggers into one `onChange` dependency so
+    /// `body` stays type-checkable. Any change clears the bar (chrome-hide is
+    /// handled separately so it can also close the fan).
+    private var colorBarDismissToken: String {
+        let position = book.currentLocator?.locations.position.map(String.init) ?? "-"
+        return "\(fanMenuOpen)|\(router.panel)|\(showingComments)|\(showingWorkDetail)|\(position)"
     }
 
     /// The reader's effective theme (app theme while linked).
@@ -635,63 +230,158 @@ struct ReadiumReaderView: View {
     /// Chapters / Display share the app-wide panel slot so only one opens at once.
     private var readerPanelBinding: Binding<Bool> {
         Binding(
-            get: { router.panel == .readerChapters || router.panel == .readerDisplay },
+            get: {
+                router.panel == .readerChapters || router.panel == .readerDisplay
+                    || router.panel == .readerFind
+            },
             set: { if !$0 { router.panel = .none } }
         )
     }
 
     var body: some View {
-        content
-            .modifier(ReaderInteractiveDismissStyle(offset: dismissDragOffset,
-                                                    reduceMotion: reduceMotion))
-            // The pill sits outside the dismiss-style transform (not inside `content`)
-            // so it's immune to the swipe-to-dismiss pan's scale/offset/clip — including
-            // its brief spring-back when an ordinary tap's incidental finger movement
-            // crosses the pan's own latch threshold without becoming a real dismiss.
-            // That spring-back is a legitimate, real animation (not a no-op), so it
-            // can't be skipped; keeping the pill out of the transformed subtree means
-            // it never rides along with it, whatever the cause.
-            .overlay(alignment: .bottom) { bottomBar }
-            .background(readerTheme.backgroundColor)
-            .preferredColorScheme(readerTheme.colorScheme)
-            .navigationTitle(work.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ActionToolbar {
-                    if ao3WorkID != nil {
-                        ToolbarIconButton(title: "Comments", systemImage: "bubble.left.and.bubble.right") {
-                            showingComments = true
-                        }
-                    }
-                    ToolbarIconButton(title: "Chapters", systemImage: "list.bullet") {
-                        router.toggle(.readerChapters)
-                    }
-                    ToolbarIconButton(title: "Display Options", systemImage: "textformat.size") {
-                        router.toggle(.readerDisplay)
-                    }
-                }
+        // Dim + card peel are driven in UIKit during the gesture (see
+        // `ReaderDismissDragSurface`) so pan samples don't rebuild this tree.
+        ZStack {
+            readerTheme.backgroundColor
+                .ignoresSafeArea()
+            ReaderDismissDimAnchor(surface: dismissSurface)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+
+            dismissableReaderCard
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .preferredColorScheme(readerTheme.colorScheme)
+        .navigationTitle(work.title)
+        .navigationBarTitleDisplayMode(.inline)
+        // The floating top bar replaces the system nav bar entirely. Hide the
+        // bar *and* its background so the Library's top-leading menu can't draw
+        // over the reader during the push transition.
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+            // `onDismiss` is what makes Contents → Add Note work. These are two
+            // sibling sheets on one presenter, and SwiftUI won't present the
+            // second while the first is still dismissing — setting both in the
+            // same update simply drops the editor. Handing it off here runs it
+            // once the panel is really gone.
+            .sheet(isPresented: readerPanelBinding, onDismiss: presentPendingNoteEditor) {
+                readerSheet
             }
-            .sheet(isPresented: readerPanelBinding) { readerSheet }
             .commentsSheet(
                 isPresented: $showingComments,
                 workID: ao3WorkID ?? 0,
                 context: .init(savedWork: work),
                 initialChapterPosition: currentAO3Chapter
             )
-            // Immersive reading: hide the tab bar; the nav/status bars follow the chrome.
+            .sheet(item: $editingNote) { annotation in
+                ReaderNoteEditor(annotation: annotation) {
+                    try? modelContext.save()
+                    FolderSyncService.markDirty()
+                    refreshHighlightDecorations()
+                } onDelete: {
+                    deleteAnnotation(annotation)
+                    refreshHighlightDecorations()
+                }
+                .preferredColorScheme(readerTheme.colorScheme)
+            }
+            // Title pill → work details as a *sheet*, not a navigation push.
+            // Pushing via `navigationDestination(isPresented:)` while the reader
+            // has `.toolbar(.hidden, for: .navigationBar)` + statusBarHidden
+            // frozen the UI mid-transition (nav stack and status-bar ownership
+            // fight). A sheet keeps the immersive reader underneath intact and
+            // avoids Detail→Reader→Detail stack bloat.
+            .sheet(isPresented: $showingWorkDetail) {
+                NavigationStack {
+                    WorkDetailView(work: work, openedFromReader: true)
+                }
+                .preferredColorScheme(readerTheme.colorScheme)
+                .presentationDragIndicator(.visible)
+            }
+            // Highlights made in an earlier session have to be drawn when the
+            // book opens, not only when one is created.
+            .onChange(of: book.phase) { _, phase in
+                guard phase == .ready else { return }
+                // Seed slider from initialLocator-backed readingPosition before
+                // the first visual JS report can briefly claim last page.
+                if !book.isLocatorIngestionBlocked {
+                    syncSliderFromPosition(book.readingPosition)
+                }
+                refreshHighlightDecorations()
+                // Tap a highlight on the page → colour / note / delete editor.
+                book.observeHighlightTaps { id in
+                    openHighlight(id: id)
+                }
+                speech.prepare(
+                    publication: book.publication,
+                    title: work.title,
+                    author: work.author,
+                    totalPositions: book.positionsByReadingOrder.reduce(0) { $0 + $1.count }
+                )
+                // Keep the page with the voice as it moves between utterances.
+                // Blocked during dismiss freeze / successful-exit latch so TTS
+                // cannot seek the navigator (or corrupt the flushed locator).
+                speech.onAdvance = { locator in
+                    // Dismiss freeze/exit latch, and hold-to-seek — never fight
+                    // the user (or corrupt a committed exit flush) by page-follow.
+                    guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
+                    book.go(to: locator)
+                }
+                // Lock Screen / Island previous-next track = chapter skip (mini player).
+                speech.onSkipPrevious = { handleSpeechSkipBack() }
+                speech.onSkipNext = { handleSpeechSkipForward() }
+            }
+            // Voice changes from the Display sheet apply on the next utterance.
+            .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
+            .onChange(of: chromeVisible) { _, visible in
+                if !visible {
+                    fanMenuOpen = false
+                    colorBarAnnotationID = nil
+                }
+            }
+            // Single token so we don't hang the type-checker with a forest of
+            // .onChange on `body` (colour bar is contextual — drop when context ends).
+            .onChange(of: colorBarDismissToken) { _, _ in
+                colorBarAnnotationID = nil
+            }
+            .alert("AO3", isPresented: kudosBannerPresented) {
+                Button("OK", role: .cancel) { kudosBanner = nil }
+            } message: {
+                Text(kudosBanner ?? "")
+            }
+            // Immersive reading: hide the tab bar; the status bar follows the chrome.
             .toolbar(.hidden, for: .tabBar)
-            .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
             .statusBarHidden(!chromeVisible)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
             .animation(unlessReduced: .easeInOut(duration: 0.25), value: book.chromeHidden)
+            .animation(.easeInOut(duration: 0.25), value: speech.isSessionActive)
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
-            .task(id: bookLoadToken) { await openBook() }
-            .onChange(of: preferencesToken) { _, _ in book.submit(preferences) }
+            .task(id: bookLoadToken) {
+                // Seed page-box inputs before the navigator exists: first
+                // content-inset query runs during setup.
+                book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
+                book.renderedPageMarginPoints = max(0, textStyle.margin)
+                book.seedPageBoxGeometryFromWindowIfNeeded()
+                await openBook()
+            }
+            .onChange(of: preferencesToken) { _, _ in applyReaderPreferences() }
             // The Display / Customize controls live in a sheet over the reader; a
             // behind-the-sheet onChange can be missed, so re-apply when it closes.
             .onChange(of: router.panel) { _, panel in
-                if panel == .none { book.submit(preferences) }
+                if panel == .none {
+                    applyReaderPreferences()
+                    speech.applyPreferences()
+                    // Drop results (and any in-flight search) with the sheet, so
+                    // reopening Find starts clean instead of on a stale query.
+                    searchModel.reset()
+                }
+            }
+            .onChange(of: book.readingPosition) { _, newValue in
+                // Dismiss freeze / exit latch: never move the scrub bar.
+                guard !book.isLocatorIngestionBlocked else { return }
+                syncSliderFromPosition(newValue)
             }
             .onChange(of: scenePhase) { _, phase in
                 // Force-quit safety: flush when leaving the foreground so a
@@ -709,79 +399,446 @@ struct ReadiumReaderView: View {
                 }
             }
             .onDisappear {
+                // Safety net: `isScrubbing` gates the debounced progress write,
+                // so a drag that never delivers `onEditingChanged(false)` (view
+                // torn down mid-gesture, slider disabled mid-drag) would leave
+                // it latched and silently stop persisting progress for the rest
+                // of the session. Releasing it here costs nothing when the flag
+                // is already clear, which is the normal case.
+                book.isScrubbing = false
+                isEditingSlider = false
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 try? modelContext.save()
                 scheduleFolderSyncOnReaderClose()
+                // The lock is the reader's, not the app's — never leave the rest
+                // of the app pinned to whatever orientation reading ended in.
+                orientationLock.release()
+                // Reading aloud is bound to this reader: leaving a *work* tears
+                // down speech + remote commands + Now Playing. Backgrounding the
+                // app with the reader still open keeps TTS (system Now Playing).
+                // Mini-player stop still uses `stop()` only — see `stopReadingAloud`.
+                speech.tearDown()
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
                     router.panel = .none
                 }
             }
     }
 
+    /// Ends speech and collapses the mini-player strip. Shared by the fan-menu
+    /// waveform control (when active) and the mini player's stop button.
+    /// Leaving the reader uses `speech.tearDown()` instead so remote commands
+    /// are removed (not only paused/stopped).
+    private func stopReadingAloud() {
+        speech.stop()
+    }
+
+    /// Fan-menu waveform: start from the current page when idle; otherwise the
+    /// same full stop as the mini player (not pause).
+    private func toggleReadingAloud() {
+        if speech.status != .stopped {
+            stopReadingAloud()
+        } else {
+            speech.toggle(from: book.currentLocator)
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         switch book.phase {
         case .loading:
-            ProgressView("Opening…")
+            // Opaque page skeleton so the Library toolbar/menu can't show through
+            // during the push transition, and so opening matches the rest of the app.
+            ReaderPageSkeleton()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(readerTheme.backgroundColor)
         case let .failed(message):
             ContentUnavailableView("Couldn't open this EPUB", systemImage: "exclamationmark.triangle",
                                    description: Text(message))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(readerTheme.backgroundColor)
         case .ready:
             if let navigator = book.navigator {
                 ReadiumNavigatorContainer(
                     controller: navigator,
                     readingMode: readingMode,
-                    onDismissDragChanged: handleDismissDragChanged,
-                    onDismissDragEnded: handleDismissDragEnded
+                    dismissSurface: dismissSurface,
+                    reduceMotion: reduceMotion,
+                    onDismissInteractionActiveChange: handleDismissInteractionActiveChange,
+                    onDismissDragEnded: handleDismissDragEnded,
+                    onHighlight: { createAnnotationFromSelection(withNote: false) },
+                    onAddNote: { createAnnotationFromSelection(withNote: true) }
                 )
                 .ignoresSafeArea()
+            } else {
+                // Keep a full-size host even if the navigator is momentarily nil
+                // so chrome overlays never re-collapse to a zero-size anchor.
+                ReaderPageSkeleton()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(readerTheme.backgroundColor)
             }
         }
     }
 
-    private func handleDismissDragChanged(_ offset: CGFloat) {
-        guard !isDismissingByDrag else { return }
-        dismissDragOffset = offset
+    private func handleDismissInteractionActiveChange(_ active: Bool) {
+        // Successful exit keeps the gate latched until the book is deallocated.
+        if !active && (isDismissingByDrag || book.isDismissExitLatched) { return }
+        book.setDismissInteractionActive(active)
     }
 
-    private func handleDismissDragEnded(_ shouldDismiss: Bool) {
+    private func handleDismissDragEnded(_ shouldDismiss: Bool, unfreeze: @escaping () -> Void) {
         guard !isDismissingByDrag else { return }
         if shouldDismiss {
-            isDismissingByDrag = true
+            // Lock the peel transform *before* flush/latch. Those touch
+            // @State/@Observable and rebuild the peel host; without the lock the
+            // card snaps to identity (bounce up), re-applies finger offset
+            // (comes down), then flies off.
+            dismissSurface.lockTransformForExit()
+            // Flush *before* latching so live (still freeze-stable) locator is
+            // recorded once; subsequent flushes skip re-record.
             flushProgress(shelfStamp: true)
+            isDismissingByDrag = true
+            book.latchDismissExit()
+            // Leave page freeze in place until view teardown — never call
+            // `unfreeze` on the success path (would re-enable ingestion mid-exit).
             if reduceMotion {
+                dismissSurface.endCardSnapshot()
+                dismissSurface.reset(reduceMotion: true)
                 dismissReader()
                 return
             }
-            // Slide the page the rest of the way off, then pop without the navigation
-            // stack's own animation (the view is already off-screen) for a seamless exit.
-            withAnimation(.easeIn(duration: 0.22)) {
-                dismissDragOffset = 1400
-            }
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 210_000_000)
+            // Fly the card snapshot off-screen, then pop.
+            dismissSurface.animate(
+                to: 1400,
+                reduceMotion: false,
+                duration: 0.22,
+                spring: false
+            ) {
+                self.dismissSurface.endCardSnapshot()
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
-                withTransaction(transaction) { dismissReader() }
+                withTransaction(transaction) { self.dismissReader() }
             }
-        } else if dismissDragOffset != 0 {
-            // Spring back to rest tracking; a snappy, well-damped return (no overshoot).
-            // The dismiss-pan recognizer doesn't cancel other touches, so it also sees
-            // every ordinary tap-to-toggle-chrome — those never latch as a dismiss, so
-            // `dismissDragOffset` is already 0 here. Skipping the no-op reset means an
-            // ordinary tap never opens a spring-animation transaction that can bleed
-            // into (and jitter) the chrome toggle's own animation for the same tap.
-            withAnimation(.interpolatingSpring(stiffness: 340, damping: 32)) {
-                dismissDragOffset = 0
+            return
+        }
+        // Cancel: spring snapshot back, restore live card, unfreeze WebKit.
+        if dismissSurface.offset != 0 {
+            dismissSurface.animate(
+                to: 0,
+                reduceMotion: reduceMotion,
+                duration: 0.38,
+                spring: true
+            ) {
+                self.dismissSurface.endCardSnapshot()
+                unfreeze()
             }
+        } else {
+            dismissSurface.endCardSnapshot()
+            unfreeze()
         }
     }
 
+    // MARK: In-book annotations
+
+    /// Creates a highlight from the reader's current text selection, optionally
+    /// opening the note editor straight afterwards.
+    ///
+    /// Re-highlighting the same passage with **Highlight** compares the
+    /// currently-picked colour against the existing mark's (ANN-2, product
+    /// decision 2026-07-28): the *same* colour again toggles it off, same as
+    /// tapping your own highlighter twice; a *different* colour recolours it
+    /// in place instead of stacking a second mark over the same words.
+    /// **Add Note** on an existing mark opens its editor either way.
+    ///
+    /// New marks use the last-picked colour, then surface the floating colour
+    /// bar so the reader can refine without a second trip through the editor.
+    ///
+    /// The anchor is the selection's own `Locator` — it carries the CFI//text
+    /// range Readium needs to redraw the highlight over the exact words — and
+    /// `text.highlight` is stored alongside it as the passage snapshot.
+    private func createAnnotationFromSelection(withNote: Bool) {
+        guard let selection = book.currentSelection,
+              let locatorString = selection.locator.persistenceString
+        else { return }
+
+        if let existing = existingHighlight(matching: selection.locator) {
+            book.clearSelection()
+            if withNote {
+                colorBarAnnotationID = nil
+                editingNote = existing
+            } else if existing.color == ReadingAnnotationColor.lastUsed {
+                colorBarAnnotationID = nil
+                deleteAnnotation(existing)
+            } else {
+                applyHighlightColor(ReadingAnnotationColor.lastUsed, to: existing)
+            }
+            return
+        }
+
+        let color = ReadingAnnotationColor.lastUsed
+        let spineIndex = (book.readingPosition?.chapter ?? 1) - 1
+        let annotation = ReadingAnnotation(
+            work: work,
+            kind: .highlight,
+            locatorString: locatorString,
+            selectedText: selection.locator.text.highlight ?? "",
+            color: color,
+            progression: selection.locator.locations.totalProgression ?? 0,
+            spineIndex: spineIndex,
+            chapterTitle: chapterTitle(forSpineIndex: spineIndex)
+        )
+        modelContext.insert(annotation)
+        try? modelContext.save()
+        FolderSyncService.markDirty()
+
+        book.clearSelection()
+        refreshHighlightDecorations()
+        if withNote {
+            colorBarAnnotationID = nil
+            editingNote = annotation
+        } else {
+            // Immediate colour refine — the system menu can't host a picker.
+            colorBarAnnotationID = annotation.id
+        }
+    }
+
+    private func applyHighlightColor(_ color: ReadingAnnotationColor, to annotation: ReadingAnnotation) {
+        guard annotation.color != color else {
+            colorBarAnnotationID = nil
+            return
+        }
+        annotation.color = color
+        annotation.markModified()
+        ReadingAnnotationColor.lastUsed = color
+        try? modelContext.save()
+        FolderSyncService.markDirty()
+        refreshHighlightDecorations()
+        // One tap applies and dismisses — refining again is a tap on the mark.
+        colorBarAnnotationID = nil
+    }
+
+    /// The live highlight that covers this selection, if any.
+    /// Match is **locator-string equality only** (see `ReadingAnnotationMatching`).
+    private func existingHighlight(matching locator: Locator) -> ReadingAnnotation? {
+        guard let selectionLocator = locator.persistenceString, !selectionLocator.isEmpty
+        else { return nil }
+
+        return annotations
+            .filter { $0.kind == .highlight }
+            .first { annotation in
+                ReadingAnnotationMatching.isSamePassage(
+                    existingLocator: annotation.locatorString,
+                    selectionLocator: selectionLocator
+                )
+            }
+    }
+
+    /// Redraws every highlight for this work over the page. Called after any
+    /// change to the set, and once the book is ready (a highlight made in a
+    /// previous session has to be drawn on open, not just when created).
+    private func refreshHighlightDecorations() {
+        let decorations: [Decoration] = annotations
+            .filter { $0.kind == .highlight }
+            .compactMap { annotation in
+                guard let locator = Locator(persistenceString: annotation.locatorString) else { return nil }
+                let tint = UIColor(annotation.color.tint)
+                // Underline is a rule, not a fill — match the palette swatch.
+                let style: Decoration.Style = annotation.color == .underline
+                    ? .underline(tint: tint)
+                    : .highlight(tint: tint)
+                return Decoration(
+                    id: annotation.id.uuidString,
+                    locator: locator,
+                    style: style
+                )
+            }
+        book.applyHighlightDecorations(decorations)
+    }
+
+    /// Adds a bookmark at the current page, or removes the one already there.
+    /// Deletion records a `.readingAnnotation` tombstone so a restore from an
+    /// older archive can't resurrect it (see the merge rules in
+    /// `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`).
+    private func toggleBookmarkAtCurrentPosition() {
+        if let existing = bookmarkAtCurrentPosition {
+            modelContext.insert(SyncTombstone(
+                recordID: existing.id,
+                recordType: .readingAnnotation,
+                sourceURL: work.sourceURL,
+                ao3WorkID: ao3WorkID
+            ))
+            modelContext.delete(existing)
+            try? modelContext.save()
+            FolderSyncService.markDirty()
+        } else if let locator = book.currentLocator {
+            addBookmark(at: locator)
+        }
+    }
+
+    /// `book.sections`' spine index for a locator's resource, matched by href.
+    ///
+    /// All three index spaces here are the same length — `ReaderSectionBuilder`
+    /// emits one `ReaderSection` per spine href, and Readium builds
+    /// `positionsByReadingOrder` as `readingOrder.map { ... ?? [] }`, keeping
+    /// empty entries. The reason to prefer href is not length, it's *derivation*:
+    /// `readingPosition.chapter` resolves the chapter by scanning global
+    /// position ranges, so it only answers for locators that carry a
+    /// `locations.position`. Search results don't (Readium's search service
+    /// emits progression only), and neither does a locator mid-navigation — for
+    /// those it silently falls through to a different answer than href matching
+    /// gives. Since `ReaderSearchGrouping` buckets results by href, deriving the
+    /// reader's own index any other way let the two disagree, which is why
+    /// "This Chapter" didn't reliably pin first.
+    private func spineIndex(for locator: Locator) -> Int? {
+        let key = ReaderSectionBuilder.hrefKey(locator.href.string)
+        return book.sections.first { ReaderSectionBuilder.hrefKey($0.href) == key }?.spineIndex
+    }
+
+    /// The reader's live chapter, on the same `sections`-href basis as
+    /// `spineIndex(for:)` — see its doc comment for why that matters.
+    private var currentSpineIndex: Int? {
+        book.currentLocator.flatMap(spineIndex(for:))
+    }
+
+    /// Adds a bookmark at an arbitrary locator (e.g. a Find in Work result),
+    /// unlike `toggleBookmarkAtCurrentPosition` which only ever targets the
+    /// reader's live position.
+    /// Returns the bookmark now at this spot — the newly created one, or the
+    /// existing one when there already was a bookmark there — so callers that
+    /// need to act on it (Contents' **Add Note**, which opens the editor on it)
+    /// don't have to re-find it and can't accidentally create a second.
+    @discardableResult
+    private func addBookmark(at locator: Locator) -> ReadingAnnotation? {
+        let locator = resolvedPositionLocator(for: locator)
+        guard let locatorString = locator.persistenceString else { return nil }
+        // Don't stack a second bookmark on a spot that already has one. Matched
+        // on `position` (not the whole locator string) for the same reason
+        // `bookmarkAtCurrentPosition` does: a search-result locator and a
+        // live-reading locator for the same page carry different progression
+        // and text, so string equality would see two distinct marks where the
+        // reader sees one page.
+        if let position = locator.locations.position,
+           let existing = bookmarkAnnotations.first(where: {
+               Locator(persistenceString: $0.locatorString)?.locations.position == position
+           }) {
+            return existing
+        }
+        let spineIndex = spineIndex(for: locator) ?? 0
+        let bookmark = ReadingAnnotation(
+            work: work,
+            kind: .bookmark,
+            locatorString: locatorString,
+            progression: locator.locations.totalProgression ?? 0,
+            spineIndex: spineIndex,
+            chapterTitle: chapterTitle(forSpineIndex: spineIndex)
+        )
+        modelContext.insert(bookmark)
+        try? modelContext.save()
+        FolderSyncService.markDirty()
+        return bookmark
+    }
+
+    /// Backfills `locations.position` when it's missing, so bookmarks created
+    /// away from the live navigator still participate in `bookmarkAtCurrentPosition`'s
+    /// position-based matching. Readium's search service returns locators with
+    /// `progression` but not `position` (that's a separate `PositionsService`
+    /// cross-reference the search index doesn't do) — storing one of those
+    /// as-is meant a Find in Work bookmark could never be recognized as
+    /// "already bookmarked" by the regular bookmark button, silently allowing
+    /// a duplicate at the same spot. Finds the closest position-list entry in
+    /// the same chapter by progression and borrows its `position`, leaving
+    /// every other field (href, progression, text) untouched.
+    private func resolvedPositionLocator(for locator: Locator) -> Locator {
+        guard locator.locations.position == nil,
+              let progression = locator.locations.progression,
+              let spineIndex = spineIndex(for: locator),
+              book.positionsByReadingOrder.indices.contains(spineIndex)
+        else { return locator }
+        let candidates = book.positionsByReadingOrder[spineIndex]
+        guard let nearest = candidates.min(by: {
+            abs(($0.locations.progression ?? 0) - progression) < abs(($1.locations.progression ?? 0) - progression)
+        }), let resolvedPosition = nearest.locations.position else { return locator }
+        return locator.copy(locations: { $0.position = resolvedPosition })
+    }
+
+    /// The section title to stamp on a new annotation, so its list row reads
+    /// well even before the book's sections are loaded.
+    private func chapterTitle(forSpineIndex index: Int) -> String {
+        guard book.sections.indices.contains(index) else { return "" }
+        return book.sections[index].title
+    }
+
+    /// Jumps to an annotation's anchor and closes the sheet. Highlights also
+    /// open the note/colour/delete editor so a bare mark is editable in place.
+    private func goToAnnotation(_ annotation: ReadingAnnotation) {
+        if let locator = Locator(persistenceString: annotation.locatorString) {
+            book.go(to: locator)
+        }
+        router.panel = .none
+        if annotation.kind == .highlight {
+            editingNote = annotation
+        }
+    }
+
+    private func deleteAnnotation(_ annotation: ReadingAnnotation) {
+        if editingNote?.id == annotation.id {
+            editingNote = nil
+        }
+        if colorBarAnnotationID == annotation.id {
+            colorBarAnnotationID = nil
+        }
+        modelContext.insert(SyncTombstone(
+            recordID: annotation.id,
+            recordType: .readingAnnotation,
+            sourceURL: work.sourceURL,
+            ao3WorkID: ao3WorkID
+        ))
+        modelContext.delete(annotation)
+        try? modelContext.save()
+        FolderSyncService.markDirty()
+        refreshHighlightDecorations()
+    }
+
+    /// Opens the editor for a highlight the reader tapped on the page.
+    private func openHighlight(id decorationID: String) {
+        guard let annotation = annotations.first(where: {
+            $0.kind == .highlight && $0.id.uuidString == decorationID
+        }) else { return }
+        editingNote = annotation
+    }
+
+    /// Submits mapped preferences and keeps page-box inputs in step with Customize:
+    /// - **Text size / line height** → `renderedLineHeightPoints` + forced spread
+    ///   content-inset refresh so whole-line snap is not stale.
+    /// - **Page margin** → Readium horizontal `pageMargins` (vertical box uses
+    ///   frozen safe area only; margin is not subtracted from safe top/bottom).
+    private func applyReaderPreferences() {
+        book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
+        book.renderedPageMarginPoints = max(0, textStyle.margin)
+        book.submit(preferences)
+        // Typography submit updates CSS but may not re-run spread updateContentInset.
+        book.forcePageBoxContentInsetRefresh()
+        // Font/columns/mode/margin change swipe pageCount — remeasure instead of sticky Y.
+        book.clearVisualPageMetrics()
+        book.schedulePageBarRemeasure()
+    }
+
     private func dismissReader() {
-        flushProgress(shelfStamp: true)
+        // Close button / edge swipe: kill TTS page-follow, flush the live locator
+        // once, then latch so `onDisappear`'s second flush cannot re-record a
+        // speech- or teardown-corrupted position. Swipe-down already flushed +
+        // latched before fly-off; latch is idempotent.
+        speech.onAdvance = nil
+        if !book.isDismissExitLatched {
+            flushProgress(shelfStamp: true)
+            book.latchDismissExit()
+            isDismissingByDrag = true
+        } else {
+            // Already committed on peel success — shelf stamp only if needed.
+            flushProgress(shelfStamp: true)
+        }
         dismiss()
     }
 
@@ -791,7 +848,11 @@ struct ReadiumReaderView: View {
     private func flushProgress(shelfStamp: Bool) {
         progressPersistence.cancelTrailingWrite()
         // Prefer the live navigator locator; fall back to the last noted string.
-        if let live = book.currentLocator?.persistenceString {
+        // After exit has committed (swipe peel or close/edge), never re-record a
+        // live locator — freeze release / late TTS can still mutate `currentLocator`
+        // while the view is tearing down.
+        let exitCommitted = isDismissingByDrag || book.isDismissExitLatched
+        if !exitCommitted, let live = book.currentLocator?.persistenceString {
             progressPersistence.record(
                 locatorString: live,
                 totalProgression: book.currentLocator?.locations.totalProgression
@@ -836,128 +897,388 @@ struct ReadiumReaderView: View {
 
     // MARK: Chrome
 
-    /// iOS navigation is gesture-based (swipe / tap zones), so the bar shows only
-    /// the position pill — no prev/next buttons.
-    private var bottomBar: some View {
-        // A full-bleed, non-interactive layer that bottom-aligns the pill against the
-        // true screen edge (the overlay otherwise stops at the home-indicator safe
-        // area). Hit testing is off so taps still reach the page to toggle chrome.
-        //
-        // Always present (not conditionally inserted via `if chromeVisible`) and
-        // shown/hidden with a fixed offset + opacity rather than
-        // `.transition(.move(edge:))`: that transition computes its off-screen
-        // distance from this view's own resolved frame, which is ambiguous here — a
-        // `.frame(maxHeight: .infinity)` inside a container whose nav bar/status bar
-        // visibility is *also* animating at the same moment. SwiftUI can get that
-        // computation wrong for the transition's first frame or two and then
-        // visibly correct itself, which reads as the pill jumping up before sliding
-        // down. A fixed offset has no such ambiguity.
-        progressPill
-            // Bounds the capsule's *width*: this padding reduces the proposal the
-            // pill receives, so at large Dynamic Type sizes it can never grow past
-            // the screen edge (the enclosing frame proposes the full width, and the
-            // pill would otherwise size purely to its own single-line text). 16pt
-            // per edge is this app's established screen margin.
-            .padding(.horizontal, 16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            // Sit as close to the bottom edge as the Dynamic Island is to the top.
-            .padding(.bottom, 11)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-            .offset(y: chromeVisible ? 0 : 120)
+    /// Page + floating chrome as one surface, so drag-to-dismiss moves the whole
+    /// reader (not only the EPUB text) — Apple Books card behaviour.
+    ///
+    /// Host must always fill the screen: while `.loading`, bare `content` would
+    /// be a centred ProgressView and chrome overlays would flash mid-screen.
+    /// Sheets / lifecycle modifiers stay *outside* this tree so they are not
+    /// scaled/offset with the card.
+    private var dismissableReaderCard: some View {
+        // UIKit host owns the peel transform for page + chrome as one unit.
+        ReaderDismissPeelHost(surface: dismissSurface, reduceMotion: reduceMotion) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Each chrome layer sizes to its own content (no infinite-frame
+                // hit-test area), so taps between controls still reach the page.
+                .overlay(alignment: .top) { topBarLayer }
+                // Bottom stack: colour bar + position card / decoupled mini player.
+                .overlay(alignment: .bottom) { bottomChromeLayer }
+                .overlay { fanDismissBackdropLayer }
+                .overlay(alignment: .topTrailing) { fanMenuLayer }
+                .background(readerTheme.backgroundColor)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // `host.safeAreaRegions = []` (inside the peel host) only stops the
+        // *inner* UIHostingController from handing safe-area insets down to its
+        // own SwiftUI content — it has no effect on how the *outer* SwiftUI
+        // layout treats `ReaderDismissPeelHost` itself. Without this, SwiftUI
+        // still shrinks this representable into the safe sub-rectangle by
+        // default, and the manual `pageBoxChromeSafeTop`/`Bottom` chrome padding
+        // below then stacks a second inset on top of that — the double top/
+        // bottom padding bug. This is the modifier the "peel host zeroes SwiftUI
+        // safe regions" comments elsewhere assumed was already in effect.
+        .ignoresSafeArea()
+    }
+
+    private var topBarLayer: some View {
+        ReaderChromeTopBar(
+            title: work.title, author: work.author,
+            tint: themeManager.effectiveTint, titleHidden: fanMenuOpen,
+            onClose: dismissReader,
+            onOpenDetails: { showingWorkDetail = true }
+        )
+        // Peel host zeroes SwiftUI safe regions — pad from the same frozen
+        // window safe area the page box uses (plus chromeInset).
+        .padding(.top, book.pageBoxChromeSafeTop + 8)
+        .allowsHitTesting(chromeVisible)
+        .opacity(chromeVisible ? 1 : 0)
+    }
+
+    /// Present only while the fan is open — otherwise a screen-sized tap target
+    /// would swallow every tap meant for the page's own chrome toggle.
+    @ViewBuilder
+    private var fanDismissBackdropLayer: some View {
+        if fanMenuOpen, chromeVisible {
+            ReaderFanMenu.dismissBackdrop(isOpen: $fanMenuOpen, reduceMotion: reduceMotion)
+        }
+    }
+
+    private var fanMenuLayer: some View {
+        ReaderFanMenu(isOpen: $fanMenuOpen, pills: fanPills, shareURL: shareURL,
+                      roundActions: fanRoundActions,
+                      accentColor: themeManager.effectiveTint, reduceMotion: reduceMotion)
+            .padding(.trailing, Self.chromeInset)
+            .padding(.top, book.pageBoxChromeSafeTop + 8)
+            .allowsHitTesting(chromeVisible)
             .opacity(chromeVisible ? 1 : 0)
+            // QuickLook renders the archived original in place — a PDF stays a PDF, so
+            // the reader can compare the conversion against the source, including the
+            // images conversion drops.
+            .quickLookPreview($previewingOriginal)
+            .alert(
+                "Couldn't Rebuild This Work",
+                isPresented: Binding(
+                    get: { rebuildError != nil },
+                    set: { if !$0 { rebuildError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { rebuildError = nil }
+            } message: {
+                Text(rebuildError ?? "")
+            }
     }
 
-    private var progressPill: some View {
-        // Just the essentials: overall percent, chapter, and page within the chapter.
-        let label = if let pos = book.readingPosition {
-            "\(pos.percent)%  ·  \(sectionLabel(for: pos))  ·  Pg. \(pos.page)/\(pos.pageCount)"
-        } else if let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) {
-            "\(percent)%"
-        } else {
-            ""
+    /// Re-runs conversion from the archived original, in place. Surfaced in the reader
+    /// because that is where a reader notices the conversion is wrong.
+    @MainActor
+    private func rebuildFromOriginal() async {
+        do {
+            try await WorkReconversion.reconvert(work, in: modelContext)
+        } catch {
+            rebuildError = error.localizedDescription
         }
-        return Text(label)
-            .font(.footnote.weight(.medium))
-            .monospacedDigit()
-            .lineLimit(1)
-            // Shrink a little before truncating, so the longest reading
-            // ("100%  ·  12/12  ·  Pg. 10/10") stays fully legible inside the
-            // width `bottomBar` bounds it to at large Dynamic Type sizes.
-            .minimumScaleFactor(0.75)
+    }
+
+    /// Bottom chrome stack:
+    /// - **Chrome up + speech:** colour bar (optional) + position card with mini player inside
+    /// - **Chrome down + speech:** mini player alone (decoupled; seek card hidden)
+    /// - **Chrome up, no speech:** position card only
+    /// - **Chrome down, no speech:** empty
+    ///
+    /// Colour bar lives in this VStack (not a magic `+ 88` offset) so it always
+    /// clears the card cleanly.
+    @ViewBuilder
+    private var bottomChromeLayer: some View {
+        let speechActive = speech.isSessionActive
+        VStack(spacing: 10) {
+            if chromeVisible {
+                highlightColorBar
+                // Coupled: mini player rides inside the position card when speaking.
+                positionCard(includeMiniPlayer: speechActive)
+            } else if speechActive {
+                // Decoupled: transport stays reachable while full chrome is hidden.
+                standaloneMiniPlayer
+            }
+        }
+        .padding(.horizontal, Self.chromeInset)
+        .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
+        .allowsHitTesting(chromeVisible || speechActive)
+    }
+
+    @ViewBuilder
+    private var highlightColorBar: some View {
+        if let id = colorBarAnnotationID,
+           let annotation = annotations.first(where: { $0.id == id })
+        {
+            ReaderHighlightColorBar(
+                selected: annotation.color,
+                onSelect: { applyHighlightColor($0, to: annotation) },
+                onDismiss: { colorBarAnnotationID = nil }
+            )
+        }
+    }
+
+    /// Mini player in its own glass when chrome is dismissed mid-TTS.
+    private var standaloneMiniPlayer: some View {
+        speechMiniPlayer(tint: themeManager.effectiveTint)
             .padding(.horizontal, 16)
-            // minHeight (not a fixed height) so the capsule can grow at large
-            // Dynamic Type sizes instead of clipping the scaled footnote text.
-            .frame(minHeight: 40)
-            .glassEffect(.regular, in: .capsule)
-            .opacity(label.isEmpty ? 0 : 1)
+            .padding(.vertical, 12)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    /// The AO3 story chapter the reader is currently on, for the chapter-aware
-    /// Comments button. `pos.chapter - 1` is the current spine index (same basis the
-    /// pill uses); the section list normalizes it past Preface/Summary/Afterword.
-    /// nil (→ open on All comments) until a position and built sections both exist.
-    private var currentAO3Chapter: Int? {
-        guard let pos = book.readingPosition, !book.sections.isEmpty else { return nil }
-        return book.sections.ao3StoryChapter(forSpineIndex: pos.chapter - 1)
+    private func speechMiniPlayer(tint: SwiftUI.Color) -> some View {
+        ReaderSpeechMiniPlayer(
+            controller: speech,
+            tint: tint,
+            onStop: { stopReadingAloud() },
+            onSkipBack: { handleSpeechSkipBack() },
+            onSkipForward: { handleSpeechSkipForward() },
+            onSeekHoldStart: { forward in handleSpeechSeekHoldStart(forward: forward) },
+            onSeekHoldTick: { forward in handleSpeechSeekHoldTick(forward: forward) },
+            onSeekHoldEnd: { handleSpeechSeekHoldEnd() },
+            // Empty areas of the strip (caption, waveform, gutters) show chrome —
+            // same idea as tapping the page when only the mini player is up.
+            onBackgroundTap: { book.chromeHidden = false }
+        )
     }
 
-    /// The pill's chapter segment, normalized against AO3 front/back matter
-    /// (`ReaderSection`) instead of a raw spine position — "P"/"S"/"A", or
-    /// "<index>/<total>" for a real story chapter, preferring AO3's own posted
-    /// chapter total over one derived purely from the section list. Falls back to
-    /// the raw "Ch. x/x" reading if sections haven't been built (shouldn't happen
-    /// once `.ready`, but a locator can theoretically outrace it).
-    private func sectionLabel(for pos: ReadiumBook.ReadingPosition) -> String {
-        guard book.sections.indices.contains(pos.chapter - 1) else {
-            return "Ch. \(pos.chapter)/\(pos.chapterCount)"
+    /// Position card; when `includeMiniPlayer` the TTS strip sits above a
+    /// hairline separator inside the same glass surface. While the EPUB is
+    /// still opening (or before the first locator), show a glass skeleton so
+    /// the bottom chrome occupies its final layout immediately.
+    @ViewBuilder
+    private func positionCard(includeMiniPlayer: Bool) -> some View {
+        Group {
+            if let summary = positionSummary {
+                positionCardContent(summary: summary, includeMiniPlayer: includeMiniPlayer)
+            } else {
+                ReaderPositionCardSkeleton()
+            }
         }
-        let storyTotal = SavedWork.totalChapterCount(from: work.chapters) ?? book.sections.storyChapterCount
-        let label = book.sections[pos.chapter - 1].pillLabel(storyChapterTotal: storyTotal)
-        return label.isEmpty ? "Ch. \(pos.chapter)/\(pos.chapterCount)" : label
     }
 
-    // MARK: Chapters / Display sheet
-
-    private var readerSheet: some View {
-        NavigationStack {
-            Group {
-                if router.panel == .readerChapters {
-                    List { chapterRows }
-                } else {
-                    ReaderOptionsForm()
+    @ViewBuilder
+    private func positionCardContent(
+        summary: ReaderPositionSummary,
+        includeMiniPlayer: Bool
+    ) -> some View {
+        let tint = themeManager.effectiveTint
+        // Always use readingPosition for both page and pageCount so we never mix
+        // visual swipe pages (e.g. 95) with Readium ~1 KB chapter positions (e.g. 10).
+        // That mixed pair produced "Page 95 of 10" until the next swipe refreshed UI.
+        let pos = book.readingPosition
+        let pageReady = pos?.pageBarReady == true
+        let pageCount = pageReady ? max(1, pos?.pageCount ?? 1) : 1
+        let sliderEnabled = pageReady && pageCount > 1
+        // Live page under the thumb while scrubbing; otherwise navigator page.
+        let displayPage: Int = {
+            guard pageReady else { return 1 }
+            if isEditingSlider {
+                return ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
+            }
+            return min(pageCount, max(1, pos?.page ?? 1))
+        }()
+        // Chapter minutes left track the thumb while scrubbing.
+        // Visual page units must never be fed to `minutes(forPositions:)` as if
+        // they were ~1 KB Readium positions — scale via chapter position count.
+        let chapterRemainingMinutes: Int? = {
+            guard pageReady else { return nil }
+            if isEditingSlider {
+                guard let chapterPositions = book.currentChapterPositions,
+                      !chapterPositions.isEmpty, pageCount > 0
+                else { return nil }
+                let remaining = ReaderPageMetrics.chapterRemainingPositions(
+                    page: displayPage,
+                    pageCount: pageCount,
+                    chapterPositionCount: chapterPositions.count
+                )
+                return ReaderTimeEstimate.minutes(forPositions: remaining)
+            }
+            if let remaining = book.remainingPositions?.chapter {
+                return ReaderTimeEstimate.minutes(forPositions: remaining)
+            }
+            return nil
+        }()
+        // Theme tint on page digit + "N min" when scrubbed away from origin.
+        let scrubValuesEmphasized = ReaderChapterScrub.isDeviatedFromOrigin(
+            sliderValue: sliderValue,
+            origin: sliderScrubOrigin,
+            pageCount: pageCount
+        )
+        // Until swipe-scale measure is ready: page=0 signals "Page …" (not 1 of 1).
+        let cardPage = pageReady ? displayPage : 0
+        let cardPageCount = pageReady ? pageCount : 0
+        Group {
+            if includeMiniPlayer {
+                ReaderPositionCard(
+                    page: cardPage,
+                    pageCount: cardPageCount,
+                    chapterRemainingMinutes: chapterRemainingMinutes,
+                    workLine: summary.workLine,
+                    tint: tint,
+                    sliderValue: scrubBinding,
+                    sliderEnabled: sliderEnabled,
+                    scrubOrigin: sliderScrubOrigin,
+                    scrubValuesEmphasized: scrubValuesEmphasized,
+                    onEditingChanged: handleSliderEditingChanged
+                ) {
+                    speechMiniPlayer(tint: tint)
                 }
-            }
-            .navigationTitle(router.panel == .readerChapters ? "Chapters" : "Display & Themes")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { router.panel = .none }
-                }
+            } else {
+                ReaderPositionCard(
+                    page: cardPage,
+                    pageCount: cardPageCount,
+                    chapterRemainingMinutes: chapterRemainingMinutes,
+                    workLine: summary.workLine,
+                    tint: tint,
+                    sliderValue: scrubBinding,
+                    sliderEnabled: sliderEnabled,
+                    scrubOrigin: sliderScrubOrigin,
+                    scrubValuesEmphasized: scrubValuesEmphasized,
+                    onEditingChanged: handleSliderEditingChanged
+                )
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .presentationContentInteraction(.scrolls)
-        .preferredColorScheme(readerTheme.colorScheme)
+        // Selection ticks only while scrubbing (trigger is 0 when not editing).
+        .sensoryFeedback(.selection, trigger: scrubPreviewPage(pageCount: pageCount))
     }
 
-    private var chapterRows: some View {
-        // .other sections have no navigable heading of their own (AO3/Calibre
-        // never gave them one) and aren't part of the story — not shown here,
-        // matching the reader index's documented Preface/Summary/Chapter/
-        // Afterword-only contract. Still reachable by normal page-turning.
-        ForEach(book.sections.filter { $0.kind != .other }) { section in
-            Button {
-                book.go(toSpineIndex: section.spineIndex)
-                router.panel = .none
-            } label: {
-                Text(section.title)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-            }
-            .buttonStyle(.plain)
+    /// Page under the thumb while scrubbing; stable `0` when not editing so
+    /// sensory feedback only fires on real scrub steps.
+    private func scrubPreviewPage(pageCount: Int) -> Int {
+        guard isEditingSlider, pageCount > 0 else { return 0 }
+        return ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
+    }
+
+
+    /// The fan's round action row (after the native `ShareLink` slot): kudos is
+    /// wired to the existing native write action; read aloud and in-book
+    /// bookmarking are shown per the layout but disabled until their capabilities
+    /// land (TASKS.md) rather than faked.
+    private var fanRoundActions: [ReaderFanRoundAction] {
+        var actions: [ReaderFanRoundAction] = []
+        // Icons always use the reader theme tint; active/inactive is outline vs
+        // filled SF Symbol (kudos heart, bookmark), not grey vs tint.
+        let tint = themeManager.effectiveTint
+        if let ao3WorkID {
+            actions.append(ReaderFanRoundAction(
+                id: "kudos",
+                systemImage: kudosGiven ? "heart.fill" : "heart",
+                tint: tint,
+                accessibilityLabel: kudosGiven ? "Kudos given" : "Give kudos",
+                isEnabled: !kudosWorking && !kudosGiven
+            ) {
+                giveKudos(workID: ao3WorkID)
+            })
         }
+        // Converted imports only — an AO3 EPUB has no "original" behind it. Sits in
+        // the round row rather than the pill list because the owner wanted it here,
+        // and it reads as a peer of Share: both are about the file rather than the
+        // reading session.
+        //
+        // Worth having at all because conversion is lossy — images are dropped, layout
+        // is reflowed — so checking the source is how a reader tells a conversion
+        // artefact from something the author actually wrote.
+        if let original = originalDocumentURL {
+            actions.append(ReaderFanRoundAction(
+                id: "original",
+                systemImage: "doc.text.magnifyingglass",
+                tint: tint,
+                accessibilityLabel: "View the original file this work was converted from"
+            ) {
+                previewingOriginal = original
+            })
+        }
+        // Start when idle; when the mini player is up (playing *or* paused) this
+        // is the same `stopReadingAloud()` the mini player's stop button uses —
+        // not pause — so the strip dismisses instead of lingering muted.
+        // `isSessionActive` (not `status != .stopped`): the raw comparison also
+        // matched `.unavailable`, so a publication Readium can't speak got the
+        // filled/emphasized "active" look and a "Stop reading aloud" a11y label
+        // on a control that was simultaneously disabled below.
+        let speechActive = speech.isSessionActive
+        actions.append(ReaderFanRoundAction(
+            id: "readAloud",
+            // Active: filled waveform + theme capsule fill (same emphasized
+            // treatment as rotation lock) so "speaking" is obvious at a glance.
+            systemImage: speechActive ? "waveform.circle.fill" : "waveform",
+            tint: tint,
+            accessibilityLabel: speechActive ? "Stop reading aloud" : "Read aloud",
+            // Needs extractable content; a publication Readium can't tokenise
+            // gets a disabled control rather than silent no-op playback.
+            isEnabled: speech.isAvailable,
+            isEmphasized: speechActive
+        ) {
+            playReaderToggleHaptic()
+            withAnimation(.snappy(duration: 0.35)) {
+                toggleReadingAloud()
+            }
+        })
+        let rotationLocked = orientationLock.isLocked
+        actions.append(ReaderFanRoundAction(
+            id: "rotationLock",
+            // Open padlock while rotation is free, closed once pinned — the SF
+            // Symbol for the open variant is `lock.open.rotation`, not
+            // `lock.rotation.open`, which silently renders nothing. Pair with
+            // `.contentTransition(.symbolEffect(.replace))` on the Image and
+            // `withAnimation` here for the Control Center lock morph.
+            // Locked also fills the capsule with theme tint + a white glyph so
+            // the state is obvious (outline vs closed lock alone is too subtle).
+            systemImage: rotationLocked ? "lock.rotation" : "lock.open.rotation",
+            tint: tint,
+            accessibilityLabel: rotationLocked ? "Unlock rotation" : "Lock rotation",
+            isEmphasized: rotationLocked
+        ) {
+            playReaderToggleHaptic()
+            withAnimation(.snappy(duration: 0.35)) {
+                orientationLock.toggle(in: ReaderOrientationLock.activeScene)
+            }
+        })
+        let isBookmarked = bookmarkAtCurrentPosition != nil
+        actions.append(ReaderFanRoundAction(
+            id: "bookmark",
+            systemImage: isBookmarked ? "bookmark.fill" : "bookmark",
+            tint: tint,
+            accessibilityLabel: isBookmarked ? "Remove bookmark" : "Add bookmark",
+            // Needs a locator to anchor to; disabled until the navigator reports one.
+            isEnabled: currentReadingPosition != nil
+        ) {
+            playReaderToggleHaptic()
+            toggleBookmarkAtCurrentPosition()
+        })
+        return actions
+    }
+
+    /// Light toggle tick for fan round actions (rotation lock, TTS, bookmark).
+    private func playReaderToggleHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
+        generator.impactOccurred()
+    }
+
+    /// Stronger tick when a chapter skip / restart commits (Music-like boundary).
+    private func playSpeechChapterHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
+        generator.impactOccurred()
+    }
+
+    /// Soft step feedback while hold-seeking within a chapter.
+    private func playSpeechSeekTickHaptic() {
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
     }
 
     // MARK: Loading + progress
@@ -1017,6 +1338,7 @@ struct ReadiumReaderView: View {
             try? context.save()
         }
         book.onOpenExternalURL = { url in
+            if openCommentsLinkIfMatching(url) { return }
             // AO3 links in the work (e.g. the preface's tag links) route to the matching
             // native screen where one exists; everything else opens the in-app web view.
             router.openAO3Link(url)
@@ -1027,6 +1349,9 @@ struct ReadiumReaderView: View {
             ? work.lastSpineIndex : nil
         let config = EPUBNavigatorViewController.Configuration(
             preferences: preferences,
+            // Adds Highlight / Add Note to the system selection menu next to
+            // Copy, Look Up and friends.
+            editingActions: ReadiumBook.selectionEditingActions,
             fontFamilyDeclarations: fontFamilyDeclarations,
             readiumCSSRSProperties: ReadiumReaderStyleMapper.readingSystemProperties
         )
@@ -1035,68 +1360,461 @@ struct ReadiumReaderView: View {
     }
 }
 
-private struct ReaderInteractiveDismissStyle: ViewModifier {
-    typealias Body = AnyView
+/// Reader behaviour that isn't the view hierarchy itself: Apple-Music-style
+/// speech chapter skip / hold-seek, the position card's label inputs, the
+/// scrub slider's live seek, and kudos. Split out purely for navigability —
+/// same file, so the `private` members above stay reachable and nothing
+/// about access levels or behaviour changes.
+extension ReadiumReaderView {
 
-    let offset: CGFloat
-    let reduceMotion: Bool
+    // MARK: Contents sheet helpers
 
-    func body(content: Self.Content) -> AnyView {
-        let clampedOffset = max(0, offset)
-        let progress = min(clampedOffset / 280, 1)
-        // The page follows the finger down, shrinking and rounding into a card as it
-        // goes (Apple Books). No per-frame drop shadow — that offscreen pass on the
-        // full-screen web view was the source of the drag jank.
-        return AnyView(content
-            .scaleEffect(reduceMotion ? 1 : 1 - progress * 0.06, anchor: .center)
-            .clipShape(RoundedRectangle(cornerRadius: reduceMotion ? 0 : progress * 20,
-                                        style: .continuous))
-            .offset(y: clampedOffset)
-            .opacity(Double(1 - progress * 0.2)))
+    /// Opens the note editor queued by Contents' **Add Note**, now that the
+    /// panel sheet has finished dismissing. A no-op for every other way the
+    /// panel closes, which is why it can hang off the shared `onDismiss`.
+    private func presentPendingNoteEditor() {
+        guard let pending = pendingNoteAfterPanelDismiss else { return }
+        pendingNoteAfterPanelDismiss = nil
+        editingNote = pending
     }
-}
 
-// MARK: - Theme mapping
+    /// First Readium locator of a chapter — the anchor for Contents' swipe
+    /// actions, which act on the chapter's start rather than the live position.
+    /// nil until `positionsByReadingOrder` has loaded, which is what gates those
+    /// actions from appearing at all (see `ReaderContentsSheet`).
+    private func chapterStartLocator(for section: ReaderSection) -> Locator? {
+        guard book.positionsByReadingOrder.indices.contains(section.spineIndex) else { return nil }
+        return book.positionsByReadingOrder[section.spineIndex].first
+    }
 
-extension ReaderTheme {
-    /// The matching Readium navigator theme. Readium has no OLED case of its own —
-    /// `.dark` gives the navigator's chrome (e.g. its own default selection color)
-    /// the right dark-mode behavior, while `backgroundColor`/`textColor` above are
-    /// passed through `EPUBPreferences` explicitly, so the true-black page and text
-    /// colors are unaffected by this mapping.
-    var readiumTheme: ReadiumNavigator.Theme {
-        switch self {
-        case .light: .light
-        case .sepia: .sepia
-        case .dark, .oled: .dark
+    // MARK: Annotation lookups
+
+    /// This work's live bookmarks / highlights / notes, in book order.
+    private var annotations: [ReadingAnnotation] {
+        allAnnotations.filter { $0.work?.id == work.id && !$0.isPendingDeletion }
+    }
+
+    private var bookmarkAnnotations: [ReadingAnnotation] {
+        annotations.filter { $0.kind == .bookmark }
+    }
+
+    /// All in-book highlights (with or without a note). Bare marks used to be
+    /// invisible here, which left no sheet-based path to delete them.
+    private var noteAnnotations: [ReadingAnnotation] {
+        annotations.filter { $0.kind == .highlight }
+    }
+
+    /// The Readium position (1-based, publication-wide) the reader is on.
+    /// This is the page's identity, so bookmarking can toggle exactly rather
+    /// than fuzzily matching progressions.
+    private var currentReadingPosition: Int? {
+        book.currentLocator?.locations.position
+    }
+
+    /// The bookmark on the current page, if one exists — drives the round
+    /// button's filled/outline state and makes the tap a toggle.
+    private var bookmarkAtCurrentPosition: ReadingAnnotation? {
+        guard let position = currentReadingPosition else { return nil }
+        return bookmarkAnnotations.first {
+            Locator(persistenceString: $0.locatorString)?.locations.position == position
         }
     }
-}
 
-// MARK: - Locator persistence (public-API only)
+    // MARK: Contents / Display sheet
 
-extension Locator {
-    /// A JSON string suitable for storing in SwiftData. The toolkit's own
-    /// `jsonString()` is internal, so round-trip through Foundation JSON using the
-    /// public `jsonObject` / `JSONValue` accessors.
-    var persistenceString: String? {
-        let dict = jsonObject.mapValues(\.any)
-        guard JSONSerialization.isValidJSONObject(dict),
-              let data = try? JSONSerialization.data(withJSONObject: dict),
-              let string = String(data: data, encoding: .utf8)
-        else { return nil }
-        return string
+    private var readerSheetTitle: String {
+        switch router.panel {
+        case .readerChapters: "Contents"
+        case .readerFind: "Find in Work"
+        default: "Display & Themes"
+        }
     }
 
-    /// Rebuilds a `Locator` from `persistenceString`; nil if absent/invalid.
-    init?(persistenceString: String) {
-        guard !persistenceString.isEmpty,
-              let data = persistenceString.data(using: .utf8),
-              let any = try? JSONSerialization.jsonObject(with: data),
-              let json = JSONValue(any),
-              let locator = try? Locator(json: json, warnings: nil)
-        else { return nil }
-        self = locator
+    private var readerSheet: some View {
+        NavigationStack {
+            Group {
+                if router.panel == .readerChapters {
+                    ReaderContentsSheet(
+                        segment: $contentsSegment,
+                        sections: book.sections,
+                        bookmarks: bookmarkAnnotations,
+                        notes: noteAnnotations,
+                        chapterStartPercent: { section in
+                            guard let locator = chapterStartLocator(for: section),
+                                  let progression = locator.locations.totalProgression
+                            else { return nil }
+                            return Int((progression * 100).rounded())
+                        },
+                        onSelectChapter: { section in
+                            book.go(toSpineIndex: section.spineIndex)
+                            router.panel = .none
+                        },
+                        onBookmarkChapter: { section in
+                            guard let locator = chapterStartLocator(for: section) else { return }
+                            addBookmark(at: locator)
+                        },
+                        onAddNoteToChapter: { section in
+                            guard let locator = chapterStartLocator(for: section),
+                                  let bookmark = addBookmark(at: locator)
+                            else { return }
+                            // Queue rather than present: the panel's `onDismiss`
+                            // opens the editor once Contents is actually gone.
+                            pendingNoteAfterPanelDismiss = bookmark
+                            router.panel = .none
+                        },
+                        onSelectAnnotation: goToAnnotation,
+                        onDeleteAnnotation: deleteAnnotation
+                    )
+                } else if router.panel == .readerFind {
+                    ReaderSearchView(
+                        model: searchModel,
+                        publication: book.publication,
+                        sections: book.sections,
+                        // Matched by href against `book.sections`, the same basis
+                        // `ReaderSearchGrouping` matches results against — not
+                        // `readingPosition.chapter`, which is 1 + an index into
+                        // `positionsByReadingOrder`. That array can have fewer
+                        // entries than `book.sections` (any spine item with zero
+                        // Readium positions is absent from it), so the two "chapter
+                        // index" spaces can silently drift apart after such a gap.
+                        // This was why "This Chapter" only pinned first sometimes.
+                        currentSpineIndex: currentSpineIndex,
+                        onSelect: { locator in
+                            book.go(to: locator)
+                            router.panel = .none
+                        },
+                        onBookmark: { locator in addBookmark(at: locator) }
+                    )
+                } else {
+                    ReaderOptionsForm()
+                }
+            }
+            .navigationTitle(readerSheetTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { router.panel = .none }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.scrolls)
+        // Annotation rows and the segmented control tint from the theme, not the
+        // raw accent, so Sepia keeps its warm brown.
+        .tint(themeManager.effectiveTint)
+        .preferredColorScheme(readerTheme.colorScheme)
+    }
+    private func handleSpeechSkipBack() {
+        guard let pos = book.readingPosition else { return }
+        switch ReaderSpeechSkip.backwardAction(
+            page: pos.page,
+            chapter: pos.chapter,
+            chapterCount: pos.chapterCount
+        ) {
+        case .restartChapter:
+            goToSpineChapterStart(pos.chapter, resumePlaying: speech.isPlaying)
+            playSpeechChapterHaptic()
+        case .previousChapter:
+            goToSpineChapterStart(pos.chapter - 1, resumePlaying: speech.isPlaying)
+            playSpeechChapterHaptic()
+        case .none:
+            break
+        }
+    }
+
+    private func handleSpeechSkipForward() {
+        guard let pos = book.readingPosition else { return }
+        switch ReaderSpeechSkip.forwardAction(chapter: pos.chapter, chapterCount: pos.chapterCount) {
+        case .nextChapter:
+            goToSpineChapterStart(pos.chapter + 1, resumePlaying: speech.isPlaying)
+            playSpeechChapterHaptic()
+        case .none:
+            break
+        }
+    }
+
+    /// 1-based spine chapter → first Readium position; re-anchors TTS.
+    private func goToSpineChapterStart(_ chapter1Based: Int, resumePlaying: Bool) {
+        let index = chapter1Based - 1
+        guard book.positionsByReadingOrder.indices.contains(index),
+              let first = book.positionsByReadingOrder[index].first
+        else { return }
+        book.go(to: first)
+        // Keep a paused session paused at the new chapter; only autoplay if we
+        // were already speaking.
+        speech.reanchor(to: first, resumePlaying: resumePlaying)
+    }
+
+    private func handleSpeechSeekHoldStart(forward: Bool) {
+        speechSeekWasPlaying = speech.isPlaying
+        speechSeekHolding = true
+        if speech.isPlaying {
+            speech.pause()
+        }
+        // First seek step is the hold control's immediate first tick.
+    }
+
+    private func handleSpeechSeekHoldTick(forward: Bool) {
+        guard let positions = book.currentChapterPositions, positions.count > 1 else { return }
+        // Never index the positions list with visual page-1 (mixed metrics).
+        // Prefer the live locator's global position; else map visual→progression
+        // the same way the chapter scrub slider does.
+        let currentIdx: Int = {
+            if let globalPos = book.currentLocator?.locations.position,
+               let first = positions.first?.locations.position {
+                return max(0, min(positions.count - 1, globalPos - first))
+            }
+            if let progression = book.currentLocator?.locations.progression, positions.count > 1 {
+                let idx = Int((progression * Double(positions.count - 1)).rounded())
+                return max(0, min(positions.count - 1, idx))
+            }
+            if let pos = book.readingPosition {
+                return ReaderPageMetrics.positionIndex(
+                    visualPage: pos.page,
+                    visualPageCount: pos.pageCount,
+                    positionCount: positions.count
+                )
+            }
+            return 0
+        }()
+        let delta = forward ? 1 : -1
+        guard let newIdx = ReaderSpeechSkip.seekIndex(
+            current: currentIdx,
+            count: positions.count,
+            delta: delta
+        ) else { return }
+        let locator = positions[newIdx]
+        book.go(to: locator)
+        speech.noteSeekLocator(locator)
+        playSpeechSeekTickHaptic()
+    }
+
+    private func handleSpeechSeekHoldEnd() {
+        guard speechSeekHolding else { return }
+        speechSeekHolding = false
+        speech.reanchor(to: book.currentLocator, resumePlaying: speechSeekWasPlaying)
+        speechSeekWasPlaying = false
+    }
+
+    /// The AO3 story chapter the reader is currently on, for the chapter-aware
+    /// Comments entry and the position card's chapter line. `pos.chapter - 1` is
+    /// the current spine index; the section list normalizes it past Preface/
+    /// Summary/Afterword. nil (→ Comments opens on All) until a position and
+    /// built sections both exist.
+    private var currentAO3Chapter: Int? {
+        guard let pos = book.readingPosition, !book.sections.isEmpty else { return nil }
+        return book.sections.ao3StoryChapter(forSpineIndex: pos.chapter - 1)
+    }
+
+    /// The position card's label lines, built from `book.readingPosition` +
+    /// `book.remainingPositions` — no new requests, no new persistence.
+    private var positionSummary: ReaderPositionSummary? {
+        guard let pos = book.readingPosition else { return nil }
+        let remaining = book.remainingPositions
+        return ReaderPositionSummary(
+            page: pos.page, pageCount: pos.pageCount, percent: pos.percent,
+            place: .resolve(chapter: pos.chapter, chapterCount: pos.chapterCount,
+                            sections: book.sections,
+                            postedChapterTotal: SavedWork.totalChapterCount(from: work.chapters)),
+            remainingInChapter: remaining?.chapter, remainingInWork: remaining?.work
+        )
+    }
+
+    /// Pushes the slider to the reader's live position while the user isn't
+    /// dragging it, so it tracks normal reading without fighting the drag.
+    /// While the page bar is not ready, leave the thumb alone — forcing 0 from
+    /// the stub pageCount:1 readingPosition was a next/back snap on the slider.
+    private func syncSliderFromPosition(_ pos: ReadiumBook.ReadingPosition?) {
+        guard !isEditingSlider, let pos, pos.pageBarReady, pos.pageCount > 0 else { return }
+        // A single-page chapter has nowhere left to go — page 1 of 1 is both the
+        // start and the end, so the bar should read full, not empty.
+        sliderValue = pos.pageCount > 1 ? Double(pos.page - 1) / Double(pos.pageCount - 1) : 1
+    }
+
+    /// Seeks the page under the thumb *while* dragging, so the text scrubs with
+    /// the slider (Books-style) instead of only jumping on release. Rate-limited
+    /// two ways — only when the rounded page actually changes, and at most once
+    /// per `scrubSeekInterval` — because a fast drag across a long chapter would
+    /// otherwise queue a `go(to:)` per intermediate page. `syncSliderFromPosition`
+    /// stays suppressed while editing, so these seeks can't fight the thumb.
+    private func handleScrubSeek() {
+        guard isEditingSlider, !book.isLocatorIngestionBlocked, !isDismissingByDrag else { return }
+        guard book.pageBarReady, book.visualPageCount != nil else { return }
+        let pageCount = book.readingPosition?.pageCount ?? 0
+        guard pageCount > 1 else { return }
+        let page = ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
+        // Only when the rounded page actually changes — many slider samples map
+        // to the same page. Backpressure past that is the seek's own job
+        // (`scrubToProgressionInCurrentResource` coalesces to latest-wins), not
+        // a fixed time gate here, which only ever added lag of its own.
+        guard page != lastScrubSeekPage else { return }
+        lastScrubSeekPage = page
+        book.scrubToProgressionInCurrentResource(
+            ReaderPageMetrics.progression(page: page, pageCount: pageCount)
+        )
+    }
+
+    /// Write-through binding for the position card's slider: stores the thumb
+    /// value, then live-seeks. Deliberately *not* an `.onChange(of: sliderValue)`
+    /// on `body` — this view already carries enough modifiers that one more
+    /// blew the SwiftUI type-checker's budget (see the `colorBarDismissToken`
+    /// note for the same problem solved the same way).
+    private var scrubBinding: Binding<Double> {
+        Binding(
+            get: { sliderValue },
+            set: { newValue in
+                sliderValue = newValue
+                handleScrubSeek()
+            }
+        )
+    }
+
+    /// Live-seeks during the drag (`handleScrubSeek`) and commits the exact page
+    /// on release — the release seek still runs unconditionally, since the last
+    /// live one may have been rate-limited away short of where the thumb ended.
+    /// On begin, freeze a scrub-origin tick so the user can return to cancel.
+    private func handleSliderEditingChanged(_ editing: Bool) {
+        if editing {
+            isEditingSlider = true
+            book.isScrubbing = true
+            sliderScrubOrigin = sliderValue
+            // Seed with where we already are, so the first tiny drag inside the
+            // starting page doesn't fire a seek to the page we're on — which in
+            // scrolled mode would snap the text to that page's top edge.
+            lastScrubSeekPage = book.readingPosition?.page
+            return
+        }
+        isEditingSlider = false
+        book.isScrubbing = false
+        sliderScrubOrigin = nil
+        lastScrubSeekPage = nil
+        // Ignore scrub commit while dismiss freeze / exit latch is up — a release
+        // that races with swipe-down must not seek the navigator mid-exit.
+        guard !book.isLocatorIngestionBlocked, !isDismissingByDrag else { return }
+        let pageCount = book.readingPosition?.pageCount ?? 0
+        guard pageCount > 0 else { return }
+        let page = ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
+        // Swipe-scale seek once page bar is ready.
+        if book.pageBarReady, book.visualPageCount != nil {
+            book.goToProgressionInCurrentResource(
+                ReaderPageMetrics.progression(page: page, pageCount: pageCount)
+            )
+            return
+        }
+        // Position-list fallback when visual metrics aren't available yet.
+        guard let positions = book.currentChapterPositions, !positions.isEmpty else { return }
+        let index = ReaderChapterScrub.positionIndex(
+            sliderValue: sliderValue,
+            pageCount: positions.count
+        )
+        book.go(to: positions[index])
+    }
+
+    private func giveKudos(workID: Int) {
+        guard !kudosWorking, !kudosGiven else { return }
+        kudosWorking = true
+        Task {
+            do {
+                kudosBanner = try await auth.giveKudos(workID: workID)
+                kudosGiven = true
+            } catch {
+                kudosBanner = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            kudosWorking = false
+        }
+    }
+
+    private var kudosBannerPresented: Binding<Bool> {
+        Binding(get: { kudosBanner != nil }, set: { if !$0 { kudosBanner = nil } })
     }
 }
+
+
+// MARK: - Fan menu items
+
+/// The fan menu's labelled pills and its share target.
+///
+/// An extension purely so `ReadiumReaderView`'s own body stays inside SwiftLint's
+/// `type_body_length` limit — adding the two conversion pills pushed it past the
+/// error threshold. Kept in this file so it can still reach the view's `private`
+/// state (Swift allows that for same-file extensions), which means no visibility
+/// had to widen. Pure code movement.
+extension ReadiumReaderView {
+    /// The fan's labelled menu pills: Contents, Bookmarks & Highlights, Find in Work,
+    /// Comments (AO3-backed works only — not in the reference design's four, but
+    /// dropping it would lose an existing feature, which the brief forbids), and
+    /// Themes & Settings.
+    private var fanPills: [ReaderFanMenuPill] {
+        var pills: [ReaderFanMenuPill] = [
+            ReaderFanMenuPill(id: "contents", title: contentsPillTitle, systemImage: "list.bullet") {
+                contentsSegment = .chapters
+                router.panel = .readerChapters
+            },
+            ReaderFanMenuPill(id: "bookmarks", title: "Bookmarks & Highlights", systemImage: "bookmark") {
+                contentsSegment = .bookmarks
+                router.panel = .readerChapters
+            },
+            ReaderFanMenuPill(
+                id: "find", title: "Find in Work", systemImage: "magnifyingglass",
+                // Readium synthesises a content search service for EPUBs; if this
+                // publication somehow has none, dim the control rather than open a
+                // box that can never return anything.
+                isEnabled: ReaderSearchModel.isSearchable(book.publication)
+            ) {
+                router.panel = .readerFind
+            }
+        ]
+        if ao3WorkID != nil {
+            pills.append(ReaderFanMenuPill(
+                id: "comments", title: "Comments", systemImage: "bubble.left.and.bubble.right"
+            ) {
+                showingComments = true
+            })
+        }
+        if WorkReconversion.candidate(for: work)?.isStale == true {
+            pills.append(ReaderFanMenuPill(
+                id: "rebuild", title: "Rebuild from Original", systemImage: "arrow.triangle.2.circlepath"
+            ) {
+                Task { await rebuildFromOriginal() }
+            })
+        }
+        pills.append(ReaderFanMenuPill(id: "settings", title: "Themes & Settings", systemImage: "textformat.size") {
+            router.panel = .readerDisplay
+        })
+        return pills
+    }
+
+    private var contentsPillTitle: String {
+        guard let percent = book.totalProgression.map({ Int(($0 * 100).rounded()) }) else { return "Contents" }
+        return "Contents · \(percent)%"
+    }
+
+    /// What the fan's `ShareLink` slot offers, best available first.
+    ///
+    /// This used to be `ao3WorkID.map(AO3AuthService.workURL)`, so a work with no AO3
+    /// id had no share slot at all — and a non-AO3 work's menu is already the sparse
+    /// one, since Kudos and Comments cannot apply to it. There is always *something*
+    /// worth sharing:
+    ///
+    /// 1. the AO3 page, when the work has one;
+    /// 2. the original posting on whatever site it came from (a fanfiction.net story
+    ///    link, say), which for a deleted work is often the only citation left;
+    /// 3. failing any link, the EPUB itself — which is the whole point of a
+    ///    community copy, and the only way to hand it on.
+    private var shareURL: URL? {
+        if let ao3WorkID { return AO3AuthService.workURL(ao3WorkID) }
+        if let source = URL(string: work.sourceURL), source.scheme?.hasPrefix("http") == true {
+            return source
+        }
+        return WorkReaderPreparation.hasReadableEPUB(for: work) ? work.fileURL : nil
+    }
+
+    /// The file this work was converted from, when it was converted and the original is
+    /// still archived. Drives the "Original File" pill.
+    private var originalDocumentURL: URL? {
+        WorkReconversion.candidate(for: work)?.originalURL
+    }
+}
+
 #endif

@@ -135,8 +135,16 @@ struct AccountView: View {
                     case .privacy: PrivacyDataView()
                     }
                 }
-                .navigationDestination(for: AO3AccountWorksList.Kind.self) { AO3AccountWorksList(kind: $0) }
+                .navigationDestination(for: AO3AccountWorksList.Kind.self) {
+                    AO3AccountWorksList(kind: $0)
+                }
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+                // The work cards on this tab carry an ⓘ that pushes
+                // `LocalWorkDestination.detail`; without this handler it would be
+                // an inert control here while working everywhere else.
+                .navigationDestination(for: LocalWorkDestination.self) {
+                    LocalWorkDestinationView(destination: $0)
+                }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: AccountInboxThreadDestination.self) { destination in
                     CommentsView(

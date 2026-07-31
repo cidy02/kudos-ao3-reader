@@ -353,6 +353,7 @@ enum FolderSyncService {
             fonts: context.fetch(FetchDescriptor<CustomFont>()),
             collections: context.fetch(FetchDescriptor<WorkCollection>()),
             readingQueues: context.fetch(FetchDescriptor<ReadingQueue>()),
+            annotations: context.fetch(FetchDescriptor<ReadingAnnotation>()),
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
         )

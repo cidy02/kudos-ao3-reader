@@ -90,6 +90,25 @@ final class CommentsModel {
     /// direct-reply tree so the view can render replies recursively inside the
     /// specific comment they answer.
     private(set) var displayThreads: [AO3Comment] = []
+    /// Depth-first replies per root, computed once per page rebuild. Read by the
+    /// row builder so rendering never walks a reply tree — see
+    /// `rebuildDisplayThreads`.
+    private(set) var flattenedRepliesByRoot: [Int: [FlattenedReply]] = [:]
+    /// The page flattened to one entry per rendered row, rebuilt only when the
+    /// threads or the expansion state actually change. The view renders this
+    /// directly so its `body` allocates nothing per pass — see
+    /// `CommentConversationRowItem` for why that matters to swipe smoothness.
+    private(set) var conversationRows: [CommentConversationRowItem] = []
+    /// Threads the reader expanded, plus how much of each is revealed. Owned
+    /// here rather than by the view so `conversationRows` can be rebuilt at the
+    /// moment they change instead of being recomputed while rendering.
+    private var expandedRootIDs: Set<Int> = []
+    private var visibleReplyCounts: [Int: Int] = [:]
+    /// Conversations the reader has folded shut. Separate from `expandedRootIDs`,
+    /// which tracks how much of an *open* thread is revealed: a thread short enough
+    /// to auto-expand was never in that set, so it had no state to turn off and no
+    /// way to be closed again.
+    private var collapsedRootIDs: Set<Int> = []
 
     var scope: Scope = .all
     private(set) var chapters: [AO3ChapterRef] = []
@@ -216,7 +235,7 @@ final class CommentsModel {
         authContext = current
         guard hadContext else { return true }
         page = nil
-        displayThreads = []
+        clearRenderedThreads()
         chapters = []
         chaptersFailureMessage = nil
         scope = .all
@@ -260,9 +279,23 @@ final class CommentsModel {
     /// the skeleton for the new context instead of the previous scope's comments.
     func resetForContextChange() {
         page = nil
-        displayThreads = []
+        clearRenderedThreads()
         phase = .idle
         currentPageNumber = 1
+    }
+
+    /// Drops the rendered page and everything derived from it. `conversationRows`
+    /// is what the list actually renders, so clearing `displayThreads` alone
+    /// would leave the previous scope's — or the previous *account's* — comments
+    /// on screen. Expansion state goes too: it's keyed by root id, which means
+    /// nothing once the threads are gone.
+    private func clearRenderedThreads() {
+        displayThreads = []
+        flattenedRepliesByRoot = [:]
+        conversationRows = []
+        expandedRootIDs = []
+        visibleReplyCounts = [:]
+        collapsedRootIDs = []
     }
 
     /// The screen's first load. With no preselected chapter it's a plain All load;
@@ -633,12 +666,84 @@ final class CommentsModel {
 
     private func rebuildDisplayThreads() {
         guard let page else {
-            displayThreads = []
+            clearRenderedThreads()
             return
         }
         displayThreads = Self.orderedDisplayThreads(
             from: page.comments, newestFirst: newestFirst
         )
+        // Walk each reply tree once, here, rather than in the view. The rows
+        // only ever slice this for chunking, but computing it in `body` meant
+        // every layout pass — including every frame of a swipe — re-walked and
+        // re-allocated the whole tree for every visible thread.
+        flattenedRepliesByRoot = Dictionary(
+            uniqueKeysWithValues: displayThreads.map {
+                ($0.id, CommentThreadGeometry.flattenedReplies(from: $0))
+            }
+        )
+        rebuildConversationRows()
+    }
+
+    private func rebuildConversationRows() {
+        conversationRows = CommentConversationBuilder.rows(
+            roots: displayThreads,
+            repliesByRoot: flattenedRepliesByRoot,
+            expandedRootIDs: expandedRootIDs,
+            visibleReplyCounts: visibleReplyCounts,
+            collapsedRootIDs: collapsedRootIDs,
+            // The list always stops at a conversation's first replies; the thread
+            // screen is the only caller that renders a subtree in full.
+            bounded: true
+        )
+    }
+
+    /// Folds a whole conversation shut, or opens it again.
+    ///
+    /// Collapsing also drops any "show more" progress for that root: reopening a
+    /// thread the reader had walked deep into and dumping them back at reply 40
+    /// is worse than starting it fresh.
+    func toggleCollapsed(rootID: Int) {
+        if collapsedRootIDs.contains(rootID) {
+            collapsedRootIDs.remove(rootID)
+        } else {
+            collapsedRootIDs.insert(rootID)
+            expandedRootIDs.remove(rootID)
+            visibleReplyCounts[rootID] = nil
+        }
+        rebuildConversationRows()
+    }
+
+    /// "Show N replies" on a collapsed thread opens it; a later tap on "Show N
+    /// more" reveals the next chunk. One entry point for both, since the
+    /// expander row can't tell which case it is.
+    func expandReplies(rootID: Int) {
+        if expandedRootIDs.contains(rootID) {
+            visibleReplyCounts[rootID] =
+                (visibleReplyCounts[rootID] ?? CommentThreadGeometry.repliesChunkSize)
+                    + CommentThreadGeometry.repliesChunkSize
+        } else {
+            expandedRootIDs.insert(rootID)
+        }
+        rebuildConversationRows()
+    }
+
+    /// Forces a thread fully open so a "Thread"/"Parent Thread" jump can't land
+    /// on a reply that collapsing — or chunking — has left out of the row list.
+    /// `scrollTo` silently no-ops on an id that was never materialized, so this
+    /// lifts the chunk cap as well as expanding, which is what the old
+    /// `startsExpanded` flag did.
+    func forceExpand(rootID: Int) {
+        let total = flattenedRepliesByRoot[rootID]?.count ?? 0
+        let alreadyFullyShown = expandedRootIDs.contains(rootID)
+            && !collapsedRootIDs.contains(rootID)
+            && (visibleReplyCounts[rootID] ?? CommentThreadGeometry.repliesChunkSize) >= total
+        guard !alreadyFullyShown else { return }
+        // A jump into a folded conversation has to open it, or `scrollTo` lands on
+        // an id that was never materialized and silently does nothing.
+        collapsedRootIDs.remove(rootID)
+        expandedRootIDs.insert(rootID)
+        visibleReplyCounts[rootID] = max(total, CommentThreadGeometry.repliesChunkSize)
+        rebuildConversationRows()
     }
 
     /// Root-thread display order for a fetched page. Newest-first reverses only
@@ -660,6 +765,26 @@ final class CommentsModel {
     /// Pure lookup over a display-thread list (testable without a live load).
     nonisolated static func rootID(containing commentID: Int, in threads: [AO3Comment]) -> Int? {
         threads.first { $0.contains(commentID: commentID) }?.id
+    }
+
+    /// The comment itself, wherever it sits in the loaded page — the subtree that
+    /// "Thread" pushes. AO3's own Thread / Parent Thread pages are rooted at the
+    /// chosen comment, not at its top-level ancestor, so this returns the node
+    /// rather than the root that owns it.
+    ///
+    /// No request: the target is always already on the fetched page, which is why
+    /// the pushed screen can render straight from the model.
+    func comment(withID commentID: Int) -> AO3Comment? {
+        Self.comment(withID: commentID, in: displayThreads)
+    }
+
+    /// Pure lookup over a display-thread list (testable without a live load).
+    nonisolated static func comment(withID commentID: Int, in threads: [AO3Comment]) -> AO3Comment? {
+        for thread in threads {
+            if thread.id == commentID { return thread }
+            if let found = comment(withID: commentID, in: thread.replies) { return found }
+        }
+        return nil
     }
 
     /// One page, via cache unless stale/bypassed. Returns nil after setting a
@@ -1036,55 +1161,12 @@ final class CommentsModel {
 
     // MARK: Error classification
 
-    /// True when the POST may have reached AO3 even though no confirmation came
-    /// back — the only situations where a duplicate is possible and verification
-    /// (not retry) must decide. Two shapes: the response never arrived (timeout /
-    /// dropped connection), or a final-200 page arrived carrying neither a
-    /// recognized error flash nor a recognized success flash
-    /// (`AO3WriteError.unconfirmed` — maintenance page, interstitial; CAA-2).
-    static func isAmbiguousSubmitError(_ error: Error) -> Bool {
-        if case AO3WriteError.unconfirmed = error { return true }
-        guard let urlError = error as? URLError else { return false }
-        switch urlError.code {
-        case .timedOut, .networkConnectionLost:
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// The banner text for an ambiguous submit, honest about which of the two
-    /// ambiguity shapes happened.
-    static func ambiguousSubmitMessage(for error: Error) -> String {
-        if case AO3WriteError.unconfirmed = error {
-            return "AO3 answered but didn't confirm the comment posted. "
-                + "Checking whether it went through…"
-        }
-        return "The connection dropped while posting. Checking whether the comment went through…"
-    }
-
+    // The rest of this section — `isAmbiguousSubmitError`, `ambiguousSubmitMessage`
+    // and `message(for:)` — lives in `CommentsErrorMessages.swift`, moved there so
+    // this class body fits SwiftLint's `type_body_length` limit. `isOfflineError`
+    // stays here because it is `private` and called from this file.
     private static func isOfflineError(_ error: Error) -> Bool {
         (error as? URLError)?.code == .notConnectedToInternet
-    }
-
-    static func message(for error: Error) -> String {
-        switch error {
-        case AO3Error.rateLimited:
-            return "AO3 is asking for a pause. Please try again in a moment."
-        case AO3Error.authenticationRequired, AO3WriteError.notSignedIn:
-            return "Log in to AO3 to do that."
-        case let AO3WriteError.rejected(reason):
-            return reason
-        case AO3Error.notFound:
-            return "AO3 couldn't find these comments — the work may be hidden or deleted."
-        case AO3Error.forbidden:
-            return "AO3 declined the request. The work may be restricted to logged-in users."
-        case let error as URLError where error.code == .notConnectedToInternet:
-            return "You're offline. Comments will load when you're back online."
-        default:
-            return (error as? LocalizedError)?.errorDescription
-                ?? "Something went wrong talking to AO3."
-        }
     }
 }
 

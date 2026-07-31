@@ -63,7 +63,10 @@ func importEPUB(
         } else {
             Log.library.info("Import merged into existing “\(existing.title)”")
         }
-        Task { await WorkTags.refreshFromAO3(for: existing, in: context) }
+        // Verifies the work still exists on AO3 as well as refreshing its tags —
+        // one request, and it is what makes the Library's "Last Copy" badge accurate
+        // from the moment of import. See `WorkAvailability`.
+        Task { await WorkAvailability.verify(existing, in: context) }
         return existing
     }
 
@@ -109,7 +112,7 @@ func importEPUB(
 
     // Refresh the work's tags from AO3's live page in the background; the EPUB
     // tags set above stand in until (and if) that succeeds.
-    Task { await WorkTags.refreshFromAO3(for: work, in: context) }
+    Task { await WorkAvailability.verify(work, in: context) }
 
     return work
 }
@@ -257,7 +260,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
             duplicate.markModified()
             WorkSearchIndex.reindex(duplicate)
             try? context.save()
-            Task { await WorkTags.refreshFromAO3(for: duplicate, in: context) }
+            Task { await WorkAvailability.verify(duplicate, in: context) }
             return .restored(duplicate)
         }
         duplicate.markModified()
@@ -285,8 +288,33 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     try? context.save()
     Log.library.info("Imported user EPUB “\(work.title)”")
 
-    Task { await WorkTags.refreshFromAO3(for: work, in: context) }
+    Task { await WorkAvailability.verify(work, in: context) }
     return .imported(work)
+}
+
+/// Re-reads the EPUB already stored for `work` and applies its metadata.
+///
+/// Needed by `WorkReconversion`: rebuilding replaced the file but left every field on
+/// the `SavedWork` untouched, so a rebuild produced better *text* and none of the better
+/// *metadata* — the owner rebuilt a work and its source site was still unknown
+/// afterwards, which is the bug this closes.
+///
+/// `fillOnly: false` by default, deliberately: the point of a rebuild is that the new
+/// conversion knows more than the old one did, so its values should win. `assign` skips
+/// empty strings, so a field the new EPUB has nothing to say about is never blanked. User
+/// data — tags, collections, queues, progress — is not metadata and is never touched here.
+@MainActor
+func applyStoredEPUBMetadata(to work: SavedWork, in context: ModelContext, fillOnly: Bool = false) async {
+    let url = work.fileURL
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    let inspection = await Task.detached(priority: .userInitiated) {
+        try? UserEPUBInspection.inspect(url)
+    }.value
+    guard let inspection, work.modelContext != nil else { return }
+    applyUserImportMetadata(inspection, to: work, fillOnly: fillOnly)
+    work.markModified()
+    WorkSearchIndex.reindex(work)
+    context.saveBestEffort(reason: "Saving re-read EPUB metadata failed")
 }
 
 /// Maps an EPUB `dc:language` code (e.g. "en") to a human-readable name, reusing
@@ -358,6 +386,13 @@ private func applyEPUBMetadata(
         work.isComplete = complete
     }
     if let words = extracted.groups.words, words > 0, !fillOnly || work.wordCount == 0 {
+        work.wordCount = words
+    }
+    // A work with no AO3 identity never gets a stats refresh, so without this its
+    // length stayed 0 and the card simply omitted it. `EPUBBuilder` states the count it
+    // wrote, and calibre states its own, so both converted imports and calibre EPUBs
+    // now report a length. AO3's own figure wins when present, being authoritative.
+    if let words = meta.wordCount, words > 0, work.wordCount == 0 {
         work.wordCount = words
     }
     if !extracted.groups.chapters.isEmpty {

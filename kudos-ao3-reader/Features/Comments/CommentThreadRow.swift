@@ -8,36 +8,94 @@ import SwiftUI
 
 /// Geometry for comment threads.
 ///
-/// **Two card shells only** (no matryoshka):
-/// 1. Top-level conversation card
-/// 2. One nested card **per reply** (any logical depth), all sitting inside the
-///    root card — never a card inside a reply card.
+/// **One card per comment**, in the app's own card language (`cardSurface`,
+/// hairline border, shared radius) — a comment reads like every other Kudos
+/// card, not like a dense forum row. Nesting is then carried two ways, borrowing
+/// the idea from Reddit clients rather than their look: the card is indented per
+/// level, and a themed rail runs down the inside of its leading edge.
 ///
-/// Hierarchy is the Threads-style avatar spine connecting those reply cards
-/// in depth-first order.
+/// The rail is tinted from the **accent** at stepped opacities, not a rainbow —
+/// it has to hold up in Light, Dark, Sepia and OLED, and stay recognisably AO3
+/// red rather than becoming its own palette.
+///
+/// This is structural as well as visual: each card belongs to exactly one row,
+/// so nothing is shared across rows. The previous design ran one continuous
+/// card and one avatar spine *across* rows, which is what let a swipe tear the
+/// card apart and made the rail break at every boundary. It also restores
+/// information that layout silently dropped — replies used to render identically
+/// at every depth, so a reply-to-a-reply looked exactly like a direct reply.
+/// Comment threads are **depth-bounded in the list**: a conversation shows its
+/// root and at most two direct replies, and everything deeper is reached through
+/// a "Continue thread" row that pushes `CommentThreadScreen`.
+///
+/// That bound is the design's central idea, and it is structural rather than
+/// cosmetic. Three earlier styles (elbow, straight, and a flat one-card-per-
+/// conversation variant) all tried to render an arbitrarily deep tree inline, and
+/// every problem this screen went through — the width squeeze at depth, the fill
+/// ladder washing out, a six-rail gutter — came from that single decision. Real
+/// AO3 threads go deep (The Queen's Mercy's epilogue carries a ~10-reply chain),
+/// and that is exactly where readers engage most. Bounding the list means only one
+/// nesting level is ever drawn, so the hard cases stop existing instead of being
+/// tuned. The other three were compared on device and dropped; see T-151.
+
 enum CommentThreadGeometry {
     static let cardPadding: CGFloat = 14
     /// Comment cards use the app-wide card radius, so a thread card reads exactly
     /// like a Library/Search card rather than a near-miss.
     static let cardCornerRadius = CardListMetrics.cornerRadius
-    static let nestedCardPadding: CGFloat = 12
-    static let nestedCardCornerRadius = CardListMetrics.cornerRadius
-    static let nestedCardSpacing = CardListMetrics.interCardSpacing
-    static let avatarSize: CGFloat = 40
-    static let avatarColumnWidth: CGFloat = avatarSize
+    static let interCardSpacing = CardListMetrics.interCardSpacing
+    /// Air above a new top-level conversation — wide enough for the rule that
+    /// sits in it to read as a divider between threads rather than card chrome.
+    static let conversationGap: CGFloat = 26
+    /// Outer margin, matching the other card lists' side margin.
+    static let sideMargin: CGFloat = 16
+    /// Token indent for levels past `maxIndentedDepth`.
+    static let compactIndentStep: CGFloat = 16
+    /// Threads style: how far a reply's own card steps in from its parent's.
+    ///
+    /// Wider than the concept's 30, and the difference is load-bearing rather than
+    /// taste. The connector drops from the parent's avatar centre, which sits
+    /// `cardPadding + avatarSize(forDepth: 0)/2` = 34pt inside the parent's card; at 30 the
+    /// reply's leading edge lands at 30, *left* of that, so the elbow would have to
+    /// double back on itself to reach the card it points at. (The concept dodges
+    /// this by running its rail in a fixed gutter instead — and then its arm stops
+    /// 9pt short of the card.) 48 clears the avatar with room for a visible
+    /// forward arm, and the list only ever draws one level of it.
+    static let threadsIndentStep: CGFloat = 48
+    /// Threads style: levels of indent on the thread screen before it holds.
+    ///
+    /// A cap at all is a legibility budget, not a width one. Depth past a couple of
+    /// levels is not information a reader acts on: nobody needs to distinguish the
+    /// ninth reply from the tenth. A ten-deep AO3 chain is two people talking, and it
+    /// should look like two people talking, in reading order.
+    ///
+    /// Rendering the real tree was the mistake behind every artefact this design went
+    /// through — the width squeeze, the fill ladder that washed out, the six-stripe
+    /// gutter. Structure past this depth is carried by
+    /// `CommentPostRow.parentAttribution`, in words, and only on the replies where
+    /// reading order doesn't already make it obvious.
+    static let threadsMaxIndentedDepth = 3
+    /// Deep AO3 chains would otherwise indent themselves off-screen; past this
+    /// the rail opacity keeps changing but the indent stops growing.
+    static let maxIndentedDepth = 2
+    static let railWidth: CGFloat = 3
+    static let railSpacing: CGFloat = 10
+    /// Radius of the turn where a trunk elbows into its reply.
+    static let elbowRadius: CGFloat = 10
+    /// Inner cards sit a touch tighter than the outer conversation card.
+    static let nestedCardCornerRadius: CGFloat = 12
+
+    /// Avatars step down with depth so a nested reply reads as subordinate
+    /// without needing a heavier frame — the root keeps the full 40pt the
+    /// design has always used.
+    static func avatarSize(forDepth depth: Int) -> CGFloat {
+        switch max(0, depth) {
+        case 0: 40
+        case 1: 34
+        default: 30
+        }
+    }
     static let avatarContentSpacing: CGFloat = 10
-    /// Vertical gap between spine posts; carried inside the rail so the line
-    /// never breaks across SwiftUI `VStack` spacing.
-    static let postSpacing: CGFloat = 12
-    static let spineWidth: CGFloat = 2
-    /// Reply cards carry their own `nestedCardPadding`, which insets their avatars
-    /// from the card's edge. The root post and the bridges between reply cards take
-    /// the SAME leading inset, so every avatar — and the rail joining them — sits on
-    /// one column. Without it the rail misses each reply avatar by exactly
-    /// `nestedCardPadding`.
-    static let railInset: CGFloat = nestedCardPadding
-    /// Shared centre of the avatar rail, from the root card's content edge.
-    static let railCenterX: CGFloat = railInset + avatarColumnWidth / 2
     /// Reply stacks larger than this start collapsed. Counts EVERY reply in the
     /// thread — the whole depth-first stack is what expanding actually renders —
     /// not just the root's direct children.
@@ -48,6 +106,71 @@ enum CommentThreadGeometry {
     static let repliesChunkSize = 20
     /// Collapsed body height before "Read more".
     static let collapsedBodyLineLimit = 5
+
+    /// Rail tint for a nesting level: always the accent, stepped down in opacity
+    /// and cycling, so adjacent levels are always distinguishable without
+    /// introducing colours the theme doesn't own.
+    static func railColor(forDepth depth: Int) -> Color {
+        // Muted, and deliberately so. At full strength the accent made a hairline
+        // of *furniture* the loudest thing on the screen, competing with the prose
+        // it was only supposed to be joining — the same mistake as accenting every
+        // commenter's name. The top of this ramp lands near the reference design's
+        // own rail (`#5A1A1E`, which is this accent at ~37% over a near-black
+        // page), so a connector reads as structure you can follow when you look
+        // for it and ignore when you don't.
+        //
+        // The cycle still only has to separate *adjacent* levels, so the range is
+        // tighter than it was: each step is roughly 1.4× its neighbour, which stays
+        // legible without any of them shouting.
+        let opacities: [Double] = [0.38, 0.28, 0.20, 0.14]
+        return Color.accentColor.opacity(opacities[max(0, depth) % opacities.count])
+    }
+
+
+    /// Leading indent for a reply, clamped to what the screen can spare.
+    ///
+    /// The *list* never renders past depth 1 — anything deeper sits behind
+    /// "Continue thread" — so the depth cap only ever binds on the thread screen,
+    /// which walks a real tree. Three levels there, then it holds: at 48pt a step a
+    /// deep chain would otherwise spend the screen on indent before a word is
+    /// drawn, and past a few levels depth stops being information anyone acts on.
+    ///
+    /// Then clamped, because avatars and padding are fixed point values and text is
+    /// not: a fixed step keeps its width while the words inside a card grow,
+    /// starving a nested card until its content spills. Keying that off an
+    /// accessibility-size *category* wasn't enough — the sizes just below the
+    /// threshold starve the card just as badly. So the ideal indent is computed
+    /// first, then clamped so the content column never drops under
+    /// `minimumContentWidth`. Nesting gives up width before legibility does, and it
+    /// adapts to the real container, so wider screens (iPad, landscape) keep the
+    /// full indent.
+    static func indent(
+        forDepth depth: Int,
+        availableWidth: CGFloat,
+        typeSize: DynamicTypeSize
+    ) -> CGFloat {
+        let ideal = threadsIndentStep * CGFloat(min(max(0, depth), threadsMaxIndentedDepth))
+        let budget = availableWidth - sideMargin * 2 - minimumContentWidth(for: typeSize)
+        return max(0, min(ideal, budget))
+    }
+
+    /// Width a comment's own content needs before nesting may take any more.
+    /// Grows with text size because that's exactly what the fixed-point indent
+    /// fails to account for.
+    static func minimumContentWidth(for typeSize: DynamicTypeSize) -> CGFloat {
+        if typeSize.isAccessibilitySize { return 280 }
+        return typeSize >= .xxLarge ? 240 : 200
+    }
+
+    /// Inset applied to a nested card's trailing and bottom edges per level.
+    ///
+    /// Deliberately smaller than the leading indent: mirroring a 48pt avatar-column
+    /// step on both sides would starve a deep reply of width, and this inset only has
+    /// to read as sitting inside its parent. See
+    /// `indent(forDepth:availableWidth:typeSize:)`.
+    static func nestedInset(forLevel level: Int) -> CGFloat {
+        CGFloat(max(0, level)) * cardPadding
+    }
 
     /// Depth-first list of every reply under a root (root itself excluded),
     /// each becoming its own nested card.
@@ -70,6 +193,57 @@ enum CommentThreadGeometry {
     }
 }
 
+/// One row of a rendered conversation. A top-level comment and every reply
+/// under it each become their **own** `List` row rather than subviews of a
+/// single row, because `.swipeActions` only attaches to a row — packing a whole
+/// thread into one row meant a swipe beside any reply fired with the *root*
+/// comment's context (copying, editing, or deleting the wrong comment).
+///
+/// Depth is carried by the row's own indent and rail (see
+/// `CommentThreadGeometry`), so nothing is shared between rows.
+enum CommentConversationItem: Identifiable {
+    /// `parentAuthor` is nil for the root post, set for a reply. `depth` is the
+    /// AO3 nesting level (0 = root) and drives the indent and rail colour.
+    case post(comment: AO3Comment, parentAuthor: String?, depth: Int)
+    /// The "Show N replies" / "Show N more" control, itself a row so it sits
+    /// inside the same continuous card.
+    case expander(rootID: Int, hiddenCount: Int, showsVerb: Bool)
+    /// "Continue thread" — the bounded list's exit to the thread screen.
+    ///
+    /// Distinct from `.expander`, which reveals more rows in place. This one
+    /// navigates, and `hiddenCount` is every remaining **descendant**, not just
+    /// the direct children left over. Counting direct children (as the concept's
+    /// own mock does) hides a root with two replies and eight grandchildren behind
+    /// no affordance at all.
+    case continueThread(rootID: Int, hiddenCount: Int)
+
+    /// Nesting level for thread-line purposes. The expander belongs to the
+    /// replies it reveals, so it sits at their depth rather than the root's.
+    var connectorDepth: Int {
+        switch self {
+        case let .post(_, _, depth): depth
+        case .expander, .continueThread: 1
+        }
+    }
+
+    var id: String {
+        switch self {
+        case let .post(comment, _, _): "post-\(comment.id)"
+        case let .expander(rootID, _, _): "expander-\(rootID)"
+        case let .continueThread(rootID, _): "continue-\(rootID)"
+        }
+    }
+
+    /// The comment a swipe action should act on — nil for the control rows,
+    /// which deliberately offer none.
+    var actionableComment: AO3Comment? {
+        switch self {
+        case let .post(comment, _, _): comment
+        case .expander, .continueThread: nil
+        }
+    }
+}
+
 /// One reply in display order (DFS under a top-level comment).
 struct FlattenedReply: Identifiable, Equatable {
     var id: Int { comment.id }
@@ -85,18 +259,35 @@ struct FlattenedReply: Identifiable, Equatable {
 }
 
 /// Shared role chip for native Comments and Inbox notification cards.
+///
+/// **Only informative roles get a chip.** A plain commenter is the overwhelming
+/// default, so a "User" badge on nearly every byline said nothing while adding a
+/// line of furniture to each one — and it diluted the badge that people actually
+/// scan a comment section for. Author / Me / Guest carry real information;
+/// `.user` renders nothing.
 struct CommentParticipantBadge: View {
     let role: AO3CommentParticipantRole
-    /// Set only for a nested reply card (never for a root comment or an Inbox
-    /// notification row, which have no reply structure to announce): who this
-    /// comment directly replies to. The only VoiceOver-visible trace of the
-    /// visual spine/rail, which stays `accessibilityHidden` (HIG audit UI-2).
-    var replyContext: String? = nil
 
     private var isEmphasized: Bool { role == .author || role == .me }
 
+    /// `person` — the same symbol the app uses for a work's author everywhere
+    /// else (Home cards, the Work Details hero, the Comments info card), so the
+    /// badge reads as *that* author rather than as a generic role chip. Only the
+    /// author gets one: `Me` and `Guest` say what they mean on their own, and a
+    /// symbol on each would just be more furniture in the byline.
+    private var symbol: String? {
+        role == .author ? "person" : nil
+    }
+
     var body: some View {
-        Text(role.rawValue)
+        if role != .user {
+            HStack(spacing: 3) {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .imageScale(.small)
+                }
+                Text(role.rawValue)
+            }
             .font(.caption2.weight(isEmphasized ? .semibold : .regular))
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
@@ -104,17 +295,19 @@ struct CommentParticipantBadge: View {
             .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             .fixedSize()
             .layoutPriority(1)
+            // One element, one announcement — without this VoiceOver reads the
+            // symbol and the word as two separate items.
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)
+        }
     }
 
     private var accessibilityLabel: String {
-        let roleText: String = switch role {
+        switch role {
         case .me: "Your comment"
         case .author: "Work author"
         case .user, .guest: role.rawValue
         }
-        guard let replyContext, !replyContext.isEmpty else { return roleText }
-        return "Reply to \(replyContext). \(roleText)"
     }
 }
 
@@ -122,13 +315,23 @@ struct CommentParticipantBadge: View {
 /// Its visible capsule stays tight while the control keeps a 44pt hit target.
 struct CommentReplyButton: View {
     var accessibilityLabel = "Reply"
+    /// Drop the word: set by deeply nested cards and at accessibility text
+    /// sizes, where a full capsule plus the overflow button no longer fits.
+    var compact = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Label("Reply", systemImage: "arrowshape.turn.up.left")
                 .font(.caption.weight(.semibold))
-                .labelStyle(.titleAndIcon)
+                // Icon-only where the word won't fit. Decided from the
+                // environment rather than by `ViewThatFits`: the actions row
+                // puts a `Spacer` beside this button, so the proposal it
+                // receives is effectively unbounded and every candidate
+                // "fits" — the fallback could never fire.
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(.quaternary, in: Capsule())
@@ -139,9 +342,63 @@ struct CommentReplyButton: View {
         .foregroundStyle(.primary)
         .accessibilityLabel(accessibilityLabel)
     }
+
+}
+
+/// Lets a label style be chosen at runtime — `LabelStyle` is an opaque
+/// protocol, so the two branches of a ternary would otherwise be different
+/// concrete types.
+struct AnyLabelStyle: LabelStyle {
+    private let make: (Configuration) -> AnyView
+
+    init(_ style: some LabelStyle) {
+        make = { AnyView(Label($0).labelStyle(style)) }
+    }
+
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
+}
+
+extension EnvironmentValues {
+    /// Width of the comments list, measured once by `CommentsView`.
+    ///
+    /// Indent has to be known to set `listRowInsets`, which happens before the
+    /// row is laid out — so a row can't measure its own width in time. The
+    /// container publishes it instead.
+    @Entry var commentsContentWidth: CGFloat = 390
 }
 
 // MARK: - Thread environment (highlight + actions)
+
+/// Whether a conversation is folded, and how much folding it hides.
+///
+/// `replyCount` is every descendant, not the root's direct children — "Show 3"
+/// on a thread that opens to eleven rows is a lie the reader catches immediately.
+struct CommentCollapseState: Equatable {
+    let isCollapsed: Bool
+    let replyCount: Int
+
+    /// Deliberately asymmetric. Closed, the control has to say what it would
+    /// reveal, because the rows are gone and nothing else does. Open, the count is
+    /// visible on screen already, so repeating it is noise.
+    var label: String { isCollapsed ? "Show \(replyCount)" : "Hide" }
+
+    var accessibilityLabel: String {
+        isCollapsed
+            ? "Show \(replyCount) \(replyCount == 1 ? "reply" : "replies")"
+            : "Hide replies"
+    }
+}
+
+/// A pushed isolated-thread screen, identified by the comment it is rooted at.
+///
+/// A bare `Int` can't drive `navigationDestination(item:)`, and the comment id is
+/// the whole route — the subtree is resolved from `CommentsModel` on arrival
+/// rather than carried here, so the screen keeps rendering the live comment after
+/// an edit or a reply lands.
+struct CommentThreadRoute: Identifiable, Hashable {
+    let commentID: Int
+    var id: Int { commentID }
+}
 
 struct CommentThreadHandlers {
     var onReply: (AO3Comment) -> Void
@@ -188,256 +445,627 @@ extension EnvironmentValues {
     }
 }
 
-// MARK: - Top-level list row (card level 0)
+// MARK: - Conversation rows
 
-/// One top-level AO3 comment as a Library card. Every reply in its tree is a
-/// separate nested card inside this shell, linked by the avatar spine.
-struct CommentThreadRow: View {
-    let comment: AO3Comment
+/// One row of the comments list, already resolved to everything the row view
+/// needs. The whole page is precomputed into a flat `[CommentConversationRowItem]`
+/// so the `List` gets a single lazy `ForEach`.
+///
+/// The shape matters for performance, not just tidiness: a nested `ForEach`
+/// whose inner data was built inside the outer closure forced that closure to
+/// run for *every* conversation on every body pass — allocating a prefix array,
+/// an items array and an `enumerated()` array per thread — because SwiftUI has
+/// to evaluate it to know the row count. That defeats `List` laziness, and a
+/// swipe re-evaluates the body continuously, which is what made swiping stutter.
+struct CommentConversationRowItem: Identifiable {
+    let item: CommentConversationItem
+    /// The top-level comment this row belongs to — the expander's target.
+    let rootID: Int
+    /// First row of a conversation that isn't the first on the page: gets the
+    /// extra air and the rule that separate one conversation from the next.
+    let startsConversation: Bool
+    /// Nesting level (0 = root), and the two facts needed to draw the thread
+    /// lines: whether this is the last child of its parent (so the trunk stops
+    /// at its elbow instead of continuing past), and for each *ancestor* level
+    /// whether that ancestor still has siblings below (so its vertical line
+    /// keeps running down past this row).
+    ///
+    /// Resolved once in the builder rather than in `body`: a row can't see its
+    /// siblings, and re-deriving this per layout pass is the kind of per-frame
+    /// tree work that made swiping stutter before.
+    let depth: Int
+    let isLastSibling: Bool
+    let ancestorLines: [Bool]
+    /// Depth of the row that follows *within this conversation*, or nil when
+    /// this is its last row. An enclosing card at level `j` closes here exactly
+    /// when `nextDepth <= j` — that's the whole test for where a nested card's
+    /// bottom edge lands.
+    let nextDepth: Int?
+    /// True when this reply's parent is *not* the row directly above it — an
+    /// earlier sibling's subtree sits in between, so no connector joins the two
+    /// and the reply has to name its parent in text instead.
+    let showsParentAttribution: Bool
+    /// Set on a root that has replies: the caret's state and what it would reveal.
+    /// nil everywhere else, which is also the "no caret" signal.
+    let collapse: CommentCollapseState?
+
+    var id: String { item.id }
+}
+
+/// The elbow that joins a reply to the comment it answers.
+///
+/// One shape per row, drawn in the row's background alongside the card, so nothing
+/// crosses a row boundary and a swipe moves only its own comment. Consecutive rows
+/// touch, so the segments read as one continuous line.
+struct ThreadConnectors: Shape {
+    let depth: Int
+    let isLastSibling: Bool
+    let ancestorLines: [Bool]
+    let leadingInset: CGFloat
+    /// This card's own top/bottom insets within the row, so the elbow can meet the
+    /// card's vertical middle — the line then reads as running from the comment
+    /// above down into the centre of the reply it points at.
+    let cardTopInset: CGFloat
+    let cardBottomInset: CGFloat
+    /// A row with a reply directly beneath it draws the *start* of that reply's
+    /// trunk itself, from its own bottom edge to the row's edge. The line has to
+    /// begin inside the parent — a row can only paint within its own bounds — so
+    /// the reply's row picks it up at its top edge and the two segments meet.
+    let hasChildBelow: Bool
+    /// Resolved indent per level, handed down from the chrome. Recomputing it here
+    /// would risk the lines and the cards disagreeing about where an edge is the
+    /// moment either formula changes.
+    let indents: [CGFloat]
+    /// Draw only the segments belonging to this nesting level.
+    ///
+    /// A row can carry lines for several levels at once — an ancestor's trunk, its
+    /// own elbow, and the start of its child's trunk — and a `Shape` takes a single
+    /// stroke colour. Emitting them as one path meant a row painted every line in
+    /// *its* colour, so one continuous trunk changed colour each time it crossed
+    /// into a differently-nested row. The caller strokes one filtered shape per
+    /// level, each in that level's own colour.
+    let level: Int
+    let cornerRadius: CGFloat
+
+    private func indent(forLevel level: Int) -> CGFloat {
+        guard level >= 0, level < indents.count else { return indents.last ?? 0 }
+        return indents[level]
+    }
+
+    /// Horizontal centre of the trunk joining a comment at `parentDepth` to its
+    /// replies — its avatar's column, which is also comfortably left of the reply
+    /// card's leading edge, so the elbow always runs *forward* into the card.
+    private func trunkX(parentDepth: Int) -> CGFloat {
+        leadingInset
+            + indent(forLevel: parentDepth)
+            + CommentThreadGeometry.cardPadding
+            + CommentThreadGeometry.avatarSize(forDepth: parentDepth) / 2
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+
+        // Descender into the reply below, leaving from this card's **bottom edge**.
+        // Cards here are self-contained rather than nested, so a line starting at
+        // the avatar would run the whole height of the card — past the body and the
+        // actions row — before it got anywhere, and that reads as something
+        // crossing the comment rather than leaving it.
+        if hasChildBelow, level == depth {
+            let childX = trunkX(parentDepth: depth)
+            let startY = rect.maxY - cardBottomInset
+            if startY < rect.maxY {
+                path.move(to: CGPoint(x: childX, y: startY))
+                path.addLine(to: CGPoint(x: childX, y: rect.maxY))
+            }
+        }
+
+        guard depth > 0 else { return path }
+
+        // An ancestor that still has siblings below keeps a line running the full
+        // height of this row, carrying it past an earlier sibling's whole subtree to
+        // reach the next peer. Only reachable on the thread screen: the list is
+        // depth-bounded, so it never renders a row deep enough to need one.
+        if level < depth - 1, level < ancestorLines.count, ancestorLines[level] {
+            let x = trunkX(parentDepth: level)
+            path.move(to: CGPoint(x: x, y: rect.minY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+        }
+
+        guard level == depth - 1 else { return path }
+
+        // This row's own level: down from the top, then a rounded turn into the
+        // card's leading edge.
+        let x = trunkX(parentDepth: depth - 1)
+        let cardMidY = (rect.minY + cardTopInset + rect.maxY - cardBottomInset) / 2
+        let y = min(max(cardMidY, rect.minY + cornerRadius), rect.maxY)
+        path.move(to: CGPoint(x: x, y: rect.minY))
+        path.addLine(to: CGPoint(x: x, y: y - cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: x + cornerRadius, y: y),
+            control: CGPoint(x: x, y: y)
+        )
+        path.addLine(to: CGPoint(x: leadingInset + indent(forLevel: depth), y: y))
+
+        // A middle child's trunk carries on down to the next sibling's elbow.
+        if !isLastSibling {
+            path.move(to: CGPoint(x: x, y: y - cornerRadius))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+        }
+        return path
+    }
+}
+
+/// Builds the flat row list for one top-level conversation.
+///
+/// Replies were already flattened depth-first (`flattenedReplies`); this only
+/// decides which of them are visible and appends the expander control, so the
+/// caller can emit one `List` row per item.
+enum CommentConversationBuilder {
+    /// `replies` is the root's depth-first reply list, precomputed by the model
+    /// (`flattenedRepliesByRoot`). Deliberately a parameter rather than walked
+    /// here: this runs on every layout pass, and re-walking the tree per frame
+    /// is what made swiping a long thread stutter.
+    /// Bounded form: the root, its first `boundedDirectReplies` **direct** replies,
+    /// and a "Continue thread" row for everything else.
+    ///
+    /// `hidden` counts all remaining *descendants*, not the direct children left
+    /// over — a root with two replies that each carry a subtree has nothing left
+    /// over by the direct-child measure, and would silently drop its grandchildren.
+    static func boundedItems(
+        root: AO3Comment,
+        replies: [FlattenedReply]
+    ) -> [CommentConversationItem] {
+        var items: [CommentConversationItem] = [
+            .post(comment: root, parentAuthor: nil, depth: 0)
+        ]
+        let shown = replies.filter { $0.depth == 1 }.prefix(boundedDirectReplies)
+        for reply in shown {
+            items.append(.post(
+                comment: reply.comment, parentAuthor: reply.parentAuthor, depth: reply.depth
+            ))
+        }
+        let hidden = replies.count - shown.count
+        if hidden > 0 {
+            items.append(.continueThread(rootID: root.id, hiddenCount: hidden))
+        }
+        return items
+    }
+
+    /// How many direct replies a bounded conversation shows before deferring to the
+    /// thread screen. Two, per the concept — enough to show a conversation started,
+    /// few enough that a long comment section stays scannable.
+    static let boundedDirectReplies = 2
+
+    static func items(
+        root: AO3Comment,
+        replies: [FlattenedReply],
+        isExpanded: Bool,
+        visibleReplyCount: Int
+    ) -> [CommentConversationItem] {
+        // Gated on the total reply count, because expanding renders every
+        // descendant, not just the root's direct children.
+        let showsReplies = isExpanded
+            || replies.count <= CommentThreadGeometry.autoExpandedMaxReplies
+
+        guard !replies.isEmpty, showsReplies else {
+            var items: [CommentConversationItem] = [
+                .post(comment: root, parentAuthor: nil, depth: 0)
+            ]
+            if !replies.isEmpty {
+                items.append(.expander(rootID: root.id, hiddenCount: replies.count, showsVerb: false))
+            }
+            return items
+        }
+
+        let shown = Array(replies.prefix(max(visibleReplyCount, CommentThreadGeometry.autoExpandedMaxReplies)))
+        let hidden = replies.count - shown.count
+        var items: [CommentConversationItem] = [
+            .post(comment: root, parentAuthor: nil, depth: 0)
+        ]
+        for reply in shown {
+            items.append(.post(
+                comment: reply.comment,
+                parentAuthor: reply.parentAuthor,
+                depth: reply.depth
+            ))
+        }
+        if hidden > 0 {
+            items.append(.expander(rootID: root.id, hiddenCount: hidden, showsVerb: true))
+        }
+        return items
+    }
+
+    /// Whether another node at exactly `depth` follows `index` under the *same*
+    /// parent — the scan stops as soon as the tree pops shallower than `depth`,
+    /// because anything past that belongs to a different branch.
+    private static func hasLaterPeer(at depth: Int, after index: Int, in depths: [Int]) -> Bool {
+        var i = index + 1
+        while i < depths.count {
+            if depths[i] < depth { return false }
+            if depths[i] == depth { return true }
+            i += 1
+        }
+        return false
+    }
+
+    /// Flattens every conversation on the page into one row list.
+    static func rows(
+        roots: [AO3Comment],
+        repliesByRoot: [Int: [FlattenedReply]],
+        expandedRootIDs: Set<Int>,
+        visibleReplyCounts: [Int: Int],
+        collapsedRootIDs: Set<Int> = [],
+        bounded: Bool = false
+    ) -> [CommentConversationRowItem] {
+        var rows: [CommentConversationRowItem] = []
+        for (conversationIndex, root) in roots.enumerated() {
+            let replies = repliesByRoot[root.id] ?? []
+            let isCollapsed = collapsedRootIDs.contains(root.id)
+            let items: [CommentConversationItem] = if isCollapsed {
+                // Folded: the root and nothing else — not even the "Continue
+                // thread" row, which would leave a way in that contradicts the
+                // caret the reader just closed.
+                [.post(comment: root, parentAuthor: nil, depth: 0)]
+            } else if bounded {
+                boundedItems(root: root, replies: replies)
+            } else {
+                items(
+                    root: root,
+                    replies: replies,
+                    isExpanded: expandedRootIDs.contains(root.id),
+                    visibleReplyCount: visibleReplyCounts[root.id] ?? CommentThreadGeometry.repliesChunkSize
+                )
+            }
+            // Depth-first order, so a node's siblings and descendants are all
+            // ahead of it — one forward scan per row answers both questions the
+            // thread lines need.
+            let depths = items.map(\.connectorDepth)
+            for (index, item) in items.enumerated() {
+                let depth = depths[index]
+                rows.append(CommentConversationRowItem(
+                    item: item,
+                    rootID: root.id,
+                    startsConversation: index == 0 && conversationIndex > 0,
+                    depth: depth,
+                    isLastSibling: !Self.hasLaterPeer(at: depth, after: index, in: depths),
+                    ancestorLines: (0 ..< max(0, depth - 1)).map { level in
+                        Self.hasLaterPeer(at: level + 1, after: index, in: depths)
+                    },
+                    nextDepth: index + 1 < depths.count ? depths[index + 1] : nil,
+                    // Depth-first order means a reply's parent is the row above it
+                    // *unless* an earlier sibling's subtree intervenes, which is
+                    // exactly when the row above is deeper than this one's parent.
+                    showsParentAttribution: depth > 0
+                        && (index == 0 || depths[index - 1] != depth - 1),
+                    // Only a root with replies can be folded. A reply's own caret
+                    // would compete with its parent's for the same gesture on
+                    // overlapping content, and closing a mid-thread reply leaves a
+                    // hole rather than a tidier list.
+                    collapse: depth == 0 && !replies.isEmpty
+                        ? CommentCollapseState(isCollapsed: isCollapsed, replyCount: replies.count)
+                        : nil
+                ))
+            }
+        }
+        return rows
+    }
+}
+
+/// One comment as its own plain `List` row: indent + rail for depth, hairline
+/// separators between rows, no card.
+struct CommentConversationRow: View {
+    let item: CommentConversationItem
     let workAuthors: [String]
     var workAuthorIdentities: [AO3AuthorIdentity] = []
     let showChapterBadge: Bool
-    /// Forced open by "Thread"/"Parent Thread" focus, so a collapsed thread can
-    /// never swallow the comment being scrolled to.
-    var startsExpanded = false
+    let startsConversation: Bool
+    let depth: Int
+    let isLastSibling: Bool
+    let ancestorLines: [Bool]
+    let nextDepth: Int?
+    var showsParentAttribution = false
+    var collapse: CommentCollapseState?
+    /// Invoked by the expander row.
+    var onExpand: () -> Void = {}
+    /// Invoked by the "Continue thread" row.
+    var onContinueThread: () -> Void = {}
+    /// Invoked by a root comment's collapse caret.
+    var onToggleCollapse: () -> Void = {}
 
     @Environment(ThemeManager.self) private var theme
-    @Environment(\.commentHighlightID) private var highlightedCommentID
+    @Environment(AO3AuthService.self) private var auth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var forceExpandReplies = false
-    /// How many of the (already-expanded) replies are currently rendered. Caps a
-    /// single "Show replies" tap on a huge thread to one chunk instead of
-    /// bursting every `NestedReplyCard` — and every avatar's `AsyncImage`
-    /// request — at once.
-    @State private var visibleReplyCount = CommentThreadGeometry.repliesChunkSize
-
-    private var replyItems: [FlattenedReply] {
-        CommentThreadGeometry.flattenedReplies(from: comment)
-    }
-
-    /// Gated on the total reply count, because expanding renders every descendant
-    /// (`replyItems`), not just the root's direct children.
-    private var showsReplies: Bool {
-        forceExpandReplies || startsExpanded
-            || replyItems.count <= CommentThreadGeometry.autoExpandedMaxReplies
-    }
-
-    /// The replies actually rendered this pass. A "Thread"/"Parent Thread" jump
-    /// (`startsExpanded`) must show the whole stack — `scrollTo` can't reach an
-    /// id that chunking hasn't materialized yet — so only the casual "Show
-    /// replies" path chunks.
-    private func visibleReplies(from replies: [FlattenedReply]) -> [FlattenedReply] {
-        guard !startsExpanded else { return replies }
-        return Array(replies.prefix(max(visibleReplyCount, CommentThreadGeometry.autoExpandedMaxReplies)))
+    /// The work author's own replies are what readers scan a comment section
+    /// for, so their rail takes the accent at full strength regardless of how
+    /// deep the reply sits — depth still reads from the indent.
+    private var isWorkAuthorComment: Bool {
+        guard case let .post(comment, _, _) = item else { return false }
+        let identity: AO3AuthorIdentity? = {
+            guard !comment.isGuest, let path = comment.userPath else { return nil }
+            return AO3AuthorIdentity(displayName: comment.author, href: path)
+        }()
+        return AO3CommentParticipantRole.resolve(
+            name: comment.author,
+            isGuest: comment.isGuest,
+            isAnonymousCreator: comment.isAnonymousCreator,
+            commenterUsername: identity?.username,
+            currentUsername: auth.username,
+            workAuthors: workAuthors,
+            workAuthorUsernames: workAuthorIdentities.compactMap(\.username)
+        ) == .author
     }
 
     var body: some View {
-        let elevation = theme.appTheme.cardShadow
-        let replies = replyItems
-        let shown = visibleReplies(from: replies)
-        let shape = RoundedRectangle(
-            cornerRadius: CommentThreadGeometry.cardCornerRadius,
-            style: .continuous
-        )
-        let isHighlighted = highlightedCommentID == comment.id
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(CommentThreadGeometry.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(CommentRowChrome(
+                depth: depth,
+                isLastSibling: isLastSibling,
+                ancestorLines: ancestorLines,
+                nextDepth: nextDepth,
+                startsConversation: startsConversation,
+                isWorkAuthor: isWorkAuthorComment,
+                half: CommentThreadGeometry.interCardSpacing / 2
+            ))
+    }
 
-        return VStack(alignment: .leading, spacing: 0) {
-            // Root post — spine continues under the avatar when replies show.
-            SpinePostRow(
+    @ViewBuilder
+    private var content: some View {
+        switch item {
+        case let .post(comment, parentAuthor, _):
+            CommentPostRow(
                 comment: comment,
                 workAuthors: workAuthors,
                 workAuthorIdentities: workAuthorIdentities,
-                showChapterBadge: showChapterBadge,
-                drawsSpineBelow: !replies.isEmpty && showsReplies
+                showChapterBadge: parentAuthor == nil && showChapterBadge,
+                depth: depth,
+                replyToAuthor: parentAuthor,
+                showsParentAttribution: showsParentAttribution,
+                collapse: collapse,
+                onToggleCollapse: onToggleCollapse
             )
             .id(comment.id)
-            // Puts the root avatar on the same rail column as the reply avatars,
-            // which sit inside their own cards' padding.
-            .padding(.leading, CommentThreadGeometry.railInset)
-
-            if !replies.isEmpty {
-                if showsReplies {
-                    // Root post's spine ends right where this VStack begins, so
-                    // every reply card connects the incoming rail through its own
-                    // top padding into its avatar, and — except the last one
-                    // rendered — back out through its bottom padding into the
-                    // bridge to the next card.
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
-                            if index > 0 {
-                                spineBridge(height: CommentThreadGeometry.nestedCardSpacing)
-                            }
-                            NestedReplyCard(
-                                comment: item.comment,
-                                workAuthors: workAuthors,
-                                workAuthorIdentities: workAuthorIdentities,
-                                replyToAuthor: item.parentAuthor,
-                                connectsToNext: index < shown.count - 1
-                            )
-                        }
-                    }
-                    if shown.count < replies.count {
-                        expandRepliesButton(
-                            count: replies.count - shown.count, verb: "more", reduceMotion: reduceMotion
-                        ) {
-                            visibleReplyCount += CommentThreadGeometry.repliesChunkSize
-                        }
-                        .padding(.top, CommentThreadGeometry.postSpacing)
-                        .padding(
-                            .leading,
-                            CommentThreadGeometry.railInset
-                                + CommentThreadGeometry.avatarColumnWidth
-                                + CommentThreadGeometry.avatarContentSpacing
-                        )
-                    }
-                } else {
-                    expandRepliesButton(count: replies.count, verb: nil, reduceMotion: reduceMotion) {
-                        forceExpandReplies = true
-                    }
-                    .padding(.top, CommentThreadGeometry.postSpacing)
-                    .padding(
-                        .leading,
-                        CommentThreadGeometry.railInset
-                            + CommentThreadGeometry.avatarColumnWidth
-                            + CommentThreadGeometry.avatarContentSpacing
-                    )
-                }
-            }
+        case let .expander(_, hiddenCount, showsVerb):
+            expandRepliesButton(
+                count: hiddenCount,
+                verb: showsVerb ? "more" : nil,
+                reduceMotion: reduceMotion,
+                action: onExpand
+            )
+        case let .continueThread(_, hiddenCount):
+            continueThreadButton(count: hiddenCount, action: onContinueThread)
         }
-        .padding(CommentThreadGeometry.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.appTheme.cardSurface, in: shape)
-        .highlightOverlay(shape, isHighlighted: isHighlighted)
-        .overlay {
-            shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-        }
-        // Same elevation every other card list gets (flat in Dark, by convention).
-        .shadow(color: elevation.color, radius: elevation.radius, x: 0, y: elevation.y)
-        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-        .onAppear {
-            // Latch a naturally-expanded thread open. A reload that pushes it past
-            // the collapse threshold — commonly the user's OWN just-posted reply —
-            // must not snap it shut and hide the very reply they just wrote.
-            if replies.count <= CommentThreadGeometry.autoExpandedMaxReplies {
-                forceExpandReplies = true
-            }
-        }
-    }
-
-    private func spineBridge(height: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            ThreadSpineSegment()
-                .frame(width: CommentThreadGeometry.avatarColumnWidth, height: height)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, CommentThreadGeometry.railInset)
-        .accessibilityHidden(true)
     }
 }
 
-// MARK: - Nested reply card (one reply = one card)
+/// The bounded list's exit to the thread screen.
+///
+/// A *navigation*, not a disclosure, so it says where it goes and carries a
+/// chevron rather than the expander's "show more" affordance — the two sit in the
+/// same slot in the same list and must not be mistaken for each other.
+private func continueThreadButton(count: Int, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Continue thread")
+                    .font(.subheadline.weight(.semibold))
+                Text(count == 1
+                    ? "1 more reply in this thread"
+                    : "\(count) more replies in this thread")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .minimumHitTarget()
+}
 
-/// A single reply enclosed in its own card. The rail arrives through this
-/// card's own top padding (from the root post or the previous bridge) and, when
-/// another reply follows, exits through the bottom padding into the next
-/// bridge — so the spine reaches every avatar instead of floating disconnected
-/// in the gaps between cards.
-private struct NestedReplyCard: View {
-    let comment: AO3Comment
-    let workAuthors: [String]
-    let workAuthorIdentities: [AO3AuthorIdentity]
-    /// Display name of the comment this one directly replies to (root card or
-    /// another reply) — threaded down to `SpinePostRow` purely for the
-    /// VoiceOver reply-context announcement (HIG audit UI-2).
-    let replyToAuthor: String
-    /// True when another reply card follows in the (possibly chunked) visible
-    /// stack. The last rendered card is a dead end: no rail below it.
-    let connectsToNext: Bool
+/// Frames a comment row: the app's card, plus the hairline that separates one
+/// top-level conversation from the next.
+/// Frames a comment row: its own card, the connector joining it to its parent,
+/// and the rule that separates one top-level conversation from the next.
+///
+/// Cards sit **beside** each other with an indent, never inside each other. That
+/// one decision removes everything the earlier nested designs needed — corner
+/// open/close logic, per-level fills, seam handling, card masking, z-order
+/// interleaving across a stack — because nothing is shared between rows and so
+/// nothing can seam, bleed or tear.
+private struct CommentRowChrome: ViewModifier {
+    let depth: Int
+    let isLastSibling: Bool
+    let ancestorLines: [Bool]
+    let nextDepth: Int?
+    /// True on a root comment that isn't the first on the page — its card gets
+    /// extra air above it and a rule, so consecutive conversations don't read as
+    /// one long run of identical cards.
+    let startsConversation: Bool
+    /// The work author's own comments get an accent-tinted card. Their replies are
+    /// what readers scan a comment section for, and a card you can pick out at
+    /// arm's length beats a stripe. Kept to a low opacity so body text stays
+    /// readable on every theme, including OLED's true black and Sepia's warm paper.
+    let isWorkAuthor: Bool
+    let half: CGFloat
 
     @Environment(ThemeManager.self) private var theme
-    @Environment(\.commentHighlightID) private var highlightedCommentID
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.commentsContentWidth) private var contentWidth
 
-    var body: some View {
-        let elevation = theme.appTheme.cardShadow
-        let shape = RoundedRectangle(
-            cornerRadius: CommentThreadGeometry.nestedCardCornerRadius,
-            style: .continuous
-        )
-        let isHighlighted = highlightedCommentID == comment.id
-
-        SpinePostRow(
-            comment: comment,
-            workAuthors: workAuthors,
-            workAuthorIdentities: workAuthorIdentities,
-            showChapterBadge: false,
-            drawsSpineBelow: connectsToNext,
-            replyToAuthor: replyToAuthor
-        )
-        .id(comment.id)
-        // Equal inset on every side so the avatar isn’t pushed down relative
-        // to the leading edge (top used to be 8 while leading was 0).
-        .padding(CommentThreadGeometry.nestedCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // Dark reads the nesting off the surface (cards stay flat there); Light and
-        // Sepia keep `cardSurface` and lift with the same shadow every card uses.
-        .background(theme.appTheme.nestedCardSurface, in: shape)
-        // Fills this card's own top/bottom padding with rail so the incoming
-        // line (root spine or previous bridge) reaches this avatar, and — when
-        // another reply follows — continues out toward the next bridge, instead
-        // of leaving that padding as a disconnected gap.
-        .overlay(alignment: .top) { railStub }
-        .overlay(alignment: .bottom) {
-            if connectsToNext { railStub }
+    /// Indent for every level this row draws, resolved once so the card and the
+    /// connectors are guaranteed to agree.
+    private var indents: [CGFloat] {
+        (0 ... max(0, depth)).map {
+            CommentThreadGeometry.indent(
+                forDepth: $0, availableWidth: contentWidth, typeSize: dynamicTypeSize
+            )
         }
-        .highlightOverlay(shape, isHighlighted: isHighlighted)
-        .overlay {
-            shape.strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-        }
-        .shadow(
-            color: elevation.color,
-            radius: elevation.radius,
-            x: 0,
-            y: elevation.y
-        )
     }
 
-    private var railStub: some View {
-        HStack(spacing: 0) {
-            ThreadSpineSegment()
-                .frame(
-                    width: CommentThreadGeometry.avatarColumnWidth,
-                    height: CommentThreadGeometry.nestedCardPadding
-                )
-            Spacer(minLength: 0)
+    private var indent: CGFloat { indents[min(depth, indents.count - 1)] }
+
+    private var topGap: CGFloat {
+        startsConversation ? CommentThreadGeometry.conversationGap : half
+    }
+
+    /// Vertical inset of this row's card. Every card is self-contained, so each one
+    /// takes its own gap above and below — there is no "continued by the row below"
+    /// case to ask about.
+    private var cardTopInset: CGFloat { topGap }
+    private var cardBottomInset: CGFloat { half }
+
+    func body(content: Content) -> some View {
+        content
+            .listRowInsets(EdgeInsets(
+                top: topGap,
+                leading: CommentThreadGeometry.sideMargin + indent,
+                // Must match the card's own bottom inset exactly, or the actions row
+                // hangs that far below the card it belongs to.
+                bottom: cardBottomInset,
+                trailing: CommentThreadGeometry.sideMargin
+            ))
+            // The card is the row's *background*, matching `.cardRow()` in every
+            // other card list.
+            //
+            // **It does not hold the card still under a swipe.** An earlier comment
+            // here claimed a swipe "translates content only"; observed on device
+            // (iOS 26.5), the whole row — background included — translates. So a
+            // connector lines up with its neighbour at rest and desyncs mid-swipe.
+            // Accepted 2026-07-29 (owner call, see TASKS.md): the only fix that
+            // keeps cross-row connectors is hand-rolling the gesture, whose failure
+            // modes are worse than the cosmetic problem.
+            .listRowBackground(rowBackground)
+            .listRowSeparator(.hidden)
+    }
+
+    private var rowBackground: some View {
+        ZStack {
+            // The elbow *into* this card is drawn first so the card masks where its
+            // arm meets the edge; the descender *out of* this comment is drawn after
+            // so it is not masked by the card it leaves from.
+            if depth > 0 { connectorLine(forLevel: depth - 1) }
+            card
+            connectorLine(forLevel: depth)
         }
-        .padding(.leading, CommentThreadGeometry.nestedCardPadding)
+        // Confines card and connectors to this row. A line spanning the row runs
+        // `minY`…`maxY`, and a round cap extends half a line width past each end —
+        // on a masked stretch that stray cap is the only part that shows, and it
+        // reads as a dot floating beside a card on the neighbouring row.
+        .clipped()
         .accessibilityHidden(true)
+        .overlay(alignment: .top) {
+            if startsConversation { conversationRule }
+        }
+    }
+
+    /// One self-contained card for this comment, stepped in by its depth.
+    ///
+    /// Rounded on all four sides and always taking its own top and bottom gap: no
+    /// card is ever continued by the row below, so none of the containment
+    /// questions apply. Definition comes from an inset hairline rather than the
+    /// shadow, which is `.clear` on Dark and OLED.
+    private var card: some View {
+        let shape = RoundedRectangle(
+            cornerRadius: CommentThreadGeometry.cardCornerRadius, style: .continuous
+        )
+        return shape
+            .fill(theme.appTheme.cardSurface)
+            .overlay {
+                if isWorkAuthor { shape.fill(theme.effectiveTint.opacity(0.12)) }
+            }
+            .overlay {
+                shape.strokeBorder(
+                    isWorkAuthor
+                        ? theme.effectiveTint.opacity(0.55)
+                        : Color.primary.opacity(0.08),
+                    lineWidth: isWorkAuthor ? 1 : 0.5
+                )
+            }
+            .padding(.leading, CommentThreadGeometry.sideMargin + indent)
+            .padding(.trailing, CommentThreadGeometry.sideMargin)
+            .padding(.top, topGap)
+            .padding(.bottom, half)
+            .shadow(
+                color: theme.appTheme.cardShadow.color,
+                radius: theme.appTheme.cardShadow.radius,
+                x: 0, y: theme.appTheme.cardShadow.y
+            )
+    }
+
+    /// The rule between two top-level conversations.
+    ///
+    /// Neutral `.primary`, not `theme.appTheme.cardBorder`: that token is **`.clear`
+    /// on Dark and OLED**, where a card's own contrast normally does the
+    /// separating — so the one rule whose job is separating two cards was invisible
+    /// on exactly the themes where cards sit closest in tone.
+    ///
+    /// Centred in the *empty band* between the cards, which is not half this row's
+    /// top gap: the previous card closes `half` above the row boundary and this one
+    /// opens `topGap` below it, so the band runs `-half`…`+topGap` and its middle is
+    /// below the boundary, not above. Offsetting by `-topGap / 2` drew the rule
+    /// inside the card above it.
+    private var conversationRule: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.12))
+            .frame(height: 0.5)
+            .padding(.horizontal, CommentThreadGeometry.sideMargin)
+            .offset(y: (topGap - half) / 2)
+            .accessibilityHidden(true)
+    }
+
+    private func connectorLine(forLevel level: Int) -> some View {
+        ThreadConnectors(
+            depth: depth,
+            isLastSibling: isLastSibling,
+            ancestorLines: ancestorLines,
+            leadingInset: CommentThreadGeometry.sideMargin,
+            cardTopInset: cardTopInset,
+            cardBottomInset: cardBottomInset,
+            hasChildBelow: nextDepth == depth + 1,
+            indents: indents,
+            level: level,
+            cornerRadius: CommentThreadGeometry.elbowRadius
+        )
+        .stroke(
+            CommentThreadGeometry.railColor(forDepth: level),
+            style: StrokeStyle(lineWidth: CommentThreadGeometry.railWidth, lineCap: .round)
+        )
     }
 }
 
-// MARK: - Spine post row
+// MARK: - Post row
 
-/// One comment on the Threads-style avatar rail. The rail under the avatar
-/// grows with the body and can include the inter-post gap so SwiftUI spacing
-/// never punches a hole in the line.
-private struct SpinePostRow: View {
+/// One comment's content: byline, body, actions. Carries no depth or position
+/// information — the enclosing `CommentConversationRow` owns the indent and
+/// rail, so this view is the same at every nesting level.
+private struct CommentPostRow: View {
     let comment: AO3Comment
     let workAuthors: [String]
     let workAuthorIdentities: [AO3AuthorIdentity]
     let showChapterBadge: Bool
-    /// Also reserves `postSpacing` under the body and fills it with rail, so the
-    /// next avatar sits on a continuous line.
-    let drawsSpineBelow: Bool
-    /// nil for the root card (`CommentThreadRow` passes nothing extra); set to
-    /// the immediate parent's author for a nested reply card, so VoiceOver can
-    /// announce the reply relationship the spine only conveys visually.
+    /// Nesting level, so the avatar can step down with depth.
+    var depth: Int = 0
+    /// Set for a reply: who it answers. The connector conveys nesting visually but
+    /// is `accessibilityHidden`, so this is VoiceOver's only account of it —
+    /// always supplied, regardless of whether it is also shown on screen.
     var replyToAuthor: String? = nil
+    /// Whether to *render* `replyToAuthor` as well as announce it. Set only where
+    /// the connector can't do the job — see `CommentConversationRowItem`.
+    var showsParentAttribution = false
+    /// Set on a root with replies; nil means no caret.
+    var collapse: CommentCollapseState?
+    var onToggleCollapse: () -> Void = {}
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.commentThreadHandlers) private var handlers
 
     private var participantRole: AO3CommentParticipantRole {
@@ -453,36 +1081,51 @@ private struct SpinePostRow: View {
     }
 
     var body: some View {
-        // Formatted once and handed to both byline candidates: `ViewThatFits` builds
-        // every candidate in order to measure it, and the date formatting isn't free.
+        // Resolved once here rather than inside the byline: date formatting isn't
+        // free, and this runs on every body pass.
         let timestamp = comment.postedText.isEmpty
             ? ""
             : AO3CommentTimestamp.displayText(
                 rawText: comment.postedText, date: comment.postedAt
             )
 
-        return HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
-            VStack(spacing: 0) {
-                // Avatar is the same profile entry point as the byline name when
-                // AO3 gave us a resolvable /users/... route (not guests).
+        return Group {
+            if comment.isThreadCutoff || comment.isDeleted {
+                // Neither has a byline to host the avatar, so both keep the leading
+                // column. A 40pt avatar has no text baseline to align to, which is
+                // why it sits in a column rather than inside a byline row.
+                HStack(alignment: .top, spacing: CommentThreadGeometry.avatarContentSpacing) {
+                    authorAvatarControl
+                    commentBody(timestamp: timestamp)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                fullWidthBody(timestamp: timestamp)
+            }
+        }
+    }
+
+    /// Avatar in the byline row only; prose and actions span the card beneath it.
+    ///
+    /// The column under the avatar used to be reserved for a trunk running from the
+    /// avatar down to the reply hanging off it. The connector leaves from the card's
+    /// bottom edge now, so that column is dead space — reclaiming it gives roughly
+    /// 50pt back on every line of every comment.
+    ///
+    /// Not applied to the deleted tombstone or AO3's thread-cutoff row: neither has
+    /// a byline to host the avatar, so both keep the leading column.
+    private func fullWidthBody(timestamp: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: CommentThreadGeometry.avatarContentSpacing) {
                 authorAvatarControl
-
-                if drawsSpineBelow {
-                    ThreadSpineSegment()
-                        .frame(maxHeight: .infinity)
-                }
+                byline(timestamp: timestamp)
             }
-            .frame(width: CommentThreadGeometry.avatarColumnWidth, alignment: .top)
-
-            VStack(alignment: .leading, spacing: 0) {
-                commentBody(timestamp: timestamp)
-                if drawsSpineBelow {
-                    Color.clear
-                        .frame(height: CommentThreadGeometry.postSpacing)
-                        .accessibilityHidden(true)
-                }
+            parentAttribution
+            if !comment.bodyText.isEmpty {
+                ExpandableCommentBody(text: comment.bodyText)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            actionsRow
+                .padding(.top, 2)
         }
     }
 
@@ -501,10 +1144,11 @@ private struct SpinePostRow: View {
             Text(comment.bodyText.isEmpty ? "(Previous comment deleted.)" : comment.bodyText)
                 .font(.subheadline.italic())
                 .foregroundStyle(.secondary)
-                .frame(minHeight: CommentThreadGeometry.avatarSize, alignment: .center)
+                .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth), alignment: .center)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 byline(timestamp: timestamp)
+                parentAttribution
                 if !comment.bodyText.isEmpty {
                     ExpandableCommentBody(text: comment.bodyText)
                 }
@@ -524,7 +1168,7 @@ private struct SpinePostRow: View {
         let label = Label(cutoffText, systemImage: "ellipsis.bubble")
             .font(.subheadline.weight(.medium))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: CommentThreadGeometry.avatarSize)
+            .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth))
             .contentShape(Rectangle())
 
         if let url = comment.cutoffThreadURL {
@@ -541,31 +1185,44 @@ private struct SpinePostRow: View {
         return "\(count) more \(count == 1 ? "comment" : "comments") in this thread"
     }
 
+    /// "↳ in reply to <author>", for a reply the connector can't reach.
+    ///
+    /// A drawn line can only state parenthood while both ends are on screen, and
+    /// it isn't drawn at all when an earlier sibling's subtree sits between a reply
+    /// and its parent. This says it in words instead: no width cost, and it still
+    /// reads after the parent has scrolled away.
+    ///
+    /// Deliberately not shown on every reply. Where the parent is the row directly
+    /// above, the connector already says it and this would only repeat the name
+    /// above it — which in a thread dominated by one commenter is pure noise.
+    /// `accessibilityHidden` because the row's own hint already announces it, and
+    /// VoiceOver gets that hint whether or not this is on screen.
+    @ViewBuilder
+    private var parentAttribution: some View {
+        if showsParentAttribution, let replyToAuthor, !replyToAuthor.isEmpty {
+            Label("in reply to \(replyToAuthor)", systemImage: "arrow.turn.down.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Author and role badge, with the timestamp on its own line beneath.
+    ///
+    /// Always two lines, no longer a `ViewThatFits` between a one-line and a
+    /// wrapped variant. Two reasons it can be fixed now: the prose runs the full
+    /// width of the card, so the byline no longer has to earn its horizontal space
+    /// back for the text below it; and the avatar beside it is 40pt tall, which a
+    /// single line of byline left half empty. Dropping the `ViewThatFits` also
+    /// stops SwiftUI building and measuring a candidate layout it then discards on
+    /// every pass.
+    ///
+    /// Baseline-aligned, not `.top`: `.top` pinned the chapter badge to the top of
+    /// the name's 28pt hit box, which sits above the name's own cap height.
     private func byline(timestamp: String) -> some View {
-        // Prefer author + timestamp on one line; when the timestamp won't fit
-        // next to the name (long names, Author/Guest + chapter badge), drop it
-        // onto the line under the author.
-        ViewThatFits(in: .horizontal) {
-            bylineSingleLine(timestamp: timestamp)
-            bylineWrappedTimestamp(timestamp: timestamp)
-        }
-    }
-
-    /// Author, role badge, and timestamp on one row (preferred when space allows).
-    private func bylineSingleLine(timestamp: String) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            authorIdentity
-            if !timestamp.isEmpty {
-                timestampText(timestamp)
-            }
-            Spacer(minLength: 4)
-            chapterBadge
-        }
-    }
-
-    /// Timestamp under the author when the single-line layout is too wide.
-    private func bylineWrappedTimestamp(timestamp: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
                 authorIdentity
                 if !timestamp.isEmpty {
@@ -573,8 +1230,47 @@ private struct SpinePostRow: View {
                 }
             }
             .layoutPriority(1)
+            // The name gave up its own 28pt hit box (it was top-aligned, so it grew
+            // downward and showed as a gap above the timestamp). The block reclaims
+            // that target and then some: the timestamp carries no action of its own,
+            // so the whole name-and-date column can open the profile — taller than
+            // the 28pt box ever was, and the full width of the column rather than
+            // just the glyphs. `including:` keeps a guest's block inert instead of
+            // swallowing taps for a route that doesn't exist.
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                TapGesture().onEnded {
+                    if let authorRoute { handlers.onOpenAuthor?(authorRoute) }
+                },
+                including: authorRoute == nil ? .subviews : .all
+            )
             Spacer(minLength: 4)
             chapterBadge
+            collapseControl
+        }
+    }
+
+    /// Folds a whole conversation shut from its root's byline.
+    ///
+    /// Lives in the byline rather than the action strip because it acts on the
+    /// *thread*, not on this comment — the action strip's Reply and overflow both
+    /// address the comment itself, and mixing scopes in one row of controls is how
+    /// people end up collapsing something when they meant to reply to it.
+    @ViewBuilder
+    private var collapseControl: some View {
+        if let collapse {
+            Button(action: onToggleCollapse) {
+                Text(collapse.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary.opacity(0.5), in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel(collapse.accessibilityLabel)
         }
     }
 
@@ -583,8 +1279,7 @@ private struct SpinePostRow: View {
     private var authorAvatarControl: some View {
         CommentAuthorAvatarButton(
             comment: comment,
-            size: CommentThreadGeometry.avatarSize,
-            columnWidth: CommentThreadGeometry.avatarColumnWidth,
+            size: CommentThreadGeometry.avatarSize(forDepth: depth),
             onOpenAuthor: handlers.onOpenAuthor
         )
     }
@@ -596,7 +1291,15 @@ private struct SpinePostRow: View {
     private var authorIdentity: some View {
         // Byline defaults to maxWidth: .infinity; role chips must not share that
         // flexible slot or they collapse to a tint/gray capsule with no label.
-        HStack(spacing: 6) {
+        //
+        // Baseline — not centre — alignment. `AO3AuthorBylineView` gives its
+        // tappable name a `minHeight: 28` hit box that is deliberately
+        // *top*-aligned (growing downward so the name's baseline doesn't move),
+        // which makes the byline view taller than the text inside it. Centring
+        // the chip against that taller box therefore parks it below the name
+        // instead of beside it; matching baselines puts the chip's own label on
+        // the same line as the name, which is what it's meant to read as.
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             AO3AuthorBylineView(
                 names: [comment.author],
                 identities: commentIdentity.map { [$0] } ?? [],
@@ -604,10 +1307,31 @@ private struct SpinePostRow: View {
                 font: .subheadline,
                 compact: true,
                 emphasized: true,
+                // Only the work's own author. Accenting every commenter spent the
+                // app's loudest colour on its most repeated element, so the tint
+                // marked "a person" rather than "worth reading first" — and the
+                // author's reply, which is the thing people scan a comment section
+                // for, looked like everything else. `.me` keeps plain text too: it
+                // already carries a badge, and highlighting your own name tells you
+                // nothing you don't know.
+                tinted: participantRole == .author,
+                // The name sits directly above the timestamp here, so the 28pt hit
+                // box — top-aligned, growing downward — showed up as a gap between
+                // the two. A guest's name has no such box, so registered and guest
+                // bylines were spaced differently for no reason a reader could name.
+                // Safe to drop because the 40pt avatar beside it opens the same
+                // profile: the large target for this destination is still there.
+                expandsHitTarget: false,
                 onOpenRoute: handlers.onOpenAuthor
             )
-            CommentParticipantBadge(role: participantRole, replyContext: replyToAuthor)
+            CommentParticipantBadge(role: participantRole)
         }
+        // The rail conveys "this is a reply, and to whom" only visually and is
+        // `accessibilityHidden`, so it has to be said here. This used to ride on
+        // the role badge, which no longer renders for a plain commenter — i.e.
+        // for most replies (HIG audit UI-2).
+        .accessibilityElement(children: .contain)
+        .accessibilityHint(replyToAuthor.map { "Reply to \($0)" } ?? "")
     }
 
     private func timestampText(_ timestamp: String) -> some View {
@@ -645,6 +1369,18 @@ private struct SpinePostRow: View {
         return AO3AuthorIdentity(displayName: comment.author, href: path)
     }
 
+    /// The profile this byline opens, resolved through the same resolver
+    /// `AO3AuthorBylineView` uses internally rather than a second derivation — so
+    /// the block-wide tap target and the name's own can never disagree about where
+    /// they go, or about whether there is anywhere to go at all.
+    private var authorRoute: AO3AuthorRoute? {
+        AO3AuthorBylineResolver.tokens(
+            names: [comment.author],
+            identities: commentIdentity.map { [$0] } ?? [],
+            fallbackText: comment.author
+        ).first?.route
+    }
+
     /// Compact bottom strip: Reply bottom-leading, overflow bottom-trailing.
     /// The capsule itself stays visually tight; each button reserves a 44pt
     /// minimum hit area around it (same convention as `expandRepliesButton`/
@@ -657,6 +1393,8 @@ private struct SpinePostRow: View {
                 // the same class of control rather than faint borderless text.
                 CommentReplyButton(
                     accessibilityLabel: "Reply to \(comment.author)",
+                    compact: depth >= CommentThreadGeometry.maxIndentedDepth
+                        || dynamicTypeSize.isAccessibilitySize,
                     action: { handlers.onReply(comment) }
                 )
             }
@@ -741,6 +1479,12 @@ private struct ExpandableCommentBody: View {
             bodyText
                 .lineLimit(isExpanded ? nil : CommentThreadGeometry.collapsedBodyLineLimit)
                 .fixedSize(horizontal: false, vertical: true)
+                // Snap between the clamped and full layouts rather than
+                // animating the line-limit change: SwiftUI can't interpolate one
+                // text layout into another, so it cross-fades the two
+                // renderings and the glyphs visibly ghost and drift while the
+                // frame grows. The card's own growth still animates.
+                .animation(nil, value: isExpanded)
                 .background(alignment: .top) { truncationProbes }
 
             if needsExpansion {
@@ -764,7 +1508,13 @@ private struct ExpandableCommentBody: View {
 
     private var bodyText: some View {
         Text(text)
-            .font(.subheadline)
+            // `.body`, not `.subheadline`. AO3 comments are paragraphs of prose,
+            // not metadata — this is the content of the screen, and in a reading
+            // app it should be set at reading size. The extra line spacing is
+            // what makes a multi-paragraph comment scan as prose rather than as
+            // a wall.
+            .font(.body)
+            .lineSpacing(2)
             .foregroundStyle(.primary)
     }
 
@@ -791,20 +1541,6 @@ private struct ExpandableCommentBody: View {
         .hidden()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-// MARK: - Spine primitive
-
-private struct ThreadSpineSegment: View {
-    @Environment(ThemeManager.self) private var theme
-
-    var body: some View {
-        Rectangle()
-            .fill(theme.appTheme.threadSpine)
-            .frame(width: CommentThreadGeometry.spineWidth)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityHidden(true)
     }
 }
 
@@ -913,6 +1649,9 @@ struct CommentAuthorAvatarButton: View {
 struct CommentAvatar: View {
     private let isGuest: Bool
     private let avatarURL: URL?
+    /// Whose avatar this is, used only for the no-image fallback. Optional so a
+    /// caller without a name still gets the generic glyph rather than nothing.
+    private let name: String?
     var size: CGFloat = 40
 
     @State private var loadedImage: Image?
@@ -924,12 +1663,14 @@ struct CommentAvatar: View {
     init(comment: AO3Comment, size: CGFloat = 40) {
         isGuest = comment.isGuest
         avatarURL = comment.avatarURL
+        name = comment.author
         self.size = size
     }
 
-    init(isGuest: Bool, avatarURL: URL?, size: CGFloat = 40) {
+    init(isGuest: Bool, avatarURL: URL?, name: String? = nil, size: CGFloat = 40) {
         self.isGuest = isGuest
         self.avatarURL = avatarURL
+        self.name = name
         self.size = size
     }
 
@@ -982,10 +1723,124 @@ struct CommentAvatar: View {
         #endif
     }
 
+    /// Shown when there's no icon to show — which on AO3 is most commenters.
+    ///
+    /// An initial rather than `person.fill`: a comment section is mostly people
+    /// without icons, and the generic glyph made every byline in a long thread
+    /// carry the same picture, so the avatar column said nothing and a
+    /// back-and-forth between two people looked like a crowd.
+    ///
+    /// Guests keep the glyph deliberately. AO3 shows every guest as "Guest", so an
+    /// initial there would either be a letter they didn't choose or a "G" repeated
+    /// down the page — the glyph is the honest answer for someone with no identity.
+    @ViewBuilder
     private var placeholder: some View {
-        Image(systemName: "person.fill")
-            .font(.system(size: size * 0.43, weight: .medium))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if !isGuest, let initial {
+            Text(initial)
+                .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Image(systemName: "person.fill")
+                .font(.system(size: size * 0.43, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// First character of the display name, uppercased.
+    ///
+    /// Grapheme-clustered, not `first` on unicode scalars: AO3 usernames carry
+    /// emoji and combining marks, and taking a scalar can split one visible
+    /// character into a fragment that renders as a box. nil for a name with no
+    /// usable character at all, which falls back to the glyph.
+    private var initial: String? {
+        guard let character = name?.trimmingCharacters(in: .whitespacesAndNewlines).first
+        else { return nil }
+        return String(character).uppercased()
+    }
+}
+
+// MARK: - Swipe actions
+
+extension View {
+    /// Native swipe actions for one comment row.
+    ///
+    /// Split by consequence, which is also the iOS convention: the leading edge
+    /// (swipe right) carries the single most common action, Reply, so it keeps
+    /// a full-swipe shortcut; the trailing edge carries the rest. Full swipe is
+    /// deliberately **off** on the trailing edge — Delete lives there, and a
+    /// fast flick must never destroy a comment without a deliberate tap.
+    ///
+    /// Every action is still in the "…" menu. Swipe is an accelerator, not a
+    /// replacement: the menu stays the discoverable path and the one VoiceOver
+    /// and Full Keyboard Access users rely on.
+    ///
+    /// `comment` is nil for the expander row, which gets no actions at all.
+    func commentSwipeActions(comment: AO3Comment?) -> some View {
+        modifier(CommentSwipeActions(comment: comment))
+    }
+}
+
+/// Reads its handlers from the environment rather than taking them as a
+/// parameter: building a `CommentThreadHandlers` per row meant allocating seven
+/// escaping closures for every comment on every layout pass, which a swipe
+/// triggers repeatedly. The environment value is built once by the list.
+private struct CommentSwipeActions: ViewModifier {
+    let comment: AO3Comment?
+
+    @Environment(\.commentThreadHandlers) private var handlers
+    @Environment(AO3AuthService.self) private var auth
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let comment, !comment.isDeleted, !comment.isThreadCutoff {
+            content
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    if comment.canReply {
+                        Button {
+                            if auth.isLoggedIn {
+                                handlers.onReply(comment)
+                            } else {
+                                handlers.onRequestLogin()
+                            }
+                        } label: {
+                            Label("Reply", systemImage: "arrowshape.turn.up.left")
+                        }
+                        .tint(.accentColor)
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    // Declared destructive-last so Delete sits furthest from the
+                    // edge the thumb arrives at, not directly under it.
+                    Button {
+                        handlers.onCopyLink(comment)
+                    } label: {
+                        Label("Copy Link", systemImage: "link")
+                    }
+                    .tint(.gray)
+
+                    if comment.editPath != nil {
+                        Button {
+                            handlers.onEdit(comment)
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.orange)
+                    }
+
+                    if comment.deletePath != nil {
+                        Button(role: .destructive) {
+                            handlers.onDelete(comment)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+        } else {
+            content
+        }
     }
 }

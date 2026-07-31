@@ -92,8 +92,18 @@ private struct LocalWorkReaderDestination: View {
     private var restorationView: some View {
         switch phase {
         case .opening, .restoring:
-            ProgressView(phase == .restoring ? "Restoring EPUB…" : "Opening…")
+            // Match the reader open experience — skeleton page, not a spinner —
+            // and fill the screen so Library chrome can't bleed through.
+            ReaderPageSkeleton()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #if os(macOS)
+                .background(Color(nsColor: .windowBackgroundColor))
+                #else
+                .background(Color(uiColor: .systemBackground))
+                .navigationBarBackButtonHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
+                #endif
+                .accessibilityLabel(phase == .restoring ? "Restoring EPUB" : "Opening")
         case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't Open Reader", systemImage: "exclamationmark.triangle")
@@ -124,6 +134,91 @@ private struct LocalWorkReaderDestination: View {
     }
 }
 
+/// Pushed when a card for a work the library does not have yet should *read* it:
+/// import it from AO3 first, then open the reader.
+///
+/// The Account tab's lists (bookmarks, subscriptions, the account works lists) are the
+/// caller. A card there was a route to Work Details, which meant reading something you
+/// had bookmarked took two screens and a second decision; tapping the card now does the
+/// obvious thing instead. Importing on tap is a real side effect — the work joins the
+/// library — but that is what "open this" has to mean for a work stored on AO3.
+struct RemoteWorkReaderRoute: Hashable {
+    let work: AO3WorkSummary
+}
+
+/// Resolves `RemoteWorkReaderRoute` to a local work, then hands off to the same reader
+/// destination a local card uses, so restore/skeleton/failure behaviour is shared
+/// rather than reimplemented for remote works.
+struct RemoteWorkReaderDestination: View {
+    let summary: AO3WorkSummary
+
+    @Environment(\.modelContext) private var context
+    @State private var resolved: SavedWork?
+    @State private var failure: String?
+
+    var body: some View {
+        Group {
+            if let resolved {
+                LocalWorkDestinationView(destination: .reader(resolved))
+            } else if let failure {
+                ContentUnavailableView {
+                    Label("Couldn't Open Work", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(failure)
+                } actions: {
+                    NavigationLink(value: summary) {
+                        Label("Work Details", systemImage: "info.circle")
+                    }
+                }
+            } else {
+                // The same skeleton a local open shows, so an import and a restore
+                // look identical from the outside.
+                ReaderPageSkeleton()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #if os(macOS)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    #else
+                    .background(Color(uiColor: .systemBackground))
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar(.hidden, for: .navigationBar)
+                    #endif
+                    .accessibilityLabel("Downloading work")
+            }
+        }
+        .task(id: summary) { await resolve() }
+    }
+
+    @MainActor
+    private func resolve() async {
+        guard resolved == nil, failure == nil else { return }
+        do {
+            // Reuses the queue's importer, so a work opened this way is indexed,
+            // deduplicated against an existing copy, and preserved exactly like one
+            // added through any other path.
+            resolved = try await ReadingQueueService.resolveLocalWork(for: summary, in: context)
+        } catch {
+            failure = WorkCardActionError.message(for: error)
+        }
+    }
+}
+
+/// A compact work card's tap: open the work.
+///
+/// One rule app-wide, not a per-screen choice — a card in a carousel, on the Account
+/// tab, or on an author profile all do the same thing, and the ⓘ in the corner is how
+/// you get to Work Details from any of them. A remote work is imported on the way.
+///
+/// Note the concrete types. An earlier version returned an `AnyHashable` so one
+/// `NavigationLink` could cover both a detail and a reader destination, and every card
+/// stopped opening: `navigationDestination(for:)` matches on the value's **static**
+/// type, so an erased value matches nothing and the tap silently does nothing.
+enum WorkCardTap {
+    static func destination(for work: SavedWork) -> LocalWorkDestination { .reader(work) }
+    static func destination(for remote: AO3WorkSummary) -> RemoteWorkReaderRoute {
+        RemoteWorkReaderRoute(work: remote)
+    }
+}
+
 /// Label/icon pairs for work-lifecycle toggles duplicated across card context
 /// menus, work detail, and the bulk-action bar.
 enum WorkActionLabels {
@@ -143,6 +238,14 @@ enum WorkActionLabels {
         isFavorite
             ? ("Unfavorite", "star.slash")
             : ("Favorite", "star")
+    }
+
+    /// "Saved" keeps a work's EPUB from ever being freed. Distinct from Delete, which
+    /// removes the work — the two used to share one menu slot.
+    static func saved(isSaved: Bool) -> (title: String, systemImage: String) {
+        isSaved
+            ? ("Remove from Saved", "bookmark.slash")
+            : ("Save", "bookmark")
     }
 }
 
@@ -207,6 +310,8 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
     @State private var showingComments = false
+    @State private var rebuildError: String?
+    @State private var confirmingRebuild = false
     @State private var pendingDelete: SavedWork?
 
     private var commentsWorkID: Int? {
@@ -234,22 +339,17 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     }
                 }
 
-                if work.isSaved {
-                    Button(role: .destructive) {
-                        if confirmBeforeDelete {
-                            pendingDelete = work
-                        } else {
-                            PreservedWorkService.softDelete(work, in: context)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                } else {
-                    Button {
-                        WorkLifecycle.setSaved(work, true, in: context)
-                    } label: {
-                        Label("Save", systemImage: "bookmark")
-                    }
+                // Save and Delete are different axes, so both are always offered.
+                // Previously this was an either/or — saved works got Delete, unsaved
+                // works got Save — which meant a work the user had never explicitly
+                // saved (an imported file, say) had **no way to delete it from this
+                // menu at all**. Delete now lives at the bottom, where a destructive
+                // action belongs.
+                Button {
+                    WorkLifecycle.setSaved(work, !work.isSaved, in: context)
+                } label: {
+                    let labels = WorkActionLabels.saved(isSaved: work.isSaved)
+                    Label(labels.title, systemImage: labels.systemImage)
                 }
 
                 Button {
@@ -285,8 +385,36 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     Label("Add to Collection", systemImage: "square.stack")
                 }
 
+                // Offered for any converted import, not just a stale one: a rebuild also
+                // applies *importer* fixes the converter version cannot know about, so an
+                // up-to-date work still has a reason to be rebuilt. A redundant rebuild
+                // asks first, since it costs time and changes the file.
+                if let rebuildable = WorkReconversion.candidate(for: work) {
+                    Button {
+                        if rebuildable.isStale {
+                            Task { await rebuildFromOriginal() }
+                        } else {
+                            confirmingRebuild = true
+                        }
+                    } label: {
+                        Label("Rebuild from Original", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+
                 NavigationLink(value: LocalWorkDestination.detail(work)) {
                     Label("Work Details", systemImage: "info.circle")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    if confirmBeforeDelete {
+                        pendingDelete = work
+                    } else {
+                        PreservedWorkService.softDelete(work, in: context)
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
             .sheet(isPresented: $showingAddToQueue) {
@@ -307,6 +435,41 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: { PreservedWorkService.softDelete($0, in: context) }
             )
+            .confirmationDialog(
+                "Rebuild this work?",
+                isPresented: $confirmingRebuild,
+                titleVisibility: .visible
+            ) {
+                Button("Rebuild") { Task { await rebuildFromOriginal() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This work was already built with the latest converter, so its text is "
+                    + "unlikely to change. Rebuilding re-reads everything from the original file, "
+                    + "which is worth doing if its details look wrong.")
+            }
+            .alert(
+                "Couldn't Rebuild This Work",
+                isPresented: Binding(
+                    get: { rebuildError != nil },
+                    set: { if !$0 { rebuildError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { rebuildError = nil }
+            } message: {
+                Text(rebuildError ?? "")
+            }
+    }
+
+    /// Rebuilds the EPUB from the archived original. Failure is surfaced through the
+    /// same notice the card's other actions use rather than swallowed — a rebuild that
+    /// silently did nothing would be worse than one that says why it could not.
+    @MainActor
+    private func rebuildFromOriginal() async {
+        do {
+            try await WorkReconversion.reconvert(work, in: context)
+        } catch {
+            rebuildError = WorkCardActionError.message(for: error)
+        }
     }
 
     @MainActor
@@ -367,6 +530,55 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Inline, not a modifier taking `existingLocalWork` as a parameter.
+            // That lookup builds a `WorkIdentityIndex` over the *entire* library
+            // (three dictionaries, with URL parsing per work), and passing it as
+            // a parameter forced it to run for every visible card on every body
+            // pass. Referenced only inside these closures it keeps the same
+            // deferred cost profile `.contextMenu` below already relies on.
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                // Full swipe takes the first action. Save is the common intent
+                // from a listing, and it's what the local rows put here too.
+                if existingLocalWork?.isSaved != true {
+                    Button(action: save) {
+                        Label("Save", systemImage: "bookmark")
+                    }
+                    .tint(.blue)
+                    .disabled(working)
+                }
+
+                Button(action: toggleSavedForLater) {
+                    let labels = WorkActionLabels.savedForLater(
+                        isQueued: existingLocalWork?.isInSavedForLaterQueue == true
+                    )
+                    Label(labels.title, systemImage: labels.systemImage)
+                }
+                .tint(.indigo)
+                .disabled(working)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                // Delete only exists once the work is actually in the library —
+                // there is nothing to delete for a listing not taken yet. Full
+                // swipe stays off so a flick can't destroy a saved work.
+                if let existingLocalWork, existingLocalWork.isSaved {
+                    Button(role: .destructive) {
+                        if confirmBeforeDelete {
+                            pendingDelete = existingLocalWork
+                        } else {
+                            PreservedWorkService.softDelete(existingLocalWork, in: context)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(working)
+                }
+
+                Button(action: addToQueue) {
+                    Label("Add to Queue", systemImage: "list.bullet.rectangle")
+                }
+                .tint(.orange)
+                .disabled(working)
+            }
             .contextMenu {
                 Button {
                     read()

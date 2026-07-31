@@ -63,14 +63,17 @@ enum WorkTags {
             work.workTagsFetched = true
             work.markModified()
             WorkSearchIndex.reindex(work)
+            // The page answered, so the work exists: record that, which also clears a
+            // stale `ao3Unavailable` if the work has come back. Routed through
+            // `WorkAvailability` so both callers stamp the same fields.
+            WorkAvailability.record(.present, on: work, in: context)
             try? context.save()
         } catch AO3Error.notFound {
             // 404 — the work has been deleted from AO3. Stop re-fetching it and keep
             // whatever tags it already has (EPUB-derived or a prior AO3 fetch).
             guard work.modelContext != nil else { return }
-            work.ao3Unavailable = true
             work.markModified()
-            try? context.save()
+            WorkAvailability.record(.deleted, on: work, in: context)
         } catch {
             // Other network or parse failure: keep the EPUB-derived tags and retry next time.
         }

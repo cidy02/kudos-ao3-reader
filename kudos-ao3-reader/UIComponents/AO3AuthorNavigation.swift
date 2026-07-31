@@ -57,6 +57,26 @@ struct AO3AuthorBylineView: View {
     var font: Font = .subheadline
     var compact = false
     var emphasized = false
+    /// Whether a navigable name takes the accent.
+    ///
+    /// Defaults to true, which is right where a byline names *the* author of the
+    /// thing on screen — one accented name, and it means something. It is wrong in
+    /// a comment section: accenting every commenter puts the loudest colour in the
+    /// app on the most repeated element, so the tint stops marking importance and
+    /// just marks "a person". Comments pass false for everyone except the work's
+    /// own author. The name stays tappable either way — avatar, hit box and the
+    /// button trait are unchanged.
+    var tinted = true
+    /// Whether a navigable name carries its own 28pt hit target.
+    ///
+    /// Defaults to true. Set false only where something else already offers a
+    /// large target for the same destination *and* the extra box would be visible
+    /// as layout: the frame is top-aligned so it grows downward, which is invisible
+    /// beside inline text but shows as a gap under a name that has something
+    /// stacked beneath it. A guest's name takes the non-navigable branch and has no
+    /// such frame, so leaving this on makes registered and guest bylines sit
+    /// differently for no reason a reader could name.
+    var expandsHitTarget = true
     private let onOpenRoute: ((AO3AuthorRoute) -> Void)?
 
     @Environment(AppRouter.self) private var router
@@ -74,6 +94,8 @@ struct AO3AuthorBylineView: View {
         font: Font = .subheadline,
         compact: Bool = false,
         emphasized: Bool = false,
+        tinted: Bool = true,
+        expandsHitTarget: Bool = true,
         onOpenRoute: ((AO3AuthorRoute) -> Void)? = nil
     ) {
         self.names = names
@@ -83,6 +105,8 @@ struct AO3AuthorBylineView: View {
         self.font = font
         self.compact = compact
         self.emphasized = emphasized
+        self.tinted = tinted
+        self.expandsHitTarget = expandsHitTarget
         self.onOpenRoute = onOpenRoute
     }
 
@@ -146,8 +170,12 @@ struct AO3AuthorBylineView: View {
                     // so the enlarged hit box only grows downward, off the baseline.
                     Text(text)
                         .fontWeight(emphasized ? .semibold : .regular)
-                        .foregroundStyle(.tint)
-                        .frame(minWidth: 28, minHeight: 28, alignment: .top)
+                        .foregroundStyle(tinted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                        .frame(
+                            minWidth: expandsHitTarget ? 28 : 0,
+                            minHeight: expandsHitTarget ? 28 : 0,
+                            alignment: .top
+                        )
                         .contentShape(Rectangle())
                         .highPriorityGesture(TapGesture().onEnded { activate(route) })
                         .accessibilityLabel(token.name)
@@ -226,6 +254,14 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
                     initialFocusesChapter: route.focusesChapter,
                     initialComposes: route.composes
                 )
+            }
+            // Compact work cards open the work everywhere in the app, downloading it
+            // first when the library does not have it. Registered here because every
+            // tab's stack applies this modifier, and a card can appear in any of them
+            // (carousels, Account's lists, an author profile pushed from anywhere) —
+            // a stack that missed the registration would leave those cards inert.
+            .navigationDestination(for: RemoteWorkReaderRoute.self) { route in
+                RemoteWorkReaderDestination(summary: route.work)
             }
             // Observe the epoch (not the Optional route): @Observable + Optional
             // equality skips same-route re-taps. Epoch always changes; only the

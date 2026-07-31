@@ -69,8 +69,32 @@ enum WorkLifecycle {
         for membership in work.queueMemberships {
             SyncTombstones.recordDeletion(of: membership, in: context)
         }
+        // ReadingAnnotation.work has no @Relationship cascade rule (it's a plain
+        // optional, unlike queueMemberships above), so SwiftData's default
+        // .nullify would otherwise leave these rows behind forever — orphaned,
+        // untombstoned, and invisible to every list (they all filter by
+        // work?.id). Fetch and delete them explicitly, tombstoning each first so
+        // a future restore from an older archive can't resurrect a mark whose
+        // book no longer exists.
+        let workID = work.id
+        let orphanedAnnotations = (try? context.fetch(FetchDescriptor<ReadingAnnotation>()))?
+            .filter { $0.work?.id == workID } ?? []
+        for annotation in orphanedAnnotations {
+            SyncTombstones.recordDeletion(of: annotation, in: context)
+            context.delete(annotation)
+        }
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
+        // A converted import keeps the original file it came from. Only permanent
+        // deletion removes it — deliberately *not* `freeEPUB`, which exists to
+        // reclaim space for works that can be re-downloaded from AO3, and the
+        // original of a community copy is the one artifact that cannot.
+        if let original = Storage.existingOriginalDocumentURL(for: work.id) {
+            try? FileManager.default.removeItem(at: original)
+        }
+        // Its conversion record goes with it, or the Originals directory accumulates
+        // sidecars pointing at files that no longer exist.
+        WorkConversionRecord.delete(for: work.id)
         context.delete(work)
         context.saveBestEffort(reason: "Saving work deletion failed")
     }

@@ -44,6 +44,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// deterministic composite of the collection and work IDs — see
     /// `SyncTombstone.collectionMembershipID(collectionID:workID:)`.
     case workCollectionMembership
+    /// An in-book bookmark / highlight / note the user deleted. Without this a
+    /// restore from an older archive would silently resurrect it, the same way
+    /// queue memberships needed their own tombstones.
+    case readingAnnotation
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat
@@ -266,6 +270,29 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// tags it already has (EPUB-derived or a prior AO3 fetch). Distinct from a locked /
     /// login-gated page, which returns content (no tags) and stays retryable.
     var ao3Unavailable: Bool = false
+
+    /// Which site this work came from, derived from `sourceURL`.
+    ///
+    /// Derived rather than stored, so it needs no migration and no backup bump — see
+    /// `WorkOrigin`. An AO3 work id is trusted over the URL, since a work downloaded
+    /// natively always has one and its `sourceURL` may be a `/downloads/` link.
+    var origin: WorkOrigin {
+        if ao3WorkID != nil { return .archiveOfOurOwn }
+        return WorkOrigin.detect(sourceURL: sourceURL)
+    }
+
+    /// How this copy stands relative to the site it came from.
+    ///
+    /// The point of the whole preservation feature made visible: a work AO3 has
+    /// deleted, whose file we still hold, is the last copy the user will ever get.
+    /// It should not look like every other row in the Library.
+    var preservationState: WorkPreservationState {
+        // `ao3Unavailable` is set only when AO3 answered 404 for this work — deleted
+        // or hidden. A locked or merely failing page leaves it false and retryable,
+        // so this never mistakes a network problem for a deletion.
+        guard ao3Unavailable else { return .available }
+        return hasEPUB ? .preservedLastCopy : .goneWithNoCopy
+    }
 
     /// True once the type-split Work Tags are available (after an AO3 refresh).
     var hasCategorizedWorkTags: Bool {
@@ -686,6 +713,125 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var syncStatus: SyncRecordStatus {
         get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
         set { syncStatusRaw = newValue.rawValue }
+    }
+
+    func markModified(_ date: Date = Date()) {
+        lastModifiedAt = date
+        if syncStatus == .synced { syncStatus = .pending }
+    }
+}
+
+/// What a `ReadingAnnotation` is. One model covers all three because they share an
+/// identical anchor (a Readium `Locator`) and lifecycle — only the presence of a
+/// highlight range, a colour, and a note body differ.
+nonisolated enum ReadingAnnotationKind: String, Codable, CaseIterable {
+    /// A place the reader marked to come back to. No selected text required.
+    case bookmark
+    /// A highlighted passage, optionally with a note attached.
+    case highlight
+}
+
+/// The highlight tint. Stored as a string rather than a raw colour so the palette
+/// can be re-themed (and so Sepia can warm them) without migrating stored data.
+nonisolated enum ReadingAnnotationColor: String, Codable, CaseIterable {
+    case yellow, green, blue, pink, purple, underline
+
+    var title: String {
+        switch self {
+        case .yellow: "Yellow"
+        case .green: "Green"
+        case .blue: "Blue"
+        case .pink: "Pink"
+        case .purple: "Purple"
+        case .underline: "Underline"
+        }
+    }
+}
+
+/// One in-book bookmark, highlight, or note, anchored by a Readium `Locator`.
+///
+/// The anchor is `Locator.persistenceString` — exactly how reading progress is
+/// stored (`SavedWork.readiumLocator`), so there is one locator-encoding path in
+/// the app and no second format to keep in step. `selectedText` is a snapshot of
+/// what the passage said when it was highlighted: EPUBs can be re-downloaded and
+/// AO3 authors edit posted chapters, so a locator can drift or dangle — the
+/// snapshot keeps the annotation meaningful (and listable) even then.
+///
+/// Additive, default-valued fields only, per the migration rules in
+/// `docs/DATA_AND_PERSISTENCE_INVARIANTS.md`. Note the deliberate absence of any
+/// property named `isDeleted` (CoreData collision).
+@Model final class ReadingAnnotation {
+    var id: UUID = UUID()
+    var kindRaw: String = ReadingAnnotationKind.bookmark.rawValue
+    var colorRaw: String = ReadingAnnotationColor.yellow.rawValue
+    /// Readium `Locator` JSON — the anchor. Same encoding as `readiumLocator`.
+    var locatorString: String = ""
+    /// The passage as it read when annotated; empty for a plain bookmark.
+    var selectedText: String = ""
+    /// The reader's own note. Empty means "no note" — a highlight without one.
+    var note: String = ""
+    /// `totalProgression` at creation (0...1), so lists can sort in book order
+    /// without re-decoding every locator.
+    var progression: Double = 0
+    /// Spine index at creation, for grouping a list by chapter cheaply.
+    var spineIndex: Int = 0
+    /// Chapter title at creation, so the list reads well even if the section
+    /// list isn't loaded (the annotations sheet can open before the book does).
+    var chapterTitle: String = ""
+    var createdAt: Date = Date()
+    var lastModifiedAt: Date = Date()
+    var deletedAt: Date?
+    var isPendingDeletion: Bool = false
+    var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
+
+    var work: SavedWork?
+
+    init(
+        id: UUID = UUID(),
+        work: SavedWork,
+        kind: ReadingAnnotationKind,
+        locatorString: String,
+        selectedText: String = "",
+        note: String = "",
+        color: ReadingAnnotationColor = .yellow,
+        progression: Double = 0,
+        spineIndex: Int = 0,
+        chapterTitle: String = "",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.work = work
+        kindRaw = kind.rawValue
+        colorRaw = color.rawValue
+        self.locatorString = locatorString
+        self.selectedText = selectedText
+        self.note = note
+        self.progression = progression
+        self.spineIndex = spineIndex
+        self.chapterTitle = chapterTitle
+        self.createdAt = createdAt
+        lastModifiedAt = createdAt
+    }
+
+    var kind: ReadingAnnotationKind {
+        get { ReadingAnnotationKind(rawValue: kindRaw) ?? .bookmark }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var color: ReadingAnnotationColor {
+        get { ReadingAnnotationColor(rawValue: colorRaw) ?? .yellow }
+        set { colorRaw = newValue.rawValue }
+    }
+
+    var syncStatus: SyncRecordStatus {
+        get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    /// True when this carries a reader-written note — the Notes list's filter.
+    /// A highlight with no note belongs only under Highlights.
+    var hasNote: Bool {
+        !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func markModified(_ date: Date = Date()) {

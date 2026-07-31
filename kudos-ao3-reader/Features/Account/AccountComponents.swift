@@ -526,14 +526,13 @@ struct AccountWorksCompactGrid: View {
     @ViewBuilder
     private func compactCard(for entry: CanonicalWork) -> some View {
         if let work = entry.local {
-            // Account destinations use `SavedWork` → WorkDetailView (not LocalWorkDestination).
-            NavigationLink(value: work) {
+            NavigationLink(value: WorkCardTap.destination(for: work)) {
                 SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
-            NavigationLink(value: remote) {
+            NavigationLink(value: WorkCardTap.destination(for: remote)) {
                 AO3WorkCoverCard(work: remote)
             }
             .buttonStyle(.plain)
@@ -562,7 +561,7 @@ struct AccountBookmarksCompactGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             ForEach(bookmarks) { bookmark in
-                NavigationLink(value: bookmark.work) {
+                NavigationLink(value: WorkCardTap.destination(for: bookmark.work)) {
                     AO3WorkCoverCard(work: bookmark.work)
                 }
                 .buttonStyle(.plain)
