@@ -128,16 +128,22 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
 
             if let dismissPan {
                 dismissPan.view?.removeGestureRecognizer(dismissPan)
+                self.dismissPan = nil
             }
 
-            let dismissPan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan))
-            // Touches must still reach the web view for tap-to-toggle chrome.
-            // Scroll rubber-band is stopped via `shouldBeRequiredToFailBy` + an
-            // immediate pin on `.began`, not by cancelling touches.
-            dismissPan.cancelsTouchesInView = false
-            dismissPan.delegate = self
-            view.addGestureRecognizer(dismissPan)
-            self.dismissPan = dismissPan
+            // No drag-to-dismiss recogniser of our own any more. The reader is pushed
+            // with the system zoom transition (`WorkCardZoomTransition.swift`), which
+            // brings its own interactive dismissal — dragging the page collapses it
+            // back into the card it came from. Running both meant our peel won the
+            // gesture and the dismissal kept feeling hand-rolled, which is what the
+            // owner reported.
+            //
+            // The peel machinery below (`handleDismissPan`, the delegate methods,
+            // `ReaderDismissDragSurface`) is left in place for one build so the two
+            // can be compared on device; `dismissPan` simply stays nil, so none of it
+            // runs. See T-186 for the removal, which also has to preserve the peel
+            // host's `safeAreaRegions = []` — the page box and the open skeleton both
+            // depend on the reader being full-bleed.
 
             installedView = view
         }
