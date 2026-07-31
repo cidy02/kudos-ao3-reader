@@ -1182,6 +1182,24 @@ struct ReadiumReaderView: View {
                 giveKudos(workID: ao3WorkID)
             })
         }
+        // Converted imports only — an AO3 EPUB has no "original" behind it. Sits in
+        // the round row rather than the pill list because the owner wanted it here,
+        // and it reads as a peer of Share: both are about the file rather than the
+        // reading session.
+        //
+        // Worth having at all because conversion is lossy — images are dropped, layout
+        // is reflowed — so checking the source is how a reader tells a conversion
+        // artefact from something the author actually wrote.
+        if let original = originalDocumentURL {
+            actions.append(ReaderFanRoundAction(
+                id: "original",
+                systemImage: "doc.text.magnifyingglass",
+                tint: tint,
+                accessibilityLabel: "View the original file this work was converted from"
+            ) {
+                previewingOriginal = original
+            })
+        }
         // Start when idle; when the mini player is up (playing *or* paused) this
         // is the same `stopReadingAloud()` the mini player's stop button uses —
         // not pause — so the strip dismisses instead of lingering muted.
@@ -1751,18 +1769,6 @@ extension ReadiumReaderView {
                 id: "comments", title: "Comments", systemImage: "bubble.left.and.bubble.right"
             ) {
                 showingComments = true
-            })
-        }
-        // Converted imports only, and they are exactly the works whose menu is
-        // otherwise thin. Seeing the source page matters here in a way it never does
-        // for an AO3 EPUB: conversion is lossy — images are dropped, layout is
-        // reflowed — so being able to check the original is how a reader tells a
-        // conversion artefact from something the author actually wrote.
-        if originalDocumentURL != nil {
-            pills.append(ReaderFanMenuPill(
-                id: "original", title: "Original File", systemImage: "doc.text.magnifyingglass"
-            ) {
-                previewingOriginal = originalDocumentURL
             })
         }
         if WorkReconversion.candidate(for: work)?.isStale == true {

@@ -72,9 +72,24 @@ struct WorkCoverCard: View {
                 cardStats
 
                 if !stateBadges.isEmpty {
-                    FlowLayout(spacing: 6, rowSpacing: 5) {
-                        ForEach(stateBadges, id: \.text) { badge in
-                            WorkStateBadge(text: badge.text, symbol: badge.symbol)
+                    // Two per row rather than `FlowLayout`'s one. A card is narrow
+                    // enough that flow wrapping gave each badge its own line, so four
+                    // badges cost four rows and squeezed the progress bar out; pairing
+                    // them fits the same four in two. Each badge takes half the row so
+                    // the columns line up down the card.
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(Array(stride(from: 0, to: stateBadges.count, by: 2)), id: \.self) { start in
+                            HStack(spacing: 6) {
+                                ForEach(stateBadges[start..<min(start + 2, stateBadges.count)], id: \.text) { badge in
+                                    WorkStateBadge(text: badge.text, symbol: badge.symbol)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                // Keeps a lone badge on a half-width column instead of
+                                // stretching it across the card.
+                                if stateBadges.count - start == 1 {
+                                    Spacer(minLength: 0).frame(maxWidth: .infinity)
+                                }
+                            }
                         }
                     }
                     .font(.caption2)
@@ -138,12 +153,22 @@ struct WorkCoverCard: View {
         }
         if work.isInSavedForLaterQueue { badges.append((text: "Later", symbol: "bookmark.fill")) }
         if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
-        if work.hasEPUB { badges.append((text: "Offline", symbol: "arrow.down.circle.fill")) }
         if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
-        // Capped because a carousel card is a fixed height: six badges wrap to three
-        // rows and squeeze the progress bar out. The order above is the priority — a
-        // work that is the last copy in existence says so before it says "Favorite" —
-        // and Work Details lists every one of these in full.
+        // The *absence* of a downloaded file is what carries information, so this is
+        // deliberately not an "Offline" badge.
+        //
+        // Every shelf except History filters on `hasEPUB`, and saved/favorited/queued
+        // works are never freed (`isProtected` covers them), so "Offline" was true on
+        // effectively every card that could show it — a badge on everything says
+        // nothing. A work whose file was freed appears only in History, and *that* is
+        // worth labelling. `goneWithNoCopy` already covers the freed-and-deleted case
+        // above, so this does not double up with it.
+        if !work.hasEPUB, !work.ao3Unavailable {
+            badges.append((text: "Not downloaded", symbol: "arrow.down.circle"))
+        }
+        // Capped to two rows of two. The order above is the priority — a work that is
+        // the last copy in existence says so before it says "Favorite" — and Work
+        // Details lists every one of these in full.
         return Array(badges.prefix(4))
     }
 
@@ -352,6 +377,10 @@ struct WorkStateBadge: View {
         Label(text, systemImage: symbol)
             .labelStyle(.titleAndIcon)
             .lineLimit(1)
+            // Two badges now share a card's width, so a long label ("SufficientVelocity",
+            // "Not downloaded") shrinks a little rather than truncating to an ellipsis
+            // that says nothing.
+            .minimumScaleFactor(0.8)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
