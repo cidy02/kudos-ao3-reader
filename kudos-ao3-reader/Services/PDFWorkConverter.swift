@@ -214,10 +214,25 @@ nonisolated enum PDFWorkConverter {
                 if leadingIndex < count, trailingIndex < count {
                     let leading = page.characterBounds(at: leadingIndex)
                     let trailing = page.characterBounds(at: trailingIndex)
+                    // The right edge is sampled over the last few inked glyphs rather
+                    // than read off the final one. PDFKit routinely reports a
+                    // degenerate box for a trailing glyph — a real body line came back
+                    // with maxX (85.9) *less than* its own minX (86.5) — which made the
+                    // page measure collapse from ~370pt to 39pt and the indent test in
+                    // `blocks(from:)` fire on ordinary glyph jitter, splitting
+                    // paragraphs mid-sentence.
+                    var rightEdge = max(trailing.maxX, leading.maxX)
+                    var probe = trailingIndex
+                    var sampled = 0
+                    while sampled < 3, probe > leadingIndex {
+                        probe -= 1
+                        sampled += 1
+                        rightEdge = max(rightEdge, page.characterBounds(at: probe).maxX)
+                    }
                     runs.append(VisualLine(
                         text: String(characters[stringIndex..<end]),
                         minX: leading.minX,
-                        maxX: trailing.maxX,
+                        maxX: max(rightEdge, leading.minX + 1),
                         midY: leading.midY,
                         height: max(leading.height, trailing.height, 1)
                     ))
@@ -333,7 +348,12 @@ nonisolated enum PDFWorkConverter {
                 if line.midY - next.midY > normalLeading * 1.5 { endsParagraph = true }
                 // A following line indented past the body margin is a first-line
                 // indent, the other convention for marking a new paragraph.
-                if next.minX > marginLeft + measure * 0.03 { endsParagraph = true }
+                // A real first-line indent is a typographic decision — a quarter inch
+                // or more. The absolute floor matters because a line's measured minX
+                // jitters by several points with the glyph it starts on (86.5 vs 91.5
+                // vs 90.1 on consecutive body lines of one real page), and a
+                // percentage-only threshold read that jitter as an indent.
+                if next.minX > marginLeft + max(12, measure * 0.03) { endsParagraph = true }
             } else {
                 endsParagraph = true
             }

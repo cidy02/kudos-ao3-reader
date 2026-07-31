@@ -26,7 +26,12 @@ nonisolated enum ImportedDocumentConverter {
     /// - 5 — PDF front matter kept as a "Preface" (it was silently dropped when an
     ///       outline started on page 2), and calibre/FanFicFare's metadata page parsed
     ///       for the story link, fandom, genre, rating and summary.
-    static let converterVersion = 5
+    /// - 6 — PDF paragraphs no longer split mid-sentence. A line's right edge is now
+    ///       sampled over several glyphs (PDFKit reported some trailing glyphs with a
+    ///       maxX *below* their own minX, collapsing the page measure), and the
+    ///       first-line-indent test gained an absolute 12pt floor so a few points of
+    ///       glyph jitter can no longer read as an indent.
+    static let converterVersion = 6
 
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.
