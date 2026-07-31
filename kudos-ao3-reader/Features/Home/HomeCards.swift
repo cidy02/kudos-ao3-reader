@@ -167,9 +167,13 @@ struct WorkCoverCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Status and origin")
+        // No `presentationCompactAdaptation(.popover)`: forcing a popover on iPhone
+        // pinned this to a small fixed box that **clipped** the text, which is exactly
+        // what the owner hit. Left to adapt, iPhone gets a sheet — which is the right
+        // container for several paragraphs — while iPad and macOS keep the popover.
         .popover(isPresented: $showingStatus) {
             statusPopover
-                .presentationCompactAdaptation(.popover)
+                .presentationDetents([.medium, .large])
         }
     }
 
@@ -178,6 +182,15 @@ struct WorkCoverCard: View {
     /// had to. Everything here is a fact about *this* work — nothing is inferred for
     /// the sake of filling the panel.
     private var statusPopover: some View {
+        // Scrollable because this text grows: several provenance notes at an
+        // accessibility text size will exceed any fixed container, and silently cutting
+        // an explanation off is worse than making it scroll.
+        ScrollView {
+            statusPopoverContent
+        }
+    }
+
+    private var statusPopoverContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label {
                 Text(provenanceSentence)
@@ -219,6 +232,13 @@ struct WorkCoverCard: View {
         .frame(maxWidth: 280, alignment: .leading)
     }
 
+    /// True for names iOS invents when a file is shared rather than picked — a bare
+    /// UUID, which tells a reader nothing about the file it came from.
+    private static func looksLikeGeneratedName(_ name: String) -> Bool {
+        let base = (name as NSString).deletingPathExtension
+        return UUID(uuidString: base) != nil
+    }
+
     /// One sentence saying where this work came from.
     private var provenanceSentence: String {
         switch work.origin {
@@ -241,9 +261,14 @@ struct WorkCoverCard: View {
         if let candidate = WorkReconversion.candidate(for: work) {
             let format = ImportedFileFormat(rawValue: candidate.record.format)?.displayName
                 ?? candidate.record.format
-            notes.append("Converted from \(format) on import. The original file "
-                + "(\(candidate.record.originalFileName)) is kept alongside it, so this work can be "
-                + "rebuilt without downloading anything.")
+            // iOS names a shared file with a bare UUID, and printing that adds nothing —
+            // the owner's card read "(C8E89916-3E56-49B2-96FE-498B7B147EFE.pdf)".
+            let name = candidate.record.originalFileName
+            let named = Self.looksLikeGeneratedName(name)
+                ? "The original file"
+                : "The original file (\(name))"
+            notes.append("Converted from \(format) on import. \(named) is kept alongside it, "
+                + "so this work can be rebuilt without downloading anything.")
             if candidate.isStale {
                 notes.append("A newer converter is available — rebuilding from the original would "
                     + "improve how this work reads.")
