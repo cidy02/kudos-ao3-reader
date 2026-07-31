@@ -50,14 +50,21 @@ struct WorkCoverCard: View {
     var footer: String?
     var progress: Double?
 
+    @State private var showingStatus = false
+
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(work.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(3)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .top, spacing: 6) {
+                    Text(work.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(3)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !allStatuses.isEmpty {
+                        statusButton
+                    }
+                }
 
                 if !work.author.isEmpty {
                     CardMetaLabel(text: work.author, symbol: "person", accessibilityLabel: "Author: \(work.author)")
@@ -71,28 +78,15 @@ struct WorkCoverCard: View {
 
                 cardStats
 
-                if !stateBadges.isEmpty {
-                    // Two per row rather than `FlowLayout`'s one. A card is narrow
-                    // enough that flow wrapping gave each badge its own line, so four
-                    // badges cost four rows and squeezed the progress bar out; pairing
-                    // them fits the same four in two. Each badge takes half the row so
-                    // the columns line up down the card.
-                    VStack(alignment: .leading, spacing: 5) {
-                        ForEach(Array(stride(from: 0, to: stateBadges.count, by: 2)), id: \.self) { start in
-                            HStack(spacing: 6) {
-                                ForEach(stateBadges[start..<min(start + 2, stateBadges.count)], id: \.text) { badge in
-                                    WorkStateBadge(text: badge.text, symbol: badge.symbol)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                // Keeps a lone badge on a half-width column instead of
-                                // stretching it across the card.
-                                if stateBadges.count - start == 1 {
-                                    Spacer(minLength: 0).frame(maxWidth: .infinity)
-                                }
-                            }
-                        }
-                    }
-                    .font(.caption2)
+                // Only preservation stays on the card. It is the one status the app
+                // exists to surface — "this is the last copy of a deleted work" — and
+                // hiding that behind a tap would defeat the point. It also appears on
+                // very few cards, so it costs space only where it matters most.
+                // Everything else lives behind the ⓘ button, which is what the owner
+                // asked for: statuses without the card paying for them.
+                if let preservation = work.preservationState.badgeLabel {
+                    WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
+                        .font(.caption2)
                 }
 
                 Spacer(minLength: 4)
@@ -105,6 +99,57 @@ struct WorkCoverCard: View {
                 }
             }
         }
+    }
+
+    /// ⓘ in the card's top-right corner.
+    ///
+    /// A plain `Button` is safe here even though the whole card navigates: the card's
+    /// `NavigationLink` lives in the *background* (see `CardNavigationModifier`), so a
+    /// foreground control is hit-tested first and takes its own taps. That is precisely
+    /// why the link is in the background rather than wrapping the content.
+    private var statusButton: some View {
+        Button {
+            showingStatus = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                // 28pt of tappable area around a 13pt glyph. Still under the 44pt
+                // guideline, deliberately: a larger target on a compact carousel card
+                // would eat the title's width, and the same information is a long-press
+                // away in Work Details.
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Status and origin")
+        .popover(isPresented: $showingStatus) {
+            statusPopover
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var statusPopover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(allStatuses, id: \.text) { badge in
+                WorkStateBadge(text: badge.text, symbol: badge.symbol)
+            }
+            // Named for every work here, AO3 included: the card suppresses "AO3" as
+            // noise, but someone who opened this panel is asking where the work is from.
+            Divider()
+            Label("From \(work.origin.displayName)", systemImage: work.origin.symbolName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let explanation = work.preservationState.explanation(origin: work.origin) {
+                Text(explanation)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .font(.caption2)
+        .padding(14)
+        .frame(maxWidth: 260, alignment: .leading)
     }
 
     private var cardStats: some View {
@@ -137,16 +182,18 @@ struct WorkCoverCard: View {
         return work.isComplete ? "Complete" : "WIP"
     }
 
-    private var stateBadges: [(text: String, symbol: String)] {
+    /// Every status worth reporting, uncapped — the popover has room, so the
+    /// four-badge cap the card needed is gone.
+    private var allStatuses: [(text: String, symbol: String)] {
         var badges: [(text: String, symbol: String)] = []
         // Preservation first: "this is the last copy in existence" outranks every
         // other thing a badge could say about a work.
         if let preservation = work.preservationState.badgeLabel {
             badges.append((text: preservation, symbol: work.preservationState.badgeSymbol))
         }
-        // Origin is shown only when it *isn't* AO3. Labelling every card "AO3" in an
-        // AO3 reader is noise; the exceptions are what carry information, because they
-        // behave differently — no live page to refresh from, no kudos to give.
+        // A chip only for non-AO3 origins: the popover names the source in full on its
+        // own row, so an "AO3" chip would just repeat it. The exceptions earn a chip
+        // because they behave differently — no live page to refresh, no kudos to give.
         let origin = work.origin
         if origin != .archiveOfOurOwn {
             badges.append((text: origin.shortLabel, symbol: origin.symbolName))
@@ -166,10 +213,7 @@ struct WorkCoverCard: View {
         if !work.hasEPUB, !work.ao3Unavailable {
             badges.append((text: "Not downloaded", symbol: "arrow.down.circle"))
         }
-        // Capped to two rows of two. The order above is the priority — a work that is
-        // the last copy in existence says so before it says "Favorite" — and Work
-        // Details lists every one of these in full.
-        return Array(badges.prefix(4))
+        return badges
     }
 
     private var footerSymbol: String {
