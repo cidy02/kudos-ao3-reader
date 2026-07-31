@@ -154,8 +154,16 @@ struct WorkCoverCard: View {
                 // guideline, deliberately: a larger target on a compact carousel card
                 // would eat the title's width, and the same information is a long-press
                 // away in Work Details.
-                .frame(width: 28, height: 28)
+                //
+                // The glyph is pinned to the box's own top-trailing corner, and the
+                // box is then pulled into the card's 12pt padding. Without both, the
+                // slack between a 28pt target and a 13pt glyph left the ⓘ floating
+                // roughly 19pt inside the corner instead of sitting in it. The tap
+                // target keeps its full 28pt — only the layout moves.
+                .frame(width: 28, height: 28, alignment: .topTrailing)
                 .contentShape(Rectangle())
+                .padding(.top, -4)
+                .padding(.trailing, -6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Status and origin")
