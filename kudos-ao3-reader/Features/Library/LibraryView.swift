@@ -36,6 +36,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @State private var path = NavigationPath()
+    @Namespace private var cardZoomNamespace
     @State private var filters = LibraryFilters()
     @State private var markedForLater: [AO3WorkSummary] = []
     /// True only while the remote Marked-for-Later request is in flight, so the
@@ -140,6 +141,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
+                // One namespace for this stack: the card and the screen it
+                // pushes both read it, which is what pairs them for the zoom.
+                .environment(\.workCardTransitionNamespace, cardZoomNamespace)
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
                 .navigationDestination(for: LibrarySectionKind.self) { kind in
                     LibrarySectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)

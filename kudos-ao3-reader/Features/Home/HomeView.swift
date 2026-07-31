@@ -20,6 +20,7 @@ struct HomeView: View {
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
     @State private var path = NavigationPath()
+    @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
     /// True only while the remote subscriptions request is actually in flight, so the
     /// carousel can show cover skeletons instead of briefly flashing its empty state.
@@ -120,6 +121,9 @@ struct HomeView: View {
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
                 .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
+                // One namespace for this stack: the card and the screen it
+                // pushes both read it, which is what pairs them for the zoom.
+                .environment(\.workCardTransitionNamespace, cardZoomNamespace)
                 .navigationDestination(for: LocalWorkDestination.self) { destination in
                     LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
                 }

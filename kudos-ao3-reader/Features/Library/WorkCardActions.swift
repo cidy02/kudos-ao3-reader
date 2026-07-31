@@ -16,6 +16,8 @@ struct LocalWorkDestinationView: View {
     var onReaderOpen: (SavedWork) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
+    /// Pairs with the card this was pushed from — see `WorkCardZoomTransition.swift`.
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     /// Set once, on this view's genuine first `.onAppear` — never updated again, so a
     /// later re-appearance (e.g. Back from a pushed Author Profile revealing this view)
     /// is never mistaken for a fresh, possibly-spurious push.
@@ -26,6 +28,7 @@ struct LocalWorkDestinationView: View {
             switch destination {
             case let .reader(work):
                 LocalWorkReaderDestination(work: work, onOpen: onReaderOpen)
+                    .workCardZoomDestination(work.id, in: zoomNamespace)
             case let .detail(work):
                 WorkDetailView(work: work)
             }

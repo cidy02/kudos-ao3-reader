@@ -88,6 +88,10 @@ struct WorkCoverCard: View {
     var footer: String?
     var progress: Double?
 
+    /// Set per tab stack; the pushed reader zooms out of this card. See
+    /// `WorkCardZoomTransition.swift`.
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
+
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
@@ -149,6 +153,9 @@ struct WorkCoverCard: View {
                 }
             }
         }
+        // The reader pushed from this card zooms out of it, and collapses back into
+        // it on dismiss. No-ops where no namespace is provided.
+        .workCardZoomSource(work.id, in: zoomNamespace)
     }
 
     private var cardStats: some View {
@@ -260,6 +267,9 @@ struct WorkCoverCard: View {
 struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
 
+    /// See `WorkCoverCard.zoomNamespace`.
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
+
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
@@ -302,6 +312,7 @@ struct AO3WorkCoverCard: View {
                 }
             }
         }
+        .workCardZoomSource(work.id, in: zoomNamespace)
         .remoteWorkContextMenu(work: work)
     }
 
