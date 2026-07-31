@@ -28,6 +28,10 @@ nonisolated enum PDFWorkConverter {
     /// and OCR takes over.
     private static let textLayerThreshold = 200
 
+    /// Title for the front-matter chapter. "Preface" because that is what AO3's own
+    /// EPUB export calls the same page.
+    private static let prefaceTitle = "Preface"
+
     static func convert(fileAt url: URL, fallbackTitle: String) throws -> HTMLWorkConverter.Result {
         guard let document = PDFDocument(url: url) else {
             throw ImportedDocumentConverter.ConversionError.pdfUnreadable
@@ -46,10 +50,31 @@ nonisolated enum PDFWorkConverter {
             .map(withoutEchoedTitle)
         guard !chapters.isEmpty else { throw ImportedDocumentConverter.ConversionError.noReadableText }
 
-        return HTMLWorkConverter.Result(
-            metadata: metadata(of: document, fallbackTitle: fallbackTitle),
-            chapters: chapters
-        )
+        var work = metadata(of: document, fallbackTitle: fallbackTitle)
+        var finalChapters = chapters
+
+        // calibre and FanFicFare open an exported fic with a metadata page, and it is
+        // the only place a converted PDF can learn it came from fanfiction.net — which
+        // is what the Library's origin badge reads.
+        //
+        // Parsed from the page's **raw** lines, not from `cleaned`. Those have been
+        // through paragraph reflow, which merges this page's short ragged label lines
+        // into one blob — and the parser then read `Storylink:` as part of `Story:`'s
+        // value and produced junk like a rating of "MStatus: Complete".
+        let rawFirstPage = lines(of: document.page(at: 0)?.string ?? "")
+        if let front = CalibreMetadataPage.parse(lines: rawFirstPage) {
+            work = front.merged(into: work)
+            // Re-render the preface from the parsed fields: the raw block is a label
+            // list that reads badly as prose, and every value in it is now metadata.
+            if let first = finalChapters.first, first.title == prefaceTitle {
+                let body = HTMLWorkSanitizer.paragraphs(from: front.prefaceBlocks())
+                if !body.isEmpty {
+                    finalChapters[0] = .init(title: prefaceTitle, bodyXHTML: body)
+                }
+            }
+        }
+
+        return HTMLWorkConverter.Result(metadata: work, chapters: finalChapters)
     }
 
     // MARK: - Text extraction
@@ -81,7 +106,14 @@ nonisolated enum PDFWorkConverter {
             }
         }
 
-        guard totalCharacters < textLayerThreshold else { return pages }
+        if totalCharacters >= textLayerThreshold {
+            // The document has a text layer overall — but a single page can still be an
+            // image: a scanned title page, or a cover exported as a picture. The
+            // document-wide threshold above cannot see that, so any page that came back
+            // empty on its own is OCR'd individually. Without this such a page imports
+            // as nothing at all, silently.
+            return withOCRForEmptyPages(pages, of: document)
+        }
 
         Log.library.info("PDF has no usable text layer (\(totalCharacters) chars); trying OCR")
         let recognized = try ocrPages(of: document)
@@ -90,6 +122,34 @@ nonisolated enum PDFWorkConverter {
         }
         // OCR yields lines with no geometry, so the width heuristic applies there.
         return recognized.map { reflowed($0) }
+    }
+
+    /// Fills in pages that yielded no text of their own by OCR'ing just those pages.
+    ///
+    /// Bounded by the same page budget as a full-document OCR, and the drop is logged
+    /// rather than passed off as a complete conversion.
+    private static func withOCRForEmptyPages(
+        _ pages: [[String]],
+        of document: PDFDocument
+    ) -> [[String]] {
+        let emptyPages = pages.indices.filter { pages[$0].isEmpty }
+        guard !emptyPages.isEmpty else { return pages }
+
+        var filled = pages
+        let budgeted = emptyPages.prefix(maxOCRPages)
+        if budgeted.count < emptyPages.count {
+            Log.library.notice(
+                "\(emptyPages.count) pages had no text layer; OCR ran on the first \(maxOCRPages)"
+            )
+        }
+        for index in budgeted {
+            guard let page = document.page(at: index), let image = render(page) else { continue }
+            let recognized = recognizeText(in: image)
+            guard !recognized.isEmpty else { continue }
+            Log.library.info("Recovered page \(index + 1) of the PDF by OCR")
+            filled[index] = reflowed(recognized)
+        }
+        return filled
     }
 
     /// One printed line, rebuilt from the bounds of the characters on it.
@@ -497,6 +557,22 @@ nonisolated enum PDFWorkConverter {
         guard marks.count > 1 else { return nil }
 
         var chapters: [EPUBBuilder.Chapter] = []
+
+        // Anything before the first outline entry is front matter — the title,
+        // metadata and summary page that most fic PDFs open with. This loop used to
+        // start at `marks[0].page` and drop those pages **silently**, losing a whole
+        // page of the work with no error and nothing in the log. Named "Preface"
+        // because that is what AO3's own EPUB export calls the same page.
+        if let first = marks.first, first.page > 0 {
+            let leading = pageLines[0..<min(first.page, pageLines.count)]
+                .flatMap(\.self)
+                .filter { !$0.isEmpty }
+            let body = HTMLWorkSanitizer.paragraphs(from: leading)
+            if !body.isEmpty {
+                chapters.append(.init(title: prefaceTitle, bodyXHTML: body))
+            }
+        }
+
         for (offset, mark) in marks.enumerated() {
             let end = offset + 1 < marks.count ? marks[offset + 1].page : pageLines.count
             guard mark.page < end, mark.page < pageLines.count else { continue }

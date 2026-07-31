@@ -79,6 +79,14 @@ enum UserDocumentImport {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.copyItem(at: source, to: destination)
+            // Records which converter produced this work, so a later version can
+            // rebuild it from these bytes instead of the user deleting and re-importing.
+            // Written only on success: a record without its original is a promise the
+            // app cannot keep.
+            WorkConversionRecord(
+                format: format.rawValue,
+                originalFileName: source.lastPathComponent
+            ).write(for: work.id)
         } catch {
             Log.library.error(
                 "Couldn't preserve the original import: \(error.localizedDescription, privacy: .public)"

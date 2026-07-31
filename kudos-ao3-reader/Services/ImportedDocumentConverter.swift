@@ -8,6 +8,26 @@ import OSLog
 /// either an EPUB to import or a typed error naming the format, so the whole
 /// import path downstream stays EPUB-only.
 nonisolated enum ImportedDocumentConverter {
+    /// Version of the conversion *output*. Recorded per work in
+    /// `WorkConversionRecord`, so a work converted by an older version can be rebuilt
+    /// from its archived original instead of being deleted and imported again.
+    ///
+    /// **Bump this whenever conversion output changes for the same input** — a new
+    /// format, better chapter splitting, different paragraph handling, new metadata
+    /// recovered. Do *not* bump for refactors, error-message wording, or anything a
+    /// reader could not notice.
+    ///
+    /// History, so the number means something to whoever reads it next:
+    /// - 1 — first release: HTML, plain text, and ZIP archives.
+    /// - 2 — PDF support (PDFKit text layer, Vision OCR for scans).
+    /// - 3 — PDF paragraphs rebuilt from page geometry rather than line width, and a
+    ///       chapter's title no longer repeated as its first paragraph.
+    /// - 4 — author's notes marked as `<aside class="author-note">`.
+    /// - 5 — PDF front matter kept as a "Preface" (it was silently dropped when an
+    ///       outline started on page 2), and calibre/FanFicFare's metadata page parsed
+    ///       for the story link, fandom, genre, rating and summary.
+    static let converterVersion = 5
+
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.
         case notYetSupported(ImportedFileFormat)

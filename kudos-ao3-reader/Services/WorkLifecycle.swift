@@ -92,6 +92,9 @@ enum WorkLifecycle {
         if let original = Storage.existingOriginalDocumentURL(for: work.id) {
             try? FileManager.default.removeItem(at: original)
         }
+        // Its conversion record goes with it, or the Originals directory accumulates
+        // sidecars pointing at files that no longer exist.
+        WorkConversionRecord.delete(for: work.id)
         context.delete(work)
         context.saveBestEffort(reason: "Saving work deletion failed")
     }

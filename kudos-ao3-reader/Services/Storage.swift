@@ -75,8 +75,19 @@ nonisolated enum Storage {
             at: originalsDirectory,
             includingPropertiesForKeys: nil
         )
-        return contents?.first { $0.lastPathComponent.hasPrefix(prefix) }
+        return contents?.first {
+            // The conversion record sidecar shares this prefix and is *not* the
+            // original; returning it would make re-conversion try to convert its own
+            // bookkeeping.
+            $0.lastPathComponent.hasPrefix(prefix)
+                && !$0.lastPathComponent.hasSuffix(conversionRecordSuffix)
+        }
     }
+
+    /// Suffix of the per-work conversion record written next to a preserved original.
+    /// Lives here so the "which file is the original?" rule above and the record's own
+    /// filename can never drift apart.
+    static let conversionRecordSuffix = ".conversion.json"
 
     /// Scratch space where EPUBs are unzipped for reading.
     static func readerDirectory(for id: UUID) -> URL {
