@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import io.github.cidy02.kudos.account.AO3CollectionsScreen
 import io.github.cidy02.kudos.account.AccountListScreen
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
@@ -229,7 +230,8 @@ fun AppNavHost(
                 },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
                 onOpenSettings = { navController.navigate(Routes.Settings) },
-                onOpenCollections = { navController.navigate(Routes.Collections) }
+                onOpenCollections = { navController.navigate(Routes.Collections) },
+                onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) }
             )
         }
         composable(Routes.AccountLogin) {
@@ -237,6 +239,19 @@ fun AppNavHost(
                 authRepository = container.authRepository,
                 onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
                 onCancel = { navController.popBackStack() }
+            )
+        }
+        composable(Routes.AO3Collections) {
+            AO3CollectionsScreen(
+                repository = container.accountListRepository,
+                onLogin = { navController.navigate(Routes.AccountLogin) },
+                onOpenCollection = { collection ->
+                    selectedAccountListType = AccountListType.Collection(
+                        name = collection.name,
+                        displayTitle = collection.title
+                    )
+                    navController.navigate(Routes.AccountList)
+                }
             )
         }
         composable(Routes.AccountList) {
