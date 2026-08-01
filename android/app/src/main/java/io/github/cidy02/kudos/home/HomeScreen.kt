@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.account.AccountListRepository
+import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.LibraryDisplayItem
@@ -46,6 +47,7 @@ fun HomeScreen(
     metadataRepository: AO3WorkMetadataRepository,
     authRepository: AO3AuthRepository,
     accountListRepository: AccountListRepository,
+    privacyGate: PrivacyGate = PrivacyGate(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
@@ -59,10 +61,12 @@ fun HomeScreen(
             workRepository = workRepository,
             metadataRepository = metadataRepository,
             authRepository = authRepository,
-            accountListRepository = accountListRepository
+            accountListRepository = accountListRepository,
+            privacyGate = privacyGate
         )
     )
     val state by viewModel.state.collectAsState()
+    val onReveal: (String) -> Unit = viewModel::revealWork
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -102,6 +106,7 @@ fun HomeScreen(
                     viewModel.onOpenLocalWork(id)
                     onOpenReader(id)
                 },
+                onReveal = onReveal,
                 footerFor = null
             )
         }
@@ -118,6 +123,7 @@ fun HomeScreen(
                     viewModel.onOpenLocalWork(id)
                     onOpenReader(id)
                 },
+                onReveal = onReveal,
                 footerFor = { work -> updateFooter(work) }
             )
         }
@@ -137,6 +143,7 @@ fun HomeScreen(
                 emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
                 onOpenWork = onOpenWork,
                 onOpenReader = onOpenReader,
+                onReveal = onReveal,
                 footerFor = null
             )
         }
@@ -147,6 +154,7 @@ fun HomeScreen(
                 emptyMessage = "Nothing opened recently. Start reading to see your history here.",
                 onOpenWork = onOpenWork,
                 onOpenReader = onOpenReader,
+                onReveal = onReveal,
                 footerFor = null
             )
         }
@@ -185,6 +193,7 @@ private fun HomeShelf(
     emptyMessage: String,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
+    onReveal: (String) -> Unit,
     footerFor: ((SavedWork) -> String?)?
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -212,7 +221,8 @@ private fun HomeShelf(
                         display = display,
                         footerOverride = footerFor?.invoke(display.item.work),
                         onOpenWork = { onOpenWork(display.item.work.id) },
-                        onOpenReader = { onOpenReader(display.item.work.id) }
+                        onOpenReader = { onOpenReader(display.item.work.id) },
+                        onReveal = { onReveal(display.item.work.id) }
                     )
                 }
             }
@@ -318,7 +328,8 @@ private fun HomeWorkCover(
     display: LibraryDisplayItem,
     footerOverride: String?,
     onOpenWork: () -> Unit,
-    onOpenReader: () -> Unit
+    onOpenReader: () -> Unit,
+    onReveal: () -> Unit
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -347,8 +358,22 @@ private fun HomeWorkCover(
                 kudos = work.kudos.takeIf { it > 0 }
             )
         },
-        onOpen = if (canRead) onOpenReader else onOpenWork,
-        onOpenDetails = onOpenWork,
+        // This was the actual bug (found in review, confirmed by reading the code):
+        // `obscured` only ever changed what WorkCoverCard *shows* (blurred cover +
+        // "Tap to reveal" label, below) — the click handler stayed `onOpenWork`
+        // regardless, so a tap on a card whose label promised "Tap to reveal" instead
+        // navigated straight into that work's full, unblurred Work Detail page. The
+        // Library screen's own obscured cards already gate correctly (onReveal, not a
+        // navigation callback); Home's didn't. Apple's equivalent blurs the whole card
+        // — including its own ⓘ details button — under one tap target that only
+        // reveals (Features/Privacy/MatureContent.swift's `SensitiveWorkCoverCard`),
+        // so onOpenDetails is gated the same way here, not only the main tap.
+        onOpen = when {
+            obscured -> onReveal
+            canRead -> onOpenReader
+            else -> onOpenWork
+        },
+        onOpenDetails = if (obscured) onReveal else onOpenWork,
         progress = if (obscured) null else progress,
         progressLabel = if (obscured) null else progressLabel,
         statusChips = if (obscured) {

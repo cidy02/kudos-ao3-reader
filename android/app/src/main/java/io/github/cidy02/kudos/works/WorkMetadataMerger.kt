@@ -26,6 +26,18 @@ class WorkMetadataMerger(
             hasEpub = false
         )
 
+        // `existing` can be a soft-deleted (Recently Deleted) row — WorkIdentityIndex's
+        // lookup tiers don't filter isDeleted, by design, so the same work downloaded or
+        // saved again is recognised as the same row rather than creating a duplicate.
+        // Without this, `base.copy(...)` below carries isDeleted/deletedAt/
+        // permanentDeletionScheduledAt straight through unchanged (Kotlin's data-class
+        // copy keeps whatever a field isn't explicitly given), so the merged row kept
+        // ticking toward permanent deletion — the download reported success but the
+        // work never reappeared in the Library, and was later purged for good. Mirrors
+        // Apple `PreservedWorkService.restore`: revival on any interaction, not only an
+        // explicit "restore" tap.
+        val isRevival = existing?.isDeleted == true
+
         val fandoms = canonical?.fandoms?.takeIf { it.isNotEmpty() } ?: summary?.fandoms ?: base.workFandoms
         val relationships = canonical?.relationships?.takeIf { it.isNotEmpty() } ?: summary?.relationships ?: base.workRelationships
         val characters = canonical?.characters?.takeIf { it.isNotEmpty() } ?: summary?.characters ?: base.workCharacters
@@ -66,7 +78,10 @@ class WorkMetadataMerger(
             lastReadDate = base.lastReadDate,
             readiumLocator = base.readiumLocator,
             knownChapterCount = base.knownChapterCount,
-            lastUpdateCheck = base.lastUpdateCheck
+            lastUpdateCheck = base.lastUpdateCheck,
+            isDeleted = if (isRevival) false else base.isDeleted,
+            deletedAt = if (isRevival) null else base.deletedAt,
+            permanentDeletionScheduledAt = if (isRevival) null else base.permanentDeletionScheduledAt
         )
     }
 

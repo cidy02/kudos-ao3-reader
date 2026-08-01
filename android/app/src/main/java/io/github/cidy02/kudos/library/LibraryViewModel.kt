@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,14 +21,14 @@ class LibraryViewModel(
     private val repository: LibraryRepository,
     private val workRepository: WorkRepository,
     private val settingsRepository: SettingsRepository? = null,
-    private val queueRepository: ReadingQueueRepository? = null
+    private val queueRepository: ReadingQueueRepository? = null,
+    private val privacyGate: PrivacyGate = PrivacyGate()
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val filters = MutableStateFlow(LibraryFilterState())
     private val sort = MutableStateFlow(LibrarySort.RecentlyAdded)
     private val selectionMode = MutableStateFlow(false)
     private val selectedWorkIds = MutableStateFlow<Set<String>>(emptySet())
-    private val revealedWorkIds = MutableStateFlow<Set<String>>(emptySet())
     private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())
     private val queueRefreshTick = MutableStateFlow(0)
 
@@ -55,13 +56,14 @@ class LibraryViewModel(
         libraryBase,
         selectionMode,
         selectedWorkIds,
-        revealedWorkIds,
+        privacyGate.state,
         readingQueues
     ) { base, selecting, ids, revealed, queues ->
         base.copy(
             selectionMode = selecting,
             selectedWorkIds = if (selecting) ids else emptySet(),
-            revealedWorkIds = revealed,
+            revealedWorkIds = revealed.revealedIds,
+            revealAllActive = revealed.revealAll,
             readingQueues = queues,
             // Session reveal flips Obscured → Visible for those work ids.
             continueReading = base.continueReading.map { it.withReveal(revealed) },
@@ -252,18 +254,24 @@ class LibraryViewModel(
         }
     }
 
-    /** Session reveal for an obscured mature card (Apple PrivacyGate.reveal). */
+    /** Session reveal for an obscured mature card (Apple `PrivacyGate.reveal`). */
     fun revealWork(workId: String) {
-        revealedWorkIds.update { it + workId }
+        privacyGate.reveal(workId)
     }
 
-    /** Apple MatureRevealToggle: flip hide-mature for this device. */
-    fun toggleHideMature() {
-        val settings = settingsRepository ?: return
-        viewModelScope.launch {
-            val current = settings.snapshot()
-            settings.updateHideMatureContent(!current.privacy.hideMatureContent)
-        }
+    /**
+     * Apple `MatureRevealToggle`: session-only show/re-hide of every mature work,
+     * shared app-wide via `PrivacyGate` — NOT a change to the persisted "Hide mature
+     * content" setting.
+     *
+     * This used to call `settingsRepository.updateHideMatureContent`, which permanently
+     * flipped that app-wide setting (surfaced in Settings, and gating Home/Search/
+     * Browse too) from a single toolbar tap meant only to peek at one item for the
+     * current session — a real behavioural mismatch from Apple's session-only toggle,
+     * found in review and fixed here.
+     */
+    fun toggleRevealAll() {
+        privacyGate.toggleRevealAll()
     }
 
     // endregion
@@ -289,7 +297,8 @@ class LibraryViewModel(
             repository: LibraryRepository,
             workRepository: WorkRepository,
             settingsRepository: SettingsRepository? = null,
-            queueRepository: ReadingQueueRepository? = null
+            queueRepository: ReadingQueueRepository? = null,
+            privacyGate: PrivacyGate = PrivacyGate()
         ): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
@@ -297,17 +306,12 @@ class LibraryViewModel(
                         repository,
                         workRepository,
                         settingsRepository,
-                        queueRepository
+                        queueRepository,
+                        privacyGate
                     )
                 }
             }
     }
-}
-
-private fun LibraryDisplayItem.withReveal(revealed: Set<String>): LibraryDisplayItem {
-    if (privacyVisibility != LibraryPrivacyVisibility.Obscured) return this
-    if (item.work.id !in revealed) return this
-    return copy(privacyVisibility = LibraryPrivacyVisibility.Visible)
 }
 
 private fun Set<String>.toggle(value: String): Set<String> {

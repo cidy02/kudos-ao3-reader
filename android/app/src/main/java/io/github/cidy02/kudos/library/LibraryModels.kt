@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
@@ -24,6 +25,17 @@ data class LibraryDisplayItem(
     val item: LibraryWorkListItem,
     val privacyVisibility: LibraryPrivacyVisibility = LibraryPrivacyVisibility.Visible
 )
+
+/**
+ * Session reveal flips Obscured → Visible for a work [reveal] covers — shared by
+ * every screen's ViewModel (Library, Home) that folds `PrivacyGate` state into its
+ * own `LibraryQuery.buildState`-derived items, so the rule can't drift between them.
+ */
+fun LibraryDisplayItem.withReveal(reveal: PrivacyRevealState): LibraryDisplayItem {
+    if (privacyVisibility != LibraryPrivacyVisibility.Obscured) return this
+    if (!reveal.isRevealed(item.work.id)) return this
+    return copy(privacyVisibility = LibraryPrivacyVisibility.Visible)
+}
 
 data class LibrarySection(
     val title: String,
@@ -67,8 +79,20 @@ data class LibraryUiState(
     val selectedWorkIds: Set<String> = emptySet(),
     /** Session-only mature reveals (Tap to reveal). */
     val revealedWorkIds: Set<String> = emptySet(),
-    /** Privacy: mature content currently hidden (for toolbar reveal toggle). */
+    /**
+     * Persisted "Hide mature content" setting — what actually drives Obscure/Hide for
+     * every item above (`LibraryQuery.buildState` reads it from `snapshot.privacy`).
+     * NOT what the toolbar reveal icon reflects; see [revealAllActive] for that.
+     */
     val hideMatureContent: Boolean = true,
+    /**
+     * `PrivacyGate.revealAll` — session-only, what the toolbar eye icon actually
+     * reflects and what tapping it flips. Deliberately separate from
+     * [hideMatureContent]: the persisted setting still defaults back on at next
+     * launch even while this is true for the rest of the current session (Apple
+     * `MatureRevealToggle` / `gate.revealAll`).
+     */
+    val revealAllActive: Boolean = false,
     val matureWorkCount: Int = 0
 ) {
     val hasSavedWorks: Boolean

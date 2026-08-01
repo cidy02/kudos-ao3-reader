@@ -236,7 +236,21 @@ class DownloadQueue(
             byId = { workRepository.getWork(it) },
             bySourceUrl = { workRepository.findBySourceUrl(it) }
         )
-        return existing?.hasEpub == true
+        if (existing == null) return false
+        if (existing.isDeleted) {
+            // softDelete() keeps the EPUB on disk, so a soft-deleted match with
+            // hasEpub=true would otherwise report "already downloaded" and this whole
+            // item gets skipped (see the `!item.force` guard above the caller) — the
+            // work never actually comes back to the Library, and stays on course to be
+            // purged for good when its Recently Deleted window runs out, despite the
+            // user having just tried to download it again (directly, or as part of a
+            // series). Revive it here rather than only recognising the file is present:
+            // restoreFromRecentlyDeleted also retracts the soft-delete's sync
+            // tombstone, which the WorkImporter-side revival fixes for the redownload
+            // paths don't (they have no repository access to do so).
+            workRepository.restoreFromRecentlyDeleted(existing.id)
+        }
+        return existing.hasEpub
     }
 
     private fun updateStatus(ao3WorkId: Long, status: DownloadQueueStatus) {

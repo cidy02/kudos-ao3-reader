@@ -400,8 +400,24 @@ fun WorkDetailScreen(
         val local = state.local
         if (local != null) {
             runWorkAction {
+                // A work reached here as `state.local` can be a soft-deleted match —
+                // WorkIdentityIndex's lookup (used to resolve a RemoteSummary/Ao3WorkId/
+                // RemoteUrl source to a local row) doesn't filter isDeleted, so tapping
+                // Save on what looks like a normal AO3 work can silently be acting on a
+                // hidden Recently Deleted row, still counting down to permanent removal
+                // regardless. Revive first, mirroring Apple `PreservedWorkService`'s
+                // "revival on any interaction, not only an explicit restore tap" — not
+                // gated behind a separate confirmation, since the user's own action
+                // (saving/favoriting/finishing it again) already expresses the intent
+                // a Restore tap would.
                 val updated = workRepository.upsert(
-                    local.copy(isSaved = !local.isSaved, lastModifiedAt = Instant.now())
+                    local.copy(
+                        isSaved = !local.isSaved,
+                        isDeleted = false,
+                        deletedAt = null,
+                        permanentDeletionScheduledAt = null,
+                        lastModifiedAt = Instant.now()
+                    )
                 )
                 refreshLocal(updated.id, state.remote)
             }

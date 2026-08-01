@@ -57,6 +57,9 @@ class KudosAppContainer(context: Context) {
         SettingsRepository(appContext.kudosSettingsDataStore)
     }
 
+    /** One shared instance app-wide — see PrivacyGate's doc comment for why. */
+    val privacyGate: PrivacyGate by lazy { PrivacyGate() }
+
     val customFontRepository: CustomFontRepository by lazy {
         CustomFontRepository(
             customFontDao = database.customFontDao(),

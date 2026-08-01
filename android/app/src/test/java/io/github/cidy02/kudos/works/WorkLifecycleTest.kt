@@ -72,6 +72,58 @@ class WorkMetadataMergerTest {
         assertEquals("2/2", merged.chapters)
         assertEquals(9, merged.kudos)
     }
+
+    // The three cases below pin the revival behaviour added to fix a real bug found in
+    // review: importing or saving a work that matches a soft-deleted (Recently Deleted)
+    // row updated its fields but left `isDeleted` untouched — the download reported
+    // success, yet the work stayed hidden and on course to be purged for good when its
+    // 90-day window ran out regardless. `WorkIdentityIndex.findExisting` matches
+    // soft-deleted rows by design (so re-saving the same work is recognised rather than
+    // duplicated); this merger is what has to undo the soft delete when that happens,
+    // mirroring Apple `PreservedWorkService.restore`.
+
+    @Test
+    fun mergingASoftDeletedMatchRevivesIt() {
+        val softDeleted = SavedWork(
+            id = workUuid,
+            title = "Old Work",
+            author = "Someone",
+            sourceUrl = "https://archiveofourown.org/works/4242",
+            hasEpub = true,
+            isDeleted = true,
+            deletedAt = Instant.parse("2026-07-01T00:00:00Z"),
+            permanentDeletionScheduledAt = Instant.parse("2026-09-29T00:00:00Z")
+        )
+
+        val merged = WorkMetadataMerger().merge(
+            summary = null,
+            canonical = null,
+            existing = softDeleted,
+            markSaved = true
+        )
+
+        assertFalse("a re-saved work must leave Recently Deleted", merged.isDeleted)
+        assertNull(merged.deletedAt)
+        assertNull(merged.permanentDeletionScheduledAt)
+    }
+
+    @Test
+    fun mergingAnActiveMatchLeavesItsDeletionFieldsAlone() {
+        // The revival path must not be a no-op-turned-into-a-bug for the ordinary
+        // case: an active (never-deleted) work merging in new metadata just stays active.
+        val active = sampleSavedWork().copy(isDeleted = false, deletedAt = null)
+        val merged = WorkMetadataMerger().merge(summary = null, canonical = null, existing = active, markSaved = true)
+        assertFalse(merged.isDeleted)
+        assertNull(merged.deletedAt)
+    }
+
+    @Test
+    fun mergingWithNoExistingMatchCreatesAnOrdinaryNewWork() {
+        // No `existing` at all (a genuinely new work) must not somehow read as a
+        // "revival" and misbehave — there is nothing to revive.
+        val merged = WorkMetadataMerger().merge(summary = null, canonical = null, existing = null, markSaved = true)
+        assertFalse(merged.isDeleted)
+    }
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -417,6 +469,31 @@ class WorkImporterLifecycleTest {
         assertTrue(work.hasEpub)
         assertTrue(work.isFinished)
         assertTrue(work.isFavorite)
+    }
+
+    @Test
+    fun downloadingAWorkThatMatchesARecentlyDeletedRowRevivesIt() = runTest {
+        // End-to-end version of WorkMetadataMergerTest's revival cases — through the
+        // real WorkImporter and a real in-memory Room DB, exercising the exact path a
+        // user hits: delete a work, then download the same AO3 work again (directly,
+        // or as part of a series). Before the fix, this reported success while the
+        // work stayed hidden in Recently Deleted, still counting down to permanent
+        // removal.
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        repository.softDelete(workUuid)
+        assertTrue(repository.getWork(workUuid)!!.isDeleted)
+
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Success(epubBytes)
+        )
+        val result = importer.download(sampleSummary())
+
+        val work = (result as WorkImportResult.Success).work
+        assertFalse("re-downloading a soft-deleted work must revive it", work.isDeleted)
+        assertNull(work.deletedAt)
+        assertNull(work.permanentDeletionScheduledAt)
+        assertTrue(repository.observeSavedWorks().first().any { it.id == workUuid })
     }
 
     @Test

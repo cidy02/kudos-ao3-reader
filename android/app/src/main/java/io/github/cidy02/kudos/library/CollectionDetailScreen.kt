@@ -26,25 +26,40 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Composable
 fun CollectionDetailScreen(
     collectionId: String,
     workRepository: WorkRepository,
+    settingsRepository: SettingsRepository? = null,
+    privacyGate: PrivacyGate = PrivacyGate(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onCollectionDeleted: () -> Unit
 ) {
+    // A Collection had no mature-content gating at all: title, author and a live
+    // Read button rendered unconditionally, unlike every other screen showing local
+    // works (Library, Home). Reuses the same LibraryPrivacy computation and the
+    // shared PrivacyGate those use, rather than a third parallel privacy mechanism.
+    val privacy by (settingsRepository?.settings?.map { it.privacy }
+        ?: kotlinx.coroutines.flow.flowOf(PrivacySettings()))
+        .collectAsState(initial = PrivacySettings())
+    val reveal by privacyGate.state.collectAsState()
     var loading by remember(collectionId) { mutableStateOf(true) }
     var working by remember(collectionId) { mutableStateOf(false) }
     var error by remember(collectionId) { mutableStateOf<String?>(null) }
@@ -189,13 +204,17 @@ fun CollectionDetailScreen(
                     }
                 } else {
                     items(works, key = { it.id }) { work ->
+                        val obscured = LibraryPrivacy.visibility(work, privacy) ==
+                            LibraryPrivacyVisibility.Obscured && !reveal.isRevealed(work.id)
                         CollectionWorkRow(
                             work = work,
                             enabled = !working,
+                            obscured = obscured,
                             onOpenWork = { onOpenWork(work.id) },
                             onOpenReader = {
                                 if (work.hasEpub) onOpenReader(work.id)
                             },
+                            onReveal = { privacyGate.reveal(work.id) },
                             onRemove = { removeWork(work.id) }
                         )
                     }
@@ -209,8 +228,10 @@ fun CollectionDetailScreen(
 private fun CollectionWorkRow(
     work: SavedWork,
     enabled: Boolean,
+    obscured: Boolean,
     onOpenWork: () -> Unit,
     onOpenReader: () -> Unit,
+    onReveal: () -> Unit,
     onRemove: () -> Unit
 ) {
     Card(
@@ -228,16 +249,28 @@ private fun CollectionWorkRow(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = enabled, onClick = onOpenWork),
+                    // Obscured: the whole title/author block reveals on tap instead of
+                    // opening the work — this screen had no such gate at all before
+                    // (found in review), unlike every other place a local work renders.
+                    .clickable(
+                        enabled = enabled,
+                        onClick = if (obscured) onReveal else onOpenWork
+                    ),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = work.title.ifBlank { "Untitled work" },
+                    text = if (obscured) "Hidden mature work" else work.title.ifBlank { "Untitled work" },
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (work.author.isNotBlank()) {
+                if (obscured) {
+                    Text(
+                        text = "Tap to reveal",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (work.author.isNotBlank()) {
                     Text(
                         text = "by ${work.author}",
                         style = MaterialTheme.typography.bodyMedium,
@@ -252,7 +285,7 @@ private fun CollectionWorkRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (work.hasEpub) {
+                if (work.hasEpub && !obscured) {
                     OutlinedButton(enabled = enabled, onClick = onOpenReader) {
                         Text("Read")
                     }

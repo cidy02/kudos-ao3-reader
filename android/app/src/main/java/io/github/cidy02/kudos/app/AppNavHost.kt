@@ -75,6 +75,7 @@ fun AppNavHost(
                 metadataRepository = container.metadataRepository,
                 authRepository = container.authRepository,
                 accountListRepository = container.accountListRepository,
+                privacyGate = container.privacyGate,
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
@@ -101,6 +102,7 @@ fun AppNavHost(
                 workRepository = container.workRepository,
                 settingsRepository = container.settingsRepository,
                 queueRepository = container.readingQueueRepository,
+                privacyGate = container.privacyGate,
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
@@ -144,6 +146,8 @@ fun AppNavHost(
                 CollectionDetailScreen(
                     collectionId = collectionId,
                     workRepository = container.workRepository,
+                    settingsRepository = container.settingsRepository,
+                    privacyGate = container.privacyGate,
                     onOpenWork = { workId ->
                         selectedWorkSource = WorkDetailSource.LocalWork(workId)
                         navController.navigate(Routes.WorkDetail)
@@ -459,7 +463,9 @@ fun AppNavHost(
 
         composable(Routes.ReadingStatistics) {
             ReadingStatisticsScreen(
-                libraryRepository = container.libraryRepository
+                libraryRepository = container.libraryRepository,
+                settingsRepository = container.settingsRepository,
+                privacyGate = container.privacyGate
             )
         }
 

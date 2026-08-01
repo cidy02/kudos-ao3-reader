@@ -72,6 +72,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
@@ -95,6 +96,7 @@ fun LibraryScreen(
     workRepository: WorkRepository,
     settingsRepository: SettingsRepository? = null,
     queueRepository: ReadingQueueRepository? = null,
+    privacyGate: PrivacyGate = PrivacyGate(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRecentlyDeleted: () -> Unit = {},
@@ -110,7 +112,8 @@ fun LibraryScreen(
             repository,
             workRepository,
             settingsRepository,
-            queueRepository
+            queueRepository,
+            privacyGate
         )
     )
     val state by viewModel.state.collectAsState()
@@ -349,7 +352,7 @@ fun LibraryScreen(
         onAddToQueue = { addToQueueWorkId = it },
         onAddToCollection = { addToCollectionWorkId = it },
         onOpenComments = onOpenComments,
-        onTogglePrivacy = viewModel::toggleHideMature
+        onTogglePrivacy = viewModel::toggleRevealAll
     )
 }
 
@@ -675,15 +678,18 @@ private fun LibraryToolbarPill(
                     if (state.showPrivacyToggle) {
                         IconButton(onClick = onTogglePrivacy) {
                             Icon(
-                                imageVector = if (state.hideMatureContent) {
-                                    Icons.Filled.VisibilityOff
-                                } else {
+                                // Reflects the session-only reveal-all state, not the
+                                // persisted "Hide mature content" setting — tapping this
+                                // never touches that setting. See LibraryUiState.revealAllActive.
+                                imageVector = if (state.revealAllActive) {
                                     Icons.Filled.Visibility
-                                },
-                                contentDescription = if (state.hideMatureContent) {
-                                    "Show mature works"
                                 } else {
+                                    Icons.Filled.VisibilityOff
+                                },
+                                contentDescription = if (state.revealAllActive) {
                                     "Hide mature works"
+                                } else {
+                                    "Show mature works"
                                 },
                                 tint = MaterialTheme.colorScheme.primary
                             )

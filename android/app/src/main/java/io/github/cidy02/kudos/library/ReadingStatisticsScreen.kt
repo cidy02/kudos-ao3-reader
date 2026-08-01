@@ -37,6 +37,9 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import java.time.Instant
 import java.time.ZoneId
@@ -47,7 +50,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
 data class ReadingStatisticsUiState(
@@ -57,16 +61,32 @@ data class ReadingStatisticsUiState(
 )
 
 class ReadingStatisticsViewModel(
-    libraryRepository: LibraryRepository
+    libraryRepository: LibraryRepository,
+    settingsRepository: SettingsRepository? = null,
+    privacyGate: PrivacyGate = PrivacyGate()
 ) : ViewModel() {
-    val state: StateFlow<ReadingStatisticsUiState> = libraryRepository
-        .observeSavedWorks()
-        .map { works ->
-            ReadingStatisticsUiState(
-                loading = false,
-                statistics = ReadingStatistics.from(works)
-            )
+    val state: StateFlow<ReadingStatisticsUiState> = combine(
+        libraryRepository.observeSavedWorks(),
+        settingsRepository?.settings ?: flowOf(KudosSettings()),
+        privacyGate.state
+    ) { works, settings, reveal ->
+        // Aggregate counts and fandom labels must not leak a hidden mature work —
+        // this had no privacy filtering at all before (found in review; every other
+        // reader of the library applies LibraryPrivacy first). Apple's equivalent:
+        // `works.filter { !hideMature || !$0.isAdult || gate.isRevealed($0) }`
+        // (LibraryView.statisticsWorks).
+        val visible = works.filter { work ->
+            when (LibraryPrivacy.visibility(work, settings.privacy)) {
+                LibraryPrivacyVisibility.Visible -> true
+                LibraryPrivacyVisibility.Obscured,
+                LibraryPrivacyVisibility.Hidden -> reveal.isRevealed(work.id)
+            }
         }
+        ReadingStatisticsUiState(
+            loading = false,
+            statistics = ReadingStatistics.from(visible)
+        )
+    }
         .catch { throwable ->
             emit(
                 ReadingStatisticsUiState(
@@ -82,19 +102,25 @@ class ReadingStatisticsViewModel(
         )
 
     companion object {
-        fun factory(libraryRepository: LibraryRepository): ViewModelProvider.Factory =
+        fun factory(
+            libraryRepository: LibraryRepository,
+            settingsRepository: SettingsRepository? = null,
+            privacyGate: PrivacyGate = PrivacyGate()
+        ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { ReadingStatisticsViewModel(libraryRepository) }
+                initializer { ReadingStatisticsViewModel(libraryRepository, settingsRepository, privacyGate) }
             }
     }
 }
 
 @Composable
 fun ReadingStatisticsScreen(
-    libraryRepository: LibraryRepository
+    libraryRepository: LibraryRepository,
+    settingsRepository: SettingsRepository? = null,
+    privacyGate: PrivacyGate = PrivacyGate()
 ) {
     val viewModel: ReadingStatisticsViewModel = viewModel(
-        factory = ReadingStatisticsViewModel.factory(libraryRepository)
+        factory = ReadingStatisticsViewModel.factory(libraryRepository, settingsRepository, privacyGate)
     )
     val state by viewModel.state.collectAsState()
     ReadingStatisticsContent(state = state)

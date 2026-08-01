@@ -74,7 +74,22 @@ class WorkImporter(
                 // Preserve local user state (isFinished, favorite, progress); only the
                 // file-backed flags change here. A re-download of a finished work must
                 // not silently clear the user's Finished marker.
-                val updated = workRepository.upsert(work.copy(hasEpub = true, isSaved = true))
+                //
+                // `downloadExisting` (the DownloadQueue resolved-match path) hands this
+                // `work` straight through without going via WorkMetadataMerger, so a
+                // soft-deleted match reaching here still has isDeleted=true — clear it
+                // here too, or the download reports success while the row stays hidden
+                // in Recently Deleted and is later purged for good regardless. See the
+                // matching fix in WorkMetadataMerger.merge for the download(summary) path.
+                val updated = workRepository.upsert(
+                    work.copy(
+                        hasEpub = true,
+                        isSaved = true,
+                        isDeleted = false,
+                        deletedAt = null,
+                        permanentDeletionScheduledAt = null
+                    )
+                )
                 WorkImportResult.Success(updated)
             }
         }

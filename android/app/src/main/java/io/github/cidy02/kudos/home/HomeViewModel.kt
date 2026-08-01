@@ -5,10 +5,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.account.AccountListType
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.library.LibraryRepository
+import io.github.cidy02.kudos.library.withReveal
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
@@ -44,6 +47,7 @@ class HomeViewModel(
     private val metadataRepository: AO3WorkMetadataRepository,
     private val authRepository: AO3AuthRepository,
     private val accountListRepository: AccountListRepository,
+    private val privacyGate: PrivacyGate = PrivacyGate(),
     private val updateChecker: WorkUpdateChecker = WorkUpdateChecker(
         workRepository = workRepository,
         metadataRepository = metadataRepository
@@ -65,10 +69,11 @@ class HomeViewModel(
         dashboard,
         subscriptions,
         subscriptionsLoading,
-        authRepository.state
-    ) { dash, subs, loading, auth ->
+        authRepository.state,
+        privacyGate.state
+    ) { dash, subs, loading, auth, revealed ->
         HomeUiState(
-            dashboard = dash,
+            dashboard = dash.withReveal(revealed),
             subscriptions = subs,
             subscriptionsLoading = loading,
             isSignedIn = auth.isSignedIn
@@ -103,6 +108,11 @@ class HomeViewModel(
         }
     }
 
+    /** Session reveal for an obscured mature card (Apple `PrivacyGate.reveal`). */
+    fun revealWork(workId: String) {
+        privacyGate.reveal(workId)
+    }
+
     private suspend fun runUpdateCheck() {
         // Snapshot current library works; upserts will refresh the dashboard flow.
         val works = workRepository.listSavedWorks()
@@ -131,7 +141,8 @@ class HomeViewModel(
             workRepository: WorkRepository,
             metadataRepository: AO3WorkMetadataRepository,
             authRepository: AO3AuthRepository,
-            accountListRepository: AccountListRepository
+            accountListRepository: AccountListRepository,
+            privacyGate: PrivacyGate = PrivacyGate()
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -141,10 +152,18 @@ class HomeViewModel(
                         workRepository = workRepository,
                         metadataRepository = metadataRepository,
                         authRepository = authRepository,
-                        accountListRepository = accountListRepository
+                        accountListRepository = accountListRepository,
+                        privacyGate = privacyGate
                     ) as T
                 }
             }
         }
     }
 }
+
+private fun HomeDashboardState.withReveal(revealed: PrivacyRevealState): HomeDashboardState = copy(
+    continueReading = continueReading.map { it.withReveal(revealed) },
+    recentlyUpdated = recentlyUpdated.map { it.withReveal(revealed) },
+    favorites = favorites.map { it.withReveal(revealed) },
+    recentlyOpened = recentlyOpened.map { it.withReveal(revealed) }
+)
