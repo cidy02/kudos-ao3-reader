@@ -40,6 +40,14 @@ class WorkRepository(
             .map { works -> works.map { it.toDomain() }.filter { it.isSaved } }
     }
 
+    /**
+     * All active library works (excludes soft-deleted). Used by Browse category
+     * enrichment for saved counts and recently-read chips — not only `isSaved`.
+     */
+    fun observeLibraryWorks(): Flow<List<SavedWork>> {
+        return workDao.observeAll().map { works -> works.map { it.toDomain() } }
+    }
+
     /** One-shot list of active saved library works (excludes soft-deleted). */
     suspend fun listSavedWorks(): List<SavedWork> {
         return workDao.getAll().map { it.toDomain() }.filter { it.isSaved }

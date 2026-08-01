@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.settings
 
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,12 +18,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,8 +50,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -54,6 +66,7 @@ import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -77,15 +90,26 @@ private val FontOpenMimeTypes = arrayOf(
     "application/octet-stream"
 )
 
+/**
+ * Settings section map aligned with iOS Form groups (portable prefs only):
+ * AO3 Account · Theme · Appearance/Reading · Library · Backup · Sync N/A · Privacy · Help.
+ */
 @Composable
 fun SettingsScreen(
     repository: SettingsRepository,
     customFontRepository: CustomFontRepository,
-    onOpenBackup: () -> Unit
+    onOpenBackup: () -> Unit,
+    authRepository: AO3AuthRepository? = null,
+    onLogin: () -> Unit = {},
+    onOpenAbout: () -> Unit = {}
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val importedFonts by customFontRepository.observeImported()
         .collectAsState(initial = emptyList())
+    val authFlow = remember(authRepository) {
+        authRepository?.state ?: flowOf(AO3AuthState.SignedOut)
+    }
+    val authState by authFlow.collectAsState(initial = AO3AuthState.SignedOut)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var fontStatus by remember { mutableStateOf<String?>(null) }
@@ -151,76 +175,146 @@ fun SettingsScreen(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // TopAppBar already titles this screen; keep a short subtitle only.
+        // ── AO3 Account ────────────────────────────────────────────────
         item {
-            Text(
-                text = "Reader, privacy, and backup-compatible app preferences.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            SettingsGroup(title = "AO3 Account") {
+                when (val auth = authState) {
+                    is AO3AuthState.SignedIn -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Signed In",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = auth.username,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch { authRepository?.logout() }
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Log Out",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    AO3AuthState.Restoring, AO3AuthState.SigningIn -> {
+                        Text(
+                            text = "Checking AO3 session…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    is AO3AuthState.Expired, is AO3AuthState.Error, AO3AuthState.SignedOut -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onLogin)
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Log In to AO3…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                val errorMessage = when (auth) {
+                                    is AO3AuthState.Expired -> auth.message
+                                    is AO3AuthState.Error -> auth.message
+                                    else -> null
+                                }
+                                if (errorMessage != null) {
+                                    Text(
+                                        text = errorMessage,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            SettingsFooter(
+                "A login enables bookmarks, history, subscriptions, kudos, comments, " +
+                    "and restricted works."
             )
         }
+
+        // ── Theme ──────────────────────────────────────────────────────
         item {
-            SettingsGroup(title = "Privacy") {
-                SettingSwitchRow(
-                    label = "Hide mature content",
-                    checked = settings.privacy.hideMatureContent,
-                    onCheckedChange = { launchUpdate { repository.updateHideMatureContent(it) } }
-                )
-                SettingChipRow(label = "Mature content mode") {
-                    MatureContentMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = settings.privacy.matureContentMode == mode,
-                            onClick = {
-                                launchUpdate { repository.updateMatureContentMode(mode) }
-                            },
-                            label = { Text(mode.storageValue.replaceFirstChar { it.uppercase() }) }
-                        )
-                    }
-                }
-                SettingSwitchRow(
-                    label = "Require device reveal",
-                    checked = settings.privacy.requireBiometricToReveal,
-                    onCheckedChange = {
-                        launchUpdate { repository.updateRequireBiometricToReveal(it) }
-                    }
-                )
-            }
-        }
-        item {
-            SettingsGroup(title = "App") {
+            SettingsGroup(title = "Theme") {
                 SettingChipRow(label = "App theme") {
-                    AppThemeSetting.entries.forEach { theme ->
+                    // Light / Sepia / Dark / OLED / System. OLED maps to Dark
+                    // storage (AppThemeSetting has no distinct OLED value yet).
+                    ThemeChipOption.entries.forEach { option ->
                         FilterChip(
-                            selected = settings.app.appTheme == theme,
-                            onClick = { launchUpdate { repository.updateAppTheme(theme) } },
-                            label = { Text(theme.storageValue.replaceFirstChar { it.uppercase() }) }
+                            selected = isThemeChipSelected(settings.app.appTheme, option),
+                            onClick = {
+                                launchUpdate { repository.updateAppTheme(option.setting) }
+                            },
+                            label = { Text(option.label) }
                         )
                     }
                 }
                 SettingSwitchRow(
-                    label = "Confirm before delete",
-                    checked = settings.app.confirmBeforeDelete,
+                    label = "Match App & Reader Theme",
+                    checked = settings.reader.matchAppReaderTheme,
                     onCheckedChange = {
-                        launchUpdate { repository.updateConfirmBeforeDelete(it) }
+                        launchUpdate { repository.updateMatchAppReaderTheme(it) }
                     }
                 )
                 AccentColorEditor(
                     accentHex = settings.app.accentColorHex,
-                    onCommit = { hex -> launchUpdate { repository.updateAccentColor(hex) } }
+                    onCommit = { hex -> launchUpdate { repository.updateAccentColor(hex) } },
+                    onReset = {
+                        launchUpdate { repository.updateAccentColor("#990000") }
+                    }
                 )
             }
+            SettingsFooter(
+                "Light, Sepia, Dark, or System across the app. Dark is used for " +
+                    "OLED-style dark chrome on Android. Sepia keeps its warm tint."
+            )
         }
+
+        // ── Appearance / Reading ───────────────────────────────────────
         item {
-            SettingsGroup(title = "Reader") {
-                SettingChipRow(label = "Mode") {
-                    ReaderMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = settings.reader.readerMode == mode,
-                            onClick = { launchUpdate { repository.updateReaderMode(mode) } },
-                            label = { Text(mode.storageValue.replaceFirstChar { it.uppercase() }) }
-                        )
-                    }
-                }
+            SettingsGroup(title = "Appearance") {
                 SettingChipRow(label = "Reader theme") {
                     ReaderThemeSetting.entries.forEach { theme ->
                         FilterChip(
@@ -231,17 +325,14 @@ fun SettingsScreen(
                     }
                 }
                 SettingSwitchRow(
-                    label = "Match app theme",
-                    checked = settings.reader.matchAppReaderTheme,
-                    onCheckedChange = {
-                        launchUpdate { repository.updateMatchAppReaderTheme(it) }
-                    }
-                )
-                SettingSwitchRow(
                     label = "Justified text",
                     checked = settings.reader.readerJustify,
                     onCheckedChange = { launchUpdate { repository.updateReaderJustify(it) } }
                 )
+            }
+        }
+        item {
+            SettingsGroup(title = "Text Size") {
                 SettingSliderRow(
                     label = "Text size",
                     value = settings.reader.readerFontPt.toFloat().coerceIn(FontPtMin, FontPtMax),
@@ -284,6 +375,31 @@ fun SettingsScreen(
                         }
                     }
                 )
+            }
+        }
+        item {
+            SettingsGroup(title = "Reading") {
+                SettingChipRow(label = "Mode") {
+                    ReaderMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = settings.reader.readerMode == mode,
+                            onClick = { launchUpdate { repository.updateReaderMode(mode) } },
+                            label = {
+                                Text(
+                                    when (mode) {
+                                        ReaderMode.Scroll -> "Scrolled"
+                                        ReaderMode.Paged -> "Paged"
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+            SettingsFooter("Choose how pages turn while reading.")
+        }
+        item {
+            SettingsGroup(title = "Font") {
                 ReaderFontSection(
                     selectedFontId = settings.reader.readerFontId,
                     importedFonts = importedFonts,
@@ -315,36 +431,207 @@ fun SettingsScreen(
                 )
             }
         }
+
+        // ── Library ────────────────────────────────────────────────────
         item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            SettingsGroup(title = "Library") {
+                SettingSwitchRow(
+                    label = "Confirm before deleting",
+                    checked = settings.app.confirmBeforeDelete,
+                    onCheckedChange = {
+                        launchUpdate { repository.updateConfirmBeforeDelete(it) }
+                    }
+                )
+            }
+            SettingsFooter("Ask before removing a work from your Library.")
+        }
+
+        // ── Backup ─────────────────────────────────────────────────────
+        item {
+            SettingsGroup(title = "Backup") {
+                TextButton(
+                    onClick = onOpenBackup,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Backup and reset", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "Settings use the same field names and defaults as the cross-platform backup contract.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text("Export / Import Backup…")
+                }
+                OutlinedButton(
+                    onClick = { scope.launch { repository.resetToDefaults() } },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Reset settings to defaults")
+                }
+            }
+            SettingsFooter(
+                "Backups include library records, queues, EPUBs, tags, fonts, and app " +
+                    "settings. AO3 sessions and passwords are never included."
+            )
+        }
+
+        // ── Library Sync Folder (iOS iCloud — not on Android) ──────────
+        item {
+            SettingsGroup(title = "Library Sync Folder") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = onOpenBackup, modifier = Modifier.weight(1f)) {
-                            Text("Backup")
-                        }
-                        OutlinedButton(
-                            onClick = { scope.launch { repository.resetToDefaults() } },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Reset")
-                        }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Not available on Android",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "iOS uses an iCloud Documents folder for multi-device " +
+                                "library sync. Android will use a folder picker later.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
+
+        // ── Privacy ────────────────────────────────────────────────────
+        item {
+            SettingsGroup(title = "Privacy") {
+                SettingSwitchRow(
+                    label = "Hide mature content",
+                    checked = settings.privacy.hideMatureContent,
+                    onCheckedChange = { launchUpdate { repository.updateHideMatureContent(it) } }
+                )
+                SettingChipRow(label = "When hidden") {
+                    MatureContentMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = settings.privacy.matureContentMode == mode,
+                            onClick = {
+                                launchUpdate { repository.updateMatureContentMode(mode) }
+                            },
+                            label = {
+                                Text(
+                                    when (mode) {
+                                        MatureContentMode.Obscure -> "Blur"
+                                        MatureContentMode.Hide -> "Hide"
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+                SettingSwitchRow(
+                    label = "Require biometric to reveal",
+                    checked = settings.privacy.requireBiometricToReveal,
+                    onCheckedChange = {
+                        launchUpdate { repository.updateRequireBiometricToReveal(it) }
+                    }
+                )
+            }
+            SettingsFooter(
+                "Mature and Explicit works can be blurred or hidden in Library, History, " +
+                    "and Favorites until you reveal them."
+            )
+        }
+
+        // ── Help & Project ─────────────────────────────────────────────
+        item {
+            SettingsGroup(title = "Help & Project") {
+                SettingsLinkRow(
+                    label = "About Kudos",
+                    icon = Icons.Outlined.Info,
+                    onClick = onOpenAbout
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SettingsLinkRow(
+                    label = "Report a Bug",
+                    icon = Icons.Outlined.BugReport,
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:")
+                            putExtra(
+                                Intent.EXTRA_EMAIL,
+                                arrayOf("cidy02@users.noreply.github.com")
+                            )
+                            putExtra(Intent.EXTRA_SUBJECT, "Kudos Android bug report")
+                        }
+                        runCatching { context.startActivity(intent) }
+                    }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SettingsLinkRow(
+                    label = "Source on GitHub",
+                    icon = Icons.Outlined.Code,
+                    onClick = {
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/cidy02/kudos-ao3-reader")
+                        )
+                        runCatching { context.startActivity(intent) }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** Theme chips shown in Settings. OLED maps to [AppThemeSetting.Dark]. */
+private enum class ThemeChipOption(val label: String, val setting: AppThemeSetting) {
+    Light("Light", AppThemeSetting.Light),
+    Sepia("Sepia", AppThemeSetting.Sepia),
+    Dark("Dark", AppThemeSetting.Dark),
+    Oled("OLED", AppThemeSetting.Dark),
+    System("System", AppThemeSetting.System)
+}
+
+/**
+ * Dark and OLED both store [AppThemeSetting.Dark]. Prefer highlighting Dark so
+ * only one chip looks selected; OLED remains a one-tap alias for Dark.
+ */
+private fun isThemeChipSelected(current: AppThemeSetting, option: ThemeChipOption): Boolean {
+    return when (option) {
+        ThemeChipOption.Oled -> false
+        else -> current == option.setting
+    }
+}
+
+@Composable
+private fun SettingsFooter(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingsLinkRow(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 
@@ -365,10 +652,8 @@ private fun ReaderFontSection(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "Font", style = MaterialTheme.typography.bodyMedium)
         Text(
-            text = "Built-in families plus fonts you import (.ttf / .otf). Selection is stored as " +
-                "readerFontID (custom fonts use custom:<fileName>).",
+            text = "Built-in families plus fonts you import (.ttf / .otf).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -547,7 +832,8 @@ private fun SettingSliderRow(
 @Composable
 private fun AccentColorEditor(
     accentHex: String,
-    onCommit: (String) -> Unit
+    onCommit: (String) -> Unit,
+    onReset: () -> Unit
 ) {
     var draft by remember { mutableStateOf(accentHex) }
     LaunchedEffect(accentHex) {
@@ -579,13 +865,18 @@ private fun AccentColorEditor(
             label = { Text("Hex") },
             supportingText = { Text("e.g. #990000") }
         )
-        OutlinedButton(
-            onClick = {
-                normalizeAccentHex(draft)?.let { onCommit(it) }
-            },
-            enabled = normalizeAccentHex(draft) != null
-        ) {
-            Text("Apply accent")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+                onClick = {
+                    normalizeAccentHex(draft)?.let { onCommit(it) }
+                },
+                enabled = normalizeAccentHex(draft) != null
+            ) {
+                Text("Apply accent")
+            }
+            TextButton(onClick = onReset) {
+                Text("Reset to AO3 Red")
+            }
         }
     }
 }
