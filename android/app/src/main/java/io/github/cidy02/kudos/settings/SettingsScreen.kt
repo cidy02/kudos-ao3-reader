@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.settings
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -11,10 +16,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,14 +41,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
+import io.github.cidy02.kudos.core.model.ReaderFontCatalog
+import io.github.cidy02.kudos.core.model.ReaderFontOption
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.files.CustomFontRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private val AccentPresets = listOf("#990000", "#0B57D0", "#0F6B46", "#7A3E00", "#5B2C6F")
@@ -50,16 +67,83 @@ private const val LineHeightMax = 2.2f
 private const val MarginMin = 8f
 private const val MarginMax = 48f
 
+/** SAF MIME types commonly used for TrueType / OpenType fonts. */
+private val FontOpenMimeTypes = arrayOf(
+    "font/ttf",
+    "font/otf",
+    "application/x-font-ttf",
+    "application/x-font-otf",
+    "application/font-sfnt",
+    "application/octet-stream"
+)
+
 @Composable
 fun SettingsScreen(
     repository: SettingsRepository,
+    customFontRepository: CustomFontRepository,
     onOpenBackup: () -> Unit
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
+    val importedFonts by customFontRepository.observeImported()
+        .collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var fontStatus by remember { mutableStateOf<String?>(null) }
+    var fontStatusIsError by remember { mutableStateOf(false) }
+    var fontBusy by remember { mutableStateOf(false) }
 
     fun launchUpdate(block: suspend () -> Unit) {
         scope.launch { block() }
+    }
+
+    val importFontLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            fontBusy = true
+            fontStatus = null
+            try {
+                val displayName = withContext(Dispatchers.IO) {
+                    queryDisplayName(context, uri)
+                }
+                if (!CustomFontRepository.isSupportedFontFileName(displayName)) {
+                    fontStatusIsError = true
+                    fontStatus = "Only .ttf and .otf font files are supported."
+                    return@launch
+                }
+                val bytes = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error("Could not read the selected font file.")
+                }
+                val nameWithoutExt = displayName
+                    ?.substringAfterLast('/')
+                    ?.substringAfterLast('\\')
+                    ?.substringBeforeLast('.')
+                    ?.trim()
+                    .orEmpty()
+                val result = customFontRepository.importFont(
+                    displayName = nameWithoutExt,
+                    originalFileName = displayName,
+                    bytes = bytes
+                )
+                result.fold(
+                    onSuccess = { font ->
+                        fontStatusIsError = false
+                        fontStatus = "Imported “${font.name}”."
+                    },
+                    onFailure = { error ->
+                        fontStatusIsError = true
+                        fontStatus = error.message ?: "Could not import font."
+                    }
+                )
+            } catch (error: Exception) {
+                fontStatusIsError = true
+                fontStatus = error.message ?: "Could not import font."
+            } finally {
+                fontBusy = false
+            }
+        }
     }
 
     LazyColumn(
@@ -200,6 +284,35 @@ fun SettingsScreen(
                         }
                     }
                 )
+                ReaderFontSection(
+                    selectedFontId = settings.reader.readerFontId,
+                    importedFonts = importedFonts,
+                    busy = fontBusy,
+                    statusMessage = fontStatus,
+                    statusIsError = fontStatusIsError,
+                    onSelect = { fontId ->
+                        launchUpdate { repository.updateReaderFontId(fontId) }
+                    },
+                    onImport = {
+                        if (!fontBusy) importFontLauncher.launch(FontOpenMimeTypes)
+                    },
+                    onDelete = { font ->
+                        launchUpdate {
+                            fontBusy = true
+                            fontStatus = null
+                            try {
+                                customFontRepository.deleteImported(font)
+                                fontStatusIsError = false
+                                fontStatus = "Removed “${font.name}”."
+                            } catch (error: Exception) {
+                                fontStatusIsError = true
+                                fontStatus = error.message ?: "Could not delete font."
+                            } finally {
+                                fontBusy = false
+                            }
+                        }
+                    }
+                )
             }
         }
         item {
@@ -230,6 +343,113 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderFontSection(
+    selectedFontId: String,
+    importedFonts: List<CustomFont>,
+    busy: Boolean,
+    statusMessage: String?,
+    statusIsError: Boolean,
+    onSelect: (String) -> Unit,
+    onImport: () -> Unit,
+    onDelete: (CustomFont) -> Unit
+) {
+    val options = remember(importedFonts) { ReaderFontCatalog.options(importedFonts) }
+    val importedBySelectionId = remember(importedFonts) {
+        importedFonts.associateBy { it.selectionId }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = "Font", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = "Built-in families plus fonts you import (.ttf / .otf). Selection is stored as " +
+                "readerFontID (custom fonts use custom:<fileName>).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        options.forEach { option ->
+            FontOptionRow(
+                option = option,
+                selected = option.id == selectedFontId,
+                enabled = !busy,
+                onSelect = { onSelect(option.id) },
+                onDelete = if (option.isCustom) {
+                    {
+                        importedBySelectionId[option.id]?.let(onDelete)
+                    }
+                } else {
+                    null
+                }
+            )
+        }
+        OutlinedButton(
+            onClick = onImport,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (busy) "Working…" else "Import font")
+        }
+        if (statusMessage != null) {
+            Text(
+                text = statusMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (statusIsError) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FontOptionRow(
+    option: ReaderFontOption,
+    selected: Boolean,
+    enabled: Boolean,
+    onSelect: () -> Unit,
+    onDelete: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onSelect)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = option.name,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (option.isCustom) {
+                Text(
+                    text = "Imported",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (selected) {
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = "Selected",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        if (onDelete != null) {
+            IconButton(onClick = onDelete, enabled = enabled) {
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = "Delete ${option.name}"
+                )
             }
         }
     }
@@ -382,4 +602,24 @@ private fun normalizeAccentHex(raw: String): String? {
         hex
     }
     return "#${expanded.uppercase()}"
+}
+
+private fun queryDisplayName(context: android.content.Context, uri: Uri): String? {
+    val fromResolver = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) cursor.getString(index) else null
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
+    return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment
 }

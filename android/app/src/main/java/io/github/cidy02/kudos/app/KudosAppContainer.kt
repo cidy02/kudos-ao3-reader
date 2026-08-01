@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.KudosDatabaseMigrations
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.data.preferences.kudosSettingsDataStore
+import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.LibraryRepository
@@ -49,6 +50,18 @@ class KudosAppContainer(context: Context) {
 
     val fontFileStore: FontFileStore by lazy {
         FontFileStore(appContext.filesDir.toPath())
+    }
+
+    val settingsRepository: SettingsRepository by lazy {
+        SettingsRepository(appContext.kudosSettingsDataStore)
+    }
+
+    val customFontRepository: CustomFontRepository by lazy {
+        CustomFontRepository(
+            customFontDao = database.customFontDao(),
+            fontFileStore = fontFileStore,
+            settingsRepository = settingsRepository
+        )
     }
 
     val ao3Client: OkHttpAO3Client by lazy {
@@ -115,10 +128,6 @@ class KudosAppContainer(context: Context) {
             workImporter = workImporter,
             workRepository = workRepository
         )
-    }
-
-    val settingsRepository: SettingsRepository by lazy {
-        SettingsRepository(appContext.kudosSettingsDataStore)
     }
 
     val libraryRepository: LibraryRepository by lazy {
