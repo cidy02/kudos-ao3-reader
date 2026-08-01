@@ -424,6 +424,288 @@ class BackupPreservesReadiumLocatorAsPlatformSpecificDataTest {
     }
 }
 
+class BackupLwwProgressMergeTest {
+    @Test
+    fun keepsLocalProgressWhenLocalLastReadIsNewerAndArchiveLacksProgressClock() {
+        val local = sampleSavedWork().copy(
+            lastSpineIndex = 9,
+            lastScrollFraction = 0.9,
+            lastReadDate = Instant.parse("2026-07-01T00:00:00Z"),
+            progressModifiedAt = Instant.parse("2026-07-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-07-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork(
+            lastSpineIndex = 1,
+            lastScrollFraction = 0.1
+        ).copy(
+            lastReadDate = "2026-01-01T00:00:00Z",
+            progressModifiedAt = null,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals(9, merged.lastSpineIndex)
+        assertEquals(0.9, merged.lastScrollFraction, 0.0)
+        assertEquals(Instant.parse("2026-07-01T00:00:00Z"), merged.lastReadDate)
+    }
+
+    @Test
+    fun appliesArchiveProgressWhenProgressModifiedAtIsNewer() {
+        val local = sampleSavedWork().copy(
+            lastSpineIndex = 2,
+            lastScrollFraction = 0.2,
+            lastReadDate = Instant.parse("2026-01-01T00:00:00Z"),
+            progressModifiedAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork(
+            lastSpineIndex = 5,
+            lastScrollFraction = 0.55
+        ).copy(
+            lastReadDate = "2026-06-01T00:00:00Z",
+            progressModifiedAt = "2026-06-01T00:00:00Z",
+            lastModifiedAt = "2026-06-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals(5, merged.lastSpineIndex)
+        assertEquals(0.55, merged.lastScrollFraction, 0.0)
+        assertEquals(Instant.parse("2026-06-01T00:00:00Z"), merged.lastReadDate)
+    }
+
+    @Test
+    fun keepsLocalFavoriteWhenLocalLastModifiedIsNewer() {
+        val local = sampleSavedWork().copy(
+            isFavorite = true,
+            title = "Local Title",
+            lastModifiedAt = Instant.parse("2026-07-10T00:00:00Z")
+        )
+        val archive = sampleBackupWork().copy(
+            isFavorite = false,
+            title = "Archive Title",
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertTrue(merged.isFavorite)
+        assertEquals("Local Title", merged.title)
+    }
+}
+
+class BackupTombstoneSuppressTest {
+    @Test
+    fun suppressesResurrectionOfDeletedWorkByUuid() {
+        val deletedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt,
+            sourceURL = "https://archiveofourown.org/works/123",
+            ao3WorkID = 123
+        )
+        val archive = sampleBackupWork().copy(
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            dateAdded = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
+        assertEquals(1, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.tombstones.size)
+    }
+
+    @Test
+    fun exportsAndReimportsTombstonesInManifest() {
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE,
+            lastModifiedAt = DATE,
+            sourceURL = "https://archiveofourown.org/works/123"
+        )
+        val snapshot = BackupLibrarySnapshot(
+            works = listOf(sampleSavedWork()),
+            tombstones = listOf(tombstone)
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = DATE),
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+        val imported = BackupImporter.importV2Zip(bytes)
+        assertEquals(1, imported.manifest.tombstones.size)
+        assertEquals(WORK_ID, imported.manifest.tombstones.single().recordID)
+
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+        assertEquals(1, merged.snapshot.tombstones.size)
+    }
+}
+
+class BackupAnnotationApplyTest {
+    @Test
+    fun appliesAnnotationsByIdWithLww() {
+        val olderLocal = io.github.cidy02.kudos.core.model.ReadingAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            note = "old",
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = BackupAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "highlight",
+            colorRaw = "green",
+            locatorString = """{"href":"ch1"}""",
+            selectedText = "text",
+            note = "new note",
+            progression = 0.3,
+            spineIndex = 2,
+            chapterTitle = "Ch 1",
+            createdAt = "2026-01-01T00:00:00Z",
+            lastModifiedAt = "2026-06-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                annotations = listOf(olderLocal)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(archive)
+                )
+            )
+        )
+
+        assertEquals(1, result.summary.annotationsUpdated)
+        val ann = result.snapshot.annotations.single()
+        assertEquals("new note", ann.note)
+        assertEquals("highlight", ann.kindRaw)
+        assertEquals("""{"href":"ch1"}""", ann.locatorString)
+    }
+
+    @Test
+    fun skipsAnnotationWhenWorkAbsentFromRestore() {
+        val archive = BackupAnnotation(
+            id = ANN_ID,
+            workID = OTHER_WORK_ID,
+            kindRaw = "bookmark",
+            createdAt = DATE_STRING
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(archive)
+                )
+            )
+        )
+        assertTrue(result.snapshot.annotations.isEmpty())
+    }
+}
+
+class BackupQueueApplyTest {
+    @Test
+    fun storesAndRestoresQueueMembershipLinks() {
+        val queue = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Weekend",
+            kindRaw = "custom",
+            sortOrder = 1,
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE_STRING
+        )
+        val membership = BackupReadingQueueMembership(
+            id = MEMBERSHIP_ID,
+            queueID = QUEUE_ID,
+            workID = WORK_ID,
+            queuedAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING,
+            sortOrderInQueue = 0,
+            note = "try this"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    readingQueues = listOf(queue),
+                    readingQueueMemberships = listOf(membership)
+                )
+            )
+        )
+
+        assertEquals(1, result.summary.queuesCreated)
+        assertEquals(1, result.summary.membershipsCreated)
+        assertEquals("Weekend", result.snapshot.readingQueues.single().name)
+        assertEquals(WORK_ID, result.snapshot.readingQueueMemberships.single().workID)
+        assertEquals("try this", result.snapshot.readingQueueMemberships.single().note)
+    }
+
+    @Test
+    fun exportsQueuesAndMembershipsInManifest() {
+        val snapshot = BackupLibrarySnapshot(
+            works = listOf(sampleSavedWork()),
+            readingQueues = listOf(
+                io.github.cidy02.kudos.core.model.ReadingQueue(
+                    id = QUEUE_ID,
+                    name = "Later",
+                    kindRaw = "custom",
+                    sortOrder = 0,
+                    dateCreated = DATE,
+                    dateUpdated = DATE
+                )
+            ),
+            readingQueueMemberships = listOf(
+                io.github.cidy02.kudos.core.model.ReadingQueueMembership(
+                    id = MEMBERSHIP_ID,
+                    queueID = QUEUE_ID,
+                    workID = WORK_ID,
+                    queuedAt = DATE,
+                    lastModifiedAt = DATE
+                )
+            )
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = DATE),
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+        val imported = BackupImporter.importV2Zip(bytes)
+        assertEquals(1, imported.manifest.readingQueues.size)
+        assertEquals(1, imported.manifest.readingQueueMemberships.size)
+    }
+}
+
 class BackupAppleV8CompatibilityTest {
     @Test
     fun acceptsManifestVersion8WithAnnotations() {
@@ -462,6 +744,9 @@ class BackupAppleV8CompatibilityTest {
         val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
         assertEquals(1, merged.snapshot.works.size)
         assertEquals("Example Work", merged.snapshot.works.single().title)
+        assertEquals(1, merged.summary.annotationsCreated)
+        assertEquals(1, merged.snapshot.annotations.size)
+        assertEquals("highlight", merged.snapshot.annotations.single().kindRaw)
     }
 
     @Test
@@ -574,6 +859,10 @@ private const val OTHER_WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 private const val COLLECTION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 private const val OTHER_COLLECTION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 private const val SEARCH_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+private const val ANN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+private const val QUEUE_ID = "11111111-1111-4111-8111-111111111111"
+private const val MEMBERSHIP_ID = "22222222-2222-4222-8222-222222222222"
+private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
 private const val DATE_STRING = "2026-06-26T12:00:00Z"
 private val DATE: Instant = Instant.parse(DATE_STRING)
 private val EPUB_BYTES = "dummy epub bytes".toByteArray()
@@ -611,7 +900,10 @@ private fun sampleManifest(
             dateAdded = DATE_STRING
         )
     ),
-    annotations: List<BackupAnnotation> = emptyList()
+    annotations: List<BackupAnnotation> = emptyList(),
+    readingQueues: List<BackupReadingQueue> = emptyList(),
+    readingQueueMemberships: List<BackupReadingQueueMembership> = emptyList(),
+    tombstones: List<BackupTombstone> = emptyList()
 ): KudosBackupManifest {
     return KudosBackupManifest(
         version = version,
@@ -638,7 +930,10 @@ private fun sampleManifest(
         ),
         collections = collections,
         savedSearches = savedSearches,
+        readingQueues = readingQueues,
+        readingQueueMemberships = readingQueueMemberships,
         annotations = annotations,
+        tombstones = tombstones,
         settings = settings
     )
 }

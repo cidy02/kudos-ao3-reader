@@ -19,7 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Captures the local library into a v2 `.kudosbackup` ZIP and restores merge-only
+ * Captures the local library into a `.kudosbackup` ZIP and restores merge-only
  * from SAF-picked archives. Session/cookie stores are never read or written.
  */
 class BackupRepository(
@@ -65,7 +65,7 @@ class BackupRepository(
     }
 
     /**
-     * Import a v2 ZIP archive (bytes from SAF). Merge-only restore; never deletes
+     * Import a ZIP archive (bytes from SAF). Merge-only restore; never deletes
      * existing local works. Returns a human-readable summary.
      */
     suspend fun importV2ZipBytes(bytes: ByteArray): BackupRestoreSummary = withContext(Dispatchers.IO) {
@@ -77,7 +77,8 @@ class BackupRepository(
     }
 
     suspend fun captureLibrarySnapshot(): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
-        val works = database.workDao().getAll().map { it.toDomain() }
+        // Include soft-deleted works so export carries Recently Deleted state.
+        val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
         val userTagsByWorkId = works.associate { work ->
             work.id to database.tagDao().getTagsForWork(work.id).map { it.name }
         }
@@ -87,6 +88,10 @@ class BackupRepository(
             entity.toDomain(database.collectionDao().getWorkIdsForCollection(entity.id))
         }
         val savedSearches = database.savedSearchDao().getAll().map { it.toDomain() }
+        val tombstones = database.syncTombstoneDao().getAll().map { it.toDomain() }
+        val readingQueues = database.readingQueueDao().getAllQueues().map { it.toDomain() }
+        val memberships = database.readingQueueDao().getAllMemberships().map { it.toDomain() }
+        val annotations = database.annotationDao().getAll().map { it.toDomain() }
         val settings = BackupSettings.fromSettings(settingsRepository.snapshot())
         val epubWorkIds = works
             .filter { it.hasEpub }
@@ -108,7 +113,11 @@ class BackupRepository(
             savedSearches = savedSearches,
             settings = settings,
             epubWorkIds = epubWorkIds,
-            fontFilesByFileName = fontFiles
+            fontFilesByFileName = fontFiles,
+            tombstones = tombstones,
+            readingQueues = readingQueues,
+            readingQueueMemberships = memberships,
+            annotations = annotations
         )
     }
 
@@ -162,6 +171,16 @@ class BackupRepository(
 
         snapshot.savedSearches.forEach { database.savedSearchDao().upsert(it.toEntity()) }
 
+        snapshot.tombstones.forEach { database.syncTombstoneDao().upsert(it.toEntity()) }
+
+        // Queues before memberships (FK).
+        snapshot.readingQueues.forEach { database.readingQueueDao().upsertQueue(it.toEntity()) }
+        snapshot.readingQueueMemberships.forEach {
+            database.readingQueueDao().upsertMembership(it.toEntity())
+        }
+
+        snapshot.annotations.forEach { database.annotationDao().upsert(it.toEntity()) }
+
         settingsRepository.replaceAll(snapshot.settings.toSettings())
     }
 }
@@ -170,6 +189,7 @@ fun BackupRestoreSummary.toUserMessage(): String {
     val parts = buildList {
         if (worksCreated > 0) add("$worksCreated work(s) added")
         if (worksUpdated > 0) add("$worksUpdated work(s) updated")
+        if (worksSuppressed > 0) add("$worksSuppressed previously deleted work(s) skipped")
         if (bookmarksCreated + bookmarksUpdated > 0) {
             add("${bookmarksCreated + bookmarksUpdated} bookmark(s)")
         }
@@ -181,6 +201,18 @@ fun BackupRestoreSummary.toUserMessage(): String {
         }
         if (savedSearchesCreated + savedSearchesUpdated > 0) {
             add("${savedSearchesCreated + savedSearchesUpdated} saved search(es)")
+        }
+        if (queuesCreated + queuesUpdated > 0) {
+            add("${queuesCreated + queuesUpdated} queue(s)")
+        }
+        if (membershipsCreated + membershipsUpdated > 0) {
+            add("${membershipsCreated + membershipsUpdated} queue membership(s)")
+        }
+        if (annotationsCreated + annotationsUpdated > 0) {
+            add("${annotationsCreated + annotationsUpdated} annotation(s)")
+        }
+        if (annotationsSuppressed > 0) {
+            add("$annotationsSuppressed deleted annotation(s) skipped")
         }
     }
     return if (parts.isEmpty()) {

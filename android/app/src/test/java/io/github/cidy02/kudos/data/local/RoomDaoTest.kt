@@ -43,9 +43,87 @@ class RoomDaoTest {
     }
 
     @Test
-    fun databaseCreatesAtSchemaVersionOne() = runBlocking {
-        assertEquals(1, database.openHelper.readableDatabase.version)
+    fun databaseCreatesAtSchemaVersionTwo() = runBlocking {
+        assertEquals(2, database.openHelper.readableDatabase.version)
         assertEquals(0, database.workDao().count())
+    }
+
+    @Test
+    fun softDeletedWorksExcludedFromActiveQueries() = runBlocking {
+        val active = sampleWork(id = "work-active")
+        val deleted = sampleWork(id = "work-deleted").copy(isDeleted = true)
+        database.workDao().upsert(active.toEntity())
+        database.workDao().upsert(deleted.toEntity())
+
+        assertEquals(1, database.workDao().count())
+        assertEquals(listOf("work-active"), database.workDao().getAll().map { it.id })
+        assertEquals(2, database.workDao().getAllIncludingDeleted().size)
+    }
+
+    @Test
+    fun epic2TablesRoundTripTombstoneQueueAndAnnotation() = runBlocking {
+        val now = Instant.parse("2026-06-26T12:00:00Z")
+        val work = sampleWork(id = "work-epic2")
+        database.workDao().upsert(work.toEntity())
+
+        database.syncTombstoneDao().upsert(
+            io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity(
+                id = "ts-1",
+                recordID = "dead-work",
+                recordTypeRaw = "savedWork",
+                createdAt = now,
+                lastModifiedAt = now,
+                sourceURL = "https://archiveofourown.org/works/1",
+                ao3WorkID = 1,
+                deletedOnDeviceID = "",
+                deletionReason = "userDelete"
+            )
+        )
+        database.readingQueueDao().upsertQueue(
+            io.github.cidy02.kudos.data.local.entity.ReadingQueueEntity(
+                id = "queue-1",
+                name = "Later",
+                kindRaw = "custom",
+                sortOrder = 0,
+                dateCreated = now,
+                dateUpdated = now,
+                isDeleted = false
+            )
+        )
+        database.readingQueueDao().upsertMembership(
+            io.github.cidy02.kudos.data.local.entity.ReadingQueueMembershipEntity(
+                id = "mem-1",
+                queueID = "queue-1",
+                workID = work.id,
+                queuedAt = now,
+                lastModifiedAt = now,
+                sortOrderInQueue = 0,
+                note = ""
+            )
+        )
+        database.annotationDao().upsert(
+            io.github.cidy02.kudos.data.local.entity.AnnotationEntity(
+                id = "ann-1",
+                workID = work.id,
+                kindRaw = "highlight",
+                colorRaw = "green",
+                locatorString = "{}",
+                selectedText = "hi",
+                note = "",
+                progression = 0.1,
+                spineIndex = 0,
+                chapterTitle = "",
+                createdAt = now,
+                lastModifiedAt = now,
+                isPendingDeletion = false
+            )
+        )
+
+        assertEquals(1, database.syncTombstoneDao().getAll().size)
+        assertEquals(1, database.readingQueueDao().getAllQueues().size)
+        assertEquals(1, database.readingQueueDao().getAllMemberships().size)
+        assertEquals(1, database.annotationDao().getAll().size)
+        assertEquals(now, database.workDao().getById(work.id)?.dateAdded)
     }
 
     @Test

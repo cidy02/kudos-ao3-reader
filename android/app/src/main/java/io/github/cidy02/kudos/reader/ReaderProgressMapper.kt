@@ -35,7 +35,10 @@ class ReaderProgressMapper {
             lastSpineIndex = progress.spineIndex.coerceAtLeast(0),
             lastScrollFraction = progress.scrollFraction.coerceIn(0.0, 1.0),
             readiumLocator = progress.locatorJson ?: work.readiumLocator,
-            lastReadDate = now
+            lastReadDate = now,
+            // LWW clocks so backup merge does not clobber fresher local progress.
+            progressModifiedAt = now,
+            lastModifiedAt = now
         )
     }
 }

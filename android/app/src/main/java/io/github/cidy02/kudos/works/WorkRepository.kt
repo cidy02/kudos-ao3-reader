@@ -1,11 +1,13 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionEntity
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
+import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
 import io.github.cidy02.kudos.data.local.entity.TagEntity
 import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
@@ -45,12 +47,12 @@ class WorkRepository(
 
     suspend fun setHasEpub(workId: String, hasEpub: Boolean): SavedWork? {
         val work = getWork(workId) ?: return null
-        return upsert(work.copy(hasEpub = hasEpub))
+        return upsert(work.copy(hasEpub = hasEpub, lastModifiedAt = clock()))
     }
 
     suspend fun toggleFavorite(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
-        return upsert(work.copy(isFavorite = !work.isFavorite))
+        return upsert(work.copy(isFavorite = !work.isFavorite, lastModifiedAt = clock()))
     }
 
     suspend fun toggleFinished(workId: String): SavedWork? {
@@ -67,27 +69,49 @@ class WorkRepository(
     suspend fun setFinished(workId: String, finished: Boolean): SavedWork? {
         val work = getWork(workId) ?: return null
         if (work.isFinished == finished) return work
+        val now = clock()
         return if (finished) {
-            var next = work.copy(isFinished = true)
+            var next = work.copy(isFinished = true, lastModifiedAt = now)
             if (!next.isProtected && next.hasEpub) {
                 fileStore.deleteWorkEpub(workId)
                 next = next.copy(hasEpub = false)
             }
             upsert(next)
         } else {
-            upsert(work.copy(isFinished = false))
+            upsert(work.copy(isFinished = false, lastModifiedAt = now))
         }
     }
 
     suspend fun deleteLocalEpub(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
         fileStore.deleteWorkEpub(workId)
-        return upsert(work.copy(hasEpub = false))
+        return upsert(work.copy(hasEpub = false, lastModifiedAt = clock()))
     }
 
+    /**
+     * Hard-delete for now (soft-delete UI deferred). Records a sync tombstone so
+     * a later backup import does not resurrect this work by UUID.
+     */
     suspend fun removeFromLibrary(workId: String) {
+        val work = getWork(workId)
         fileStore.deleteWorkEpub(workId)
         workDao.deleteById(workId)
+        if (work != null) {
+            val now = clock()
+            database.syncTombstoneDao().upsert(
+                SyncTombstoneEntity(
+                    id = uuidFactory(),
+                    recordID = work.id,
+                    recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    sourceURL = work.sourceUrl,
+                    ao3WorkID = null,
+                    deletedOnDeviceID = "",
+                    deletionReason = "userDelete"
+                )
+            )
+        }
     }
 
     suspend fun userTagsForWork(workId: String): List<Tag> {

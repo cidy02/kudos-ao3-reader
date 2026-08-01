@@ -3,8 +3,12 @@ package io.github.cidy02.kudos.backup
 import io.github.cidy02.kudos.core.model.BackupSettings as CoreBackupSettings
 import io.github.cidy02.kudos.core.model.Bookmark
 import io.github.cidy02.kudos.core.model.CustomFont
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.WorkCollection
 
 data class KudosBackupPackage(
@@ -25,12 +29,17 @@ data class BackupLibrarySnapshot(
         .filter { it.hasEpub }
         .map { BackupPaths.normalizeIdForComparison(it.id) }
         .toSet(),
-    val fontFilesByFileName: Map<String, ByteArray> = emptyMap()
+    val fontFilesByFileName: Map<String, ByteArray> = emptyMap(),
+    val tombstones: List<SyncTombstone> = emptyList(),
+    val readingQueues: List<ReadingQueue> = emptyList(),
+    val readingQueueMemberships: List<ReadingQueueMembership> = emptyList(),
+    val annotations: List<ReadingAnnotation> = emptyList()
 )
 
 data class BackupRestoreSummary(
     val worksCreated: Int = 0,
     val worksUpdated: Int = 0,
+    val worksSuppressed: Int = 0,
     val bookmarksCreated: Int = 0,
     val bookmarksUpdated: Int = 0,
     val fontsCreated: Int = 0,
@@ -38,7 +47,15 @@ data class BackupRestoreSummary(
     val collectionsCreated: Int = 0,
     val collectionsUpdated: Int = 0,
     val savedSearchesCreated: Int = 0,
-    val savedSearchesUpdated: Int = 0
+    val savedSearchesUpdated: Int = 0,
+    val queuesCreated: Int = 0,
+    val queuesUpdated: Int = 0,
+    val membershipsCreated: Int = 0,
+    val membershipsUpdated: Int = 0,
+    val membershipsSuppressed: Int = 0,
+    val annotationsCreated: Int = 0,
+    val annotationsUpdated: Int = 0,
+    val annotationsSuppressed: Int = 0
 )
 
 data class BackupMergeResult(

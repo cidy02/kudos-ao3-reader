@@ -27,13 +27,18 @@ interface WorkDao {
     @Query("SELECT * FROM works WHERE sourceUrl = :sourceUrl LIMIT 1")
     suspend fun getBySourceUrl(sourceUrl: String): WorkEntity?
 
-    @Query("SELECT * FROM works ORDER BY dateAdded DESC")
+    /** Active library works (excludes soft-deleted). */
+    @Query("SELECT * FROM works WHERE isDeleted = 0 ORDER BY dateAdded DESC")
     suspend fun getAll(): List<WorkEntity>
 
+    /** All works including soft-deleted — used by backup capture/export. */
     @Query("SELECT * FROM works ORDER BY dateAdded DESC")
+    suspend fun getAllIncludingDeleted(): List<WorkEntity>
+
+    @Query("SELECT * FROM works WHERE isDeleted = 0 ORDER BY dateAdded DESC")
     fun observeAll(): Flow<List<WorkEntity>>
 
-    @Query("SELECT COUNT(*) FROM works")
+    @Query("SELECT COUNT(*) FROM works WHERE isDeleted = 0")
     suspend fun count(): Int
 
     @Query("DELETE FROM works WHERE id = :id")

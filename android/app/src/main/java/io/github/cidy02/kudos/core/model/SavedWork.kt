@@ -38,7 +38,15 @@ data class SavedWork(
     val comments: Int? = null,
     val hits: Int? = null,
     val knownChapterCount: Int? = null,
-    val lastUpdateCheck: Instant? = null
+    val lastUpdateCheck: Instant? = null,
+    /** Sync LWW metadata (Apple `lastModifiedAt`). Defaults to [dateAdded]. */
+    val lastModifiedAt: Instant? = null,
+    /** Progress LWW clock (Apple `progressModifiedAt`). Falls back to [lastReadDate]. */
+    val progressModifiedAt: Instant? = null,
+    /** Soft-delete / Recently Deleted (Apple `isPendingDeletion`). */
+    val isDeleted: Boolean = false,
+    val deletedAt: Instant? = null,
+    val permanentDeletionScheduledAt: Instant? = null
 ) {
     val isProtected: Boolean
         get() = isSaved || isFavorite
@@ -51,4 +59,12 @@ data class SavedWork(
 
     val isInProgress: Boolean
         get() = hasEpub && !isFinished && hasStartedReading
+
+    /** Effective record modification time for LWW flag/metadata merge. */
+    val effectiveLastModifiedAt: Instant
+        get() = lastModifiedAt ?: dateAdded
+
+    /** Effective progress modification time for LWW progress merge. */
+    val effectiveProgressModifiedAt: Instant?
+        get() = progressModifiedAt ?: lastReadDate
 }

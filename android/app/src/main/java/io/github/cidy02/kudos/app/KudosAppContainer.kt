@@ -7,12 +7,9 @@ import io.github.cidy02.kudos.auth.AndroidAO3CookieStore
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.FileAO3SessionStore
 import io.github.cidy02.kudos.auth.LiveAO3SessionValidator
-import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
-import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
-import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
-import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import io.github.cidy02.kudos.backup.BackupRepository
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.KudosDatabaseMigrations
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.data.preferences.kudosSettingsDataStore
 import io.github.cidy02.kudos.files.FontFileStore
@@ -20,8 +17,12 @@ import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
+import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import io.github.cidy02.kudos.reader.ReaderRepository
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
@@ -34,7 +35,9 @@ class KudosAppContainer(context: Context) {
             appContext,
             KudosDatabase::class.java,
             KudosDatabase.DatabaseName
-        ).build()
+        )
+            .addMigrations(KudosDatabaseMigrations.MIGRATION_1_2)
+            .build()
     }
 
     val workFileStore: WorkFileStore by lazy {

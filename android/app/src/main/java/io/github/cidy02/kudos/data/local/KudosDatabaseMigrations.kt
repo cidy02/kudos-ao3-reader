@@ -1,0 +1,151 @@
+package io.github.cidy02.kudos.data.local
+
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+/**
+ * Room migrations for [KudosDatabase].
+ *
+ * v1 → v2 (Epic 2): LWW timestamps + soft-delete on works; sync tombstones;
+ * reading queues + memberships; in-book annotations.
+ */
+object KudosDatabaseMigrations {
+    val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Work LWW / soft-delete columns (nullable Instant → INTEGER; bool → INTEGER).
+            db.execSQL("ALTER TABLE works ADD COLUMN lastModifiedAt INTEGER")
+            db.execSQL("ALTER TABLE works ADD COLUMN progressModifiedAt INTEGER")
+            db.execSQL(
+                "ALTER TABLE works ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL("ALTER TABLE works ADD COLUMN deletedAt INTEGER")
+            db.execSQL("ALTER TABLE works ADD COLUMN permanentDeletionScheduledAt INTEGER")
+            // Backfill lastModifiedAt from dateAdded so LWW has a baseline.
+            db.execSQL(
+                "UPDATE works SET lastModifiedAt = dateAdded WHERE lastModifiedAt IS NULL"
+            )
+            db.execSQL(
+                "UPDATE works SET progressModifiedAt = lastReadDate " +
+                    "WHERE progressModifiedAt IS NULL AND lastReadDate IS NOT NULL"
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_tombstones` (
+                    `id` TEXT NOT NULL,
+                    `recordID` TEXT NOT NULL,
+                    `recordTypeRaw` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `lastModifiedAt` INTEGER NOT NULL,
+                    `sourceURL` TEXT NOT NULL,
+                    `ao3WorkID` INTEGER,
+                    `deletedOnDeviceID` TEXT NOT NULL,
+                    `deletionReason` TEXT NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_tombstones_recordID` " +
+                    "ON `sync_tombstones` (`recordID`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_tombstones_recordTypeRaw` " +
+                    "ON `sync_tombstones` (`recordTypeRaw`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_tombstones_ao3WorkID` " +
+                    "ON `sync_tombstones` (`ao3WorkID`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_tombstones_sourceURL` " +
+                    "ON `sync_tombstones` (`sourceURL`)"
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reading_queues` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `kindRaw` TEXT NOT NULL,
+                    `sortOrder` INTEGER NOT NULL,
+                    `dateCreated` INTEGER NOT NULL,
+                    `dateUpdated` INTEGER NOT NULL,
+                    `lastMembershipChangedAt` INTEGER,
+                    `deletedAt` INTEGER,
+                    `isDeleted` INTEGER NOT NULL,
+                    `permanentDeletionScheduledAt` INTEGER,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reading_queues_name` " +
+                    "ON `reading_queues` (`name`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reading_queues_kindRaw` " +
+                    "ON `reading_queues` (`kindRaw`)"
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reading_queue_memberships` (
+                    `id` TEXT NOT NULL,
+                    `queueID` TEXT NOT NULL,
+                    `workID` TEXT NOT NULL,
+                    `queuedAt` INTEGER NOT NULL,
+                    `lastModifiedAt` INTEGER,
+                    `sortOrderInQueue` INTEGER NOT NULL,
+                    `note` TEXT NOT NULL,
+                    PRIMARY KEY(`id`),
+                    FOREIGN KEY(`queueID`) REFERENCES `reading_queues`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reading_queue_memberships_queueID` " +
+                    "ON `reading_queue_memberships` (`queueID`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reading_queue_memberships_workID` " +
+                    "ON `reading_queue_memberships` (`workID`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reading_queue_memberships_queueID_workID` " +
+                    "ON `reading_queue_memberships` (`queueID`, `workID`)"
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `annotations` (
+                    `id` TEXT NOT NULL,
+                    `workID` TEXT NOT NULL,
+                    `kindRaw` TEXT NOT NULL,
+                    `colorRaw` TEXT NOT NULL,
+                    `locatorString` TEXT NOT NULL,
+                    `selectedText` TEXT NOT NULL,
+                    `note` TEXT NOT NULL,
+                    `progression` REAL NOT NULL,
+                    `spineIndex` INTEGER NOT NULL,
+                    `chapterTitle` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `lastModifiedAt` INTEGER,
+                    `deletedAt` INTEGER,
+                    `isPendingDeletion` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_annotations_workID` " +
+                    "ON `annotations` (`workID`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_annotations_lastModifiedAt` " +
+                    "ON `annotations` (`lastModifiedAt`)"
+            )
+        }
+    }
+}

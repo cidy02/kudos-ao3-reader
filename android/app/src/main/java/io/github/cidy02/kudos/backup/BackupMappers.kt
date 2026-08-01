@@ -3,8 +3,12 @@ package io.github.cidy02.kudos.backup
 import io.github.cidy02.kudos.core.model.BackupSettings as CoreBackupSettings
 import io.github.cidy02.kudos.core.model.Bookmark
 import io.github.cidy02.kudos.core.model.CustomFont
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.WorkCollection
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -45,6 +49,18 @@ fun BackupLibrarySnapshot.toV2Manifest(
         savedSearches = savedSearches
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
             .map { it.toBackupSavedSearch() },
+        readingQueues = readingQueues
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupReadingQueue() },
+        readingQueueMemberships = readingQueueMemberships
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupReadingQueueMembership() },
+        annotations = annotations
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupAnnotation() },
+        tombstones = tombstones
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupTombstone() },
         settings = settings.toBackupSettingsPayload()
     )
 }
@@ -90,7 +106,14 @@ fun SavedWork.toBackupWork(
         workTagsFetched = workTagsFetched,
         userTags = userTags.normalizedNames(),
         collectionIDs = collectionIds.map { BackupPaths.canonicalUuid(it, "collection.id") },
-        readiumLocator = readiumLocator
+        readiumLocator = readiumLocator,
+        lastModifiedAt = (lastModifiedAt ?: dateAdded).let(BackupValidator::formatInstant),
+        progressModifiedAt = progressModifiedAt?.let(BackupValidator::formatInstant)
+            ?: lastReadDate?.let(BackupValidator::formatInstant),
+        isDeleted = isDeleted,
+        deletedAt = deletedAt?.let(BackupValidator::formatInstant),
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+            ?.let(BackupValidator::formatInstant)
     )
 }
 
@@ -100,6 +123,10 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
     } else {
         java.time.Instant.now()
     }
+    val lastModified = BackupValidator.parseNullableInstant(
+        lastModifiedAt?.takeIf { it.isNotBlank() },
+        "work.lastModifiedAt"
+    ) ?: added
     return SavedWork(
         id = BackupPaths.canonicalUuid(id, "work.id"),
         title = title,
@@ -143,6 +170,20 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         lastUpdateCheck = BackupValidator.parseNullableInstant(
             lastUpdateCheck?.takeIf { it.isNotBlank() },
             "work.lastUpdateCheck"
+        ),
+        lastModifiedAt = lastModified,
+        progressModifiedAt = BackupValidator.parseNullableInstant(
+            progressModifiedAt?.takeIf { it.isNotBlank() },
+            "work.progressModifiedAt"
+        ),
+        isDeleted = isDeleted == true,
+        deletedAt = BackupValidator.parseNullableInstant(
+            deletedAt?.takeIf { it.isNotBlank() },
+            "work.deletedAt"
+        ),
+        permanentDeletionScheduledAt = BackupValidator.parseNullableInstant(
+            permanentDeletionScheduledAt?.takeIf { it.isNotBlank() },
+            "work.permanentDeletionScheduledAt"
         )
     )
 }
@@ -264,6 +305,175 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
         readerTheme = readerTheme,
         matchAppReaderTheme = matchAppReaderTheme,
         accentColorHex = accentColorHex
+    )
+}
+
+fun ReadingQueue.toBackupReadingQueue(): BackupReadingQueue {
+    return BackupReadingQueue(
+        id = BackupPaths.canonicalUuid(id, "queue.id"),
+        name = name,
+        kindRaw = kindRaw,
+        sortOrder = sortOrder,
+        dateCreated = BackupValidator.formatInstant(dateCreated),
+        dateUpdated = BackupValidator.formatInstant(dateUpdated),
+        lastMembershipChangedAt = lastMembershipChangedAt?.let(BackupValidator::formatInstant),
+        deletedAt = deletedAt?.let(BackupValidator::formatInstant),
+        isDeleted = isDeleted,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+            ?.let(BackupValidator::formatInstant)
+    )
+}
+
+fun BackupReadingQueue.toReadingQueue(): ReadingQueue {
+    val created = if (dateCreated.isNotBlank()) {
+        BackupValidator.parseInstant(dateCreated, "queue.dateCreated")
+    } else {
+        Instant.now()
+    }
+    val updated = if (dateUpdated.isNotBlank()) {
+        BackupValidator.parseInstant(dateUpdated, "queue.dateUpdated")
+    } else {
+        created
+    }
+    return ReadingQueue(
+        id = BackupPaths.canonicalUuid(id, "queue.id"),
+        name = name,
+        kindRaw = kindRaw.ifBlank { "custom" },
+        sortOrder = sortOrder,
+        dateCreated = created,
+        dateUpdated = updated,
+        lastMembershipChangedAt = BackupValidator.parseNullableInstant(
+            lastMembershipChangedAt?.takeIf { it.isNotBlank() },
+            "queue.lastMembershipChangedAt"
+        ),
+        deletedAt = BackupValidator.parseNullableInstant(
+            deletedAt?.takeIf { it.isNotBlank() },
+            "queue.deletedAt"
+        ),
+        isDeleted = isDeleted == true,
+        permanentDeletionScheduledAt = BackupValidator.parseNullableInstant(
+            permanentDeletionScheduledAt?.takeIf { it.isNotBlank() },
+            "queue.permanentDeletionScheduledAt"
+        )
+    )
+}
+
+fun ReadingQueueMembership.toBackupReadingQueueMembership(): BackupReadingQueueMembership {
+    return BackupReadingQueueMembership(
+        id = BackupPaths.canonicalUuid(id, "membership.id"),
+        queueID = BackupPaths.canonicalUuid(queueID, "membership.queueID"),
+        workID = BackupPaths.canonicalUuid(workID, "membership.workID"),
+        queuedAt = BackupValidator.formatInstant(queuedAt),
+        lastModifiedAt = lastModifiedAt?.let(BackupValidator::formatInstant),
+        sortOrderInQueue = sortOrderInQueue,
+        note = note
+    )
+}
+
+fun BackupReadingQueueMembership.toReadingQueueMembership(): ReadingQueueMembership {
+    val queued = if (queuedAt.isNotBlank()) {
+        BackupValidator.parseInstant(queuedAt, "membership.queuedAt")
+    } else {
+        Instant.now()
+    }
+    return ReadingQueueMembership(
+        id = BackupPaths.canonicalUuid(id, "membership.id"),
+        queueID = BackupPaths.canonicalUuid(queueID, "membership.queueID"),
+        workID = BackupPaths.canonicalUuid(workID, "membership.workID"),
+        queuedAt = queued,
+        lastModifiedAt = BackupValidator.parseNullableInstant(
+            lastModifiedAt?.takeIf { it.isNotBlank() },
+            "membership.lastModifiedAt"
+        ) ?: queued,
+        sortOrderInQueue = sortOrderInQueue,
+        note = note
+    )
+}
+
+fun ReadingAnnotation.toBackupAnnotation(): BackupAnnotation {
+    return BackupAnnotation(
+        id = BackupPaths.canonicalUuid(id, "annotation.id"),
+        workID = BackupPaths.canonicalUuid(workID, "annotation.workID"),
+        kindRaw = kindRaw,
+        colorRaw = colorRaw,
+        locatorString = locatorString,
+        selectedText = selectedText,
+        note = note,
+        progression = progression,
+        spineIndex = spineIndex,
+        chapterTitle = chapterTitle,
+        createdAt = BackupValidator.formatInstant(createdAt),
+        lastModifiedAt = lastModifiedAt?.let(BackupValidator::formatInstant),
+        deletedAt = deletedAt?.let(BackupValidator::formatInstant),
+        isPendingDeletion = isPendingDeletion
+    )
+}
+
+fun BackupAnnotation.toReadingAnnotation(): ReadingAnnotation {
+    val created = if (createdAt.isNotBlank()) {
+        BackupValidator.parseInstant(createdAt, "annotation.createdAt")
+    } else {
+        Instant.now()
+    }
+    return ReadingAnnotation(
+        id = BackupPaths.canonicalUuid(id, "annotation.id"),
+        workID = BackupPaths.canonicalUuid(workID, "annotation.workID"),
+        kindRaw = kindRaw.ifBlank { "bookmark" },
+        colorRaw = colorRaw,
+        locatorString = locatorString,
+        selectedText = selectedText,
+        note = note,
+        progression = progression,
+        spineIndex = spineIndex,
+        chapterTitle = chapterTitle,
+        createdAt = created,
+        lastModifiedAt = BackupValidator.parseNullableInstant(
+            lastModifiedAt?.takeIf { it.isNotBlank() },
+            "annotation.lastModifiedAt"
+        ) ?: created,
+        deletedAt = BackupValidator.parseNullableInstant(
+            deletedAt?.takeIf { it.isNotBlank() },
+            "annotation.deletedAt"
+        ),
+        isPendingDeletion = isPendingDeletion
+    )
+}
+
+fun SyncTombstone.toBackupTombstone(): BackupTombstone {
+    return BackupTombstone(
+        id = BackupPaths.canonicalUuid(id, "tombstone.id"),
+        recordID = BackupPaths.canonicalUuid(recordID, "tombstone.recordID"),
+        recordTypeRaw = recordTypeRaw,
+        createdAt = BackupValidator.formatInstant(createdAt),
+        lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt),
+        sourceURL = sourceURL,
+        ao3WorkID = ao3WorkID,
+        deletedOnDeviceID = deletedOnDeviceID,
+        deletionReason = deletionReason
+    )
+}
+
+fun BackupTombstone.toSyncTombstone(): SyncTombstone {
+    val created = if (createdAt.isNotBlank()) {
+        BackupValidator.parseInstant(createdAt, "tombstone.createdAt")
+    } else {
+        Instant.now()
+    }
+    val modified = if (lastModifiedAt.isNotBlank()) {
+        BackupValidator.parseInstant(lastModifiedAt, "tombstone.lastModifiedAt")
+    } else {
+        created
+    }
+    return SyncTombstone(
+        id = BackupPaths.canonicalUuid(id, "tombstone.id"),
+        recordID = BackupPaths.canonicalUuid(recordID, "tombstone.recordID"),
+        recordTypeRaw = recordTypeRaw.ifBlank { "savedWork" },
+        createdAt = created,
+        lastModifiedAt = modified,
+        sourceURL = sourceURL,
+        ao3WorkID = ao3WorkID,
+        deletedOnDeviceID = deletedOnDeviceID,
+        deletionReason = deletionReason
     )
 }
 

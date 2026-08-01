@@ -48,5 +48,10 @@ data class WorkEntity(
     val comments: Int?,
     val hits: Int?,
     val knownChapterCount: Int?,
-    val lastUpdateCheck: Instant?
+    val lastUpdateCheck: Instant?,
+    val lastModifiedAt: Instant? = null,
+    val progressModifiedAt: Instant? = null,
+    val isDeleted: Boolean = false,
+    val deletedAt: Instant? = null,
+    val permanentDeletionScheduledAt: Instant? = null
 )

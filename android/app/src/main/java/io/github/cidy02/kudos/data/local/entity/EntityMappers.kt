@@ -2,8 +2,12 @@ package io.github.cidy02.kudos.data.local.entity
 
 import io.github.cidy02.kudos.core.model.Bookmark
 import io.github.cidy02.kudos.core.model.CustomFont
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
 
@@ -43,7 +47,12 @@ fun SavedWork.toEntity(): WorkEntity {
         comments = comments,
         hits = hits,
         knownChapterCount = knownChapterCount,
-        lastUpdateCheck = lastUpdateCheck
+        lastUpdateCheck = lastUpdateCheck,
+        lastModifiedAt = lastModifiedAt,
+        progressModifiedAt = progressModifiedAt,
+        isDeleted = isDeleted,
+        deletedAt = deletedAt,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
     )
 }
 
@@ -83,7 +92,12 @@ fun WorkEntity.toDomain(): SavedWork {
         comments = comments,
         hits = hits,
         knownChapterCount = knownChapterCount,
-        lastUpdateCheck = lastUpdateCheck
+        lastUpdateCheck = lastUpdateCheck,
+        lastModifiedAt = lastModifiedAt,
+        progressModifiedAt = progressModifiedAt,
+        isDeleted = isDeleted,
+        deletedAt = deletedAt,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
     )
 }
 
@@ -134,4 +148,124 @@ fun SavedSearch.toEntity(): SavedSearchEntity {
 
 fun SavedSearchEntity.toDomain(): SavedSearch {
     return SavedSearch(id = id, name = name, dateAdded = dateAdded, filtersJson = filtersJson)
+}
+
+fun SyncTombstone.toEntity(): SyncTombstoneEntity {
+    return SyncTombstoneEntity(
+        id = id,
+        recordID = recordID,
+        recordTypeRaw = recordTypeRaw,
+        createdAt = createdAt,
+        lastModifiedAt = lastModifiedAt,
+        sourceURL = sourceURL,
+        ao3WorkID = ao3WorkID,
+        deletedOnDeviceID = deletedOnDeviceID,
+        deletionReason = deletionReason
+    )
+}
+
+fun SyncTombstoneEntity.toDomain(): SyncTombstone {
+    return SyncTombstone(
+        id = id,
+        recordID = recordID,
+        recordTypeRaw = recordTypeRaw,
+        createdAt = createdAt,
+        lastModifiedAt = lastModifiedAt,
+        sourceURL = sourceURL,
+        ao3WorkID = ao3WorkID,
+        deletedOnDeviceID = deletedOnDeviceID,
+        deletionReason = deletionReason
+    )
+}
+
+fun ReadingQueue.toEntity(): ReadingQueueEntity {
+    return ReadingQueueEntity(
+        id = id,
+        name = name,
+        kindRaw = kindRaw,
+        sortOrder = sortOrder,
+        dateCreated = dateCreated,
+        dateUpdated = dateUpdated,
+        lastMembershipChangedAt = lastMembershipChangedAt,
+        deletedAt = deletedAt,
+        isDeleted = isDeleted,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+    )
+}
+
+fun ReadingQueueEntity.toDomain(): ReadingQueue {
+    return ReadingQueue(
+        id = id,
+        name = name,
+        kindRaw = kindRaw,
+        sortOrder = sortOrder,
+        dateCreated = dateCreated,
+        dateUpdated = dateUpdated,
+        lastMembershipChangedAt = lastMembershipChangedAt,
+        deletedAt = deletedAt,
+        isDeleted = isDeleted,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+    )
+}
+
+fun ReadingQueueMembership.toEntity(): ReadingQueueMembershipEntity {
+    return ReadingQueueMembershipEntity(
+        id = id,
+        queueID = queueID,
+        workID = workID,
+        queuedAt = queuedAt,
+        lastModifiedAt = lastModifiedAt,
+        sortOrderInQueue = sortOrderInQueue,
+        note = note
+    )
+}
+
+fun ReadingQueueMembershipEntity.toDomain(): ReadingQueueMembership {
+    return ReadingQueueMembership(
+        id = id,
+        queueID = queueID,
+        workID = workID,
+        queuedAt = queuedAt,
+        lastModifiedAt = lastModifiedAt,
+        sortOrderInQueue = sortOrderInQueue,
+        note = note
+    )
+}
+
+fun ReadingAnnotation.toEntity(): AnnotationEntity {
+    return AnnotationEntity(
+        id = id,
+        workID = workID,
+        kindRaw = kindRaw,
+        colorRaw = colorRaw,
+        locatorString = locatorString,
+        selectedText = selectedText,
+        note = note,
+        progression = progression,
+        spineIndex = spineIndex,
+        chapterTitle = chapterTitle,
+        createdAt = createdAt,
+        lastModifiedAt = lastModifiedAt,
+        deletedAt = deletedAt,
+        isPendingDeletion = isPendingDeletion
+    )
+}
+
+fun AnnotationEntity.toDomain(): ReadingAnnotation {
+    return ReadingAnnotation(
+        id = id,
+        workID = workID,
+        kindRaw = kindRaw,
+        colorRaw = colorRaw,
+        locatorString = locatorString,
+        selectedText = selectedText,
+        note = note,
+        progression = progression,
+        spineIndex = spineIndex,
+        chapterTitle = chapterTitle,
+        createdAt = createdAt,
+        lastModifiedAt = lastModifiedAt,
+        deletedAt = deletedAt,
+        isPendingDeletion = isPendingDeletion
+    )
 }
