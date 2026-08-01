@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.account
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,17 +9,32 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.auth.AO3AuthRepository
@@ -27,7 +43,6 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
 
@@ -42,17 +57,19 @@ fun AccountScreen(
     viewModel: AccountViewModel = viewModel(factory = AccountViewModel.factory(authRepository))
 ) {
     val state by viewModel.uiState.collectAsState()
+    val signedIn = state.authState is AO3AuthState.SignedIn
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            KudosScreenHeader(
-                title = "Account",
-                subtitle = "AO3 session, account lists, app settings, and backup tools."
+            Text(
+                text = "AO3 session, account lists, settings, and backup.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         item {
@@ -63,13 +80,47 @@ fun AccountScreen(
             )
         }
         item {
-            AccountListsCard(
-                enabled = state.authState is AO3AuthState.SignedIn,
-                onOpenList = onOpenList
-            )
+            AccountDestinationGroup(
+                title = "My AO3",
+                footer = if (!signedIn) "Log in to load account lists." else null
+            ) {
+                AccountListType.entries.forEachIndexed { index, type ->
+                    AccountDestinationRow(
+                        title = type.title,
+                        icon = type.leadingIcon,
+                        enabled = signedIn,
+                        supportingText = if (!signedIn) "Sign in required" else null,
+                        onClick = { onOpenList(type) },
+                        showDivider = index < AccountListType.entries.lastIndex
+                    )
+                }
+            }
         }
         item {
-            AppActionsCard(onOpenSettings = onOpenSettings, onOpenBackup = onOpenBackup)
+            AccountDestinationGroup(title = "App") {
+                AccountDestinationRow(
+                    title = "Settings",
+                    icon = Icons.Outlined.Settings,
+                    enabled = true,
+                    onClick = onOpenSettings,
+                    showDivider = true
+                )
+                AccountDestinationRow(
+                    title = "Backup",
+                    icon = Icons.Outlined.CloudUpload,
+                    enabled = true,
+                    onClick = onOpenBackup,
+                    showDivider = false
+                )
+            }
+        }
+        item {
+            Text(
+                text = "AO3 lists live here. User-initiated kudos, comments, bookmarks, " +
+                    "subscriptions, and Mark for Later actions are available from each work detail.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -94,9 +145,15 @@ fun AccountListScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        KudosScreenHeader(
-            title = type.title,
-            subtitle = "Read-only AO3 account list."
+        // TopAppBar is generic ("Account List"); keep a compact type label only.
+        Text(
+            text = type.title,
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = "Read-only AO3 account list.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         when (val current = state) {
             AccountListUiState.Loading -> LoadingStateCard("Loading ${type.title}")
@@ -192,7 +249,12 @@ private fun AccountStatusCard(
     onLogin: () -> Unit,
     onLogout: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -207,8 +269,15 @@ private fun AccountStatusCard(
                 }
                 is AO3AuthState.SignedIn -> {
                     StatusBadge("Signed in")
-                    Text("Signed in as ${authState.username}.")
-                    Text("Session cookies stay app-private and are never included in Kudos backups.")
+                    Text(
+                        text = authState.username,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Session cookies stay app-private and are never included in Kudos backups.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     OutlinedButton(onClick = onLogout) { Text("Log Out") }
                 }
                 AO3AuthState.SignedOut -> SignedOutLoginCopy(onLogin)
@@ -227,7 +296,10 @@ private fun AccountStatusCard(
 
 @Composable
 private fun InlineLoading(message: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         CircularProgressIndicator()
         Text(message)
     }
@@ -236,59 +308,121 @@ private fun InlineLoading(message: String) {
 @Composable
 private fun SignedOutLoginCopy(onLogin: () -> Unit) {
     Text("AO3 login is optional.")
-    Text("Kudos opens AO3's real login page. It never stores your AO3 password.")
-    Text("Kudos is an unofficial app and is not affiliated with AO3 or OTW.")
+    Text(
+        text = "Kudos opens AO3's real login page. It never stores your AO3 password.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+        text = "Kudos is an unofficial app and is not affiliated with AO3 or OTW.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
     Button(onClick = onLogin) { Text("Log In to AO3") }
 }
 
 @Composable
-private fun AccountListsCard(
-    enabled: Boolean,
-    onOpenList: (AccountListType) -> Unit
+private fun AccountDestinationGroup(
+    title: String,
+    footer: String? = null,
+    content: @Composable () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
         ) {
-            Text("My AO3", style = MaterialTheme.typography.titleMedium)
-            AccountListType.entries.forEach { type ->
-                OutlinedButton(
-                    enabled = enabled,
-                    onClick = { onOpenList(type) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(type.title)
-                }
-            }
-            if (!enabled) {
-                Text("Log in to load account lists.")
-            }
+            content()
+        }
+        if (!footer.isNullOrBlank()) {
+            Text(
+                text = footer,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun AppActionsCard(
-    onOpenSettings: () -> Unit,
-    onOpenBackup: () -> Unit
+private fun AccountDestinationRow(
+    title: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    showDivider: Boolean,
+    supportingText: String? = null
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("App", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onOpenSettings, modifier = Modifier.weight(1f)) {
-                    Text("Settings")
-                }
-                OutlinedButton(onClick = onOpenBackup, modifier = Modifier.weight(1f)) {
-                    Text("Backup")
-                }
-            }
-            HorizontalDivider()
-            Text("AO3 lists live here. User-initiated kudos, comments, bookmarks, subscriptions, and Mark for Later actions are available from each work detail.")
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
+    val iconColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
+    Column {
+        ListItem(
+            headlineContent = {
+                Text(title)
+            },
+            supportingContent = if (!supportingText.isNullOrBlank()) {
+                { Text(supportingText) }
+            } else {
+                null
+            },
+            leadingContent = {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor
+                )
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = iconColor
+                )
+            },
+            colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                headlineColor = contentColor,
+                supportingColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                    alpha = if (enabled) 1f else 0.6f
+                ),
+                leadingIconColor = iconColor,
+                trailingIconColor = iconColor
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+        )
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 56.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
         }
     }
 }
+
+private val AccountListType.leadingIcon: ImageVector
+    get() = when (this) {
+        AccountListType.MarkedForLater -> Icons.Outlined.Schedule
+        AccountListType.Bookmarks -> Icons.Outlined.BookmarkBorder
+        AccountListType.History -> Icons.Outlined.History
+        AccountListType.Subscriptions -> Icons.Outlined.NotificationsNone
+        AccountListType.MyWorks -> Icons.Outlined.Description
+    }
