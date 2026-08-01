@@ -80,6 +80,8 @@ class WorkLifecycleRepositoryTest {
     private lateinit var database: KudosDatabase
     private lateinit var fileStore: WorkFileStore
     private lateinit var repository: WorkRepository
+    /** Mutable so purge tests can advance past the 90-day recovery window. */
+    private var clockNow: Instant = Instant.parse("2026-06-26T12:00:00Z")
 
     @Before
     fun setUp() {
@@ -88,10 +90,11 @@ class WorkLifecycleRepositoryTest {
             .allowMainThreadQueries()
             .build()
         fileStore = WorkFileStore(Files.createTempDirectory("kudos-work-tests"))
+        clockNow = Instant.parse("2026-06-26T12:00:00Z")
         repository = WorkRepository(
             database = database,
             fileStore = fileStore,
-            clock = { Instant.parse("2026-06-26T12:00:00Z") },
+            clock = { clockNow },
             uuidFactory = { "22222222-2222-2222-2222-222222222222" }
         )
     }
@@ -208,8 +211,9 @@ class WorkLifecycleRepositoryTest {
         val expiredId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         val pendingId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         val now = Instant.parse("2026-06-26T12:00:00Z")
-        repository.upsert(sampleSavedWork(expiredId).copy(title = "Long Gone"))
+        repository.upsert(sampleSavedWork(expiredId).copy(title = "Long Gone", hasEpub = true))
         repository.upsert(sampleSavedWork(pendingId).copy(title = "Still Pending"))
+        fileStore.writeWorkEpub(expiredId, epubBytes)
 
         // Soft-delete both at "now"; then push expired past the window.
         repository.softDelete(expiredId)
@@ -223,9 +227,42 @@ class WorkLifecycleRepositoryTest {
 
         assertEquals(1, removed)
         assertNull(repository.getWork(expiredId))
+        assertFalse(fileStore.workEpubExists(expiredId))
         assertNotNull(repository.getWork(pendingId))
         assertTrue(repository.getWork(pendingId)!!.isDeleted)
         assertEquals(listOf(pendingId), repository.listRecentlyDeleted().map { it.id })
+    }
+
+    @Test
+    fun sweepExpiredSoftDeletesUsesInjectableClockAtExactBoundary() = runTest {
+        val boundaryId = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        val futureId = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        repository.upsert(sampleSavedWork(boundaryId).copy(title = "Hits Window", hasEpub = true))
+        repository.upsert(sampleSavedWork(futureId).copy(title = "Still Inside Window"))
+        fileStore.writeWorkEpub(boundaryId, epubBytes)
+
+        // Soft-delete at t0 → scheduledAt = t0 + 90d.
+        repository.softDelete(boundaryId)
+        // Second work soft-deleted one second later so its schedule is after the boundary.
+        clockNow = clockNow.plusSeconds(1)
+        repository.softDelete(futureId)
+
+        // Advance clock to exact permanentDeletionScheduledAt of boundary work (t0 + 90d).
+        // Query is `<= now`, so exact equality must purge.
+        clockNow = Instant.parse("2026-06-26T12:00:00Z").plus(WorkRepository.RECOVERY_WINDOW)
+
+        val removed = repository.sweepExpiredSoftDeletes()
+
+        assertEquals(1, removed)
+        assertNull(repository.getWork(boundaryId))
+        assertFalse(fileStore.workEpubExists(boundaryId))
+        assertNotNull(repository.getWork(futureId))
+        assertTrue(repository.getWork(futureId)!!.isDeleted)
+        // One second before future work's scheduled time — still recoverable.
+        assertEquals(
+            clockNow.plusSeconds(1),
+            repository.getWork(futureId)!!.permanentDeletionScheduledAt
+        )
     }
 
     @Test
