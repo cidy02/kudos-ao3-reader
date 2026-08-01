@@ -18,6 +18,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,6 +59,63 @@ class RoomDaoTest {
         assertEquals(1, database.workDao().count())
         assertEquals(listOf("work-active"), database.workDao().getAll().map { it.id })
         assertEquals(2, database.workDao().getAllIncludingDeleted().size)
+        assertEquals(listOf("work-deleted"), database.workDao().getDeleted().map { it.id })
+    }
+
+    @Test
+    fun getExpiredSoftDeletesReturnsOnlyPastSchedule() = runBlocking {
+        val now = Instant.parse("2026-06-26T12:00:00Z")
+        val expired = sampleWork(id = "work-expired").copy(
+            isDeleted = true,
+            deletedAt = now.minusSeconds(100),
+            permanentDeletionScheduledAt = now.minusSeconds(1)
+        )
+        val pending = sampleWork(id = "work-pending").copy(
+            isDeleted = true,
+            deletedAt = now,
+            permanentDeletionScheduledAt = now.plusSeconds(3_600)
+        )
+        val active = sampleWork(id = "work-active")
+        database.workDao().upsert(expired.toEntity())
+        database.workDao().upsert(pending.toEntity())
+        database.workDao().upsert(active.toEntity())
+
+        assertEquals(
+            listOf("work-expired"),
+            database.workDao().getExpiredSoftDeletes(now).map { it.id }
+        )
+    }
+
+    @Test
+    fun syncTombstoneDaoDeleteByRecordRetractsMatchingRows() = runBlocking {
+        val now = Instant.parse("2026-06-26T12:00:00Z")
+        database.syncTombstoneDao().upsert(
+            io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity(
+                id = "ts-keep",
+                recordID = "other-work",
+                recordTypeRaw = "savedWork",
+                createdAt = now,
+                lastModifiedAt = now,
+                deletionReason = "workDeleted"
+            )
+        )
+        database.syncTombstoneDao().upsert(
+            io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity(
+                id = "ts-drop",
+                recordID = "work-restore",
+                recordTypeRaw = "savedWork",
+                createdAt = now,
+                lastModifiedAt = now,
+                deletionReason = "workDeleted"
+            )
+        )
+
+        database.syncTombstoneDao().deleteByRecord("work-restore", "savedWork")
+
+        assertEquals(listOf("ts-keep"), database.syncTombstoneDao().getAll().map { it.id })
+        assertTrue(
+            database.syncTombstoneDao().getByRecord("work-restore", "savedWork").isEmpty()
+        )
     }
 
     @Test

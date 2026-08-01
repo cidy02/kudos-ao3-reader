@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import io.github.cidy02.kudos.data.local.entity.WorkEntity
+import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -40,6 +41,27 @@ interface WorkDao {
 
     @Query("SELECT COUNT(*) FROM works WHERE isDeleted = 0")
     suspend fun count(): Int
+
+    /** Soft-deleted works in Recently Deleted (newest first). */
+    @Query("SELECT * FROM works WHERE isDeleted = 1 ORDER BY deletedAt DESC")
+    suspend fun getDeleted(): List<WorkEntity>
+
+    @Query("SELECT * FROM works WHERE isDeleted = 1 ORDER BY deletedAt DESC")
+    fun observeDeleted(): Flow<List<WorkEntity>>
+
+    /**
+     * Soft-deleted works whose recovery window has elapsed
+     * (`permanentDeletionScheduledAt` ≤ [now]).
+     */
+    @Query(
+        """
+        SELECT * FROM works
+        WHERE isDeleted = 1
+          AND permanentDeletionScheduledAt IS NOT NULL
+          AND permanentDeletionScheduledAt <= :now
+        """
+    )
+    suspend fun getExpiredSoftDeletes(now: Instant): List<WorkEntity>
 
     @Query("DELETE FROM works WHERE id = :id")
     suspend fun deleteById(id: String)

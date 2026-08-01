@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -130,6 +131,101 @@ class WorkLifecycleRepositoryTest {
 
         assertNull(repository.getWork(workUuid))
         assertFalse(fileStore.workEpubExists(workUuid))
+    }
+
+    @Test
+    fun softDeleteSetsFieldsKeepsEpubAndRecordsTombstone() = runTest {
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+
+        val deleted = repository.softDelete(workUuid)
+
+        assertNotNull(deleted)
+        assertTrue(deleted!!.isDeleted)
+        assertEquals(Instant.parse("2026-06-26T12:00:00Z"), deleted.deletedAt)
+        assertEquals(
+            Instant.parse("2026-06-26T12:00:00Z").plus(WorkRepository.RECOVERY_WINDOW),
+            deleted.permanentDeletionScheduledAt
+        )
+        assertTrue(fileStore.workEpubExists(workUuid))
+        // Soft-deleted works leave the active library.
+        assertTrue(repository.observeSavedWorks().first().none { it.id == workUuid })
+        assertEquals(listOf(workUuid), repository.listRecentlyDeleted().map { it.id })
+        val tombstones = database.syncTombstoneDao().getByRecord(
+            workUuid,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
+        )
+        assertEquals(1, tombstones.size)
+        assertEquals(123, tombstones.single().ao3WorkID)
+        assertEquals("workDeleted", tombstones.single().deletionReason)
+    }
+
+    @Test
+    fun restoreFromRecentlyDeletedClearsFieldsAndRetractsTombstone() = runTest {
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+        repository.softDelete(workUuid)
+
+        val restored = repository.restoreFromRecentlyDeleted(workUuid)
+
+        assertNotNull(restored)
+        assertFalse(restored!!.isDeleted)
+        assertNull(restored.deletedAt)
+        assertNull(restored.permanentDeletionScheduledAt)
+        assertTrue(fileStore.workEpubExists(workUuid))
+        assertEquals(listOf(workUuid), repository.observeSavedWorks().first().map { it.id })
+        assertTrue(repository.listRecentlyDeleted().isEmpty())
+        assertTrue(
+            database.syncTombstoneDao().getByRecord(
+                workUuid,
+                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
+            ).isEmpty()
+        )
+    }
+
+    @Test
+    fun hardDeleteRemovesRecordFileAndKeepsTombstone() = runTest {
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+        repository.softDelete(workUuid)
+
+        repository.hardDelete(workUuid)
+
+        assertNull(repository.getWork(workUuid))
+        assertFalse(fileStore.workEpubExists(workUuid))
+        assertTrue(repository.listRecentlyDeleted().isEmpty())
+        // softDelete + hardDelete each record a tombstone (Apple always re-records).
+        assertTrue(
+            database.syncTombstoneDao().getByRecord(
+                workUuid,
+                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
+            ).isNotEmpty()
+        )
+    }
+
+    @Test
+    fun sweepExpiredSoftDeletesOnlyRemovesPastSchedule() = runTest {
+        val expiredId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        val pendingId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        val now = Instant.parse("2026-06-26T12:00:00Z")
+        repository.upsert(sampleSavedWork(expiredId).copy(title = "Long Gone"))
+        repository.upsert(sampleSavedWork(pendingId).copy(title = "Still Pending"))
+
+        // Soft-delete both at "now"; then push expired past the window.
+        repository.softDelete(expiredId)
+        repository.softDelete(pendingId)
+        val expired = repository.getWork(expiredId)!!.copy(
+            permanentDeletionScheduledAt = now.minusSeconds(1)
+        )
+        repository.upsert(expired)
+
+        val removed = repository.sweepExpiredSoftDeletes()
+
+        assertEquals(1, removed)
+        assertNull(repository.getWork(expiredId))
+        assertNotNull(repository.getWork(pendingId))
+        assertTrue(repository.getWork(pendingId)!!.isDeleted)
+        assertEquals(listOf(pendingId), repository.listRecentlyDeleted().map { it.id })
     }
 
     @Test

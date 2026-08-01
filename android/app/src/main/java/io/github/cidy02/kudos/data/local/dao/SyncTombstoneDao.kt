@@ -21,4 +21,8 @@ interface SyncTombstoneDao {
 
     @Query("DELETE FROM sync_tombstones WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    /** Retract all tombstones for a restored record (Apple PreservedWorkService). */
+    @Query("DELETE FROM sync_tombstones WHERE recordID = :recordId AND recordTypeRaw = :recordType")
+    suspend fun deleteByRecord(recordId: String, recordType: String)
 }

@@ -13,11 +13,17 @@ import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.files.WorkFileStore
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/**
+ * Library work persistence. Soft-delete / Recently Deleted follows Apple
+ * `PreservedWorkService`: delete → 90-day recoverable window (EPUB kept) →
+ * permanent hard-delete (EPUB + row removed, tombstone retained).
+ */
 class WorkRepository(
     private val database: KudosDatabase,
     private val fileStore: WorkFileStore,
@@ -27,10 +33,20 @@ class WorkRepository(
     private val workDao = database.workDao()
     private val tagDao = database.tagDao()
     private val collectionDao = database.collectionDao()
+    private val tombstoneDao = database.syncTombstoneDao()
 
     fun observeSavedWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll()
             .map { works -> works.map { it.toDomain() }.filter { it.isSaved } }
+    }
+
+    /** Soft-deleted works in Recently Deleted (newest first). */
+    fun observeRecentlyDeleted(): Flow<List<SavedWork>> {
+        return workDao.observeDeleted().map { works -> works.map { it.toDomain() } }
+    }
+
+    suspend fun listRecentlyDeleted(): List<SavedWork> {
+        return workDao.getDeleted().map { it.toDomain() }
     }
 
     suspend fun getWork(id: String): SavedWork? = workDao.getById(id)?.toDomain()
@@ -89,29 +105,102 @@ class WorkRepository(
     }
 
     /**
-     * Hard-delete for now (soft-delete UI deferred). Records a sync tombstone so
-     * a later backup import does not resurrect this work by UUID.
+     * Moves a work to Recently Deleted for [RECOVERY_WINDOW]. Keeps the EPUB on
+     * disk so restore is instant. Records a sync tombstone so a stale backup
+     * cannot resurrect the work while it remains deleted (Apple softDelete).
      */
-    suspend fun removeFromLibrary(workId: String) {
+    suspend fun softDelete(workId: String): SavedWork? {
+        val work = getWork(workId) ?: return null
+        val now = clock()
+        val updated = work.copy(
+            isDeleted = true,
+            deletedAt = now,
+            permanentDeletionScheduledAt = now.plus(RECOVERY_WINDOW),
+            lastModifiedAt = now
+        )
+        upsert(updated)
+        recordWorkTombstone(updated, now, deletionReason = "workDeleted")
+        return updated
+    }
+
+    /**
+     * Restores a soft-deleted work to the active library and retracts any
+     * savedWork tombstones for its id (Apple PreservedWorkService.restore).
+     */
+    suspend fun restoreFromRecentlyDeleted(workId: String): SavedWork? {
+        val work = getWork(workId) ?: return null
+        val now = clock()
+        val restored = work.copy(
+            isDeleted = false,
+            deletedAt = null,
+            permanentDeletionScheduledAt = null,
+            lastModifiedAt = now
+        )
+        upsert(restored)
+        retractWorkTombstone(workId)
+        return restored
+    }
+
+    /**
+     * Permanently removes the work row and local EPUB, and records a sync
+     * tombstone so a later backup import does not resurrect it by UUID.
+     * Used by "Delete Permanently" and [sweepExpiredSoftDeletes].
+     */
+    suspend fun hardDelete(workId: String) {
         val work = getWork(workId)
         fileStore.deleteWorkEpub(workId)
         workDao.deleteById(workId)
         if (work != null) {
-            val now = clock()
-            database.syncTombstoneDao().upsert(
-                SyncTombstoneEntity(
-                    id = uuidFactory(),
-                    recordID = work.id,
-                    recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
-                    createdAt = now,
-                    lastModifiedAt = now,
-                    sourceURL = work.sourceUrl,
-                    ao3WorkID = null,
-                    deletedOnDeviceID = "",
-                    deletionReason = "userDelete"
-                )
-            )
+            recordWorkTombstone(work, clock(), deletionReason = "workDeleted")
         }
+    }
+
+    /**
+     * Legacy entry point: permanent removal. Delegates to [hardDelete].
+     * Everyday UI deletion should prefer [softDelete] once Recently Deleted UI lands.
+     */
+    suspend fun removeFromLibrary(workId: String) {
+        hardDelete(workId)
+    }
+
+    /**
+     * Permanently deletes soft-deleted works past
+     * `permanentDeletionScheduledAt`. Returns how many works were removed.
+     */
+    suspend fun sweepExpiredSoftDeletes(): Int {
+        val now = clock()
+        val expired = workDao.getExpiredSoftDeletes(now)
+        for (entity in expired) {
+            hardDelete(entity.id)
+        }
+        return expired.size
+    }
+
+    private suspend fun recordWorkTombstone(
+        work: SavedWork,
+        now: Instant,
+        deletionReason: String
+    ) {
+        val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
+            ?.toInt()
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = work.id,
+                recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                createdAt = now,
+                lastModifiedAt = now,
+                sourceURL = work.sourceUrl,
+                ao3WorkID = ao3Id,
+                deletedOnDeviceID = "",
+                deletionReason = deletionReason
+            )
+        )
+    }
+
+    private suspend fun retractWorkTombstone(workId: String) {
+        tombstoneDao.deleteByRecord(workId, SyncTombstoneRecordType.SAVED_WORK)
     }
 
     suspend fun userTagsForWork(workId: String): List<Tag> {
@@ -171,5 +260,10 @@ class WorkRepository(
     suspend fun removeFromCollection(workId: String, collectionId: String): List<WorkCollection> {
         collectionDao.removeWork(collectionId, workId)
         return collectionsForWork(workId)
+    }
+
+    companion object {
+        /** Apple `PreservedWorkService.recoveryWindow` — 90 days. */
+        val RECOVERY_WINDOW: Duration = Duration.ofDays(90)
     }
 }
