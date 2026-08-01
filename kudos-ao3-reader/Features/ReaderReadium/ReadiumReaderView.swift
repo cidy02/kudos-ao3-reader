@@ -116,8 +116,8 @@ struct ReadiumReaderView: View {
         work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
     }
     /// UIKit peel surface — interactive samples never touch SwiftUI state.
-    @State private var dismissSurface = ReaderDismissDragSurface()
-    @State private var isDismissingByDrag = false
+    /// Set once dismissal commits, so late locator writes are ignored on the way out.
+    @State private var isDismissingReader = false
 
     // MARK: Chrome state
 
@@ -257,11 +257,10 @@ struct ReadiumReaderView: View {
 
     var body: some View {
         // Dim + card peel are driven in UIKit during the gesture (see
-        // `ReaderDismissDragSurface`) so pan samples don't rebuild this tree.
+        // the old peel surface) so chrome doesn't rebuild during dismissal.
         ZStack {
             readerTheme.backgroundColor
                 .ignoresSafeArea()
-            ReaderDismissDimAnchor(surface: dismissSurface)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -485,10 +484,7 @@ struct ReadiumReaderView: View {
                     ReadiumNavigatorContainer(
                         controller: navigator,
                         readingMode: readingMode,
-                        dismissSurface: dismissSurface,
                         reduceMotion: reduceMotion,
-                        onDismissInteractionActiveChange: handleDismissInteractionActiveChange,
-                        onDismissDragEnded: handleDismissDragEnded,
                         onHighlight: { createAnnotationFromSelection(withNote: false) },
                         onAddNote: { createAnnotationFromSelection(withNote: true) }
                     )
@@ -507,63 +503,7 @@ struct ReadiumReaderView: View {
         }
     }
 
-    private func handleDismissInteractionActiveChange(_ active: Bool) {
-        // Successful exit keeps the gate latched until the book is deallocated.
-        if !active && (isDismissingByDrag || book.isDismissExitLatched) { return }
-        book.setDismissInteractionActive(active)
-    }
 
-    private func handleDismissDragEnded(_ shouldDismiss: Bool, unfreeze: @escaping () -> Void) {
-        guard !isDismissingByDrag else { return }
-        if shouldDismiss {
-            // Lock the peel transform *before* flush/latch. Those touch
-            // @State/@Observable and rebuild the peel host; without the lock the
-            // card snaps to identity (bounce up), re-applies finger offset
-            // (comes down), then flies off.
-            dismissSurface.lockTransformForExit()
-            // Flush *before* latching so live (still freeze-stable) locator is
-            // recorded once; subsequent flushes skip re-record.
-            flushProgress(shelfStamp: true)
-            isDismissingByDrag = true
-            book.latchDismissExit()
-            // Leave page freeze in place until view teardown — never call
-            // `unfreeze` on the success path (would re-enable ingestion mid-exit).
-            if reduceMotion {
-                dismissSurface.endCardSnapshot()
-                dismissSurface.reset(reduceMotion: true)
-                dismissReader()
-                return
-            }
-            // Fly the card snapshot off-screen, then pop.
-            dismissSurface.animate(
-                to: 1400,
-                reduceMotion: false,
-                duration: 0.22,
-                spring: false
-            ) {
-                self.dismissSurface.endCardSnapshot()
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { self.dismissReader() }
-            }
-            return
-        }
-        // Cancel: spring snapshot back, restore live card, unfreeze WebKit.
-        if dismissSurface.offset != 0 {
-            dismissSurface.animate(
-                to: 0,
-                reduceMotion: reduceMotion,
-                duration: 0.38,
-                spring: true
-            ) {
-                self.dismissSurface.endCardSnapshot()
-                unfreeze()
-            }
-        } else {
-            dismissSurface.endCardSnapshot()
-            unfreeze()
-        }
-    }
 
     // MARK: In-book annotations
 
@@ -859,7 +799,7 @@ struct ReadiumReaderView: View {
         if !book.isDismissExitLatched {
             flushProgress(shelfStamp: true)
             book.latchDismissExit()
-            isDismissingByDrag = true
+            isDismissingReader = true
         } else {
             // Already committed on peel success — shelf stamp only if needed.
             flushProgress(shelfStamp: true)
@@ -876,7 +816,7 @@ struct ReadiumReaderView: View {
         // After exit has committed (swipe peel or close/edge), never re-record a
         // live locator — freeze release / late TTS can still mutate `currentLocator`
         // while the view is tearing down.
-        let exitCommitted = isDismissingByDrag || book.isDismissExitLatched
+        let exitCommitted = isDismissingReader || book.isDismissExitLatched
         if !exitCommitted, let live = book.currentLocator?.persistenceString {
             progressPersistence.record(
                 locatorString: live,
@@ -932,7 +872,7 @@ struct ReadiumReaderView: View {
     /// scaled/offset with the card.
     private var dismissableReaderCard: some View {
         // UIKit host owns the peel transform for page + chrome as one unit.
-        ReaderDismissPeelHost(surface: dismissSurface, reduceMotion: reduceMotion) {
+        ReaderFullBleedHost {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Each chrome layer sizes to its own content (no infinite-frame
@@ -948,7 +888,7 @@ struct ReadiumReaderView: View {
         // `host.safeAreaRegions = []` (inside the peel host) only stops the
         // *inner* UIHostingController from handing safe-area insets down to its
         // own SwiftUI content — it has no effect on how the *outer* SwiftUI
-        // layout treats `ReaderDismissPeelHost` itself. Without this, SwiftUI
+        // layout treats `ReaderFullBleedHost` itself. Without this, SwiftUI
         // still shrinks this representable into the safe sub-rectangle by
         // default, and the manual `pageBoxChromeSafeTop`/`Bottom` chrome padding
         // below then stacks a second inset on top of that — the double top/
@@ -1665,7 +1605,7 @@ extension ReadiumReaderView {
     /// otherwise queue a `go(to:)` per intermediate page. `syncSliderFromPosition`
     /// stays suppressed while editing, so these seeks can't fight the thumb.
     private func handleScrubSeek() {
-        guard isEditingSlider, !book.isLocatorIngestionBlocked, !isDismissingByDrag else { return }
+        guard isEditingSlider, !book.isLocatorIngestionBlocked, !isDismissingReader else { return }
         guard book.pageBarReady, book.visualPageCount != nil else { return }
         let pageCount = book.readingPosition?.pageCount ?? 0
         guard pageCount > 1 else { return }
@@ -1717,7 +1657,7 @@ extension ReadiumReaderView {
         lastScrubSeekPage = nil
         // Ignore scrub commit while dismiss freeze / exit latch is up — a release
         // that races with swipe-down must not seek the navigator mid-exit.
-        guard !book.isLocatorIngestionBlocked, !isDismissingByDrag else { return }
+        guard !book.isLocatorIngestionBlocked, !isDismissingReader else { return }
         let pageCount = book.readingPosition?.pageCount ?? 0
         guard pageCount > 0 else { return }
         let page = ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)

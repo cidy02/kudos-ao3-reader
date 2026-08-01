@@ -125,10 +125,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     private var pageBarMeasureGeneration = 0
     /// Retained WKScriptMessageHandler for live swipe updates after ready.
     private let visualPageBridge = VisualPageMessageBridge()
-    /// True while swipe-down dismiss is freezing the page. Freeze mutates scroll
-    /// offsets (and can hide WebKit under a snapshot); those side-effects must
-    /// not rewrite `currentLocator`, visual page metrics, or durable progress.
-    private(set) var isDismissInteractionActive = false
     /// Latched on a successful drag-to-dismiss until this book is deallocated.
     /// Survives unfreeze / late WebKit settles so exit flush cannot re-record a
     /// freeze- or TTS-corrupted locator after the pre-exit snapshot.
@@ -136,7 +132,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Locator / visual / viewport ingestion is blocked for the freeze *and*
     /// the entire successful-exit teardown window.
     var isLocatorIngestionBlocked: Bool {
-        isDismissInteractionActive || isDismissExitLatched
+        isDismissExitLatched
     }
     /// Toggled by tapping the page; the view hides/shows its chrome on this.
     ///
@@ -363,19 +359,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         currentChapterPositions?.count ?? 0
     }
 
-    /// Marks the swipe-down dismiss interaction. While active, locator + visual
-    /// page updates from freeze side-effects are ignored so resume stays put.
-    /// Clearing is a no-op once a successful exit is latched.
-    func setDismissInteractionActive(_ active: Bool) {
-        if !active && isDismissExitLatched { return }
-        isDismissInteractionActive = active
-    }
-
-    /// Successful drag-dismiss: permanently block locator/visual/completion
-    /// ingestion until this `ReadiumBook` is torn down with the view.
+    /// Dismissal has committed: permanently block locator/visual/completion ingestion
+    /// until this `ReadiumBook` is torn down with the view, so a late scroll or
+    /// teardown notification cannot overwrite the position that was just flushed.
     func latchDismissExit() {
         isDismissExitLatched = true
-        isDismissInteractionActive = true
     }
 
     /// Seeks within the current resource by progression (0…1). Used when the
@@ -489,7 +477,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         // another book's last page while this EPUB is still opening.
         currentLocator = nil
         clearVisualPageMetrics()
-        isDismissInteractionActive = false
         isDismissExitLatched = false
         do {
             let publication = try await ReadiumPublicationLoader.openEPUB(at: fileURL)
