@@ -9,13 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,13 +22,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.ui.components.CoverCardStatsColumn
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -37,6 +40,11 @@ import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.ui.components.StatusBadge
+import io.github.cidy02.kudos.ui.components.WorkStatItem
+import io.github.cidy02.kudos.ui.components.chapterStatText
+import io.github.cidy02.kudos.ui.components.completionStatText
+import io.github.cidy02.kudos.ui.components.ratingDisplayName
+import io.github.cidy02.kudos.ui.components.wordStatText
 import java.time.Instant
 import kotlin.math.roundToInt
 
@@ -400,15 +408,31 @@ private fun CompactWorkRow(
     onOpenReader: (String) -> Unit
 ) {
     val work = display.item.work
+    val canRead =
+        work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible
+    val onPrimaryOpen: () -> Unit = {
+        if (canRead) onOpenReader(work.id) else onOpenWork(work.id)
+    }
     Surface(
         tonalElevation = 1.dp,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onPrimaryOpen)
+            .semantics {
+                contentDescription = if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+                    "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
+                } else {
+                    val action = if (canRead) "Read" else "Open details for"
+                    "$action ${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
+                }
+            }
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
@@ -431,10 +455,7 @@ private fun CompactWorkRow(
                     MetadataChipRow(labels = work.compactStatusLabels(), maxItems = 4)
                 }
             }
-            if (work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible) {
-                TextButton(onClick = { onOpenReader(work.id) }) { Text("Read") }
-            }
-            TextButton(onClick = { onOpenWork(work.id) }) { Text("Details") }
+            TextButton(onClick = { onOpenWork(work.id) }) { Text("ⓘ") }
         }
     }
 }
@@ -446,9 +467,22 @@ private fun SavedWorkCard(
     onOpenReader: () -> Unit
 ) {
     val work = display.item.work
+    val canRead =
+        work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible
+    val onPrimaryOpen = if (canRead) onOpenReader else onOpenWork
     Card(
+        onClick = onPrimaryOpen,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+                    "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
+                } else {
+                    val action = if (canRead) "Read" else "Open details for"
+                    "$action ${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
+                }
+            }
     ) {
         Column(
             modifier = Modifier
@@ -460,20 +494,33 @@ private fun SavedWorkCard(
                 StatusBadge("Mature work hidden")
                 MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
             } else {
-                Text(
-                    text = work.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "by ${work.author.ifBlank { "Anonymous" }}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = work.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "by ${work.author.ifBlank { "Anonymous" }}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    TextButton(onClick = onOpenWork) { Text("ⓘ") }
+                }
                 MetadataChipRow(labels = work.fandomLabels(), maxItems = 3, prominent = true)
-                MetadataChipRow(labels = work.fullStatusLabels(), maxItems = 10)
+                MetadataChipRow(labels = work.localStatusLabels(), maxItems = 6)
+                CoverCardStatsColumn(stats = work.coverStats())
                 if (work.summary.isNotBlank()) {
                     Text(
                         text = work.summary,
@@ -483,12 +530,6 @@ private fun SavedWorkCard(
                     )
                 }
                 TagLine(display.item.userTags, display.item.collections)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpenWork) { Text("Details") }
-                if (work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible) {
-                    Button(onClick = onOpenReader) { Text("Read") }
-                }
             }
         }
     }
@@ -500,20 +541,37 @@ private fun TagLine(tags: List<Tag>, collections: List<WorkCollection>) {
     MetadataChipRow(labels = labels, maxItems = 4)
 }
 
-private fun SavedWork.fullStatusLabels(): List<String> {
+/** Local-only status chips (download/favorite/finished/progress). */
+private fun SavedWork.localStatusLabels(): List<String> {
     return listOfNotNull(
         if (hasEpub) "Downloaded" else "Not downloaded",
         if (isFavorite) "Favorite" else null,
         if (isFinished) "Finished" else null,
-        if (isComplete) "Complete" else "In progress",
-        rating.takeIf { it.isNotBlank() },
-        wordCount.takeIf { it > 0 }?.let { "%,d words".format(it) },
-        chapters.takeIf { it.isNotBlank() }?.let { "$it chapters" },
-        kudos.takeIf { it > 0 }?.let { "$it kudos" },
-        comments?.takeIf { it > 0 }?.let { "$it comments" },
-        hits?.takeIf { it > 0 }?.let { "$it hits" },
         lastReadDate?.let { "Read ${it.shortDate()}" },
         readingProgressFraction()?.let { "${(it * 100).roundToInt()}%" }
+    )
+}
+
+/** AO3 cover-card stats: one label per row with spelled-out nouns. */
+private fun SavedWork.coverStats(): List<WorkStatItem> {
+    return listOfNotNull(
+        ratingDisplayName(rating)?.let { WorkStatItem(it, accessibilityLabel = rating) },
+        chapters.takeIf { it.isNotBlank() }?.let {
+            WorkStatItem(chapterStatText(it), accessibilityLabel = "Chapters $it")
+        },
+        completionStatText(isComplete)?.let { WorkStatItem(it) },
+        wordCount.takeIf { it > 0 }?.let {
+            WorkStatItem(wordStatText(it), accessibilityLabel = "%,d words".format(it))
+        },
+        kudos.takeIf { it > 0 }?.let {
+            WorkStatItem(if (it == 1) "1 kudos" else "%,d kudos".format(it))
+        },
+        comments?.takeIf { it > 0 }?.let {
+            WorkStatItem(if (it == 1) "1 comment" else "%,d comments".format(it))
+        },
+        hits?.takeIf { it > 0 }?.let {
+            WorkStatItem(if (it == 1) "1 hit" else "%,d hits".format(it))
+        }
     )
 }
 

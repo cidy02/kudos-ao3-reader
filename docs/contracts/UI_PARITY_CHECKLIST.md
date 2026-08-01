@@ -37,6 +37,9 @@ Status: Partial.
 - Complete: shared Material metadata chips/status badges now organize dense AO3
   and saved-work metadata across Home, Library, Search, Browse, Account lists,
   and Work Detail.
+- Complete (2026-07-31 hig-review sync): cover-card AO3 stats use a one-stat-per-row
+  column with spelled-out nouns (`CoverCardStatsColumn` / `WorkStats.kt`), matching
+  Apple's post-`436d65f` cover-card rule. Local status remains chips.
 - Partial: Android does not yet have Apple-style generated cover cards or
   carousel art; it uses dense Material cards.
 - Needs human review: confirm the card hierarchy remains scannable at large font
@@ -50,6 +53,9 @@ Status: Partial.
 - Complete: Continue Reading, Favorites, Recently Opened, and Recently Added
   shelves are present, horizontal, and privacy-aware.
 - Complete: Home routes to canonical Work Detail and Reader.
+- Complete (2026-07-31 hig-review sync): compact Home cards are reader-first —
+  whole-card tap opens the reader when an EPUB is present; ⓘ opens Work Detail.
+  Shelf limit raised to 12; card width tightened to 240.dp.
 - Deferred: Android Home does not yet show AO3 Subscriptions or Recently Updated
   shelves.
 - Needs human review: visual density and empty-state tone on device.
@@ -123,7 +129,11 @@ Status: Partial, needs human review.
   URL is known, and can mark finished.
 - Complete: cross-platform resume still depends on `lastSpineIndex` and
   `lastScrollFraction`; engine-specific locators are same-platform precision only.
+- Complete (2026-07-31 hig-review sync): open path uses a full-page themed
+  `ReaderPageSkeleton` instead of a centered spinner (Material expression of
+  Apple's skeleton-only open).
 - Partial: full reader settings UI and custom font import are not finished.
+- Deferred: remote compact-card download-into-reader (Apple `f1f2844` full rule).
 - Needs human review: actual Readium rendering, progress persistence, TalkBack,
   and controls on device.
 

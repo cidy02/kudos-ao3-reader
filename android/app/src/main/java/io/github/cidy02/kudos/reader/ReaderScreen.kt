@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -37,6 +36,7 @@ import io.github.cidy02.kudos.reader.readium.ReadiumOpenResult
 import io.github.cidy02.kudos.reader.readium.ReadiumProgressAdapter
 import io.github.cidy02.kudos.reader.readium.ReadiumPublicationOpener
 import io.github.cidy02.kudos.reader.readium.ReadiumSettingsAdapter
+import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 
 /**
  * Real reader entry point. Resolves the work (via [ReaderViewModel]/repository),
@@ -54,7 +54,8 @@ fun ReaderScreen(
     val uiState by viewModel.state.collectAsState()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val state = uiState) {
-            ReaderUiState.Loading -> ReaderMessage("Opening…", showSpinner = true)
+            // Skeleton-only open path (hig-review): no centered spinner flash.
+            ReaderUiState.Loading -> ReaderPageSkeleton(message = "Opening…")
             is ReaderUiState.Error -> ReaderErrorView(
                 error = state.error,
                 onBack = onBack,
@@ -97,7 +98,7 @@ private fun ReaderReading(
     }
 
     when (val result = opening) {
-        null -> ReaderMessage("Opening “${state.work.title}”…", showSpinner = true)
+        null -> ReaderPageSkeleton(message = "Opening “${state.work.title}”…")
         is ReadiumOpenResult.Failure -> ReaderErrorView(
             error = result.error,
             onBack = onBack,
@@ -186,18 +187,7 @@ private fun ReaderTopBar(
     }
 }
 
-@Composable
-private fun ReaderMessage(message: String, showSpinner: Boolean = false) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (showSpinner) CircularProgressIndicator()
-            Text(text = message, style = MaterialTheme.typography.bodyLarge)
-        }
-    }
-}
+
 
 @Composable
 private fun ReaderErrorView(
