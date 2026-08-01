@@ -2,7 +2,8 @@ package io.github.cidy02.kudos.network.ao3
 
 data class AO3NetworkConfig(
     val maxConcurrentRequests: Int = 3,
-    val minDelayBetweenRequestsMillis: Long = 500,
+    // Apple paces at 0.6s between starts (AO3RequestDefaults). Keep parity.
+    val minDelayBetweenRequestsMillis: Long = 600,
     val maxRetries: Int = 2,
     val callTimeoutSeconds: Long = 30
 ) {

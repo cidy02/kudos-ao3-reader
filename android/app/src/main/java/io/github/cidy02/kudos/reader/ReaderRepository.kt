@@ -49,9 +49,9 @@ class ReaderRepository(
     }
 
     suspend fun setFinished(workId: String, finished: Boolean): SavedWork? {
-        val work = workRepository.getWork(workId) ?: return null
-        if (work.isFinished == finished) return work
-        return workRepository.upsert(work.copy(isFinished = finished))
+        // Delegates to WorkRepository so free-EPUB-on-finish policy is one place
+        // (Apple WorkLifecycle parity).
+        return workRepository.setFinished(workId, finished)
     }
 
     /**

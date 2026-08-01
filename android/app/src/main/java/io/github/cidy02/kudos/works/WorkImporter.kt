@@ -23,7 +23,7 @@ class WorkImporter(
     private val merger: WorkMetadataMerger = WorkMetadataMerger()
 ) {
     suspend fun saveMetadataOnly(summary: AO3WorkSummary): WorkImportResult {
-        val existing = workRepository.findBySourceUrl(summary.workUrl)
+        val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
         val work = merger.merge(
             summary = summary,
@@ -36,7 +36,7 @@ class WorkImporter(
     }
 
     suspend fun download(summary: AO3WorkSummary): WorkImportResult {
-        val existing = workRepository.findBySourceUrl(summary.workUrl)
+        val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
         val base = workRepository.upsert(
             merger.merge(
@@ -78,6 +78,14 @@ class WorkImporter(
                 WorkImportResult.Success(updated)
             }
         }
+    }
+
+    private suspend fun findExisting(summary: AO3WorkSummary): SavedWork? {
+        return WorkIdentityIndex.findExisting(
+            candidateSourceUrl = summary.workUrl,
+            byId = { workRepository.getWork(it) },
+            bySourceUrl = { workRepository.findBySourceUrl(it) }
+        )
     }
 
     private suspend fun fetchCanonical(workId: Long): AO3WorkMetadata? {

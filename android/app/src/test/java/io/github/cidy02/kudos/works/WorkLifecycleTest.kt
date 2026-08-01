@@ -164,6 +164,33 @@ class WorkLifecycleRepositoryTest {
 
         assertEquals(listOf(workUuid), works.map { it.id })
     }
+
+    @Test
+    fun markFinishedFreesEpubWhenUnprotected() = runTest {
+        // History-only: not saved, not favorite — Apple WorkLifecycle free-on-finish.
+        repository.upsert(
+            sampleSavedWork().copy(isSaved = false, isFavorite = false, hasEpub = true, isFinished = false)
+        )
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+
+        val finished = repository.setFinished(workUuid, true)
+
+        assertTrue(finished!!.isFinished)
+        assertFalse(finished.hasEpub)
+        assertFalse(fileStore.workEpubExists(workUuid))
+    }
+
+    @Test
+    fun markFinishedKeepsEpubWhenProtected() = runTest {
+        repository.upsert(sampleSavedWork().copy(isSaved = true, hasEpub = true, isFinished = false))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+
+        val finished = repository.setFinished(workUuid, true)
+
+        assertTrue(finished!!.isFinished)
+        assertTrue(finished.hasEpub)
+        assertTrue(fileStore.workEpubExists(workUuid))
+    }
 }
 
 @RunWith(RobolectricTestRunner::class)

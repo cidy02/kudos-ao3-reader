@@ -55,7 +55,28 @@ class WorkRepository(
 
     suspend fun toggleFinished(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
-        return upsert(work.copy(isFinished = !work.isFinished))
+        return setFinished(workId, !work.isFinished)
+    }
+
+    /**
+     * Apple `WorkLifecycle.markFinished` / `markStillReading` parity:
+     * - Mark finished: set flag; if the work is **not** protected (saved/favorite),
+     *   free the local EPUB (history-only entry).
+     * - Mark unfinished: clear flag only — never auto-restore the EPUB.
+     */
+    suspend fun setFinished(workId: String, finished: Boolean): SavedWork? {
+        val work = getWork(workId) ?: return null
+        if (work.isFinished == finished) return work
+        return if (finished) {
+            var next = work.copy(isFinished = true)
+            if (!next.isProtected && next.hasEpub) {
+                fileStore.deleteWorkEpub(workId)
+                next = next.copy(hasEpub = false)
+            }
+            upsert(next)
+        } else {
+            upsert(work.copy(isFinished = false))
+        }
     }
 
     suspend fun deleteLocalEpub(workId: String): SavedWork? {
