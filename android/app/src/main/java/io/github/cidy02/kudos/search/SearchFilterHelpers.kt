@@ -184,3 +184,34 @@ fun activeFilterChips(filters: AO3SearchFilters): List<String> {
 
     return chips
 }
+
+/**
+ * Default name for saving the current search: free-text query, else first fandom,
+ * else a generic label (matches Apple `defaultSavedSearchName`).
+ */
+fun defaultSavedSearchName(filters: AO3SearchFilters): String {
+    val query = filters.query.trim()
+    if (query.isNotEmpty()) return query
+    val fandom = filters.fandom.trim()
+    if (fandom.isNotEmpty()) {
+        return AO3SearchFilters.commaSeparatedValues(fandom).firstOrNull() ?: fandom
+    }
+    return "Saved Search"
+}
+
+/**
+ * One-line description of a saved search's filters (query + salient facets).
+ */
+fun savedSearchSubtitle(filters: AO3SearchFilters): String? {
+    val parts = mutableListOf<String>()
+    val query = filters.query.trim()
+    if (query.isNotEmpty()) parts += "“$query”"
+    val fandom = filters.fandom.trim()
+    if (fandom.isNotEmpty()) {
+        parts += AO3SearchFilters.commaSeparatedValues(fandom).firstOrNull() ?: fandom
+    }
+    if (filters.rating != AO3Rating.ANY) parts += filters.rating.title
+    if (filters.completion != AO3Completion.ANY) parts += filters.completion.title
+    if (filters.sort != AO3SearchSort.RELEVANCE) parts += filters.sort.title
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}

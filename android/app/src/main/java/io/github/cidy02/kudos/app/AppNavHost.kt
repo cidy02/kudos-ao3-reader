@@ -187,7 +187,8 @@ fun AppNavHost(
                 onOpenWork = { work ->
                     selectedWorkSource = WorkDetailSource.RemoteSummary(work)
                     navController.navigate(Routes.WorkDetail)
-                }
+                },
+                savedSearchRepository = container.savedSearchRepository
             )
         }
         composable(Routes.WorkDetail) {

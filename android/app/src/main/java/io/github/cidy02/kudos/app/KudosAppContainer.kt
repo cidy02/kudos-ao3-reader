@@ -24,6 +24,7 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import io.github.cidy02.kudos.reader.ReaderRepository
+import io.github.cidy02.kudos.search.SavedSearchRepository
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
 
@@ -134,5 +135,9 @@ class KudosAppContainer(context: Context) {
             fontFileStore = fontFileStore,
             settingsRepository = settingsRepository
         )
+    }
+
+    val savedSearchRepository: SavedSearchRepository by lazy {
+        SavedSearchRepository(database.savedSearchDao())
     }
 }

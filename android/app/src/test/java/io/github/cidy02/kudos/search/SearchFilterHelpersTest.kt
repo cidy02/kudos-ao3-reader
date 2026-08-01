@@ -141,4 +141,34 @@ class SearchFilterHelpersTest {
         assertTrue(chips.contains(AO3Language.ENGLISH.title))
         assertTrue(chips.contains("Sort: Kudos"))
     }
+
+    @Test
+    fun defaultSavedSearchNamePrefersQueryThenFandom() {
+        assertEquals(
+            "slow burn",
+            defaultSavedSearchName(AO3SearchFilters(query = "slow burn", fandom = "Naruto"))
+        )
+        assertEquals(
+            "Naruto",
+            defaultSavedSearchName(AO3SearchFilters(fandom = "Naruto, Boruto"))
+        )
+        assertEquals("Saved Search", defaultSavedSearchName(AO3SearchFilters()))
+    }
+
+    @Test
+    fun savedSearchSubtitleJoinsSalientParts() {
+        assertEquals(null, savedSearchSubtitle(AO3SearchFilters()))
+        assertEquals(
+            "“found family” · Naruto · Mature · Complete · Kudos",
+            savedSearchSubtitle(
+                AO3SearchFilters(
+                    query = "found family",
+                    fandom = "Naruto",
+                    rating = AO3Rating.MATURE,
+                    completion = AO3Completion.COMPLETE,
+                    sort = AO3SearchSort.KUDOS
+                )
+            )
+        )
+    }
 }

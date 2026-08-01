@@ -56,7 +56,8 @@ fun SearchFilterSheet(
     onFiltersChange: (AO3SearchFilters) -> Unit,
     onApply: () -> Unit,
     onClear: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSave: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -329,6 +330,14 @@ fun SearchFilterSheet(
                 if (filters.hasActiveFilters) {
                     TextButton(onClick = onClear) {
                         Text("Clear")
+                    }
+                }
+                if (onSave != null) {
+                    TextButton(
+                        enabled = filters.isSearchable,
+                        onClick = onSave
+                    ) {
+                        Text("Save")
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))

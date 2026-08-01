@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,14 +12,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
@@ -51,14 +60,29 @@ import kotlinx.coroutines.launch
 @Composable
 fun SearchScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
-    repository: AO3SearchRepository = remember { AO3SearchRepository() }
+    repository: AO3SearchRepository = remember { AO3SearchRepository() },
+    savedSearchRepository: SavedSearchRepository? = null
 ) {
     var filters by remember { mutableStateOf(AO3SearchFilters()) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var saveName by remember { mutableStateOf("") }
     var state by remember { mutableStateOf<SearchUiState>(SearchUiState.Idle) }
     var lastFilters by remember { mutableStateOf(AO3SearchFilters()) }
+    var savedSearches by remember { mutableStateOf<List<SavedSearch>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val activeChips = remember(filters) { activeFilterChips(filters) }
+
+    fun refreshSavedSearches() {
+        val repo = savedSearchRepository ?: return
+        scope.launch {
+            savedSearches = repo.getAll()
+        }
+    }
+
+    LaunchedEffect(savedSearchRepository) {
+        refreshSavedSearches()
+    }
 
     fun runSearch(page: Int = 1, searchFilters: AO3SearchFilters = filters) {
         if (!searchFilters.isSearchable) {
@@ -95,6 +119,39 @@ fun SearchScreen(
         filters = clearedFiltersPreservingQuery(filters)
     }
 
+    fun presentSaveDialog() {
+        if (savedSearchRepository == null || !filters.isSearchable) return
+        saveName = defaultSavedSearchName(filters)
+        showSaveDialog = true
+    }
+
+    fun commitSavedSearch() {
+        val repo = savedSearchRepository ?: return
+        val name = saveName.trim()
+        if (name.isEmpty() || !filters.isSearchable) return
+        scope.launch {
+            repo.save(name, filters)
+            savedSearches = repo.getAll()
+            showSaveDialog = false
+            saveName = ""
+        }
+    }
+
+    fun runSaved(saved: SavedSearch) {
+        val repo = savedSearchRepository ?: return
+        val restored = repo.filtersOf(saved)
+        filters = restored
+        runSearch(page = 1, searchFilters = restored)
+    }
+
+    fun deleteSaved(id: String) {
+        val repo = savedSearchRepository ?: return
+        scope.launch {
+            repo.delete(id)
+            savedSearches = repo.getAll()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -113,6 +170,17 @@ fun SearchScreen(
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
+            if (savedSearchRepository != null) {
+                IconButton(
+                    enabled = filters.isSearchable,
+                    onClick = ::presentSaveDialog
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.BookmarkAdd,
+                        contentDescription = "Save search"
+                    )
+                }
+            }
             Button(
                 enabled = state !is SearchUiState.Loading && filters.isSearchable,
                 onClick = { runSearch() }
@@ -137,11 +205,27 @@ fun SearchScreen(
         }
 
         when (val current = state) {
-            SearchUiState.Idle -> EmptyStateCard(
-                title = "Search AO3 works",
-                message = "Enter a title, tag, author, or phrase — or open Filters for rating, " +
-                    "warnings, tags, and more. Search runs only when you press Search or Apply."
-            )
+            SearchUiState.Idle -> {
+                if (savedSearches.isNotEmpty()) {
+                    SavedSearchesList(
+                        savedSearches = savedSearches,
+                        subtitleFor = { saved ->
+                            savedSearchRepository
+                                ?.filtersOf(saved)
+                                ?.let(::savedSearchSubtitle)
+                        },
+                        onRun = ::runSaved,
+                        onDelete = ::deleteSaved,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    EmptyStateCard(
+                        title = "Search AO3 works",
+                        message = "Enter a title, tag, author, or phrase — or open Filters for rating, " +
+                            "warnings, tags, and more. Save a searchable filter set to re-run later."
+                    )
+                }
+            }
             SearchUiState.Loading -> LoadingStateCard("Searching AO3")
             is SearchUiState.Error -> {
                 ErrorStateCard(
@@ -178,8 +262,135 @@ fun SearchScreen(
                 runSearch(page = 1, searchFilters = filters)
             },
             onClear = ::clearFilters,
-            onDismiss = { showFilterSheet = false }
+            onDismiss = { showFilterSheet = false },
+            onSave = if (savedSearchRepository != null) {
+                {
+                    showFilterSheet = false
+                    presentSaveDialog()
+                }
+            } else {
+                null
+            }
         )
+    }
+
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showSaveDialog = false
+                saveName = ""
+            },
+            title = { Text("Save Search") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Save the current search and its filters to re-run later.")
+                    OutlinedTextField(
+                        value = saveName,
+                        onValueChange = { saveName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = saveName.trim().isNotEmpty() && filters.isSearchable,
+                    onClick = ::commitSavedSearch
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSaveDialog = false
+                        saveName = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SavedSearchesList(
+    savedSearches: List<SavedSearch>,
+    subtitleFor: (SavedSearch) -> String?,
+    onRun: (SavedSearch) -> Unit,
+    onDelete: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        item {
+            KudosSectionHeader(
+                title = "Saved Searches",
+                subtitle = "Tap to re-run. Search AO3 above or open Filters."
+            )
+        }
+        items(savedSearches, key = { it.id }) { saved ->
+            SavedSearchRow(
+                saved = saved,
+                subtitle = subtitleFor(saved),
+                onRun = { onRun(saved) },
+                onDelete = { onDelete(saved.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SavedSearchRow(
+    saved: SavedSearch,
+    subtitle: String?,
+    onRun: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onRun)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = saved.name,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = "Delete saved search"
+                )
+            }
+        }
     }
 }
 

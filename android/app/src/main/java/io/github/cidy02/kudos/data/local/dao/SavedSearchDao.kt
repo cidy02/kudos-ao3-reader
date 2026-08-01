@@ -16,4 +16,7 @@ interface SavedSearchDao {
 
     @Query("SELECT * FROM saved_searches ORDER BY dateAdded DESC")
     suspend fun getAll(): List<SavedSearchEntity>
+
+    @Query("DELETE FROM saved_searches WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
