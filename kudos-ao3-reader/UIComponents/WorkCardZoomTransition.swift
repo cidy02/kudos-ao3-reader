@@ -32,20 +32,33 @@ extension View {
     /// Marks this card as the thing a pushed screen should zoom out of.
     @ViewBuilder
     func workCardZoomSource(_ id: some Hashable, in namespace: Namespace.ID?) -> some View {
+        #if os(macOS)
+        self
+        #else
         if let namespace {
             matchedTransitionSource(id: id, in: namespace)
         } else {
             self
         }
+        #endif
     }
 
     /// Marks this screen as zooming out of the card with the same id.
+    ///
+    /// iOS only: `NavigationTransition.zoom` is unavailable on macOS, where a window's
+    /// navigation has no such presentation to animate. The Mac build keeps the plain
+    /// push, which is why this is a no-op there rather than a compile-time exclusion
+    /// at every call site.
     @ViewBuilder
     func workCardZoomDestination(_ id: some Hashable, in namespace: Namespace.ID?) -> some View {
+        #if os(macOS)
+        self
+        #else
         if let namespace {
             navigationTransition(.zoom(sourceID: id, in: namespace))
         } else {
             self
         }
+        #endif
     }
 }
