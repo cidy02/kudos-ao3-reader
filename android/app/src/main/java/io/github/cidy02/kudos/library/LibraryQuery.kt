@@ -20,6 +20,8 @@ object LibraryQuery {
         }
         val hiddenCount = snapshot.items.size - visible.size
         val filtered = apply(visible, searchQuery, filters, sort)
+        // Fandom chips / facet filters narrow every shelf (Apple LibraryView).
+        val shelfSource = filterOnly(visible, searchQuery, filters)
         val matureCount = snapshot.items.count { isMatureWork(it.work) }
         return LibraryUiState(
             loading = false,
@@ -29,16 +31,17 @@ object LibraryQuery {
             totalSaved = snapshot.items.size,
             hiddenByPrivacyCount = hiddenCount,
             items = filtered,
-            continueReading = continueReading(visible),
-            readingHistory = readingHistory(visible),
-            recentlyAdded = sortDisplayItems(visible, LibrarySort.RecentlyAdded),
+            continueReading = continueReading(shelfSource),
+            readingHistory = readingHistory(shelfSource),
+            recentlyAdded = sortDisplayItems(shelfSource, LibrarySort.RecentlyAdded),
             favorites = sortDisplayItems(
-                visible.filter { it.item.work.isFavorite },
+                shelfSource.filter { it.item.work.isFavorite },
                 LibrarySort.LastRead
             ),
-            savedForLater = savedForLater(visible),
-            finished = finished(visible),
-            downloaded = downloaded(visible),
+            savedForLater = savedForLater(shelfSource),
+            finished = finished(shelfSource),
+            downloaded = downloaded(shelfSource),
+            topFandoms = topFandoms(visible),
             userTags = snapshot.userTags.sortedBy { it.normalizedName.lowercase() },
             collections = snapshot.collections.sortedWith(
                 compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }
@@ -46,6 +49,37 @@ object LibraryQuery {
             hideMatureContent = snapshot.privacy.hideMatureContent,
             matureWorkCount = matureCount
         )
+    }
+
+    /** Most frequent fandoms among privacy-visible works (chip bar). */
+    fun topFandoms(items: List<LibraryDisplayItem>, limit: Int = 10): List<String> {
+        val counts = linkedMapOf<String, Int>()
+        for (display in items) {
+            for (raw in display.item.work.workFandoms) {
+                val name = raw.trim()
+                if (name.isEmpty()) continue
+                counts[name] = (counts[name] ?: 0) + 1
+            }
+        }
+        return counts.entries
+            .sortedWith(
+                compareByDescending<Map.Entry<String, Int>> { it.value }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.key }
+            )
+            .take(limit)
+            .map { it.key }
+    }
+
+    /** Filter + search without reordering (section builders apply their own sort). */
+    fun filterOnly(
+        items: List<LibraryDisplayItem>,
+        searchQuery: String = "",
+        filters: LibraryFilterState = LibraryFilterState()
+    ): List<LibraryDisplayItem> {
+        val query = searchQuery.trim()
+        return items.filter { display ->
+            matchesFilters(display.item, filters) && matchesSearch(display, query)
+        }
     }
 
     fun apply(

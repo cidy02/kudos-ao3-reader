@@ -106,6 +106,16 @@ class WorkRepository(
         return upsert(work.copy(isFavorite = favorite, lastModifiedAt = clock()))
     }
 
+    /**
+     * Apple `WorkLifecycle.setSaved` — keep (protect EPUB) or un-save a work.
+     * Library observe path only surfaces [SavedWork.isSaved] works.
+     */
+    suspend fun setSaved(workId: String, saved: Boolean): SavedWork? {
+        val work = getWork(workId) ?: return null
+        if (work.isSaved == saved) return work
+        return upsert(work.copy(isSaved = saved, lastModifiedAt = clock()))
+    }
+
     suspend fun toggleFinished(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
         return setFinished(workId, !work.isFinished)

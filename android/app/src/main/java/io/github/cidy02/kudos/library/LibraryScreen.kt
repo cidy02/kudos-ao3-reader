@@ -1,8 +1,8 @@
 package io.github.cidy02.kudos.library
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,81 +13,113 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
-import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkTags
 import kotlin.math.roundToInt
 
 private const val ShelfLimit = 12
 
 /**
- * Library dashboard — Material expression of Apple [LibraryView]:
- * horizontal cover-card carousels (Reading Now → Saved for Later → Finished →
- * Collections → Downloaded), icon toolbar (privacy / insights / select / filter),
- * and long-press context menus on cards.
+ * Library dashboard — Material expression of Apple Library:
+ * fandom chips · collapsible cover carousels · Reading Queues / Collections create tiles ·
+ * Reading History · toolbar pill (privacy / select / overflow) · long-press context menu.
  */
 @Composable
 fun LibraryScreen(
     repository: LibraryRepository,
     workRepository: WorkRepository,
     settingsRepository: SettingsRepository? = null,
+    queueRepository: ReadingQueueRepository? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRecentlyDeleted: () -> Unit = {},
     onOpenReadingQueues: () -> Unit = {},
     onOpenReadingStatistics: () -> Unit = {},
-    onOpenCollections: () -> Unit = {}
+    onOpenCollections: () -> Unit = {},
+    onOpenQueue: (String) -> Unit = {},
+    onOpenCollection: (String) -> Unit = {},
+    onOpenComments: (Long) -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(
-        factory = LibraryViewModel.factory(repository, workRepository, settingsRepository)
+        factory = LibraryViewModel.factory(
+            repository,
+            workRepository,
+            settingsRepository,
+            queueRepository
+        )
     )
     val state by viewModel.state.collectAsState()
     var confirmBulkRemove by remember { mutableStateOf(false) }
     var confirmRemoveOne by remember { mutableStateOf<String?>(null) }
+    var createQueueName by remember { mutableStateOf<String?>(null) }
+    var createCollectionName by remember { mutableStateOf<String?>(null) }
+    var addToQueueWorkId by remember { mutableStateOf<String?>(null) }
+    var addToCollectionWorkId by remember { mutableStateOf<String?>(null) }
 
     if (confirmBulkRemove) {
         val count = state.selectedCount
@@ -97,9 +129,7 @@ fun LibraryScreen(
                 Text(if (count == 1) "Remove 1 work?" else "Remove $count works?")
             },
             text = {
-                Text(
-                    "Selected works move to Recently Deleted for 90 days."
-                )
+                Text("Selected works move to Recently Deleted for 90 days.")
             },
             confirmButton = {
                 TextButton(
@@ -136,11 +166,162 @@ fun LibraryScreen(
         )
     }
 
+    createQueueName?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { createQueueName = null },
+            title = { Text("New Queue") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { createQueueName = it },
+                    label = { Text("Queue name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = draft.trim().isNotEmpty(),
+                    onClick = {
+                        val name = draft.trim()
+                        createQueueName = null
+                        viewModel.createQueue(name) { id -> onOpenQueue(id) }
+                    }
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createQueueName = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    createCollectionName?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { createCollectionName = null },
+            title = { Text("New Collection") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { createCollectionName = it },
+                    label = { Text("Collection name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = draft.trim().isNotEmpty(),
+                    onClick = {
+                        val name = draft.trim()
+                        createCollectionName = null
+                        viewModel.createCollection(name) { id -> onOpenCollection(id) }
+                    }
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createCollectionName = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    addToQueueWorkId?.let { workId ->
+        AlertDialog(
+            onDismissRequest = { addToQueueWorkId = null },
+            title = { Text("Add to Queue") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (state.readingQueues.isEmpty()) {
+                        Text(
+                            "No queues yet. Create one from Reading Queues.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        state.readingQueues.forEach { queue ->
+                            TextButton(
+                                onClick = {
+                                    addToQueueWorkId = null
+                                    viewModel.addToQueue(workId, queue.id)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(queue.name, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { addToQueueWorkId = null }) { Text("Close") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        addToQueueWorkId = null
+                        onOpenReadingQueues()
+                    }
+                ) { Text("Manage queues") }
+            }
+        )
+    }
+
+    addToCollectionWorkId?.let { workId ->
+        var newName by remember(workId) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { addToCollectionWorkId = null },
+            title = { Text("Add to Collection") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("New collection") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (state.collections.isEmpty()) {
+                        Text(
+                            "No collections yet. Create one above.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        state.collections.forEach { collection ->
+                            TextButton(
+                                onClick = {
+                                    addToCollectionWorkId = null
+                                    viewModel.addToCollection(workId, collection.name)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    "${collection.name} (${collection.workIds.size})",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = newName.trim().isNotEmpty(),
+                    onClick = {
+                        val name = newName.trim()
+                        addToCollectionWorkId = null
+                        viewModel.addToCollection(workId, name)
+                    }
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = { addToCollectionWorkId = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     LibraryContent(
         state = state,
-        onToggleFavoriteFilter = viewModel::toggleFavoriteOnly,
-        onFinishedFilter = viewModel::setFinishedFilter,
-        onDownloadFilter = viewModel::setDownloadFilter,
+        onSetFandomFilter = viewModel::setFandomFilter,
         onClearFilters = viewModel::clearFilters,
         onOpenWork = onOpenWork,
         onOpenReader = onOpenReader,
@@ -148,6 +329,10 @@ fun LibraryScreen(
         onOpenRecentlyDeleted = onOpenRecentlyDeleted,
         onOpenReadingStatistics = onOpenReadingStatistics,
         onOpenCollections = onOpenCollections,
+        onOpenQueue = onOpenQueue,
+        onOpenCollection = onOpenCollection,
+        onCreateQueue = { createQueueName = "" },
+        onCreateCollection = { createCollectionName = "" },
         onEnterSelection = { viewModel.enterSelectionMode() },
         onExitSelection = viewModel::exitSelectionMode,
         onToggleSelection = viewModel::toggleWorkSelection,
@@ -159,6 +344,11 @@ fun LibraryScreen(
         onToggleFavoriteOne = viewModel::toggleFavoriteOne,
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
+        onSetSavedOne = viewModel::setSavedOne,
+        onRevealWork = viewModel::revealWork,
+        onAddToQueue = { addToQueueWorkId = it },
+        onAddToCollection = { addToCollectionWorkId = it },
+        onOpenComments = onOpenComments,
         onTogglePrivacy = viewModel::toggleHideMature
     )
 }
@@ -166,9 +356,7 @@ fun LibraryScreen(
 @Composable
 private fun LibraryContent(
     state: LibraryUiState,
-    onToggleFavoriteFilter: () -> Unit,
-    onFinishedFilter: (LibraryFinishedFilter) -> Unit,
-    onDownloadFilter: (LibraryDownloadFilter) -> Unit,
+    onSetFandomFilter: (String?) -> Unit,
     onClearFilters: () -> Unit,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
@@ -176,6 +364,10 @@ private fun LibraryContent(
     onOpenReadingQueues: () -> Unit,
     onOpenReadingStatistics: () -> Unit,
     onOpenCollections: () -> Unit,
+    onOpenQueue: (String) -> Unit,
+    onOpenCollection: (String) -> Unit,
+    onCreateQueue: () -> Unit,
+    onCreateCollection: () -> Unit,
     onEnterSelection: () -> Unit,
     onExitSelection: () -> Unit,
     onToggleSelection: (String) -> Unit,
@@ -187,10 +379,31 @@ private fun LibraryContent(
     onToggleFavoriteOne: (String) -> Unit,
     onToggleFinishedOne: (String) -> Unit,
     onRemoveOne: (String) -> Unit,
+    onSetSavedOne: (String, Boolean) -> Unit,
+    onRevealWork: (String) -> Unit,
+    onAddToQueue: (String) -> Unit,
+    onAddToCollection: (String) -> Unit,
+    onOpenComments: (Long) -> Unit,
     onTogglePrivacy: () -> Unit
 ) {
-    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
+    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
     val bottomPad = if (state.selectionMode) 88.dp else 12.dp
+    val cardActions = LibraryCardActions(
+        onOpenWork = onOpenWork,
+        onOpenReader = onOpenReader,
+        onToggleFavorite = onToggleFavoriteOne,
+        onToggleFinished = onToggleFinishedOne,
+        onRemove = onRemoveOne,
+        onSetSaved = onSetSavedOne,
+        onSelect = { id ->
+            onEnterSelection()
+            onToggleSelection(id)
+        },
+        onReveal = onRevealWork,
+        onAddToQueue = onAddToQueue,
+        onAddToCollection = onAddToCollection,
+        onOpenComments = onOpenComments
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -201,19 +414,15 @@ private fun LibraryContent(
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Icon toolbar — Apple primaryAction cluster (privacy / insights / select / filter)
             item {
-                LibraryIconToolbar(
+                LibraryToolbarPill(
                     state = state,
-                    filtersExpanded = filtersExpanded,
-                    onToggleFilters = { filtersExpanded = !filtersExpanded },
                     onOpenReadingStatistics = onOpenReadingStatistics,
                     onEnterSelection = onEnterSelection,
                     onExitSelection = onExitSelection,
                     onTogglePrivacy = onTogglePrivacy,
                     onOpenRecentlyDeleted = onOpenRecentlyDeleted,
-                    onOpenReadingQueues = onOpenReadingQueues,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp)
                 )
             }
 
@@ -249,22 +458,23 @@ private fun LibraryContent(
                 return@LazyColumn
             }
 
-            // Filters panel (collapsed by default) — Apple inspector substitute
-            item {
-                AnimatedVisibility(visible = filtersExpanded && !state.selectionMode) {
-                    LibraryFilterChips(
-                        state = state,
-                        onToggleFavorite = onToggleFavoriteFilter,
-                        onFinishedFilter = onFinishedFilter,
-                        onDownloadFilter = onDownloadFilter,
-                        onClear = onClearFilters,
+            if (!state.selectionMode &&
+                (state.topFandoms.isNotEmpty() || state.filters.hasActiveFilters)
+            ) {
+                item {
+                    FandomFilterChips(
+                        topFandoms = state.topFandoms,
+                        selectedFandom = state.filters.fandoms.singleOrNull(),
+                        hasActiveFilters = state.filters.hasActiveFilters,
+                        onSelectAll = { onSetFandomFilter(null) },
+                        onSelectFandom = { onSetFandomFilter(it) },
+                        onReset = onClearFilters,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
             }
 
             if (state.selectionMode) {
-                // Select mode: vertical checklist (Apple selectList)
                 item {
                     Text(
                         text = if (state.hasSelection) {
@@ -285,119 +495,105 @@ private fun LibraryContent(
                     )
                 }
             } else {
-                // Dashboard carousels — Apple section order
                 item {
                     LibraryCarousel(
+                        sectionKey = "readingNow",
                         title = "Reading Now",
                         items = state.continueReading.take(ShelfLimit),
-                        emptyMessage = "You're not reading anything right now. Open something below or find a new work in Browse.",
+                        emptyMessage =
+                            "You're not reading anything right now. Open something below or find a new work in Browse.",
                         showProgress = true,
-                        onOpenWork = onOpenWork,
-                        onOpenReader = onOpenReader,
-                        onToggleFavorite = onToggleFavoriteOne,
-                        onToggleFinished = onToggleFinishedOne,
-                        onRemove = onRemoveOne,
-                        onSelect = { id ->
-                            onEnterSelection()
-                            onToggleSelection(id)
-                        }
+                        collapsed = collapsed["readingNow"] == true,
+                        onToggleCollapsed = {
+                            collapsed["readingNow"] = !(collapsed["readingNow"] ?: false)
+                        },
+                        actions = cardActions
                     )
                 }
                 item {
                     LibraryCarousel(
+                        sectionKey = "savedForLater",
                         title = "Saved for Later",
                         items = state.savedForLater.take(ShelfLimit),
-                        emptyMessage = "Nothing saved for later yet. Save works here, or mark them for later on AO3.",
+                        emptyMessage =
+                            "Nothing saved for later yet. Save works here, or mark them for later on AO3.",
                         showProgress = false,
-                        onOpenWork = onOpenWork,
-                        onOpenReader = onOpenReader,
-                        onToggleFavorite = onToggleFavoriteOne,
-                        onToggleFinished = onToggleFinishedOne,
-                        onRemove = onRemoveOne,
-                        onSelect = { id ->
-                            onEnterSelection()
-                            onToggleSelection(id)
-                        }
+                        collapsed = collapsed["savedForLater"] == true,
+                        onToggleCollapsed = {
+                            collapsed["savedForLater"] =
+                                !(collapsed["savedForLater"] ?: false)
+                        },
+                        actions = cardActions
                     )
                 }
                 item {
                     LibraryCarousel(
+                        sectionKey = "finished",
                         title = "Finished",
                         items = state.finished.take(ShelfLimit),
                         emptyMessage = "No finished works yet. Works you complete show up here.",
                         showProgress = false,
                         footerFor = { "Finished" },
-                        onOpenWork = onOpenWork,
-                        onOpenReader = onOpenReader,
-                        onToggleFavorite = onToggleFavoriteOne,
-                        onToggleFinished = onToggleFinishedOne,
-                        onRemove = onRemoveOne,
-                        onSelect = { id ->
-                            onEnterSelection()
-                            onToggleSelection(id)
-                        }
+                        collapsed = collapsed["finished"] == true,
+                        onToggleCollapsed = {
+                            collapsed["finished"] = !(collapsed["finished"] ?: false)
+                        },
+                        actions = cardActions
                     )
                 }
                 item {
-                    CollectionsShelfPreview(
+                    ReadingQueuesShelf(
+                        queues = state.readingQueues,
+                        collapsed = collapsed["queues"] == true,
+                        onToggleCollapsed = {
+                            collapsed["queues"] = !(collapsed["queues"] ?: false)
+                        },
+                        onSeeAll = onOpenReadingQueues,
+                        onCreate = onCreateQueue,
+                        onOpenQueue = onOpenQueue
+                    )
+                }
+                item {
+                    CollectionsShelf(
                         collections = state.collections,
-                        onOpenCollections = onOpenCollections
+                        collapsed = collapsed["collections"] == true,
+                        onToggleCollapsed = {
+                            collapsed["collections"] = !(collapsed["collections"] ?: false)
+                        },
+                        onSeeAll = onOpenCollections,
+                        onCreate = onCreateCollection,
+                        onOpenCollection = onOpenCollection
                     )
                 }
                 item {
                     LibraryCarousel(
+                        sectionKey = "downloaded",
                         title = "Downloaded",
                         items = state.downloaded.take(ShelfLimit),
-                        emptyMessage = "No downloads yet. Download a work as EPUB to read it offline.",
+                        emptyMessage =
+                            "No downloads yet. Download a work as EPUB to read it offline.",
                         showProgress = false,
-                        onOpenWork = onOpenWork,
-                        onOpenReader = onOpenReader,
-                        onToggleFavorite = onToggleFavoriteOne,
-                        onToggleFinished = onToggleFinishedOne,
-                        onRemove = onRemoveOne,
-                        onSelect = { id ->
-                            onEnterSelection()
-                            onToggleSelection(id)
-                        }
+                        collapsed = collapsed["downloaded"] == true,
+                        onToggleCollapsed = {
+                            collapsed["downloaded"] = !(collapsed["downloaded"] ?: false)
+                        },
+                        actions = cardActions
                     )
                 }
-
-                // When filters are active, also show the matching vertical list.
-                if (state.hasActiveQueryOrFilters) {
-                    item {
-                        KudosSectionHeader(
-                            title = "Matches",
-                            subtitle = "${state.items.size}",
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                    if (state.items.isEmpty()) {
-                        item {
-                            EmptyStateCard(
-                                title = "No matches",
-                                message = "No saved works match the current filters.",
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
-                        }
-                    } else {
-                        items(state.items, key = { "match-${it.item.work.id}" }) { display ->
-                            LibraryCarouselCard(
-                                display = display,
-                                showProgress = false,
-                                footerOverride = null,
-                                onOpenWork = { onOpenWork(display.item.work.id) },
-                                onOpenReader = { onOpenReader(display.item.work.id) },
-                                onToggleFavorite = { onToggleFavoriteOne(display.item.work.id) },
-                                onToggleFinished = { onToggleFinishedOne(display.item.work.id) },
-                                onRemove = { onRemoveOne(display.item.work.id) },
-                                onSelect = {
-                                    onEnterSelection()
-                                    onToggleSelection(display.item.work.id)
-                                },
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
-                        }
-                    }
+                item {
+                    LibraryCarousel(
+                        sectionKey = "history",
+                        title = "Reading History",
+                        items = state.readingHistory.take(ShelfLimit),
+                        emptyMessage =
+                            "Nothing opened recently. Start reading to see your history here.",
+                        showProgress = false,
+                        collapsed = collapsed["history"] == true,
+                        onToggleCollapsed = {
+                            collapsed["history"] = !(collapsed["history"] ?: false)
+                        },
+                        actions = cardActions
+                    )
                 }
             }
         }
@@ -417,45 +613,65 @@ private fun LibraryContent(
     }
 }
 
+private data class LibraryCardActions(
+    val onOpenWork: (String) -> Unit,
+    val onOpenReader: (String) -> Unit,
+    val onToggleFavorite: (String) -> Unit,
+    val onToggleFinished: (String) -> Unit,
+    val onRemove: (String) -> Unit,
+    val onSetSaved: (String, Boolean) -> Unit,
+    val onSelect: (String) -> Unit,
+    val onReveal: (String) -> Unit,
+    val onAddToQueue: (String) -> Unit,
+    val onAddToCollection: (String) -> Unit,
+    val onOpenComments: (Long) -> Unit
+)
+
+/** Compact trailing pill: privacy eye · select · overflow (Insights / Select). */
 @Composable
-private fun LibraryIconToolbar(
+private fun LibraryToolbarPill(
     state: LibraryUiState,
-    filtersExpanded: Boolean,
-    onToggleFilters: () -> Unit,
     onOpenReadingStatistics: () -> Unit,
     onEnterSelection: () -> Unit,
     onExitSelection: () -> Unit,
     onTogglePrivacy: () -> Unit,
     onOpenRecentlyDeleted: () -> Unit,
-    onOpenReadingQueues: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
-                " · $it hidden"
-            }.orEmpty()
-            Text(
-                text = if (state.selectionMode) {
-                    if (state.hasSelection) "${state.selectedCount} selected" else "Select works"
-                } else {
-                    "${state.totalSaved} saved$hidden"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 8.dp)
-            )
-            // Compact icon cluster — Apple toolbar primaryAction
-            Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                if (state.selectionMode) {
-                    TextButton(onClick = onExitSelection) { Text("Done") }
-                } else {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
+            " · $it hidden"
+        }.orEmpty()
+        Text(
+            text = if (state.selectionMode) {
+                if (state.hasSelection) "${state.selectedCount} selected" else "Select works"
+            } else {
+                "${state.totalSaved} saved$hidden"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp)
+        )
+
+        if (state.selectionMode) {
+            TextButton(onClick = onExitSelection) { Text("Done") }
+        } else {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                tonalElevation = 1.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                ) {
                     if (state.showPrivacyToggle) {
                         IconButton(onClick = onTogglePrivacy) {
                             Icon(
@@ -468,121 +684,172 @@ private fun LibraryIconToolbar(
                                     "Show mature works"
                                 } else {
                                     "Hide mature works"
-                                }
+                                },
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
                     if (state.hasSavedWorks) {
-                        IconButton(onClick = onOpenReadingStatistics) {
-                            Icon(
-                                imageVector = Icons.Outlined.BarChart,
-                                contentDescription = "Reading Insights"
-                            )
-                        }
                         IconButton(onClick = onEnterSelection) {
                             Icon(
                                 imageVector = Icons.Outlined.Checklist,
-                                contentDescription = "Select"
+                                contentDescription = "Select",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
-                        IconButton(onClick = onToggleFilters) {
-                            Icon(
-                                imageVector = Icons.Outlined.FilterList,
-                                contentDescription = if (filtersExpanded) {
-                                    "Hide filters"
-                                } else {
-                                    "Filters"
-                                },
-                                tint = if (state.filters.hasActiveFilters || filtersExpanded) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
+                        var overflowOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { overflowOpen = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = "More",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = overflowOpen,
+                                onDismissRequest = { overflowOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Reading Insights") },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.BarChart, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onOpenReadingStatistics()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Select") },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Checklist, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onEnterSelection()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Recently Deleted") },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Delete, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onOpenRecentlyDeleted()
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
-        }
-        // Secondary links (queues / recently deleted) as compact text
-        if (!state.selectionMode) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                TextButton(onClick = onOpenReadingQueues) { Text("Queues") }
-                TextButton(onClick = onOpenRecentlyDeleted) { Text("Recently Deleted") }
             }
         }
     }
 }
 
 @Composable
-private fun LibraryFilterChips(
-    state: LibraryUiState,
-    onToggleFavorite: () -> Unit,
-    onFinishedFilter: (LibraryFinishedFilter) -> Unit,
-    onDownloadFilter: (LibraryDownloadFilter) -> Unit,
-    onClear: () -> Unit,
+private fun FandomFilterChips(
+    topFandoms: List<String>,
+    selectedFandom: String?,
+    hasActiveFilters: Boolean,
+    onSelectAll: () -> Unit,
+    onSelectFandom: (String) -> Unit,
+    onReset: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.horizontalScroll(rememberScrollState())
+        if (topFandoms.isNotEmpty()) {
+            val allSelected = selectedFandom == null
+            FilterChip(
+                selected = allSelected,
+                onClick = onSelectAll,
+                label = { Text("All") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+            topFandoms.forEach { fandom ->
+                FilterChip(
+                    selected = selectedFandom == fandom,
+                    onClick = {
+                        if (selectedFandom == fandom) onSelectAll() else onSelectFandom(fandom)
+                    },
+                    label = {
+                        Text(
+                            fandom,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                )
+            }
+        }
+        if (hasActiveFilters) {
+            TextButton(onClick = onReset) { Text("Reset") }
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleSectionHeader(
+    title: String,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
+    onSeeAll: (() -> Unit)? = null,
+    showSeeAll: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = onToggleCollapsed,
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(0.dp)
         ) {
-            FilterChip(
-                selected = state.filters.favoriteOnly,
-                onClick = onToggleFavorite,
-                label = { Text("Favorites") }
-            )
-            FilterChip(
-                selected = state.filters.finished == LibraryFinishedFilter.Finished,
-                onClick = {
-                    onFinishedFilter(
-                        if (state.filters.finished == LibraryFinishedFilter.Finished) {
-                            LibraryFinishedFilter.Any
-                        } else {
-                            LibraryFinishedFilter.Finished
-                        }
-                    )
-                },
-                label = { Text("Finished") }
-            )
-            FilterChip(
-                selected = state.filters.finished == LibraryFinishedFilter.Unfinished,
-                onClick = {
-                    onFinishedFilter(
-                        if (state.filters.finished == LibraryFinishedFilter.Unfinished) {
-                            LibraryFinishedFilter.Any
-                        } else {
-                            LibraryFinishedFilter.Unfinished
-                        }
-                    )
-                },
-                label = { Text("Unfinished") }
-            )
-            FilterChip(
-                selected = state.filters.download == LibraryDownloadFilter.Downloaded,
-                onClick = {
-                    onDownloadFilter(
-                        if (state.filters.download == LibraryDownloadFilter.Downloaded) {
-                            LibraryDownloadFilter.Any
-                        } else {
-                            LibraryDownloadFilter.Downloaded
-                        }
-                    )
-                },
-                label = { Text("Downloaded") }
-            )
-            if (state.filters.hasActiveFilters) {
-                TextButton(onClick = onClear) { Text("Clear") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = if (collapsed) {
+                        Icons.Filled.KeyboardArrowDown
+                    } else {
+                        Icons.Filled.KeyboardArrowUp
+                    },
+                    contentDescription = if (collapsed) "Expand $title" else "Collapse $title",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (showSeeAll && onSeeAll != null) {
+            IconButton(onClick = onSeeAll) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = "See all $title",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -590,49 +857,47 @@ private fun LibraryFilterChips(
 
 @Composable
 private fun LibraryCarousel(
+    sectionKey: String,
     title: String,
     items: List<LibraryDisplayItem>,
     emptyMessage: String,
     showProgress: Boolean,
-    onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit,
-    onToggleFinished: (String) -> Unit,
-    onRemove: (String) -> Unit,
-    onSelect: (String) -> Unit,
-    footerFor: ((SavedWork) -> String?)? = null
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
+    actions: LibraryCardActions,
+    footerFor: ((SavedWork) -> String?)? = null,
+    onSeeAll: (() -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        KudosSectionHeader(
+        CollapsibleSectionHeader(
             title = title,
-            subtitle = if (items.isEmpty()) null else "${items.size}",
-            modifier = Modifier.padding(horizontal = 16.dp)
+            collapsed = collapsed,
+            onToggleCollapsed = onToggleCollapsed,
+            onSeeAll = onSeeAll,
+            showSeeAll = items.isNotEmpty() && onSeeAll != null
         )
-        if (items.isEmpty()) {
-            EmptyStateCard(
-                title = "Nothing here yet",
-                message = emptyMessage,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        } else {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.height(WorkCoverCardMetrics.height)
-            ) {
-                items(items, key = { "$title-${it.item.work.id}" }) { display ->
-                    LibraryCarouselCard(
-                        display = display,
-                        showProgress = showProgress,
-                        footerOverride = footerFor?.invoke(display.item.work),
-                        onOpenWork = { onOpenWork(display.item.work.id) },
-                        onOpenReader = { onOpenReader(display.item.work.id) },
-                        onToggleFavorite = { onToggleFavorite(display.item.work.id) },
-                        onToggleFinished = { onToggleFinished(display.item.work.id) },
-                        onRemove = { onRemove(display.item.work.id) },
-                        onSelect = { onSelect(display.item.work.id) }
-                    )
+        AnimatedVisibility(visible = !collapsed) {
+            if (items.isEmpty()) {
+                EmptyStateCard(
+                    title = "Nothing here yet",
+                    message = emptyMessage,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.height(WorkCoverCardMetrics.height)
+                ) {
+                    items(items, key = { "$sectionKey-${it.item.work.id}" }) { display ->
+                        LibraryCarouselCard(
+                            display = display,
+                            showProgress = showProgress,
+                            footerOverride = footerFor?.invoke(display.item.work),
+                            actions = actions
+                        )
+                    }
                 }
             }
         }
@@ -645,18 +910,14 @@ private fun LibraryCarouselCard(
     display: LibraryDisplayItem,
     showProgress: Boolean,
     footerOverride: String?,
-    onOpenWork: () -> Unit,
-    onOpenReader: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onToggleFinished: () -> Unit,
-    onRemove: () -> Unit,
-    onSelect: () -> Unit,
+    actions: LibraryCardActions,
     modifier: Modifier = Modifier
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
     val canRead = work.hasEpub && !obscured
     var menuOpen by remember(work.id) { mutableStateOf(false) }
+    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
 
     val progress = if (showProgress && !obscured && footerOverride == null) {
         work.readingProgressFraction()?.toFloat()
@@ -666,7 +927,7 @@ private fun LibraryCarouselCard(
     val progressLabel = progress?.let { value ->
         when {
             value >= 0.999f || work.isFinished -> "Finished"
-            else -> "${(value * 100).roundToInt()}% · Reading"
+            else -> "Reading  ${(value * 100).roundToInt()}%"
         }
     }
 
@@ -683,17 +944,23 @@ private fun LibraryCarouselCard(
                     chapters = work.chapters,
                     isComplete = work.isComplete,
                     wordCount = work.wordCount.takeIf { it > 0 },
-                    kudos = work.kudos.takeIf { it > 0 }
+                    kudos = null
                 )
             },
             onOpen = {
-                if (canRead) onOpenReader() else onOpenWork()
+                if (obscured) {
+                    actions.onReveal(work.id)
+                } else if (canRead) {
+                    actions.onOpenReader(work.id)
+                } else {
+                    actions.onOpenWork(work.id)
+                }
             },
-            onOpenDetails = onOpenWork,
+            onOpenDetails = { actions.onOpenWork(work.id) },
             progress = progress,
             progressLabel = progressLabel,
             statusChips = if (obscured) {
-                listOf(work.rating.ifBlank { "Mature content" })
+                emptyList()
             } else {
                 listOfNotNull(
                     footerOverride,
@@ -703,106 +970,187 @@ private fun LibraryCarouselCard(
             },
             obscured = obscured,
             contentDescription = if (obscured) {
-                "Mature work hidden"
+                "Hidden mature work. Activate to reveal."
             } else {
                 "${if (canRead) "Read" else "Open"} ${work.title}"
             },
-            onLongClick = { menuOpen = true }
+            onLongClick = { if (!obscured) menuOpen = true }
         )
         DropdownMenu(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false }
         ) {
             if (canRead) {
-                DropdownMenuItem(
-                    text = { Text("Read") },
+                ContextMenuItem(
+                    icon = Icons.AutoMirrored.Outlined.MenuBook,
+                    label = "Read",
                     onClick = {
                         menuOpen = false
-                        onOpenReader()
+                        actions.onOpenReader(work.id)
                     }
                 )
             }
-            DropdownMenuItem(
-                text = { Text("Details") },
+            if (ao3Id != null) {
+                ContextMenuItem(
+                    icon = Icons.Outlined.Info,
+                    label = "Comments",
+                    onClick = {
+                        menuOpen = false
+                        actions.onOpenComments(ao3Id)
+                    }
+                )
+            }
+            ContextMenuItem(
+                icon = Icons.Outlined.Checklist,
+                label = "Select",
                 onClick = {
                     menuOpen = false
-                    onOpenWork()
+                    actions.onSelect(work.id)
                 }
             )
-            DropdownMenuItem(
-                text = { Text(if (work.isFavorite) "Unfavorite" else "Favorite") },
+            if (work.isSaved) {
+                ContextMenuItem(
+                    icon = Icons.Outlined.BookmarkBorder,
+                    label = "Remove from Saved",
+                    onClick = {
+                        menuOpen = false
+                        actions.onSetSaved(work.id, false)
+                    }
+                )
+            }
+            ContextMenuItem(
+                icon = if (work.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                label = if (work.isFavorite) "Unfavorite" else "Favorite",
                 onClick = {
                     menuOpen = false
-                    onToggleFavorite()
+                    actions.onToggleFavorite(work.id)
                 }
             )
-            DropdownMenuItem(
-                text = { Text(if (work.isFinished) "Mark unfinished" else "Mark finished") },
+            ContextMenuItem(
+                icon = Icons.Outlined.Bookmark,
+                label = if (work.isSaved) "Saved for Later" else "Save for Later",
                 onClick = {
                     menuOpen = false
-                    onToggleFinished()
+                    actions.onSetSaved(work.id, !work.isSaved)
                 }
             )
-            DropdownMenuItem(
-                text = { Text("Select…") },
+            ContextMenuItem(
+                icon = Icons.AutoMirrored.Outlined.List,
+                label = "Add to Queue",
                 onClick = {
                     menuOpen = false
-                    onSelect()
+                    actions.onAddToQueue(work.id)
                 }
             )
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        "Remove",
-                        color = MaterialTheme.colorScheme.error
-                    )
+            ContextMenuItem(
+                icon = Icons.Outlined.CheckCircle,
+                label = if (work.isFinished) "Mark unfinished" else "Mark as Finished",
+                onClick = {
+                    menuOpen = false
+                    actions.onToggleFinished(work.id)
+                }
+            )
+            ContextMenuItem(
+                icon = Icons.Outlined.Folder,
+                label = "Add to Collection",
+                onClick = {
+                    menuOpen = false
+                    actions.onAddToCollection(work.id)
+                }
+            )
+            ContextMenuItem(
+                icon = Icons.Outlined.Info,
+                label = "Work Details",
+                onClick = {
+                    menuOpen = false
+                    actions.onOpenWork(work.id)
+                }
+            )
+            ContextMenuItem(
+                icon = Icons.Outlined.Delete,
+                label = "Remove",
+                onClick = {
+                    menuOpen = false
+                    actions.onRemove(work.id)
                 },
-                onClick = {
-                    menuOpen = false
-                    onRemove()
-                }
+                destructive = true
             )
         }
     }
 }
 
 @Composable
-private fun CollectionsShelfPreview(
-    collections: List<io.github.cidy02.kudos.core.model.WorkCollection>,
-    onOpenCollections: () -> Unit
+private fun ContextMenuItem(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.padding(horizontal = 16.dp)
-    ) {
-        KudosSectionHeader(
-            title = "Collections",
-            subtitle = if (collections.isEmpty()) null else "${collections.size}",
-            trailing = {
-                TextButton(onClick = onOpenCollections) { Text("See all") }
-            }
-        )
-        if (collections.isEmpty()) {
-            EmptyStateCard(
-                title = "No collections yet",
-                message = "Group works into named shelves from Work Detail or Collections."
+    DropdownMenuItem(
+        text = {
+            Text(
+                label,
+                color = if (destructive) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
             )
-        } else {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.horizontalScroll(rememberScrollState())
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (destructive) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                }
+            )
+        },
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun ReadingQueuesShelf(
+    queues: List<LibraryQueuePreview>,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
+    onSeeAll: () -> Unit,
+    onCreate: () -> Unit,
+    onOpenQueue: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        CollapsibleSectionHeader(
+            title = "Reading Queues",
+            collapsed = collapsed,
+            onToggleCollapsed = onToggleCollapsed,
+            onSeeAll = onSeeAll,
+            showSeeAll = true
+        )
+        AnimatedVisibility(visible = !collapsed) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                verticalAlignment = Alignment.Top
             ) {
-                collections.take(8).forEach { collection ->
-                    FilterChip(
-                        selected = false,
-                        onClick = onOpenCollections,
-                        label = {
-                            Text(
-                                "${collection.name} (${collection.workIds.size})",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                item(key = "new-queue") {
+                    CreateShelfTile(
+                        title = "New Queue",
+                        subtitle = "Tap to create",
+                        onClick = onCreate
+                    )
+                }
+                items(queues, key = { "queue-${it.id}" }) { queue ->
+                    NamedShelfTile(
+                        title = queue.name,
+                        subtitle = when (queue.workCount) {
+                            0 -> "Empty"
+                            1 -> "1 work"
+                            else -> "${queue.workCount} works"
+                        },
+                        onClick = { onOpenQueue(queue.id) }
                     )
                 }
             }
@@ -810,7 +1158,147 @@ private fun CollectionsShelfPreview(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CollectionsShelf(
+    collections: List<WorkCollection>,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
+    onSeeAll: () -> Unit,
+    onCreate: () -> Unit,
+    onOpenCollection: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        CollapsibleSectionHeader(
+            title = "Collections",
+            collapsed = collapsed,
+            onToggleCollapsed = onToggleCollapsed,
+            onSeeAll = onSeeAll,
+            showSeeAll = true
+        )
+        AnimatedVisibility(visible = !collapsed) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                verticalAlignment = Alignment.Top
+            ) {
+                item(key = "new-collection") {
+                    CreateShelfTile(
+                        title = "New Collection",
+                        subtitle = "Tap to create",
+                        onClick = onCreate
+                    )
+                }
+                items(collections, key = { "col-${it.id}" }) { collection ->
+                    NamedShelfTile(
+                        title = collection.name,
+                        subtitle = when (collection.workIds.size) {
+                            0 -> "Empty"
+                            1 -> "1 work"
+                            else -> "${collection.workIds.size} works"
+                        },
+                        onClick = { onOpenCollection(collection.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Dashed + create tile (Apple NewCollectionCard / New Queue). */
+@Composable
+private fun CreateShelfTile(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.width(WorkCoverCardMetrics.width),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                width = 1.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(WorkCoverCardMetrics.height - 48.dp)
+                .semantics { contentDescription = title }
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun NamedShelfTile(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.width(WorkCoverCardMetrics.width),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(WorkCoverCardMetrics.height - 48.dp)
+                .semantics { contentDescription = "$title, $subtitle" }
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.Folder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 @Composable
 private fun SelectableWorkRow(
     display: LibraryDisplayItem,
@@ -901,11 +1389,14 @@ private fun LibrarySelectionActionBar(
             TextButton(onClick = onMarkFinished, enabled = hasSelection) { Text("Finished") }
             TextButton(onClick = onMarkUnfinished, enabled = hasSelection) { Text("Unfinished") }
             TextButton(onClick = onRemove, enabled = hasSelection) {
-                Text("Remove", color = if (hasSelection) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                })
+                Text(
+                    "Remove",
+                    color = if (hasSelection) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    }
+                )
             }
             TextButton(onClick = onCancel) { Text("Cancel") }
         }

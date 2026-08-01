@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,15 +17,19 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class LibraryViewModel(
-    repository: LibraryRepository,
+    private val repository: LibraryRepository,
     private val workRepository: WorkRepository,
-    private val settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val queueRepository: ReadingQueueRepository? = null
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val filters = MutableStateFlow(LibraryFilterState())
     private val sort = MutableStateFlow(LibrarySort.RecentlyAdded)
     private val selectionMode = MutableStateFlow(false)
     private val selectedWorkIds = MutableStateFlow<Set<String>>(emptySet())
+    private val revealedWorkIds = MutableStateFlow<Set<String>>(emptySet())
+    private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())
+    private val queueRefreshTick = MutableStateFlow(0)
 
     private val libraryBase: StateFlow<LibraryUiState> = combine(
         repository.observeSnapshot(),
@@ -49,11 +54,24 @@ class LibraryViewModel(
     val state: StateFlow<LibraryUiState> = combine(
         libraryBase,
         selectionMode,
-        selectedWorkIds
-    ) { base, selecting, ids ->
+        selectedWorkIds,
+        revealedWorkIds,
+        readingQueues
+    ) { base, selecting, ids, revealed, queues ->
         base.copy(
             selectionMode = selecting,
-            selectedWorkIds = if (selecting) ids else emptySet()
+            selectedWorkIds = if (selecting) ids else emptySet(),
+            revealedWorkIds = revealed,
+            readingQueues = queues,
+            // Session reveal flips Obscured → Visible for those work ids.
+            continueReading = base.continueReading.map { it.withReveal(revealed) },
+            readingHistory = base.readingHistory.map { it.withReveal(revealed) },
+            recentlyAdded = base.recentlyAdded.map { it.withReveal(revealed) },
+            favorites = base.favorites.map { it.withReveal(revealed) },
+            savedForLater = base.savedForLater.map { it.withReveal(revealed) },
+            finished = base.finished.map { it.withReveal(revealed) },
+            downloaded = base.downloaded.map { it.withReveal(revealed) },
+            items = base.items.map { it.withReveal(revealed) }
         )
     }.stateIn(
         scope = viewModelScope,
@@ -61,12 +79,30 @@ class LibraryViewModel(
         initialValue = LibraryUiState(loading = true)
     )
 
+    init {
+        refreshQueues()
+        // Re-load queues when an external tick is bumped after create/add.
+        viewModelScope.launch {
+            queueRefreshTick.collect { refreshQueues() }
+        }
+    }
+
     fun updateSearchQuery(query: String) {
         searchQuery.value = query
     }
 
     fun updateSort(next: LibrarySort) {
         sort.value = next
+    }
+
+    /** Fandom chip bar: empty = All; single fandom = filter to that name. */
+    fun setFandomFilter(fandom: String?) {
+        filters.update { current ->
+            val next = fandom?.trim().orEmpty()
+            current.copy(
+                fandoms = if (next.isEmpty()) emptySet() else setOf(next)
+            )
+        }
     }
 
     fun toggleFavoriteOnly() {
@@ -173,6 +209,54 @@ class LibraryViewModel(
         }
     }
 
+    fun setSavedOne(workId: String, saved: Boolean) {
+        viewModelScope.launch {
+            workRepository.setSaved(workId, saved)
+        }
+    }
+
+    fun toggleSavedOne(workId: String) {
+        viewModelScope.launch {
+            val work = workRepository.getWork(workId) ?: return@launch
+            workRepository.setSaved(workId, !work.isSaved)
+        }
+    }
+
+    fun addToQueue(workId: String, queueId: String) {
+        val queues = queueRepository ?: return
+        viewModelScope.launch {
+            runCatching { queues.addWork(queueId, workId) }
+            queueRefreshTick.update { it + 1 }
+        }
+    }
+
+    fun addToCollection(workId: String, collectionName: String) {
+        viewModelScope.launch {
+            runCatching { workRepository.addToCollection(workId, collectionName) }
+        }
+    }
+
+    fun createCollection(name: String, onCreated: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            val created = runCatching { workRepository.createCollection(name) }.getOrNull()
+            if (created != null) onCreated(created.id)
+        }
+    }
+
+    fun createQueue(name: String, onCreated: (String) -> Unit = {}) {
+        val queues = queueRepository ?: return
+        viewModelScope.launch {
+            val created = runCatching { queues.createQueue(name) }.getOrNull()
+            queueRefreshTick.update { it + 1 }
+            if (created != null) onCreated(created.id)
+        }
+    }
+
+    /** Session reveal for an obscured mature card (Apple PrivacyGate.reveal). */
+    fun revealWork(workId: String) {
+        revealedWorkIds.update { it + workId }
+    }
+
     /** Apple MatureRevealToggle: flip hide-mature for this device. */
     fun toggleHideMature() {
         val settings = settingsRepository ?: return
@@ -184,18 +268,46 @@ class LibraryViewModel(
 
     // endregion
 
+    private fun refreshQueues() {
+        val queues = queueRepository ?: return
+        viewModelScope.launch {
+            runCatching {
+                queues.ensureSavedForLaterQueue()
+                queues.listQueues().map { queue ->
+                    LibraryQueuePreview(
+                        id = queue.id,
+                        name = queue.displayName,
+                        workCount = queues.listWorks(queue.id).size
+                    )
+                }
+            }.onSuccess { readingQueues.value = it }
+        }
+    }
+
     companion object {
         fun factory(
             repository: LibraryRepository,
             workRepository: WorkRepository,
-            settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
+            settingsRepository: SettingsRepository? = null,
+            queueRepository: ReadingQueueRepository? = null
         ): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
-                    LibraryViewModel(repository, workRepository, settingsRepository)
+                    LibraryViewModel(
+                        repository,
+                        workRepository,
+                        settingsRepository,
+                        queueRepository
+                    )
                 }
             }
     }
+}
+
+private fun LibraryDisplayItem.withReveal(revealed: Set<String>): LibraryDisplayItem {
+    if (privacyVisibility != LibraryPrivacyVisibility.Obscured) return this
+    if (item.work.id !in revealed) return this
+    return copy(privacyVisibility = LibraryPrivacyVisibility.Visible)
 }
 
 private fun Set<String>.toggle(value: String): Set<String> {
