@@ -265,19 +265,42 @@ class WorkRepository(
         }
     }
 
-    suspend fun addToCollection(workId: String, name: String): List<WorkCollection> {
+    suspend fun getCollection(collectionId: String): WorkCollection? {
+        val entity = collectionDao.getById(collectionId) ?: return null
+        return entity.toDomain(collectionDao.getWorkIdsForCollection(entity.id))
+    }
+
+    /** Saved works currently in [collectionId], newest library-add first. */
+    suspend fun worksForCollection(collectionId: String): List<SavedWork> {
+        return collectionDao.getWorksForCollection(collectionId).map { it.toDomain() }
+    }
+
+    /**
+     * Creates an empty named shelf, or returns the existing case-insensitive match.
+     * Does not attach a work — use [addToCollection] for membership.
+     */
+    suspend fun createCollection(name: String): WorkCollection {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Collection name must not be blank." }
         val existing = collectionDao.getAll().firstOrNull {
             it.name.equals(trimmed, ignoreCase = true)
         }
-        val collection = existing ?: CollectionEntity(
+        if (existing != null) {
+            return existing.toDomain(collectionDao.getWorkIdsForCollection(existing.id))
+        }
+        val entity = CollectionEntity(
             id = uuidFactory(),
             name = trimmed,
             dateAdded = clock(),
             description = null,
             sortOrder = null
-        ).also { collectionDao.upsert(it) }
+        )
+        collectionDao.upsert(entity)
+        return entity.toDomain(emptyList())
+    }
+
+    suspend fun addToCollection(workId: String, name: String): List<WorkCollection> {
+        val collection = createCollection(name)
         collectionDao.addWork(CollectionWorkCrossRef(collection.id, workId))
         return collectionsForWork(workId)
     }
@@ -285,6 +308,16 @@ class WorkRepository(
     suspend fun removeFromCollection(workId: String, collectionId: String): List<WorkCollection> {
         collectionDao.removeWork(collectionId, workId)
         return collectionsForWork(workId)
+    }
+
+    /**
+     * Deletes the collection shelf only. Works remain in Library (Apple parity).
+     * Cross-ref rows cascade via FK when the collection row is removed.
+     */
+    suspend fun deleteCollection(collectionId: String) {
+        // Explicitly clear memberships first so callers without CASCADE still work in tests.
+        collectionDao.removeAllWorks(collectionId)
+        collectionDao.deleteById(collectionId)
     }
 
     companion object {

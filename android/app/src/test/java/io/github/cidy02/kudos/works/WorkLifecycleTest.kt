@@ -288,6 +288,31 @@ class WorkLifecycleRepositoryTest {
     }
 
     @Test
+    fun createCollectionCreatesEmptyShelfAndDeleteLeavesWorks() = runTest {
+        repository.upsert(sampleSavedWork())
+
+        val shelf = repository.createCollection("Classics")
+        assertEquals("Classics", shelf.name)
+        assertTrue(shelf.workIds.isEmpty())
+        assertEquals(1, repository.allCollections().size)
+
+        // Case-insensitive match reuses the shelf instead of duplicating.
+        val again = repository.createCollection(" classics ")
+        assertEquals(shelf.id, again.id)
+        assertEquals(1, repository.allCollections().size)
+
+        repository.addToCollection(workUuid, "Classics")
+        val works = repository.worksForCollection(shelf.id)
+        assertEquals(listOf(workUuid), works.map { it.id })
+
+        repository.deleteCollection(shelf.id)
+        assertTrue(repository.allCollections().isEmpty())
+        // Work itself remains in the library.
+        assertNotNull(repository.getWork(workUuid))
+        assertTrue(repository.collectionsForWork(workUuid).isEmpty())
+    }
+
+    @Test
     fun libraryRepositoryListsSavedWorksOnly() = runTest {
         repository.upsert(sampleSavedWork())
         repository.upsert(sampleSavedWork("33333333-3333-3333-3333-333333333333").copy(isSaved = false))
