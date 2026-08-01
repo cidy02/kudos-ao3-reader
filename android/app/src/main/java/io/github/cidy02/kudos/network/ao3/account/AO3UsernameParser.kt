@@ -6,6 +6,17 @@ import java.nio.charset.StandardCharsets
 import org.jsoup.Jsoup
 
 class AO3UsernameParser {
+    /**
+     * True when the HTML is a real AO3 document (logged-in or logged-out body).
+     * Challenge walls, empty error pages, and pages that merely share `#main`
+     * return false so session restore keeps cookies instead of wiping them.
+     * Port of Apple `LiveAO3SessionValidator.looksLikeAO3Page`.
+     */
+    fun looksLikeAO3Page(html: String): Boolean {
+        val body = Jsoup.parse(html, AO3Constants.BASE_URL).body()
+        return body.hasClass("logged-in") || body.hasClass("logged-out")
+    }
+
     fun isLoggedIn(html: String): Boolean {
         val document = Jsoup.parse(html, AO3Constants.BASE_URL)
         if (document.body().hasClass("logged-in")) return true

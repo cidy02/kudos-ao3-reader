@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.auth
 
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,7 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 class AO3AuthRepository(
     private val sessionStore: AO3SessionStore,
     private val cookieStore: AO3CookieStore,
-    private val cookieJar: AO3CookieJar = AO3CookieJar()
+    private val cookieJar: AO3CookieJar = AO3CookieJar(),
+    private val sessionValidator: AO3SessionValidating? = null
 ) {
     private val mutableState = MutableStateFlow<AO3AuthState>(AO3AuthState.Restoring)
     val state: StateFlow<AO3AuthState> = mutableState.asStateFlow()
@@ -17,6 +19,13 @@ class AO3AuthRepository(
     private var currentSession: AO3Session? = null
     private var didRestore = false
 
+    /**
+     * Loads the persisted session once per process. When a [sessionValidator]
+     * is configured, GETs a cheap AO3 page with the stored cookies:
+     * - clearly logged-out → clear session ([AO3AuthState.Expired])
+     * - network / non-AO3 failure → keep session (offline-preserving)
+     * - logged-in → optionally refresh cookies/username and sign in
+     */
     suspend fun restoreSession() {
         if (didRestore) return
         didRestore = true
@@ -30,7 +39,32 @@ class AO3AuthRepository(
 
         currentSession = restored
         cookieStore.install(restored)
-        mutableState.value = AO3AuthState.SignedIn(restored.username)
+
+        val validator = sessionValidator
+        if (validator == null) {
+            mutableState.value = AO3AuthState.SignedIn(restored.username)
+            return
+        }
+
+        try {
+            when (val validation = validator.validate(restored)) {
+                is AO3SessionValidation.Valid -> {
+                    sessionStore.save(validation.session)
+                    cookieStore.install(validation.session)
+                    currentSession = validation.session
+                    mutableState.value = AO3AuthState.SignedIn(validation.session.username)
+                }
+                AO3SessionValidation.Expired -> {
+                    clearSession()
+                    mutableState.value = AO3AuthState.Expired()
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Connectivity or non-definitive response — keep the saved session.
+            mutableState.value = AO3AuthState.SignedIn(restored.username)
+        }
     }
 
     suspend fun acceptWebLogin(username: String): AO3Result<AO3Session> {

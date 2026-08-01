@@ -62,12 +62,26 @@ class OkHttpAO3Client(
     constructor(
         config: AO3NetworkConfig = AO3NetworkConfig()
     ) : this(
-        okHttpClient = OkHttpClient.Builder()
-            .callTimeout(config.callTimeoutSeconds, TimeUnit.SECONDS)
-            .followRedirects(true)
-            .build(),
+        okHttpClient = defaultOkHttpClient(config),
         config = config
     )
+
+    companion object {
+        /**
+         * Default OkHttp stack: redirects are followed by
+         * [AO3RedirectCookieRelayInterceptor] so an explicit Cookie header is
+         * refreshed from Set-Cookie on same-host AO3 redirects and stripped
+         * when the redirect leaves trusted AO3 hosts.
+         */
+        fun defaultOkHttpClient(config: AO3NetworkConfig = AO3NetworkConfig()): OkHttpClient {
+            return OkHttpClient.Builder()
+                .callTimeout(config.callTimeoutSeconds, TimeUnit.SECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .addInterceptor(AO3RedirectCookieRelayInterceptor())
+                .build()
+        }
+    }
 
     override suspend fun get(
         url: String,

@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.auth.AndroidAO3CookieStore
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.FileAO3SessionStore
+import io.github.cidy02.kudos.auth.LiveAO3SessionValidator
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
@@ -51,7 +52,8 @@ class KudosAppContainer(context: Context) {
     val authRepository: AO3AuthRepository by lazy {
         AO3AuthRepository(
             sessionStore = FileAO3SessionStore(appContext),
-            cookieStore = AndroidAO3CookieStore()
+            cookieStore = AndroidAO3CookieStore(),
+            sessionValidator = LiveAO3SessionValidator(client = ao3Client)
         )
     }
 
