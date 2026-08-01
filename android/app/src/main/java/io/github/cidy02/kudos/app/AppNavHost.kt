@@ -237,6 +237,7 @@ fun AppNavHost(
         composable(Routes.Account) {
             AccountScreen(
                 authRepository = container.authRepository,
+                listRepository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenList = { type ->
                     selectedAccountListType = type
@@ -254,6 +255,17 @@ fun AppNavHost(
                 onOpenWeb = { url ->
                     webFallbackUrl = url
                     navController.navigate(Routes.WebFallback)
+                },
+                onOpenWork = { work ->
+                    selectedWorkSource = WorkDetailSource.RemoteSummary(work)
+                    navController.navigate(Routes.WorkDetail)
+                },
+                onOpenCollection = { collection ->
+                    selectedAccountListType = AccountListType.Collection(
+                        name = collection.name,
+                        displayTitle = collection.title
+                    )
+                    navController.navigate(Routes.AccountList)
                 }
             )
         }

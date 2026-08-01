@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,7 +86,22 @@ fun MainScaffold(
                                     )
                                 }
                             }
-                            // Theme control only on Account (settings-adjacent), not every tab.
+                            // iOS Account trailing gear → Settings.
+                            if (currentRoute == Routes.Account) {
+                                IconButton(
+                                    onClick = {
+                                        navController.navigate(Routes.Settings) {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Settings,
+                                        contentDescription = "Settings"
+                                    )
+                                }
+                            }
+                            // Theme control only on Account / Settings (settings-adjacent).
                             if (currentRoute == Routes.Account || currentRoute == Routes.Settings) {
                                 IconButton(onClick = onCycleTheme) {
                                     Icon(
