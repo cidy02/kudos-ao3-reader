@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,7 +39,6 @@ fun FandomWorksScreen(
     fandomName: String,
     workRepository: WorkRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    onBack: () -> Unit,
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
@@ -66,12 +64,10 @@ fun FandomWorksScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // TopAppBar is generic ("Works"); fandom name is useful context.
         KudosScreenHeader(
             title = fandomName,
-            subtitle = "AO3 works for this fandom.",
-            trailing = {
-                TextButton(onClick = onBack) { Text("Back") }
-            }
+            subtitle = "AO3 works for this fandom."
         )
 
         when (val current = state) {

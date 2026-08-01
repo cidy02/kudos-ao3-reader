@@ -85,8 +85,9 @@ fun QueueDetailScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            // TopAppBar is generic ("Queue"); show queue name + count as context.
             KudosScreenHeader(
-                title = queue?.displayName ?: "Queue",
+                title = queue?.displayName?.takeIf { it.isNotBlank() && it != "Queue" },
                 subtitle = when {
                     loading -> "Loading…"
                     items.isEmpty() -> "No works in this queue."

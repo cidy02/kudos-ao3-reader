@@ -149,8 +149,7 @@ fun AppNavHost(
                     onOpenWebFallback = { url ->
                         webFallbackUrl = url
                         navController.navigate(Routes.WebFallback)
-                    },
-                    onBack = { navController.popBackStack() }
+                    }
                 )
             }
         }
@@ -166,8 +165,7 @@ fun AppNavHost(
                     onOpenWork = { work ->
                         selectedWorkSource = WorkDetailSource.RemoteSummary(work)
                         navController.navigate(Routes.WorkDetail)
-                    },
-                    onBack = { navController.popBackStack() }
+                    }
                 )
             }
         }

@@ -64,8 +64,8 @@ fun ReadingQueuesScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            // TopAppBar already says "Reading Queues".
             KudosScreenHeader(
-                title = "Reading Queues",
                 subtitle = "Local queues such as Saved for Later."
             )
         }

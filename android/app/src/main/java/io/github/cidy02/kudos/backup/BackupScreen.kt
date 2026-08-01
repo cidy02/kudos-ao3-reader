@@ -101,8 +101,8 @@ fun BackupScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
+            // TopAppBar already says "Backup"; keep privacy/compatibility guidance only.
             KudosScreenHeader(
-                title = "Backup",
                 subtitle = "Portable Kudos backups keep Library data, EPUB files, fonts, and settings separate from AO3 session data."
             )
         }

@@ -49,8 +49,12 @@ fun AO3WebLoginScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("AO3 Login", style = MaterialTheme.typography.headlineSmall)
-        Text(message, style = MaterialTheme.typography.bodyMedium)
+        // TopAppBar already says "AO3 Login".
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCancel) {
                 Text("Cancel")
