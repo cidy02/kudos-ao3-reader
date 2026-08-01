@@ -26,9 +26,10 @@ class NavigationRoutesTest {
     fun recentlyDeletedRouteHasUserFacingTitle() {
         assertEquals("Recently Deleted", Routes.titleFor(Routes.RecentlyDeleted))
     }
-}
+
     @Test
     fun readingQueueRoutesHaveUserFacingTitles() {
         assertEquals("Reading Queues", Routes.titleFor(Routes.ReadingQueues))
         assertEquals("Queue", Routes.titleFor(Routes.QueueDetail))
     }
+}

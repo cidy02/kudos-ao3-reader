@@ -24,6 +24,7 @@ class SearchFilterHelpersTest {
         assertEquals(FilterSelectionState.CLEAR, FilterSelectionState.EXCLUDED.next)
     }
 
+
     @Test
     fun cycleWarningMovesThroughThreeStates() {
         var filters = AO3SearchFilters()
@@ -45,6 +46,7 @@ class SearchFilterHelpersTest {
         assertEquals(FilterSelectionState.CLEAR, warningSelection(filters, AO3Warning.VIOLENCE))
     }
 
+
     @Test
     fun cycleCategoryMovesThroughThreeStates() {
         var filters = AO3SearchFilters()
@@ -59,6 +61,7 @@ class SearchFilterHelpersTest {
         assertTrue(filters.categories.isEmpty())
         assertTrue(filters.excludedCategories.isEmpty())
     }
+
 
     @Test
     fun withRatingSelectedAppliesAppleSideEffects() {
@@ -84,6 +87,7 @@ class SearchFilterHelpersTest {
         assertTrue(between.includeNotRated)
     }
 
+
     @Test
     fun clearedFiltersPreservesQueryOnly() {
         val filters = AO3SearchFilters(
@@ -104,6 +108,7 @@ class SearchFilterHelpersTest {
         assertFalse(cleared.hasActiveFilters)
         assertEquals(AO3SearchFilters(query = "found family"), cleared)
     }
+
 
     @Test
     fun activeFilterChipsSummarizesFacets() {
@@ -143,6 +148,7 @@ class SearchFilterHelpersTest {
         assertTrue(chips.contains("Sort: Kudos"))
     }
 
+
     @Test
     fun collectLocalTagSuggestionsDedupesAndSortsByKind() {
         val works = listOf(
@@ -179,6 +185,7 @@ class SearchFilterHelpersTest {
         assertEquals(suggestions.freeforms, suggestions.forKind(LocalTagKind.FREEFORM))
     }
 
+
     @Test
     fun currentTokenAndCommittedTagsSplitOnComma() {
         assertEquals(emptyList<String>(), committedTagValues(""))
@@ -193,6 +200,7 @@ class SearchFilterHelpersTest {
         assertEquals("Sa", currentTagToken("Naruto, Sa"))
         assertEquals("", currentTagToken("Naruto, Sasuke, "))
     }
+
 
     @Test
     fun filterLocalTagSuggestionsPrefersPrefixAndExcludesCommitted() {
@@ -228,6 +236,7 @@ class SearchFilterHelpersTest {
         )
     }
 
+
     @Test
     fun applyTagSuggestionReplacesTokenAndAppendsSeparator() {
         assertEquals("Naruto, ", applyTagSuggestion("", "Naruto"))
@@ -237,7 +246,7 @@ class SearchFilterHelpersTest {
         // Selecting an already-committed tag does not duplicate it.
         assertEquals("Naruto, ", applyTagSuggestion("Naruto, Nar", "Naruto"))
     }
-}
+
 
     @Test
     fun defaultSavedSearchNamePrefersQueryThenFandom() {
@@ -251,6 +260,7 @@ class SearchFilterHelpersTest {
         )
         assertEquals("Saved Search", defaultSavedSearchName(AO3SearchFilters()))
     }
+
 
     @Test
     fun savedSearchSubtitleJoinsSalientParts() {
@@ -268,3 +278,4 @@ class SearchFilterHelpersTest {
             )
         )
     }
+}

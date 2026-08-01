@@ -61,13 +61,6 @@ interface WorkDao {
     @Query("SELECT COUNT(*) FROM works WHERE isDeleted = 0")
     suspend fun count(): Int
 
-    /** Soft-deleted works in Recently Deleted (newest first). */
-    @Query("SELECT * FROM works WHERE isDeleted = 1 ORDER BY deletedAt DESC")
-    suspend fun getDeleted(): List<WorkEntity>
-
-    @Query("SELECT * FROM works WHERE isDeleted = 1 ORDER BY deletedAt DESC")
-    fun observeDeleted(): Flow<List<WorkEntity>>
-
     /**
      * Soft-deleted works whose recovery window has elapsed
      * (`permanentDeletionScheduledAt` ≤ [now]).

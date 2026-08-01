@@ -62,7 +62,6 @@ fun AppNavHost(
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
                 },
-                onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
                 onOpenReader = { workId ->
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
@@ -275,8 +274,7 @@ fun AppNavHost(
         
         composable(Routes.RecentlyDeleted) {
             RecentlyDeletedScreen(
-                repository = container.workRepository,
-                onBack = { navController.popBackStack() }
+                workRepository = container.workRepository
             )
         }
 

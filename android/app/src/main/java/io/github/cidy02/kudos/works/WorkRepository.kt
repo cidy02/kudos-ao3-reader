@@ -141,15 +141,6 @@ class WorkRepository(
         return restored
     }
 
-    /** Soft-deleted works for Recently Deleted UI (newest deletion first). */
-    fun observeRecentlyDeleted(): Flow<List<SavedWork>> {
-        return workDao.observeDeleted().map { works -> works.map { it.toDomain() } }
-    }
-
-    suspend fun listRecentlyDeleted(): List<SavedWork> {
-        return workDao.getDeleted().map { it.toDomain() }
-    }
-
     /**
      * Permanently removes the work row and local EPUB, and records a sync
      * tombstone so a later backup import does not resurrect it by UUID.
