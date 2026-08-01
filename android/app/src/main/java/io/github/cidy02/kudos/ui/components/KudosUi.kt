@@ -86,20 +86,22 @@ fun MetadataChip(
     prominent: Boolean = false
 ) {
     if (label.isBlank()) return
+    // MD3 assist-chip–like capsule: primaryContainer for emphasis, surface
+    // container + outline for quiet tags.
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.small,
         color = if (prominent) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
-            MaterialTheme.colorScheme.surface
+            MaterialTheme.colorScheme.surfaceContainerHighest
         },
         contentColor = if (prominent) {
             MaterialTheme.colorScheme.onPrimaryContainer
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
-        tonalElevation = if (prominent) 0.dp else 1.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color = if (prominent) {
@@ -158,7 +160,10 @@ fun LoadingStateCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -235,9 +240,10 @@ private fun StateCard(
             containerColor = if (error) {
                 MaterialTheme.colorScheme.errorContainer
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                MaterialTheme.colorScheme.surfaceContainerLow
             }
         ),
+        shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth()
     ) {
         Column(

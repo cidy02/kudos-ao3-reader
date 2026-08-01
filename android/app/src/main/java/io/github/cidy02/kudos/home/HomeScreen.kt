@@ -5,27 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -33,18 +22,13 @@ import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.readingProgressFraction
-import io.github.cidy02.kudos.ui.components.CoverCardStatsColumn
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.ui.components.MetadataChipRow
-import io.github.cidy02.kudos.ui.components.StatusBadge
-import io.github.cidy02.kudos.ui.components.WorkStatItem
-import io.github.cidy02.kudos.ui.components.chapterStatText
-import io.github.cidy02.kudos.ui.components.completionStatText
-import io.github.cidy02.kudos.ui.components.ratingDisplayName
-import io.github.cidy02.kudos.ui.components.wordStatText
+import io.github.cidy02.kudos.ui.components.WorkCoverCard
+import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
+import io.github.cidy02.kudos.ui.components.coverCardStats
 import kotlin.math.roundToInt
 
 @Composable
@@ -60,13 +44,23 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        contentPadding = PaddingValues(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item { HomeHeader(state) }
+        item {
+            HomeHeader(
+                state = state,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
 
         if (state.loading) {
-            item { LoadingStateCard("Loading your reading dashboard") }
+            item {
+                LoadingStateCard(
+                    message = "Loading your reading dashboard",
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
             return@LazyColumn
         }
 
@@ -74,7 +68,8 @@ fun HomeScreen(
             item {
                 EmptyHomeState(
                     onOpenBrowse = onOpenBrowse,
-                    onOpenLibrary = onOpenLibrary
+                    onOpenLibrary = onOpenLibrary,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
             return@LazyColumn
@@ -117,7 +112,10 @@ fun HomeScreen(
             )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedButton(onClick = onOpenLibrary) {
                     Text("Library")
                 }
@@ -130,20 +128,22 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(state: HomeDashboardState) {
+private fun HomeHeader(state: HomeDashboardState, modifier: Modifier = Modifier) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
-        " - $it hidden by privacy"
+        " · $it hidden by privacy"
     }.orEmpty()
     KudosScreenHeader(
         title = "Home",
-        subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden"
+        subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden",
+        modifier = modifier
     )
 }
 
 @Composable
 private fun EmptyHomeState(
     onOpenBrowse: () -> Unit,
-    onOpenLibrary: () -> Unit
+    onOpenLibrary: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     EmptyStateCard(
         title = "No saved works yet",
@@ -151,7 +151,8 @@ private fun EmptyHomeState(
         primaryActionLabel = "Browse AO3",
         onPrimaryAction = onOpenBrowse,
         secondaryActionLabel = "Library",
-        onSecondaryAction = onOpenLibrary
+        onSecondaryAction = onOpenLibrary,
+        modifier = modifier
     )
 }
 
@@ -163,24 +164,28 @@ private fun HomeShelf(
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         KudosSectionHeader(
             title = title,
-            subtitle = if (items.isEmpty()) null else "${items.size} shown"
+            subtitle = if (items.isEmpty()) null else "${items.size} shown",
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
         if (items.isEmpty()) {
             EmptyStateCard(
                 title = "Nothing here yet",
-                message = emptyMessage
+                message = emptyMessage,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing)
+            ) {
                 items(items, key = { "${title}-${it.item.work.id}" }) { display ->
-                    HomeWorkCard(
+                    HomeWorkCover(
                         display = display,
                         onOpenWork = { onOpenWork(display.item.work.id) },
-                        onOpenReader = { onOpenReader(display.item.work.id) },
-                        modifier = Modifier.width(240.dp)
+                        onOpenReader = { onOpenReader(display.item.work.id) }
                     )
                 }
             }
@@ -189,114 +194,65 @@ private fun HomeShelf(
 }
 
 @Composable
-private fun HomeWorkCard(
+private fun HomeWorkCover(
     display: LibraryDisplayItem,
     onOpenWork: () -> Unit,
-    onOpenReader: () -> Unit,
-    modifier: Modifier = Modifier
+    onOpenReader: () -> Unit
 ) {
     val work = display.item.work
-    val progress = work.readingProgressFraction()
-    val canRead =
-        work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible
-    // hig-review compact-card rule: tap opens the work for reading when a local
-    // EPUB exists; otherwise open Work Detail (download / manage). ⓘ is Details.
-    val onPrimaryOpen = if (canRead) onOpenReader else onOpenWork
-    Card(
-        onClick = onPrimaryOpen,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = modifier
-            .semantics {
-                contentDescription =
-                    if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
-                        "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
-                    } else {
-                        val action = if (canRead) "Read" else "Open details for"
-                        "$action ${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
-                    }
-            }
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
-                StatusBadge("Mature work hidden")
-                MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = work.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "by ${work.author.ifBlank { "Anonymous" }}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    TextButton(onClick = onOpenWork) {
-                        Text("ⓘ")
-                    }
-                }
-                MetadataChipRow(labels = work.fandomLabels(), maxItems = 3, prominent = true)
-                MetadataChipRow(labels = work.homeLocalStatusLabels(), maxItems = 4)
-                CoverCardStatsColumn(stats = work.homeCoverStats())
-                progress?.let { value ->
-                    LinearProgressIndicator(
-                        progress = { value.toFloat() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    StatusBadge("${(value * 100).roundToInt()}% read")
-                }
-            }
+    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    val canRead = work.hasEpub && !obscured
+    val progress = work.readingProgressFraction()?.toFloat()
+    val progressLabel = progress?.let { value ->
+        when {
+            value >= 0.999f -> "Finished"
+            work.isFinished -> "Finished"
+            else -> "${(value * 100).roundToInt()}% · Reading"
         }
     }
-}
 
-/** Local-only badges that are not AO3 cover stats. */
-private fun SavedWork.homeLocalStatusLabels(): List<String> {
-    return listOfNotNull(
-        if (hasEpub) "Downloaded" else "Not downloaded",
-        if (isFavorite) "Favorite" else null,
-        if (isFinished) "Finished" else null
-    )
-}
-
-private fun SavedWork.homeCoverStats(): List<WorkStatItem> {
-    return listOfNotNull(
-        ratingDisplayName(rating)?.let { WorkStatItem(it, accessibilityLabel = rating) },
-        chapters.takeIf { it.isNotBlank() }?.let {
-            WorkStatItem(chapterStatText(it), accessibilityLabel = "Chapters $it")
-        },
-        completionStatText(isComplete)?.let { WorkStatItem(it) },
-        wordCount.takeIf { it > 0 }?.let {
-            WorkStatItem(wordStatText(it), accessibilityLabel = "%,d words".format(it))
-        },
-        kudos.takeIf { it > 0 }?.let {
-            WorkStatItem(
-                text = if (it == 1) "1 kudos" else "%,d kudos".format(it)
+    WorkCoverCard(
+        title = work.title,
+        author = work.author.ifBlank { "Anonymous" },
+        fandom = work.primaryFandom(),
+        stats = if (obscured) {
+            emptyList()
+        } else {
+            coverCardStats(
+                rating = work.rating,
+                chapters = work.chapters,
+                isComplete = work.isComplete,
+                wordCount = work.wordCount.takeIf { it > 0 },
+                kudos = work.kudos.takeIf { it > 0 }
             )
+        },
+        onOpen = if (canRead) onOpenReader else onOpenWork,
+        onOpenDetails = onOpenWork,
+        progress = if (obscured) null else progress,
+        progressLabel = if (obscured) null else progressLabel,
+        // Only chips that cannot live behind Details — keep the face quiet (MD3
+        // progressive disclosure). Download state matters for offline trust.
+        statusChips = if (obscured) {
+            listOf(work.rating.ifBlank { "Mature content" })
+        } else {
+            listOfNotNull(
+                if (!work.hasEpub) "Not downloaded" else null,
+                if (work.isFavorite) "Favorite" else null
+            )
+        },
+        obscured = obscured,
+        contentDescription = if (obscured) {
+            "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
+        } else {
+            val action = if (canRead) "Read" else "Open details for"
+            "$action ${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
         }
     )
 }
 
-private fun SavedWork.fandomLabels(): List<String> {
-    return workFandoms.ifEmpty { workTags }
-        .filter { it.isNotBlank() }
-        .take(3)
+private fun SavedWork.primaryFandom(): String? {
+    return workFandoms.firstOrNull { it.isNotBlank() }
+        ?: workTags.firstOrNull { it.isNotBlank() }
 }
 
-/** hig-review carousels show more items; 4 was too sparse for a reader-first shelf. */
 private const val HomeShelfLimit = 12

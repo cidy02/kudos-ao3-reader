@@ -250,3 +250,68 @@ kudos-ao3-reader-android tip.
 
 Contracts: `UI_PARITY_CHECKLIST.md`, `CROSS_PLATFORM_UI_BRIDGE.md`,
 `KUDOS_ANDROID_INTERFACE_GUIDELINES.md`.
+
+---
+
+## 11. Pass 2 — Material 3 visual hierarchy (2026-07-31)
+
+**Intent:** make Android UI *read* like hig-review product hierarchy while
+staying inside **Material Design 3** (see `ANDROID_MATERIAL_HIG_TRANSLATION.md`).
+
+```text
+Preserve Apple product intent (reader-first cards, dense metadata, progressive disclosure).
+Express it with MD3 components, color roles, type roles, and touch targets.
+Do NOT clone 164×228 SwiftUI tiles, SF Symbols, Liquid Glass, or iOS chrome.
+```
+
+### What we matched (product → MD3)
+
+| Product rule (hig-review) | Material 3 expression |
+|---|---|
+| Compact shelf card hierarchy | `ElevatedCard` + `WorkCoverCard` (`titleSmall` → meta → stats → progress) |
+| ⓘ → Work Details | `IconButton` + `Icons.Outlined.Info` (40.dp, primary tint) |
+| Author / fandom meta | Icon + `labelMedium` / `onSurfaceVariant` (`CardMetaLine`) |
+| One-stat-per-row cover stats | Column of `WorkStatLabel` (primary icon + `labelSmall`) |
+| List-row stats flow | `WorkListStatsRow` (`FlowRow` + same labels) |
+| Detailed AO3 row hierarchy | `Card` `surfaceContainerLow`: title → author → fandom → summary → divider → stats; **More** for tags |
+| Adjacent shelf cards distinct | Soft HSL wash over `surfaceContainerHigh` (tonal, not cover-art clone) |
+| Quiet status surface | Chips only for offline-critical / favorite; not full badge soup |
+| Section + shelf rhythm | 16.dp screen gutters, 12.dp shelf gaps, 12-item shelf cap |
+
+### Deliberately not cloned
+
+| iOS detail | Why skipped |
+|---|---|
+| Fixed 164×228 tile + Dynamic Type scale lock | MD3 cards are content-sized; we use **176.dp × min 220.dp** for shelf density |
+| SF Symbol glyphs | Material Icons (outlined / auto-mirrored) |
+| NavigationLink-in-background zoom | Platform navigation; Android uses NavCompose routes |
+| Collapsible section + chevron “See all” | Optional follow-up; header text remains MD3 `titleLarge` |
+| Liquid Glass / peel / zoom transition | iOS-only chrome |
+
+### New / updated files (pass 2)
+
+| Path | Role |
+|---|---|
+| `ui/components/WorkCoverCard.kt` | Shared MD3 elevated shelf card |
+| `ui/components/WorkStats.kt` | Icon stats + `coverCardStats` / `listRowStats` |
+| `ui/components/AO3WorkCard.kt` | List hierarchy + expand + MD3 surfaces |
+| `home/HomeScreen.kt` | Shelves use `WorkCoverCard` |
+| `library/LibraryScreen.kt` | Compact row + full card MD3 hierarchy |
+| `ui/components/KudosUi.kt` | `surfaceContainer*` chips / state cards |
+| `gradle` material-icons core + extended | MD3 icon set |
+
+### Verification (pass 2)
+
+| Check | Result |
+|---|---|
+| `compileDebugKotlin` | **PASS** |
+| `WorkStatsTest` | **PASS** |
+| Manual device density / TalkBack | Still required |
+
+### MD3 self-check
+
+- [x] Components: `ElevatedCard`, `Card`, `IconButton`, `LinearProgressIndicator`, `HorizontalDivider`, chips-as-`Surface`
+- [x] Color roles: `primary`, `onSurface`, `onSurfaceVariant`, `surfaceContainerLow/High/Highest`, `outlineVariant`, `primaryContainer`
+- [x] Type roles: `titleMedium` / `titleSmall`, `bodyMedium` / `bodySmall`, `labelSmall` / `labelMedium`
+- [x] Touch targets: detail `IconButton` 40.dp
+- [x] No iOS visual-effect dependency

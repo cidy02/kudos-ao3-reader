@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -9,7 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -32,7 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
-import io.github.cidy02.kudos.ui.components.CoverCardStatsColumn
+import io.github.cidy02.kudos.ui.components.CardMetaLine
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -40,11 +42,9 @@ import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.ui.components.StatusBadge
-import io.github.cidy02.kudos.ui.components.WorkStatItem
-import io.github.cidy02.kudos.ui.components.chapterStatText
-import io.github.cidy02.kudos.ui.components.completionStatText
-import io.github.cidy02.kudos.ui.components.ratingDisplayName
-import io.github.cidy02.kudos.ui.components.wordStatText
+import io.github.cidy02.kudos.ui.components.WorkDetailsIconButton
+import io.github.cidy02.kudos.ui.components.WorkListStatsRow
+import io.github.cidy02.kudos.ui.components.listRowStats
 import java.time.Instant
 import kotlin.math.roundToInt
 
@@ -408,20 +408,21 @@ private fun CompactWorkRow(
     onOpenReader: (String) -> Unit
 ) {
     val work = display.item.work
-    val canRead =
-        work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible
+    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    val canRead = work.hasEpub && !obscured
     val onPrimaryOpen: () -> Unit = {
         if (canRead) onOpenReader(work.id) else onOpenWork(work.id)
     }
+    // MD3 filled tonal list row — dense, whole-row primary action.
     Surface(
         tonalElevation = 1.dp,
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onPrimaryOpen)
             .semantics {
-                contentDescription = if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+                contentDescription = if (obscured) {
                     "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
                 } else {
                     val action = if (canRead) "Read" else "Open details for"
@@ -430,12 +431,12 @@ private fun CompactWorkRow(
             }
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (obscured) {
                     StatusBadge("Mature work hidden")
                     MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
                 } else {
@@ -452,14 +453,19 @@ private fun CompactWorkRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    MetadataChipRow(labels = work.compactStatusLabels(), maxItems = 4)
+                    MetadataChipRow(labels = work.compactStatusLabels(), maxItems = 3)
                 }
             }
-            TextButton(onClick = { onOpenWork(work.id) }) { Text("ⓘ") }
+            WorkDetailsIconButton(onClick = { onOpenWork(work.id) })
         }
     }
 }
 
+/**
+ * Full Library card — Material 3 surface card with the same list hierarchy as
+ * Search (`AO3WorkCard`): title, author, fandom, summary, divider, list stats.
+ * Primary open is reader-first when an EPUB is present.
+ */
 @Composable
 private fun SavedWorkCard(
     display: LibraryDisplayItem,
@@ -467,16 +473,19 @@ private fun SavedWorkCard(
     onOpenReader: () -> Unit
 ) {
     val work = display.item.work
-    val canRead =
-        work.hasEpub && display.privacyVisibility == LibraryPrivacyVisibility.Visible
+    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    val canRead = work.hasEpub && !obscured
     val onPrimaryOpen = if (canRead) onOpenReader else onOpenWork
     Card(
         onClick = onPrimaryOpen,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
             .semantics {
-                contentDescription = if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+                contentDescription = if (obscured) {
                     "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
                 } else {
                     val action = if (canRead) "Read" else "Open details for"
@@ -487,10 +496,10 @@ private fun SavedWorkCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) {
+            if (obscured) {
                 StatusBadge("Mature work hidden")
                 MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
             } else {
@@ -501,7 +510,7 @@ private fun SavedWorkCard(
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = work.title,
@@ -511,25 +520,44 @@ private fun SavedWorkCard(
                         )
                         Text(
                             text = "by ${work.author.ifBlank { "Anonymous" }}",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    TextButton(onClick = onOpenWork) { Text("ⓘ") }
+                    WorkDetailsIconButton(onClick = onOpenWork)
                 }
-                MetadataChipRow(labels = work.fandomLabels(), maxItems = 3, prominent = true)
-                MetadataChipRow(labels = work.localStatusLabels(), maxItems = 6)
-                CoverCardStatsColumn(stats = work.coverStats())
+                work.primaryFandom()?.let { fandom ->
+                    CardMetaLine(
+                        text = fandom,
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        accessibilityLabel = "Fandom: $fandom"
+                    )
+                }
+                MetadataChipRow(labels = work.localStatusLabels(), maxItems = 4)
                 if (work.summary.isNotBlank()) {
                     Text(
                         text = work.summary,
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
                 TagLine(display.item.userTags, display.item.collections)
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 2.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                WorkListStatsRow(
+                    stats = listRowStats(
+                        rating = work.rating,
+                        wordCount = work.wordCount.takeIf { it > 0 },
+                        chapters = work.chapters,
+                        kudos = work.kudos.takeIf { it > 0 }
+                    )
+                )
             }
         }
     }
@@ -552,29 +580,6 @@ private fun SavedWork.localStatusLabels(): List<String> {
     )
 }
 
-/** AO3 cover-card stats: one label per row with spelled-out nouns. */
-private fun SavedWork.coverStats(): List<WorkStatItem> {
-    return listOfNotNull(
-        ratingDisplayName(rating)?.let { WorkStatItem(it, accessibilityLabel = rating) },
-        chapters.takeIf { it.isNotBlank() }?.let {
-            WorkStatItem(chapterStatText(it), accessibilityLabel = "Chapters $it")
-        },
-        completionStatText(isComplete)?.let { WorkStatItem(it) },
-        wordCount.takeIf { it > 0 }?.let {
-            WorkStatItem(wordStatText(it), accessibilityLabel = "%,d words".format(it))
-        },
-        kudos.takeIf { it > 0 }?.let {
-            WorkStatItem(if (it == 1) "1 kudos" else "%,d kudos".format(it))
-        },
-        comments?.takeIf { it > 0 }?.let {
-            WorkStatItem(if (it == 1) "1 comment" else "%,d comments".format(it))
-        },
-        hits?.takeIf { it > 0 }?.let {
-            WorkStatItem(if (it == 1) "1 hit" else "%,d hits".format(it))
-        }
-    )
-}
-
 private fun SavedWork.compactStatusLabels(): List<String> {
     return listOfNotNull(
         if (hasEpub) "Downloaded" else "Not downloaded",
@@ -584,10 +589,9 @@ private fun SavedWork.compactStatusLabels(): List<String> {
     )
 }
 
-private fun SavedWork.fandomLabels(): List<String> {
-    return workFandoms.ifEmpty { workTags }
-        .filter { it.isNotBlank() }
-        .take(3)
+private fun SavedWork.primaryFandom(): String? {
+    return workFandoms.firstOrNull { it.isNotBlank() }
+        ?: workTags.firstOrNull { it.isNotBlank() }
 }
 
 private fun Instant.shortDate(): String = toString().substringBefore('T')
