@@ -16,4 +16,7 @@ interface CustomFontDao {
 
     @Query("SELECT * FROM custom_fonts WHERE fileName = :fileName")
     suspend fun getByFileName(fileName: String): CustomFontEntity?
+
+    @Query("SELECT * FROM custom_fonts ORDER BY dateAdded DESC")
+    suspend fun getAll(): List<CustomFontEntity>
 }

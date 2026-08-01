@@ -241,7 +241,7 @@ fun AppNavHost(
             )
         }
         composable(Routes.Backup) {
-            BackupScreen()
+            BackupScreen(repository = container.backupRepository)
         }
     }
 }

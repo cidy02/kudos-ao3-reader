@@ -16,4 +16,7 @@ interface BookmarkDao {
 
     @Query("SELECT * FROM bookmarks WHERE urlString = :urlString")
     suspend fun getByUrl(urlString: String): BookmarkEntity?
+
+    @Query("SELECT * FROM bookmarks ORDER BY dateAdded DESC")
+    suspend fun getAll(): List<BookmarkEntity>
 }

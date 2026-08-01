@@ -158,6 +158,11 @@ Status: Partial.
 - Complete: Settings now displays current DataStore values for reader, privacy,
   and app settings using backup-contract field meanings.
 - Complete: Settings can reset local settings to defaults and opens Backup.
+- Complete (2026-07-31): Backup Import/Export wired via Android SAF document
+  pickers. Export writes v2 ZIP `.kudosbackup`; import merge-restores works,
+  EPUBs, fonts, collections, bookmarks, saved searches, and settings. AO3
+  session data is never included. Apple v1 directory packages are still not
+  opened via SAF (v2 ZIP is the portable path).
 - Complete: Backup screen states compatibility, merge-only restore behavior, and
   secret/session exclusion rules.
 - Complete: Settings and Backup use the shared screen-header vocabulary, and

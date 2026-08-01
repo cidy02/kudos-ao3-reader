@@ -51,6 +51,31 @@ class SettingsRepository(
         dataStore.edit { it.clear() }
     }
 
+    /** Replace all preference keys from a full settings snapshot (backup restore). */
+    suspend fun replaceAll(settings: KudosSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.ReaderFontId] = settings.reader.readerFontId
+            prefs[Keys.ReaderMode] = settings.reader.readerMode.storageValue
+            prefs[Keys.ReaderTwoPage] = settings.reader.readerTwoPage
+            prefs[Keys.ReaderCustomize] = settings.reader.readerCustomize
+            prefs[Keys.ReaderBoldText] = settings.reader.readerBoldText
+            prefs[Keys.ReaderFontPt] = settings.reader.readerFontPt
+            prefs[Keys.ReaderLineHeight] = settings.reader.readerLineHeight
+            prefs[Keys.ReaderLetterSpacing] = settings.reader.readerLetterSpacing
+            prefs[Keys.ReaderWordSpacing] = settings.reader.readerWordSpacing
+            prefs[Keys.ReaderMargin] = settings.reader.readerMargin
+            prefs[Keys.ReaderJustify] = settings.reader.readerJustify
+            prefs[Keys.ConfirmBeforeDelete] = settings.app.confirmBeforeDelete
+            prefs[Keys.HideMatureContent] = settings.privacy.hideMatureContent
+            prefs[Keys.MatureContentMode] = settings.privacy.matureContentMode.storageValue
+            prefs[Keys.RequireBiometricToReveal] = settings.privacy.requireBiometricToReveal
+            prefs[Keys.AppTheme] = settings.app.appTheme.storageValue
+            prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
+            prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
+            prefs[Keys.AccentColorHex] = settings.app.accentColorHex
+        }
+    }
+
     private fun settingsFromPreferences(preferences: Preferences): KudosSettings {
         val defaults = KudosSettings.Defaults
         return KudosSettings(
