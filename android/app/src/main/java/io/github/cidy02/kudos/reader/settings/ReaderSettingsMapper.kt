@@ -73,5 +73,24 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         const val MAX_MARGIN_FACTOR = 2.0
         const val MIN_LINE_HEIGHT = 1.0
         const val MAX_LINE_HEIGHT = 3.0
+
+        /**
+         * Inverse of [fontSizePercent]: percent of [DEFAULT_BASE_FONT_PT] → points.
+         * Used when persisting display-sheet font size into DataStore.
+         */
+        fun fontPtFromPercent(
+            percent: Int,
+            baseFontPt: Double = DEFAULT_BASE_FONT_PT
+        ): Double {
+            val clamped = percent.coerceIn(MIN_FONT_PERCENT, MAX_FONT_PERCENT)
+            return (clamped / 100.0) * baseFontPt
+        }
+
+        fun toReaderThemeSetting(theme: ReaderColorTheme): ReaderThemeSetting =
+            when (theme) {
+                ReaderColorTheme.Light -> ReaderThemeSetting.Light
+                ReaderColorTheme.Sepia -> ReaderThemeSetting.Sepia
+                ReaderColorTheme.Dark -> ReaderThemeSetting.Dark
+            }
     }
 }

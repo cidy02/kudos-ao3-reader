@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
@@ -17,12 +18,13 @@ import kotlinx.coroutines.launch
  * Drives the reader screen: resolves the work, exposes [ReaderUiState], and
  * debounces/persists progress reported by the Readium navigator host.
  *
- * Display preferences (font size / theme) are updated in-session on the
- * [ReaderUiState.Reading] snapshot and applied via [io.github.cidy02.kudos.reader.readium.ReadiumSettingsAdapter]
- * without interrupting progress save.
+ * Display preferences (font size / theme) update the in-session
+ * [ReaderUiState.Reading] snapshot (applied via ReadiumSettingsAdapter) and are
+ * also written to [SettingsRepository] so they survive leaving the reader.
  */
 class ReaderViewModel(
     private val repository: ReaderRepository,
+    private val settingsRepository: SettingsRepository,
     private val workId: String
 ) : ViewModel() {
 
@@ -82,7 +84,10 @@ class ReaderViewModel(
         viewModelScope.launch { repository.markEpubMissing(workId) }
     }
 
-    /** In-session font size (% of publisher base). Clamped to mapper bounds. */
+    /**
+     * Font size (% of publisher base). Clamped to mapper bounds, applied
+     * in-session, and persisted as `readerFontPt` (18pt base) + customize on.
+     */
     fun setFontSizePercent(percent: Int) {
         val clamped = percent.coerceIn(
             ReaderSettingsMapper.MIN_FONT_PERCENT,
@@ -95,12 +100,29 @@ class ReaderViewModel(
                 publisherStyles = false
             )
         }
+        viewModelScope.launch {
+            settingsRepository.updateReaderFontPt(
+                ReaderSettingsMapper.fontPtFromPercent(clamped)
+            )
+            settingsRepository.updateReaderCustomize(true)
+        }
     }
 
-    /** In-session reader colour theme (light / sepia / dark). */
+    /**
+     * Reader colour theme (light / sepia / dark). Applied in-session and
+     * persisted as `readerTheme` with `matchAppReaderTheme = false` so the
+     * choice is not overridden by app theme on reopen.
+     */
     fun setColorTheme(theme: ReaderColorTheme) {
         updatePreferences { prefs ->
             prefs.copy(theme = theme, publisherStyles = false)
+        }
+        viewModelScope.launch {
+            settingsRepository.updateReaderTheme(
+                ReaderSettingsMapper.toReaderThemeSetting(theme)
+            )
+            settingsRepository.updateMatchAppReaderTheme(false)
+            settingsRepository.updateReaderCustomize(true)
         }
     }
 
@@ -116,9 +138,15 @@ class ReaderViewModel(
     }
 
     companion object {
-        fun factory(repository: ReaderRepository, workId: String): ViewModelProvider.Factory =
+        fun factory(
+            repository: ReaderRepository,
+            settingsRepository: SettingsRepository,
+            workId: String
+        ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { ReaderViewModel(repository, workId) }
+                initializer {
+                    ReaderViewModel(repository, settingsRepository, workId)
+                }
             }
     }
 }

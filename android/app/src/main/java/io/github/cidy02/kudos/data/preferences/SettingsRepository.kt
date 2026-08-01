@@ -39,6 +39,27 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderTheme] = theme.storageValue }
     }
 
+    /** Persist reader font size in points (settings-contract field). */
+    suspend fun updateReaderFontPt(fontPt: Double) {
+        dataStore.edit { it[Keys.ReaderFontPt] = fontPt }
+    }
+
+    /**
+     * When true, [ReaderSettingsMapper] prefers app theme over [updateReaderTheme].
+     * Display-sheet theme picks must set this false so the choice survives reopen.
+     */
+    suspend fun updateMatchAppReaderTheme(match: Boolean) {
+        dataStore.edit { it[Keys.MatchAppReaderTheme] = match }
+    }
+
+    /**
+     * When true, reader applies user style overrides (`publisherStyles = false`).
+     * Display-sheet font/theme changes set this true.
+     */
+    suspend fun updateReaderCustomize(customize: Boolean) {
+        dataStore.edit { it[Keys.ReaderCustomize] = customize }
+    }
+
     suspend fun updateMatureContentMode(mode: MatureContentMode) {
         dataStore.edit { it[Keys.MatureContentMode] = mode.storageValue }
     }

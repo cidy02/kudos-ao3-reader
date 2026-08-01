@@ -216,7 +216,11 @@ fun AppNavHost(
             } else {
                 val readerViewModel: ReaderViewModel = viewModel(
                     key = workId,
-                    factory = ReaderViewModel.factory(container.readerRepository, workId)
+                    factory = ReaderViewModel.factory(
+                        repository = container.readerRepository,
+                        settingsRepository = container.settingsRepository,
+                        workId = workId
+                    )
                 )
                 ReaderScreen(
                     viewModel = readerViewModel,

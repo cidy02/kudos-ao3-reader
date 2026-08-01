@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
@@ -65,6 +66,16 @@ class ReaderViewModelPreferencesTest {
         val next = reading.copy(liveProgress = progress)
         assertEquals(progress, next.liveProgress)
         assertEquals(130, next.preferences.fontSizePercent)
+    }
+
+    @Test
+    fun fontSizePersistMappingUses18ptBase() {
+        // Same math ReaderViewModel uses when writing SettingsRepository.
+        assertEquals(27.0, ReaderSettingsMapper.fontPtFromPercent(150), 0.0)
+        assertEquals(
+            ReaderThemeSetting.Dark,
+            ReaderSettingsMapper.toReaderThemeSetting(ReaderColorTheme.Dark)
+        )
     }
 
     // Mirrors ReaderViewModel.setFontSizePercent / setColorTheme transforms.

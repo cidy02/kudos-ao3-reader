@@ -32,6 +32,36 @@ class ReaderSettingsMapperTest {
     }
 
     @Test
+    fun fontPercentRoundTripsToPointsViaBase18() {
+        assertEquals(18.0, ReaderSettingsMapper.fontPtFromPercent(100), 0.0)
+        assertEquals(27.0, ReaderSettingsMapper.fontPtFromPercent(150), 0.0)
+        assertEquals(9.0, ReaderSettingsMapper.fontPtFromPercent(50), 0.0)
+        assertEquals(45.0, ReaderSettingsMapper.fontPtFromPercent(250), 0.0)
+        // Out-of-range percent is clamped before conversion.
+        assertEquals(9.0, ReaderSettingsMapper.fontPtFromPercent(1), 0.0)
+        assertEquals(45.0, ReaderSettingsMapper.fontPtFromPercent(999), 0.0)
+        // Round-trip: pt → % → pt for a clean multiple of the 18pt base.
+        val percent = mapper.map(ReaderSettings(readerFontPt = 27.0), AppSettings()).fontSizePercent
+        assertEquals(27.0, ReaderSettingsMapper.fontPtFromPercent(percent), 0.0)
+    }
+
+    @Test
+    fun colorThemeMapsToReaderThemeSetting() {
+        assertEquals(
+            ReaderThemeSetting.Light,
+            ReaderSettingsMapper.toReaderThemeSetting(ReaderColorTheme.Light)
+        )
+        assertEquals(
+            ReaderThemeSetting.Sepia,
+            ReaderSettingsMapper.toReaderThemeSetting(ReaderColorTheme.Sepia)
+        )
+        assertEquals(
+            ReaderThemeSetting.Dark,
+            ReaderSettingsMapper.toReaderThemeSetting(ReaderColorTheme.Dark)
+        )
+    }
+
+    @Test
     fun pagedTwoPageMapsToTwoColumns() {
         val prefs = mapper.map(
             ReaderSettings(readerMode = ReaderMode.Paged, readerTwoPage = true),
