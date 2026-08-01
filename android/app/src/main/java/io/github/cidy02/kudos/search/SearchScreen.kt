@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,19 +9,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Error
@@ -42,23 +53,23 @@ fun SearchScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     repository: AO3SearchRepository = remember { AO3SearchRepository() }
 ) {
-    var query by remember { mutableStateOf("") }
-    var sort by remember { mutableStateOf(AO3SearchSort.RELEVANCE) }
+    var filters by remember { mutableStateOf(AO3SearchFilters()) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var state by remember { mutableStateOf<SearchUiState>(SearchUiState.Idle) }
     var lastFilters by remember { mutableStateOf(AO3SearchFilters()) }
     val scope = rememberCoroutineScope()
+    val activeChips = remember(filters) { activeFilterChips(filters) }
 
-    fun runSearch(page: Int = 1) {
-        val filters = AO3SearchFilters(query = query, sort = sort)
-        if (!filters.isSearchable) {
+    fun runSearch(page: Int = 1, searchFilters: AO3SearchFilters = filters) {
+        if (!searchFilters.isSearchable) {
             state = SearchUiState.Idle
             return
         }
 
-        lastFilters = filters
+        lastFilters = searchFilters
         state = SearchUiState.Loading
         scope.launch {
-            state = when (val result = repository.search(filters, page)) {
+            state = when (val result = repository.search(searchFilters, page)) {
                 is AO3Result.Success -> SearchUiState.Results(result.value)
                 is AO3Result.Failure -> SearchUiState.Error(result.error, page)
             }
@@ -80,6 +91,10 @@ fun SearchScreen(
         }
     }
 
+    fun clearFilters() {
+        filters = clearedFiltersPreservingQuery(filters)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -88,33 +103,44 @@ fun SearchScreen(
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
             OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
+                value = filters.query,
+                onValueChange = { filters = filters.copy(query = it) },
                 label = { Text("Query") },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
             Button(
-                enabled = state !is SearchUiState.Loading &&
-                    AO3SearchFilters(query = query, sort = sort).isSearchable,
+                enabled = state !is SearchUiState.Loading && filters.isSearchable,
                 onClick = { runSearch() }
             ) {
                 Text("Search")
             }
         }
 
-        SearchOptionsRow(
-            selectedSort = sort,
-            onSortSelected = { sort = it }
+        SearchControlsRow(
+            filters = filters,
+            activeChipCount = activeChips.size,
+            onSortSelected = { filters = filters.copy(sort = it) },
+            onOpenFilters = { showFilterSheet = true },
+            onClearFilters = ::clearFilters
         )
+
+        if (activeChips.isNotEmpty()) {
+            ActiveFilterChipRow(
+                chips = activeChips,
+                onClear = ::clearFilters
+            )
+        }
 
         when (val current = state) {
             SearchUiState.Idle -> EmptyStateCard(
                 title = "Search AO3 works",
-                message = "Enter a title, tag, author, or phrase. Search runs only when you press Search."
+                message = "Enter a title, tag, author, or phrase — or open Filters for rating, " +
+                    "warnings, tags, and more. Search runs only when you press Search or Apply."
             )
             SearchUiState.Loading -> LoadingStateCard("Searching AO3")
             is SearchUiState.Error -> {
@@ -129,7 +155,7 @@ fun SearchScreen(
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No works found",
-                        message = "AO3 returned no works for this query. Try a broader term or a different sort."
+                        message = "AO3 returned no works for this query. Try broader terms or fewer filters."
                     )
                 } else {
                     SearchResultsList(
@@ -142,36 +168,107 @@ fun SearchScreen(
             }
         }
     }
+
+    if (showFilterSheet) {
+        SearchFilterSheet(
+            filters = filters,
+            onFiltersChange = { filters = it },
+            onApply = {
+                showFilterSheet = false
+                runSearch(page = 1, searchFilters = filters)
+            },
+            onClear = ::clearFilters,
+            onDismiss = { showFilterSheet = false }
+        )
+    }
 }
 
 @Composable
-private fun SearchOptionsRow(
-    selectedSort: AO3SearchSort,
-    onSortSelected: (AO3SearchSort) -> Unit
+private fun SearchControlsRow(
+    filters: AO3SearchFilters,
+    activeChipCount: Int,
+    onSortSelected: (AO3SearchSort) -> Unit,
+    onOpenFilters: () -> Unit,
+    onClearFilters: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var sortExpanded by remember { mutableStateOf(false) }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        OutlinedButton(onClick = { expanded = true }) {
-            Text("Sort: ${selectedSort.title}")
+        OutlinedButton(onClick = onOpenFilters) {
+            BadgedBox(
+                badge = {
+                    if (activeChipCount > 0) {
+                        Badge { Text(activeChipCount.coerceAtMost(99).toString()) }
+                    }
+                }
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FilterList,
+                        contentDescription = null
+                    )
+                    Text("Filters")
+                }
+            }
+        }
+
+        OutlinedButton(onClick = { sortExpanded = true }) {
+            Text("Sort: ${filters.sort.title}")
         }
         DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+            expanded = sortExpanded,
+            onDismissRequest = { sortExpanded = false }
         ) {
             AO3SearchSort.entries.forEach { sort ->
                 DropdownMenuItem(
                     text = { Text(sort.title) },
                     onClick = {
                         onSortSelected(sort)
-                        expanded = false
+                        sortExpanded = false
                     }
                 )
             }
         }
+
+        if (filters.hasActiveFilters) {
+            TextButton(onClick = onClearFilters) {
+                Text("Clear")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActiveFilterChipRow(
+    chips: List<String>,
+    onClear: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+    ) {
+        chips.forEach { label ->
+            InputChip(
+                selected = true,
+                onClick = { /* summary only; edit via Filters sheet */ },
+                label = { Text(label, maxLines = 1) }
+            )
+        }
+        FilterChip(
+            selected = false,
+            onClick = onClear,
+            label = { Text("Clear all") }
+        )
     }
 }
 
