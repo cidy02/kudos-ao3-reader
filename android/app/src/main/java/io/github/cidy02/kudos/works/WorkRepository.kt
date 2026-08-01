@@ -91,6 +91,13 @@ class WorkRepository(
         return upsert(work.copy(isFavorite = !work.isFavorite, lastModifiedAt = clock()))
     }
 
+    /** Sets favorite flag without toggling (Library bulk favorite / unfavorite). */
+    suspend fun setFavorite(workId: String, favorite: Boolean): SavedWork? {
+        val work = getWork(workId) ?: return null
+        if (work.isFavorite == favorite) return work
+        return upsert(work.copy(isFavorite = favorite, lastModifiedAt = clock()))
+    }
+
     suspend fun toggleFinished(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
         return setFinished(workId, !work.isFinished)

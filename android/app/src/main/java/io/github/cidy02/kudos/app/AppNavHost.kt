@@ -89,6 +89,7 @@ fun AppNavHost(
         composable(Routes.Library) {
             LibraryScreen(
                 repository = container.libraryRepository,
+                workRepository = container.workRepository,
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)

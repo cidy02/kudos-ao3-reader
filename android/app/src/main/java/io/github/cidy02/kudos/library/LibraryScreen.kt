@@ -1,23 +1,31 @@
 package io.github.cidy02.kudos.library
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,12 +61,14 @@ import io.github.cidy02.kudos.ui.components.StatusBadge
 import io.github.cidy02.kudos.ui.components.WorkDetailsIconButton
 import io.github.cidy02.kudos.ui.components.WorkListStatsRow
 import io.github.cidy02.kudos.ui.components.listRowStats
+import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
 import kotlin.math.roundToInt
 
 @Composable
 fun LibraryScreen(
     repository: LibraryRepository,
+    workRepository: WorkRepository,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRecentlyDeleted: () -> Unit = {},
@@ -65,8 +76,43 @@ fun LibraryScreen(
     onOpenReadingStatistics: () -> Unit = {},
     onOpenCollections: () -> Unit = {}
 ) {
-    val viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.factory(repository))
+    val viewModel: LibraryViewModel = viewModel(
+        factory = LibraryViewModel.factory(repository, workRepository)
+    )
     val state by viewModel.state.collectAsState()
+    var confirmBulkRemove by remember { mutableStateOf(false) }
+
+    if (confirmBulkRemove) {
+        val count = state.selectedCount
+        AlertDialog(
+            onDismissRequest = { confirmBulkRemove = false },
+            title = {
+                Text(
+                    if (count == 1) "Remove 1 work?" else "Remove $count works?"
+                )
+            },
+            text = {
+                Text(
+                    "Selected works move to Recently Deleted for 90 days. " +
+                        "You can restore them from Library → Recently Deleted. " +
+                        "After 90 days they are permanently removed (including any downloaded EPUBs)."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmBulkRemove = false
+                        viewModel.bulkSoftDelete()
+                    }
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBulkRemove = false }) { Text("Cancel") }
+            }
+        )
+    }
 
     LibraryContent(
         state = state,
@@ -83,7 +129,16 @@ fun LibraryScreen(
         onOpenReadingQueues = onOpenReadingQueues,
         onOpenRecentlyDeleted = onOpenRecentlyDeleted,
         onOpenReadingStatistics = onOpenReadingStatistics,
-        onOpenCollections = onOpenCollections
+        onOpenCollections = onOpenCollections,
+        onEnterSelection = { viewModel.enterSelectionMode() },
+        onExitSelection = viewModel::exitSelectionMode,
+        onToggleSelection = viewModel::toggleWorkSelection,
+        onLongPressWork = { workId -> viewModel.enterSelectionMode(workId) },
+        onBulkFavorite = { viewModel.bulkSetFavorite(true) },
+        onBulkUnfavorite = { viewModel.bulkSetFavorite(false) },
+        onBulkMarkFinished = { viewModel.bulkSetFinished(true) },
+        onBulkMarkUnfinished = { viewModel.bulkSetFinished(false) },
+        onBulkRemove = { confirmBulkRemove = true }
     )
 }
 
@@ -103,143 +158,265 @@ private fun LibraryContent(
     onOpenRecentlyDeleted: () -> Unit = {},
     onOpenReadingQueues: () -> Unit = {},
     onOpenReadingStatistics: () -> Unit = {},
-    onOpenCollections: () -> Unit = {}
+    onOpenCollections: () -> Unit = {},
+    onEnterSelection: () -> Unit = {},
+    onExitSelection: () -> Unit = {},
+    onToggleSelection: (String) -> Unit = {},
+    onLongPressWork: (String) -> Unit = {},
+    onBulkFavorite: () -> Unit = {},
+    onBulkUnfavorite: () -> Unit = {},
+    onBulkMarkFinished: () -> Unit = {},
+    onBulkMarkUnfinished: () -> Unit = {},
+    onBulkRemove: () -> Unit = {}
 ) {
     // Filters stay collapsed by default so shelves + main list lead (Apple density parity).
     var filtersExpanded by rememberSaveable { mutableStateOf(false) }
+    val bottomPad = if (state.selectionMode) 88.dp else 18.dp
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            horizontal = 20.dp,
-            vertical = 18.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Subtitle/count + Collections/Queues/Insights/Deleted — TopAppBar already says "Library".
-        item {
-            LibraryToolbarRow(
-                state = state,
-                onOpenCollections = onOpenCollections,
-                onOpenReadingQueues = onOpenReadingQueues,
-                onOpenReadingStatistics = onOpenReadingStatistics,
-                onOpenRecentlyDeleted = onOpenRecentlyDeleted
-            )
-        }
-
-        if (state.loading) {
-            item { LoadingStateCard("Loading your Library") }
-            return@LazyColumn
-        }
-
-        state.error?.let { error ->
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                top = 18.dp,
+                end = 20.dp,
+                // Extra bottom inset so the sticky selection bar does not cover rows.
+                bottom = bottomPad
+            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Subtitle/count + Select / Queues / Deleted — TopAppBar already says "Library".
             item {
-                ErrorStateCard(
-                    title = "Library could not load",
-                    message = error
+                LibraryToolbarRow(
+                    state = state,
+                    onOpenCollections = onOpenCollections,
+                    onOpenReadingQueues = onOpenReadingQueues,
+                    onOpenReadingStatistics = onOpenReadingStatistics,
+                    onOpenRecentlyDeleted = onOpenRecentlyDeleted,
+                    onEnterSelection = onEnterSelection,
+                    onExitSelection = onExitSelection
                 )
             }
-            return@LazyColumn
-        }
 
-        if (!state.hasSavedWorks) {
-            item { EmptyLibraryState() }
-            return@LazyColumn
-        }
+            if (state.loading) {
+                item { LoadingStateCard("Loading your Library") }
+                return@LazyColumn
+            }
 
-        // 1) Search near top
-        item {
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = onSearch,
-                label = { Text("Search Library") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+            state.error?.let { error ->
+                item {
+                    ErrorStateCard(
+                        title = "Library could not load",
+                        message = error
+                    )
+                }
+                return@LazyColumn
+            }
 
-        // 2) Short shelf previews lead content
-        item {
-            LibrarySectionPreview(
-                title = "Continue Reading",
-                items = state.continueReading.take(4),
-                emptyMessage = "No in-progress works.",
-                onOpenWork = onOpenWork,
-                onOpenReader = onOpenReader
-            )
-        }
-        item {
-            LibrarySectionPreview(
-                title = "Reading History",
-                items = state.readingHistory.take(4),
-                emptyMessage = "No reading history.",
-                onOpenWork = onOpenWork,
-                onOpenReader = onOpenReader
-            )
-        }
-        item {
-            LibrarySectionPreview(
-                title = "Recently Added",
-                items = state.recentlyAdded.take(4),
-                emptyMessage = "No saved works.",
-                onOpenWork = onOpenWork,
-                onOpenReader = onOpenReader
-            )
-        }
-        if (state.favorites.isNotEmpty()) {
+            if (!state.hasSavedWorks) {
+                item { EmptyLibraryState() }
+                return@LazyColumn
+            }
+
+            // 1) Search near top
+            item {
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = onSearch,
+                    label = { Text("Search Library") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.selectionMode
+                )
+            }
+
+            // 2) Short shelf previews lead content
             item {
                 LibrarySectionPreview(
-                    title = "Favorites",
-                    items = state.favorites.take(4),
-                    emptyMessage = "No favorites.",
+                    title = "Continue Reading",
+                    items = state.continueReading.take(4),
+                    emptyMessage = "No in-progress works.",
+                    selectionMode = state.selectionMode,
+                    selectedWorkIds = state.selectedWorkIds,
                     onOpenWork = onOpenWork,
-                    onOpenReader = onOpenReader
+                    onOpenReader = onOpenReader,
+                    onToggleSelection = onToggleSelection,
+                    onLongPressWork = onLongPressWork
                 )
+            }
+            item {
+                LibrarySectionPreview(
+                    title = "Reading History",
+                    items = state.readingHistory.take(4),
+                    emptyMessage = "No reading history.",
+                    selectionMode = state.selectionMode,
+                    selectedWorkIds = state.selectedWorkIds,
+                    onOpenWork = onOpenWork,
+                    onOpenReader = onOpenReader,
+                    onToggleSelection = onToggleSelection,
+                    onLongPressWork = onLongPressWork
+                )
+            }
+            item {
+                LibrarySectionPreview(
+                    title = "Recently Added",
+                    items = state.recentlyAdded.take(4),
+                    emptyMessage = "No saved works.",
+                    selectionMode = state.selectionMode,
+                    selectedWorkIds = state.selectedWorkIds,
+                    onOpenWork = onOpenWork,
+                    onOpenReader = onOpenReader,
+                    onToggleSelection = onToggleSelection,
+                    onLongPressWork = onLongPressWork
+                )
+            }
+            if (state.favorites.isNotEmpty()) {
+                item {
+                    LibrarySectionPreview(
+                        title = "Favorites",
+                        items = state.favorites.take(4),
+                        emptyMessage = "No favorites.",
+                        selectionMode = state.selectionMode,
+                        selectedWorkIds = state.selectedWorkIds,
+                        onOpenWork = onOpenWork,
+                        onOpenReader = onOpenReader,
+                        onToggleSelection = onToggleSelection,
+                        onLongPressWork = onLongPressWork
+                    )
+                }
+            }
+
+            // 3) Advanced filters tucked behind expandable header (default collapsed)
+            if (!state.selectionMode) {
+                item {
+                    LibraryFiltersPanel(
+                        state = state,
+                        expanded = filtersExpanded,
+                        onExpandedChange = { filtersExpanded = it },
+                        onSort = onSort,
+                        onToggleFavorite = onToggleFavorite,
+                        onFinishedFilter = onFinishedFilter,
+                        onDownloadFilter = onDownloadFilter,
+                        onToggleUserTag = onToggleUserTag,
+                        onToggleCollection = onToggleCollection,
+                        onClearFilters = onClearFilters
+                    )
+                }
+            }
+
+            item {
+                KudosSectionHeader(
+                    title = if (state.selectionMode) {
+                        if (state.hasSelection) {
+                            "${state.selectedCount} selected"
+                        } else {
+                            "Select works"
+                        }
+                    } else {
+                        "All Saved Works"
+                    },
+                    trailing = {
+                        StatusBadge("${state.items.size}")
+                    }
+                )
+            }
+
+            if (state.items.isEmpty()) {
+                item { NoResultsState(state) }
+            } else {
+                items(state.items, key = { it.item.work.id }) { display ->
+                    SavedWorkCard(
+                        display = display,
+                        selectionMode = state.selectionMode,
+                        selected = display.item.work.id in state.selectedWorkIds,
+                        onOpenWork = { onOpenWork(display.item.work.id) },
+                        onOpenReader = { onOpenReader(display.item.work.id) },
+                        onToggleSelection = { onToggleSelection(display.item.work.id) },
+                        onLongPress = { onLongPressWork(display.item.work.id) }
+                    )
+                }
             }
         }
 
-        // 3) Advanced filters tucked behind expandable header (default collapsed)
-        item {
-            LibraryFiltersPanel(
-                state = state,
-                expanded = filtersExpanded,
-                onExpandedChange = { filtersExpanded = it },
-                onSort = onSort,
-                onToggleFavorite = onToggleFavorite,
-                onFinishedFilter = onFinishedFilter,
-                onDownloadFilter = onDownloadFilter,
-                onToggleUserTag = onToggleUserTag,
-                onToggleCollection = onToggleCollection,
-                onClearFilters = onClearFilters
+        if (state.selectionMode) {
+            LibrarySelectionActionBar(
+                hasSelection = state.hasSelection,
+                onFavorite = onBulkFavorite,
+                onUnfavorite = onBulkUnfavorite,
+                onMarkFinished = onBulkMarkFinished,
+                onMarkUnfinished = onBulkMarkUnfinished,
+                onRemove = onBulkRemove,
+                onCancel = onExitSelection,
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
+}
 
-        item {
-            KudosSectionHeader(
-                title = "All Saved Works",
-                trailing = {
-                    StatusBadge("${state.items.size}")
-                }
-            )
-        }
-
-        if (state.items.isEmpty()) {
-            item { NoResultsState(state) }
-        } else {
-            items(state.items, key = { it.item.work.id }) { display ->
-                SavedWorkCard(
-                    display = display,
-                    onOpenWork = { onOpenWork(display.item.work.id) },
-                    onOpenReader = { onOpenReader(display.item.work.id) }
+/**
+ * Sticky action row while multi-select is active. Bulk actions require a non-empty
+ * selection; Cancel always exits selection mode.
+ */
+@Composable
+private fun LibrarySelectionActionBar(
+    hasSelection: Boolean,
+    onFavorite: () -> Unit,
+    onUnfavorite: () -> Unit,
+    onMarkFinished: () -> Unit,
+    onMarkUnfinished: () -> Unit,
+    onRemove: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onFavorite, enabled = hasSelection) {
+                Text("Favorite")
+            }
+            TextButton(onClick = onUnfavorite, enabled = hasSelection) {
+                Text("Unfavorite")
+            }
+            TextButton(onClick = onMarkFinished, enabled = hasSelection) {
+                Text("Finished")
+            }
+            TextButton(onClick = onMarkUnfinished, enabled = hasSelection) {
+                Text("Unfinished")
+            }
+            TextButton(
+                onClick = onRemove,
+                enabled = hasSelection
+            ) {
+                Text(
+                    text = "Remove",
+                    color = if (hasSelection) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    }
                 )
+            }
+            TextButton(onClick = onCancel) {
+                Text("Cancel")
             }
         }
     }
 }
 
 /**
- * Light toolbar under the scaffold TopAppBar: saved count + Collections / Queues /
- * Insights / Recently Deleted. Avoids a second full "Library" title.
+ * Light toolbar: saved count + Select / Collections / Queues / Insights / Recently Deleted.
+ * Avoids a second full "Library" title.
  */
 @Composable
 private fun LibraryToolbarRow(
@@ -247,40 +424,63 @@ private fun LibraryToolbarRow(
     onOpenCollections: () -> Unit = {},
     onOpenReadingQueues: () -> Unit,
     onOpenReadingStatistics: () -> Unit = {},
-    onOpenRecentlyDeleted: () -> Unit = {}
+    onOpenRecentlyDeleted: () -> Unit = {},
+    onEnterSelection: () -> Unit = {},
+    onExitSelection: () -> Unit = {}
 ) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
         " · $it hidden by privacy"
     }.orEmpty()
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "${state.totalSaved} saved$hidden",
+            text = if (state.selectionMode) {
+                if (state.hasSelection) {
+                    "${state.selectedCount} selected"
+                } else {
+                    "Select works"
+                }
+            } else {
+                "${state.totalSaved} saved$hidden"
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onOpenCollections) {
-                Text("Collections")
+        if (state.selectionMode) {
+            TextButton(onClick = onExitSelection) {
+                Text("Done")
             }
-            TextButton(onClick = onOpenReadingQueues) {
-                Text("Queues")
-            }
-            if (state.hasSavedWorks) {
-                TextButton(onClick = onOpenReadingStatistics) {
-                    Text("Insights")
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (state.hasSavedWorks) {
+                    TextButton(onClick = onEnterSelection) {
+                        Text("Select")
+                    }
                 }
-            }
-            TextButton(onClick = onOpenRecentlyDeleted) {
-                Text("Recently Deleted")
+                TextButton(onClick = onOpenCollections) {
+                    Text("Collections")
+                }
+                TextButton(onClick = onOpenReadingQueues) {
+                    Text("Queues")
+                }
+                if (state.hasSavedWorks) {
+                    TextButton(onClick = onOpenReadingStatistics) {
+                        Text("Insights")
+                    }
+                }
+                TextButton(onClick = onOpenRecentlyDeleted) {
+                    Text("Recently Deleted")
+                }
             }
         }
     }
@@ -311,8 +511,12 @@ private fun LibrarySectionPreview(
     title: String,
     items: List<LibraryDisplayItem>,
     emptyMessage: String,
+    selectionMode: Boolean,
+    selectedWorkIds: Set<String>,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onToggleSelection: (String) -> Unit,
+    onLongPressWork: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         KudosSectionHeader(
@@ -326,7 +530,15 @@ private fun LibrarySectionPreview(
             )
         } else {
             items.forEach { display ->
-                CompactWorkRow(display, onOpenWork, onOpenReader)
+                CompactWorkRow(
+                    display = display,
+                    selectionMode = selectionMode,
+                    selected = display.item.work.id in selectedWorkIds,
+                    onOpenWork = onOpenWork,
+                    onOpenReader = onOpenReader,
+                    onToggleSelection = { onToggleSelection(display.item.work.id) },
+                    onLongPress = { onLongPressWork(display.item.work.id) }
+                )
             }
         }
     }
@@ -356,9 +568,7 @@ private fun LibraryFiltersPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(
-                    onClick = { onExpandedChange(!expanded) }
-                )
+                .clickable(onClick = { onExpandedChange(!expanded) })
                 .semantics {
                     contentDescription = "$headerLabel. $expandLabel"
                 }
@@ -531,28 +741,51 @@ private fun <T> LibraryFacetChips(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CompactWorkRow(
     display: LibraryDisplayItem,
+    selectionMode: Boolean,
+    selected: Boolean,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onToggleSelection: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
     val canRead = work.hasEpub && !obscured
     val onPrimaryOpen: () -> Unit = {
-        if (canRead) onOpenReader(work.id) else onOpenWork(work.id)
+        if (selectionMode) {
+            onToggleSelection()
+        } else if (canRead) {
+            onOpenReader(work.id)
+        } else {
+            onOpenWork(work.id)
+        }
     }
     // MD3 filled tonal list row — dense, whole-row primary action.
     Surface(
         tonalElevation = 1.dp,
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onPrimaryOpen)
+            .combinedClickable(
+                onClick = onPrimaryOpen,
+                onLongClick = {
+                    if (selectionMode) onToggleSelection() else onLongPress()
+                }
+            )
             .semantics {
-                contentDescription = if (obscured) {
+                contentDescription = if (selectionMode) {
+                    val mark = if (selected) "Selected" else "Not selected"
+                    "$mark ${work.title}. Double tap to toggle selection."
+                } else if (obscured) {
                     "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
                 } else {
                     val action = if (canRead) "Read" else "Open details for"
@@ -565,6 +798,12 @@ private fun CompactWorkRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (selectionMode) {
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onToggleSelection() }
+                )
+            }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (obscured) {
                     StatusBadge("Mature work hidden")
@@ -586,7 +825,9 @@ private fun CompactWorkRow(
                     MetadataChipRow(labels = work.compactStatusLabels(), maxItems = 3)
                 }
             }
-            WorkDetailsIconButton(onClick = { onOpenWork(work.id) })
+            if (!selectionMode) {
+                WorkDetailsIconButton(onClick = { onOpenWork(work.id) })
+            }
         }
     }
 }
@@ -594,28 +835,51 @@ private fun CompactWorkRow(
 /**
  * Full Library card — Material 3 surface card with the same list hierarchy as
  * Search (`AO3WorkCard`): title, author, fandom, summary, divider, list stats.
- * Primary open is reader-first when an EPUB is present.
+ * Primary open is reader-first when an EPUB is present (outside selection mode).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SavedWorkCard(
     display: LibraryDisplayItem,
+    selectionMode: Boolean,
+    selected: Boolean,
     onOpenWork: () -> Unit,
-    onOpenReader: () -> Unit
+    onOpenReader: () -> Unit,
+    onToggleSelection: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
     val canRead = work.hasEpub && !obscured
-    val onPrimaryOpen = if (canRead) onOpenReader else onOpenWork
+    val onPrimaryOpen = {
+        when {
+            selectionMode -> onToggleSelection()
+            canRead -> onOpenReader()
+            else -> onOpenWork()
+        }
+    }
     Card(
-        onClick = onPrimaryOpen,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
         ),
         shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
+            .combinedClickable(
+                onClick = onPrimaryOpen,
+                onLongClick = {
+                    if (selectionMode) onToggleSelection() else onLongPress()
+                }
+            )
             .semantics {
-                contentDescription = if (obscured) {
+                contentDescription = if (selectionMode) {
+                    val mark = if (selected) "Selected" else "Not selected"
+                    "$mark ${work.title}. Double tap to toggle selection."
+                } else if (obscured) {
                     "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
                 } else {
                     val action = if (canRead) "Read" else "Open details for"
@@ -630,14 +894,34 @@ private fun SavedWorkCard(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (obscured) {
-                StatusBadge("Mature work hidden")
-                MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (selectionMode) {
+                        Checkbox(
+                            checked = selected,
+                            onCheckedChange = { onToggleSelection() }
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        StatusBadge("Mature work hidden")
+                        MetadataChipRow(labels = listOf(work.rating.ifBlank { "Mature content" }))
+                    }
+                }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.Top
                 ) {
+                    if (selectionMode) {
+                        Checkbox(
+                            checked = selected,
+                            onCheckedChange = { onToggleSelection() },
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -656,7 +940,9 @@ private fun SavedWorkCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    WorkDetailsIconButton(onClick = onOpenWork)
+                    if (!selectionMode) {
+                        WorkDetailsIconButton(onClick = onOpenWork)
+                    }
                 }
                 work.primaryFandom()?.let { fandom ->
                     CardMetaLine(
