@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.data.preferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import java.io.File
@@ -64,5 +65,53 @@ class SettingsRepositoryTest {
         assertEquals(ReaderThemeSetting.Sepia, settings.reader.readerTheme)
         assertFalse(settings.reader.matchAppReaderTheme)
         assertTrue(settings.reader.readerCustomize)
+    }
+
+    @Test
+    fun privacyAndAppBooleanUpdatersRoundTrip() = runBlocking {
+        repository.updateHideMatureContent(false)
+        repository.updateMatureContentMode(MatureContentMode.Hide)
+        repository.updateRequireBiometricToReveal(true)
+        repository.updateConfirmBeforeDelete(false)
+        repository.updateAccentColor("#0B57D0")
+
+        val settings = repository.snapshot()
+
+        assertFalse(settings.privacy.hideMatureContent)
+        assertEquals(MatureContentMode.Hide, settings.privacy.matureContentMode)
+        assertTrue(settings.privacy.requireBiometricToReveal)
+        assertFalse(settings.app.confirmBeforeDelete)
+        assertEquals("#0B57D0", settings.app.accentColorHex)
+    }
+
+    @Test
+    fun readerLayoutUpdatersRoundTrip() = runBlocking {
+        repository.updateReaderJustify(true)
+        repository.updateReaderMargin(36.0)
+        repository.updateReaderLineHeight(1.8)
+        repository.updateReaderFontId("system")
+        repository.updateReaderBoldText(true)
+        repository.updateReaderTwoPage(true)
+        repository.updateAppTheme(AppThemeSetting.System)
+
+        val settings = repository.snapshot()
+
+        assertTrue(settings.reader.readerJustify)
+        assertEquals(36.0, settings.reader.readerMargin, 0.0)
+        assertEquals(1.8, settings.reader.readerLineHeight, 0.0)
+        assertEquals("system", settings.reader.readerFontId)
+        assertTrue(settings.reader.readerBoldText)
+        assertTrue(settings.reader.readerTwoPage)
+        assertEquals(AppThemeSetting.System, settings.app.appTheme)
+    }
+
+    @Test
+    fun resetToDefaultsClearsPreviousUpdates() = runBlocking {
+        repository.updateHideMatureContent(false)
+        repository.updateReaderJustify(true)
+        repository.updateReaderFontPt(22.0)
+        repository.resetToDefaults()
+
+        assertEquals(KudosSettings.Defaults, repository.snapshot())
     }
 }
