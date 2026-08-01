@@ -29,6 +29,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var totalPages = 1
     @State private var phase: Phase = .idle
     @State private var path = NavigationPath()
+    @Namespace private var cardZoomNamespace
     /// Drives the toolbar "expand/collapse all" toggle for the result cards.
     @State private var expandAllCards = false
     /// Bumped on every search load and when backing out to Browse; a load whose
@@ -196,6 +197,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .remoteWorkSelectionChrome(bulkSelection)
         }
+        // Same pairing as Home/Library — see HomeView.swift for why this lives on
+        // the stack itself rather than threaded between navigationDestination calls.
+        .environment(\.workCardTransitionNamespace, cardZoomNamespace)
     }
 
     /// Local-first Global Search: with no query, the Media Browser fills the idle

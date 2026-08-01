@@ -19,6 +19,7 @@ struct AccountView: View {
     @Query private var localWorks: [SavedWork]
 
     @State private var path = NavigationPath()
+    @Namespace private var cardZoomNamespace
     @State private var showingLogin = false
     @State private var selectedTab: AccountTab = .overview
     @State private var readingTab: AccountReadingTab = .later
@@ -193,6 +194,8 @@ struct AccountView: View {
                     if tab != .inbox { inboxModel.endSelection() }
                 }
         }
+        // Same pairing as Home/Library/Search — see HomeView.swift.
+        .environment(\.workCardTransitionNamespace, cardZoomNamespace)
     }
 
     private var standardListRoot: some View {
