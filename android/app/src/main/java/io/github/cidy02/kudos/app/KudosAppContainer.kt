@@ -15,6 +15,7 @@ import io.github.cidy02.kudos.data.preferences.kudosSettingsDataStore
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.LibraryRepository
+import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
@@ -114,6 +115,10 @@ class KudosAppContainer(context: Context) {
 
     val libraryRepository: LibraryRepository by lazy {
         LibraryRepository(workRepository, settingsRepository.settings)
+    }
+
+    val readingQueueRepository: ReadingQueueRepository by lazy {
+        ReadingQueueRepository(database)
     }
 
     val readerRepository: ReaderRepository by lazy {

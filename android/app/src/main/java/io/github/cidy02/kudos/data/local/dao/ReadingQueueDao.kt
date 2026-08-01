@@ -17,14 +17,48 @@ interface ReadingQueueDao {
     @Query("SELECT * FROM reading_queues ORDER BY sortOrder ASC, name ASC")
     suspend fun getAllQueues(): List<ReadingQueueEntity>
 
+    @Query(
+        """
+        SELECT * FROM reading_queues
+        WHERE isDeleted = 0
+        ORDER BY sortOrder ASC, name ASC
+        """
+    )
+    suspend fun getActiveQueues(): List<ReadingQueueEntity>
+
     @Query("SELECT * FROM reading_queues WHERE id = :id")
     suspend fun getQueueById(id: String): ReadingQueueEntity?
+
+    @Query(
+        """
+        SELECT * FROM reading_queues
+        WHERE kindRaw = :kindRaw AND isDeleted = 0
+        ORDER BY sortOrder ASC, name ASC
+        LIMIT 1
+        """
+    )
+    suspend fun getActiveQueueByKind(kindRaw: String): ReadingQueueEntity?
 
     @Query("SELECT * FROM reading_queue_memberships")
     suspend fun getAllMemberships(): List<ReadingQueueMembershipEntity>
 
-    @Query("SELECT * FROM reading_queue_memberships WHERE queueID = :queueId")
+    @Query(
+        """
+        SELECT * FROM reading_queue_memberships
+        WHERE queueID = :queueId
+        ORDER BY sortOrderInQueue ASC, queuedAt ASC
+        """
+    )
     suspend fun getMembershipsForQueue(queueId: String): List<ReadingQueueMembershipEntity>
+
+    @Query(
+        """
+        SELECT * FROM reading_queue_memberships
+        WHERE queueID = :queueId AND workID = :workId
+        LIMIT 1
+        """
+    )
+    suspend fun getMembershipForWork(queueId: String, workId: String): ReadingQueueMembershipEntity?
 
     @Query("SELECT * FROM reading_queue_memberships WHERE id = :id")
     suspend fun getMembershipById(id: String): ReadingQueueMembershipEntity?
@@ -34,4 +68,12 @@ interface ReadingQueueDao {
 
     @Query("DELETE FROM reading_queue_memberships WHERE id = :id")
     suspend fun deleteMembershipById(id: String)
+
+    @Query(
+        """
+        DELETE FROM reading_queue_memberships
+        WHERE queueID = :queueId AND workID = :workId
+        """
+    )
+    suspend fun deleteMembershipForWork(queueId: String, workId: String)
 }

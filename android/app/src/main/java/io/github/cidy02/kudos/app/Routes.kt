@@ -23,6 +23,8 @@ object Routes {
     const val BrowseWorks = "browse-works"
     const val WebFallback = "web-fallback"
     const val RecentlyDeleted = "recently-deleted"
+    const val ReadingQueues = "reading-queues"
+    const val QueueDetail = "queue-detail"
 
     val topLevelDestinations = listOf(
         TopLevelDestination(Home, "Home", "H"),
@@ -49,6 +51,8 @@ object Routes {
             BrowseWorks -> "Works"
             WebFallback -> "AO3"
             RecentlyDeleted -> "Recently Deleted"
+            ReadingQueues -> "Reading Queues"
+            QueueDetail -> "Queue"
             else -> "Kudos"
         }
     }

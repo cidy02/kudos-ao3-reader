@@ -53,7 +53,8 @@ fun LibraryScreen(
     repository: LibraryRepository,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
-    onOpenRecentlyDeleted: () -> Unit = {}
+    onOpenRecentlyDeleted: () -> Unit = {},
+    onOpenReadingQueues: () -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.factory(repository))
     val state by viewModel.state.collectAsState()
@@ -70,6 +71,7 @@ fun LibraryScreen(
         onClearFilters = viewModel::clearFilters,
         onOpenWork = onOpenWork,
         onOpenReader = onOpenReader,
+        onOpenReadingQueues = onOpenReadingQueues,
         onOpenRecentlyDeleted = onOpenRecentlyDeleted
     )
 }
@@ -87,7 +89,8 @@ private fun LibraryContent(
     onClearFilters: () -> Unit,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
-    onOpenRecentlyDeleted: () -> Unit
+    onOpenRecentlyDeleted: () -> Unit = {},
+    onOpenReadingQueues: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -97,7 +100,7 @@ private fun LibraryContent(
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { LibraryHeader(state, onOpenRecentlyDeleted) }
+        item { LibraryHeader(state, onOpenReadingQueues = onOpenReadingQueues, onOpenRecentlyDeleted = onOpenRecentlyDeleted) }
 
         if (state.loading) {
             item { LoadingStateCard("Loading your Library") }
@@ -116,8 +119,6 @@ private fun LibraryContent(
 
         if (!state.hasSavedWorks) {
             item { EmptyLibraryState() }
-            // Still allow navigation into Recently Deleted when the active
-            // library is empty (soft-deleted works live outside this list).
             return@LazyColumn
         }
 
@@ -200,7 +201,8 @@ private fun LibraryContent(
 @Composable
 private fun LibraryHeader(
     state: LibraryUiState,
-    onOpenRecentlyDeleted: () -> Unit
+    onOpenReadingQueues: () -> Unit,
+    onOpenRecentlyDeleted: () -> Unit = {}
 ) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
         " - $it hidden by privacy"
@@ -209,8 +211,13 @@ private fun LibraryHeader(
         title = "Library",
         subtitle = "${state.totalSaved} saved$hidden",
         trailing = {
-            TextButton(onClick = onOpenRecentlyDeleted) {
-                Text("Recently Deleted")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onOpenReadingQueues) {
+                    Text("Queues")
+                }
+                TextButton(onClick = onOpenRecentlyDeleted) {
+                    Text("Recently Deleted")
+                }
             }
         }
     )
@@ -242,7 +249,8 @@ private fun LibrarySectionPreview(
     items: List<LibraryDisplayItem>,
     emptyMessage: String,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onOpenRecentlyDeleted: () -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         KudosSectionHeader(
@@ -418,7 +426,8 @@ private fun <T> LibraryFacetChips(
 private fun CompactWorkRow(
     display: LibraryDisplayItem,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onOpenRecentlyDeleted: () -> Unit = {}
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured

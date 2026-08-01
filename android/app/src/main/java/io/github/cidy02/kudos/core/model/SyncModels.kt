@@ -29,10 +29,17 @@ data class SyncTombstone(
     val deletionReason: String = ""
 )
 
+/** Matches Apple `ReadingQueueKind` raw values. */
+object ReadingQueueKind {
+    const val SAVED_FOR_LATER = "savedForLater"
+    const val CUSTOM = "custom"
+    const val SAVED_FOR_LATER_NAME = "Saved for Later"
+}
+
 data class ReadingQueue(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val kindRaw: String = "custom",
+    val kindRaw: String = ReadingQueueKind.CUSTOM,
     val sortOrder: Int = 0,
     val dateCreated: Instant = Instant.now(),
     val dateUpdated: Instant = dateCreated,
@@ -40,7 +47,14 @@ data class ReadingQueue(
     val deletedAt: Instant? = null,
     val isDeleted: Boolean = false,
     val permanentDeletionScheduledAt: Instant? = null
-)
+) {
+    val displayName: String
+        get() = if (kindRaw == ReadingQueueKind.SAVED_FOR_LATER) {
+            ReadingQueueKind.SAVED_FOR_LATER_NAME
+        } else {
+            name
+        }
+}
 
 data class ReadingQueueMembership(
     val id: String = UUID.randomUUID().toString(),

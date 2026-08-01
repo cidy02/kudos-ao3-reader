@@ -25,6 +25,8 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
 import io.github.cidy02.kudos.library.LibraryScreen
 import io.github.cidy02.kudos.library.RecentlyDeletedScreen
+import io.github.cidy02.kudos.library.QueueDetailScreen
+import io.github.cidy02.kudos.library.ReadingQueuesScreen
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
 import io.github.cidy02.kudos.reader.ReaderViewModel
@@ -46,6 +48,7 @@ fun AppNavHost(
     var selectedBrowseCategory by remember { mutableStateOf<AO3MediaCategory?>(null) }
     var selectedBrowseFandom by remember { mutableStateOf<AO3Fandom?>(null) }
     var webFallbackUrl by remember { mutableStateOf<String?>(null) }
+    var selectedQueueId by remember { mutableStateOf<String?>(null) }
 
     NavHost(
         navController = navController,
@@ -59,6 +62,7 @@ fun AppNavHost(
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
                 },
+                onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
                 onOpenReader = { workId ->
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
@@ -78,13 +82,33 @@ fun AppNavHost(
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
                 },
-                onOpenRecentlyDeleted = {
-                    navController.navigate(Routes.RecentlyDeleted)
+                onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
+                onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) }
+            )
+        }
+        composable(Routes.ReadingQueues) {
+            ReadingQueuesScreen(
+                repository = container.readingQueueRepository,
+                onOpenQueue = { queueId ->
+                    selectedQueueId = queueId
+                    navController.navigate(Routes.QueueDetail)
                 }
             )
         }
-        composable(Routes.RecentlyDeleted) {
-            RecentlyDeletedScreen(workRepository = container.workRepository)
+        composable(Routes.QueueDetail) {
+            val queueId = selectedQueueId
+            if (queueId == null) {
+                navController.popBackStack()
+            } else {
+                QueueDetailScreen(
+                    queueId = queueId,
+                    repository = container.readingQueueRepository,
+                    onOpenWork = { workId ->
+                        selectedWorkSource = WorkDetailSource.LocalWork(workId)
+                        navController.navigate(Routes.WorkDetail)
+                    }
+                )
+            }
         }
         composable(Routes.Browse) {
             BrowseScreen(
@@ -198,6 +222,7 @@ fun AppNavHost(
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,
                 writeRepository = container.writeRepository,
+                readingQueueRepository = container.readingQueueRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenComments = { workId ->
                     selectedCommentTarget = AO3CommentTarget.Work(workId)
@@ -217,9 +242,9 @@ fun AppNavHost(
                 val readerViewModel: ReaderViewModel = viewModel(
                     key = workId,
                     factory = ReaderViewModel.factory(
-                        repository = container.readerRepository,
-                        settingsRepository = container.settingsRepository,
-                        workId = workId
+                        container.readerRepository,
+                        container.settingsRepository,
+                        workId
                     )
                 )
                 ReaderScreen(
@@ -247,6 +272,14 @@ fun AppNavHost(
                 onLogin = { navController.navigate(Routes.AccountLogin) }
             )
         }
+        
+        composable(Routes.RecentlyDeleted) {
+            RecentlyDeletedScreen(
+                repository = container.workRepository,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Routes.Settings) {
             SettingsScreen(
                 repository = container.settingsRepository,

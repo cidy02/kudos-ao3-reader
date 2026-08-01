@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
@@ -50,6 +51,7 @@ fun WorkDetailScreen(
     workRepository: WorkRepository,
     workImporter: WorkImporter,
     writeRepository: AO3WriteRepository,
+    readingQueueRepository: ReadingQueueRepository,
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
     onOpenReader: (String) -> Unit
@@ -73,6 +75,7 @@ fun WorkDetailScreen(
             remote = remote,
             userTags = local?.let { workRepository.userTagsForWork(it.id) }.orEmpty(),
             collections = local?.let { workRepository.collectionsForWork(it.id) }.orEmpty(),
+            inSavedForLater = readingQueueRepository.isInSavedForLater(workId),
             loading = false
         )
     }
@@ -89,6 +92,7 @@ fun WorkDetailScreen(
                         remote = source.summary,
                         userTags = workRepository.userTagsForWork(existing.id),
                         collections = workRepository.collectionsForWork(existing.id),
+                        inSavedForLater = readingQueueRepository.isInSavedForLater(existing.id),
                         loading = false
                     )
                 } else {
@@ -326,6 +330,16 @@ fun WorkDetailScreen(
         onMarkForLater = {
             runAo3Write { writeRepository.markForLater(it) }
         },
+        onAddToSavedForLater = {
+            ensureLocalThen { work ->
+                if (state.inSavedForLater) {
+                    readingQueueRepository.removeFromSavedForLater(work.id)
+                } else {
+                    readingQueueRepository.addToSavedForLater(work.id)
+                }
+                refreshLocal(work.id, state.remote)
+            }
+        },
         onBookmark = { bookmarkDialog = true },
         onComments = {
             state.ao3WorkId?.let(onOpenComments)
@@ -357,6 +371,7 @@ private fun WorkDetailContent(
     onKudos: () -> Unit,
     onSubscribe: () -> Unit,
     onMarkForLater: () -> Unit,
+    onAddToSavedForLater: () -> Unit,
     onBookmark: () -> Unit,
     onComments: () -> Unit,
     onOpenReader: (String) -> Unit
@@ -388,7 +403,8 @@ private fun WorkDetailContent(
                 onDeleteEpub = onDeleteEpub,
                 onRemoveFromLibrary = onRemoveFromLibrary,
                 onOpenAo3 = onOpenAo3,
-                onOpenReader = onOpenReader
+                onOpenReader = onOpenReader,
+                onAddToSavedForLater = onAddToSavedForLater
             )
 
             state.error?.let {
@@ -457,7 +473,8 @@ private fun StatusLine(state: WorkDetailUiState) {
         if (state.local?.isSaved == true) "Saved" else null,
         if (state.local?.hasEpub == true) "Downloaded" else "Metadata only",
         if (state.local?.isFavorite == true) "Favorite" else null,
-        if (state.local?.isFinished == true) "Finished" else null
+        if (state.local?.isFinished == true) "Finished" else null,
+        if (state.inSavedForLater) "Saved for Later" else null
     )
     MetadataChipRow(labels = labels, prominent = true)
 }
@@ -472,7 +489,8 @@ private fun ActionButtons(
     onDeleteEpub: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onAddToSavedForLater: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -501,6 +519,21 @@ private fun ActionButtons(
             }
             OutlinedButton(enabled = state.sourceUrl.isNotBlank(), onClick = onOpenAo3, modifier = Modifier.weight(1f)) {
                 Text("Open on AO3")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                enabled = !state.working,
+                onClick = onAddToSavedForLater,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (state.inSavedForLater) {
+                        "Remove from Saved for Later"
+                    } else {
+                        "Add to Saved for Later"
+                    }
+                )
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -652,6 +685,7 @@ private data class WorkDetailUiState(
     val remote: AO3WorkSummary? = null,
     val userTags: List<Tag> = emptyList(),
     val collections: List<WorkCollection> = emptyList(),
+    val inSavedForLater: Boolean = false,
     val loading: Boolean = false,
     val working: Boolean = false,
     val error: String? = null,
