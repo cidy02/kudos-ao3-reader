@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,11 +64,13 @@ fun WorkCoverCard(
         append(if (obscured) obscuredLabel else title)
         if (!obscured && author.isNotBlank()) append(", by $author")
     }
+    // Fixed width + height so LazyRow carousels never remeasure/jump when
+    // neighboring cards have different stats, chips, or progress.
     ElevatedCard(
         onClick = onOpen,
         modifier = modifier
             .width(WorkCoverCardMetrics.width)
-            .heightIn(min = WorkCoverCardMetrics.minHeight)
+            .height(WorkCoverCardMetrics.height)
             .semantics { this.contentDescription = a11y },
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.elevatedCardColors(
@@ -79,6 +81,7 @@ fun WorkCoverCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .clipToBounds()
                 .padding(WorkCoverCardMetrics.contentPadding),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -100,18 +103,18 @@ fun WorkCoverCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    minLines = 2,
                     modifier = Modifier.weight(1f)
                 )
                 WorkDetailsIconButton(onClick = onOpenDetails)
             }
 
-            if (author.isNotBlank()) {
-                CardMetaLine(
-                    text = author,
-                    icon = Icons.Outlined.Person,
-                    accessibilityLabel = "Author: $author"
-                )
-            }
+            // Always reserve one attribution line so cards with/without fandom match.
+            CardMetaLine(
+                text = author.ifBlank { "Anonymous" },
+                icon = Icons.Outlined.Person,
+                accessibilityLabel = "Author: ${author.ifBlank { "Anonymous" }}"
+            )
             if (!fandom.isNullOrBlank()) {
                 CardMetaLine(
                     text = fandom,
@@ -120,11 +123,11 @@ fun WorkCoverCard(
                 )
             }
 
-            if (author.isNotBlank() || !fandom.isNullOrBlank()) {
-                CardMetaSeparator()
-            }
+            CardMetaSeparator()
 
-            CoverCardStatsColumn(stats = stats)
+            CoverCardStatsColumn(
+                stats = stats.take(WorkCoverCardMetrics.maxStats)
+            )
 
             if (statusChips.isNotEmpty()) {
                 MetadataChipRow(labels = statusChips, maxItems = 2)
@@ -132,20 +135,31 @@ fun WorkCoverCard(
 
             Spacer(Modifier.weight(1f, fill = true))
 
-            progress?.let { value ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    LinearProgressIndicator(
-                        progress = { value.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = progressLabel
-                            ?: if (value >= 0.999f) "Finished" else "Reading",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            // Fixed footer band: progress when present, otherwise equal empty space
+            // so cards with and without progress share the same silhouette.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WorkCoverCardMetrics.footerHeight),
+                contentAlignment = Alignment.BottomStart
+            ) {
+                progress?.let { value ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        LinearProgressIndicator(
+                            progress = { value.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = progressLabel
+                                ?: if (value >= 0.999f) "Finished" else "Reading",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -255,7 +269,17 @@ private fun blendOver(base: Color, overlay: Color): Color {
 object WorkCoverCardMetrics {
     /** Comfortable MD3 shelf width; product density, not a 164pt iOS lock. */
     val width = 176.dp
-    val minHeight = 220.dp
+    /**
+     * Fixed height for every carousel card on a screen.
+     * Variable height (old minHeight-only) made LazyRow cross-axis remeasure and jump.
+     */
+    val height = 248.dp
+    /** @deprecated Use [height]; kept so callers can migrate without a hard break. */
+    val minHeight = height
     val contentPadding = 12.dp
     val shelfSpacing = 12.dp
+    /** Progress / footer band reserved on every card. */
+    val footerHeight = 36.dp
+    /** Cap stats rows so denser works don't overflow the fixed card. */
+    const val maxStats = 4
 }

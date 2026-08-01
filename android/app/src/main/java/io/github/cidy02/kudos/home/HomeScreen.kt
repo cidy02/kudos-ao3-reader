@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -15,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -200,7 +202,10 @@ private fun HomeShelf(
         } else {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing)
+                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                // Fixed card height: keep cross-axis stable while scrolling.
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.height(WorkCoverCardMetrics.height)
             ) {
                 items(items, key = { "${title}-${it.item.work.id}" }) { display ->
                     HomeWorkCover(
@@ -267,7 +272,9 @@ private fun SubscriptionsShelf(
                 // Horizontal remote shelf (Apple AO3WorkCoverCard parity).
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing)
+                    horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.height(WorkCoverCardMetrics.height)
                 ) {
                     items(works, key = { "sub-${it.id}" }) { work ->
                         RemoteWorkCover(
