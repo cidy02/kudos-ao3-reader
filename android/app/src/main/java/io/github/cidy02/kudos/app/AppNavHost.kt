@@ -27,6 +27,7 @@ import io.github.cidy02.kudos.library.LibraryScreen
 import io.github.cidy02.kudos.library.RecentlyDeletedScreen
 import io.github.cidy02.kudos.library.QueueDetailScreen
 import io.github.cidy02.kudos.library.ReadingQueuesScreen
+import io.github.cidy02.kudos.library.ReadingStatisticsScreen
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
 import io.github.cidy02.kudos.reader.ReaderViewModel
@@ -94,7 +95,8 @@ fun AppNavHost(
                     navController.navigate(Routes.Reader)
                 },
                 onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
-                onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) }
+                onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) },
+                onOpenReadingStatistics = { navController.navigate(Routes.ReadingStatistics) }
             )
         }
         composable(Routes.ReadingQueues) {
@@ -286,6 +288,12 @@ fun AppNavHost(
         composable(Routes.RecentlyDeleted) {
             RecentlyDeletedScreen(
                 workRepository = container.workRepository
+            )
+        }
+
+        composable(Routes.ReadingStatistics) {
+            ReadingStatisticsScreen(
+                libraryRepository = container.libraryRepository
             )
         }
 

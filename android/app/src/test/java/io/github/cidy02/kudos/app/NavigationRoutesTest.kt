@@ -32,4 +32,9 @@ class NavigationRoutesTest {
         assertEquals("Reading Queues", Routes.titleFor(Routes.ReadingQueues))
         assertEquals("Queue", Routes.titleFor(Routes.QueueDetail))
     }
+
+    @Test
+    fun readingStatisticsRouteHasUserFacingTitle() {
+        assertEquals("Reading Insights", Routes.titleFor(Routes.ReadingStatistics))
+    }
 }

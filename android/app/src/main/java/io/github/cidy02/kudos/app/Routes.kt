@@ -37,6 +37,7 @@ object Routes {
     const val RecentlyDeleted = "recently-deleted"
     const val ReadingQueues = "reading-queues"
     const val QueueDetail = "queue-detail"
+    const val ReadingStatistics = "reading-statistics"
 
     val topLevelDestinations = listOf(
         TopLevelDestination(
@@ -85,6 +86,7 @@ object Routes {
             RecentlyDeleted -> "Recently Deleted"
             ReadingQueues -> "Reading Queues"
             QueueDetail -> "Queue"
+            ReadingStatistics -> "Reading Insights"
             else -> "Kudos"
         }
     }
