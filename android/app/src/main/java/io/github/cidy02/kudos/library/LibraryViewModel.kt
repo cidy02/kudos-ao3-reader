@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 
 class LibraryViewModel(
     repository: LibraryRepository,
-    private val workRepository: WorkRepository
+    private val workRepository: WorkRepository,
+    private val settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val filters = MutableStateFlow(LibraryFilterState())
@@ -151,13 +152,48 @@ class LibraryViewModel(
 
     // endregion
 
+    // region Context-menu single-work actions
+
+    fun toggleFavoriteOne(workId: String) {
+        viewModelScope.launch {
+            val work = workRepository.getWork(workId) ?: return@launch
+            workRepository.setFavorite(workId, !work.isFavorite)
+        }
+    }
+
+    fun toggleFinishedOne(workId: String) {
+        viewModelScope.launch {
+            workRepository.toggleFinished(workId)
+        }
+    }
+
+    fun softDeleteOne(workId: String) {
+        viewModelScope.launch {
+            workRepository.softDelete(workId)
+        }
+    }
+
+    /** Apple MatureRevealToggle: flip hide-mature for this device. */
+    fun toggleHideMature() {
+        val settings = settingsRepository ?: return
+        viewModelScope.launch {
+            val current = settings.snapshot()
+            settings.updateHideMatureContent(!current.privacy.hideMatureContent)
+        }
+    }
+
+    // endregion
+
     companion object {
         fun factory(
             repository: LibraryRepository,
-            workRepository: WorkRepository
+            workRepository: WorkRepository,
+            settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { LibraryViewModel(repository, workRepository) }
+                initializer {
+                    LibraryViewModel(repository, workRepository, settingsRepository)
+                }
             }
     }
 }

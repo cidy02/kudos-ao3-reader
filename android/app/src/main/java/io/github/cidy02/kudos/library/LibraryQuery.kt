@@ -20,6 +20,7 @@ object LibraryQuery {
         }
         val hiddenCount = snapshot.items.size - visible.size
         val filtered = apply(visible, searchQuery, filters, sort)
+        val matureCount = snapshot.items.count { isMatureWork(it.work) }
         return LibraryUiState(
             loading = false,
             searchQuery = searchQuery,
@@ -35,10 +36,15 @@ object LibraryQuery {
                 visible.filter { it.item.work.isFavorite },
                 LibrarySort.LastRead
             ),
+            savedForLater = savedForLater(visible),
+            finished = finished(visible),
+            downloaded = downloaded(visible),
             userTags = snapshot.userTags.sortedBy { it.normalizedName.lowercase() },
             collections = snapshot.collections.sortedWith(
                 compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-            )
+            ),
+            hideMatureContent = snapshot.privacy.hideMatureContent,
+            matureWorkCount = matureCount
         )
     }
 
@@ -63,10 +69,42 @@ object LibraryQuery {
             .sortedWith(recencyComparator())
     }
 
+    /** Apple `LibrarySectionKind.savedForLater`: explicitly saved works. */
+    fun savedForLater(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
+        return items
+            .filter { it.item.work.isSaved }
+            .sortedWith(recencyComparator())
+    }
+
+    /** Apple `LibrarySectionKind.finished`. */
+    fun finished(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
+        return items
+            .filter { it.item.work.isFinished }
+            .sortedWith(lastReadComparator())
+    }
+
+    /** Apple `LibrarySectionKind.downloaded`: EPUB on disk. */
+    fun downloaded(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
+        return items
+            .filter { it.item.work.hasEpub }
+            .sortedWith(
+                compareByDescending<LibraryDisplayItem> { it.item.work.dateAdded }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
+            )
+    }
+
     fun readingHistory(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
             .filter { it.item.work.lastReadDate != null }
             .sortedWith(lastReadComparator())
+    }
+
+    private fun isMatureWork(work: SavedWork): Boolean {
+        val rating = work.rating.lowercase()
+        return rating.contains("explicit") ||
+            rating.contains("mature") ||
+            rating == "e" ||
+            rating == "m"
     }
 
     fun sortDisplayItems(

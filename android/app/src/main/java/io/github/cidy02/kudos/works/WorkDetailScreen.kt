@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -651,7 +651,10 @@ private fun StatusLine(state: WorkDetailUiState) {
     MetadataChipRow(labels = labels, prominent = true)
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Actions as Form-style list rows — Material expression of Apple WorkDetailView
+ * `actionsSection` + toolbar favorite / overflow AO3 menu.
+ */
 @Composable
 private fun ActionButtons(
     state: WorkDetailUiState,
@@ -683,153 +686,246 @@ private fun ActionButtons(
     val canDownloadSeries = !busy && state.seriesUrl.isNotBlank()
     val ao3Enabled = !busy && state.ao3WorkId != null
     val dangerColor = MaterialTheme.colorScheme.error
+    val isFavorite = local?.isFavorite == true
+    val isFinished = local?.isFinished == true
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // 1. Primary open / download / save
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (epubWorkId != null) {
-                Button(
-                    enabled = canRead,
-                    onClick = { onOpenReader(epubWorkId) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Read")
-                }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Primary actions card — Apple Form Section
+        DetailFormCard {
+            DetailActionRow(
+                title = when {
+                    busy && state.queuingSeries -> "Fetching series…"
+                    busy -> "Downloading…"
+                    hasEpub -> "Read"
+                    else -> "Download & Read"
+                },
+                enabled = if (hasEpub) canRead else canDownload,
+                primary = true,
+                onClick = {
+                    if (epubWorkId != null) onOpenReader(epubWorkId) else onDownload()
+                },
+                showDivider = true
+            )
+            DetailActionRow(
+                title = "Open on AO3",
+                enabled = state.sourceUrl.isNotBlank(),
+                onClick = onOpenAo3,
+                showDivider = true
+            )
+            DetailActionRow(
+                title = if (isFavorite) "Favorited" else "Favorite",
+                enabled = !busy,
+                onClick = onToggleFavorite,
+                showDivider = true
+            )
+            if (showSaveToLibrary) {
+                DetailActionRow(
+                    title = "Save to Keep",
+                    enabled = !busy,
+                    onClick = onSave,
+                    showDivider = true
+                )
+            } else if (isSaved) {
+                DetailActionRow(
+                    title = "Saved",
+                    enabled = false,
+                    onClick = {},
+                    showDivider = true
+                )
+            }
+            if (!isFinished) {
+                DetailActionRow(
+                    title = "Mark as Finished",
+                    enabled = !busy,
+                    onClick = onToggleFinished,
+                    showDivider = true
+                )
             } else {
-                Button(
+                DetailActionRow(
+                    title = "Mark Unfinished",
+                    enabled = !busy,
+                    onClick = onToggleFinished,
+                    showDivider = true
+                )
+            }
+            DetailActionRow(
+                title = if (state.inSavedForLater) {
+                    "Remove from Saved for Later"
+                } else {
+                    "Saved for Later"
+                },
+                enabled = !busy,
+                onClick = onAddToSavedForLater,
+                showDivider = hasEpub || state.seriesUrl.isNotBlank() || local != null
+            )
+            if (hasEpub) {
+                DetailActionRow(
+                    title = "Redownload EPUB",
                     enabled = canDownload,
                     onClick = onDownload,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Download EPUB")
-                }
-                if (showSaveToLibrary) {
-                    FilledTonalButton(
-                        enabled = !busy,
-                        onClick = onSave,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Save to Library")
-                    }
-                }
-            }
-        }
-        // Saved-but-no-epub already covered; hasEpub + unsaved is rare (history-only) —
-        // still offer Save when a remote blurb is available.
-        if (hasEpub && showSaveToLibrary) {
-            FilledTonalButton(
-                enabled = !busy,
-                onClick = onSave,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Save to Library")
-            }
-        }
-
-        // 2. Local library toggles + open on web
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(enabled = !busy, onClick = onToggleFavorite) {
-                Text(if (local?.isFavorite == true) "Unfavorite" else "Favorite")
-            }
-            OutlinedButton(enabled = !busy, onClick = onToggleFinished) {
-                Text(if (local?.isFinished == true) "Mark Unfinished" else "Mark Finished")
-            }
-            OutlinedButton(enabled = !busy, onClick = onAddToSavedForLater) {
-                Text(if (state.inSavedForLater) "Remove Saved for Later" else "Saved for Later")
-            }
-            OutlinedButton(enabled = state.sourceUrl.isNotBlank(), onClick = onOpenAo3) {
-                Text("Open on AO3")
-            }
-            if (hasEpub) {
-                // Secondary redownload; primary CTA stays Read.
-                OutlinedButton(enabled = canDownload, onClick = onDownload) {
-                    Text("Redownload")
-                }
+                    showDivider = state.seriesUrl.isNotBlank() || local != null
+                )
             }
             if (state.seriesUrl.isNotBlank()) {
-                OutlinedButton(enabled = canDownloadSeries, onClick = onDownloadSeries) {
-                    Text(if (state.queuingSeries) "Fetching series…" else "Download series")
+                DetailActionRow(
+                    title = if (state.queuingSeries) "Fetching series…" else "Download series",
+                    enabled = canDownloadSeries,
+                    onClick = onDownloadSeries,
+                    showDivider = local != null
+                )
+            }
+            if (local != null) {
+                if (hasEpub) {
+                    DetailActionRow(
+                        title = "Delete EPUB",
+                        enabled = !busy,
+                        destructive = true,
+                        onClick = onDeleteEpub,
+                        showDivider = true
+                    )
                 }
+                DetailActionRow(
+                    title = "Remove from Library",
+                    enabled = !busy,
+                    destructive = true,
+                    onClick = onRemoveFromLibrary,
+                    showDivider = false
+                )
             }
         }
+        Text(
+            text = statusFooter(state),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
-        // 3. AO3 account actions
+        // On AO3 — overflow menu style list (Apple AO3WorkActionsMenu)
         Text(
             text = "On AO3",
             style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.primary
         )
-        if (state.ao3WorkId == null) {
-            MetadataLine("AO3 social actions need a canonical work URL.")
-        }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AssistChip(
-                enabled = ao3Enabled,
-                onClick = onKudos,
-                label = { Text("Kudos") }
-            )
-            AssistChip(
-                enabled = ao3Enabled,
-                onClick = onSubscribe,
-                label = { Text("Subscribe") }
-            )
-            AssistChip(
-                enabled = ao3Enabled,
-                onClick = onMarkForLater,
-                label = { Text("Mark for Later") }
-            )
-            AssistChip(
-                enabled = ao3Enabled,
-                onClick = onBookmark,
-                label = { Text("Bookmark") }
-            )
-            AssistChip(
-                enabled = ao3Enabled,
-                onClick = onComments,
-                label = { Text("Comments") }
-            )
-            AssistChip(
-                onClick = onLogin,
-                label = { Text("Log in to AO3") }
-            )
-        }
-
-        // 4. Danger zone — destructive last
-        if (local != null) {
-            Text(
-                text = "Danger zone",
-                style = MaterialTheme.typography.titleSmall,
-                color = dangerColor
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (hasEpub) {
-                    TextButton(
-                        enabled = !busy,
-                        onClick = onDeleteEpub
-                    ) {
-                        Text("Delete EPUB", color = dangerColor)
-                    }
-                }
-                TextButton(
-                    enabled = !busy,
-                    onClick = onRemoveFromLibrary
-                ) {
-                    Text("Remove from Library", color = dangerColor)
-                }
+        DetailFormCard {
+            if (state.ao3WorkId == null) {
+                Text(
+                    text = "AO3 actions need a canonical work URL.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                DetailActionRow(
+                    title = "Give Kudos",
+                    enabled = ao3Enabled,
+                    onClick = onKudos,
+                    showDivider = true
+                )
+                DetailActionRow(
+                    title = "Leave a Comment",
+                    enabled = ao3Enabled,
+                    onClick = onComments,
+                    showDivider = true
+                )
+                DetailActionRow(
+                    title = "Bookmark on AO3",
+                    enabled = ao3Enabled,
+                    onClick = onBookmark,
+                    showDivider = true
+                )
+                DetailActionRow(
+                    title = "Mark for Later",
+                    enabled = ao3Enabled,
+                    onClick = onMarkForLater,
+                    showDivider = true
+                )
+                DetailActionRow(
+                    title = "Subscribe",
+                    enabled = ao3Enabled,
+                    onClick = onSubscribe,
+                    showDivider = true
+                )
+                DetailActionRow(
+                    title = "Log in to AO3",
+                    enabled = true,
+                    onClick = onLogin,
+                    showDivider = false
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun DetailFormCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+private fun DetailActionRow(
+    title: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    primary: Boolean = false,
+    destructive: Boolean = false,
+    showDivider: Boolean = true
+) {
+    val color = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        destructive -> MaterialTheme.colorScheme.error
+        primary -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Column {
+        androidx.compose.material3.ListItem(
+            headlineContent = {
+                Text(
+                    text = title,
+                    color = color,
+                    style = if (primary) {
+                        MaterialTheme.typography.titleMedium
+                    } else {
+                        MaterialTheme.typography.bodyLarge
+                    }
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (enabled) {
+                        Modifier.clickable(onClick = onClick)
+                    } else {
+                        Modifier
+                    }
+                ),
+            colors = androidx.compose.material3.ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
+        )
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+        }
+    }
+}
+
+private fun statusFooter(state: WorkDetailUiState): String {
+    val work = state.local
+        ?: return "Reading downloads this work to your device. When you finish, the file is freed unless you save or favorite it."
+    return when {
+        work.isSaved -> "Saved — kept on this device."
+        !work.hasEpub -> "Finished. The file was freed to save space; it re-downloads when you read it again."
+        work.isFinished -> "Finished."
+        work.isFavorite -> "Favorited, so its file is kept when finished."
+        else -> "Reading. When you finish, the file is freed unless you save or favorite it."
     }
 }
 

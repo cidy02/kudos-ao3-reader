@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,7 @@ import kotlin.math.absoluteValue
  * - Local status badges stay off the face when possible; progress uses
  *   [LinearProgressIndicator].
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WorkCoverCard(
     title: String,
@@ -58,7 +61,9 @@ fun WorkCoverCard(
     statusChips: List<String> = emptyList(),
     obscured: Boolean = false,
     obscuredLabel: String = "Mature work hidden",
-    contentDescription: String? = null
+    contentDescription: String? = null,
+    /** Long-press (e.g. Library context menu). Null = tap-only card. */
+    onLongClick: (() -> Unit)? = null
 ) {
     val a11y = contentDescription ?: buildString {
         append(if (obscured) obscuredLabel else title)
@@ -66,11 +71,15 @@ fun WorkCoverCard(
     }
     // Fixed width + height so LazyRow carousels never remeasure/jump when
     // neighboring cards have different stats, chips, or progress.
+    // combinedClickable (not Card onClick) so long-press can open a menu.
     ElevatedCard(
-        onClick = onOpen,
         modifier = modifier
             .width(WorkCoverCardMetrics.width)
             .height(WorkCoverCardMetrics.height)
+            .combinedClickable(
+                onClick = onOpen,
+                onLongClick = onLongClick
+            )
             .semantics { this.contentDescription = a11y },
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.elevatedCardColors(

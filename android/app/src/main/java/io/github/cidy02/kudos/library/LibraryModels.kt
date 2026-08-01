@@ -44,12 +44,19 @@ data class LibraryUiState(
     val readingHistory: List<LibraryDisplayItem> = emptyList(),
     val recentlyAdded: List<LibraryDisplayItem> = emptyList(),
     val favorites: List<LibraryDisplayItem> = emptyList(),
+    /** iOS Library dashboard shelves (Reading Now / Saved for Later / Finished / Downloaded). */
+    val savedForLater: List<LibraryDisplayItem> = emptyList(),
+    val finished: List<LibraryDisplayItem> = emptyList(),
+    val downloaded: List<LibraryDisplayItem> = emptyList(),
     val userTags: List<Tag> = emptyList(),
     val collections: List<WorkCollection> = emptyList(),
-    /** True while multi-select is active (long-press or Select toolbar). */
+    /** True while multi-select is active (Select toolbar). */
     val selectionMode: Boolean = false,
     /** Selected work ids while [selectionMode] is true. */
-    val selectedWorkIds: Set<String> = emptySet()
+    val selectedWorkIds: Set<String> = emptySet(),
+    /** Privacy: mature content currently hidden (for toolbar reveal toggle). */
+    val hideMatureContent: Boolean = true,
+    val matureWorkCount: Int = 0
 ) {
     val hasSavedWorks: Boolean
         get() = totalSaved > 0
@@ -62,4 +69,8 @@ data class LibraryUiState(
 
     val hasSelection: Boolean
         get() = selectedWorkIds.isNotEmpty()
+
+    /** Show privacy toolbar affordance when mature works exist. */
+    val showPrivacyToggle: Boolean
+        get() = matureWorkCount > 0
 }

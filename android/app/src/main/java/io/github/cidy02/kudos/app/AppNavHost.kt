@@ -99,6 +99,7 @@ fun AppNavHost(
             LibraryScreen(
                 repository = container.libraryRepository,
                 workRepository = container.workRepository,
+                settingsRepository = container.settingsRepository,
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
