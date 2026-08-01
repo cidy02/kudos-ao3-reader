@@ -49,6 +49,9 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.ui.components.StatusBadge
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
 @Composable
@@ -56,6 +59,7 @@ fun WorkDetailScreen(
     source: WorkDetailSource?,
     workRepository: WorkRepository,
     workImporter: WorkImporter,
+    downloadQueue: DownloadQueue,
     writeRepository: AO3WriteRepository,
     readingQueueRepository: ReadingQueueRepository,
     metadataRepository: AO3WorkMetadataRepository? = null,
@@ -74,6 +78,7 @@ fun WorkDetailScreen(
     var bookmarkRecommendation by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
+    var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
 
     suspend fun refreshLocal(workId: String, remote: AO3WorkSummary? = state.remote) {
         val local = workRepository.getWork(workId)
@@ -187,17 +192,79 @@ fun WorkDetailScreen(
         }
     }
 
+    /**
+     * Routes downloads through [DownloadQueue] so concurrent taps queue serially
+     * instead of racing [WorkImporter]. Redownload forces past the "already has
+     * EPUB" skip. Local state refreshes when the queued item terminalizes.
+     */
     fun download() {
-        runWorkAction {
-            val result = state.remote?.let { workImporter.download(it) }
-                ?: state.local?.let { workImporter.downloadExisting(it) }
-                ?: WorkImportResult.Failure(null, AO3Error.Validation("No work selected."))
-            when (result) {
-                is WorkImportResult.Failure -> state = state.copy(
-                    local = result.work ?: state.local,
-                    error = result.error.displayMessage()
-                )
-                is WorkImportResult.Success -> refreshLocal(result.work.id, state.remote)
+        val remote = state.remote
+        val local = state.local
+        val ao3Id = remote?.id
+            ?: local?.let { WorkTags.ao3WorkIdFromUrl(it.sourceUrl) }
+            ?: state.ao3WorkId
+        if (ao3Id == null) {
+            state = state.copy(error = "No work selected.")
+            return
+        }
+
+        val force = local?.hasEpub == true
+        if (remote != null) {
+            downloadQueue.enqueue(remote, force = force)
+        } else if (local != null) {
+            downloadQueue.enqueueLocal(
+                ao3WorkId = ao3Id,
+                title = local.title,
+                sourceUrl = local.sourceUrl,
+                force = force
+            )
+        } else {
+            state = state.copy(error = "No work selected.")
+            return
+        }
+
+        state = state.copy(
+            error = null,
+            ao3Message = if (force) "Queued redownload." else "Queued for download."
+        )
+
+        // Refresh Work Detail once this id reaches a terminal queue status.
+        downloadWatchJob?.cancel()
+        downloadWatchJob = scope.launch {
+            val terminal = downloadQueue.items
+                .mapNotNull { list -> list.firstOrNull { it.ao3WorkId == ao3Id } }
+                .first {
+                    it.status == DownloadQueueStatus.Done ||
+                        it.status == DownloadQueueStatus.Skipped ||
+                        it.status == DownloadQueueStatus.Failed
+                }
+            when (terminal.status) {
+                DownloadQueueStatus.Done,
+                DownloadQueueStatus.Skipped -> {
+                    val sourceUrl = remote?.workUrl ?: local?.sourceUrl
+                    val refreshed = if (sourceUrl != null) {
+                        WorkIdentityIndex.findExisting(
+                            candidateSourceUrl = sourceUrl,
+                            byId = { workRepository.getWork(it) },
+                            bySourceUrl = { workRepository.findBySourceUrl(it) }
+                        )
+                    } else {
+                        null
+                    }
+                    if (refreshed != null) {
+                        refreshLocal(refreshed.id, remote)
+                    } else if (terminal.status == DownloadQueueStatus.Skipped) {
+                        state = state.copy(ao3Message = "Already downloaded.")
+                    }
+                }
+                DownloadQueueStatus.Failed -> {
+                    state = state.copy(
+                        ao3Message = null,
+                        error = "Download failed for \"${terminal.title}\"."
+                    )
+                }
+                DownloadQueueStatus.Queued,
+                DownloadQueueStatus.Downloading -> Unit
             }
         }
     }
