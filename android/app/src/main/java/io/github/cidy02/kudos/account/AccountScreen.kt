@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
@@ -53,6 +54,7 @@ fun AccountScreen(
     onOpenList: (AccountListType) -> Unit,
     onOpenBackup: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCollections: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(factory = AccountViewModel.factory(authRepository))
 ) {
@@ -98,6 +100,14 @@ fun AccountScreen(
         }
         item {
             AccountDestinationGroup(title = "App") {
+                AccountDestinationRow(
+                    title = "Local Collections",
+                    icon = Icons.AutoMirrored.Outlined.LibraryBooks,
+                    enabled = true,
+                    supportingText = "Named shelves in your Library",
+                    onClick = onOpenCollections,
+                    showDivider = true
+                )
                 AccountDestinationRow(
                     title = "Settings",
                     icon = Icons.Outlined.Settings,

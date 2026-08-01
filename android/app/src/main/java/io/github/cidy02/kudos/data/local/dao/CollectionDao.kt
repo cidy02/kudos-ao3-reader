@@ -55,4 +55,10 @@ interface CollectionDao {
 
     @Query("DELETE FROM collection_work_cross_refs WHERE collectionId = :collectionId AND workId = :workId")
     suspend fun removeWork(collectionId: String, workId: String)
+
+    @Query("DELETE FROM collection_work_cross_refs WHERE collectionId = :collectionId")
+    suspend fun removeAllWorks(collectionId: String)
+
+    @Query("DELETE FROM collections WHERE id = :id")
+    suspend fun deleteById(id: String)
 }

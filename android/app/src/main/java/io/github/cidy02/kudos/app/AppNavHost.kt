@@ -23,6 +23,8 @@ import io.github.cidy02.kudos.home.HomeScreen
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
+import io.github.cidy02.kudos.library.CollectionDetailScreen
+import io.github.cidy02.kudos.library.CollectionsScreen
 import io.github.cidy02.kudos.library.LibraryScreen
 import io.github.cidy02.kudos.library.RecentlyDeletedScreen
 import io.github.cidy02.kudos.library.QueueDetailScreen
@@ -49,6 +51,7 @@ fun AppNavHost(
     var selectedBrowseFandom by remember { mutableStateOf<AO3Fandom?>(null) }
     var webFallbackUrl by remember { mutableStateOf<String?>(null) }
     var selectedQueueId by remember { mutableStateOf<String?>(null) }
+    var selectedCollectionId by remember { mutableStateOf<String?>(null) }
 
     NavHost(
         navController = navController,
@@ -94,8 +97,41 @@ fun AppNavHost(
                     navController.navigate(Routes.Reader)
                 },
                 onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
-                onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) }
+                onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) },
+                onOpenCollections = { navController.navigate(Routes.Collections) }
             )
+        }
+        composable(Routes.Collections) {
+            CollectionsScreen(
+                workRepository = container.workRepository,
+                onOpenCollection = { collectionId ->
+                    selectedCollectionId = collectionId
+                    navController.navigate(Routes.CollectionDetail)
+                }
+            )
+        }
+        composable(Routes.CollectionDetail) {
+            val collectionId = selectedCollectionId
+            if (collectionId == null) {
+                navController.popBackStack()
+            } else {
+                CollectionDetailScreen(
+                    collectionId = collectionId,
+                    workRepository = container.workRepository,
+                    onOpenWork = { workId ->
+                        selectedWorkSource = WorkDetailSource.LocalWork(workId)
+                        navController.navigate(Routes.WorkDetail)
+                    },
+                    onOpenReader = { workId ->
+                        readerWorkId = workId
+                        navController.navigate(Routes.Reader)
+                    },
+                    onCollectionDeleted = {
+                        selectedCollectionId = null
+                        navController.popBackStack()
+                    }
+                )
+            }
         }
         composable(Routes.ReadingQueues) {
             ReadingQueuesScreen(
@@ -191,7 +227,8 @@ fun AppNavHost(
                     navController.navigate(Routes.AccountList)
                 },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
-                onOpenSettings = { navController.navigate(Routes.Settings) }
+                onOpenSettings = { navController.navigate(Routes.Settings) },
+                onOpenCollections = { navController.navigate(Routes.Collections) }
             )
         }
         composable(Routes.AccountLogin) {
