@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -30,6 +31,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -65,7 +68,8 @@ fun WorkDetailScreen(
     metadataRepository: AO3WorkMetadataRepository? = null,
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onOpenAuthor: (String) -> Unit = {}
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
@@ -474,7 +478,8 @@ fun WorkDetailScreen(
             state.ao3WorkId?.let(onOpenComments)
                 ?: run { state = state.copy(error = "This action needs a canonical AO3 work URL.") }
         },
-        onOpenReader = onOpenReader
+        onOpenReader = onOpenReader,
+        onOpenAuthor = onOpenAuthor
     )
 }
 
@@ -503,7 +508,8 @@ private fun WorkDetailContent(
     onAddToSavedForLater: () -> Unit,
     onBookmark: () -> Unit,
     onComments: () -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onOpenAuthor: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -521,7 +527,11 @@ private fun WorkDetailContent(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
-            MetadataLine("by ${state.author.ifBlank { "Anonymous" }}")
+            AuthorLine(
+                authorNames = state.tappableAuthorNames,
+                displayAuthor = state.author,
+                onOpenAuthor = onOpenAuthor
+            )
             StatusLine(state)
             ActionButtons(
                 state = state,
@@ -871,6 +881,72 @@ private fun MetadataLine(text: String) {
     )
 }
 
+/**
+ * Renders "by Author" with each non-blank, non-Anonymous author name tappable
+ * so users can open that author's works list (AO3 parity).
+ */
+@Composable
+private fun AuthorLine(
+    authorNames: List<String>,
+    displayAuthor: String,
+    onOpenAuthor: (String) -> Unit
+) {
+    if (authorNames.isEmpty()) {
+        MetadataLine("by ${displayAuthor.ifBlank { "Anonymous" }}")
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(0.dp)
+    ) {
+        Text(
+            text = "by ",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        authorNames.forEachIndexed { index, name ->
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .semantics { contentDescription = "Open works by $name" }
+                    .clickable { onOpenAuthor(name) }
+            )
+            if (index < authorNames.lastIndex) {
+                Text(
+                    text = ", ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Prefer discrete remote author list; fall back to splitting a local "A, B" string.
+ * Anonymous / blank names are not tappable.
+ */
+internal fun resolveTappableAuthorNames(
+    remoteAuthors: List<String>?,
+    localAuthor: String?
+): List<String> {
+    val fromRemote = remoteAuthors.orEmpty()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.equals("Anonymous", ignoreCase = true) }
+    if (fromRemote.isNotEmpty()) return fromRemote
+
+    val local = localAuthor?.trim().orEmpty()
+    if (local.isEmpty() || local.equals("Anonymous", ignoreCase = true)) return emptyList()
+    return local.split(",")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.equals("Anonymous", ignoreCase = true) }
+}
+
 private data class WorkDetailUiState(
     val local: SavedWork? = null,
     val remote: AO3WorkSummary? = null,
@@ -884,6 +960,8 @@ private data class WorkDetailUiState(
 ) {
     val title: String = local?.title ?: remote?.title ?: "Work"
     val author: String = local?.author ?: remote?.authorText ?: ""
+    val tappableAuthorNames: List<String> =
+        resolveTappableAuthorNames(remote?.authors, local?.author)
     val summary: String = local?.summary ?: remote?.summary ?: ""
     val sourceUrl: String = local?.sourceUrl ?: remote?.workUrl ?: ""
     val ao3WorkId: Long? = WorkTags.ao3WorkIdFromUrl(sourceUrl)
