@@ -45,11 +45,21 @@ data class LibraryUiState(
     val recentlyAdded: List<LibraryDisplayItem> = emptyList(),
     val favorites: List<LibraryDisplayItem> = emptyList(),
     val userTags: List<Tag> = emptyList(),
-    val collections: List<WorkCollection> = emptyList()
+    val collections: List<WorkCollection> = emptyList(),
+    /** True while multi-select is active (long-press or Select toolbar). */
+    val selectionMode: Boolean = false,
+    /** Selected work ids while [selectionMode] is true. */
+    val selectedWorkIds: Set<String> = emptySet()
 ) {
     val hasSavedWorks: Boolean
         get() = totalSaved > 0
 
     val hasActiveQueryOrFilters: Boolean
         get() = searchQuery.isNotBlank() || filters.hasActiveFilters
+
+    val selectedCount: Int
+        get() = selectedWorkIds.size
+
+    val hasSelection: Boolean
+        get() = selectedWorkIds.isNotEmpty()
 }

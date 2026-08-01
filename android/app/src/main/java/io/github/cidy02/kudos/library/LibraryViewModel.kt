@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -12,15 +13,19 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class LibraryViewModel(
-    repository: LibraryRepository
+    repository: LibraryRepository,
+    private val workRepository: WorkRepository
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
     private val filters = MutableStateFlow(LibraryFilterState())
     private val sort = MutableStateFlow(LibrarySort.RecentlyAdded)
+    private val selectionMode = MutableStateFlow(false)
+    private val selectedWorkIds = MutableStateFlow<Set<String>>(emptySet())
 
-    val state: StateFlow<LibraryUiState> = combine(
+    private val libraryBase: StateFlow<LibraryUiState> = combine(
         repository.observeSnapshot(),
         searchQuery,
         filters,
@@ -33,6 +38,21 @@ class LibraryViewModel(
                 loading = false,
                 error = throwable.message ?: "Library could not be loaded."
             )
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = LibraryUiState(loading = true)
+    )
+
+    val state: StateFlow<LibraryUiState> = combine(
+        libraryBase,
+        selectionMode,
+        selectedWorkIds
+    ) { base, selecting, ids ->
+        base.copy(
+            selectionMode = selecting,
+            selectedWorkIds = if (selecting) ids else emptySet()
         )
     }.stateIn(
         scope = viewModelScope,
@@ -72,10 +92,72 @@ class LibraryViewModel(
         filters.value = LibraryFilterState()
     }
 
+    // region Multi-select
+
+    fun enterSelectionMode(initialWorkId: String? = null) {
+        selectionMode.value = true
+        selectedWorkIds.value = if (initialWorkId != null) {
+            LibrarySelection.selectOnly(initialWorkId)
+        } else {
+            LibrarySelection.clear()
+        }
+    }
+
+    fun exitSelectionMode() {
+        selectionMode.value = false
+        selectedWorkIds.value = LibrarySelection.clear()
+    }
+
+    fun toggleWorkSelection(workId: String) {
+        if (!selectionMode.value) {
+            enterSelectionMode(workId)
+            return
+        }
+        selectedWorkIds.update { LibrarySelection.toggle(it, workId) }
+    }
+
+    fun bulkSetFavorite(favorite: Boolean) {
+        val ids = selectedWorkIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                workRepository.setFavorite(id, favorite)
+            }
+            exitSelectionMode()
+        }
+    }
+
+    fun bulkSetFinished(finished: Boolean) {
+        val ids = selectedWorkIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                workRepository.setFinished(id, finished)
+            }
+            exitSelectionMode()
+        }
+    }
+
+    fun bulkSoftDelete() {
+        val ids = selectedWorkIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                workRepository.softDelete(id)
+            }
+            exitSelectionMode()
+        }
+    }
+
+    // endregion
+
     companion object {
-        fun factory(repository: LibraryRepository): ViewModelProvider.Factory =
+        fun factory(
+            repository: LibraryRepository,
+            workRepository: WorkRepository
+        ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { LibraryViewModel(repository) }
+                initializer { LibraryViewModel(repository, workRepository) }
             }
     }
 }
