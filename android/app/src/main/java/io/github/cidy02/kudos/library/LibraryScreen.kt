@@ -61,7 +61,8 @@ fun LibraryScreen(
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRecentlyDeleted: () -> Unit = {},
-    onOpenReadingQueues: () -> Unit = {}
+    onOpenReadingQueues: () -> Unit = {},
+    onOpenReadingStatistics: () -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.factory(repository))
     val state by viewModel.state.collectAsState()
@@ -79,7 +80,8 @@ fun LibraryScreen(
         onOpenWork = onOpenWork,
         onOpenReader = onOpenReader,
         onOpenReadingQueues = onOpenReadingQueues,
-        onOpenRecentlyDeleted = onOpenRecentlyDeleted
+        onOpenRecentlyDeleted = onOpenRecentlyDeleted,
+        onOpenReadingStatistics = onOpenReadingStatistics
     )
 }
 
@@ -97,7 +99,8 @@ private fun LibraryContent(
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRecentlyDeleted: () -> Unit = {},
-    onOpenReadingQueues: () -> Unit = {}
+    onOpenReadingQueues: () -> Unit = {},
+    onOpenReadingStatistics: () -> Unit = {}
 ) {
     // Filters stay collapsed by default so shelves + main list lead (Apple density parity).
     var filtersExpanded by rememberSaveable { mutableStateOf(false) }
@@ -110,11 +113,12 @@ private fun LibraryContent(
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Subtitle/count + Queues/Deleted — TopAppBar already says "Library".
+        // Subtitle/count + Queues/Insights/Deleted — TopAppBar already says "Library".
         item {
             LibraryToolbarRow(
                 state = state,
                 onOpenReadingQueues = onOpenReadingQueues,
+                onOpenReadingStatistics = onOpenReadingStatistics,
                 onOpenRecentlyDeleted = onOpenRecentlyDeleted
             )
         }
@@ -230,13 +234,14 @@ private fun LibraryContent(
 }
 
 /**
- * Light toolbar under the scaffold TopAppBar: saved count + Queues / Recently Deleted.
+ * Light toolbar under the scaffold TopAppBar: saved count + Queues / Insights / Recently Deleted.
  * Avoids a second full "Library" title.
  */
 @Composable
 private fun LibraryToolbarRow(
     state: LibraryUiState,
     onOpenReadingQueues: () -> Unit,
+    onOpenReadingStatistics: () -> Unit = {},
     onOpenRecentlyDeleted: () -> Unit = {}
 ) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
@@ -244,7 +249,7 @@ private fun LibraryToolbarRow(
     }.orEmpty()
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -257,6 +262,11 @@ private fun LibraryToolbarRow(
         )
         TextButton(onClick = onOpenReadingQueues) {
             Text("Queues")
+        }
+        if (state.hasSavedWorks) {
+            TextButton(onClick = onOpenReadingStatistics) {
+                Text("Insights")
+            }
         }
         TextButton(onClick = onOpenRecentlyDeleted) {
             Text("Recently Deleted")
