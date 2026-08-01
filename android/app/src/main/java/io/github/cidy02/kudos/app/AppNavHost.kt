@@ -173,9 +173,14 @@ fun AppNavHost(
         composable(Routes.Browse) {
             BrowseScreen(
                 repository = container.browseRepository,
+                workRepository = container.workRepository,
                 onOpenCategory = { category ->
                     selectedBrowseCategory = category
                     navController.navigate(Routes.BrowseFandoms)
+                },
+                onOpenFandom = { fandomName ->
+                    selectedBrowseFandom = AO3Fandom(name = fandomName)
+                    navController.navigate(Routes.BrowseWorks)
                 },
                 onOpenWebFallback = { url ->
                     webFallbackUrl = url
@@ -437,6 +442,9 @@ fun AppNavHost(
             SettingsScreen(
                 repository = container.settingsRepository,
                 customFontRepository = container.customFontRepository,
+                authRepository = container.authRepository,
+                onLogin = { navController.navigate(Routes.AccountLogin) },
+                onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenBackup = { navController.navigate(Routes.Backup) }
             )
         }

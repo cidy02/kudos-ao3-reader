@@ -33,6 +33,9 @@ import androidx.navigation.compose.rememberNavController
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.DownloadQueueBanner
 
+// Chrome policy (iOS parity): Search is the prominent global action. Theme cycling
+// lives on Account/Settings only — not packed onto every tab.
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(
