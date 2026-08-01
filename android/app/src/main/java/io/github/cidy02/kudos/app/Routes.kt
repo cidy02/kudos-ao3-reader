@@ -22,6 +22,7 @@ object Routes {
     const val BrowseFandoms = "browse-fandoms"
     const val BrowseWorks = "browse-works"
     const val WebFallback = "web-fallback"
+    const val RecentlyDeleted = "recently-deleted"
 
     val topLevelDestinations = listOf(
         TopLevelDestination(Home, "Home", "H"),
@@ -47,6 +48,7 @@ object Routes {
             BrowseFandoms -> "Fandoms"
             BrowseWorks -> "Works"
             WebFallback -> "AO3"
+            RecentlyDeleted -> "Recently Deleted"
             else -> "Kudos"
         }
     }

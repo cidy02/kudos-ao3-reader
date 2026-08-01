@@ -39,6 +39,25 @@ interface WorkDao {
     @Query("SELECT * FROM works WHERE isDeleted = 0 ORDER BY dateAdded DESC")
     fun observeAll(): Flow<List<WorkEntity>>
 
+    /** Soft-deleted works for Recently Deleted UI (newest deletion first). */
+    @Query(
+        """
+        SELECT * FROM works
+        WHERE isDeleted = 1
+        ORDER BY deletedAt DESC, dateAdded DESC
+        """
+    )
+    fun observeDeleted(): Flow<List<WorkEntity>>
+
+    @Query(
+        """
+        SELECT * FROM works
+        WHERE isDeleted = 1
+        ORDER BY deletedAt DESC, dateAdded DESC
+        """
+    )
+    suspend fun getDeleted(): List<WorkEntity>
+
     @Query("SELECT COUNT(*) FROM works WHERE isDeleted = 0")
     suspend fun count(): Int
 

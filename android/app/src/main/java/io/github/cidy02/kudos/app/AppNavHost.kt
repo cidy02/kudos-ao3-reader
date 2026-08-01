@@ -24,6 +24,7 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
 import io.github.cidy02.kudos.library.LibraryScreen
+import io.github.cidy02.kudos.library.RecentlyDeletedScreen
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
 import io.github.cidy02.kudos.reader.ReaderViewModel
@@ -76,8 +77,14 @@ fun AppNavHost(
                 onOpenReader = { workId ->
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
+                },
+                onOpenRecentlyDeleted = {
+                    navController.navigate(Routes.RecentlyDeleted)
                 }
             )
+        }
+        composable(Routes.RecentlyDeleted) {
+            RecentlyDeletedScreen(workRepository = container.workRepository)
         }
         composable(Routes.Browse) {
             BrowseScreen(

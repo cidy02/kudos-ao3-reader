@@ -21,4 +21,9 @@ class NavigationRoutesTest {
         assertEquals("Works", Routes.titleFor(Routes.BrowseWorks))
         assertEquals("AO3", Routes.titleFor(Routes.WebFallback))
     }
+
+    @Test
+    fun recentlyDeletedRouteHasUserFacingTitle() {
+        assertEquals("Recently Deleted", Routes.titleFor(Routes.RecentlyDeleted))
+    }
 }

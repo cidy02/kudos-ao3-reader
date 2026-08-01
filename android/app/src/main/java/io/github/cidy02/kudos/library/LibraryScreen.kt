@@ -52,7 +52,8 @@ import kotlin.math.roundToInt
 fun LibraryScreen(
     repository: LibraryRepository,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onOpenRecentlyDeleted: () -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.factory(repository))
     val state by viewModel.state.collectAsState()
@@ -68,7 +69,8 @@ fun LibraryScreen(
         onToggleCollection = viewModel::toggleCollection,
         onClearFilters = viewModel::clearFilters,
         onOpenWork = onOpenWork,
-        onOpenReader = onOpenReader
+        onOpenReader = onOpenReader,
+        onOpenRecentlyDeleted = onOpenRecentlyDeleted
     )
 }
 
@@ -84,7 +86,8 @@ private fun LibraryContent(
     onToggleCollection: (String) -> Unit,
     onClearFilters: () -> Unit,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit
+    onOpenReader: (String) -> Unit,
+    onOpenRecentlyDeleted: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -94,7 +97,7 @@ private fun LibraryContent(
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { LibraryHeader(state) }
+        item { LibraryHeader(state, onOpenRecentlyDeleted) }
 
         if (state.loading) {
             item { LoadingStateCard("Loading your Library") }
@@ -113,6 +116,8 @@ private fun LibraryContent(
 
         if (!state.hasSavedWorks) {
             item { EmptyLibraryState() }
+            // Still allow navigation into Recently Deleted when the active
+            // library is empty (soft-deleted works live outside this list).
             return@LazyColumn
         }
 
@@ -193,13 +198,21 @@ private fun LibraryContent(
 }
 
 @Composable
-private fun LibraryHeader(state: LibraryUiState) {
+private fun LibraryHeader(
+    state: LibraryUiState,
+    onOpenRecentlyDeleted: () -> Unit
+) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
         " - $it hidden by privacy"
     }.orEmpty()
     KudosScreenHeader(
         title = "Library",
-        subtitle = "${state.totalSaved} saved$hidden"
+        subtitle = "${state.totalSaved} saved$hidden",
+        trailing = {
+            TextButton(onClick = onOpenRecentlyDeleted) {
+                Text("Recently Deleted")
+            }
+        }
     )
 }
 
