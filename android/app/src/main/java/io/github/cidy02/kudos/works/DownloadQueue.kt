@@ -1,7 +1,9 @@
 package io.github.cidy02.kudos.works
 
+import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.AO3URLResolver
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +24,7 @@ import kotlinx.coroutines.withContext
 class DownloadQueue(
     private val workImporter: WorkImporter,
     private val workRepository: WorkRepository,
+    private val seriesRepository: AO3SeriesRepository = AO3SeriesRepository(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val processDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -114,6 +117,36 @@ class DownloadQueue(
                 )
             )
         )
+    }
+
+    /**
+     * Fetches every work on the AO3 series page(s) and enqueues them for serial
+     * download. Already-downloaded works are skipped during [process]. Mirrors
+     * Apple Work Detail "Download Whole Series" → `AO3Client.seriesWorks` + queue.
+     *
+     * @return [AO3Result.Success] with the number of works discovered (pre-dedupe /
+     * skip), or a failure from the series fetch/parse path.
+     */
+    suspend fun enqueueSeries(seriesUrl: String): AO3Result<Int> {
+        return when (val result = seriesRepository.seriesWorks(seriesUrl)) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> {
+                val works = result.value
+                enqueue(
+                    works.map { summary ->
+                        DownloadQueueItem(
+                            ao3WorkId = summary.id,
+                            title = summary.title.ifBlank { "Work ${summary.id}" },
+                            sourceUrl = summary.workUrl,
+                            isComplete = summary.isComplete == true,
+                            seriesUrl = seriesUrl,
+                            summary = summary
+                        )
+                    }
+                )
+                AO3Result.Success(works.size)
+            }
+        }
     }
 
     /** Cancels everything still queued. An in-flight download finishes. */

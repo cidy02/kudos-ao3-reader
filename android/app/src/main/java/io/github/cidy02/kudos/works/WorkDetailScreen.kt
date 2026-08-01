@@ -269,6 +269,41 @@ fun WorkDetailScreen(
         }
     }
 
+    /**
+     * Scrapes the AO3 series page (all pages) and hands every work to
+     * [DownloadQueue] for serial download. Already-downloaded works are skipped
+     * by the queue. Surfaces fetch failures in the action footer.
+     */
+    fun downloadSeries() {
+        val seriesUrl = state.seriesUrl
+        if (seriesUrl.isBlank()) {
+            state = state.copy(error = "No series URL for this work.")
+            return
+        }
+        scope.launch {
+            state = state.copy(queuingSeries = true, error = null, ao3Message = null)
+            when (val result = downloadQueue.enqueueSeries(seriesUrl)) {
+                is AO3Result.Failure -> {
+                    state = state.copy(
+                        queuingSeries = false,
+                        error = "Couldn't load the series from AO3: ${result.error.displayMessage()}"
+                    )
+                }
+                is AO3Result.Success -> {
+                    val count = result.value
+                    state = state.copy(
+                        queuingSeries = false,
+                        ao3Message = if (count == 0) {
+                            "No works found on that series page."
+                        } else {
+                            "Queued $count series work${if (count == 1) "" else "s"} for download."
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     fun ensureLocalThen(action: suspend (SavedWork) -> Unit) {
         val local = state.local
         if (local != null) {
@@ -394,6 +429,7 @@ fun WorkDetailScreen(
         onNewCollectionName = { newCollectionName = it },
         onSave = ::saveMetadataOnly,
         onDownload = ::download,
+        onDownloadSeries = ::downloadSeries,
         onToggleFavorite = {
             ensureLocalThen { work ->
                 val updated = workRepository.toggleFavorite(work.id)
@@ -487,6 +523,7 @@ private fun WorkDetailContent(
     onNewCollectionName: (String) -> Unit,
     onSave: () -> Unit,
     onDownload: () -> Unit,
+    onDownloadSeries: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleFinished: () -> Unit,
     onAddTag: () -> Unit,
@@ -527,6 +564,7 @@ private fun WorkDetailContent(
                 state = state,
                 onSave = onSave,
                 onDownload = onDownload,
+                onDownloadSeries = onDownloadSeries,
                 onToggleFavorite = onToggleFavorite,
                 onToggleFinished = onToggleFinished,
                 onDeleteEpub = onDeleteEpub,
@@ -609,6 +647,7 @@ private fun ActionButtons(
     state: WorkDetailUiState,
     onSave: () -> Unit,
     onDownload: () -> Unit,
+    onDownloadSeries: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleFinished: () -> Unit,
     onDeleteEpub: () -> Unit,
@@ -623,7 +662,7 @@ private fun ActionButtons(
     onBookmark: () -> Unit,
     onComments: () -> Unit
 ) {
-    val busy = state.working
+    val busy = state.working || state.queuingSeries
     val local = state.local
     val epubWorkId = local?.takeIf { it.hasEpub }?.id
     val hasEpub = epubWorkId != null
@@ -631,6 +670,7 @@ private fun ActionButtons(
     val canDownload = !busy && (state.remote != null || local != null)
     val canRead = !busy && epubWorkId != null
     val showSaveToLibrary = !isSaved && state.remote != null
+    val canDownloadSeries = !busy && state.seriesUrl.isNotBlank()
     val ao3Enabled = !busy && state.ao3WorkId != null
     val dangerColor = MaterialTheme.colorScheme.error
 
@@ -700,6 +740,11 @@ private fun ActionButtons(
                 // Secondary redownload; primary CTA stays Read.
                 OutlinedButton(enabled = canDownload, onClick = onDownload) {
                     Text("Redownload")
+                }
+            }
+            if (state.seriesUrl.isNotBlank()) {
+                OutlinedButton(enabled = canDownloadSeries, onClick = onDownloadSeries) {
+                    Text(if (state.queuingSeries) "Fetching series…" else "Download series")
                 }
             }
         }
@@ -879,6 +924,8 @@ private data class WorkDetailUiState(
     val inSavedForLater: Boolean = false,
     val loading: Boolean = false,
     val working: Boolean = false,
+    /** True while scraping series pages before enqueue. */
+    val queuingSeries: Boolean = false,
     val error: String? = null,
     val ao3Message: String? = null
 ) {
@@ -907,6 +954,9 @@ private data class WorkDetailUiState(
         (local?.comments ?: remote?.comments)?.let { "%,d comments".format(it) },
         (local?.hits ?: remote?.hits)?.let { "%,d hits".format(it) }
     )
+    val seriesUrl: String = local?.seriesUrl?.takeIf { it.isNotBlank() }
+        ?: remote?.seriesUrl?.takeIf { !it.isNullOrBlank() }
+        ?: ""
     val seriesLine: String = local?.seriesTitle?.takeIf { it.isNotBlank() }?.let { title ->
         "Series: $title" + local.seriesPosition.takeIf { it > 0 }?.let { " #$it" }.orEmpty()
     } ?: remote?.seriesTitle?.let { title ->
