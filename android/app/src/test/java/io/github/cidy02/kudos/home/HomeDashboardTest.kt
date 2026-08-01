@@ -8,6 +8,7 @@ import io.github.cidy02.kudos.library.LibraryWorkListItem
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeDashboardTest {
@@ -43,7 +44,35 @@ class HomeDashboardTest {
         assertEquals(listOf("reading"), state.continueReading.ids())
         assertEquals(listOf("favorite"), state.favorites.ids())
         assertEquals(listOf("reading", "finished"), state.recentlyOpened.ids())
-        assertEquals(listOf("reading", "favorite", "finished"), state.recentlyAdded.ids())
+        assertTrue(state.recentlyUpdated.isEmpty())
+    }
+
+    @Test
+    fun dashboardIncludesRecentlyUpdatedSortedByLastCheck() {
+        val olderUpdate = work(
+            id = "older",
+            title = "Older Update",
+            chapters = "5/?",
+            knownChapterCount = 3,
+            lastUpdateCheckOffset = 3600
+        )
+        val newerUpdate = work(
+            id = "newer",
+            title = "Newer Update",
+            chapters = "4/10",
+            knownChapterCount = 2,
+            lastUpdateCheckOffset = 60
+        )
+        val noUpdate = work(
+            id = "steady",
+            title = "Steady",
+            chapters = "2/2",
+            knownChapterCount = 2
+        )
+
+        val state = HomeDashboard.buildState(snapshot(olderUpdate, newerUpdate, noUpdate))
+
+        assertEquals(listOf("newer", "older"), state.recentlyUpdated.ids())
     }
 
     @Test
@@ -51,7 +80,14 @@ class HomeDashboardTest {
         val state = HomeDashboard.buildState(
             snapshot(
                 work(id = "visible", title = "Visible Work", rating = "Teen"),
-                work(id = "hidden", title = "Hidden Work", rating = "Explicit"),
+                work(
+                    id = "hidden-update",
+                    title = "Hidden Update",
+                    rating = "Explicit",
+                    chapters = "5/?",
+                    knownChapterCount = 2,
+                    lastUpdateCheckOffset = 30
+                ),
                 privacy = PrivacySettings(
                     hideMatureContent = true,
                     matureContentMode = MatureContentMode.Hide
@@ -61,7 +97,8 @@ class HomeDashboardTest {
 
         assertEquals(2, state.totalSaved)
         assertEquals(1, state.hiddenByPrivacyCount)
-        assertEquals(listOf("visible"), state.recentlyAdded.ids())
+        // Hidden Explicit work would have hasUpdate but must not appear on Home shelves.
+        assertTrue(state.recentlyUpdated.isEmpty())
     }
 }
 
@@ -88,7 +125,10 @@ private fun work(
     isFinished: Boolean = false,
     lastReadOffset: Long? = null,
     lastScrollFraction: Double = 0.0,
-    rating: String = "Teen"
+    rating: String = "Teen",
+    chapters: String = "1/1",
+    knownChapterCount: Int? = null,
+    lastUpdateCheckOffset: Long? = null
 ): SavedWork {
     return SavedWork(
         id = id,
@@ -101,7 +141,9 @@ private fun work(
         isFinished = isFinished,
         rating = rating,
         wordCount = 12_000,
-        chapters = "1/1",
+        chapters = chapters,
+        knownChapterCount = knownChapterCount,
+        lastUpdateCheck = lastUpdateCheckOffset?.let { baseTime.minusSeconds(it) },
         lastReadDate = lastReadOffset?.let { baseTime.minusSeconds(it) },
         lastScrollFraction = lastScrollFraction
     )

@@ -57,7 +57,11 @@ fun AppNavHost(
     ) {
         composable(Routes.Home) {
             HomeScreen(
-                repository = container.libraryRepository,
+                libraryRepository = container.libraryRepository,
+                workRepository = container.workRepository,
+                metadataRepository = container.metadataRepository,
+                authRepository = container.authRepository,
+                accountListRepository = container.accountListRepository,
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
@@ -65,6 +69,14 @@ fun AppNavHost(
                 onOpenReader = { workId ->
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
+                },
+                onOpenRemoteWork = { summary ->
+                    selectedWorkSource = WorkDetailSource.RemoteSummary(summary)
+                    navController.navigate(Routes.WorkDetail)
+                },
+                onOpenSubscriptionsList = {
+                    selectedAccountListType = AccountListType.Subscriptions
+                    navController.navigate(Routes.AccountList)
                 },
                 onOpenLibrary = { navController.navigate(Routes.Library) },
                 onOpenBrowse = { navController.navigate(Routes.Browse) }

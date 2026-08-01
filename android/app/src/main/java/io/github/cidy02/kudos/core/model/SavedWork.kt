@@ -60,6 +60,28 @@ data class SavedWork(
     val isInProgress: Boolean
         get() = hasEpub && !isFinished && hasStartedReading
 
+    /**
+     * Posted-chapter count parsed from the `chapters` stats string ("5/10" → 5, "3" → 3).
+     * Mirrors Apple `SavedWork.postedChapterCount`.
+     */
+    val postedChapterCount: Int
+        get() = chapters
+            .substringBefore('/')
+            .trim()
+            .toIntOrNull()
+            ?: 0
+
+    /**
+     * AO3 has new chapters the user hasn't seen (live posted count exceeds the
+     * baseline). Drives Home → Recently Updated. Mirrors Apple `SavedWork.hasUpdate`
+     * with nullable Android [knownChapterCount].
+     */
+    val hasUpdate: Boolean
+        get() {
+            val known = knownChapterCount ?: return false
+            return known > 0 && postedChapterCount > known
+        }
+
     /** Effective record modification time for LWW flag/metadata merge. */
     val effectiveLastModifiedAt: Instant
         get() = lastModifiedAt ?: dateAdded

@@ -40,6 +40,11 @@ class WorkRepository(
             .map { works -> works.map { it.toDomain() }.filter { it.isSaved } }
     }
 
+    /** One-shot list of active saved library works (excludes soft-deleted). */
+    suspend fun listSavedWorks(): List<SavedWork> {
+        return workDao.getAll().map { it.toDomain() }.filter { it.isSaved }
+    }
+
     /** Soft-deleted works in Recently Deleted (newest first). */
     fun observeRecentlyDeleted(): Flow<List<SavedWork>> {
         return workDao.observeDeleted().map { works -> works.map { it.toDomain() } }
@@ -50,6 +55,21 @@ class WorkRepository(
     }
 
     suspend fun getWork(id: String): SavedWork? = workDao.getById(id)?.toDomain()
+
+    /**
+     * Marks current posted chapter count as seen, clearing Home → Recently Updated.
+     * Apple `HomeWorkDestination` parity.
+     */
+    suspend fun markUpdateSeen(workId: String): SavedWork? {
+        val work = getWork(workId) ?: return null
+        if (!work.hasUpdate) return work
+        return upsert(
+            work.copy(
+                knownChapterCount = work.postedChapterCount,
+                lastModifiedAt = clock()
+            )
+        )
+    }
 
     suspend fun findBySourceUrl(sourceUrl: String): SavedWork? {
         if (sourceUrl.isBlank()) return null
