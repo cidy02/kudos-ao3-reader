@@ -190,7 +190,8 @@ fun WorkDetailScreen(
                         val workId = state.local?.id ?: return@TextButton
                         confirmRemove = false
                         runWorkAction {
-                            workRepository.removeFromLibrary(workId)
+                            // Soft-delete into Recently Deleted (90-day recovery).
+                            workRepository.softDelete(workId)
                             state = WorkDetailUiState(remote = state.remote, loading = false)
                         }
                     }
