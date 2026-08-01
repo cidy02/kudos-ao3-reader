@@ -222,6 +222,7 @@ fun AppNavHost(
                 workImporter = container.workImporter,
                 writeRepository = container.writeRepository,
                 readingQueueRepository = container.readingQueueRepository,
+                metadataRepository = container.metadataRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenComments = { workId ->
                     selectedCommentTarget = AO3CommentTarget.Work(workId)
