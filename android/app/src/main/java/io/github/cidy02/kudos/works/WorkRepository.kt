@@ -184,8 +184,10 @@ class WorkRepository(
     }
 
     /**
-     * Permanently deletes soft-deleted works past
-     * `permanentDeletionScheduledAt`. Returns how many works were removed.
+     * Permanently deletes soft-deleted works whose
+     * `permanentDeletionScheduledAt` has elapsed (`<=` now). Invoked once on
+     * app start from [io.github.cidy02.kudos.KudosApplication] (Apple
+     * `PreservedWorkService` launch sweep). Returns how many works were removed.
      */
     suspend fun sweepExpiredSoftDeletes(): Int {
         val now = clock()
@@ -195,6 +197,9 @@ class WorkRepository(
         }
         return expired.size
     }
+
+    /** Alias for [sweepExpiredSoftDeletes] — same 90-day permanent purge. */
+    suspend fun purgeExpiredSoftDeletes(): Int = sweepExpiredSoftDeletes()
 
     private suspend fun recordWorkTombstone(
         work: SavedWork,
