@@ -1,9 +1,21 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.ui.graphics.vector.ImageVector
+
 data class TopLevelDestination(
     val route: String,
     val label: String,
-    val iconLabel: String
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector
 )
 
 object Routes {
@@ -27,10 +39,30 @@ object Routes {
     const val QueueDetail = "queue-detail"
 
     val topLevelDestinations = listOf(
-        TopLevelDestination(Home, "Home", "H"),
-        TopLevelDestination(Library, "Library", "L"),
-        TopLevelDestination(Browse, "Browse", "B"),
-        TopLevelDestination(Account, "Account", "A")
+        TopLevelDestination(
+            route = Home,
+            label = "Home",
+            selectedIcon = Icons.Filled.Home,
+            unselectedIcon = Icons.Outlined.Home
+        ),
+        TopLevelDestination(
+            route = Library,
+            label = "Library",
+            selectedIcon = Icons.AutoMirrored.Filled.MenuBook,
+            unselectedIcon = Icons.AutoMirrored.Outlined.MenuBook
+        ),
+        TopLevelDestination(
+            route = Browse,
+            label = "Browse",
+            selectedIcon = Icons.Filled.Explore,
+            unselectedIcon = Icons.Outlined.Explore
+        ),
+        TopLevelDestination(
+            route = Account,
+            label = "Account",
+            selectedIcon = Icons.Filled.Person,
+            unselectedIcon = Icons.Outlined.Person
+        )
     )
 
     fun titleFor(route: String?): String {

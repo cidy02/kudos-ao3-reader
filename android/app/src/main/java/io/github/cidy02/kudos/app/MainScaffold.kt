@@ -4,14 +4,19 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,25 +54,34 @@ fun MainScaffold(
                         title = { Text(Routes.titleFor(currentRoute)) },
                         navigationIcon = {
                             if (!isTopLevel) {
-                                TextButton(onClick = { navController.popBackStack() }) {
-                                    Text("Back")
+                                IconButton(onClick = { navController.popBackStack() }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back"
+                                    )
                                 }
                             }
                         },
                         actions = {
                             if (currentRoute != Routes.Search) {
-                                TextButton(
+                                IconButton(
                                     onClick = {
                                         navController.navigate(Routes.Search) {
                                             launchSingleTop = true
                                         }
                                     }
                                 ) {
-                                    Text("Search")
+                                    Icon(
+                                        imageVector = Icons.Filled.Search,
+                                        contentDescription = "Search"
+                                    )
                                 }
                             }
-                            TextButton(onClick = onCycleTheme) {
-                                Text(themeMode.label)
+                            IconButton(onClick = onCycleTheme) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Palette,
+                                    contentDescription = "Theme: ${themeMode.label}"
+                                )
                             }
                         }
                     )
@@ -116,7 +130,16 @@ private fun TopLevelNavigationBar(
             NavigationBarItem(
                 selected = selected,
                 onClick = { onNavigate(destination.route) },
-                icon = { Text(destination.iconLabel) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) {
+                            destination.selectedIcon
+                        } else {
+                            destination.unselectedIcon
+                        },
+                        contentDescription = destination.label
+                    )
+                },
                 label = { Text(destination.label) }
             )
         }
@@ -134,7 +157,16 @@ private fun TopLevelNavigationRail(
             NavigationRailItem(
                 selected = selected,
                 onClick = { onNavigate(destination.route) },
-                icon = { Text(destination.iconLabel) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) {
+                            destination.selectedIcon
+                        } else {
+                            destination.unselectedIcon
+                        },
+                        contentDescription = destination.label
+                    )
+                },
                 label = { Text(destination.label) }
             )
         }
