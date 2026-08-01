@@ -270,6 +270,7 @@ fun AppNavHost(
                 source = selectedWorkSource,
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,
+                downloadQueue = container.downloadQueue,
                 writeRepository = container.writeRepository,
                 readingQueueRepository = container.readingQueueRepository,
                 metadataRepository = container.metadataRepository,
