@@ -31,6 +31,13 @@ data class LibrarySection(
     val emptyMessage: String
 )
 
+/** Compact queue row for the Library dashboard shelf. */
+data class LibraryQueuePreview(
+    val id: String,
+    val name: String,
+    val workCount: Int
+)
+
 data class LibraryUiState(
     val loading: Boolean = true,
     val error: String? = null,
@@ -48,12 +55,18 @@ data class LibraryUiState(
     val savedForLater: List<LibraryDisplayItem> = emptyList(),
     val finished: List<LibraryDisplayItem> = emptyList(),
     val downloaded: List<LibraryDisplayItem> = emptyList(),
+    /** Top fandom labels for the quick-filter chip bar (most frequent first). */
+    val topFandoms: List<String> = emptyList(),
     val userTags: List<Tag> = emptyList(),
     val collections: List<WorkCollection> = emptyList(),
+    /** Local reading queues for the Library “Reading Queues” shelf. */
+    val readingQueues: List<LibraryQueuePreview> = emptyList(),
     /** True while multi-select is active (Select toolbar). */
     val selectionMode: Boolean = false,
     /** Selected work ids while [selectionMode] is true. */
     val selectedWorkIds: Set<String> = emptySet(),
+    /** Session-only mature reveals (Tap to reveal). */
+    val revealedWorkIds: Set<String> = emptySet(),
     /** Privacy: mature content currently hidden (for toolbar reveal toggle). */
     val hideMatureContent: Boolean = true,
     val matureWorkCount: Int = 0

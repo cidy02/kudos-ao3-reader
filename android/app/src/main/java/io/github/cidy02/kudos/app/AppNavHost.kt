@@ -100,6 +100,7 @@ fun AppNavHost(
                 repository = container.libraryRepository,
                 workRepository = container.workRepository,
                 settingsRepository = container.settingsRepository,
+                queueRepository = container.readingQueueRepository,
                 onOpenWork = { workId ->
                     selectedWorkSource = WorkDetailSource.LocalWork(workId)
                     navController.navigate(Routes.WorkDetail)
@@ -111,7 +112,19 @@ fun AppNavHost(
                 onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
                 onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) },
                 onOpenReadingStatistics = { navController.navigate(Routes.ReadingStatistics) },
-                onOpenCollections = { navController.navigate(Routes.Collections) }
+                onOpenCollections = { navController.navigate(Routes.Collections) },
+                onOpenQueue = { queueId ->
+                    selectedQueueId = queueId
+                    navController.navigate(Routes.QueueDetail)
+                },
+                onOpenCollection = { collectionId ->
+                    selectedCollectionId = collectionId
+                    navController.navigate(Routes.CollectionDetail)
+                },
+                onOpenComments = { workId ->
+                    selectedCommentTarget = AO3CommentTarget.Work(workId)
+                    navController.navigate(Routes.Comments)
+                }
             )
         }
         composable(Routes.Collections) {

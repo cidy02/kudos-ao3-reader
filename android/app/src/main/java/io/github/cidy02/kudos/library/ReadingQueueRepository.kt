@@ -95,6 +95,30 @@ class ReadingQueueRepository(
         return queue
     }
 
+    /** Creates a user-named custom queue (Library “+ New Queue”). */
+    suspend fun createQueue(name: String): ReadingQueue {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty()) { "Queue name must not be blank." }
+        val existing = queueDao.getActiveQueues().firstOrNull {
+            it.name.equals(trimmed, ignoreCase = true) &&
+                it.kindRaw == ReadingQueueKind.CUSTOM
+        }
+        if (existing != null) return existing.toDomain()
+
+        val now = clock()
+        val nextOrder = (queueDao.getActiveQueues().maxOfOrNull { it.sortOrder } ?: -1) + 1
+        val queue = ReadingQueue(
+            id = uuidFactory(),
+            name = trimmed,
+            kindRaw = ReadingQueueKind.CUSTOM,
+            sortOrder = nextOrder,
+            dateCreated = now,
+            dateUpdated = now
+        )
+        queueDao.upsertQueue(queue.toEntity())
+        return queue
+    }
+
     suspend fun addToSavedForLater(workId: String): ReadingQueueMembership {
         val queue = ensureSavedForLaterQueue()
         return addWork(queue.id, workId)

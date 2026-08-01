@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.CardDefaults
@@ -23,10 +25,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -60,13 +64,13 @@ fun WorkCoverCard(
     progressLabel: String? = null,
     statusChips: List<String> = emptyList(),
     obscured: Boolean = false,
-    obscuredLabel: String = "Mature work hidden",
+    obscuredLabel: String = "Tap to reveal",
     contentDescription: String? = null,
     /** Long-press (e.g. Library context menu). Null = tap-only card. */
     onLongClick: (() -> Unit)? = null
 ) {
     val a11y = contentDescription ?: buildString {
-        append(if (obscured) obscuredLabel else title)
+        append(if (obscured) "Hidden mature work. Activate to reveal." else title)
         if (!obscured && author.isNotBlank()) append(", by $author")
     }
     // Fixed width + height so LazyRow carousels never remeasure/jump when
@@ -87,6 +91,16 @@ fun WorkCoverCard(
         ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
     ) {
+        if (obscured) {
+            ObscuredCoverFace(
+                title = title,
+                author = author,
+                fandom = fandom,
+                revealLabel = obscuredLabel
+            )
+            return@ElevatedCard
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -94,13 +108,6 @@ fun WorkCoverCard(
                 .padding(WorkCoverCardMetrics.contentPadding),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (obscured) {
-                StatusBadge(obscuredLabel)
-                MetadataChipRow(labels = listOf(statusChips.firstOrNull() ?: "Mature content"))
-                Spacer(Modifier.weight(1f))
-                return@Column
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -170,6 +177,86 @@ fun WorkCoverCard(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Blurred mature-content face with a centered “Tap to reveal” pill
+ * (Apple SensitiveWorkRow / cover-card obscure mode).
+ */
+@Composable
+private fun ObscuredCoverFace(
+    title: String,
+    author: String,
+    fandom: String?,
+    revealLabel: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(16.dp)
+                .padding(WorkCoverCardMetrics.contentPadding),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                minLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = author.ifBlank { "Anonymous" },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!fandom.isNullOrBlank()) {
+                Text(
+                    text = fandom,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "Mature content",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.VisibilityOff,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = revealLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1
+                )
             }
         }
     }
