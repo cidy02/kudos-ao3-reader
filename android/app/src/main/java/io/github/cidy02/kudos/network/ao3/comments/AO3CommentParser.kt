@@ -97,9 +97,10 @@ class AO3CommentParser(
 
     private fun commentsLocked(document: Document): Boolean {
         val text = document.body().normalizedText()
+        // Do NOT treat "log in to comment" as locked — that is an auth prompt, not a lock.
         return text.contains("comments have been disabled", ignoreCase = true) ||
             text.contains("not accepting comments", ignoreCase = true) ||
-            text.contains("log in to comment", ignoreCase = true)
+            text.contains("comments are disabled", ignoreCase = true)
     }
 
     private fun commentDepth(element: Element, fallback: Int): Int {

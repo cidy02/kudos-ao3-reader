@@ -21,21 +21,21 @@ sealed class AccountListType {
     }
 
     data object Bookmarks : AccountListType() {
-        override val title = "AO3 Bookmarks"
+        override val title = "My AO3 Bookmarks"
         override val emptyTitle = "No bookmarks yet"
         override val emptyMessage = "Works you bookmark on AO3 show up here."
         override val listKey = "Bookmarks"
     }
 
     data object History : AccountListType() {
-        override val title = "AO3 History"
+        override val title = "My AO3 History"
         override val emptyTitle = "No reading history"
         override val emptyMessage = "Works you read on AO3 show up here."
         override val listKey = "History"
     }
 
     data object Subscriptions : AccountListType() {
-        override val title = "Subscriptions"
+        override val title = "My Subscriptions"
         override val emptyTitle = "No subscriptions"
         override val emptyMessage = "Works you subscribe to on AO3 show up here."
         override val listKey = "Subscriptions"

@@ -18,12 +18,31 @@ class AO3CommentRepositoryTest {
     fun publicLoadReadsCommentsWithoutAuthenticatedPost() = runTest {
         val repository = AO3CommentRepository(
             publicClient = FakePublicClient(success(writeResource("ao3/comments/comments_basic.html"))),
-            authenticatedClient = FakeAuthenticatedClient(emptyList(), emptyList())
+            // Signed-out path: authenticated GET fails, repository falls back to public HTML.
+            authenticatedClient = FakeAuthenticatedClient(
+                getResults = listOf(AO3Result.Failure(AO3Error.AuthenticationRequired)),
+                postResults = emptyList()
+            )
         )
 
         val thread = (repository.loadThread(AO3CommentTarget.Work(123)) as AO3Result.Success).value
 
         assertEquals(2, thread.comments.size)
+    }
+
+    @Test
+    fun authenticatedLoadUsesSessionHtmlWhenAvailable() = runTest {
+        val repository = AO3CommentRepository(
+            publicClient = FakePublicClient(AO3Result.Failure(AO3Error.Network("should not use public"))),
+            authenticatedClient = FakeAuthenticatedClient(
+                getResults = listOf(success(writeResource("ao3/comments/comments_basic.html"))),
+                postResults = emptyList()
+            )
+        )
+
+        val thread = (repository.loadThread(AO3CommentTarget.Work(123)) as AO3Result.Success).value
+        assertEquals(2, thread.comments.size)
+        assertEquals("comment-token", thread.form?.authenticityToken)
     }
 
     @Test

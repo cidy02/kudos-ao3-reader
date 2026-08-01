@@ -2,12 +2,13 @@ package io.github.cidy02.kudos.comments
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -22,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Error
@@ -59,63 +61,110 @@ fun CommentsScreen(
         }
     }
 
-    LaunchedEffect(target) { load() }
+    LaunchedEffect(target) {
+        draft = ""
+        message = null
+        load()
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        // TopAppBar already says "Comments"; content starts with thread/composer.
-        when (val current = state) {
-            CommentsUiState.Loading -> CircularProgressIndicator()
-            is CommentsUiState.AuthRequired -> {
+    when (val current = state) {
+        CommentsUiState.Loading -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator()
+                Text(
+                    text = "Loading comments…",
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        is CommentsUiState.AuthRequired -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(current.message, color = MaterialTheme.colorScheme.error)
                 Button(onClick = onLogin) { Text("Log in to AO3") }
+                OutlinedButton(onClick = ::load) { Text("Retry") }
             }
-            is CommentsUiState.Error -> {
+        }
+        is CommentsUiState.Error -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(current.message, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = ::load) { Text("Retry") }
             }
-            is CommentsUiState.Loaded -> {
-                val thread = current.thread
-                CommentComposer(
-                    thread = thread,
-                    draft = draft,
-                    submitting = submitting,
-                    onDraft = { draft = it },
-                    onLogin = onLogin,
-                    onSubmit = {
-                        val currentTarget = target ?: return@CommentComposer
-                        scope.launch {
-                            submitting = true
-                            message = null
-                            when (val result = repository.submitComment(currentTarget, draft)) {
-                                is AO3Result.Failure -> {
-                                    if (result.error == AO3Error.AuthenticationRequired) {
-                                        state = CommentsUiState.AuthRequired("Log in to AO3 before commenting.")
-                                    } else {
-                                        message = result.error.displayMessage()
+        }
+        is CommentsUiState.Loaded -> {
+            val thread = current.thread
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    CommentComposer(
+                        thread = thread,
+                        draft = draft,
+                        submitting = submitting,
+                        onDraft = { draft = it },
+                        onLogin = onLogin,
+                        onSubmit = {
+                            val currentTarget = target ?: return@CommentComposer
+                            scope.launch {
+                                submitting = true
+                                message = null
+                                when (val result = repository.submitComment(currentTarget, draft)) {
+                                    is AO3Result.Failure -> {
+                                        if (result.error == AO3Error.AuthenticationRequired) {
+                                            state = CommentsUiState.AuthRequired(
+                                                "Log in to AO3 before commenting."
+                                            )
+                                        } else {
+                                            message = result.error.displayMessage()
+                                        }
+                                    }
+                                    is AO3Result.Success -> {
+                                        draft = ""
+                                        message = result.value.message
+                                        load()
                                     }
                                 }
-                                is AO3Result.Success -> {
-                                    draft = ""
-                                    message = result.value.message
-                                    load()
-                                }
+                                submitting = false
                             }
-                            submitting = false
                         }
+                    )
+                }
+                message?.let { msg ->
+                    item {
+                        Text(msg, color = MaterialTheme.colorScheme.primary)
                     }
-                )
-                message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-                HorizontalDivider()
+                }
+                item { HorizontalDivider() }
                 if (thread.comments.isEmpty()) {
-                    Text("No comments yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    item {
+                        Text(
+                            "No comments yet.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 } else {
-                    thread.comments.forEach { comment ->
+                    items(
+                        items = thread.comments,
+                        key = { it.id ?: "${it.author.name}-${it.date}-${it.body.hashCode()}" }
+                    ) { comment ->
                         CommentRow(comment)
                     }
                 }
@@ -135,11 +184,12 @@ private fun CommentComposer(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when {
+            // Prefer composer when form is present (signed-in).
             thread.form != null -> {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = onDraft,
-                    label = { Text("Add a comment") },
+                    label = { Text("Leave a comment") },
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -150,14 +200,19 @@ private fun CommentComposer(
                     Text(if (submitting) "Posting…" else "Post Comment")
                 }
             }
+            // True lock (not "log in to comment" — that is handled below).
             thread.commentsLocked -> {
-                Text("AO3 is not accepting comments on this work.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "AO3 is not accepting comments on this work.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             else -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Log in to AO3 to comment.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedButton(onClick = onLogin) { Text("Log in") }
-                }
+                Text(
+                    "Log in to AO3 to leave a comment.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(onClick = onLogin) { Text("Log in") }
             }
         }
     }

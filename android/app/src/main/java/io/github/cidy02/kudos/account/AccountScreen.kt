@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.account
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,15 +13,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.auth.AO3AuthRepository
@@ -48,6 +59,10 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
 
+/**
+ * Account hub — Material expression of Apple [AccountView] Form sections:
+ * AO3 Account → My AO3 → On AO3 → Local → App → Help.
+ */
 @Composable
 fun AccountScreen(
     authRepository: AO3AuthRepository,
@@ -57,80 +72,141 @@ fun AccountScreen(
     onOpenSettings: () -> Unit,
     onOpenCollections: () -> Unit = {},
     onOpenAO3Collections: () -> Unit = {},
+    onOpenDashboard: () -> Unit = {},
+    onOpenLocalHistory: () -> Unit = {},
+    onOpenLocalFavorites: () -> Unit = {},
+    onOpenAbout: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
+    onOpenWeb: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(factory = AccountViewModel.factory(authRepository))
 ) {
     val state by viewModel.uiState.collectAsState()
     val signedIn = state.authState is AO3AuthState.SignedIn
-    val hubEntries = AccountListType.hubEntries
+    val context = LocalContext.current
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text(
-                text = "AO3 session, account lists, settings, and backup.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        item {
-            AccountStatusCard(
+            AccountStatusSection(
                 authState = state.authState,
                 onLogin = onLogin,
                 onLogout = viewModel::logout
             )
         }
         item {
-            AccountDestinationGroup(
+            AccountSection(
                 title = "My AO3",
-                footer = if (!signedIn) "Log in to load account lists." else null
-            ) {
-                hubEntries.forEach { type ->
-                    AccountDestinationRow(
-                        title = type.title,
-                        icon = type.leadingIcon,
-                        enabled = signedIn,
-                        supportingText = if (!signedIn) "Sign in required" else null,
-                        onClick = { onOpenList(type) },
-                        showDivider = true
-                    )
+                footer = if (!signedIn) {
+                    "Log in to use your AO3 subscriptions, bookmarks, history, and reading list."
+                } else {
+                    null
                 }
-                AccountDestinationRow(
-                    title = "My Collections (AO3)",
+            ) {
+                AccountNavRow(
+                    title = "My Dashboard",
+                    icon = Icons.Outlined.GridView,
+                    enabled = signedIn,
+                    onClick = onOpenDashboard
+                )
+                AccountNavRow(
+                    title = "My Works",
+                    icon = Icons.Outlined.Description,
+                    enabled = signedIn,
+                    onClick = { onOpenList(AccountListType.MyWorks) }
+                )
+                AccountNavRow(
+                    title = "My Collections",
                     icon = Icons.Outlined.Collections,
                     enabled = signedIn,
-                    supportingText = if (!signedIn) {
-                        "Sign in required"
-                    } else {
-                        "Remote collections on Archive of Our Own"
-                    },
-                    onClick = onOpenAO3Collections,
+                    onClick = onOpenAO3Collections
+                )
+                AccountNavRow(
+                    title = "My Subscriptions",
+                    icon = Icons.Outlined.NotificationsNone,
+                    enabled = signedIn,
+                    onClick = { onOpenList(AccountListType.Subscriptions) }
+                )
+                AccountNavRow(
+                    title = "My AO3 Bookmarks",
+                    icon = Icons.Outlined.BookmarkBorder,
+                    enabled = signedIn,
+                    onClick = { onOpenList(AccountListType.Bookmarks) }
+                )
+                AccountNavRow(
+                    title = "Marked for Later",
+                    icon = Icons.Outlined.Schedule,
+                    enabled = signedIn,
+                    onClick = { onOpenList(AccountListType.MarkedForLater) }
+                )
+                AccountNavRow(
+                    title = "My AO3 History",
+                    icon = Icons.Outlined.History,
+                    enabled = signedIn,
+                    onClick = { onOpenList(AccountListType.History) },
                     showDivider = false
                 )
             }
         }
         item {
-            AccountDestinationGroup(title = "App") {
-                AccountDestinationRow(
-                    title = "Local Collections",
-                    icon = Icons.AutoMirrored.Outlined.LibraryBooks,
+            AccountSection(
+                title = "On AO3",
+                footer = "Opens your AO3 settings on the website."
+            ) {
+                AccountNavRow(
+                    title = "My Preferences",
+                    icon = Icons.Outlined.Tune,
                     enabled = true,
-                    supportingText = "Named shelves in your Library",
-                    onClick = onOpenCollections,
-                    showDivider = true
+                    onClick = { onOpenWeb("https://archiveofourown.org/preferences") },
+                    showDivider = false
                 )
-                AccountDestinationRow(
+            }
+        }
+        item {
+            AccountSection(
+                title = "Local",
+                footer = "Stored on this device — distinct from your AO3 account history."
+            ) {
+                AccountNavRow(
+                    title = "Local Reading History",
+                    icon = Icons.Outlined.History,
+                    enabled = true,
+                    onClick = onOpenLocalHistory
+                )
+                AccountNavRow(
+                    title = "Favorites",
+                    icon = Icons.Outlined.StarOutline,
+                    enabled = true,
+                    onClick = onOpenLocalFavorites
+                )
+                AccountNavRow(
+                    title = "Local Collections",
+                    icon = Icons.Outlined.Collections,
+                    enabled = true,
+                    onClick = onOpenCollections,
+                    showDivider = false
+                )
+            }
+        }
+        item {
+            AccountSection(title = "App") {
+                AccountNavRow(
                     title = "Settings",
                     icon = Icons.Outlined.Settings,
                     enabled = true,
-                    onClick = onOpenSettings,
-                    showDivider = true
+                    onClick = onOpenSettings
                 )
-                AccountDestinationRow(
+                AccountNavRow(
+                    title = "Privacy & Local Data",
+                    icon = Icons.Outlined.PrivacyTip,
+                    enabled = true,
+                    onClick = onOpenPrivacy
+                )
+                AccountNavRow(
                     title = "Backup",
                     icon = Icons.Outlined.CloudUpload,
                     enabled = true,
@@ -140,12 +216,40 @@ fun AccountScreen(
             }
         }
         item {
-            Text(
-                text = "AO3 lists live here. User-initiated kudos, comments, bookmarks, " +
-                    "subscriptions, and Mark for Later actions are available from each work detail.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            AccountSection(title = "Help & Project") {
+                AccountNavRow(
+                    title = "About Kudos",
+                    icon = Icons.Outlined.Info,
+                    enabled = true,
+                    onClick = onOpenAbout
+                )
+                AccountNavRow(
+                    title = "Report a Bug",
+                    icon = Icons.Outlined.BugReport,
+                    enabled = true,
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:")
+                            putExtra(Intent.EXTRA_EMAIL, arrayOf("cidy02@users.noreply.github.com"))
+                            putExtra(Intent.EXTRA_SUBJECT, "Kudos Android bug report")
+                        }
+                        runCatching { context.startActivity(intent) }
+                    }
+                )
+                AccountNavRow(
+                    title = "Source on GitHub",
+                    icon = Icons.Outlined.Code,
+                    enabled = true,
+                    onClick = {
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/cidy02/kudos-ao3-reader")
+                        )
+                        runCatching { context.startActivity(intent) }
+                    },
+                    showDivider = false
+                )
+            }
         }
     }
 }
@@ -167,19 +271,9 @@ fun AccountListScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // TopAppBar is generic ("Account List"); keep a compact type label only.
-        Text(
-            text = type.title,
-            style = MaterialTheme.typography.titleLarge
-        )
-        Text(
-            text = "Read-only AO3 account list.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         when (val current = state) {
             AccountListUiState.Loading -> LoadingStateCard("Loading ${type.title}")
             AccountListUiState.AuthRequired -> EmptyStateCard(
@@ -255,7 +349,9 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
         }
         Text(
             text = "Page $page of $totalPages",
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 12.dp),
             style = MaterialTheme.typography.labelLarge
         )
         OutlinedButton(
@@ -269,48 +365,98 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
 }
 
 @Composable
-private fun AccountStatusCard(
+private fun AccountStatusSection(
     authState: AO3AuthState,
     onLogin: () -> Unit,
     onLogout: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
+    AccountSection(
+        title = "AO3 Account",
+        footer = when (authState) {
+            is AO3AuthState.SignedIn ->
+                "Your session stays on this device and is never included in Kudos backups."
+            else ->
+                "Log in to use your AO3 subscriptions, bookmarks, history, and reading list. " +
+                    "Your session stays on this device."
+        }
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("AO3 Account", style = MaterialTheme.typography.titleMedium)
-            when (authState) {
-                AO3AuthState.Restoring -> {
-                    InlineLoading("Checking saved AO3 session.")
-                }
-                AO3AuthState.SigningIn -> {
-                    InlineLoading("Capturing AO3 session.")
-                }
-                is AO3AuthState.SignedIn -> {
-                    StatusBadge("Signed in")
-                    Text(
-                        text = authState.username,
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = "Session cookies stay app-private and are never included in Kudos backups.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(onClick = onLogout) { Text("Log Out") }
-                }
-                AO3AuthState.SignedOut -> SignedOutLoginCopy(onLogin)
-                is AO3AuthState.Expired -> {
+        when (authState) {
+            AO3AuthState.Restoring -> {
+                ListItem(
+                    headlineContent = { Text("Checking saved AO3 session…") },
+                    leadingContent = { CircularProgressIndicator() },
+                    colors = accountListItemColors()
+                )
+            }
+            AO3AuthState.SigningIn -> {
+                ListItem(
+                    headlineContent = { Text("Capturing AO3 session…") },
+                    leadingContent = { CircularProgressIndicator() },
+                    colors = accountListItemColors()
+                )
+            }
+            is AO3AuthState.SignedIn -> {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            "Signed In",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    supportingContent = { Text(authState.username) },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    colors = accountListItemColors()
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 56.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                ListItem(
+                    headlineContent = {
+                        Text("Log Out", color = MaterialTheme.colorScheme.error)
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.Logout,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    colors = accountListItemColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onLogout)
+                )
+            }
+            AO3AuthState.SignedOut -> {
+                ListItem(
+                    headlineContent = { Text("Log In to AO3…") },
+                    supportingContent = {
+                        Text("Kudos opens AO3's real login page and never stores your password.")
+                    },
+                    leadingContent = {
+                        Icon(Icons.Outlined.Person, contentDescription = null)
+                    },
+                    colors = accountListItemColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onLogin)
+                )
+            }
+            is AO3AuthState.Expired -> {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(authState.message, color = MaterialTheme.colorScheme.error)
                     Button(onClick = onLogin) { Text("Log In Again") }
                 }
-                is AO3AuthState.Error -> {
+            }
+            is AO3AuthState.Error -> {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(authState.message, color = MaterialTheme.colorScheme.error)
                     Button(onClick = onLogin) { Text("Log In") }
                 }
@@ -320,34 +466,7 @@ private fun AccountStatusCard(
 }
 
 @Composable
-private fun InlineLoading(message: String) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator()
-        Text(message)
-    }
-}
-
-@Composable
-private fun SignedOutLoginCopy(onLogin: () -> Unit) {
-    Text("AO3 login is optional.")
-    Text(
-        text = "Kudos opens AO3's real login page. It never stores your AO3 password.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Text(
-        text = "Kudos is an unofficial app and is not affiliated with AO3 or OTW.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Button(onClick = onLogin) { Text("Log In to AO3") }
-}
-
-@Composable
-private fun AccountDestinationGroup(
+private fun AccountSection(
     title: String,
     footer: String? = null,
     content: @Composable () -> Unit
@@ -357,7 +476,7 @@ private fun AccountDestinationGroup(
             text = title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 4.dp)
+            modifier = Modifier.padding(horizontal = 8.dp)
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -372,19 +491,19 @@ private fun AccountDestinationGroup(
                 text = footer,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
     }
 }
 
 @Composable
-private fun AccountDestinationRow(
+private fun AccountNavRow(
     title: String,
     icon: ImageVector,
     enabled: Boolean,
     onClick: () -> Unit,
-    showDivider: Boolean,
+    showDivider: Boolean = true,
     supportingText: String? = null
 ) {
     val contentColor = if (enabled) {
@@ -399,20 +518,14 @@ private fun AccountDestinationRow(
     }
     Column {
         ListItem(
-            headlineContent = {
-                Text(title)
-            },
+            headlineContent = { Text(title) },
             supportingContent = if (!supportingText.isNullOrBlank()) {
                 { Text(supportingText) }
             } else {
                 null
             },
             leadingContent = {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor
-                )
+                Icon(imageVector = icon, contentDescription = null, tint = iconColor)
             },
             trailingContent = {
                 Icon(
@@ -443,12 +556,7 @@ private fun AccountDestinationRow(
     }
 }
 
-private val AccountListType.leadingIcon: ImageVector
-    get() = when (this) {
-        AccountListType.MarkedForLater -> Icons.Outlined.Schedule
-        AccountListType.Bookmarks -> Icons.Outlined.BookmarkBorder
-        AccountListType.History -> Icons.Outlined.History
-        AccountListType.Subscriptions -> Icons.Outlined.NotificationsNone
-        AccountListType.MyWorks -> Icons.Outlined.Description
-        is AccountListType.Collection -> Icons.Outlined.Collections
-    }
+@Composable
+private fun accountListItemColors() = ListItemDefaults.colors(
+    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+)

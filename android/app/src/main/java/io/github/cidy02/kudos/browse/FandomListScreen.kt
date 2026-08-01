@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.browse
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
@@ -28,7 +32,6 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
 import kotlinx.coroutines.launch
@@ -67,14 +70,16 @@ fun FandomListScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // TopAppBar is generic ("Fandoms"); category name is useful context.
-        KudosScreenHeader(
-            title = category.name,
-            subtitle = "Filter AO3 fandoms in this media category.",
-            trailing = {
-                TextButton(onClick = ::webFallback) { Text("Open on AO3") }
-            }
+        Text(
+            text = category.name,
+            style = MaterialTheme.typography.titleLarge
         )
+        Text(
+            text = "Tap a fandom to browse its works.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = ::webFallback) { Text("Open on AO3") }
 
         when (val current = state) {
             FandomListState.Loading -> LoadingStateCard("Loading fandoms")
@@ -114,17 +119,28 @@ fun FandomListScreen(
     }
 }
 
+/** Whole-row tap opens works — no separate Works button (iOS FandomListView). */
 @Composable
 private fun FandomRow(fandom: AO3Fandom, onOpen: () -> Unit) {
     Surface(
         tonalElevation = 1.dp,
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .semantics {
+                contentDescription = buildString {
+                    append(fandom.name)
+                    fandom.workCount?.let { append(", $it works") }
+                    append(". Open works.")
+                }
+            }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = fandom.name,
@@ -134,7 +150,6 @@ private fun FandomRow(fandom: AO3Fandom, onOpen: () -> Unit) {
             fandom.workCount?.let { count ->
                 StatusBadge("%,d".format(count))
             }
-            TextButton(onClick = onOpen) { Text("Works") }
         }
     }
 }

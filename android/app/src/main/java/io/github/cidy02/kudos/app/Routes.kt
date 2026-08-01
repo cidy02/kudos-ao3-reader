@@ -42,6 +42,10 @@ object Routes {
     const val Collections = "collections"
     const val CollectionDetail = "collection-detail"
     const val AuthorWorks = "author-works"
+    const val AO3Dashboard = "ao3-dashboard"
+    const val LocalHistory = "local-history"
+    const val LocalFavorites = "local-favorites"
+    const val About = "about"
 
     val topLevelDestinations = listOf(
         TopLevelDestination(
@@ -95,7 +99,14 @@ object Routes {
             Collections -> "Collections"
             CollectionDetail -> "Collection"
             AuthorWorks -> "Author"
+            AO3Dashboard -> "My Dashboard"
+            LocalHistory -> "Reading History"
+            LocalFavorites -> "Favorites"
+            About -> "About"
             else -> "Kudos"
         }
     }
+
+    fun isTopLevel(route: String?): Boolean =
+        topLevelDestinations.any { it.route == route }
 }

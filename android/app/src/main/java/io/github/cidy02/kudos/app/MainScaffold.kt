@@ -44,7 +44,7 @@ fun MainScaffold(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
-    val isTopLevel = Routes.topLevelDestinations.any { it.route == currentRoute }
+    val isTopLevel = Routes.isTopLevel(currentRoute)
     val isReader = currentRoute == Routes.Reader
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -53,6 +53,8 @@ fun MainScaffold(
         Scaffold(
             topBar = {
                 if (!isReader) {
+                    // Closer to iOS: root tabs show title + Search only.
+                    // Theme cycling lives in Settings (palette button cluttered the bar).
                     TopAppBar(
                         title = { Text(Routes.titleFor(currentRoute)) },
                         navigationIcon = {
@@ -80,11 +82,14 @@ fun MainScaffold(
                                     )
                                 }
                             }
-                            IconButton(onClick = onCycleTheme) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Palette,
-                                    contentDescription = "Theme: ${themeMode.label}"
-                                )
+                            // Theme control only on Account (settings-adjacent), not every tab.
+                            if (currentRoute == Routes.Account || currentRoute == Routes.Settings) {
+                                IconButton(onClick = onCycleTheme) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Palette,
+                                        contentDescription = "Theme: ${themeMode.label}"
+                                    )
+                                }
                             }
                         }
                     )

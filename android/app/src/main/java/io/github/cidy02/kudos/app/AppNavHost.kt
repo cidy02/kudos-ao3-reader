@@ -10,10 +10,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.compose.runtime.collectAsState
 import io.github.cidy02.kudos.account.AO3CollectionsScreen
+import io.github.cidy02.kudos.account.AO3DashboardScreen
+import io.github.cidy02.kudos.account.AboutScreen
 import io.github.cidy02.kudos.account.AccountListScreen
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
+import io.github.cidy02.kudos.account.LocalLibraryListKind
+import io.github.cidy02.kudos.account.LocalLibraryListsScreen
+import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3WebLoginScreen
 import io.github.cidy02.kudos.author.AuthorWorksScreen
 import io.github.cidy02.kudos.backup.BackupScreen
@@ -233,8 +239,62 @@ fun AppNavHost(
                 onOpenBackup = { navController.navigate(Routes.Backup) },
                 onOpenSettings = { navController.navigate(Routes.Settings) },
                 onOpenCollections = { navController.navigate(Routes.Collections) },
+                onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
+                onOpenDashboard = { navController.navigate(Routes.AO3Dashboard) },
+                onOpenLocalHistory = { navController.navigate(Routes.LocalHistory) },
+                onOpenLocalFavorites = { navController.navigate(Routes.LocalFavorites) },
+                onOpenAbout = { navController.navigate(Routes.About) },
+                onOpenPrivacy = { navController.navigate(Routes.Settings) },
+                onOpenWeb = { url ->
+                    webFallbackUrl = url
+                    navController.navigate(Routes.WebFallback)
+                }
+            )
+        }
+        composable(Routes.AO3Dashboard) {
+            val authState by container.authRepository.state.collectAsState(
+                initial = AO3AuthState.Restoring
+            )
+            val username = (authState as? AO3AuthState.SignedIn)?.username
+            AO3DashboardScreen(
+                username = username,
+                onOpenList = { type ->
+                    selectedAccountListType = type
+                    navController.navigate(Routes.AccountList)
+                },
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) }
             )
+        }
+        composable(Routes.LocalHistory) {
+            LocalLibraryListsScreen(
+                kind = LocalLibraryListKind.History,
+                repository = container.libraryRepository,
+                onOpenWork = { workId ->
+                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
+                    navController.navigate(Routes.WorkDetail)
+                },
+                onOpenReader = { workId ->
+                    readerWorkId = workId
+                    navController.navigate(Routes.Reader)
+                }
+            )
+        }
+        composable(Routes.LocalFavorites) {
+            LocalLibraryListsScreen(
+                kind = LocalLibraryListKind.Favorites,
+                repository = container.libraryRepository,
+                onOpenWork = { workId ->
+                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
+                    navController.navigate(Routes.WorkDetail)
+                },
+                onOpenReader = { workId ->
+                    readerWorkId = workId
+                    navController.navigate(Routes.Reader)
+                }
+            )
+        }
+        composable(Routes.About) {
+            AboutScreen()
         }
         composable(Routes.AccountLogin) {
             AO3WebLoginScreen(
