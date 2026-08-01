@@ -64,6 +64,42 @@ class SettingsRepository(
         dataStore.edit { it[Keys.MatureContentMode] = mode.storageValue }
     }
 
+    suspend fun updateHideMatureContent(hide: Boolean) {
+        dataStore.edit { it[Keys.HideMatureContent] = hide }
+    }
+
+    suspend fun updateRequireBiometricToReveal(require: Boolean) {
+        dataStore.edit { it[Keys.RequireBiometricToReveal] = require }
+    }
+
+    suspend fun updateConfirmBeforeDelete(confirm: Boolean) {
+        dataStore.edit { it[Keys.ConfirmBeforeDelete] = confirm }
+    }
+
+    suspend fun updateReaderJustify(justify: Boolean) {
+        dataStore.edit { it[Keys.ReaderJustify] = justify }
+    }
+
+    suspend fun updateReaderMargin(margin: Double) {
+        dataStore.edit { it[Keys.ReaderMargin] = margin }
+    }
+
+    suspend fun updateReaderLineHeight(lineHeight: Double) {
+        dataStore.edit { it[Keys.ReaderLineHeight] = lineHeight }
+    }
+
+    suspend fun updateReaderFontId(fontId: String) {
+        dataStore.edit { it[Keys.ReaderFontId] = fontId }
+    }
+
+    suspend fun updateReaderBoldText(bold: Boolean) {
+        dataStore.edit { it[Keys.ReaderBoldText] = bold }
+    }
+
+    suspend fun updateReaderTwoPage(twoPage: Boolean) {
+        dataStore.edit { it[Keys.ReaderTwoPage] = twoPage }
+    }
+
     suspend fun updateAccentColor(hex: String) {
         dataStore.edit { it[Keys.AccentColorHex] = hex }
     }
