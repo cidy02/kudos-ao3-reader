@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
@@ -249,6 +250,50 @@ class DownloadQueueTest {
         assertTrue(queue.items.value.all { it.status == DownloadQueueStatus.Done })
     }
 
+    @Test
+    fun enqueueSeriesFetchesWorksAndDownloadsEach() = runBlocking {
+        val downloads = AtomicInteger(0)
+        val seriesHtml = Thread.currentThread().contextClassLoader!!
+            .getResource("ao3/series/series_page.html")!!
+            .readText()
+        // Single-page series listing (no page=2) so pagination stops after one fetch.
+        val singlePageHtml = seriesHtml.replace(
+            """<li><a href="?page=2">2</a></li>""",
+            ""
+        )
+        val seriesClient = object : AO3Client {
+            override suspend fun get(
+                url: String,
+                headers: Map<String, String>
+            ): AO3Result<AO3HttpResponse> {
+                return AO3Result.Success(
+                    AO3HttpResponse(
+                        url = url,
+                        statusCode = 200,
+                        headers = emptyMap(),
+                        body = singlePageHtml
+                    )
+                )
+            }
+        }
+        val queue = queue(
+            downloadBytes = {
+                downloads.incrementAndGet()
+                AO3Result.Success(epubBytes)
+            },
+            seriesRepository = AO3SeriesRepository(client = seriesClient)
+        )
+
+        val result = queue.enqueueSeries("https://archiveofourown.org/series/55")
+        assertEquals(2, (result as AO3Result.Success).value)
+        awaitIdle(queue)
+
+        assertEquals(setOf(101L, 102L), queue.items.value.map { it.ao3WorkId }.toSet())
+        assertTrue(queue.items.value.all { it.status == DownloadQueueStatus.Done })
+        assertTrue(queue.items.value.all { it.seriesUrl == "https://archiveofourown.org/series/55" })
+        assertEquals(2, downloads.get())
+    }
+
     private suspend fun awaitIdle(queue: DownloadQueue) {
         withTimeout(10_000) {
             queue.items.first { list ->
@@ -262,7 +307,8 @@ class DownloadQueueTest {
     }
 
     private fun queue(
-        downloadBytes: suspend (Long) -> AO3Result<ByteArray>
+        downloadBytes: suspend (Long) -> AO3Result<ByteArray>,
+        seriesRepository: AO3SeriesRepository = AO3SeriesRepository()
     ): DownloadQueue {
         val client = object : AO3Client {
             override suspend fun get(
@@ -312,6 +358,7 @@ class DownloadQueueTest {
         return DownloadQueue(
             workImporter = importer,
             workRepository = repository,
+            seriesRepository = seriesRepository,
             scope = queueScope,
             processDispatcher = Dispatchers.IO
         )
