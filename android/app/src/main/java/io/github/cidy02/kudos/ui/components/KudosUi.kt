@@ -21,13 +21,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
+/**
+ * Optional context header under the scaffold TopAppBar.
+ *
+ * Prefer omitting [title] when it would repeat [io.github.cidy02.kudos.app.Routes.titleFor]
+ * (Home / Browse / Backup / …). Use title only for *specific* context the app bar cannot show
+ * (category name, fandom name, queue name). Keep [subtitle] for counts and short guidance.
+ */
 @Composable
 fun KudosScreenHeader(
-    title: String,
-    subtitle: String,
+    title: String? = null,
+    subtitle: String? = null,
     modifier: Modifier = Modifier,
     trailing: @Composable (() -> Unit)? = null
 ) {
+    val hasTitle = !title.isNullOrBlank()
+    val hasSubtitle = !subtitle.isNullOrBlank()
+    if (!hasTitle && !hasSubtitle && trailing == null) return
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -35,14 +46,19 @@ fun KudosScreenHeader(
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(if (hasTitle && hasSubtitle) 4.dp else 0.dp)
         ) {
-            Text(text = title, style = MaterialTheme.typography.headlineMedium)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (hasTitle) {
+                // titleLarge — not headlineMedium — so this stays context under the app bar.
+                Text(text = title.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            }
+            if (hasSubtitle) {
+                Text(
+                    text = subtitle.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         trailing?.invoke()
     }

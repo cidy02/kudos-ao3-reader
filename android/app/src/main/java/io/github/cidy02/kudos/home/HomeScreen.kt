@@ -169,8 +169,8 @@ private fun HomeHeader(state: HomeUiState, modifier: Modifier = Modifier) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
         " · $it hidden by privacy"
     }.orEmpty()
+    // TopAppBar already says "Kudos"; keep saved count / privacy as context only.
     KudosScreenHeader(
-        title = "Home",
         subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden",
         modifier = modifier
     )

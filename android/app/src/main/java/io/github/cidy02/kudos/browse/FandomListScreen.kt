@@ -38,7 +38,6 @@ fun FandomListScreen(
     category: AO3MediaCategory,
     onOpenFandom: (AO3Fandom) -> Unit,
     onOpenWebFallback: (String) -> Unit,
-    onBack: () -> Unit,
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
 ) {
     var state by remember(category.name) { mutableStateOf<FandomListState>(FandomListState.Loading) }
@@ -68,14 +67,12 @@ fun FandomListScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // TopAppBar is generic ("Fandoms"); category name is useful context.
         KudosScreenHeader(
             title = category.name,
             subtitle = "Filter AO3 fandoms in this media category.",
             trailing = {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = onBack) { Text("Back") }
-                    TextButton(onClick = ::webFallback) { Text("AO3") }
-                }
+                TextButton(onClick = ::webFallback) { Text("Open on AO3") }
             }
         )
 

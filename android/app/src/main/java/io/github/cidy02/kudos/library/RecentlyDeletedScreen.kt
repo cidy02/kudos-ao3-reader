@@ -156,8 +156,8 @@ private fun RecentlyDeletedContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            // TopAppBar already says "Recently Deleted".
             KudosScreenHeader(
-                title = "Recently Deleted",
                 subtitle = "Deleted works stay here for 90 days before permanent removal."
             )
         }

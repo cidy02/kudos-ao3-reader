@@ -61,9 +61,9 @@ fun BrowseScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // TopAppBar already says "Browse"; keep guidance + web fallback only.
         KudosScreenHeader(
-            title = "Browse",
-            subtitle = "Explore AO3's media categories, fandom lists, and work results natively.",
+            subtitle = "Explore AO3 media categories, fandom lists, and work results natively.",
             trailing = {
                 OutlinedButton(onClick = { onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl()) }) {
                     Text("Open on AO3")

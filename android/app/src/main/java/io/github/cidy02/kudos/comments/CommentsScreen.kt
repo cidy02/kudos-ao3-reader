@@ -68,7 +68,7 @@ fun CommentsScreen(
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(text = "Comments", style = MaterialTheme.typography.headlineSmall)
+        // TopAppBar already says "Comments"; content starts with thread/composer.
         when (val current = state) {
             CommentsUiState.Loading -> CircularProgressIndicator()
             is CommentsUiState.AuthRequired -> {
