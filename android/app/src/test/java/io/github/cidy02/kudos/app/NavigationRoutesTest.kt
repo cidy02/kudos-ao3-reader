@@ -37,4 +37,9 @@ class NavigationRoutesTest {
     fun readingStatisticsRouteHasUserFacingTitle() {
         assertEquals("Reading Insights", Routes.titleFor(Routes.ReadingStatistics))
     }
+
+    @Test
+    fun authorWorksRouteHasUserFacingTitle() {
+        assertEquals("Author", Routes.titleFor(Routes.AuthorWorks))
+    }
 }

@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.account.AccountListScreen
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
 import io.github.cidy02.kudos.auth.AO3WebLoginScreen
+import io.github.cidy02.kudos.author.AuthorWorksScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.browse.FandomListScreen
@@ -53,6 +54,7 @@ fun AppNavHost(
     var webFallbackUrl by remember { mutableStateOf<String?>(null) }
     var selectedQueueId by remember { mutableStateOf<String?>(null) }
     var selectedCollectionId by remember { mutableStateOf<String?>(null) }
+    var selectedAuthorName by remember { mutableStateOf<String?>(null) }
 
     NavHost(
         navController = navController,
@@ -282,8 +284,27 @@ fun AppNavHost(
                 onOpenReader = { workId ->
                     readerWorkId = workId
                     navController.navigate(Routes.Reader)
+                },
+                onOpenAuthor = { authorName ->
+                    selectedAuthorName = authorName
+                    navController.navigate(Routes.AuthorWorks)
                 }
             )
+        }
+        composable(Routes.AuthorWorks) {
+            val authorName = selectedAuthorName
+            if (authorName.isNullOrBlank()) {
+                navController.popBackStack()
+            } else {
+                AuthorWorksScreen(
+                    authorName = authorName,
+                    workRepository = container.workRepository,
+                    onOpenWork = { work ->
+                        selectedWorkSource = WorkDetailSource.RemoteSummary(work)
+                        navController.navigate(Routes.WorkDetail)
+                    }
+                )
+            }
         }
         composable(Routes.Reader) {
             val workId = readerWorkId

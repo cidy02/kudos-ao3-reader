@@ -40,6 +40,7 @@ object Routes {
     const val ReadingStatistics = "reading-statistics"
     const val Collections = "collections"
     const val CollectionDetail = "collection-detail"
+    const val AuthorWorks = "author-works"
 
     val topLevelDestinations = listOf(
         TopLevelDestination(
@@ -91,6 +92,7 @@ object Routes {
             ReadingStatistics -> "Reading Insights"
             Collections -> "Collections"
             CollectionDetail -> "Collection"
+            AuthorWorks -> "Author"
             else -> "Kudos"
         }
     }
