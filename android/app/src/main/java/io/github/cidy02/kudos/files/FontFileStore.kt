@@ -61,4 +61,18 @@ class FontFileStore(
             }
         }
     }
+
+    suspend fun deleteFont(fileName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val path = runCatching { fontPath(fileName) }.getOrNull() ?: return@withContext false
+            runCatching { Files.deleteIfExists(path) }.getOrDefault(false)
+        }
+    }
+
+    suspend fun fontExists(fileName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val path = runCatching { fontPath(fileName) }.getOrNull() ?: return@withContext false
+            runCatching { Files.isRegularFile(path) }.getOrDefault(false)
+        }
+    }
 }

@@ -339,6 +339,7 @@ fun AppNavHost(
         composable(Routes.Settings) {
             SettingsScreen(
                 repository = container.settingsRepository,
+                customFontRepository = container.customFontRepository,
                 onOpenBackup = { navController.navigate(Routes.Backup) }
             )
         }

@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import io.github.cidy02.kudos.data.local.entity.CustomFontEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CustomFontDao {
@@ -19,4 +20,13 @@ interface CustomFontDao {
 
     @Query("SELECT * FROM custom_fonts ORDER BY dateAdded DESC")
     suspend fun getAll(): List<CustomFontEntity>
+
+    @Query("SELECT * FROM custom_fonts ORDER BY dateAdded DESC")
+    fun observeAll(): Flow<List<CustomFontEntity>>
+
+    @Query("DELETE FROM custom_fonts WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM custom_fonts WHERE fileName = :fileName")
+    suspend fun deleteByFileName(fileName: String)
 }
