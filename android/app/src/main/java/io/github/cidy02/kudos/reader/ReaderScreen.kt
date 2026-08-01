@@ -80,6 +80,11 @@ import kotlinx.coroutines.launch
  *
  * Epic 3 chrome: immersive top/bottom bars (tap content to toggle), TOC sheet,
  * display sheet (font size + theme), and live progress label.
+ *
+ * Initial font/theme come from [ReaderUiState.Reading.preferences] (open →
+ * DataStore snapshot). The display sheet only mutates that in-session state;
+ * persistence of sheet changes is deferred 3a — until then, re-open reloads
+ * whatever is already stored in settings (defaults or backup restore).
  */
 @Composable
 fun ReaderScreen(

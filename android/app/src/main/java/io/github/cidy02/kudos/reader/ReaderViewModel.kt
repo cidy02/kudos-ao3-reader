@@ -18,9 +18,9 @@ import kotlinx.coroutines.launch
  * Drives the reader screen: resolves the work, exposes [ReaderUiState], and
  * debounces/persists progress reported by the Readium navigator host.
  *
- * Display preferences (font size / theme) update the in-session
- * [ReaderUiState.Reading] snapshot (applied via ReadiumSettingsAdapter) and are
- * also written to [SettingsRepository] so they survive leaving the reader.
+ * Initial preferences come from [ReaderRepository.open] (DataStore snapshot).
+ * Display sheet changes update the in-session snapshot and persist via
+ * [SettingsRepository] so they survive leaving the reader.
  */
 class ReaderViewModel(
     private val repository: ReaderRepository,

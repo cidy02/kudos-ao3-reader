@@ -13,7 +13,11 @@ import java.time.Instant
  * user state. Knows nothing about Readium types.
  *
  * Settings come from a suspending [settingsProvider] (decoupled from DataStore so
- * the repository is unit-testable without a real settings store).
+ * the repository is unit-testable without a real settings store). Production wiring
+ * uses [io.github.cidy02.kudos.data.preferences.SettingsRepository.snapshot] so
+ * [open] injects the latest saved `readerFontPt` / theme into [ReaderOpenResult.Success.preferences]
+ * via [ReaderSettingsMapper] — the single preference source for the reader (no
+ * parallel in-memory preference store).
  */
 class ReaderRepository(
     private val workRepository: WorkRepository,
@@ -23,6 +27,10 @@ class ReaderRepository(
     private val settingsMapper: ReaderSettingsMapper = ReaderSettingsMapper(),
     private val clock: () -> Instant = { Instant.now() }
 ) {
+    /**
+     * Resolve a work for reading. On success, [ReaderOpenResult.Success.preferences]
+     * is always mapped from the current [settingsProvider] snapshot (DataStore in prod).
+     */
     suspend fun open(workId: String): ReaderOpenResult {
         val work = workRepository.getWork(workId)
             ?: return ReaderOpenResult.Failure(null, ReaderError.WorkNotFound)
