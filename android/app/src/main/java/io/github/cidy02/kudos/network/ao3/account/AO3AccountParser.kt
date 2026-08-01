@@ -32,7 +32,35 @@ class AO3AccountParser(
             AccountListType.Subscriptions -> parseSubscriptionsPage(html, page)
             AccountListType.MarkedForLater,
             AccountListType.History,
-            AccountListType.MyWorks -> searchParser.parseSearchPage(html, page)
+            AccountListType.MyWorks,
+            is AccountListType.Collection -> searchParser.parseSearchPage(html, page)
+        }
+    }
+
+    /**
+     * Parses a collections index (`li.collection.blurb`) into name/title/byline.
+     * Mirrors Apple `AO3Client.parseCollections`.
+     */
+    fun parseCollections(html: String, finalUrl: String? = null): List<AO3Collection> {
+        if (AO3OverloadDetector.isOverloadPage(html)) throw AO3AccountParseException.Overloaded()
+        if (usernameParser.isLoginRequiredPage(html, finalUrl)) throw AO3AccountParseException.LoginRequired()
+
+        val document = Jsoup.parse(html, AO3Constants.BASE_URL)
+        return document.select("li.collection.blurb").mapNotNull { li ->
+            val link = li.selectFirst("h4.heading a[href*=/collections/]") ?: return@mapNotNull null
+            val href = link.attr("href")
+            val marker = "/collections/"
+            val start = href.indexOf(marker)
+            if (start < 0) return@mapNotNull null
+            val slug = href.substring(start + marker.length)
+                .substringBefore("/")
+                .trim()
+            if (slug.isEmpty()) return@mapNotNull null
+            val title = link.normalizedText().ifBlank { slug }
+            val byline = li.selectFirst(".byline, .heading .byline")
+                ?.normalizedText()
+                .orEmpty()
+            AO3Collection(name = slug, title = title, byline = byline)
         }
     }
 

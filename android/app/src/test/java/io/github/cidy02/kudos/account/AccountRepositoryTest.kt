@@ -110,6 +110,58 @@ class AccountListItemsDoNotAutoSaveTest {
     }
 }
 
+class AO3CollectionsRepositoryTest {
+    @Test
+    fun loadsAuthenticatedCollectionsIndex() = runTest {
+        val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore())
+        auth.restoreSession()
+        val client = FakeAccountClient(
+            AO3Result.Success(
+                AO3HttpResponse(
+                    url = "https://archiveofourown.org/users/AO3_Reader/collections",
+                    statusCode = 200,
+                    headers = emptyMap(),
+                    body = accountRepositoryResourceText("ao3/account/collections.html")
+                )
+            )
+        )
+        val repository = AccountListRepository(client = client, authRepository = auth)
+
+        val collections = (repository.loadCollections() as AO3Result.Success).value
+
+        assertTrue(client.requestedUrl!!.endsWith("/users/AO3_Reader/collections"))
+        assertTrue(client.requestHeaders!!.getValue("Cookie").contains("_otwarchive_session=secret"))
+        assertEquals(listOf("cool_fics", "another_one"), collections.map { it.name })
+        assertEquals("Cool Fics", collections.first().title)
+    }
+
+    @Test
+    fun loadsCollectionWorksViaAccountListType() = runTest {
+        val auth = AO3AuthRepository(MemorySessionStore(testSession()), MemoryCookieStore())
+        auth.restoreSession()
+        val client = FakeAccountClient(
+            AO3Result.Success(
+                AO3HttpResponse(
+                    url = "https://archiveofourown.org/collections/cool_fics/works",
+                    statusCode = 200,
+                    headers = emptyMap(),
+                    body = accountRepositoryResourceText("ao3/account/history.html")
+                )
+            )
+        )
+        val repository = AccountListRepository(client = client, authRepository = auth)
+
+        val page = (
+            repository.load(
+                AccountListType.Collection(name = "cool_fics", displayTitle = "Cool Fics")
+            ) as AO3Result.Success
+            ).value
+
+        assertTrue(client.requestedUrl!!.endsWith("/collections/cool_fics/works"))
+        assertEquals(202L, page.works.single().id)
+    }
+}
+
 private class FakeAccountClient(
     private val result: AO3Result<AO3HttpResponse>
 ) : AO3Client {

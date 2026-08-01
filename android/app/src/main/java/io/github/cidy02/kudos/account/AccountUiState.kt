@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.account
 
 import io.github.cidy02.kudos.auth.AO3AuthState
+import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
@@ -17,3 +18,10 @@ sealed interface AccountListUiState {
 
 val AccountListUiState.works: List<AO3WorkSummary>
     get() = (this as? AccountListUiState.Loaded)?.page?.works.orEmpty()
+
+sealed interface AO3CollectionsUiState {
+    data object Loading : AO3CollectionsUiState
+    data object AuthRequired : AO3CollectionsUiState
+    data class Loaded(val collections: List<AO3Collection>) : AO3CollectionsUiState
+    data class Failed(val message: String) : AO3CollectionsUiState
+}

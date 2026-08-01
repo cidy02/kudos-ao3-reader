@@ -88,7 +88,47 @@ class AccountListViewModel(
     }
 }
 
-private fun AO3Error.displayMessage(): String {
+class AO3CollectionsViewModel(
+    private val repository: AccountListRepository
+) : ViewModel() {
+    private val mutableState = kotlinx.coroutines.flow.MutableStateFlow<AO3CollectionsUiState>(
+        AO3CollectionsUiState.Loading
+    )
+    val uiState: StateFlow<AO3CollectionsUiState> = mutableState
+
+    init {
+        load()
+    }
+
+    fun load() {
+        viewModelScope.launch {
+            mutableState.value = AO3CollectionsUiState.Loading
+            mutableState.value = when (val result = repository.loadCollections()) {
+                is AO3Result.Success -> AO3CollectionsUiState.Loaded(result.value)
+                is AO3Result.Failure -> {
+                    if (result.error == AO3Error.AuthenticationRequired) {
+                        AO3CollectionsUiState.AuthRequired
+                    } else {
+                        AO3CollectionsUiState.Failed(result.error.displayMessage())
+                    }
+                }
+            }
+        }
+    }
+
+    companion object {
+        fun factory(repository: AccountListRepository): ViewModelProvider.Factory {
+            return object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return AO3CollectionsViewModel(repository) as T
+                }
+            }
+        }
+    }
+}
+
+internal fun AO3Error.displayMessage(): String {
     return when (this) {
         AO3Error.BadRequest -> "AO3 rejected the request."
         AO3Error.AuthenticationRequired -> "Log in to AO3 again."

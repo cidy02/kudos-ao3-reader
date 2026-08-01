@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
@@ -55,11 +56,13 @@ fun AccountScreen(
     onOpenBackup: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCollections: () -> Unit = {},
+    onOpenAO3Collections: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(factory = AccountViewModel.factory(authRepository))
 ) {
     val state by viewModel.uiState.collectAsState()
     val signedIn = state.authState is AO3AuthState.SignedIn
+    val hubEntries = AccountListType.hubEntries
 
     LazyColumn(
         modifier = modifier
@@ -86,16 +89,28 @@ fun AccountScreen(
                 title = "My AO3",
                 footer = if (!signedIn) "Log in to load account lists." else null
             ) {
-                AccountListType.entries.forEachIndexed { index, type ->
+                hubEntries.forEach { type ->
                     AccountDestinationRow(
                         title = type.title,
                         icon = type.leadingIcon,
                         enabled = signedIn,
                         supportingText = if (!signedIn) "Sign in required" else null,
                         onClick = { onOpenList(type) },
-                        showDivider = index < AccountListType.entries.lastIndex
+                        showDivider = true
                     )
                 }
+                AccountDestinationRow(
+                    title = "My Collections (AO3)",
+                    icon = Icons.Outlined.Collections,
+                    enabled = signedIn,
+                    supportingText = if (!signedIn) {
+                        "Sign in required"
+                    } else {
+                        "Remote collections on Archive of Our Own"
+                    },
+                    onClick = onOpenAO3Collections,
+                    showDivider = false
+                )
             }
         }
         item {
@@ -143,7 +158,7 @@ fun AccountListScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AccountListViewModel = viewModel(
-        key = type.name,
+        key = type.listKey,
         factory = AccountListViewModel.factory(type, repository)
     )
 ) {
@@ -217,7 +232,7 @@ private fun AccountListContent(
                 PaginationControls(page, totalPages, onLoadPage)
             }
         }
-        items(works, key = { "${type.name}-${it.id}" }) { work ->
+        items(works, key = { "${type.listKey}-${it.id}" }) { work ->
             AO3WorkCard(work = work, onOpenWork = onOpenWork)
         }
         item {
@@ -435,4 +450,5 @@ private val AccountListType.leadingIcon: ImageVector
         AccountListType.History -> Icons.Outlined.History
         AccountListType.Subscriptions -> Icons.Outlined.NotificationsNone
         AccountListType.MyWorks -> Icons.Outlined.Description
+        is AccountListType.Collection -> Icons.Outlined.Collections
     }

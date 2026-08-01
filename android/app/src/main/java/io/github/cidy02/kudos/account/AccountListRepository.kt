@@ -8,6 +8,7 @@ import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountParseException
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountParser
 import io.github.cidy02.kudos.network.ao3.account.AO3AccountUrls
+import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +37,32 @@ class AccountListRepository(
         }
     }
 
+    /**
+     * Authenticated collections index for the signed-in user
+     * (`/users/<username>/collections`).
+     */
+    suspend fun loadCollections(page: Int = 1): AO3Result<List<AO3Collection>> {
+        val username = authRepository.username()
+            ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        val url = urls.collectionsUrl(username, page)
+        val headers = when (val result = authRepository.authenticatedHeaders(url)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+
+        return when (val result = client.get(url, headers)) {
+            is AO3Result.Failure -> {
+                if (result.error == AO3Error.AuthenticationRequired) authRepository.sessionDidExpire()
+                result
+            }
+            is AO3Result.Success -> parseCollectionsPage(
+                html = result.value.body,
+                finalUrl = result.value.url,
+                statusCode = result.value.statusCode
+            )
+        }
+    }
+
     private suspend fun parse(
         type: AccountListType,
         html: String,
@@ -58,6 +85,29 @@ class AccountListRepository(
             AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 account page could not be parsed."))
         } catch (error: Exception) {
             AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 account page could not be parsed."))
+        }
+    }
+
+    private suspend fun parseCollectionsPage(
+        html: String,
+        finalUrl: String,
+        statusCode: Int
+    ): AO3Result<List<AO3Collection>> {
+        return try {
+            AO3Result.Success(
+                withContext(Dispatchers.Default) {
+                    parser.parseCollections(html, finalUrl)
+                }
+            )
+        } catch (error: AO3AccountParseException.LoginRequired) {
+            authRepository.sessionDidExpire()
+            AO3Result.Failure(AO3Error.AuthenticationRequired)
+        } catch (error: AO3AccountParseException.Overloaded) {
+            AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis = null))
+        } catch (error: AO3AccountParseException) {
+            AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 collections page could not be parsed."))
+        } catch (error: Exception) {
+            AO3Result.Failure(AO3Error.Parse(error.message ?: "AO3 collections page could not be parsed."))
         }
     }
 }

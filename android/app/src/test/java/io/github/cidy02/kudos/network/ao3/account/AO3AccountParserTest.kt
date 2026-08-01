@@ -43,6 +43,26 @@ class AO3AccountUrlsTest {
             "https://archiveofourown.org/users/AO3%20Reader/works",
             urls.url(AccountListType.MyWorks, "AO3 Reader")
         )
+        assertEquals(
+            "https://archiveofourown.org/users/AO3_Reader/collections",
+            urls.collectionsUrl("AO3_Reader")
+        )
+        assertEquals(
+            "https://archiveofourown.org/users/AO3_Reader/collections?page=2",
+            urls.collectionsUrl("AO3_Reader", page = 2)
+        )
+        assertEquals(
+            "https://archiveofourown.org/collections/cool_fics/works",
+            urls.collectionWorksUrl("cool_fics")
+        )
+        assertEquals(
+            "https://archiveofourown.org/collections/cool_fics/works?page=3",
+            urls.url(
+                AccountListType.Collection(name = "cool_fics", displayTitle = "Cool Fics"),
+                username = "AO3_Reader",
+                page = 3
+            )
+        )
     }
 }
 
@@ -107,6 +127,30 @@ class AO3SubscriptionsParserTest {
         assertEquals("Subscribed Work", work.title)
         assertEquals(listOf("drew"), work.authors)
         assertTrue(work.fandoms.isEmpty())
+    }
+}
+
+class AO3CollectionsParserTest {
+    @Test
+    fun parsesCollectionsIndexNameTitleByline() {
+        val collections = AO3AccountParser().parseCollections(
+            accountResourceText("ao3/account/collections.html")
+        )
+
+        assertEquals(2, collections.size)
+        assertEquals(listOf("cool_fics", "another_one"), collections.map { it.name })
+        assertEquals("Cool Fics", collections[0].title)
+        assertEquals("Maintained by someone", collections[0].byline)
+        assertEquals("Another One", collections[1].title)
+        assertEquals("", collections[1].byline)
+    }
+
+    @Test
+    fun emptyCollectionsIndexIsNotAnError() {
+        val collections = AO3AccountParser().parseCollections(
+            accountResourceText("ao3/account/empty_list.html")
+        )
+        assertTrue(collections.isEmpty())
     }
 }
 
