@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.works
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,7 +38,10 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.AO3URLResolver
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
+import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteOutcome
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
@@ -52,6 +58,7 @@ fun WorkDetailScreen(
     workImporter: WorkImporter,
     writeRepository: AO3WriteRepository,
     readingQueueRepository: ReadingQueueRepository,
+    metadataRepository: AO3WorkMetadataRepository? = null,
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
     onOpenReader: (String) -> Unit
@@ -76,8 +83,51 @@ fun WorkDetailScreen(
             userTags = local?.let { workRepository.userTagsForWork(it.id) }.orEmpty(),
             collections = local?.let { workRepository.collectionsForWork(it.id) }.orEmpty(),
             inSavedForLater = readingQueueRepository.isInSavedForLater(workId),
-            loading = false
+            loading = false,
+            error = null
         )
+    }
+
+    suspend fun hydrateFromAo3WorkId(workId: Long) {
+        val canonical = AO3URLResolver.canonicalWorkUrl(workId)
+        val existing = WorkIdentityIndex.findExisting(
+            candidateSourceUrl = canonical,
+            byId = { workRepository.getWork(it) },
+            bySourceUrl = { workRepository.findBySourceUrl(it) }
+        )
+        if (existing != null) {
+            refreshLocal(existing.id, remote = null)
+            return
+        }
+
+        val repo = metadataRepository
+        if (repo == null) {
+            state = WorkDetailUiState(
+                loading = false,
+                error = "Couldn't open AO3 work #$workId. Open it from Search, Browse, or Library " +
+                    "instead, or open it on AO3 from a listing that includes full blurb metadata."
+            )
+            return
+        }
+
+        when (val result = repo.fetch(workId)) {
+            is AO3Result.Success -> {
+                val remote = result.value.toRemoteSummary(workId)
+                state = WorkDetailUiState(
+                    remote = remote,
+                    loading = false,
+                    // Metadata page has tags/stats but not title/author/summary yet.
+                    ao3Message = "Loaded tags and stats from AO3. Title and summary need a full work page parse."
+                )
+            }
+            is AO3Result.Failure -> {
+                state = WorkDetailUiState(
+                    loading = false,
+                    error = "Couldn't load AO3 work #$workId: ${result.error.displayMessage()} " +
+                        "Open it from Search, Browse, or Library when possible."
+                )
+            }
+        }
     }
 
     LaunchedEffect(source) {
@@ -99,14 +149,19 @@ fun WorkDetailScreen(
                     WorkDetailUiState(remote = source.summary, loading = false)
                 }
             }
-            is WorkDetailSource.Ao3WorkId -> state = WorkDetailUiState(
-                loading = false,
-                error = "This AO3 work link needs full native detail parsing before it can open in Kudos."
-            )
-            is WorkDetailSource.RemoteUrl -> state = WorkDetailUiState(
-                loading = false,
-                error = "This AO3 link needs full native detail parsing before it can open in Kudos."
-            )
+            is WorkDetailSource.Ao3WorkId -> hydrateFromAo3WorkId(source.workId)
+            is WorkDetailSource.RemoteUrl -> {
+                val workId = WorkTags.ao3WorkIdFromUrl(source.url)
+                if (workId != null) {
+                    hydrateFromAo3WorkId(workId)
+                } else {
+                    state = WorkDetailUiState(
+                        loading = false,
+                        error = "This AO3 link isn't a work URL Kudos can open yet. " +
+                            "Try opening the work from Search, Browse, or Library."
+                    )
+                }
+            }
             null -> state = WorkDetailUiState(
                 loading = false,
                 error = "Open a work from Search or Library."
@@ -183,7 +238,13 @@ fun WorkDetailScreen(
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text("Remove from Library") },
-            text = { Text("This removes the local record and deletes the downloaded EPUB file if present.") },
+            text = {
+                Text(
+                    "This moves the work to Recently Deleted for 90 days. " +
+                        "You can restore it from Library → Recently Deleted. " +
+                        "After 90 days it is permanently removed (including any downloaded EPUB)."
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -405,7 +466,13 @@ private fun WorkDetailContent(
                 onRemoveFromLibrary = onRemoveFromLibrary,
                 onOpenAo3 = onOpenAo3,
                 onOpenReader = onOpenReader,
-                onAddToSavedForLater = onAddToSavedForLater
+                onAddToSavedForLater = onAddToSavedForLater,
+                onLogin = onLogin,
+                onKudos = onKudos,
+                onSubscribe = onSubscribe,
+                onMarkForLater = onMarkForLater,
+                onBookmark = onBookmark,
+                onComments = onComments
             )
 
             state.error?.let {
@@ -453,17 +520,6 @@ private fun WorkDetailContent(
                 onAdd = onAddCollection,
                 onRemove = onRemoveCollection
             )
-            SectionBlock("AO3 Actions") {
-                AO3Actions(
-                    enabled = !state.working && state.ao3WorkId != null,
-                    onLogin = onLogin,
-                    onKudos = onKudos,
-                    onSubscribe = onSubscribe,
-                    onMarkForLater = onMarkForLater,
-                    onBookmark = onBookmark,
-                    onComments = onComments
-                )
-            }
         }
     }
 }
@@ -480,6 +536,7 @@ private fun StatusLine(state: WorkDetailUiState) {
     MetadataChipRow(labels = labels, prominent = true)
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActionButtons(
     state: WorkDetailUiState,
@@ -491,66 +548,164 @@ private fun ActionButtons(
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
     onOpenReader: (String) -> Unit,
-    onAddToSavedForLater: () -> Unit
+    onAddToSavedForLater: () -> Unit,
+    onLogin: () -> Unit,
+    onKudos: () -> Unit,
+    onSubscribe: () -> Unit,
+    onMarkForLater: () -> Unit,
+    onBookmark: () -> Unit,
+    onComments: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                enabled = !state.working && state.local?.hasEpub == true,
-                onClick = { state.local?.id?.let(onOpenReader) },
-                modifier = Modifier.weight(1f)
+    val busy = state.working
+    val local = state.local
+    val epubWorkId = local?.takeIf { it.hasEpub }?.id
+    val hasEpub = epubWorkId != null
+    val isSaved = local?.isSaved == true
+    val canDownload = !busy && (state.remote != null || local != null)
+    val canRead = !busy && epubWorkId != null
+    val showSaveToLibrary = !isSaved && state.remote != null
+    val ao3Enabled = !busy && state.ao3WorkId != null
+    val dangerColor = MaterialTheme.colorScheme.error
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // 1. Primary open / download / save
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (epubWorkId != null) {
+                Button(
+                    enabled = canRead,
+                    onClick = { onOpenReader(epubWorkId) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Read")
+                }
+            } else {
+                Button(
+                    enabled = canDownload,
+                    onClick = onDownload,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Download EPUB")
+                }
+                if (showSaveToLibrary) {
+                    FilledTonalButton(
+                        enabled = !busy,
+                        onClick = onSave,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Save to Library")
+                    }
+                }
+            }
+        }
+        // Saved-but-no-epub already covered; hasEpub + unsaved is rare (history-only) —
+        // still offer Save when a remote blurb is available.
+        if (hasEpub && showSaveToLibrary) {
+            FilledTonalButton(
+                enabled = !busy,
+                onClick = onSave,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Read")
-            }
-            Button(enabled = !state.working, onClick = onDownload, modifier = Modifier.weight(1f)) {
-                Text(if (state.local?.hasEpub == true) "Redownload" else "Download")
+                Text("Save to Library")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(enabled = !state.working, onClick = onSave, modifier = Modifier.weight(1f)) {
-                Text(if (state.local?.isSaved == true) "Saved" else "Save")
+
+        // 2. Local library toggles + open on web
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(enabled = !busy, onClick = onToggleFavorite) {
+                Text(if (local?.isFavorite == true) "Unfavorite" else "Favorite")
             }
-            OutlinedButton(enabled = !state.working, onClick = onToggleFavorite, modifier = Modifier.weight(1f)) {
-                Text(if (state.local?.isFavorite == true) "Unfavorite" else "Favorite")
+            OutlinedButton(enabled = !busy, onClick = onToggleFinished) {
+                Text(if (local?.isFinished == true) "Mark Unfinished" else "Mark Finished")
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(enabled = !state.working, onClick = onToggleFinished, modifier = Modifier.weight(1f)) {
-                Text(if (state.local?.isFinished == true) "Mark Unfinished" else "Mark Finished")
+            OutlinedButton(enabled = !busy, onClick = onAddToSavedForLater) {
+                Text(if (state.inSavedForLater) "Remove Saved for Later" else "Saved for Later")
             }
-            OutlinedButton(enabled = state.sourceUrl.isNotBlank(), onClick = onOpenAo3, modifier = Modifier.weight(1f)) {
+            OutlinedButton(enabled = state.sourceUrl.isNotBlank(), onClick = onOpenAo3) {
                 Text("Open on AO3")
             }
+            if (hasEpub) {
+                // Secondary redownload; primary CTA stays Read.
+                OutlinedButton(enabled = canDownload, onClick = onDownload) {
+                    Text("Redownload")
+                }
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                enabled = !state.working,
-                onClick = onAddToSavedForLater,
-                modifier = Modifier.weight(1f)
+
+        // 3. AO3 account actions
+        Text(
+            text = "On AO3",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (state.ao3WorkId == null) {
+            MetadataLine("AO3 social actions need a canonical work URL.")
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AssistChip(
+                enabled = ao3Enabled,
+                onClick = onKudos,
+                label = { Text("Kudos") }
+            )
+            AssistChip(
+                enabled = ao3Enabled,
+                onClick = onSubscribe,
+                label = { Text("Subscribe") }
+            )
+            AssistChip(
+                enabled = ao3Enabled,
+                onClick = onMarkForLater,
+                label = { Text("Mark for Later") }
+            )
+            AssistChip(
+                enabled = ao3Enabled,
+                onClick = onBookmark,
+                label = { Text("Bookmark") }
+            )
+            AssistChip(
+                enabled = ao3Enabled,
+                onClick = onComments,
+                label = { Text("Comments") }
+            )
+            AssistChip(
+                onClick = onLogin,
+                label = { Text("Log in to AO3") }
+            )
+        }
+
+        // 4. Danger zone — destructive last
+        if (local != null) {
+            Text(
+                text = "Danger zone",
+                style = MaterialTheme.typography.titleSmall,
+                color = dangerColor
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    if (state.inSavedForLater) {
-                        "Remove from Saved for Later"
-                    } else {
-                        "Add to Saved for Later"
+                if (hasEpub) {
+                    TextButton(
+                        enabled = !busy,
+                        onClick = onDeleteEpub
+                    ) {
+                        Text("Delete EPUB", color = dangerColor)
                     }
-                )
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                enabled = !state.working && state.local?.hasEpub == true,
-                onClick = onDeleteEpub,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Delete EPUB")
-            }
-            OutlinedButton(
-                enabled = !state.working && state.local != null,
-                onClick = onRemoveFromLibrary,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Remove")
+                }
+                TextButton(
+                    enabled = !busy,
+                    onClick = onRemoveFromLibrary
+                ) {
+                    Text("Remove from Library", color = dangerColor)
+                }
             }
         }
     }
@@ -618,38 +773,6 @@ private fun CollectionEditor(
             Button(enabled = enabled && newCollectionName.isNotBlank(), onClick = onAdd) {
                 Text("Add")
             }
-        }
-    }
-}
-
-@Composable
-private fun AO3Actions(
-    enabled: Boolean,
-    onLogin: () -> Unit,
-    onKudos: () -> Unit,
-    onSubscribe: () -> Unit,
-    onMarkForLater: () -> Unit,
-    onBookmark: () -> Unit,
-    onComments: () -> Unit
-) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(enabled = enabled, onClick = onKudos) {
-            Text("Kudos")
-        }
-        OutlinedButton(enabled = enabled, onClick = onSubscribe) {
-            Text("Subscribe/Unsubscribe")
-        }
-        OutlinedButton(enabled = enabled, onClick = onMarkForLater) {
-            Text("Mark for Later")
-        }
-        OutlinedButton(enabled = enabled, onClick = onBookmark) {
-            Text("AO3 Bookmark")
-        }
-        OutlinedButton(enabled = enabled, onClick = onComments) {
-            Text("Comments")
-        }
-        OutlinedButton(onClick = onLogin) {
-            Text("AO3 Login")
         }
     }
 }
@@ -738,4 +861,30 @@ private fun AO3Error.displayMessage(): String {
         is AO3Error.Server -> "AO3 had a server problem (HTTP $statusCode)."
         is AO3Error.Validation -> message
     }
+}
+
+/**
+ * Map work-page tag/stats metadata into a remote summary so Download / Save /
+ * AO3 actions work when only a raw work id is known. Title/author/summary are
+ * not available from [AO3WorkMetadata] yet.
+ */
+private fun AO3WorkMetadata.toRemoteSummary(workId: Long): AO3WorkSummary {
+    return AO3WorkSummary(
+        id = workId,
+        title = "AO3 Work $workId",
+        authors = emptyList(),
+        fandoms = fandoms,
+        rating = "",
+        warnings = warnings,
+        categories = categories,
+        relationships = relationships,
+        characters = characters,
+        freeforms = freeforms,
+        language = language,
+        wordCount = words,
+        chapters = chapters,
+        kudos = kudos,
+        comments = comments,
+        hits = hits
+    )
 }
