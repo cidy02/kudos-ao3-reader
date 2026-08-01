@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.search.AO3Category
 import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Crossover
@@ -186,9 +187,150 @@ fun activeFilterChips(filters: AO3SearchFilters): List<String> {
 }
 
 /**
- * Default name for saving the current search: free-text query, else first fandom,
- * else a generic label (matches Apple `defaultSavedSearchName`).
+ * Local (library-only) tag pools for search-filter autocomplete.
+ * Built from [SavedWork] categorized tag fields + optional user tags.
  */
+data class LocalTagSuggestions(
+    val fandoms: List<String> = emptyList(),
+    val characters: List<String> = emptyList(),
+    val relationships: List<String> = emptyList(),
+    val freeforms: List<String> = emptyList()
+) {
+    fun forKind(kind: LocalTagKind): List<String> = when (kind) {
+        LocalTagKind.FANDOM -> fandoms
+        LocalTagKind.CHARACTER -> characters
+        LocalTagKind.RELATIONSHIP -> relationships
+        LocalTagKind.FREEFORM -> freeforms
+    }
+}
+
+enum class LocalTagKind {
+    FANDOM,
+    CHARACTER,
+    RELATIONSHIP,
+    FREEFORM
+}
+
+/**
+ * Collect unique, case-insensitively de-duplicated tag names from saved works.
+ * [userTagNames] are folded into freeforms (additional tags) only.
+ */
+fun collectLocalTagSuggestions(
+    works: List<SavedWork>,
+    userTagNames: List<String> = emptyList()
+): LocalTagSuggestions {
+    val fandoms = linkedMapOf<String, String>()
+    val characters = linkedMapOf<String, String>()
+    val relationships = linkedMapOf<String, String>()
+    val freeforms = linkedMapOf<String, String>()
+
+    fun put(target: MutableMap<String, String>, raw: String) {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return
+        val key = trimmed.lowercase()
+        if (key !in target) target[key] = trimmed
+    }
+
+    works.forEach { work ->
+        work.workFandoms.forEach { put(fandoms, it) }
+        work.workCharacters.forEach { put(characters, it) }
+        work.workRelationships.forEach { put(relationships, it) }
+        work.workFreeforms.forEach { put(freeforms, it) }
+        // Uncategorized blurb tags feed the freeform/additional-tags field.
+        work.workTags.forEach { put(freeforms, it) }
+    }
+    userTagNames.forEach { put(freeforms, it) }
+
+    fun sorted(values: Map<String, String>): List<String> =
+        values.values.sortedWith(String.CASE_INSENSITIVE_ORDER)
+
+    return LocalTagSuggestions(
+        fandoms = sorted(fandoms),
+        characters = sorted(characters),
+        relationships = sorted(relationships),
+        freeforms = sorted(freeforms)
+    )
+}
+
+/**
+ * Tags already committed in a comma-separated field (everything except the
+ * in-progress trailing token when the value does not end with a comma).
+ */
+fun committedTagValues(fieldValue: String): List<String> {
+    val parts = AO3SearchFilters.commaSeparatedValues(fieldValue)
+    if (parts.isEmpty()) return emptyList()
+    val endsWithSeparator = fieldValue.trimEnd().endsWith(',')
+    return if (endsWithSeparator) parts else parts.dropLast(1)
+}
+
+/**
+ * Partial token the user is currently typing (after the last comma, or the
+ * whole field when there is no comma yet). Empty when the field ends with `,`.
+ */
+fun currentTagToken(fieldValue: String): String {
+    if (fieldValue.isBlank()) return ""
+    if (fieldValue.trimEnd().endsWith(',')) return ""
+    return AO3SearchFilters.commaSeparatedValues(fieldValue).lastOrNull().orEmpty()
+}
+
+/**
+ * Filter local candidates by the current token; exclude already-committed tags.
+ * Prefers prefix matches, then substring matches; case-insensitive.
+ */
+fun filterLocalTagSuggestions(
+    candidates: List<String>,
+    fieldValue: String,
+    limit: Int = 8
+): List<String> {
+    if (limit <= 0 || candidates.isEmpty()) return emptyList()
+
+    val committed = committedTagValues(fieldValue)
+        .map { it.lowercase() }
+        .toSet()
+    val token = currentTagToken(fieldValue).trim()
+    val needle = token.lowercase()
+
+    val prefix = mutableListOf<String>()
+    val contains = mutableListOf<String>()
+
+    for (candidate in candidates) {
+        val trimmed = candidate.trim()
+        if (trimmed.isEmpty()) continue
+        val lower = trimmed.lowercase()
+        if (lower in committed) continue
+        if (needle.isEmpty()) {
+            prefix += trimmed
+        } else if (lower.startsWith(needle)) {
+            prefix += trimmed
+        } else if (lower.contains(needle)) {
+            contains += trimmed
+        }
+        if (prefix.size >= limit) break
+    }
+
+    if (prefix.size >= limit) return prefix.take(limit)
+    val remaining = limit - prefix.size
+    return prefix + contains.take(remaining)
+}
+
+/**
+ * Replace the in-progress token with [suggestion] and leave a trailing
+ * `", "` so the user can keep adding tags.
+ */
+fun applyTagSuggestion(fieldValue: String, suggestion: String): String {
+    val tag = suggestion.trim()
+    if (tag.isEmpty()) return fieldValue
+
+    val committed = committedTagValues(fieldValue)
+    val already = committed.any { it.equals(tag, ignoreCase = true) }
+    val next = if (already) committed else committed + tag
+    return if (next.isEmpty()) {
+        "$tag, "
+    } else {
+        next.joinToString(separator = ", ", postfix = ", ")
+    }
+}
+
 fun defaultSavedSearchName(filters: AO3SearchFilters): String {
     val query = filters.query.trim()
     if (query.isNotEmpty()) return query
@@ -199,9 +341,6 @@ fun defaultSavedSearchName(filters: AO3SearchFilters): String {
     return "Saved Search"
 }
 
-/**
- * One-line description of a saved search's filters (query + salient facets).
- */
 fun savedSearchSubtitle(filters: AO3SearchFilters): String? {
     val parts = mutableListOf<String>()
     val query = filters.query.trim()

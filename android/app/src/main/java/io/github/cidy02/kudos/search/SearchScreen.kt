@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
@@ -61,8 +63,18 @@ import kotlinx.coroutines.launch
 fun SearchScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     repository: AO3SearchRepository = remember { AO3SearchRepository() },
-    savedSearchRepository: SavedSearchRepository? = null
+    savedSearchRepository: SavedSearchRepository? = null,
+    workRepository: WorkRepository? = null
 ) {
+    val works by (workRepository?.observeSavedWorks() ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+        .collectAsState(initial = emptyList())
+    var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(workRepository) {
+        userTagNames = workRepository?.allUserTags()?.map { it.normalizedName }.orEmpty()
+    }
+    val localTagSuggestions = remember(works, userTagNames) {
+        collectLocalTagSuggestions(works, userTagNames)
+    }
     var filters by remember { mutableStateOf(AO3SearchFilters()) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -255,6 +267,7 @@ fun SearchScreen(
 
     if (showFilterSheet) {
         SearchFilterSheet(
+                    localTagSuggestions = localTagSuggestions,
             filters = filters,
             onFiltersChange = { filters = it },
             onApply = {

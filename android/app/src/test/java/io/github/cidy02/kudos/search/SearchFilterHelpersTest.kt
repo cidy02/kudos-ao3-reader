@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.search
 
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.search.AO3Category
 import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Crossover
@@ -143,6 +144,102 @@ class SearchFilterHelpersTest {
     }
 
     @Test
+    fun collectLocalTagSuggestionsDedupesAndSortsByKind() {
+        val works = listOf(
+            SavedWork(
+                title = "A",
+                author = "X",
+                workFandoms = listOf("Naruto", "naruto", " Bleach "),
+                workCharacters = listOf("Sasuke", "Ichigo"),
+                workRelationships = listOf("Sasuke/Naruto"),
+                workFreeforms = listOf("Fluff"),
+                workTags = listOf("Hurt/Comfort")
+            ),
+            SavedWork(
+                title = "B",
+                author = "Y",
+                workFandoms = listOf("One Piece"),
+                workCharacters = listOf("Luffy"),
+                workFreeforms = listOf("Angst", "fluff")
+            )
+        )
+
+        val suggestions = collectLocalTagSuggestions(
+            works = works,
+            userTagNames = listOf(" Comfort ", "comfort", "reread")
+        )
+
+        assertEquals(listOf("Bleach", "Naruto", "One Piece"), suggestions.fandoms)
+        assertEquals(listOf("Ichigo", "Luffy", "Sasuke"), suggestions.characters)
+        assertEquals(listOf("Sasuke/Naruto"), suggestions.relationships)
+        assertEquals(
+            listOf("Angst", "Comfort", "Fluff", "Hurt/Comfort", "reread"),
+            suggestions.freeforms
+        )
+        assertEquals(suggestions.freeforms, suggestions.forKind(LocalTagKind.FREEFORM))
+    }
+
+    @Test
+    fun currentTokenAndCommittedTagsSplitOnComma() {
+        assertEquals(emptyList<String>(), committedTagValues(""))
+        assertEquals(emptyList<String>(), committedTagValues("Nar"))
+        assertEquals(listOf("Naruto"), committedTagValues("Naruto,"))
+        assertEquals(listOf("Naruto"), committedTagValues("Naruto, Sa"))
+        assertEquals(listOf("Naruto", "Sasuke"), committedTagValues("Naruto, Sasuke, "))
+
+        assertEquals("", currentTagToken(""))
+        assertEquals("Nar", currentTagToken("Nar"))
+        assertEquals("", currentTagToken("Naruto,"))
+        assertEquals("Sa", currentTagToken("Naruto, Sa"))
+        assertEquals("", currentTagToken("Naruto, Sasuke, "))
+    }
+
+    @Test
+    fun filterLocalTagSuggestionsPrefersPrefixAndExcludesCommitted() {
+        val candidates = listOf(
+            "Naruto",
+            "Naruto Shippuuden",
+            "Bleach",
+            "One Piece",
+            "Harry Potter"
+        )
+
+        assertEquals(
+            listOf("Naruto", "Naruto Shippuuden"),
+            filterLocalTagSuggestions(candidates, "Nar", limit = 8)
+        )
+        assertEquals(
+            listOf("Bleach"),
+            filterLocalTagSuggestions(candidates, "Naruto, Bl", limit = 8)
+        )
+        // Empty token: candidates in source order, excluding committed, capped by limit.
+        assertEquals(
+            listOf("Naruto Shippuuden", "Bleach", "One Piece", "Harry Potter"),
+            filterLocalTagSuggestions(candidates, "Naruto, ", limit = 8)
+        )
+        assertEquals(
+            listOf("Naruto", "Naruto Shippuuden", "Bleach"),
+            filterLocalTagSuggestions(candidates, "", limit = 3)
+        )
+        // Substring match when no prefix hits.
+        assertEquals(
+            listOf("Harry Potter"),
+            filterLocalTagSuggestions(candidates, "Pot", limit = 8)
+        )
+    }
+
+    @Test
+    fun applyTagSuggestionReplacesTokenAndAppendsSeparator() {
+        assertEquals("Naruto, ", applyTagSuggestion("", "Naruto"))
+        assertEquals("Naruto, ", applyTagSuggestion("Nar", "Naruto"))
+        assertEquals("Naruto, Sasuke, ", applyTagSuggestion("Naruto, Sa", "Sasuke"))
+        assertEquals("Naruto, Sasuke, ", applyTagSuggestion("Naruto, ", "Sasuke"))
+        // Selecting an already-committed tag does not duplicate it.
+        assertEquals("Naruto, ", applyTagSuggestion("Naruto, Nar", "Naruto"))
+    }
+}
+
+    @Test
     fun defaultSavedSearchNamePrefersQueryThenFandom() {
         assertEquals(
             "slow burn",
@@ -171,4 +268,3 @@ class SearchFilterHelpersTest {
             )
         )
     }
-}

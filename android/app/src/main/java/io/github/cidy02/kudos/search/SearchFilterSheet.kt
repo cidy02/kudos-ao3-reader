@@ -47,7 +47,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3Warning
  * Mirrors Apple `AO3FilterPanel`: sort, rating (+ match / Not Rated),
  * cycling warnings & categories, crossover, completion, word count,
  * updated, language, and comma-separated include/exclude tag fields.
- * Tag autocomplete pickers are deferred (text fields match the model strings).
+ * Tag fields suggest from [localTagSuggestions] (library-only; no network).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +57,8 @@ fun SearchFilterSheet(
     onApply: () -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
-    onSave: (() -> Unit)? = null
+    onSave: (() -> Unit)? = null,
+    localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions()
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -270,13 +271,15 @@ fun SearchFilterSheet(
 
                 FilterSection(
                     title = "Tags",
-                    footer = "Comma-separated. Use Exclude fields for −\"tag\" query clauses."
+                    footer = "Comma-separated. Suggestions come from your library. " +
+                        "Use Exclude fields for −\"tag\" query clauses."
                 ) {
                     TagPairFields(
                         includeLabel = "Fandoms",
                         includeValue = filters.fandom,
                         excludeLabel = "Exclude fandoms",
                         excludeValue = filters.excludedFandoms,
+                        candidates = localTagSuggestions.fandoms,
                         onIncludeChange = { onFiltersChange(filters.copy(fandom = it)) },
                         onExcludeChange = {
                             onFiltersChange(filters.copy(excludedFandoms = it))
@@ -287,6 +290,7 @@ fun SearchFilterSheet(
                         includeValue = filters.characters,
                         excludeLabel = "Exclude characters",
                         excludeValue = filters.excludedCharacters,
+                        candidates = localTagSuggestions.characters,
                         onIncludeChange = { onFiltersChange(filters.copy(characters = it)) },
                         onExcludeChange = {
                             onFiltersChange(filters.copy(excludedCharacters = it))
@@ -297,6 +301,7 @@ fun SearchFilterSheet(
                         includeValue = filters.relationships,
                         excludeLabel = "Exclude relationships",
                         excludeValue = filters.excludedRelationships,
+                        candidates = localTagSuggestions.relationships,
                         onIncludeChange = {
                             onFiltersChange(filters.copy(relationships = it))
                         },
@@ -309,6 +314,7 @@ fun SearchFilterSheet(
                         includeValue = filters.additionalTags,
                         excludeLabel = "Exclude additional tags",
                         excludeValue = filters.excludedAdditionalTags,
+                        candidates = localTagSuggestions.freeforms,
                         onIncludeChange = {
                             onFiltersChange(filters.copy(additionalTags = it))
                         },
@@ -332,17 +338,14 @@ fun SearchFilterSheet(
                         Text("Clear")
                     }
                 }
-                if (onSave != null) {
-                    TextButton(
-                        enabled = filters.isSearchable,
-                        onClick = onSave
-                    ) {
-                        Text("Save")
-                    }
-                }
                 Spacer(modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = onDismiss) {
                     Text("Close")
+                }
+                if (onSave != null) {
+                    OutlinedButton(onClick = onSave) {
+                        Text("Save")
+                    }
                 }
                 Button(
                     enabled = filters.isSearchable,
@@ -423,22 +426,23 @@ private fun TagPairFields(
     includeValue: String,
     excludeLabel: String,
     excludeValue: String,
+    candidates: List<String>,
     onIncludeChange: (String) -> Unit,
     onExcludeChange: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
+        TagSuggestField(
             value = includeValue,
             onValueChange = onIncludeChange,
-            label = { Text(includeLabel) },
-            singleLine = true,
+            label = includeLabel,
+            candidates = candidates,
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedTextField(
+        TagSuggestField(
             value = excludeValue,
             onValueChange = onExcludeChange,
-            label = { Text(excludeLabel) },
-            singleLine = true,
+            label = excludeLabel,
+            candidates = candidates,
             modifier = Modifier.fillMaxWidth()
         )
     }
