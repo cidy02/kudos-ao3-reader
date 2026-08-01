@@ -132,6 +132,22 @@ struct ContentView: View {
                     #endif
                     guard FolderSyncService.snapshot().isDirty else { return }
                     Task { @MainActor in
+                        // A bare Task here was a promise the OS never made: the
+                        // process can be suspended the moment the scene goes
+                        // inactive, and this write is a whole backup package. The
+                        // assertion buys a documented finish window instead of
+                        // hoping the write lands, and the expiration handler ends it
+                        // rather than letting the OS kill the app for overrunning.
+                        #if os(iOS)
+                        var assertion = UIBackgroundTaskIdentifier.invalid
+                        assertion = UIApplication.shared.beginBackgroundTask(withName: "Folder sync up") {
+                            UIApplication.shared.endBackgroundTask(assertion)
+                            assertion = .invalid
+                        }
+                        defer {
+                            if assertion != .invalid { UIApplication.shared.endBackgroundTask(assertion) }
+                        }
+                        #endif
                         _ = try? await FolderSyncService.syncUp(in: modelContext)
                     }
                 @unknown default:

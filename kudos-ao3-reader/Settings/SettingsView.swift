@@ -379,7 +379,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                             }
                             .pickerStyle(.segmented)
 
-                            Toggle("Require Face ID to reveal", isOn: $requireBiometric)
+                            // Named from `LAContext.biometryType` rather than hardcoded:
+                            // the gate evaluates device-owner authentication, so this is
+                            // "Touch ID" / "Optic ID" / "Passcode" where that is the truth.
+                            Toggle(
+                                "Require \(PrivacyGate.authenticationMethodName) to reveal",
+                                isOn: $requireBiometric
+                            )
                         }
                         NavigationLink(value: SettingsRoute.privacy) {
                             Label("Privacy & Local Data", systemImage: "hand.raised")
@@ -1119,6 +1125,8 @@ struct FolderSyncSettingsSection: View {
     let onToggleAutoSync: (Bool) -> Void
     let onShowSyncDetails: () -> Void
 
+    @State private var confirmingDisconnect = false
+
     var body: some View {
         Section {
             LabeledContent {
@@ -1163,8 +1171,26 @@ struct FolderSyncSettingsSection: View {
                     Label("Sync Details", systemImage: "list.bullet.rectangle")
                 }
 
-                Button(role: .destructive, action: onDisconnect) {
+                Button(role: .destructive) {
+                    confirmingDisconnect = true
+                } label: {
                     Label("Disconnect", systemImage: "xmark.circle")
+                }
+                // Unlinking is destructive and was a single tap. Every other
+                // destructive action in this app confirms first (Clear History, bulk
+                // delete); this one did not, and it is one the user cannot undo
+                // without re-picking the folder and re-granting access.
+                .confirmationDialog(
+                    "Disconnect sync folder?",
+                    isPresented: $confirmingDisconnect,
+                    titleVisibility: .visible
+                ) {
+                    Button("Disconnect", role: .destructive, action: onDisconnect)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Kudos stops syncing to this folder. Your library stays on this "
+                        + "device, and the folder's contents are left untouched — you can "
+                        + "reconnect by choosing it again.")
                 }
                 .disabled(isSyncing)
             } else {

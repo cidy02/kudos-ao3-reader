@@ -27,6 +27,15 @@ extension SavedWork {
 /// Tracks which sensitive works the user has temporarily revealed this session,
 /// and gates reveals behind device biometrics when the user has enabled that.
 @MainActor
+private extension View {
+    /// `Button` wrapping that keeps the view's own appearance — the plain style is
+    /// what the row paths in this file already use.
+    func asPlainButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) { self }
+            .buttonStyle(.plain)
+    }
+}
+
 @Observable
 final class PrivacyGate {
     private(set) var revealedIDs: Set<UUID> = []
@@ -73,6 +82,25 @@ final class PrivacyGate {
         )
     }
 
+    /// What this device will actually ask for, named honestly.
+    ///
+    /// The gate evaluates `.deviceOwnerAuthentication` — biometrics **or** the device
+    /// passcode — so a settings label hardcoded to "Face ID" was wrong on every Touch
+    /// ID device, every Vision device, and every phone whose owner has no biometrics
+    /// enrolled. `LAContext.biometryType` reports what is actually enrolled, and the
+    /// passcode fallback is what the wording lands on when nothing is.
+    @MainActor
+    static var authenticationMethodName: String {
+        let context = LAContext()
+        // biometryType is only populated after a canEvaluatePolicy call.
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        switch context.biometryType {
+        case .faceID: return "Face ID"
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        default: return "Passcode"
+        }
+    }
     /// Use this when the surface owns only the visibility result, rather than the
     /// local work collection itself (for example a remote list merged with local rows).
     static func shouldShowMatureReveal(
@@ -286,14 +314,18 @@ struct SensitiveWorkCoverCard: View {
                             .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
                             .allowsHitTesting(false)
                     }
-                    .onTapGesture { onToggleSelection?() }
+                    // A real Button, like every sibling path here: `.onTapGesture`
+                    // carries no button trait, so VoiceOver announced this card as
+                    // plain content and Full Keyboard Access could not reach it. The
+                    // accessibility overrides below still apply; only activation moves.
+                    .asPlainButton { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(work.title)
                     .accessibilityValue(isSelected ? "Selected" : "Not selected")
                     .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             } else {
                 card
-                    .onTapGesture { gate.reveal(work) }
+                    .asPlainButton { gate.reveal(work) }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Hidden mature work. Activate to reveal.")
             }
