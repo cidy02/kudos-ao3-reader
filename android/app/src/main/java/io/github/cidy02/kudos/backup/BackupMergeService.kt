@@ -99,7 +99,11 @@ object BackupMergeService {
             fontsUpdated = fontMerge.updated
         )
 
-        val collections = mergeCollections(current.collections, manifest.collections).also {
+        val collections = mergeCollections(
+            current.collections,
+            manifest.collections,
+            tombstoneIndex
+        ).also {
             summary = summary.copy(
                 collectionsCreated = it.created,
                 collectionsUpdated = it.updated
@@ -361,39 +365,72 @@ object BackupMergeService {
         )
     }
 
+    /**
+     * LWW on `lastModifiedAt`, matching [mergeWork]/[mergeQueues]: an incoming
+     * deletion or rename only applies if it's not older than the local copy, and a
+     * new-to-this-device deleted collection is suppressed by its own tombstone
+     * rather than silently recreated.
+     */
     private fun mergeCollections(
         current: List<WorkCollection>,
-        incoming: List<BackupCollection>
+        incoming: List<BackupCollection>,
+        tombstoneIndex: TombstoneIndex
     ): MergeItems<WorkCollection> {
         val collectionsById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
         }
-        val names = current.mapTo(mutableSetOf()) { it.name }
+        val names = current.filterNot { it.isDeleted }.mapTo(mutableSetOf()) { it.name }
         var created = 0
         var updated = 0
 
         incoming.forEach { archived ->
-            if (archived.isDeleted == true) return@forEach
             val id = BackupPaths.canonicalUuid(archived.id, "collection.id")
+            val incomingModified = parseOptionalInstant(archived.lastModifiedAt)
+                ?: parseOptionalInstant(archived.dateAdded)
             val existing = collectionsById[id]
+
             if (existing == null) {
+                if (archived.isDeleted == true) return@forEach
+                when (tombstoneIndex.collectionResolution(id, incomingModified)) {
+                    TombstoneResolution.SUPPRESS_STALE -> return@forEach
+                    TombstoneResolution.REVIVE_NEWER,
+                    TombstoneResolution.PRESERVE_AMBIGUOUS,
+                    TombstoneResolution.NO_TOMBSTONE -> Unit
+                }
                 val restoredName = archived.name.uniqueName(names)
                 val restored = archived.toWorkCollection(nameOverride = restoredName)
                 collectionsById[id] = restored
                 names += restoredName
                 created += 1
             } else {
+                val localModified = existing.lastModifiedAt ?: existing.dateAdded
+                if (!SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
+                    return@forEach
+                }
+                val archivedIsDeleted = archived.isDeleted == true
                 val mergedWorkIds = (existing.workIds + archived.workIDs)
                     .map { BackupPaths.normalizeIdForComparison(it) }
                     .distinct()
                 collectionsById[id] = existing.copy(
-                    name = archived.name,
+                    name = if (archivedIsDeleted) existing.name else archived.name,
                     dateAdded = BackupValidator.parseInstant(archived.dateAdded, "collection.dateAdded"),
                     workIds = mergedWorkIds,
                     description = archived.description ?: existing.description,
-                    sortOrder = archived.sortOrder ?: existing.sortOrder
+                    sortOrder = archived.sortOrder ?: existing.sortOrder,
+                    lastModifiedAt = incomingModified ?: existing.lastModifiedAt,
+                    isDeleted = archivedIsDeleted,
+                    deletedAt = if (archivedIsDeleted) {
+                        parseOptionalInstant(archived.deletedAt) ?: incomingModified
+                    } else {
+                        null
+                    },
+                    permanentDeletionScheduledAt = if (archivedIsDeleted) {
+                        parseOptionalInstant(archived.permanentDeletionScheduledAt)
+                    } else {
+                        null
+                    }
                 )
-                names += archived.name
+                if (!archivedIsDeleted) names += archived.name
                 updated += 1
             }
         }
@@ -716,6 +753,7 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
     private val queueById = mutableMapOf<String, SyncTombstone>()
     private val membershipById = mutableMapOf<String, SyncTombstone>()
     private val annotationById = mutableMapOf<String, SyncTombstone>()
+    private val collectionById = mutableMapOf<String, SyncTombstone>()
 
     init {
         tombstones.forEach { tombstone ->
@@ -734,6 +772,8 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
                     indexNewest(membershipById, recordId, tombstone)
                 SyncTombstoneRecordType.READING_ANNOTATION ->
                     indexNewest(annotationById, recordId, tombstone)
+                SyncTombstoneRecordType.WORK_COLLECTION ->
+                    indexNewest(collectionById, recordId, tombstone)
                 else -> Unit
             }
         }
@@ -777,6 +817,14 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
         return SyncMerge.tombstoneResolution(
             incomingModifiedAt = incomingModifiedAt,
             tombstoneDeletedAt = annotationById[BackupPaths.normalizeIdForComparison(id)]
+                ?.lastModifiedAt
+        )
+    }
+
+    fun collectionResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt = incomingModifiedAt,
+            tombstoneDeletedAt = collectionById[BackupPaths.normalizeIdForComparison(id)]
                 ?.lastModifiedAt
         )
     }

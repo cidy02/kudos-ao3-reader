@@ -221,6 +221,104 @@ class BackupCollectionMergeTest {
         assertTrue(result.snapshot.collections.any { it.name == "Favorites" })
         assertTrue(result.snapshot.collections.any { it.name == "Favorites (Restored)" })
     }
+
+    @Test
+    fun keepsLocalRenameWhenLocalLastModifiedIsNewer() {
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Local Name",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-07-10T00:00:00Z")
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Archive Name",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(collections = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertEquals("Local Name", merged.name)
+    }
+
+    @Test
+    fun appliesArchiveRenameWhenArchiveLastModifiedIsNewer() {
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Local Name",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Archive Name",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-07-10T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(collections = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertEquals("Archive Name", merged.name)
+    }
+
+    @Test
+    fun suppressesResurrectionOfDeletedCollection() {
+        val deletedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = COLLECTION_ID,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        assertTrue(result.snapshot.collections.none { it.id == COLLECTION_ID })
+    }
+
+    @Test
+    fun revivesCollectionWhenArchiveIsNewerThanTombstone() {
+        val deletedAt = Instant.parse("2026-01-01T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = COLLECTION_ID,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-07-10T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        assertTrue(result.snapshot.collections.any { it.id == COLLECTION_ID })
+    }
 }
 
 class BackupBookmarkMergeByUrlTest {

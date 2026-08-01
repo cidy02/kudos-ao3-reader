@@ -4,7 +4,9 @@ import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.time.Instant
@@ -21,6 +23,7 @@ class ReadingQueueRepository(
 ) {
     private val queueDao = database.readingQueueDao()
     private val workDao = database.workDao()
+    private val tombstoneDao = database.syncTombstoneDao()
 
     suspend fun listQueues(): List<ReadingQueue> {
         return queueDao.getActiveQueues().map { it.toDomain() }
@@ -74,8 +77,23 @@ class ReadingQueueRepository(
 
     suspend fun removeWork(queueId: String, workId: String) {
         val existing = queueDao.getMembershipForWork(queueId, workId) ?: return
+        val now = clock()
         queueDao.deleteMembershipById(existing.id)
-        touchQueueMembershipChanged(queueId, clock())
+        // Without a tombstone, restoring a backup that still lists this membership
+        // silently resurrects it (mergeQueues/TombstoneIndex.membershipResolution
+        // expect one to exist for every removed membership).
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = existing.id,
+                recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+                createdAt = now,
+                lastModifiedAt = now,
+                deletedOnDeviceID = "",
+                deletionReason = "queueMembershipRemoved"
+            )
+        )
+        touchQueueMembershipChanged(queueId, now)
     }
 
     suspend fun ensureSavedForLaterQueue(): ReadingQueue {

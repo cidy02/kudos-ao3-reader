@@ -18,9 +18,10 @@ class KudosApplication : Application() {
         super.onCreate()
         container = KudosAppContainer(this)
         // Apple PreservedWorkService launch sweep: permanently remove soft-deleted
-        // works past permanentDeletionScheduledAt (90-day recovery window).
+        // works and collections past permanentDeletionScheduledAt (90-day window).
         applicationScope.launch {
             runCatching { container.workRepository.sweepExpiredSoftDeletes() }
+            runCatching { container.workRepository.sweepExpiredCollectionSoftDeletes() }
         }
     }
 }

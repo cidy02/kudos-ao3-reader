@@ -84,7 +84,7 @@ class BackupRepository(
         }
         val bookmarks = database.bookmarkDao().getAll().map { it.toDomain() }
         val fonts = database.customFontDao().getAll().map { it.toDomain() }
-        val collections = database.collectionDao().getAll().map { entity ->
+        val collections = database.collectionDao().getAllIncludingDeleted().map { entity ->
             entity.toDomain(database.collectionDao().getWorkIdsForCollection(entity.id))
         }
         val savedSearches = database.savedSearchDao().getAll().map { it.toDomain() }

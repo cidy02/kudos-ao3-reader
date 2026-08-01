@@ -280,19 +280,37 @@ class WorkRepository(
 
     suspend fun collectionsForWork(workId: String): List<WorkCollection> {
         return collectionDao.getCollectionsForWork(workId).map { entity ->
-            entity.toDomain(collectionDao.getWorkIdsForCollection(entity.id))
+            entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
         }
     }
 
     suspend fun allCollections(): List<WorkCollection> {
         return collectionDao.getAll().map { entity ->
-            entity.toDomain(collectionDao.getWorkIdsForCollection(entity.id))
+            entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
         }
     }
 
     suspend fun getCollection(collectionId: String): WorkCollection? {
         val entity = collectionDao.getById(collectionId) ?: return null
-        return entity.toDomain(collectionDao.getWorkIdsForCollection(entity.id))
+        return entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
+    }
+
+    /** Soft-deleted collections in Recently Deleted (newest deletion first). */
+    suspend fun listRecentlyDeletedCollections(): List<WorkCollection> {
+        return collectionDao.getDeleted().map { entity ->
+            entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
+        }
+    }
+
+    /**
+     * Soft-deleted collections for Recently Deleted UI. Membership is loaded as a
+     * flat id list without the [collectionDao] work-count join — Recently Deleted
+     * only needs the collection's name/expiry, not its active work count.
+     */
+    fun observeRecentlyDeletedCollections(): Flow<List<WorkCollection>> {
+        return collectionDao.observeDeleted().map { entities ->
+            entities.map { it.toDomain() }
+        }
     }
 
     /** Saved works currently in [collectionId], newest library-add first. */
@@ -311,14 +329,16 @@ class WorkRepository(
             it.name.equals(trimmed, ignoreCase = true)
         }
         if (existing != null) {
-            return existing.toDomain(collectionDao.getWorkIdsForCollection(existing.id))
+            return existing.toDomain(collectionDao.getActiveWorkIdsForCollection(existing.id))
         }
+        val now = clock()
         val entity = CollectionEntity(
             id = uuidFactory(),
             name = trimmed,
-            dateAdded = clock(),
+            dateAdded = now,
             description = null,
-            sortOrder = null
+            sortOrder = null,
+            lastModifiedAt = now
         )
         collectionDao.upsert(entity)
         return entity.toDomain(emptyList())
@@ -327,22 +347,91 @@ class WorkRepository(
     suspend fun addToCollection(workId: String, name: String): List<WorkCollection> {
         val collection = createCollection(name)
         collectionDao.addWork(CollectionWorkCrossRef(collection.id, workId))
+        touchCollection(collection.id)
         return collectionsForWork(workId)
     }
 
     suspend fun removeFromCollection(workId: String, collectionId: String): List<WorkCollection> {
         collectionDao.removeWork(collectionId, workId)
+        touchCollection(collectionId)
         return collectionsForWork(workId)
     }
 
+    private suspend fun touchCollection(collectionId: String) {
+        val entity = collectionDao.getById(collectionId) ?: return
+        collectionDao.upsert(entity.copy(lastModifiedAt = clock()))
+    }
+
     /**
-     * Deletes the collection shelf only. Works remain in Library (Apple parity).
-     * Cross-ref rows cascade via FK when the collection row is removed.
+     * Moves a collection to Recently Deleted for [RECOVERY_WINDOW] (Apple
+     * `PreservedWorkService.softDelete(_ collection:)`). The works inside stay in
+     * the Library untouched; only the shelf itself is deleted and recoverable.
      */
-    suspend fun deleteCollection(collectionId: String) {
-        // Explicitly clear memberships first so callers without CASCADE still work in tests.
+    suspend fun softDeleteCollection(collectionId: String): WorkCollection? {
+        val entity = collectionDao.getById(collectionId) ?: return null
+        val now = clock()
+        val updated = entity.copy(
+            isDeleted = true,
+            deletedAt = now,
+            permanentDeletionScheduledAt = now.plus(RECOVERY_WINDOW),
+            lastModifiedAt = now
+        )
+        collectionDao.upsert(updated)
+        recordCollectionTombstone(updated.id, now, deletionReason = "collectionDeleted")
+        return updated.toDomain(collectionDao.getWorkIdsForCollection(collectionId))
+    }
+
+    /** Restores a soft-deleted collection and retracts its tombstone. */
+    suspend fun restoreCollectionFromRecentlyDeleted(collectionId: String): WorkCollection? {
+        val entity = collectionDao.getById(collectionId) ?: return null
+        val now = clock()
+        val restored = entity.copy(
+            isDeleted = false,
+            deletedAt = null,
+            permanentDeletionScheduledAt = null,
+            lastModifiedAt = now
+        )
+        collectionDao.upsert(restored)
+        tombstoneDao.deleteByRecord(collectionId, SyncTombstoneRecordType.WORK_COLLECTION)
+        return restored.toDomain(collectionDao.getActiveWorkIdsForCollection(collectionId))
+    }
+
+    /**
+     * Permanently deletes the collection shelf. Works remain in Library (Apple
+     * parity). Cross-ref rows cascade via FK when the collection row is removed.
+     */
+    suspend fun hardDeleteCollection(collectionId: String) {
         collectionDao.removeAllWorks(collectionId)
         collectionDao.deleteById(collectionId)
+        recordCollectionTombstone(collectionId, clock(), deletionReason = "collectionDeleted")
+    }
+
+    /** Permanently deletes soft-deleted collections past their recovery window. */
+    suspend fun sweepExpiredCollectionSoftDeletes(): Int {
+        val now = clock()
+        val expired = collectionDao.getExpiredSoftDeletes(now)
+        for (entity in expired) {
+            hardDeleteCollection(entity.id)
+        }
+        return expired.size
+    }
+
+    private suspend fun recordCollectionTombstone(
+        collectionId: String,
+        now: Instant,
+        deletionReason: String
+    ) {
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = collectionId,
+                recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION,
+                createdAt = now,
+                lastModifiedAt = now,
+                deletedOnDeviceID = "",
+                deletionReason = deletionReason
+            )
+        )
     }
 
     companion object {

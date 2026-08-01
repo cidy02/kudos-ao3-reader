@@ -41,7 +41,10 @@ class KudosAppContainer(context: Context) {
             KudosDatabase::class.java,
             KudosDatabase.DatabaseName
         )
-            .addMigrations(KudosDatabaseMigrations.MIGRATION_1_2)
+            .addMigrations(
+                KudosDatabaseMigrations.MIGRATION_1_2,
+                KudosDatabaseMigrations.MIGRATION_2_3
+            )
             .build()
     }
 

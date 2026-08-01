@@ -111,7 +111,7 @@ fun CollectionDetailScreen(
             working = true
             error = null
             try {
-                workRepository.deleteCollection(collectionId)
+                workRepository.softDeleteCollection(collectionId)
                 confirmDelete = false
                 onCollectionDeleted()
             } catch (e: Exception) {
@@ -128,7 +128,8 @@ fun CollectionDetailScreen(
             title = { Text(if (name.isBlank()) "Delete collection?" else "Delete “$name”?") },
             text = {
                 Text(
-                    "The collection is removed. Works stay in your Library."
+                    "The collection moves to Recently Deleted for 90 days. Works stay in " +
+                        "your Library."
                 )
             },
             confirmButton = {

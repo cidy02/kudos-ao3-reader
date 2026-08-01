@@ -1,0 +1,1669 @@
+{
+  "confirmed": [],
+  "rejected": [
+    {
+      "area": "nav",
+      "areaTitle": "App shell, navigation, tab structure",
+      "finding": {
+        "androidFile": "home/HomeScreen.kt",
+        "androidLine": 350,
+        "iosFile": "kudos-ao3-reader/Features/Home/HomeSectionListView.swift",
+        "iosLine": 221,
+        "severity": "critical",
+        "category": "privacy-leak",
+        "technicalSummary": "On iOS, every carousel/row that can contain a Mature/Explicit work (Home, Library, History, Favorites) renders it through `SensitiveWorkCoverCard`/`SensitiveWorkRow` (kudos-ao3-reader/Features/Privacy/MatureContent.swift:238-319), whose tap handler for a blurred card is `gate.reveal(work)` (MatureContent.swift:296) \u2014 i.e. a tap reveals the card in place (optionally behind Face ID, MatureContent.swift:85-102) and never navigates anywhere. The app also holds a single app-scoped `PrivacyGate` instance injected via `.environment(privacyGate)` from ContentView.swift:22,68, so the reveal state is shared by every screen. On Android, only `library/LibraryScreen.kt` reproduces this pattern correctly (`onOpen = { if (obscured) actions.onReveal(...) ... }`, LibraryScreen.kt:950-958). `home/HomeScreen.kt`'s `HomeWorkCover` does not: `val canRead = work.hasEpub && !obscured` (line 325) and `onOpen = if (canRead) onOpenReader else onOpenWork` / `onOpenDetails = onOpenWork` (lines 350-351) \u2014 when `obscured == true`, `onOpen` is unconditionally `onOpenWork`, which calls `navController.navigate(Routes.WorkDetail)` (AppNavHost.kt:78-81). There is no reveal step at all for Home's carousels. `works/WorkDetailScreen.kt` has zero privacy/obscure/blur handling of its own (no match for mature/isAdult/obscure/blur/reveal in that file), so the destination screen shows the work's full title, summary, tags and warnings immediately. There is also no app-level shared reveal-state object analogous to `PrivacyGate` (KudosAppContainer/KudosApp inject nothing of the kind), so `LibraryViewModel`'s local `revealedWorkIds` (LibraryViewModel.kt:30) is the only reveal mechanism in the whole app, and it doesn't cover Home.",
+        "plainEnglishSummary": "When 'Hide mature content' (Blur mode) is turned on, blurred/hidden Mature or Explicit works on the Home tab are not actually protected: tapping the blurred card jumps straight into that work's full details page \u2014 title, summary, warnings, everything \u2014 with no unlock step and no Face-ID-style confirmation. On the Library tab the same blurred card correctly asks you to tap-to-reveal first, so this is a Home-tab-specific hole in a privacy feature the app advertises as on by default.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "nav",
+      "areaTitle": "App shell, navigation, tab structure",
+      "finding": {
+        "androidFile": "app/KudosApp.kt",
+        "androidLine": 15,
+        "iosFile": "kudos-ao3-reader/App/ContentView.swift",
+        "iosLine": 74,
+        "severity": "major",
+        "category": "broken-feature",
+        "technicalSummary": "iOS persists the whole-app theme through `ThemeManager.appTheme` (App/ThemeManager.swift:13-14, backed by UserDefaults, ContentView.swift:74 `.preferredColorScheme(theme.appTheme.colorScheme)` drives the actual rendered appearance). Android has an equivalent persisted setting, `AppThemeSetting`, written via `SettingsRepository.updateAppTheme` (data/preferences/SettingsRepository.kt:34-36) and edited from a Settings screen picker with Light/Sepia/Dark/OLED/System chips (settings/SettingsScreen.kt:280-312, whose footer literally says 'Light, Sepia, Dark, or System across the app'). However, `KudosTheme(...)` \u2014 the single `MaterialTheme` wrapper that actually determines every color in the app (ui/theme/Theme.kt:66-84) \u2014 is called exactly once in the whole codebase, from `KudosApp.kt:15`, and is driven by a completely separate, in-memory-only `KudosThemeMode` enum (`var themeMode by remember { mutableStateOf(KudosThemeMode.System) }`, KudosApp.kt:13) that is only ever mutated by the small palette icon shown on Account/Settings (MainScaffold.kt:104-112, `onCycleTheme`). `SettingsRepository`'s persisted `appTheme` is read only by `ReaderSettingsMapper` (for the reader) and `BackupSettings`; it never reaches `KudosTheme`. Net effect: picking Light/Sepia/Dark/OLED in Settings persists the choice and visibly updates the chip selection, but does nothing to the app's actual rendered colors; the app's real (unlabeled, unpersisted) theme control is the palette icon, which resets to System on every process restart.",
+        "plainEnglishSummary": "The Settings screen has a normal-looking theme picker (Light / Sepia / Dark / OLED / System) that saves your choice but never actually changes how the app looks \u2014 the app is colored by a different, hidden control (a small palette icon that only appears on the Account/Settings screen) that isn't saved at all, so it resets to System every time you reopen the app. A user who picks Sepia in Settings will see nothing change, and even the palette-icon workaround won't stick between launches.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "nav",
+      "areaTitle": "App shell, navigation, tab structure",
+      "finding": {
+        "androidFile": "app/AppNavHost.kt",
+        "androidLine": 55,
+        "iosFile": "kudos-ao3-reader/Features/Home/HomeView.swift",
+        "iosLine": 123,
+        "severity": "major",
+        "category": "navigation-state-bug",
+        "technicalSummary": "iOS gives each tab its own typed `NavigationStack(path: $path)` with `.navigationDestination(for: Type.self)` (e.g. HomeView.swift:106,123-131; LibraryView.swift:128,143-150) \u2014 every pushed screen carries its own associated data (the specific `SavedWork`/`AO3WorkSummary`/etc.) as part of the path element itself, so there is never ambiguity about which work a given stack entry shows. Android's `AppNavHost` instead uses a single flat `NavHost` where every destination route (`work-detail`, `reader`, `author-works`, `comments`, ...) takes no arguments, and 'which item is currently selected' is tracked by app-scoped `remember { mutableStateOf(...) }` variables declared once at AppNavHost.kt:55-64 (`selectedWorkSource`, `readerWorkId`, `selectedAuthorName`, etc.) that are shared by every call site and never reset on back-navigation. Concretely: Home's `onOpenWork` sets `selectedWorkSource = LocalWork(A)` and pushes `Routes.WorkDetail` (AppNavHost.kt:78-81); from that Work Detail screen tapping the author pushes Author Works (`onOpenAuthor`, AppNavHost.kt:394-397); from Author Works tapping a different work by that author sets `selectedWorkSource = RemoteSummary(B)` and pushes `Routes.WorkDetail` again (AppNavHost.kt:408-411) \u2014 none of these `navigate()` calls use `launchSingleTop`, so the back stack now legitimately contains two separate `work-detail` entries. Pressing back twice returns the user to the *first* `work-detail` entry, but `composable(Routes.WorkDetail)` re-executes and reads the *current* value of `selectedWorkSource`, which is still `RemoteSummary(B)` \u2014 the screen the user originally left (Work A) is gone; Work B is shown instead. The same shared-variable pattern applies to `readerWorkId`, `selectedCommentTarget`, `selectedAccountListType`, `selectedBrowseCategory/Fandom`, `webFallbackUrl`, `selectedQueueId`, `selectedCollectionId`, and is further compounded by `MainScaffold.kt`'s bottom-nav `navigateTopLevel` (lines 217-225), which uses the standard Compose 'multiple back stacks' `popUpTo(...){saveState=true}/restoreState=true` recipe \u2014 restoring a saved per-tab back stack re-renders whichever of these singleton-route destinations it contains using whatever the shared variable happens to hold at that moment, not what it held when that tab's entry was originally pushed.",
+        "plainEnglishSummary": "Ordinary browsing can leave you looking at the wrong work. Example: open a work from Home, tap its author to see their other works, then open a different work from that list. Now press back twice \u2014 instead of landing back on the work you started from, you land back on the second work you just visited, because the app only remembers 'the most recently opened work' globally rather than remembering which work belonged to which screen in your back history. The same issue affects going back to a previously-opened Reader, Comments thread, Author page, Reading Queue, Collection, or Browse fandom/work list whenever more than one of that same kind of screen has been opened along the way.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "nav",
+      "areaTitle": "App shell, navigation, tab structure",
+      "finding": {
+        "androidFile": "app/MainScaffold.kt",
+        "androidLine": 148,
+        "iosFile": "kudos-ao3-reader/App/ContentView.swift",
+        "iosLine": 61,
+        "severity": "minor",
+        "category": "behavior-parity",
+        "technicalSummary": "iOS mounts `DownloadQueueBanner()` as a `.overlay(alignment: .bottom)` on the whole tab container (ContentView.swift:61), and the banner's only visibility condition is `queue.isActive` (Services/DownloadQueue.swift:118-146) \u2014 there is no reader-specific suppression. Since the Reader is pushed via `.navigationDestination(item:)` inside a tab's own `NavigationStack` (Features/Library/WorkCardActions.swift:649, Features/WorkDetail/WorkDetailView.swift:175) rather than presented modally, the overlay (attached above the TabView) keeps rendering over the Reader too. Android's `MainScaffold.kt:148-153` explicitly wraps `DownloadQueueBanner` in `if (!isReader)`, hiding it whenever the current route is `Routes.Reader`, even though `container.downloadQueue` may still be actively downloading.",
+        "plainEnglishSummary": "If a work is downloading in the background and you open the reader to read something else, iOS keeps showing a small 'Downloading\u2026' pill at the bottom of the screen; Android hides it completely while you're reading and only shows it again once you leave the reader. Progress isn't lost, just invisible during that time, which is a small but real difference from what iOS shows.",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "nav",
+      "areaTitle": "App shell, navigation, tab structure",
+      "finding": {
+        "androidFile": "app/NavigationRoutesTest.kt",
+        "androidLine": 1,
+        "severity": "note",
+        "category": "test-coverage",
+        "technicalSummary": "The only test file for the `app` package, `test/.../app/NavigationRoutesTest.kt`, exercises purely static data in `Routes.kt` (title strings, the top-level destination list). Nothing tests `AppNavHost.kt`'s stateful navigation wiring (the shared-selection-variable issue above) or `KudosApp.kt`/`MainScaffold.kt`'s theme wiring (the disconnected `AppThemeSetting` vs `KudosThemeMode` issue above) \u2014 both defects live in exactly the files this package's tests don't touch. Some of this (Compose UI state, screen composition) is hard to unit-test with JVM tests, but the navigation-state bug's core logic (which route reads which variable) could be pulled out and tested, and a simple assertion that `KudosTheme`'s input is sourced from `SettingsRepository` would have caught the theme disconnect.",
+        "plainEnglishSummary": "There are no automated tests covering how the app remembers which screen/tab is showing what, or whether the Settings theme picker actually changes the app's colors \u2014 the two most serious bugs found in this review both live in code that has no test coverage at all.",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt",
+        "androidLine": 350,
+        "iosFile": "kudos-ao3-reader/Features/Privacy/MatureContent.swift",
+        "iosLine": 296,
+        "severity": "critical",
+        "category": "privacy-leak",
+        "confidence": "high",
+        "technicalSummary": "In `HomeWorkCover` (HomeScreen.kt:317-371), when a work is Obscured (`display.privacyVisibility == LibraryPrivacyVisibility.Obscured`), `WorkCoverCard` is still passed `onOpen = if (canRead) onOpenReader else onOpenWork` (line 350) and `onOpenDetails = onOpenWork` (line 351) \u2014 the same navigation callbacks used for normal cards. `WorkCoverCard` itself (ui/components/WorkCoverCard.kt:79-102) attaches `combinedClickable(onClick = onOpen, ...)` to the whole card *before* branching on `obscured`, so tapping a blurred card fires `onOpenWork` directly, navigating straight to `WorkDetailScreen`, which has no mature-content gating anywhere in it (no `obscured`/`hideMature`/blur logic found in WorkDetailScreen.kt). So the blurred cover with its 'Tap to reveal' label is purely decorative on Home: one tap takes the user to the full, unobscured Work Details page instead of revealing the card in place. Contrast with Android's own `LibraryScreen.kt` (`LibraryCarouselCard`, lines 950-957), which correctly special-cases this: `onOpen = { if (obscured) actions.onReveal(work.id) else ... }`. On iOS, `SensitiveWorkCoverCard` (MatureContent.swift:253-299) wraps a blurred card with `.onTapGesture { gate.reveal(work) }` (line 296), so tapping reveals it in place instead of navigating anywhere. `hideMatureContent` defaults to `true` and `matureContentMode` defaults to `Obscure` (SettingsModels.kt:73-74), so this is hit out-of-the-box for anyone with a Mature/Explicit work in their library, not an opt-in edge case.",
+        "plainEnglishSummary": "On the Home screen, a work you've told the app to blur for being Mature/Explicit shows the blurred cover with a 'Tap to reveal' label, but tapping it doesn't reveal it in place \u2014 it jumps straight to that work's full details page, which shows everything with no blur or warning at all. The privacy protection you turned on (and which is actually the default setting) is bypassed with a single, ordinary tap on Home, even though the same kind of card works correctly (reveals in place) on the Library screen."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/works/WorkImporter.kt",
+        "androidLine": 32,
+        "iosFile": "kudos-ao3-reader/Services/ReadingQueueService.swift",
+        "iosLine": 242,
+        "severity": "major",
+        "category": "correctness",
+        "confidence": "high",
+        "technicalSummary": "iOS deliberately distinguishes 'saved to Library' (`isSaved`) from 'added to a reading queue' (`isQueuedForLater`): `ReadingQueueService.add(_:to:in:)` (ReadingQueueService.swift:242) sets only `work.isQueuedForLater = true`, and `addToSavedForLater(_ summary:...)` (line 270-299) constructs a new `SavedWork` without setting `isSaved`. `SavedWork.isQueueOnlyWork` (Models.swift:376-378) is `isQueuedForLater && !isSaved && !isFavorite`, and `HomeSectionKind.works(from:visible:)` explicitly excludes queue-only works from Reading Now / Recently Updated / Recently Opened (HomeSections.swift:57,66,71) so a work added only to a queue stays out of Home/Library shelves until the user explicitly saves or favorites it. On Android there is no `isQueuedForLater`/queue-only concept at all in `SavedWork` (core/model/SavedWork.kt) or `LibraryQuery`. Every path that adds a remote work to a reading queue \u2014 `onAddToSavedForLater` and the 'Add to Queue' picker in WorkDetailScreen.kt (lines 646-663, 499-522) \u2014 routes through `ensureLocalThen` (WorkDetailScreen.kt:367-378), which for a not-yet-local work calls `workImporter.saveMetadataOnly(remote)`; that call always passes `markSaved = true` (WorkImporter.kt:25-36, specifically line 32). So a work merely queued for later is unconditionally marked `isSaved = true` and immediately becomes a full Library item (counted in `totalSaved`, eligible for Continue Reading/Recently Opened/etc. once opened/read), unlike iOS where it stays queue-only until the user explicitly saves it.",
+        "plainEnglishSummary": "On iPhone, adding a work to a Reading Queue (like 'Saved for Later') without also explicitly saving it keeps that work out of your Library and Home dashboard until you choose to save or favorite it. On Android, simply adding a work to any reading queue automatically and silently marks it as fully 'saved,' so it immediately counts toward your saved-works total and can show up on your Home/Library shelves \u2014 there's no way to just queue something without it also becoming a permanent library entry."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt",
+        "androidLine": 223,
+        "iosFile": "kudos-ao3-reader/Features/Home/HomeView.swift",
+        "iosLine": 232,
+        "severity": "major",
+        "category": "missing-feature",
+        "confidence": "high",
+        "technicalSummary": "iOS's `subscriptionsSection` (HomeView.swift:224-257) runs `CanonicalWorkMerge.remoteLed(remote: subscriptions, localLibrary: works.filter(passesPrivacy))` (CanonicalWorkMerge.swift:14-27) before rendering, so any subscribed work that's also saved locally renders as a `CanonicalWorkCoverCard` with `entry.local` set (CanonicalWorkCoverCard.swift:8-28) \u2014 showing its real reading progress, using the local privacy-aware `SensitiveWorkCoverCard`, and navigating straight into the reader on tap. Android's `SubscriptionsShelf` (HomeScreen.kt:223-289) renders `state.subscriptions` (raw `AO3WorkSummary` list from `accountListRepository.load`) directly through `RemoteWorkCover` (lines 291-314) with no merge against the local library at all \u2014 every subscribed work always shows the plain remote card (no reading progress, no saved/favorite badges) and tapping it always calls `onOpenRemoteWork`, which AppNavHost.kt (lines 86-89) routes to `WorkDetailSource.RemoteSummary`, a fresh network fetch \u2014 even for a work the user has already saved locally with reading progress.",
+        "plainEnglishSummary": "On iPhone, if you're subscribed to a work on AO3 that you've also saved in your Library, its Subscriptions card on Home shows your actual reading progress and tapping it jumps straight into the reader where you left off. On Android, every Subscriptions card looks the same generic way regardless of whether you've already saved that work, and tapping it always sends you to a freshly-loaded work details page instead of continuing where you left off reading."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt",
+        "androidLine": 181,
+        "iosFile": "kudos-ao3-reader/Features/Home/HomeView.swift",
+        "iosLine": 189,
+        "severity": "major",
+        "category": "missing-feature",
+        "confidence": "high",
+        "technicalSummary": "iOS's `localSection(_:works:)` (HomeView.swift:189-222) wires `onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil` on every local carousel, pushing `HomeSectionListView(kind:)` \u2014 a dedicated, full vertical list for that section (HomeSectionListView.swift). Android's `HomeShelf` composable (HomeScreen.kt:181-221) has no `onSeeAll`/'See all' affordance at all \u2014 its `KudosSectionHeader` call (lines 191-195) omits the `trailing` parameter that `KudosUi.kt:72` supports and that `SubscriptionsShelf` (lines 239-256) does use for its own 'See all' button. All four local shelves (Continue Reading line 91-107, Recently Updated 108-123, Favorites 133-142, Recently Opened 143-152) are capped with `.take(HomeShelfLimit)` (12, line 385) and have no way to view items beyond the first 12 from Home. 'Recently Updated' in particular (`HomeDashboard.recentlyUpdated`) has no equivalent shelf anywhere else in the app (LibraryScreen.kt / LibraryUiState has no 'recentlyUpdated' field), so any updated work beyond the newest 12 is completely unreachable from the UI.",
+        "plainEnglishSummary": "On iPhone, every section on the Home screen (Continue Reading, Recently Updated, Favorites, Recently Opened) has a 'See all' button that opens the full list, so nothing is lost if you have more than a handful of items. On Android, these sections just stop after 12 items with no way to see the rest \u2014 and for 'Recently Updated' specifically, there's nowhere else in the app to find those extra works at all, so if you have more than 12 works with new chapters, you'll never see all of them."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/works/WorkUpdateChecker.kt",
+        "androidLine": 36,
+        "iosFile": "kudos-ao3-reader/Services/WorkUpdateChecker.swift",
+        "iosLine": 38,
+        "severity": "minor",
+        "category": "correctness",
+        "confidence": "high",
+        "technicalSummary": "Both implementations document themselves as 'polite... throttled so opening Home re-checks each work at most every few hours.' On a failed fetch, iOS's `checkForUpdates` still stamps `work.lastUpdateCheck = Date()` in its `catch` block (WorkUpdateChecker.swift:34-40) specifically so, per its own comment, 'a failing work waits out minInterval instead of being retried on every Home visit.' Android's equivalent (`WorkUpdateChecker.kt:35-39`) does `is AO3Result.Failure -> { continue }` without updating `lastUpdateCheck`, so `shouldCheck` (lines 53-58) will return true again on the very next Home load/refresh for any work whose check keeps failing (network error, rate limit, locked/deleted AO3 page). The 6-hour backoff (`MinInterval`, line 51) therefore only applies to successful checks, not failing ones \u2014 the opposite of the documented intent \u2014 and could cause repeated AO3 requests for the same broken work on every app open.",
+        "plainEnglishSummary": "When the app can't check a work for new chapters (say the work was deleted on AO3, or there's a network hiccup), the iPhone app remembers not to try again for a few hours. The Android app forgets this and will keep retrying that same failing check every single time you open Home, which is both wasted effort and impolite to AO3's servers."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt",
+        "androidLine": 133,
+        "iosFile": "kudos-ao3-reader/Features/Home/HomeView.swift",
+        "iosLine": 208,
+        "severity": "minor",
+        "category": "correctness",
+        "confidence": "medium",
+        "technicalSummary": "On iOS, every local carousel (readingNow, recentlyUpdated, favorites, recentlyOpened) uses the same `NavigationLink(value: LocalWorkDestination.reader(work))` (HomeView.swift:208), and the shared destination handler calls `markUpdateSeen` on open (line 125, definition lines 299-303), which clears `hasUpdate` for any local work opened from any Home shelf. On Android, only the Continue Reading (lines 97-104) and Recently Updated (lines 113-120) shelves wrap their callbacks with `viewModel.onOpenLocalWork(id)` (which calls `workRepository.markUpdateSeen`, HomeViewModel.kt:100-104); the Favorites (lines 138-139) and Recently Opened (lines 148-149) shelves pass the raw `onOpenWork`/`onOpenReader` callbacks directly, bypassing it. `markUpdateSeen` is guarded by `hasUpdate` in both implementations, so this only matters for a work that is simultaneously a favorite (or has been read before) and has a pending, unseen AO3 chapter update \u2014 opening it via Favorites/Recently Opened on Android won't clear that update flag, so the work keeps showing '+N new'/'Updated' in Recently Updated even after being opened, until it's separately opened from Continue Reading or Recently Updated.",
+        "plainEnglishSummary": "If a work you've favorited (or read before) also has new chapters waiting, opening it from the Favorites or Recently Opened row on Home doesn't clear its 'new chapters' flag the way opening it from Continue Reading or Recently Updated does. On iPhone, opening the same work from any Home row clears that flag. On Android it can keep showing 'new chapters' after you've already read them, until you happen to open it from the right row."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/home/HomeScreen.kt",
+        "androidLine": 326,
+        "iosFile": "kudos-ao3-reader/Features/Home/HomeView.swift",
+        "iosLine": 321,
+        "severity": "minor",
+        "category": "correctness",
+        "confidence": "medium",
+        "technicalSummary": "iOS's `progress(kind:work:)` (HomeView.swift:319-323) returns a graphical progress value only for `.readingNow`; `.favorites` gets neither a footer nor progress (`footer(kind:work:)`, lines 307-317, returns `nil` for `.favorites`), and `.recentlyOpened` gets a text-only footer (`work.readingProgressLabel`) with no progress bar. Android's `HomeWorkCover` computes `progress = if (footerOverride != null) null else work.readingProgressFraction()?.toFloat()` (HomeScreen.kt:326) uniformly for every local shelf that passes `footerFor = null` \u2014 which includes Continue Reading, Favorites, and Recently Opened (lines 105, 140, 150). `WorkCoverCard` renders a `LinearProgressIndicator` bar plus percentage whenever `progress` is non-null (ui/components/WorkCoverCard.kt:162-179). So a favorited or recently-opened work with partial reading progress shows a graphical progress bar on Android's Home, where iOS's Favorites cards are always plain and Recently Opened cards show only a small text footer, never a bar.",
+        "plainEnglishSummary": "On the iPhone app, the Favorites row on Home never shows a reading-progress bar (it's a plain card), and Recently Opened shows only a small text note like a chapter number, not a progress bar. On Android, both of those rows show a full progress bar and percentage for any work you've partly read, which is extra information the iPhone app deliberately leaves off those two rows."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "home",
+      "areaTitle": "Home screen",
+      "finding": {
+        "androidFile": "android/app/src/test/java/io/github/cidy02/kudos/home/HomeDashboardTest.kt",
+        "severity": "note",
+        "category": "test-coverage",
+        "confidence": "high",
+        "technicalSummary": "The `home` test package contains only `HomeDashboardTest.kt`, which covers `HomeDashboard.buildState` (section filtering/sorting/privacy counts). There are no unit tests for `HomeViewModel` (HomeViewModel.kt) \u2014 e.g. the soft-failure-keeps-prior-subscriptions-list behavior (`loadSubscriptions`, lines 112-126), the sign-in-driven subscriptions reload/clear (`init`, lines 82-91), or `onOpenLocalWork`'s mark-seen call (lines 100-104) \u2014 despite this logic having real behavioral subtlety (several of the findings above concern exactly this kind of wiring).",
+        "plainEnglishSummary": "There are tests for how the Home dashboard's lists get built, but none for the Home screen's view-model logic itself \u2014 like what happens when refreshing subscriptions fails, or what happens when you sign in or out. That logic isn't covered by any automated test."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/library/LibraryViewModel.kt",
+        "androidLine": 261,
+        "iosFile": "kudos-ao3-reader/Features/Privacy/MatureContent.swift",
+        "iosLine": 49,
+        "severity": "critical",
+        "category": "privacy-setting-persistence",
+        "confidence": "high",
+        "technicalSummary": "LibraryViewModel.toggleHideMature() (LibraryViewModel.kt:261-267) calls settingsRepository.updateHideMatureContent(!current.privacy.hideMatureContent), which writes the persistent DataStore preference Keys.HideMatureContent (SettingsRepository.kt:67,197) that gates mature-content hiding app-wide (also surfaced as the 'Hide mature content' toggle in SettingsScreen.kt). This is wired to the Library toolbar's eye icon (LibraryToolbarPill's onTogglePrivacy in LibraryScreen.kt ~675-690). On iOS, the equivalent control is MatureRevealToggle (MatureContent.swift:323-334), which calls PrivacyGate.toggleRevealAll() (MatureContent.swift:49-60) \u2014 this only flips an in-memory, unpersisted revealAll flag on the @Observable PrivacyGate; the actual persisted setting is a separate @AppStorage('hideMatureContent') toggle only reachable from Settings (SettingsView.swift:36,375). iOS's reveal-all is also gated behind device biometrics when 'requireBiometricToReveal' is enabled (MatureContent.swift:85-102) and resets on every fresh app launch since it's never persisted. Android's version has no such gate and durably disables the privacy setting.",
+        "plainEnglishSummary": "On iOS, tapping the eye icon in the Library only temporarily shows mature works for the current session \u2014 the app still hides mature content by default the next time it's opened. On Android, tapping the same eye icon permanently turns off the 'Hide mature content' privacy setting everywhere in the app (Home, Search, Browse, Library) until the user manually turns it back on in Settings. A user who taps it just to peek at one item ends up leaving mature content unhidden across the whole app indefinitely, with no confirmation or indication that a permanent setting was changed."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/works/WorkRepository.kt",
+        "androidLine": 38,
+        "iosFile": "kudos-ao3-reader/Features/Library/LibraryView.swift",
+        "iosLine": 21,
+        "severity": "major",
+        "category": "data-visibility",
+        "confidence": "high",
+        "technicalSummary": "WorkRepository.observeSavedWorks() (WorkRepository.kt:38-41) filters the entire work list down to isSaved == true, and LibraryRepository.observeSnapshot() (LibraryRepository.kt:14-32) builds the whole Library dashboard exclusively from that filtered stream \u2014 so a work with isSaved == false is invisible to every Library shelf (Reading Now, Saved for Later, Finished, Downloaded, History), not just 'Saved for Later'. Separately, WorkImporter always marks a freshly downloaded work isSaved = true (WorkImporter.kt:77, WorkMetadataMerger.kt:41 'isSaved = base.isSaved || markSaved' with markSaved always true), so in practice every work starts out isSaved = true. LibraryCarouselCard's context menu (LibraryScreen.kt:1011-1020 'Remove from Saved', and 1029-1036 'Saved for Later'/'Save for Later' toggle) calls onSetSaved(id, false), which is reachable on every visible card and has no confirmation dialog (contrast the 'Remove' action, which does confirm). Doing so sets isSaved = false, and the work then vanishes from every Library shelf on the next recompute \u2014 even though its EPUB file and DB row are untouched and it doesn't appear in Recently Deleted either. On iOS, isSaved defaults to false and is never auto-set by a download (ReadingQueueService.swift:300,550 explicitly sets isSaved = false for a newly created work even when the download is queue-triggered); the top-level @Query in LibraryView.swift:21-22 fetches every non-deleted SavedWork with no isSaved filter, and each LibrarySectionKind (LibrarySectionKind.swift:77-115) applies its own independent predicate \u2014 so un-saving a work on iOS only removes it from the 'Saved for Later' shelf; it still shows in Reading Now/Finished/Downloaded/History as appropriate. LibraryRepositoryTest.kt:48-61 documents/locks in the Android behavior (a work with isSaved=false, tellingly named 'history', is asserted absent from the snapshot).",
+        "plainEnglishSummary": "Every card in the Library has a menu item that toggles whether a work is 'Saved for Later.' On Android, turning that off doesn't just remove the work from the Saved for Later shelf like it does on iOS \u2014 it makes the work disappear from the entire Library screen (Reading Now, Finished, Downloaded, History, everywhere), with no warning and no listing in Recently Deleted, even though the downloaded file is still sitting on the device. A user tapping what looks like a minor bookmark toggle can accidentally lose their downloaded work from view entirely."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt",
+        "androidLine": 583,
+        "iosFile": "kudos-ao3-reader/Features/Library/LibraryView.swift",
+        "iosLine": 234,
+        "severity": "major",
+        "category": "missing-feature",
+        "confidence": "high",
+        "technicalSummary": "LibraryQuery.buildState computes a 'favorites' shelf (LibraryQuery.kt:37-40, sourced from LibrarySectionKind-equivalent logic) and LibraryUiState carries a favorites field (LibraryModels.kt:53), but LibraryContent's LazyColumn (LibraryScreen.kt, the section-item block ~498-598) never references state.favorites \u2014 there is no LibraryCarousel for it anywhere in the file (confirmed by grep: zero occurrences of 'favorites'/'Favorites' in LibraryScreen.kt). iOS's dashboard explicitly renders a Favorites carousel: LibraryView.swift:234 'localCarousel(.favorites)', backed by LibrarySectionKind.favorites (LibrarySectionKind.swift:18,37,57-58,110-113, filtering isFavorite && visible, sorted by dateAdded desc).",
+        "plainEnglishSummary": "iOS shows a 'Favorites' row on the Library dashboard listing every work the user has starred. Android computes the same data internally but never displays it \u2014 there's no Favorites shelf on the Android Library screen at all, so a user has no dashboard view of their favorited works."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt",
+        "androidLine": 85,
+        "iosFile": "kudos-ao3-reader/Features/Library/LibraryView.swift",
+        "iosLine": 279,
+        "severity": "major",
+        "category": "missing-feature",
+        "confidence": "high",
+        "technicalSummary": "LibraryScreen.kt caps every shelf at ShelfLimit = 12 (line 85, applied via .take(ShelfLimit) at each LibraryCarousel call site, e.g. lines 502,517,533,572,587). LibraryCarousel accepts an optional onSeeAll callback (line 869) that would show a chevron (CollapsibleSectionHeader's showSeeAll, lines 846-855), but none of the Reading Now / Saved for Later / Finished / Downloaded / Reading History carousel invocations (lines 499-598) pass onSeeAll \u2014 only the Reading Queues and Collections shelves wire their own separate onSeeAll (onOpenReadingQueues/onOpenCollections). There is no per-shelf 'see all' screen; the LibrarySection data class defined for this purpose (LibraryModels.kt:28-32) is never constructed anywhere in the codebase. The only way to reach items beyond the first 12 is entering multi-select mode, whose flat list (LibraryScreen.kt:489-496) mixes all shelves together rather than showing one shelf in full. On iOS, localCarousel (LibraryView.swift:273-287) sets onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil, and .navigationDestination(for: LibrarySectionKind.self) (line 145-147) pushes LibrarySectionListView, an uncapped, sortable per-section list.",
+        "plainEnglishSummary": "iOS lets you tap a chevron next to any Library shelf (Reading Now, Saved for Later, Finished, Downloaded, Reading History) to see the full list. Android caps every shelf at 12 items and provides no way to see the rest \u2014 a user with more than 12 works in progress, downloaded, or finished simply cannot view the remainder from the Library screen."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/library/LibraryViewModel.kt",
+        "androidLine": 94,
+        "iosFile": "kudos-ao3-reader/Features/Library/LibraryFilterPanel.swift",
+        "iosLine": 7,
+        "severity": "major",
+        "category": "missing-feature",
+        "confidence": "high",
+        "technicalSummary": "LibraryFilterState (LibraryFilter.kt:9-22) models a full faceted filter set \u2014 favoriteOnly, finished, download, completion, userTagIds, collectionIds, ratings, warnings, categories, relationships, characters, freeforms \u2014 and LibrarySort (LibrarySort.kt) offers 6 sort orders; LibraryViewModel exposes setters for all of it (updateSort:94-96, toggleFavoriteOnly:108-110, setFinishedFilter:112-114, setDownloadFilter:116-118, toggleUserTag:120-122, toggleCollection:124-126). None of these are called anywhere in LibraryScreen.kt (verified by grep across the file) \u2014 the only filter control actually wired to the UI is the single-select fandom chip row (FandomFilterChips, calling onSetFandomFilter) plus a blanket 'Reset' (onClearFilters). There is no sort picker and no way to filter by rating/warning/category/completion/language/word count/user tag/collection from the UI. iOS's LibraryFilterPanel.swift is a full inspector (bottom sheet on iPhone, sidebar on iPad/macOS) with pickers for Sort, Rating, Completion, Language, word-count range, and toggleable rows for Warnings/Categories/user tags/fandoms/characters/relationships/additional tags, reachable via the toolbar's FilterButton (LibraryView.swift ~525-531).",
+        "plainEnglishSummary": "iOS has a full Filters panel for the Library (sort order, rating, warnings, categories, completion status, language, word-count range, your own tags, collections) reachable from a Filter button in the toolbar. Android's Library screen only lets you filter by a single fandom chip and reset \u2014 all the richer filtering and sorting logic exists in the code but has no button, menu, or panel that exposes it to the user."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/library/LibraryScreen.kt",
+        "androidLine": 1364,
+        "iosFile": "kudos-ao3-reader/UIComponents/WorkBulkActionBar.swift",
+        "iosLine": 56,
+        "severity": "minor",
+        "category": "missing-feature",
+        "confidence": "medium",
+        "technicalSummary": "LibrarySelectionActionBar (LibraryScreen.kt:1364-1404) offers only Favorite / Unfavorite / Finished / Unfinished / Remove / Cancel while in multi-select mode. iOS's WorkBulkActionBar (WorkBulkActionBar.swift:46-124) additionally offers bulk Save/Unsave, bulk 'Save for Later' (queue) toggle, bulk 'Add to Queue', and bulk 'Add to Collection' from the same selection toolbar (via an 'Actions' menu). Android's single-item long-press context menu does have Add to Queue/Add to Collection/Save toggle (LibraryScreen.kt:1011-1060), so the actions are reachable one work at a time, just not as a bulk operation across the current selection.",
+        "plainEnglishSummary": "When multiple works are selected in the Library, iOS lets you bulk Save, bulk Save-for-Later, bulk Add to Queue, and bulk Add to Collection in addition to Favorite/Finished/Delete. Android's selection toolbar only offers Favorite/Unfavorite/Finished/Unfinished/Remove \u2014 to add several works to a queue or collection, or to save them, the user has to do it one work at a time via each card's own menu."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "library",
+      "areaTitle": "Library screen: core list, filters, sort, bulk select, mature-content privacy",
+      "finding": {
+        "androidFile": "android/app/src/test/java/io/github/cidy02/kudos/library/LibraryRepositoryTest.kt",
+        "androidLine": 47,
+        "severity": "note",
+        "category": "test-coverage",
+        "confidence": "high",
+        "technicalSummary": "LibraryRepositoryTest.kt contains a single test (snapshotIncludesSavedWorksUserTagsAndCollections, lines 47-61) that only checks that a work is included when isSaved=true and excluded when isSaved=false \u2014 it does not test the actual repository/query wiring for privacy visibility, mature-content obscure/hide, bulk actions, or reveal-all, and it effectively locks in the isSaved-gates-the-whole-Library behavior flagged separately above without covering the case of a favorited-or-finished-but-unsaved work. LibraryQueryTest.kt (463 lines) covers the pure LibraryQuery filtering/sorting logic reasonably thoroughly, but there's no test asserting that unsaving a work removes it from all shelves versus just Saved for Later, and no test for LibraryViewModel.toggleHideMature's persistence semantics.",
+        "plainEnglishSummary": "The automated test suite for the Library barely tests the repository layer (only one test, and it happens to encode the very bug about saved/unsaved works described above) and has no test at all for the mature-content 'reveal all' toggle or for what happens to a work's visibility when it's unsaved versus removed. That gap in coverage is part of why these bugs weren't caught earlier."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkUpdateChecker.kt",
+        "androidLine": 35,
+        "iosFile": "Services/WorkUpdateChecker.swift",
+        "iosLine": 34,
+        "severity": "major",
+        "category": "correctness",
+        "confidence": "high",
+        "technicalSummary": "In WorkUpdateChecker.checkForUpdates (works/WorkUpdateChecker.kt:35-39), the AO3Result.Failure branch does `continue` without updating `work.lastUpdateCheck`, so a work whose AO3 fetch fails (network error, locked/orphaned/deleted work, rate limit) never gets `lastUpdateCheck` stamped. Since `shouldCheck()` (line 53-58) gates re-polling purely on `Duration.between(lastUpdateCheck, now) >= MinInterval`, a permanently-failing work is 'due' again on every single call to `checkForUpdates` (e.g. every Home load), forever. iOS's equivalent (Services/WorkUpdateChecker.swift:34-40) explicitly stamps `work.lastUpdateCheck = Date()` in the catch block specifically 'so a failing work waits out `minInterval` instead of being retried on every Home visit' \u2014 the exact scenario Android fails to guard against. Both files' docstrings claim the same 'polite by design... throttled' behavior, but only iOS's implementation actually delivers it for the failure path.",
+        "plainEnglishSummary": "When Kudos checks a saved in-progress story for new chapters and that check fails (locked story, deleted story, or just a network hiccup), the app is supposed to wait 6 hours before trying that story again. On Android it doesn't \u2014 a story that keeps failing gets re-checked against AO3 every single time you open Home, instead of at most every few hours like the iOS app does."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkDetailScreen.kt",
+        "androidLine": 198,
+        "iosFile": "Features/WorkDetail/WorkDetailView.swift",
+        "iosLine": 160,
+        "severity": "major",
+        "category": "missing-functionality",
+        "confidence": "high",
+        "technicalSummary": "Android's Work Detail screen never re-fetches AO3 metadata for an already-saved work. `LaunchedEffect(source)` (WorkDetailScreen.kt:198-235) for `WorkDetailSource.LocalWork` only calls `refreshLocal()` (143-154), which reads the local DB \u2014 no network call. There is no pull-to-refresh and no equivalent of iOS's `.task { \u2026 WorkTags.refreshFromAO3(for: work, in: context) }` (WorkDetailView.swift:160-172) or `.refreshable { await refreshDetails() }` (144-145, 576-595). The one remaining path that looks like it could refresh things, 'Redownload EPUB' (overflow menu item, WorkDetailScreen.kt:797-806, calling `download()` \u2192 `DownloadQueue.enqueueLocal`), routes through `DownloadQueue.downloadItem()` (works/DownloadQueue.kt:202-214) to `WorkImporter.downloadExisting()` (works/WorkImporter.kt:57-65), which only re-downloads the EPUB file and sets `hasEpub/isSaved` \u2014 it never calls `fetchCanonical`/the metadata merger, so kudos/hits/comments/tags/warnings are not updated either. Once a work is imported, its stats and tags are frozen at import time with no UI path to refresh them (chapter count for WIP works is the one exception, refreshed silently in the background by WorkUpdateChecker).",
+        "plainEnglishSummary": "On iOS, opening a saved story's detail page quietly re-checks AO3 for updated kudos, comments, hits, and tags every time, and you can also pull down to refresh. On Android, none of that happens \u2014 once you've saved a story, its kudos/comments/hits/tag numbers are stuck at whatever they were when you first downloaded it, and there's no button or gesture anywhere on the screen (not even 'Redownload EPUB') that updates them."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkDetailScreen.kt",
+        "androidLine": 1235,
+        "iosFile": "Features/WorkDetail/WorkDetailSections.swift",
+        "iosLine": 78,
+        "severity": "major",
+        "category": "missing-functionality",
+        "confidence": "high",
+        "technicalSummary": "In `DiscussionTab` (WorkDetailScreen.kt:1235-1272), the three rows 'All Comments', 'Chapter Comments', and 'Write a Comment' all call the exact same `onComments` callback (defined WorkDetailScreen.kt:667-670), which only carries a bare `Long` workId. Every call site of `onOpenComments` in AppNavHost.kt (lines 124-125, 386-387, 431-432) constructs `AO3CommentTarget.Work(workId)` \u2014 `AO3CommentTarget.Chapter(workId, chapterId)` (network/ao3/comments/AO3CommentModels.kt:26-42) is defined but never constructed anywhere in the app. There is also no 'compose mode' concept in `CommentsScreen` (comments/CommentsScreen.kt:38-42, no such parameter). So all three labeled entry points are functionally identical \u2014 they open the same all-work comments thread. iOS deliberately differentiates them via `AO3CommentsRoute(workID:context:focusesChapter:)` / `(\u2026:composes:)` (WorkDetailSections.swift:87-122), and even conditionally hides 'Chapter Comments' for single-chapter works (line 104) since Android has no chapter-scoping to hide.",
+        "plainEnglishSummary": "In Work Detail's Discussion tab there are three separate buttons \u2014 'All Comments', 'Chapter Comments', and 'Write a Comment' \u2014 that look like they do different things, but on Android they all just open the exact same generic comments screen. Tapping 'Chapter Comments' doesn't take you to that chapter's discussion, and 'Write a Comment' doesn't drop you straight into composing one, the way they do on iOS."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkDetailScreen.kt",
+        "androidLine": 1052,
+        "iosFile": "Features/WorkDetail/WorkDetailOverviewSections.swift",
+        "iosLine": 109,
+        "severity": "minor",
+        "category": "correctness",
+        "confidence": "high",
+        "technicalSummary": "The `readLabel` derivation in `OverviewTab` (WorkDetailScreen.kt:1052-1058) shows 'Continue Reading' whenever `hasEpub && state.local?.hasStartedReading == true`, with no check of `isFinished`. `SavedWork.hasStartedReading` (core/model/SavedWork.kt:54-58) is derived from `lastReadDate`/`lastSpineIndex`/`lastScrollFraction`/`readiumLocator`, none of which `WorkRepository.setFinished`/`toggleFinished` (works/WorkRepository.kt:119-134) ever clears when a work is marked finished. So a finished work that still has (or regains, e.g. via Redownload) its EPUB permanently shows 'Continue Reading' as its Overview quick action instead of 'Read'. iOS's equivalent (`WorkDetailOverviewSections.swift:109-119`) explicitly ANDs in `!(localWork?.isFinished ?? false)` so a finished work always reads 'Read', never 'Continue Reading'.",
+        "plainEnglishSummary": "For a story you've already finished and marked as Finished, the big 'Read' quick-action button on Android keeps saying 'Continue Reading' instead of switching back to plain 'Read', which is confusing since you're not actually mid-book anymore. iOS gets this right."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkDetailScreen.kt",
+        "androidLine": 1169,
+        "iosFile": "Features/WorkDetail/WorkDetailOverviewSections.swift",
+        "iosLine": 310,
+        "severity": "minor",
+        "category": "missing-functionality",
+        "confidence": "medium",
+        "technicalSummary": "Android's Overview 'Origin' card (WorkDetailScreen.kt:1169-1206) shows only a static `state.seriesLine` text ('Series: Title #N'). It has no equivalent of iOS's Series section (`WorkDetailOverviewSections.swift:310-372`), which lists every other downloaded work in the same series (`seriesWorks`, sorted by position) as tappable `NavigationLink`s to jump straight to that work's own Work Detail, alongside 'Download Whole Series' and 'View Full Series on AO3'. Android does expose 'Download series' via the overflow menu (`onDownloadSeries`), but there is no way from Work Detail to browse to or open a sibling series entry already in the library.",
+        "plainEnglishSummary": "iOS shows the other books in a series that you've already downloaded right on the Work Detail page, and lets you tap straight to any of them. Android only shows a plain text line like 'Series: Title #2' with no list of the other books and no way to jump between them from this screen."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkDetailScreen.kt",
+        "androidLine": 446,
+        "iosFile": "Features/WorkDetail/AO3WorkActionsModel.swift",
+        "iosLine": 105,
+        "severity": "minor",
+        "category": "correctness",
+        "confidence": "medium",
+        "technicalSummary": "Android's bookmark dialog (WorkDetailScreen.kt:446-497) and the overflow menu item that opens it (766-773, always labelled 'Bookmark on AO3') never query whether the work is already bookmarked. `bookmarkNotes`/`bookmarkTags`/`bookmarkPrivate`/`bookmarkRecommendation` are plain `remember { mutableStateOf(...) }` locals that start blank and are never populated from AO3. iOS's `AO3WorkActionsModel.startBookmark()` (AO3WorkActionsModel.swift:105-115) fetches `workPageStates?.existingBookmark` first, pre-fills the composer from it, and the menu label switches to 'Edit Bookmark on AO3' (AO3WorkActionsMenu.swift:33-39) when one exists. On Android, re-bookmarking a work you already bookmarked opens a blank form and submits via `createBookmark` (AO3WriteRepository.kt:106-129) with whatever (possibly blank) values are in the fields, with no indication to the user that a bookmark already exists or what it currently contains.",
+        "plainEnglishSummary": "If you've already bookmarked a story on AO3 and open the Bookmark dialog again from Android, it doesn't know that \u2014 the notes/tags fields are blank instead of showing what you already wrote, and the menu still says 'Bookmark on AO3' instead of 'Edit Bookmark'. Submitting again could overwrite your existing bookmark's notes and tags with blank ones."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkDetailScreen.kt",
+        "androidLine": 782,
+        "iosFile": "Features/WorkDetail/AO3WorkActionsMenu.swift",
+        "iosLine": 45,
+        "severity": "note",
+        "category": "correctness",
+        "confidence": "medium",
+        "technicalSummary": "The overflow menu's Subscribe item (WorkDetailScreen.kt:782-789) always renders the static text 'Subscribe', regardless of whether the work is actually currently subscribed. There is no Android equivalent of `AO3WorkActionsModel.refreshWorkPageStates` (AO3WorkActionsModel.swift:32-53), so the app never learns the live subscribed state to flip the label to 'Unsubscribe' the way iOS's menu does (AO3WorkActionsMenu.swift:45-51). The toggle itself (`writeRepository.toggleSubscribe`) still works \u2014 only the label is static.",
+        "plainEnglishSummary": "The 'Subscribe' menu option never changes to 'Unsubscribe' even after you've subscribed, so there's no way to tell from the menu whether you're already subscribed to a story. Tapping it still works (it toggles), but the label never reflects your actual state."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "workdetail",
+      "areaTitle": "Work Detail screen",
+      "finding": {
+        "androidFile": "works/WorkTags.kt",
+        "severity": "note",
+        "category": "test-coverage",
+        "confidence": "high",
+        "iosFile": "KudosTests/WorkTagsTests.swift",
+        "technicalSummary": "works/WorkTags.kt (ao3WorkIdFromUrl, canonicalAO3WorkURL, flattenedWorkTags, dedupeFirstSeen) has zero unit tests \u2014 no test file exists for it under app/src/test/java/io/github/cidy02/kudos/works/ (only WorkUpdateCheckerTest.kt and AuthorTapNamesTest.kt exist there). This logic backs work-identity dedup, comment/series/download URL parsing, and tag flattening across the app. iOS has a dedicated KudosTests/WorkTagsTests.swift covering the equivalent `canonicalAO3WorkURL`/tag-normalization surface.",
+        "plainEnglishSummary": "The code that pulls an AO3 story's numeric ID out of its URL and cleans up its tag lists has no automated tests on Android, even though the equivalent iOS code does. A regression here (e.g. a URL format that stops parsing) could silently break downloads, comments, and series features with nothing catching it."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "downloadqueue",
+      "areaTitle": "Download queue, download banner, work import, and series-download-via-queue",
+      "finding": {
+        "androidFile": "works/WorkImporter.kt",
+        "androidLine": 38,
+        "iosFile": "Services/WorkImporter.swift",
+        "iosLine": 38,
+        "severity": "critical",
+        "category": "data-loss",
+        "confidence": "high",
+        "technicalSummary": "WorkIdentityIndex.findExisting() (works/WorkIdentityIndex.kt:25-46) is backed by WorkDao.getById/getBySourceUrl (data/local/dao/WorkDao.kt:22-29), neither of which filters `isDeleted`, so it matches soft-deleted (Recently Deleted) rows exactly like active ones. WorkImporter.download()/downloadExisting()/saveMetadataOnly() (WorkImporter.kt:25-89) and DownloadQueue.downloadItem()/isAlreadyDownloaded() (DownloadQueue.kt:202-240) all use this lookup, then merge into or overwrite the matched record via WorkMetadataMerger.merge() (WorkMetadataMerger.kt:13-71) and workRepository.upsert(work.copy(hasEpub = true, isSaved = true)) (WorkImporter.kt:77) \u2014 but nothing in either path clears `isDeleted`/`deletedAt`/`permanentDeletionScheduledAt`. WorkRepository already has a purpose-built restoreFromRecentlyDeleted() (WorkRepository.kt:175-187) that does exactly this, but it is only ever called from library/RecentlyDeletedScreen.kt's explicit Restore button \u2014 never from the import/download path. Contrast with iOS: DownloadQueue.run() (Services/DownloadQueue.swift:83-93) explicitly calls PreservedWorkService.restore() when a queue item matches a pending-deletion work with an EPUB, and importEPUB() (Services/WorkImporter.swift:38-42) calls the same restore() whenever a downloaded work merges into an existing.isPendingDeletion record. Net effect on Android: re-downloading (or series-downloading, or even a single Work Detail \"Download\") a work that is currently in Recently Deleted merges the fresh download into the still-`isDeleted=true` row. WorkDetailScreen.refreshLocal() (WorkDetailScreen.kt:143-154) reads the row unfiltered via workRepository.getWork(), so the Work Detail screen reports success (\"Saved\"/downloaded) \u2014 but observeSavedWorks()/observeLibraryWorks()/getAll() all filter `isDeleted = 0` (WorkRepository.kt:38-49, WorkDao.kt:31-40), so the work never reappears in the Library list, and WorkRepository.sweepExpiredSoftDeletes() (WorkRepository.kt:213-227) will hard-delete it once the original deletion's 90-day window elapses regardless of the fresh hasEpub/isSaved state.",
+        "plainEnglishSummary": "If a user deletes a fic (it goes into 'Recently Deleted' for 90 days) and later finds and downloads that same work again \u2014 either by tapping Download on it directly or by downloading a whole series that includes it \u2014 the app reports success, but the work does not actually come back to the Library. It stays hidden in Recently Deleted and will be permanently erased once the original 90-day window runs out, silently destroying the copy the user just re-downloaded."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "downloadqueue",
+      "areaTitle": "Download queue, download banner, work import, and series-download-via-queue",
+      "finding": {
+        "androidFile": "AndroidManifest.xml",
+        "iosFile": "Services/ExternalFileImport.swift",
+        "severity": "major",
+        "category": "missing-feature",
+        "confidence": "high",
+        "technicalSummary": "iOS has a whole document-import subsystem the download-queue area is expected to mirror: ImportedFileFormat.swift sniffs file bytes (not extension) to identify EPUB/HTML/plain-text/ZIP/PDF/DOCX/ODT/RTF/MOBI/RAR/7z; ImportedDocumentConverter.swift converts the convertible formats (EPUB, HTML, plain text, ZIP, PDF) to an importable EPUB; UserDocumentImport.swift drives that conversion then calls the normal importUserEPUB path and archives the original file next to the work; ExternalFileImport.swift wires this to ContentView's `.onOpenURL` (App/ContentView.swift:152-157) so \"Open in Kudos\" from Files, Safari, Reddit, Discord, or AirDrop actually imports a fic. Android's AndroidManifest.xml (android/app/src/main/AndroidManifest.xml) declares only a MAIN/LAUNCHER intent-filter on MainActivity \u2014 no ACTION_VIEW/ACTION_SEND intent-filter for any mime type \u2014 and grepping the whole Kotlin source tree turns up no format-sniffing, no converter, and no handler for an externally-supplied file. WorkImporter.kt only ever downloads works directly from AO3 via AO3EpubDownloader; there is no code path that accepts an arbitrary local file (EPUB or otherwise) and imports it, whether from a share sheet or from an in-app picker.",
+        "plainEnglishSummary": "On iOS, a user can share or 'Open in Kudos' a fic file from Files, a browser download, a Discord/Reddit attachment, or AirDrop, and the app figures out what kind of file it is (EPUB, HTML, plain text, PDF, a zipped chapter set, etc.) and imports it, converting it to a readable book automatically. Android has none of this: there's no way to share a file into Kudos at all, and no code that would recognize or convert a non-EPUB file even if one were supplied. Anyone who received a fic as an HTML page, PDF, plain-text file, or a chaptered ZIP instead of a proper .epub simply cannot get it into the Android app."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "downloadqueue",
+      "areaTitle": "Download queue, download banner, work import, and series-download-via-queue",
+      "finding": {
+        "androidFile": "works/WorkImporter.kt",
+        "iosFile": "Services/WorkImporter.swift",
+        "severity": "note",
+        "category": "test-coverage",
+        "confidence": "medium",
+        "technicalSummary": "There is no test file at all for works/WorkImporter.kt or works/WorkMetadataMerger.kt under android/app/src/test/java/io/github/cidy02/kudos/works/ (only DownloadQueueTest.kt and WorkIdentityIndexTest.kt exist), even though WorkImporter contains the merge/persist logic that owns hasEpub/isSaved and (per the critical finding above) silently interacts badly with soft-deleted rows. DownloadQueueTest.kt's `skipAlreadyDownloadedWhenDetectable`/`forceBypassesAlreadyDownloadedSkip` tests only ever seed an active (`isDeleted = false`, implicit default) SavedWork \u2014 none of the suite seeds a soft-deleted (`isDeleted = true`) row to exercise the Recently-Deleted-revival path, so the critical bug above would not be caught by the existing suite.",
+        "plainEnglishSummary": "The code that actually saves a downloaded fic into the library (WorkImporter/WorkMetadataMerger) has no automated tests at all, and the download-queue tests that do exist never check what happens when you re-download something that's sitting in Recently Deleted \u2014 which is exactly the scenario that's currently broken."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "account/AccountScreen.kt",
+        "androidLine": 849,
+        "iosFile": "Features/Account/AccountView.swift",
+        "iosLine": 786,
+        "severity": "major",
+        "category": "missing-functionality",
+        "technicalSummary": "Android's `ActivityTabContent` renders `AccountActivityKind.Inbox` as a static `EmptyStateCard(title = \"Inbox not available yet\", ...)` (AccountScreen.kt:849-854), and `AccountActivityKind.toAccountListType()` maps `.Inbox -> null` (AccountUiState.kt:73) so it never even attempts a fetch. iOS's Activity \u203a Inbox is a fully built, stateful feature: `AO3InboxModel` fetches/paginates the real AO3 inbox, and `AccountInboxViews.swift` renders per-notification cards with unread/replied badges, a reply action that opens the native Comments composer, per-item and bulk mark-read/mark-unread/delete (with confirmation dialogs and 'this only removes the notification, not the comment' messaging), a filter sheet driven by AO3's own parsed filter form, and pagination (AccountView.swift:786-807, AccountInboxViews.swift entire file).",
+        "plainEnglishSummary": "On iPhone, Activity > Inbox is a real inbox: you can see AO3 comment notifications, reply, mark them read/unread, delete them, and filter them. On Android, tapping Activity > Inbox just shows a message saying it isn't available yet \u2014 none of that functionality exists.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "account/AO3DashboardScreen.kt",
+        "androidLine": 33,
+        "iosFile": "Features/Account/AO3DashboardView.swift",
+        "iosLine": 15,
+        "severity": "major",
+        "category": "missing-functionality",
+        "technicalSummary": "Android's `AO3DashboardScreen` (account/AO3DashboardScreen.kt:33-92) is a static `ListItem` menu of six rows (My Works / My Collections / My Bookmarks / My Subscriptions / Marked for Later / My History) that just call `onOpenList`/`onOpenAO3Collections` \u2014 i.e. it duplicates the six tiles already on the Overview shortcuts grid (AccountScreen.kt:563-595) with no unique content. iOS's `AO3DashboardView` (AO3DashboardView.swift:15-30) explicitly rejects that 'link dump' pattern (see its doc comment) and instead pushes `AuthorProfileView(route:, navigationTitle: \"Dashboard\")` \u2014 the same live, data-backed profile surface used for author pages, showing the signed-in user's actual fandoms breakdown, recent works, series, and bookmarks pulled from AO3.",
+        "plainEnglishSummary": "Tapping 'My Dashboard' on iPhone shows your actual AO3 profile \u2014 fandoms, works, series, bookmarks with real data. On Android, 'My Dashboard' just shows the exact same six shortcut links that are already on the Overview screen, so the button doesn't actually take you anywhere new or useful.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "app/AppNavHost.kt",
+        "androidLine": 267,
+        "iosFile": "Features/Account/PrivacyDataView.swift",
+        "iosLine": 8,
+        "severity": "major",
+        "category": "missing-functionality",
+        "technicalSummary": "Android's Account overflow menu has a distinct \"Privacy & Local Data\" item (AccountScreen.kt:367-373, `onOpenPrivacy`), but `AppNavHost.kt:267` wires it to `navController.navigate(Routes.Settings)` \u2014 the identical route the adjacent \"Settings\" item uses (`AppNavHost.kt:260`/`466-474`). `SettingsScreen.kt` has no privacy-disclosure copy and none of the controls iOS's `PrivacyDataView.swift` provides: the \"no ads/analytics/tracking\" statement, a standalone \"Remove AO3 Session\" action, \"Clear Browse Cache\", or \"Clear Reading History\" (with a confirmation dialog that soft-deletes history into Recently Deleted). Grepping the Android tree for these strings/behaviors (`clearCache`, `Clear Reading History`) turns up nothing.",
+        "plainEnglishSummary": "In the Account menu, 'Settings' and 'Privacy & Local Data' are two different options, but on Android they both open the exact same Settings screen \u2014 tapping 'Privacy & Local Data' shows nothing about privacy at all. On iPhone this screen explains what's stored on-device and lets you remove your AO3 session, clear the browse cache, and clear your local reading history; none of that exists anywhere in the Android app.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "account/AccountScreen.kt",
+        "androidLine": 804,
+        "iosFile": "Features/Account/AccountView.swift",
+        "iosLine": 749,
+        "severity": "minor",
+        "category": "missing-functionality",
+        "technicalSummary": "Android's Writing > Drafts renders `EmptyStateCard(title = \"Drafts not available yet\", message = \"AO3 drafts stay on the website until a drafts parser is added.\")` with no `primaryActionLabel`/`onPrimaryAction` (AccountScreen.kt:804-809), i.e. a true dead end \u2014 there is no way to actually reach Drafts from this screen even though `onOpenWeb` is already threaded through the same composable tree. iOS's equivalent (`AccountView.swift:749-757`) instead shows an `AccountExternalNavCard(title: \"Open Drafts on AO3\", ...)` that opens `archiveofourown.org/users/<username>/works/drafts` in Browse \u2014 the feature is honestly 'not native yet' but still one tap away.",
+        "plainEnglishSummary": "On iPhone, Writing > Drafts still gives you a working button that opens your AO3 drafts on the website. On Android, the same screen just says drafts aren't available yet with no button or link \u2014 there's no way to get to your drafts from there at all.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "account/AccountScreen.kt",
+        "androidLine": 518,
+        "iosFile": "Features/Account/AccountMoreOnAO3View.swift",
+        "iosLine": 6,
+        "severity": "minor",
+        "category": "correctness",
+        "technicalSummary": "Android's Overview \"More on AO3\" row (AccountScreen.kt:518-529) opens `https://archiveofourown.org/users/<username>` (the user's own profile page) via the WebView fallback. iOS's \"More on AO3\" (`AccountMoreOnAO3View.swift`) is a dedicated native screen listing ten curated destinations under \"Creator tools\" and \"Challenges & gifts\" (Drafts, Pseuds, Skins, Statistics, Co-Creator Requests, Sign-ups, Assignments, Claims, Related Works, Gifts), each opening its own AO3 sub-page. None of those specific destinations are reachable anywhere else in the Android app, so the Android label promises the same 'more' content but actually just re-shows the profile page.",
+        "plainEnglishSummary": "On iPhone, 'More on AO3' opens a menu of extra account pages \u2014 Pseuds, Skins, Statistics, Sign-ups, Gifts, and more. On Android, the same-named button just opens your own AO3 profile page instead, so those extra destinations aren't reachable from the app at all.",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "account/AccountScreen.kt",
+        "androidLine": 923,
+        "iosFile": "Features/Account/AccountView.swift",
+        "iosLine": 208,
+        "severity": "minor",
+        "category": "missing-functionality",
+        "technicalSummary": "None of the Account hub's list panes (`HubWorksPane`, `HubCollectionsPane` in AccountScreen.kt, plus `AO3CollectionsScreen.kt` and the standalone `AccountListScreen`) apply a pull-to-refresh modifier (no `pullRefresh`/`PullToRefreshBox` usage anywhere under `account/`). Once a list's `AccountListViewModel`/`AO3CollectionsViewModel` has loaded, the only way to force a re-fetch is the error-state \"Retry\" button; there is no user action to refresh already-loaded data. iOS attaches `.refreshable { await refreshCurrentTab() }` to both Account root layouts (AccountView.swift:208, :248), which reloads the active tab's list on pull-to-refresh.",
+        "plainEnglishSummary": "If you bookmark or subscribe to something new on the AO3 website and come back to the app, iPhone lets you pull down to refresh the list. On Android there's no way to manually refresh these lists at all \u2014 short of restarting the app, you're stuck looking at whatever loaded the first time.",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "account",
+      "areaTitle": "Account hub",
+      "finding": {
+        "androidFile": "account/AccountViewModel.kt",
+        "iosFile": "KudosTests",
+        "severity": "note",
+        "category": "test-coverage",
+        "technicalSummary": "`android/app/src/test/java/io/github/cidy02/kudos/account/AccountRepositoryTest.kt` only exercises `AccountListRepository` (HTTP/parsing/auth-expiry/pagination). There are no JVM unit tests for `AccountViewModel`, `AccountListViewModel`, or `AO3CollectionsViewModel` (state transitions on load/failure/auth-required), nor for the pure mapping/filtering logic in `AccountUiState.kt` (`toAccountListType()`) or the client-side fandom-count/filter logic in `HubWorksPane` (AccountScreen.kt:955-967).",
+        "plainEnglishSummary": "The network/parsing code for the Account screen is tested, but the view-model logic that decides what the screen actually shows (loading, errors, needing to log in, fandom filtering) has no automated tests, so regressions there wouldn't be caught automatically.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "settings",
+      "areaTitle": "Settings, including custom font import",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/reader/readium/ReadiumSettingsAdapter.kt",
+        "androidLine": 22,
+        "iosFile": "kudos-ao3-reader/Features/Reader/ReaderStyle.swift",
+        "iosLine": 282,
+        "severity": "major",
+        "category": "missing-functionality",
+        "confidence": "high",
+        "technicalSummary": "Importing a font in Settings works end-to-end at the data layer (CustomFontRepository.importFont writes the file via FontFileStore, inserts the CustomFontEntity, and calls settingsRepository.updateReaderFontId(font.selectionId), and SettingsScreen.kt's ReaderFontSection shows it selected with a check mark), but the selection is never rendered. ReaderSettingsMapper.kt:14-18 and ReadiumSettingsAdapter.kt:13-17 both explicitly document that 'explicit custom fonts (readerFontID) are NOT applied here yet' and 'custom-font import/registration is deferred'; ReadiumSettingsAdapter.toEpubPreferences() (lines 22-39) never reads ReaderPreferences.fontFamily when building EpubPreferences, so Readium always renders with its default/publisher font regardless of which custom font is selected. On iOS, ReaderStylesheet.css (ReaderStyle.swift:282-295) reads the CustomFont's file bytes, base64-embeds them via an @font-face rule, and applies 'ReaderUserFont' to the body \u2014 the imported font is actually rendered.",
+        "plainEnglishSummary": "You can import a custom font in Settings, pick it, and see the checkmark next to it confirming it's selected \u2014 but the reader silently ignores it and keeps using the default font. The whole point of importing a font (seeing it while reading) doesn't work, with no error or indication that anything is wrong."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "settings",
+      "areaTitle": "Settings, including custom font import",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt",
+        "androidLine": 549,
+        "iosFile": "kudos-ao3-reader/Features/Support/BugReportView.swift",
+        "iosLine": 34,
+        "severity": "major",
+        "category": "feature-parity",
+        "confidence": "medium",
+        "technicalSummary": "iOS's 'Report a Bug' (SettingsView.swift:407-411) opens BugReportView.swift, an in-app form: the user types a 'What happened?' description (lines 34-41), sees the exact app-version/system-info strings that will be attached (lines 45-52), optionally attaches a shake-triggered screenshot, and the app builds a prefilled GitHub 'new issue' URL via AppLinks.newIssue(title:body:) (AppLinks.swift:15-22) that the user reviews and submits themselves in the browser. Android's 'Report a Bug' (SettingsScreen.kt:549-563) instead fires an ACTION_SENDTO mailto: Intent to a bare address ('cidy02@users.noreply.github.com') with only a fixed subject line and no body \u2014 there is no description field, no attached app/system diagnostics, and no GitHub issue is created. A `users.noreply.github.com` address (without the numeric ID prefix GitHub uses for its real no-reply relay) is generally not a working inbound mailbox, so a report sent this way may simply go nowhere.",
+        "plainEnglishSummary": "On iPhone, reporting a bug lets you describe what happened and shows you exactly what technical info will be attached, then opens a pre-filled GitHub issue you can review before submitting. On Android, tapping 'Report a Bug' just opens your email app with a blank message addressed to a GitHub placeholder address \u2014 there's nowhere to describe the problem, no diagnostic info is included, and the address may not even be a real, monitored inbox, so the report could go nowhere without you or the app ever knowing."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "settings",
+      "areaTitle": "Settings, including custom font import",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt",
+        "androidLine": 500,
+        "iosFile": "kudos-ao3-reader/Features/Account/PrivacyDataView.swift",
+        "iosLine": 60,
+        "severity": "major",
+        "category": "missing-functionality",
+        "confidence": "high",
+        "technicalSummary": "iOS's Privacy section (SettingsView.swift:384-386) links to PrivacyDataView.swift ('Privacy & Local Data'), which provides 'Clear Browse Cache' (clears FandomCatalog.shared.clearCache(), lines 60-70) and 'Clear Reading History' (soft-deletes SavedWork history entries via PreservedWorkService.softDelete, lines 74-113, behind a confirmation dialog). Android's Privacy section (SettingsScreen.kt:500-538) only has the hide-mature-content toggle, mature-content mode chips, and biometric toggle \u2014 there is no NavigationLink/screen anywhere in the Android codebase for clearing the browse cache or reading history (grep for 'Clear.*Cache' / 'Clear.*History' / 'ReadingHistory' across android/app/src/main/java returns nothing).",
+        "plainEnglishSummary": "On iPhone, Settings \u2192 Privacy has a whole page for clearing your local reading history and cached Browse data, useful for privacy on a shared device or just tidying up. That entire page and both of those actions are missing from the Android app \u2014 there's no way to clear reading history or the browse cache at all."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "settings",
+      "areaTitle": "Settings, including custom font import",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt",
+        "androidLine": 123,
+        "iosFile": "kudos-ao3-reader/Settings/SettingsView.swift",
+        "iosLine": 1018,
+        "severity": "minor",
+        "category": "feature-parity",
+        "confidence": "high",
+        "technicalSummary": "iOS's font importer sets allowsMultipleSelection = true for the .fonts case (SettingsView.swift:1016-1021) and iterates `urls.forEach(importFont)` (line 444), so a user can select and import several font files in one picker session. Android's importFontLauncher uses `ActivityResultContracts.OpenDocument()` (SettingsScreen.kt:123-124), which only ever returns a single Uri, so each font must be imported one at a time via separate picker invocations.",
+        "plainEnglishSummary": "On iPhone you can select several font files at once when importing. On Android you can only pick and import one font file per trip to the file picker \u2014 not a dealbreaker, just more taps to import multiple fonts."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "settings",
+      "areaTitle": "Settings, including custom font import",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt",
+        "androidLine": 458,
+        "severity": "minor",
+        "category": "ux-safety",
+        "confidence": "medium",
+        "technicalSummary": "The 'Reset settings to defaults' OutlinedButton (SettingsScreen.kt:458-463) calls `repository.resetToDefaults()` directly with no confirmation dialog; SettingsRepository.resetToDefaults() (SettingsRepository.kt:107-109) does `dataStore.edit { it.clear() }`, wiping every app/reader/privacy preference in one irreversible tap. This has no iOS counterpart to compare against (it's an Android-only addition), but it sits directly beside 'Export / Import Backup\u2026' in the same card and is the only destructive action in the whole Settings screen that isn't gated by a confirmation \u2014 the app's own backup-import flow (SettingsView.swift equivalent alert) and the 'Confirm before deleting' library setting both show the app otherwise takes care to confirm destructive actions.",
+        "plainEnglishSummary": "The 'Reset settings to defaults' button wipes every app setting (theme, reader preferences, privacy options, etc.) the instant you tap it \u2014 no 'Are you sure?' prompt, and it sits right next to the backup buttons where a stray tap is easy. It doesn't touch your library, but a slip of the thumb resets everything else with no way to undo it."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "settings",
+      "areaTitle": "Settings, including custom font import",
+      "finding": {
+        "androidFile": "android/app/src/main/java/io/github/cidy02/kudos/settings/SettingsScreen.kt",
+        "androidLine": 436,
+        "iosFile": "kudos-ao3-reader/Settings/SettingsView.swift",
+        "iosLine": 306,
+        "severity": "note",
+        "category": "missing-functionality",
+        "confidence": "medium",
+        "technicalSummary": "iOS's Settings (includeAppSettings) exposes a 'Preservation' section with a 'Check Availability\u2026' sweep (SettingsView.swift:306-321) and a 'Reading Queues' section with a 'Queue Storage' NavigationLink, 'Auto-preserve small series' toggle, 'Series limit' Stepper, and a saved-work\u2192Saved-for-Later migration button (lines 323-372). Android's Settings 'Library' group (SettingsScreen.kt:436-447) only has the 'Confirm before deleting' toggle. The underlying ReadingQueue feature does exist elsewhere in the Android app (android/app/src/main/java/io/github/cidy02/kudos/library/ReadingQueueRepository.kt, ReadingQueuesScreen.kt), and `autoPreserveSmallSeriesOnSaveForLater`/`autoPreserveSeriesWorkThreshold` exist only as backup-schema fields (BackupManifest.kt:215-216) with no reader in the app that acts on them, so even a value restored from an iOS backup is inert on Android.",
+        "plainEnglishSummary": "iPhone Settings has controls for automatically keeping small series downloaded, checking whether your saved works are still up on AO3, and a Queue Storage view \u2014 none of these are reachable from Android Settings, even though Reading Queues exist elsewhere in the Android app. If an iPhone backup with 'auto-preserve small series' turned on is restored to Android, that preference is stored but has no effect."
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "search",
+      "areaTitle": "Search screen",
+      "finding": {
+        "androidFile": "search/SearchScreen.kt",
+        "androidLine": 219,
+        "iosFile": "Features/Search/SearchView.swift",
+        "iosLine": 206,
+        "severity": "major",
+        "category": "missing-feature",
+        "technicalSummary": "iOS's SearchView.swift (lines 206-247, 311-451) implements a debounced, on-device 'local-first' search: as the user types into `filters.query` with no explicit submit, `refreshLocalMatches()`/`computeLocalMatches()` scan `WorkSearchIndex` over saved works, library fandom names, the cached AO3 fandom catalog, user tags, and collections, and render them live in `localResultsList` (sections 'In Your Library', 'Fandoms in Your Library', 'Fandoms on AO3', 'Your Tags', 'Collections') alongside an explicit 'Search AO3 for \u2026' action \u2014 before any network request fires. Android's SearchScreen.kt has no equivalent: `state` only transitions among `Idle` (saved-searches list or a static prompt, lines 219-240), `Loading`, `Error`, and `Results`, all driven exclusively by `AO3SearchRepository.search()` (network). Typing into the query field (lines 178-184) does nothing locally; `works`/`userTagNames`/`localTagSuggestions` (lines 69-77) exist only to feed autocomplete candidates inside the filter sheet's `TagSuggestField`s (SearchFilterSheet.kt), never to surface an on-device results list. There is also no mechanism (no AppNavHost route parameter, no equivalent of iOS's `router.pendingTagSearch`) for another screen to jump into Search pre-filled with a tag/fandom and auto-run it \u2014 confirmed absent app-wide (no tag-tap navigation exists in AO3WorkCard.kt or WorkDetailScreen.kt either).",
+        "plainEnglishSummary": "On iPhone, typing a few letters into Search instantly shows matches from your own library (saved works, fandoms, tags, collections) before it ever touches the network \u2014 and tapping a tag anywhere in the app jumps straight into a live Search for it. On Android, the Search screen only ever talks to AO3: typing does nothing until you press \"Search,\" there's no way to see your own saved works/tags/collections from this screen, and tags elsewhere in the app aren't tappable to search at all.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "search",
+      "areaTitle": "Search screen",
+      "finding": {
+        "androidFile": "search/SearchScreen.kt",
+        "androidLine": 130,
+        "iosFile": "Features/Search/SearchView.swift",
+        "iosLine": 496,
+        "severity": "major",
+        "category": "correctness",
+        "technicalSummary": "`clearFilters()` (SearchScreen.kt:130-132) only replaces `filters` with `clearedFiltersPreservingQuery(filters)`; it never touches `state`. It backs both the always-visible 'Clear' button in `SearchControlsRow` (wired at line 209) and the filter sheet's 'Clear' button (wired at line 277). If `state` is currently `SearchUiState.Results` (or `Error`) from a filtered search, tapping either Clear button removes the active-filter chip row and drops the Filters badge to 0, but the results list on screen keeps showing the stale, still-filtered page \u2014 nothing re-runs the search or resets to idle. If the cleared filters are no longer searchable (query also empty), the screen is left showing old results with the Search button disabled, with no way back to the idle/prompt state short of typing a new query. iOS's equivalent, `clearAllFilters()` (SearchView.swift:496-506, invoked from the toolbar Filter button's 'Clear All Filters' context-menu action at line 161), always keeps `results`/`phase` synchronized: it calls `runSearch()` again if the cleared filters are still searchable, or explicitly resets `results = []`, `phase = .idle`, and closes the panel (`router.panel = .none`) otherwise. The inspector's own 'Reset Filters' (`onReset`, lines 538-547) performs the same reset-to-idle half when nothing is left searchable.",
+        "plainEnglishSummary": "Tapping \"Clear\" on the Search screen removes the filter chips from view, but the work list underneath still shows the old, filtered results \u2014 it doesn't actually refresh. A user would reasonably think clearing filters also cleared the results, but they have to press Search again to get results that match what's now on screen. In the worst case (clearing leaves nothing left to search), the screen gets stuck showing stale results with the Search button greyed out.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "search",
+      "areaTitle": "Search screen",
+      "finding": {
+        "androidFile": "search/SearchScreen.kt",
+        "androidLine": 519,
+        "iosFile": "Features/Search/SearchPaginationBar.swift",
+        "iosLine": 1,
+        "severity": "minor",
+        "category": "missing-feature",
+        "technicalSummary": "Android's result pagination (`SearchResultsList`, SearchScreen.kt:519-539) is a bare Previous/Next pair plus a 'Page X of Y' label \u2014 moving through results one page at a time only. iOS's `SearchPaginationBar` (whole file, wired into SearchView.swift at lines 220-232/459-464) shows AO3-style numbered page bubbles with an ellipsis-windowed range around the current page, and a long-press/right-click on either arrow jumps straight to page 1 or the last page. For an AO3 query with dozens or hundreds of result pages, Android offers no way to jump ahead except tapping 'Next' repeatedly.",
+        "plainEnglishSummary": "On a search with many pages of results, iPhone lets you tap a page number to jump straight there, or long-press the arrow to jump to the very first or last page. Android only has Previous/Next, so getting from page 1 to page 40 means tapping Next 39 times.",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "search",
+      "areaTitle": "Search screen",
+      "finding": {
+        "androidFile": "search/SearchScreen.kt",
+        "androidLine": 500,
+        "iosFile": "Features/Search/SearchView.swift",
+        "iosLine": 162,
+        "severity": "note",
+        "category": "missing-feature",
+        "technicalSummary": "iOS's Search results list supports multi-select bulk actions (`bulkSelection = RemoteWorkSelectionController()`, `SelectableAO3WorkRow`, `RemoteWorkSelectionToolbar`) and an 'Expand All / Collapse All Cards' toggle, both reachable from the results toolbar's '\u2026' menu (SearchView.swift lines 95, 138-142, 162-169, 226-227). Android's `SearchResultsList` (SearchScreen.kt:500-541) renders each `AO3WorkCard` with only a single tap-to-open action; there is no selection mode, no bulk action surface, and no global expand/collapse toggle for search results. This appears to be a systemic gap (no `Selection` support exists for remote work lists anywhere in the Android app outside the local Library), not unique to Search.",
+        "plainEnglishSummary": "On iPhone you can select multiple search results at once for bulk actions, and expand or collapse every result card in one tap. Android's search results can only be opened one at a time \u2014 there's no multi-select and no expand-all button.",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "statistics",
+      "areaTitle": "Reading statistics screen",
+      "finding": {
+        "androidFile": "library/ReadingStatistics.kt",
+        "androidLine": 84,
+        "iosFile": "Features/Library/ReadingStatistics.swift",
+        "iosLine": 66,
+        "severity": "major",
+        "category": "correctness",
+        "technicalSummary": "Android's `ReadingStatistics.hasStarted(work)` (ReadingStatistics.kt:84-89) re-lists the 'started' fields directly (`isFinished || lastReadDate != null || lastSpineIndex > 0 || lastScrollFraction > 0.0`) instead of calling the canonical `SavedWork.hasStartedReading` property, and its re-listing omits the `readiumLocator` check. `SavedWork.kt:54-58` already defines the correct canonical property (`lastReadDate != null || !readiumLocator.isNullOrBlank() || lastSpineIndex > 0 || lastScrollFraction > 0.0`), matching iOS's `Models.swift:419-422`. This is the exact bug iOS already hit and fixed: `ReadingStatistics.swift:62-68` now explicitly defers to `work.hasStartedReading` with a comment reading 'a private re-listing of its fields here once drifted (it missed the Readium reader's locator, undercounting works read only on iOS)', and iOS carries a regression test for it (`KudosTests/ReadingStatisticsTests.swift:67-76`, `readiumOnlyWorkCountsAsStarted`). Android has no equivalent regression test. The scenario is reachable in practice: `BackupMergeService.applyProgressLww` (BackupMergeService.kt:231-284) can merge a restored/synced work so that `readiumLocator` is adopted from the incoming side while `lastReadDate` stays null/absent (e.g. lines 239-248, 263-273 keep `lastReadDate = existing.lastReadDate` \u2014 which may be null \u2014 while still adopting a non-blank `readiumLocator`). Any such work is silently excluded from `startedWorks`/`inProgressWorks`/`topFandoms` in Reading Insights even though `SavedWork.hasStartedReading` (used elsewhere, e.g. WorkEntity/readingState logic) correctly counts it as started.",
+        "plainEnglishSummary": "If a work's reading progress comes from Android's Readium-based reader (or arrives via cross-device backup/sync) in a way that only sets the internal reader bookmark but not the 'last opened' timestamp, the Reading Insights screen will silently leave it out of 'Works Read', 'In Progress', and 'Top Fandoms' \u2014 undercounting the user's actual reading. This is the same bug the iOS app already found and fixed (with a test to stop it recurring); the Android code reintroduces it.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "statistics",
+      "areaTitle": "Reading statistics screen",
+      "finding": {
+        "androidFile": "library/ReadingStatisticsScreen.kt",
+        "androidLine": 458,
+        "severity": "minor",
+        "category": "correctness",
+        "technicalSummary": "`formatCompactNumber` (ReadingStatisticsScreen.kt:459-489) picks its K/M/B suffix bucket from the raw magnitude (`abs < 1_000_000` etc.) before rounding, then formats with `String.format(\"%.1f\", scaled)`. For values just under a bucket boundary (e.g. abs in roughly [999_950, 999_999]), `scaled = abs/1000.0` rounds up to 1000.0 at one decimal place, producing a malformed label like \"1000.0K\" instead of switching to the next suffix (e.g. \"1M\"). Verified the rounding numerically (999950 \u2192 \"1000.0\"). iOS's `wordsRead.formatted(.number.notation(.compactName))` (ReadingStatisticsView.swift:27) uses Foundation's built-in compact formatter, which does not have this off-by-bucket rounding glitch.",
+        "plainEnglishSummary": "If a heavy reader's total words-read count lands in a narrow band just under 1,000,000 (or similarly under 1,000 million), the 'Words Read' tile can briefly display a garbled number like \"1000.0K\" instead of rolling over to \"1M\".",
+        "confidence": "medium"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    },
+    {
+      "area": "statistics",
+      "areaTitle": "Reading statistics screen",
+      "finding": {
+        "androidFile": "src/test/java/io/github/cidy02/kudos/library/ReadingStatisticsTest.kt",
+        "androidLine": 1,
+        "severity": "note",
+        "category": "test-coverage",
+        "technicalSummary": "ReadingStatisticsTest.kt otherwise mirrors the iOS ReadingStatisticsTests.swift suite well (started/finished/in-progress split, words-read filtering, recent-activity windows, top fandoms, empty library, formatCompactNumber) but has no counterpart to iOS's `readiumOnlyWorkCountsAsStarted` regression test (KudosTests/ReadingStatisticsTests.swift:67-76), which is precisely the test that would have caught the `hasStarted`/readiumLocator gap reported above.",
+        "plainEnglishSummary": "The Android tests don't cover the specific case (a work whose only reading evidence is the Readium reader's internal bookmark) that the iOS team added a dedicated test for after hitting this exact bug once already.",
+        "confidence": "high"
+      },
+      "votes": [
+        {
+          "lens": "reproduces",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "platform-appropriate",
+          "verdict": null,
+          "reason": null
+        },
+        {
+          "lens": "impact",
+          "verdict": null,
+          "reason": null
+        }
+      ],
+      "survived": false
+    }
+  ],
+  "totalAreas": 22,
+  "totalCandidates": 51
+}

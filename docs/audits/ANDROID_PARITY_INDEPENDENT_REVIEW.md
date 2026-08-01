@@ -224,8 +224,203 @@ for a multi-statement background command.
 `app/build/kotlin/compileDebugKotlin` (a build-output cache directory, not source) +
 re-ran `Scripts/verify.sh` from clean. Re-run in progress; result in the next entry.
 
-## 7. Status at last update
+## 7. `verify.sh` re-run: clean, ALL GREEN
 
-`verify.sh` re-run in flight (clean cache this time) and the 22-area review workflow
-(`wf_624fcdc5-ea2`) still running. Results, the confirmed verify.sh outcome, and any
-fixes applied afterward go into `ANDROID_PARITY_REPORT.md` once the workflow returns.
+Confirmed by reading the log directly, not the background-command notification (see the
+exit-code trap note above — this wrapper is also two statements, same trap). Full
+`android/Scripts/verify.sh` — invariants, unit tests, `assembleDebug`, persistence subset,
+whitespace — passed clean.
+
+## 8. Adversarial verification never ran — twice
+
+The 22-area review workflow (`wf_624fcdc5-ea2`) finished both its review fan-out passes
+(51 candidates, then a fuller 90-candidate re-run), but its adversarial verification stage
+— 3 independent "try to refute this" agents per candidate finding, 2-of-3 needed to
+survive — got 0/141 successful lens calls across both runs. Every one errored out on
+session-limit exhaustion. I'd already caught and fixed a bug in my own workflow script
+where this failure mode was silently indistinguishable from "3 real REJECTED votes" (see
+below) — with that fixed, both runs correctly came back as 0 confirmed / all unverified,
+rather than the misleading "0 confirmed, all REJECTED" the bug would have produced. I did
+not attempt a third full re-run — same session-limit ceiling would almost certainly hit
+again — and pivoted to manual, personal verification instead, prioritized by severity.
+
+**5 of the 22 areas returned zero candidate findings in either run**, not because they're
+clean but because their review agent calls themselves never completed:
+`backup`, `network-read`, `network-write`, `data`/persistence, `uicomponents`+theme. This
+is a real gap, not a null result — two of the five (`backup`, `network-write`) were the
+areas flagged pre-review as highest-stakes (data-integrity, silent-write-failure). Ran 3
+more targeted `Agent` calls (not another full `Workflow`, to stay under the ceiling that
+broke the first two attempts) to cover these 5 areas directly: one on backup/sync data
+integrity, one on the write-action network layer, one combined on read-path resilience +
+Room persistence + theme. Results pending; will be folded into the report.
+
+## 9. A citation that looked fabricated, and was actually my own tooling error — worth
+recording precisely because of how it happened
+
+Manually re-checking each of the 8 deduped `critical`-severity raw findings against real
+code before writing them into the report. Two are the same underlying bug (`home`/`nav`
+areas both caught the same Home-carousel reveal gap) — already fixed this session, see the
+commit. Confirmed the other 5 fixed-this-session criticals are real.
+
+The 8th — "collections have no 90-day soft-delete/undo unlike iOS" — I initially logged as
+**fabricated**: I checked its citations (`PreservedWorkService.softDelete(collection, in:
+context)` at `Collections.swift:254`, `isPendingDeletion` at `PreservedWorkService.swift:
+44-46`) against `android-sync-hig-review`'s own bundled `kudos-ao3-reader/` tree and found
+neither the symbols nor a matching line. **That tree is stale** — `android-sync-hig-review`
+branched from iOS before this backup/soft-delete work landed and never merged it forward,
+since Android branches don't track every iOS commit. The correct comparison point, per §1
+of this log, is the separate `hig-review-reference` worktree pinned at iOS tip `29cd9158`
+— set up for exactly this reason. Rechecked there: `PreservedWorkService.swift` and its
+`softDelete(_ collection: WorkCollection, in: context)` overload (setting
+`isPendingDeletion`/`deletedAt`/`permanentDeletionScheduledAt`, same shape as the
+already-ported `SavedWork` soft-delete) are real and exactly where cited.
+`Collections.swift`'s delete confirmation dialog genuinely calls it and genuinely says
+"The collection moves to Recently Deleted for 90 days." **The finding was correct; my
+first verification pass used the wrong tree.** Same mistake almost repeated on the
+`readingqueues` area's citations of `ReadingQueueService.swift` before catching it the
+same way.
+
+Net effect: this is a real, critical, verified parity gap. Implementing it properly now
+(soft-delete for `CollectionEntity`, mirroring the existing `SavedWork` pattern already in
+`WorkRepository`/`WorkMetadataMerger`) rather than leaving the copy-only mitigation I
+applied before catching my own error — see the commit for the real fix. The copy fixes
+(`RecentlyDeletedScreen.kt`, `CollectionDetailScreen.kt`) stay, now describing accurate
+behavior instead of compensating for a missing feature.
+
+**Lesson for the final report, still valid despite this one resolving as "my error, not
+the finding's":** every one of the ~75 remaining deduped raw findings is a single,
+unverified LLM pass, generated by an agent that in at least one case (`readingqueues`,
+`collections`) was reading iOS ground truth I didn't have loaded correctly myself on first
+check. The specific failure mode to flag in the report isn't "findings are fabricated" —
+it's "trust the citations enough to re-check them against the right tree, not enough to
+skip re-checking." I'm re-verifying `hig-review-reference` (not the bundled copy) for
+every finding I write into the report at more than raw-listing detail.
+
+## 10. The 3 targeted-area agents returned: one clean bill of health, two more real bugs
+
+All 3 finished. `network-write`: no critical/major issues — Android's write-action network
+layer (kudos/comments/subscribe/bookmark) correctly inspects HTTP status, login-redirects,
+and AO3's overload page before declaring success on every action checked; its redirect-
+cookie-relay handling is actually more defensive than iOS's (iOS has none). `backup`: real
+major findings — `mergeCollections` had no last-write-wins gating (unconditionally
+overwrote local renames) and neither collection deletion nor reading-queue-membership
+removal recorded a sync tombstone, so a stale backup restore could silently resurrect
+either. `network-read`/`data`/`uicomponents`+theme (combined 3rd agent): confirmed the
+Settings theme picker is genuinely disconnected from the app's actual rendered theme
+(critical — a real, working control exists, but it's a separate undocumented palette icon
+that doesn't persist), plus one major defensive gap (`KudosTypeConverters.jsonToStringList`
+throws uncaught on malformed JSON instead of degrading).
+
+Given items #6 (collections had no soft-delete at all, re-verified as REAL after my own
+false "fabricated" call in §9), backup's collection-LWW/tombstone gaps, and the theme
+picker all landed in the same working session, fixed all of them together:
+
+- `PrivacyGate` wiring for Home/Library/Collections/ReadingStatistics (4 bugs, §earlier
+  session before this summary segment).
+- Soft-delete revival fixed on 4 call sites (WorkImporter/DownloadQueue/WorkMetadataMerger/
+  WorkDetailScreen) — same, earlier in session.
+- **New this segment:** full collection soft-delete lifecycle — `CollectionEntity`/
+  `WorkCollection` gained `lastModifiedAt`/`isDeleted`/`deletedAt`/
+  `permanentDeletionScheduledAt` (Room migration v2→v3, `MIGRATION_2_3`), `WorkRepository`
+  gained `softDeleteCollection`/`restoreCollectionFromRecentlyDeleted`/
+  `hardDeleteCollection`/`sweepExpiredCollectionSoftDeletes` mirroring the existing
+  `SavedWork` pattern exactly, `RecentlyDeletedScreen`/`ViewModel` now show and act on
+  deleted collections (combined Flow, not just works), `CollectionDetailScreen`'s delete
+  dialog and `RecentlyDeletedScreen`'s empty-state copy now describe the real (now-true)
+  90-day-recoverable behavior. `BackupMergeService.mergeCollections` rewritten to gate by
+  `SyncMerge.shouldApplyIncoming` + a new `TombstoneIndex.collectionResolution`, matching
+  `mergeQueues`'s existing shape; `WORK_COLLECTION` tombstones are now actually recorded
+  (the constant existed, unused, before this). `ReadingQueueRepository.removeWork` now
+  records a `READING_QUEUE_MEMBERSHIP` tombstone. `KudosApp.kt` now derives its theme from
+  `SettingsRepository` instead of unpersisted local state, and the palette-icon quick-toggle
+  writes back to the same source instead of diverging from it. `KudosTypeConverters`
+  degrades to `emptyList()` on malformed JSON instead of throwing.
+- Stale "apply deferred" comments in `BackupManifest.kt`/`BackupValidator.kt` corrected —
+  queues/annotations have been actually applied for a while; the comments just never caught
+  up, which is exactly the kind of misleading trail that nearly cost extra review time on
+  this task too.
+- New tests: `WorkLifecycleRepositoryTest` (+2 collection lifecycle tests), 4 new
+  `BackupCollectionMergeTest` cases (LWW both directions, tombstone suppress + revive-when-
+  newer), `KudosTypeConvertersTest` (new file, 3 tests).
+
+Self-caught mistake worth recording: my first attempt at these new tests declared a second
+`class BackupCollectionMergeTest { ... }` — one already existed in the same file (a
+name-collision test, unrelated to LWW). Same class of error as the `WorkMetadataMergerTest`
+duplicate earlier this session; same fix, folded the new cases into the existing class.
+Kotlin's compiler caught it immediately (`Redeclaration`) rather than silently shadowing.
+
+Full `compileDebugKotlin`/`compileDebugUnitTestKotlin` passes clean. Full `verify.sh`
+in flight as this entry is written; result and final commit go in the next entry.
+
+## 11. `verify.sh` full unit-test run caught a real bug my own code review missed
+
+Running `testDebugUnitTest` for real (not just `compileDebugUnitTestKotlin`) surfaced 4
+genuine failures — not flaky, not environmental: `RoomDaoTest.databaseCreatesAtSchemaVersionTwo`
+(expected, needed updating for the v3 schema bump — fixed, renamed to
+`databaseCreatesAtCurrentSchemaVersion`), and three tests all failing the same way —
+`expected:<[Weekend]> but was:<[]>` — a collection's work membership vanishing.
+
+Root cause: `CollectionDao.upsert` was still `@Insert(onConflict = REPLACE)`. Room
+implements `REPLACE` as an actual `DELETE` of the conflicting row followed by an `INSERT`
+of the new one — not an in-place `UPDATE`. `CollectionWorkCrossRef` has
+`ForeignKey(parentColumns=["id"], childColumns=["collectionId"], onDelete=CASCADE)` against
+`CollectionEntity`, so every `DELETE` of a collection row cascade-deleted its cross-refs
+too. My new `touchCollection()` (called after every `addToCollection`/`removeFromCollection`)
+and `softDeleteCollection`/`restoreCollectionFromRecentlyDeleted` all call
+`collectionDao.upsert(...)`, so every one of those operations was silently emptying the
+collection it touched. This is the *exact* bug `WorkDao.upsert` already has a comment
+documenting and was already fixed for, for the identical reason — I didn't check whether
+`CollectionDao` had the same latent issue before adding code that would trigger it far more
+often than the original, rarer `deleteCollection` ever did.
+
+Fixed: `CollectionDao.upsert` → `@Upsert` (in-place `UPDATE` on conflict, no cascade).
+Added a dedicated regression test
+(`softDeletingAndRestoringACollectionPreservesItsWorkMemberships`) verifying membership
+survives a full soft-delete → restore cycle. Re-ran the full suite: **all tests pass.**
+
+This is worth being honest about in the final report: this bug would **not** have been
+caught by a plausible-sounding code review pass — the Kotlin type-checks, the annotation
+compiles, and `@Insert(REPLACE)` "looks" idempotent unless you specifically know Room's
+`REPLACE` semantics and think to check whether the entity has any cascading foreign keys
+pointed at it. It was only caught because the actual test suite ran against a real in-memory
+database and asserted on real query results — a concrete argument for why `verify.sh`'s full
+test run (not just a compile check) stayed in the loop every time, even under time pressure.
+
+## 12. Second full `verify.sh` run: a build-tooling false alarm, not a code defect (same
+pattern as before, so resolved immediately rather than re-diagnosed from scratch)
+
+Re-running the complete `verify.sh` gate (not just tests) hit `dexBuilderDebug FAILED` —
+`Type ... LibraryContent$lambda$2$0$0$$inlined$items$default$4 is defined multiple times`,
+comparing a `... 2.class` file against its non-suffixed twin. This is the exact
+"` 2`"-suffixed duplicate-file pattern already diagnosed earlier in this session (found
+then in `app/build/kotlin`, git refs, and a stray worktree ref) and attributed to a
+pre-existing environmental quirk of this specific worktree, not anything caused by this
+session's edits. Confirmed 335 such duplicate files under `app/build` this time too. Fixed
+identically: `rm -rf app/build`, fresh `verify.sh` run — passed clean, `android verify: ALL
+GREEN`, invariants + full test suite + `assembleDebug` + persistence subset + whitespace.
+
+## 13. Adversarial review of the new collection-lifecycle code, this time actually
+completing (small, bounded scope — 3 lenses, not 22 areas)
+
+With ultracode explicitly on for this session going forward, and given this session's new
+code (collection soft-delete, LWW-gated backup merge, tombstone recording) is exactly the
+kind of data-integrity-critical, only-self-reviewed code the original review's adversarial
+pass existed to catch, ran one more small, tightly-scoped `Workflow` — 3 independent review
+lenses (Room/Kotlin framework correctness, iOS parity, edge-case interactions) over just the
+~15 touched files, each candidate finding then adversarially verified by 3 independent
+refutation votes. Kept deliberately small (unlike the original 22-area fan-out that hit
+session limits twice) specifically so it could complete. Result folded into the final report
+once back.
+
+## 14. Status at last update
+
+`ANDROID_PARITY_REPORT.md` written in full — methodology, all 10 fixed findings (7
+critical, 3 major) each with technical + plain-English sections, the "reviewed and
+confirmed clean" areas, the 68 deduplicated unverified findings organized by area (38
+major given full treatment, 12 minor + 18 note in compact tables), the known-gaps registry
+cross-referenced against Grok's own docs, and closing recommendations. Raw findings (both
+workflow runs' JSON + the deduplicated appendix) copied into `docs/audits/raw-findings/`.
+First batch of fixes (6 root-cause bugs) already committed as `e8661a04`. This segment's
+additional fixes (collection soft-delete/LWW/tombstone, theme picker, TypeConverters
+hardening, stale-comment cleanup) pending final `verify.sh` confirmation before their own
+commit.

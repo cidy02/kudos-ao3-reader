@@ -16,10 +16,10 @@ data class KudosBackupManifest(
     val exportedBy: BackupExportedBy? = null,
     val collections: List<BackupCollection> = emptyList(),
     val savedSearches: List<BackupSavedSearch> = emptyList(),
-    /** Apple v3+ reading queues — decoded for forward compatibility; apply deferred. */
+    /** Apple v3+ reading queues — decoded and applied by [io.github.cidy02.kudos.backup.BackupMergeService]. */
     val readingQueues: List<BackupReadingQueue> = emptyList(),
     val readingQueueMemberships: List<BackupReadingQueueMembership> = emptyList(),
-    /** Apple v8+ in-book annotations — decoded; local apply deferred until Room model lands. */
+    /** Apple v8+ in-book annotations — decoded and applied by [io.github.cidy02.kudos.backup.BackupMergeService]. */
     val annotations: List<BackupAnnotation> = emptyList(),
     /** Apple sync tombstones — decoded so we do not fail on v5+ archives. */
     val tombstones: List<BackupTombstone> = emptyList()

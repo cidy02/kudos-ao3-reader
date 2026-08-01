@@ -8,6 +8,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * v1 → v2 (Epic 2): LWW timestamps + soft-delete on works; sync tombstones;
  * reading queues + memberships; in-book annotations.
+ *
+ * v2 → v3: LWW timestamp + soft-delete on collections, matching works — collection
+ * deletion had no Recently Deleted / undo at all, and backup restore couldn't tell
+ * whether a local rename was newer than an archived one.
  */
 object KudosDatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -145,6 +149,20 @@ object KudosDatabaseMigrations {
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS `index_annotations_lastModifiedAt` " +
                     "ON `annotations` (`lastModifiedAt`)"
+            )
+        }
+    }
+
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE collections ADD COLUMN lastModifiedAt INTEGER")
+            db.execSQL(
+                "ALTER TABLE collections ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL("ALTER TABLE collections ADD COLUMN deletedAt INTEGER")
+            db.execSQL("ALTER TABLE collections ADD COLUMN permanentDeletionScheduledAt INTEGER")
+            db.execSQL(
+                "UPDATE collections SET lastModifiedAt = dateAdded WHERE lastModifiedAt IS NULL"
             )
         }
     }

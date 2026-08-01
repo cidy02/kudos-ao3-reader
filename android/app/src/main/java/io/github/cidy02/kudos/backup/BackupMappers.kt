@@ -227,7 +227,12 @@ fun WorkCollection.toBackupCollection(): BackupCollection {
         dateAdded = BackupValidator.formatInstant(dateAdded),
         workIDs = workIds.map { BackupPaths.canonicalUuid(it, "collection.workId") },
         description = description,
-        sortOrder = sortOrder
+        sortOrder = sortOrder,
+        lastModifiedAt = lastModifiedAt?.let { BackupValidator.formatInstant(it) },
+        deletedAt = deletedAt?.let { BackupValidator.formatInstant(it) },
+        isDeleted = isDeleted,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+            ?.let { BackupValidator.formatInstant(it) }
     )
 }
 
@@ -238,7 +243,14 @@ fun BackupCollection.toWorkCollection(nameOverride: String = name): WorkCollecti
         dateAdded = BackupValidator.parseInstant(dateAdded, "collection.dateAdded"),
         workIds = workIDs.map { BackupPaths.canonicalUuid(it, "collection.workId") },
         description = description,
-        sortOrder = sortOrder
+        sortOrder = sortOrder,
+        lastModifiedAt = lastModifiedAt?.takeIf { it.isNotBlank() }
+            ?.let { BackupValidator.parseInstant(it, "collection.lastModifiedAt") },
+        isDeleted = isDeleted ?: false,
+        deletedAt = deletedAt?.takeIf { it.isNotBlank() }
+            ?.let { BackupValidator.parseInstant(it, "collection.deletedAt") },
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt?.takeIf { it.isNotBlank() }
+            ?.let { BackupValidator.parseInstant(it, "collection.permanentDeletionScheduledAt") }
     )
 }
 

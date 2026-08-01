@@ -357,11 +357,60 @@ class WorkLifecycleRepositoryTest {
         val works = repository.worksForCollection(shelf.id)
         assertEquals(listOf(workUuid), works.map { it.id })
 
-        repository.deleteCollection(shelf.id)
+        repository.softDeleteCollection(shelf.id)
         assertTrue(repository.allCollections().isEmpty())
         // Work itself remains in the library.
         assertNotNull(repository.getWork(workUuid))
         assertTrue(repository.collectionsForWork(workUuid).isEmpty())
+    }
+
+    @Test
+    fun deletedCollectionIsRecoverableForNinetyDays() = runTest {
+        val shelf = repository.createCollection("Classics")
+        repository.softDeleteCollection(shelf.id)
+
+        val deleted = repository.listRecentlyDeletedCollections()
+        assertEquals(1, deleted.size)
+        assertEquals(shelf.id, deleted.single().id)
+        assertNotNull(deleted.single().permanentDeletionScheduledAt)
+
+        val restored = repository.restoreCollectionFromRecentlyDeleted(shelf.id)
+        assertNotNull(restored)
+        assertEquals(false, restored?.isDeleted)
+        assertEquals(1, repository.allCollections().size)
+        assertTrue(repository.listRecentlyDeletedCollections().isEmpty())
+    }
+
+    @Test
+    fun hardDeletingACollectionRemovesItPermanentlyAndRecordsATombstone() = runTest {
+        val shelf = repository.createCollection("Classics")
+        repository.hardDeleteCollection(shelf.id)
+
+        assertNull(repository.getCollection(shelf.id))
+        val tombstone = database.syncTombstoneDao().getAll()
+            .firstOrNull { it.recordID == shelf.id }
+        assertNotNull(tombstone)
+        assertEquals(
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            tombstone?.recordTypeRaw
+        )
+    }
+
+    @Test
+    fun softDeletingAndRestoringACollectionPreservesItsWorkMemberships() = runTest {
+        // Regression test: CollectionDao.upsert used to be @Insert(REPLACE), which is a
+        // DELETE+INSERT under the hood and silently cascade-wiped collection_work_cross_refs
+        // via the FK ON DELETE CASCADE — every touch (rename, soft-delete, restore) emptied
+        // the collection. Same bug class already fixed once for WorkDao.upsert.
+        repository.upsert(sampleSavedWork())
+        val shelf = repository.createCollection("Classics")
+        repository.addToCollection(workUuid, "Classics")
+        assertEquals(listOf(workUuid), repository.worksForCollection(shelf.id).map { it.id })
+
+        repository.softDeleteCollection(shelf.id)
+        repository.restoreCollectionFromRecentlyDeleted(shelf.id)
+
+        assertEquals(listOf(workUuid), repository.worksForCollection(shelf.id).map { it.id })
     }
 
     @Test

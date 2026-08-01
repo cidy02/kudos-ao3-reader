@@ -15,7 +15,11 @@ data class CollectionEntity(
     val name: String,
     val dateAdded: Instant,
     val description: String?,
-    val sortOrder: Int?
+    val sortOrder: Int?,
+    val lastModifiedAt: Instant? = null,
+    val isDeleted: Boolean = false,
+    val deletedAt: Instant? = null,
+    val permanentDeletionScheduledAt: Instant? = null
 )
 
 @Entity(

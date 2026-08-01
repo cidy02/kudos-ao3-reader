@@ -119,7 +119,11 @@ fun WorkCollection.toEntity(): CollectionEntity {
         name = name,
         dateAdded = dateAdded,
         description = description,
-        sortOrder = sortOrder
+        sortOrder = sortOrder,
+        lastModifiedAt = lastModifiedAt,
+        isDeleted = isDeleted,
+        deletedAt = deletedAt,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
     )
 }
 
@@ -130,7 +134,11 @@ fun CollectionEntity.toDomain(workIds: List<String> = emptyList()): WorkCollecti
         dateAdded = dateAdded,
         workIds = workIds,
         description = description,
-        sortOrder = sortOrder
+        sortOrder = sortOrder,
+        lastModifiedAt = lastModifiedAt,
+        isDeleted = isDeleted,
+        deletedAt = deletedAt,
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt
     )
 }
 

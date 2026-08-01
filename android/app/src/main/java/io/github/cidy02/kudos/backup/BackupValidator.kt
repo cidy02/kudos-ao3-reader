@@ -127,8 +127,8 @@ object BackupValidator {
             savedSearch.copy(id = id)
         }
 
-        // Preserve forward-compat arrays (queues/annotations/tombstones) as decoded;
-        // Android may not apply all of them yet, but re-export must not drop them.
+        // Queues/annotations/tombstones are applied by BackupMergeService; carry
+        // them through here unchanged so re-export doesn't drop anything.
         return manifest.copy(
             works = works,
             bookmarks = bookmarks,

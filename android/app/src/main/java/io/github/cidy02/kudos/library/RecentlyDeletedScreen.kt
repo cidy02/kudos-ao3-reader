@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -45,24 +46,26 @@ import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class RecentlyDeletedUiState(
     val loading: Boolean = true,
     val items: List<SavedWork> = emptyList(),
+    val deletedCollections: List<WorkCollection> = emptyList(),
     val error: String? = null
 )
 
 class RecentlyDeletedViewModel(
     private val workRepository: WorkRepository
 ) : ViewModel() {
-    val state: StateFlow<RecentlyDeletedUiState> = workRepository
-        .observeRecentlyDeleted()
-        .map { works ->
-            RecentlyDeletedUiState(loading = false, items = works)
-        }
+    val state: StateFlow<RecentlyDeletedUiState> = combine(
+        workRepository.observeRecentlyDeleted(),
+        workRepository.observeRecentlyDeletedCollections()
+    ) { works, collections ->
+        RecentlyDeletedUiState(loading = false, items = works, deletedCollections = collections)
+    }
         .catch { throwable ->
             emit(
                 RecentlyDeletedUiState(
@@ -79,7 +82,6 @@ class RecentlyDeletedViewModel(
 
     fun restore(workId: String) {
         viewModelScope.launch {
-            // Dependency: deferred 1a fleshes out soft-delete / tombstone retract.
             workRepository.restoreFromRecentlyDeleted(workId)
         }
     }
@@ -91,11 +93,35 @@ class RecentlyDeletedViewModel(
         }
     }
 
+    fun restoreCollection(collectionId: String) {
+        viewModelScope.launch {
+            workRepository.restoreCollectionFromRecentlyDeleted(collectionId)
+        }
+    }
+
+    fun deleteCollectionForever(collectionId: String) {
+        viewModelScope.launch {
+            workRepository.hardDeleteCollection(collectionId)
+        }
+    }
+
     companion object {
         fun factory(workRepository: WorkRepository): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer { RecentlyDeletedViewModel(workRepository) }
             }
+    }
+}
+
+private sealed interface PendingHardDelete {
+    val label: String
+
+    data class Work(val work: SavedWork) : PendingHardDelete {
+        override val label: String get() = work.title
+    }
+
+    data class Collection(val collection: WorkCollection) : PendingHardDelete {
+        override val label: String get() = collection.name
     }
 }
 
@@ -107,25 +133,30 @@ fun RecentlyDeletedScreen(
         factory = RecentlyDeletedViewModel.factory(workRepository)
     )
     val state by viewModel.state.collectAsState()
-    var pendingHardDelete by remember { mutableStateOf<SavedWork?>(null) }
+    var pendingHardDelete by remember { mutableStateOf<PendingHardDelete?>(null) }
 
     if (pendingHardDelete != null) {
-        val work = pendingHardDelete
+        val pending = pendingHardDelete
         AlertDialog(
             onDismissRequest = { pendingHardDelete = null },
             title = { Text("Delete forever?") },
             text = {
                 Text(
-                    "This work is gone for good — it can't be restored afterward." +
-                        if (work != null) "\n\n“${work.title}”" else ""
+                    "This is gone for good — it can't be restored afterward." +
+                        if (pending != null) "\n\n“${pending.label}”" else ""
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val id = pendingHardDelete?.id
+                        val toDelete = pendingHardDelete
                         pendingHardDelete = null
-                        if (id != null) viewModel.deleteForever(id)
+                        when (toDelete) {
+                            is PendingHardDelete.Work -> viewModel.deleteForever(toDelete.work.id)
+                            is PendingHardDelete.Collection ->
+                                viewModel.deleteCollectionForever(toDelete.collection.id)
+                            null -> Unit
+                        }
                     }
                 ) {
                     Text("Delete forever")
@@ -140,7 +171,11 @@ fun RecentlyDeletedScreen(
     RecentlyDeletedContent(
         state = state,
         onRestore = viewModel::restore,
-        onDeleteForever = { work -> pendingHardDelete = work }
+        onDeleteForever = { work -> pendingHardDelete = PendingHardDelete.Work(work) },
+        onRestoreCollection = viewModel::restoreCollection,
+        onDeleteCollectionForever = { collection ->
+            pendingHardDelete = PendingHardDelete.Collection(collection)
+        }
     )
 }
 
@@ -148,7 +183,9 @@ fun RecentlyDeletedScreen(
 private fun RecentlyDeletedContent(
     state: RecentlyDeletedUiState,
     onRestore: (String) -> Unit,
-    onDeleteForever: (SavedWork) -> Unit
+    onDeleteForever: (SavedWork) -> Unit,
+    onRestoreCollection: (String) -> Unit,
+    onDeleteCollectionForever: (WorkCollection) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -158,7 +195,8 @@ private fun RecentlyDeletedContent(
         item {
             // TopAppBar already says "Recently Deleted".
             KudosScreenHeader(
-                subtitle = "Deleted works stay here for 90 days before permanent removal."
+                subtitle = "Deleted works and collections stay here for 90 days before " +
+                    "permanent removal."
             )
         }
 
@@ -177,15 +215,23 @@ private fun RecentlyDeletedContent(
             return@LazyColumn
         }
 
-        if (state.items.isEmpty()) {
+        if (state.items.isEmpty() && state.deletedCollections.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = "Nothing here",
-                    message = "Deleted works, collections, and reading queues stay here for " +
-                        "90 days before they're permanently removed."
+                    message = "Deleted works and collections stay here for 90 days " +
+                        "before they're permanently removed."
                 )
             }
             return@LazyColumn
+        }
+
+        items(state.deletedCollections, key = { "collection-${it.id}" }) { collection ->
+            RecentlyDeletedCollectionRow(
+                collection = collection,
+                onRestore = { onRestoreCollection(collection.id) },
+                onDeleteForever = { onDeleteCollectionForever(collection) }
+            )
         }
 
         items(state.items, key = { it.id }) { work ->
@@ -230,7 +276,7 @@ private fun RecentlyDeletedRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            expiryCaption(work)?.let { caption ->
+            expiryCaption(work.permanentDeletionScheduledAt, work.deletedAt)?.let { caption ->
                 Text(
                     text = caption,
                     style = MaterialTheme.typography.bodySmall,
@@ -249,8 +295,59 @@ private fun RecentlyDeletedRow(
     }
 }
 
-private fun expiryCaption(work: SavedWork): String? {
-    val scheduled = work.permanentDeletionScheduledAt
+@Composable
+private fun RecentlyDeletedCollectionRow(
+    collection: WorkCollection,
+    onRestore: () -> Unit,
+    onDeleteForever: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = collection.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "Collection",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            expiryCaption(collection.permanentDeletionScheduledAt, collection.deletedAt)
+                ?.let { caption ->
+                    Text(
+                        text = caption,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onRestore) { Text("Restore") }
+                OutlinedButton(onClick = onDeleteForever) { Text("Delete forever") }
+            }
+        }
+    }
+}
+
+private fun expiryCaption(scheduled: Instant?, deletedAt: Instant?): String? {
     if (scheduled != null) {
         val days = ChronoUnit.DAYS.between(Instant.now(), scheduled).coerceAtLeast(0)
         val dateLabel = EXPIRY_DATE_FORMAT.format(scheduled.atZone(ZoneId.systemDefault()))
@@ -260,7 +357,7 @@ private fun expiryCaption(work: SavedWork): String? {
             "Expires in $days day${if (days == 1L) "" else "s"} ($dateLabel)"
         }
     }
-    val deletedAt = work.deletedAt ?: return null
+    if (deletedAt == null) return null
     val dateLabel = EXPIRY_DATE_FORMAT.format(deletedAt.atZone(ZoneId.systemDefault()))
     return "Deleted $dateLabel"
 }

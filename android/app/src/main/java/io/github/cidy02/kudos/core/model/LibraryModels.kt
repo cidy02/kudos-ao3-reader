@@ -28,7 +28,11 @@ data class WorkCollection(
     val dateAdded: Instant = Instant.now(),
     val workIds: List<String> = emptyList(),
     val description: String? = null,
-    val sortOrder: Int? = null
+    val sortOrder: Int? = null,
+    val lastModifiedAt: Instant? = null,
+    val isDeleted: Boolean = false,
+    val deletedAt: Instant? = null,
+    val permanentDeletionScheduledAt: Instant? = null
 )
 
 data class CustomFont(

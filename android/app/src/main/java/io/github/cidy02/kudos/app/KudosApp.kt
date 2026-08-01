@@ -1,22 +1,49 @@
 package io.github.cidy02.kudos.app
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import kotlinx.coroutines.launch
+
+// Settings' persisted 4-option app theme and the quick-toggle palette icon in
+// MainScaffold both need to read and write the *same* value — previously the
+// icon only mutated local Compose state (reset on every process start) and the
+// Settings picker wrote a DataStore key nothing ever read back.
+private fun AppThemeSetting.toThemeMode(): KudosThemeMode = when (this) {
+    AppThemeSetting.System -> KudosThemeMode.System
+    AppThemeSetting.Light -> KudosThemeMode.Light
+    AppThemeSetting.Dark -> KudosThemeMode.Dark
+    AppThemeSetting.Sepia -> KudosThemeMode.Sepia
+}
+
+private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
+    KudosThemeMode.System -> AppThemeSetting.System
+    KudosThemeMode.Light -> AppThemeSetting.Light
+    KudosThemeMode.Dark -> AppThemeSetting.Dark
+    KudosThemeMode.Sepia -> AppThemeSetting.Sepia
+}
 
 @Composable
 fun KudosApp(container: KudosAppContainer) {
-    var themeMode by remember { mutableStateOf(KudosThemeMode.System) }
+    val settings by container.settingsRepository.settings
+        .collectAsState(initial = KudosSettings())
+    val themeMode = settings.app.appTheme.toThemeMode()
+    val scope = rememberCoroutineScope()
 
     KudosTheme(themeMode = themeMode) {
         MainScaffold(
             container = container,
             themeMode = themeMode,
-            onCycleTheme = { themeMode = themeMode.next() }
+            onCycleTheme = {
+                scope.launch {
+                    container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                }
+            }
         )
     }
 }
