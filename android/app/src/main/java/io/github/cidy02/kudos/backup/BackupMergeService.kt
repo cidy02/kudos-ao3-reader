@@ -26,6 +26,9 @@ object BackupMergeService {
             .toMutableMap()
 
         manifest.works.forEach { archived ->
+            // Apple Recently Deleted / soft-delete: do not resurrect into Android library.
+            if (archived.isDeleted == true) return@forEach
+
             val id = BackupPaths.canonicalUuid(archived.id, "work.id")
             val existing = worksById[id]
             val incomingEpub = epubFilesById[id]

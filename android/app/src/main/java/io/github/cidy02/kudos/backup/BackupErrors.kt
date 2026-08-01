@@ -5,7 +5,10 @@ sealed class BackupError(message: String, cause: Throwable? = null) : Exception(
         BackupError(message)
 
     class UnsupportedVersion(val version: Int) :
-        BackupError("This backup uses unsupported format version $version.")
+        BackupError(
+            "This backup uses unsupported format version $version " +
+                "(Android supports ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT})."
+        )
 
     object MissingManifest : BackupError("The backup is missing manifest.json.")
 

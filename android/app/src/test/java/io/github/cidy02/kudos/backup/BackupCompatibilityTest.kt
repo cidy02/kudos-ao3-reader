@@ -64,7 +64,7 @@ class BackupV2ZipDecodeTest {
 
         val backup = BackupImporter.importV2Zip(bytes)
 
-        assertEquals(BackupVersion.ZIP_V2, backup.manifest.version)
+        assertEquals(BackupVersion.CURRENT, backup.manifest.version)
         assertEquals("android", backup.manifest.exportedBy?.platform)
         assertArrayEquals(EPUB_BYTES, backup.epubFilesByWorkId[WORK_ID])
         assertArrayEquals(FONT_BYTES, backup.fontFilesByFileName["Reader.ttf"])
@@ -100,7 +100,7 @@ class BackupV2ZipExportTest {
         assertTrue(entries.containsKey("Fonts/Reader.ttf"))
 
         val manifest = BackupImporter.decodeManifest(entries.getValue(BackupPaths.MANIFEST))
-        assertEquals(BackupVersion.ZIP_V2, manifest.version)
+        assertEquals(BackupVersion.CURRENT, manifest.version)
         assertEquals("android", manifest.exportedBy?.platform)
         assertEquals(COLLECTION_ID, manifest.collections.single().id)
         assertEquals(SEARCH_ID, manifest.savedSearches.single().id)
@@ -424,6 +424,151 @@ class BackupPreservesReadiumLocatorAsPlatformSpecificDataTest {
     }
 }
 
+class BackupAppleV8CompatibilityTest {
+    @Test
+    fun acceptsManifestVersion8WithAnnotations() {
+        val locator = """{"href":"/OEBPS/ch3.xhtml","locations":{"progression":0.42}}"""
+        val manifest = sampleManifest(
+            version = 8,
+            annotations = listOf(
+                BackupAnnotation(
+                    id = "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                    workID = WORK_ID,
+                    kindRaw = "highlight",
+                    colorRaw = "green",
+                    locatorString = locator,
+                    selectedText = "the lantern guttered",
+                    note = "echoes the opening",
+                    progression = 0.17,
+                    spineIndex = 4,
+                    chapterTitle = "Chapter 3",
+                    createdAt = DATE_STRING
+                )
+            )
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = manifest,
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+
+        val imported = BackupImporter.importV2Zip(bytes)
+        assertEquals(BackupVersion.CURRENT, imported.manifest.version)
+        // Export rewrites at CURRENT; annotations are carried when present on the package.
+        assertEquals(1, imported.manifest.annotations.size)
+        assertEquals(locator, imported.manifest.annotations.single().locatorString)
+
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+        assertEquals(1, merged.snapshot.works.size)
+        assertEquals("Example Work", merged.snapshot.works.single().title)
+    }
+
+    @Test
+    fun importsRawAppleShapedV8ZipWithoutAndroidExportedBy() {
+        // Minimal Apple-like v8 JSON: no exportedBy, with annotations + tombstones keys.
+        val json = """
+            {
+              "version": 8,
+              "exportedAt": "$DATE_STRING",
+              "works": [{
+                "id": "$WORK_ID",
+                "title": "From iPhone",
+                "author": "Author",
+                "summary": "",
+                "sourceURL": "https://archiveofourown.org/works/999",
+                "dateAdded": "$DATE_STRING",
+                "isFavorite": true,
+                "isSaved": true,
+                "isFinished": false,
+                "hasEPUB": true,
+                "isComplete": true,
+                "rating": "Mature",
+                "language": "English",
+                "wordCount": 5000,
+                "chapters": "3/3",
+                "kudos": 10,
+                "comments": 1,
+                "hits": 100,
+                "workWarnings": [],
+                "workCategories": [],
+                "seriesTitle": "",
+                "seriesPosition": 0,
+                "seriesURL": "",
+                "lastSpineIndex": 1,
+                "lastScrollFraction": 0.25,
+                "workTags": [],
+                "workFandoms": ["Fandom"],
+                "workCharacters": [],
+                "workRelationships": [],
+                "workFreeforms": [],
+                "workTagsFetched": true,
+                "userTags": ["Keep"],
+                "ao3WorkID": 999,
+                "epubPreservationStatusRaw": "preserved",
+                "metadataSyncStatusRaw": "current"
+              }],
+              "bookmarks": [],
+              "fonts": [],
+              "collections": [],
+              "readingQueues": [],
+              "readingQueueMemberships": [],
+              "annotations": [{
+                "id": "11111111-1111-4111-8111-111111111111",
+                "workID": "$WORK_ID",
+                "kindRaw": "bookmark",
+                "colorRaw": "yellow",
+                "locatorString": "{}",
+                "selectedText": "",
+                "note": "",
+                "progression": 0.1,
+                "spineIndex": 0,
+                "chapterTitle": "",
+                "createdAt": "$DATE_STRING",
+                "isPendingDeletion": false
+              }],
+              "settings": {
+                "readerFontID": "system",
+                "readerMode": "scroll",
+                "appTheme": "system",
+                "readerTheme": "sepia",
+                "accentColorHex": "#990000",
+                "autoPreserveSmallSeriesOnSaveForLater": true,
+                "autoPreserveSeriesWorkThreshold": 5
+              },
+              "tombstones": []
+            }
+        """.trimIndent()
+        val zip = rawZip(
+            listOf(
+                BackupPaths.MANIFEST to json.toByteArray(Charsets.UTF_8),
+                "Works/$WORK_ID.epub" to EPUB_BYTES
+            )
+        )
+
+        val imported = BackupImporter.importV2Zip(zip)
+        assertEquals(8, imported.manifest.version)
+        assertEquals("From iPhone", imported.manifest.works.single().title)
+        assertEquals(1, imported.manifest.annotations.size)
+        assertArrayEquals(EPUB_BYTES, imported.epubFilesByWorkId[WORK_ID])
+
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+        assertEquals(1, merged.summary.worksCreated)
+        assertEquals("From iPhone", merged.snapshot.works.single().title)
+        assertTrue(merged.snapshot.works.single().isFavorite)
+        assertEquals(listOf("Keep"), merged.snapshot.userTagsByWorkId[WORK_ID])
+    }
+
+    @Test
+    fun rejectsVersionsAboveCurrent() {
+        assertThrows(BackupError.UnsupportedVersion::class.java) {
+            BackupImporter.decodeManifest(
+                BackupJson.encodeToString(sampleManifest().copy(version = 99)).toByteArray(Charsets.UTF_8)
+            )
+        }
+    }
+}
+
 private const val WORK_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 private const val OTHER_WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 private const val COLLECTION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
@@ -447,7 +592,7 @@ private fun samplePackage(
 }
 
 private fun sampleManifest(
-    version: Int = BackupVersion.ZIP_V2,
+    version: Int = BackupVersion.CURRENT,
     exportedAt: String = DATE_STRING,
     works: List<BackupWork> = listOf(sampleBackupWork()),
     settings: BackupSettingsPayload = BackupSettingsPayload(readerFontID = "custom:Reader.ttf"),
@@ -465,16 +610,17 @@ private fun sampleManifest(
             name = "Slow Burn",
             dateAdded = DATE_STRING
         )
-    )
+    ),
+    annotations: List<BackupAnnotation> = emptyList()
 ): KudosBackupManifest {
     return KudosBackupManifest(
         version = version,
         exportedAt = exportedAt,
-        exportedBy = if (version == BackupVersion.ZIP_V2) {
-            BackupExportedBy(platform = "android", appVersion = "0.1.0")
-        } else {
-            null
-        },
+        exportedBy = BackupExportedBy(
+            platform = "android",
+            appVersion = "0.1.0",
+            schemaVersion = version
+        ),
         works = works,
         bookmarks = listOf(
             BackupBookmark(
@@ -492,6 +638,7 @@ private fun sampleManifest(
         ),
         collections = collections,
         savedSearches = savedSearches,
+        annotations = annotations,
         settings = settings
     )
 }

@@ -20,12 +20,12 @@ fun BackupLibrarySnapshot.toV2Manifest(
         .groupBy({ BackupPaths.normalizeIdForComparison(it.first) }, { it.second })
 
     return KudosBackupManifest(
-        version = BackupVersion.ZIP_V2,
+        version = BackupVersion.CURRENT,
         exportedAt = BackupValidator.formatInstant(exportedAt),
         exportedBy = BackupExportedBy(
             platform = "android",
             appVersion = appVersion,
-            schemaVersion = 1
+            schemaVersion = BackupVersion.CURRENT
         ),
         works = works
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
@@ -95,15 +95,22 @@ fun SavedWork.toBackupWork(
 }
 
 fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
+    val added = if (dateAdded.isNotBlank()) {
+        BackupValidator.parseInstant(dateAdded, "work.dateAdded")
+    } else {
+        java.time.Instant.now()
+    }
     return SavedWork(
         id = BackupPaths.canonicalUuid(id, "work.id"),
         title = title,
         author = author,
         summary = summary,
         sourceUrl = sourceURL,
-        dateAdded = BackupValidator.parseInstant(dateAdded, "work.dateAdded"),
+        dateAdded = added,
         isFavorite = isFavorite,
-        isSaved = isSaved,
+        // Prefer archive flag; default to saved when Apple marks hasEPUB so the
+        // work appears in the offline Library after import.
+        isSaved = isSaved || hasEpub,
         isFinished = isFinished,
         hasEpub = hasEpub,
         isComplete = isComplete,
@@ -117,7 +124,10 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         seriesUrl = seriesURL,
         lastSpineIndex = lastSpineIndex,
         lastScrollFraction = lastScrollFraction,
-        lastReadDate = BackupValidator.parseNullableInstant(lastReadDate, "work.lastReadDate"),
+        lastReadDate = BackupValidator.parseNullableInstant(
+            lastReadDate?.takeIf { it.isNotBlank() },
+            "work.lastReadDate"
+        ),
         workWarnings = workWarnings,
         workCategories = workCategories,
         workTags = workTags,
@@ -130,7 +140,10 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         comments = comments,
         hits = hits,
         knownChapterCount = knownChapterCount,
-        lastUpdateCheck = BackupValidator.parseNullableInstant(lastUpdateCheck, "work.lastUpdateCheck")
+        lastUpdateCheck = BackupValidator.parseNullableInstant(
+            lastUpdateCheck?.takeIf { it.isNotBlank() },
+            "work.lastUpdateCheck"
+        )
     )
 }
 

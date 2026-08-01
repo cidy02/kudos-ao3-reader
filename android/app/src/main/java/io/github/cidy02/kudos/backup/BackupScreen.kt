@@ -60,7 +60,8 @@ fun BackupScreen(
                     } ?: error("Could not open the chosen location for writing.")
                 }
                 statusIsError = false
-                statusMessage = "Exported ${bytes.size / 1024} KB as a v2 .kudosbackup ZIP."
+                statusMessage =
+                    "Exported ${bytes.size / 1024} KB as a v${BackupVersion.CURRENT} .kudosbackup ZIP."
             } catch (error: Exception) {
                 statusIsError = true
                 statusMessage = userFacingError("Export failed", error)
@@ -109,8 +110,8 @@ fun BackupScreen(
             BackupInfoCard(
                 title = "Compatibility",
                 rows = listOf(
-                    "Export writes Android v2 ZIP packages with a .kudosbackup name.",
-                    "Import accepts v2 ZIP .kudosbackup files (including those from other devices).",
+                    "Export writes ZIP packages at manifest v${BackupVersion.CURRENT} (Apple-compatible).",
+                    "Import accepts Apple/Android .kudosbackup ZIP versions ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT}.",
                     "Restore is merge-only and does not delete works that are already on the device."
                 )
             )
@@ -138,7 +139,13 @@ fun BackupScreen(
                 ) {
                     Text("Import and export", style = MaterialTheme.typography.titleMedium)
                     MetadataChipRow(
-                        labels = listOf("v2 ZIP", "SAF picker", "merge-only", "session excluded"),
+                        labels = listOf(
+                            "v${BackupVersion.CURRENT} ZIP",
+                            "v1–v${BackupVersion.CURRENT} import",
+                            "SAF picker",
+                            "merge-only",
+                            "session excluded"
+                        ),
                         prominent = true
                     )
                     Text(

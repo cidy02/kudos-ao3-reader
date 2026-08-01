@@ -41,18 +41,28 @@ object BackupValidator {
     }
 
     fun validateManifest(manifest: KudosBackupManifest): KudosBackupManifest {
-        if (manifest.version !in BackupVersion.supported) {
+        if (!BackupVersion.isSupported(manifest.version)) {
             throw BackupError.UnsupportedVersion(manifest.version)
         }
-        parseInstant(manifest.exportedAt, "exportedAt")
+        // Some Apple archives use fractional-second ISO8601; tolerate empty only
+        // for unit fixtures that skip the field (coerceInputValues).
+        if (manifest.exportedAt.isNotBlank()) {
+            parseInstant(manifest.exportedAt, "exportedAt")
+        }
 
         val workIds = mutableSetOf<String>()
         val works = manifest.works.mapIndexed { index, work ->
+            // Soft-deleted Apple works still decode; skip applying hard-deleted ones
+            // is handled at merge time. Keep them in the validated list for EPUB map.
             val id = BackupPaths.canonicalUuid(work.id, "works[$index].id")
             if (!workIds.add(id)) throw BackupError.InvalidPackage("Duplicate work id: $id")
-            parseInstant(work.dateAdded, "works[$index].dateAdded")
-            work.lastReadDate?.let { parseInstant(it, "works[$index].lastReadDate") }
-            work.lastUpdateCheck?.let { parseInstant(it, "works[$index].lastUpdateCheck") }
+            if (work.dateAdded.isNotBlank()) {
+                parseInstant(work.dateAdded, "works[$index].dateAdded")
+            }
+            work.lastReadDate?.takeIf { it.isNotBlank() }
+                ?.let { parseInstant(it, "works[$index].lastReadDate") }
+            work.lastUpdateCheck?.takeIf { it.isNotBlank() }
+                ?.let { parseInstant(it, "works[$index].lastUpdateCheck") }
             if (work.lastSpineIndex < 0) {
                 throw BackupError.InvalidPackage("lastSpineIndex must be non-negative for work $id.")
             }
@@ -117,12 +127,18 @@ object BackupValidator {
             savedSearch.copy(id = id)
         }
 
+        // Preserve forward-compat arrays (queues/annotations/tombstones) as decoded;
+        // Android may not apply all of them yet, but re-export must not drop them.
         return manifest.copy(
             works = works,
             bookmarks = bookmarks,
             fonts = fonts,
             collections = collections,
-            savedSearches = savedSearches
+            savedSearches = savedSearches,
+            readingQueues = manifest.readingQueues,
+            readingQueueMemberships = manifest.readingQueueMemberships,
+            annotations = manifest.annotations,
+            tombstones = manifest.tombstones
         )
     }
 

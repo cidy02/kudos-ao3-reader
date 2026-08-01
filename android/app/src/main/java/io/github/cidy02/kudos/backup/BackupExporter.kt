@@ -9,11 +9,13 @@ object BackupExporter {
     fun exportV2(kudosBackup: KudosBackupPackage): ByteArray {
         val manifest = BackupValidator.validateManifest(
             kudosBackup.manifest.copy(
-                version = BackupVersion.ZIP_V2,
+                // Write current Apple-compatible version so cross-device restore
+                // does not bounce on "unsupported version" either direction.
+                version = BackupVersion.CURRENT,
                 exportedBy = kudosBackup.manifest.exportedBy ?: BackupExportedBy(
                     platform = "android",
                     appVersion = "0.1.0",
-                    schemaVersion = 1
+                    schemaVersion = BackupVersion.CURRENT
                 )
             )
         )

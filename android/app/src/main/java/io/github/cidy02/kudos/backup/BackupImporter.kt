@@ -60,7 +60,9 @@ object BackupImporter {
         }
 
         val manifest = BackupValidator.decodeManifest(manifestBytes ?: throw BackupError.MissingManifest)
-        if (manifest.version != BackupVersion.ZIP_V2) {
+        // Apple writes ZIP for modern manifests (v2–v8). Accept any supported
+        // version so a Flip7 can restore a phone's v8 .kudosbackup.
+        if (!BackupVersion.isZipCompatible(manifest.version)) {
             throw BackupError.UnsupportedVersion(manifest.version)
         }
 
@@ -81,7 +83,9 @@ object BackupImporter {
         if (!Files.isRegularFile(manifestPath)) throw BackupError.MissingManifest
 
         val manifest = BackupValidator.decodeManifest(Files.readAllBytes(manifestPath))
-        if (manifest.version != BackupVersion.APPLE_V1) {
+        // Directory packages are the legacy Apple shape (typically v1). Still
+        // accept any supported version if someone hands us a directory tree.
+        if (!BackupVersion.isSupported(manifest.version)) {
             throw BackupError.UnsupportedVersion(manifest.version)
         }
 
