@@ -15,6 +15,8 @@ sealed interface ReaderUiState {
         val restoreTarget: ReaderRestoreTarget,
         val preferences: ReaderPreferences,
         val endOfWork: EndOfWorkActions,
-        val finished: Boolean
+        val finished: Boolean,
+        /** Latest navigator position for bottom progress chrome (not a second save path). */
+        val liveProgress: ReaderProgress? = null
     ) : ReaderUiState
 }

@@ -11,7 +11,12 @@ package io.github.cidy02.kudos.reader
 data class ReaderProgress(
     val spineIndex: Int,
     val scrollFraction: Double,
-    val locatorJson: String? = null
+    val locatorJson: String? = null,
+    /**
+     * Whole-book progression 0…1 from the engine (UI chrome only).
+     * Not a separate persistence field — [locatorJson] / fallbacks carry position.
+     */
+    val totalProgression: Double? = null
 ) {
     val isMeaningful: Boolean
         get() = spineIndex > 0 || scrollFraction > 0.0 || !locatorJson.isNullOrBlank()

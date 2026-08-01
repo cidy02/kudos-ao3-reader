@@ -25,7 +25,13 @@ object ReadiumProgressAdapter {
         val fraction = fallbackScrollFraction(locator)
 
         val envelope = ReaderLocatorCodec.encodeEnvelope(locator.toJSON().toString())
-        return ReaderProgress(spineIndex = spineIndex, scrollFraction = fraction, locatorJson = envelope)
+        val total = locator.locations.totalProgression?.coerceIn(0.0, 1.0)
+        return ReaderProgress(
+            spineIndex = spineIndex,
+            scrollFraction = fraction,
+            locatorJson = envelope,
+            totalProgression = total
+        )
     }
 
     /**
