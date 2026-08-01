@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,10 +13,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -24,6 +29,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -37,7 +45,6 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.ui.components.CardMetaLine
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
@@ -92,6 +99,9 @@ private fun LibraryContent(
     onOpenRecentlyDeleted: () -> Unit = {},
     onOpenReadingQueues: () -> Unit = {}
 ) {
+    // Filters stay collapsed by default so shelves + main list lead (Apple density parity).
+    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -100,7 +110,14 @@ private fun LibraryContent(
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { LibraryHeader(state, onOpenReadingQueues = onOpenReadingQueues, onOpenRecentlyDeleted = onOpenRecentlyDeleted) }
+        // Subtitle/count + Queues/Deleted — TopAppBar already says "Library".
+        item {
+            LibraryToolbarRow(
+                state = state,
+                onOpenReadingQueues = onOpenReadingQueues,
+                onOpenRecentlyDeleted = onOpenRecentlyDeleted
+            )
+        }
 
         if (state.loading) {
             item { LoadingStateCard("Loading your Library") }
@@ -122,6 +139,18 @@ private fun LibraryContent(
             return@LazyColumn
         }
 
+        // 1) Search near top
+        item {
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = onSearch,
+                label = { Text("Search Library") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // 2) Short shelf previews lead content
         item {
             LibrarySectionPreview(
                 title = "Continue Reading",
@@ -161,10 +190,12 @@ private fun LibraryContent(
             }
         }
 
+        // 3) Advanced filters tucked behind expandable header (default collapsed)
         item {
-            LibraryControls(
+            LibraryFiltersPanel(
                 state = state,
-                onSearch = onSearch,
+                expanded = filtersExpanded,
+                onExpandedChange = { filtersExpanded = it },
                 onSort = onSort,
                 onToggleFavorite = onToggleFavorite,
                 onFinishedFilter = onFinishedFilter,
@@ -198,29 +229,39 @@ private fun LibraryContent(
     }
 }
 
+/**
+ * Light toolbar under the scaffold TopAppBar: saved count + Queues / Recently Deleted.
+ * Avoids a second full "Library" title.
+ */
 @Composable
-private fun LibraryHeader(
+private fun LibraryToolbarRow(
     state: LibraryUiState,
     onOpenReadingQueues: () -> Unit,
     onOpenRecentlyDeleted: () -> Unit = {}
 ) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
-        " - $it hidden by privacy"
+        " · $it hidden by privacy"
     }.orEmpty()
-    KudosScreenHeader(
-        title = "Library",
-        subtitle = "${state.totalSaved} saved$hidden",
-        trailing = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onOpenReadingQueues) {
-                    Text("Queues")
-                }
-                TextButton(onClick = onOpenRecentlyDeleted) {
-                    Text("Recently Deleted")
-                }
-            }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "${state.totalSaved} saved$hidden",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        TextButton(onClick = onOpenReadingQueues) {
+            Text("Queues")
         }
-    )
+        TextButton(onClick = onOpenRecentlyDeleted) {
+            Text("Recently Deleted")
+        }
+    }
 }
 
 @Composable
@@ -249,8 +290,7 @@ private fun LibrarySectionPreview(
     items: List<LibraryDisplayItem>,
     emptyMessage: String,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit,
-    onOpenRecentlyDeleted: () -> Unit = {}
+    onOpenReader: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         KudosSectionHeader(
@@ -270,10 +310,14 @@ private fun LibrarySectionPreview(
     }
 }
 
+/**
+ * Collapsible sort + filter controls. Default collapsed so the shelves/list lead.
+ */
 @Composable
-private fun LibraryControls(
+private fun LibraryFiltersPanel(
     state: LibraryUiState,
-    onSearch: (String) -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onSort: (LibrarySort) -> Unit,
     onToggleFavorite: () -> Unit,
     onFinishedFilter: (LibraryFinishedFilter) -> Unit,
@@ -282,109 +326,149 @@ private fun LibraryControls(
     onToggleCollection: (String) -> Unit,
     onClearFilters: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            value = state.searchQuery,
-            onValueChange = onSearch,
-            label = { Text("Search Library") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+    val activeCount = state.filters.activeFilterCount()
+    val headerLabel = if (activeCount > 0) "Filters ($activeCount)" else "Filters"
+    val expandLabel = if (expanded) "Collapse filters" else "Expand filters"
 
-        Text(text = "Sort", style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LibrarySort.entries.forEach { sort ->
-                FilterChip(
-                    selected = state.sort == sort,
-                    onClick = { onSort(sort) },
-                    label = { Text(sort.label) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClick = { onExpandedChange(!expanded) }
                 )
+                .semantics {
+                    contentDescription = "$headerLabel. $expandLabel"
+                }
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.FilterList,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = headerLabel,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            if (activeCount > 0) {
+                StatusBadge("$activeCount")
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = "Sort", style = MaterialTheme.typography.titleSmall)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LibrarySort.entries.forEach { sort ->
+                        FilterChip(
+                            selected = state.sort == sort,
+                            onClick = { onSort(sort) },
+                            label = { Text(sort.label) }
+                        )
+                    }
+                }
+
+                Text(text = "Filters", style = MaterialTheme.typography.titleSmall)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = state.filters.favoriteOnly,
+                        onClick = onToggleFavorite,
+                        label = { Text("Favorites") }
+                    )
+                    FilterChip(
+                        selected = state.filters.download == LibraryDownloadFilter.Downloaded,
+                        onClick = {
+                            onDownloadFilter(
+                                if (state.filters.download == LibraryDownloadFilter.Downloaded) {
+                                    LibraryDownloadFilter.Any
+                                } else {
+                                    LibraryDownloadFilter.Downloaded
+                                }
+                            )
+                        },
+                        label = { Text("Downloaded") }
+                    )
+                    FilterChip(
+                        selected = state.filters.download == LibraryDownloadFilter.NotDownloaded,
+                        onClick = {
+                            onDownloadFilter(
+                                if (state.filters.download == LibraryDownloadFilter.NotDownloaded) {
+                                    LibraryDownloadFilter.Any
+                                } else {
+                                    LibraryDownloadFilter.NotDownloaded
+                                }
+                            )
+                        },
+                        label = { Text("Not downloaded") }
+                    )
+                    FilterChip(
+                        selected = state.filters.finished == LibraryFinishedFilter.Finished,
+                        onClick = {
+                            onFinishedFilter(
+                                if (state.filters.finished == LibraryFinishedFilter.Finished) {
+                                    LibraryFinishedFilter.Any
+                                } else {
+                                    LibraryFinishedFilter.Finished
+                                }
+                            )
+                        },
+                        label = { Text("Finished") }
+                    )
+                    FilterChip(
+                        selected = state.filters.finished == LibraryFinishedFilter.Unfinished,
+                        onClick = {
+                            onFinishedFilter(
+                                if (state.filters.finished == LibraryFinishedFilter.Unfinished) {
+                                    LibraryFinishedFilter.Any
+                                } else {
+                                    LibraryFinishedFilter.Unfinished
+                                }
+                            )
+                        },
+                        label = { Text("Unfinished") }
+                    )
+                }
+
+                LibraryFacetChips(
+                    title = "User Tags",
+                    empty = "No user tags.",
+                    values = state.userTags,
+                    selectedIds = state.filters.userTagIds,
+                    label = { it.normalizedName },
+                    id = { it.id },
+                    onToggle = onToggleUserTag
+                )
+                LibraryFacetChips(
+                    title = "Collections",
+                    empty = "No collections.",
+                    values = state.collections,
+                    selectedIds = state.filters.collectionIds,
+                    label = { it.name },
+                    id = { it.id },
+                    onToggle = onToggleCollection
+                )
+
+                if (state.filters.hasActiveFilters) {
+                    TextButton(onClick = onClearFilters) { Text("Clear filters") }
+                }
             }
         }
 
-        Text(text = "Filters", style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = state.filters.favoriteOnly,
-                onClick = onToggleFavorite,
-                label = { Text("Favorites") }
-            )
-            FilterChip(
-                selected = state.filters.download == LibraryDownloadFilter.Downloaded,
-                onClick = {
-                    onDownloadFilter(
-                        if (state.filters.download == LibraryDownloadFilter.Downloaded) {
-                            LibraryDownloadFilter.Any
-                        } else {
-                            LibraryDownloadFilter.Downloaded
-                        }
-                    )
-                },
-                label = { Text("Downloaded") }
-            )
-            FilterChip(
-                selected = state.filters.download == LibraryDownloadFilter.NotDownloaded,
-                onClick = {
-                    onDownloadFilter(
-                        if (state.filters.download == LibraryDownloadFilter.NotDownloaded) {
-                            LibraryDownloadFilter.Any
-                        } else {
-                            LibraryDownloadFilter.NotDownloaded
-                        }
-                    )
-                },
-                label = { Text("Not downloaded") }
-            )
-            FilterChip(
-                selected = state.filters.finished == LibraryFinishedFilter.Finished,
-                onClick = {
-                    onFinishedFilter(
-                        if (state.filters.finished == LibraryFinishedFilter.Finished) {
-                            LibraryFinishedFilter.Any
-                        } else {
-                            LibraryFinishedFilter.Finished
-                        }
-                    )
-                },
-                label = { Text("Finished") }
-            )
-            FilterChip(
-                selected = state.filters.finished == LibraryFinishedFilter.Unfinished,
-                onClick = {
-                    onFinishedFilter(
-                        if (state.filters.finished == LibraryFinishedFilter.Unfinished) {
-                            LibraryFinishedFilter.Any
-                        } else {
-                            LibraryFinishedFilter.Unfinished
-                        }
-                    )
-                },
-                label = { Text("Unfinished") }
-            )
-        }
-
-        LibraryFacetChips(
-            title = "User Tags",
-            empty = "No user tags.",
-            values = state.userTags,
-            selectedIds = state.filters.userTagIds,
-            label = { it.normalizedName },
-            id = { it.id },
-            onToggle = onToggleUserTag
-        )
-        LibraryFacetChips(
-            title = "Collections",
-            empty = "No collections.",
-            values = state.collections,
-            selectedIds = state.filters.collectionIds,
-            label = { it.name },
-            id = { it.id },
-            onToggle = onToggleCollection
-        )
-
-        if (state.filters.hasActiveFilters) {
-            TextButton(onClick = onClearFilters) { Text("Clear filters") }
-        }
         HorizontalDivider()
     }
 }
@@ -408,7 +492,10 @@ private fun <T> LibraryFacetChips(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 values.forEach { value ->
                     val valueId = id(value)
                     FilterChip(
@@ -426,8 +513,7 @@ private fun <T> LibraryFacetChips(
 private fun CompactWorkRow(
     display: LibraryDisplayItem,
     onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit,
-    onOpenRecentlyDeleted: () -> Unit = {}
+    onOpenReader: (String) -> Unit
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -617,3 +703,22 @@ private fun SavedWork.primaryFandom(): String? {
 }
 
 private fun Instant.shortDate(): String = toString().substringBefore('T')
+
+/** Count discrete active facets for the Filters badge (presentation only). */
+private fun LibraryFilterState.activeFilterCount(): Int {
+    var count = 0
+    if (favoriteOnly) count++
+    if (finished != LibraryFinishedFilter.Any) count++
+    if (download != LibraryDownloadFilter.Any) count++
+    if (completion != LibraryCompletionFilter.Any) count++
+    count += userTagIds.size
+    count += collectionIds.size
+    count += ratings.size
+    count += warnings.size
+    count += categories.size
+    count += fandoms.size
+    count += relationships.size
+    count += characters.size
+    count += freeforms.size
+    return count
+}
