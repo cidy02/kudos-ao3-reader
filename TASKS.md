@@ -77,6 +77,8 @@ order (owner said "fold in wherever makes sense"):
    uses kind-aware labels ("Preface"/"Summary"/"Afterword"/"Ch. i/storyTotal") instead of
    raw spine "Ch. N/spineCount". Non-AO3 EPUBs (no Preface TOC entry) still number every
    TOC-matched spine item 1..N unchanged. Unit tests for builder matrix + display labels.
+   Commit: `a9fd32bd`
+   (`Android: T-74 item 6 — reader progress-pill section indexing`).
    `android/Scripts/verify.sh` green.
 
 ### P2 — features (roadmap "Later" list; ID assigned on pickup)
