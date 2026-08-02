@@ -349,7 +349,7 @@ private fun RecentlyDeletedCollectionRow(
 
 private fun expiryCaption(scheduled: Instant?, deletedAt: Instant?): String? {
     if (scheduled != null) {
-        val days = ChronoUnit.DAYS.between(Instant.now(), scheduled).coerceAtLeast(0)
+        val days = daysRemainingUntil(scheduled)
         val dateLabel = EXPIRY_DATE_FORMAT.format(scheduled.atZone(ZoneId.systemDefault()))
         return if (days == 0L) {
             "Expires today ($dateLabel)"
@@ -360,6 +360,18 @@ private fun expiryCaption(scheduled: Instant?, deletedAt: Instant?): String? {
     if (deletedAt == null) return null
     val dateLabel = EXPIRY_DATE_FORMAT.format(deletedAt.atZone(ZoneId.systemDefault()))
     return "Deleted $dateLabel"
+}
+
+/**
+ * Whole days remaining until [scheduled], rounding **up** so a partial day still
+ * counts (matches iOS `rounded(.up)`). [ChronoUnit.DAYS.between] floors and can
+ * undercount by one (e.g. just after delete shows 89 instead of 90).
+ */
+internal fun daysRemainingUntil(scheduled: Instant, now: Instant = Instant.now()): Long {
+    val millis = scheduled.toEpochMilli() - now.toEpochMilli()
+    if (millis <= 0L) return 0L
+    val dayMillis = ChronoUnit.DAYS.duration.toMillis()
+    return (millis + dayMillis - 1L) / dayMillis
 }
 
 private val EXPIRY_DATE_FORMAT: DateTimeFormatter =
