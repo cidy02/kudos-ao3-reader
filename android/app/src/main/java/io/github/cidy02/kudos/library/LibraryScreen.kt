@@ -545,6 +545,22 @@ private fun LibraryContent(
                     )
                 }
                 item {
+                    // Home already has a Favorites shelf; Library computed the same
+                    // state (privacy-reveal mapped and all) but never rendered it.
+                    LibraryCarousel(
+                        sectionKey = "favorites",
+                        title = "Favorites",
+                        items = state.favorites.take(ShelfLimit),
+                        emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
+                        showProgress = false,
+                        collapsed = collapsed["favorites"] == true,
+                        onToggleCollapsed = {
+                            collapsed["favorites"] = !(collapsed["favorites"] ?: false)
+                        },
+                        actions = cardActions
+                    )
+                }
+                item {
                     ReadingQueuesShelf(
                         queues = state.readingQueues,
                         collapsed = collapsed["queues"] == true,

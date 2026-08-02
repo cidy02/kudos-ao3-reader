@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,6 +83,10 @@ fun SearchScreen(
     var state by remember { mutableStateOf<SearchUiState>(SearchUiState.Idle) }
     var lastFilters by remember { mutableStateOf(AO3SearchFilters()) }
     var savedSearches by remember { mutableStateOf<List<SavedSearch>>(emptyList()) }
+    // Guards against an older in-flight search/retry overwriting a newer one's result
+    // (e.g. Search, then immediately Sort, then immediately Search again) — only the
+    // launch that's still current when it resolves is allowed to write `state`.
+    var searchGeneration by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val activeChips = remember(filters) { activeFilterChips(filters) }
 
@@ -104,11 +109,13 @@ fun SearchScreen(
 
         lastFilters = searchFilters
         state = SearchUiState.Loading
+        val generation = ++searchGeneration
         scope.launch {
-            state = when (val result = repository.search(searchFilters, page)) {
+            val result = when (val result = repository.search(searchFilters, page)) {
                 is AO3Result.Success -> SearchUiState.Results(result.value)
                 is AO3Result.Failure -> SearchUiState.Error(result.error, page)
             }
+            if (generation == searchGeneration) state = result
         }
     }
 
@@ -119,16 +126,22 @@ fun SearchScreen(
             else -> 1
         }
         state = SearchUiState.Loading
+        val generation = ++searchGeneration
         scope.launch {
-            state = when (val result = repository.search(lastFilters, page)) {
+            val result = when (val result = repository.search(lastFilters, page)) {
                 is AO3Result.Success -> SearchUiState.Results(result.value)
                 is AO3Result.Failure -> SearchUiState.Error(result.error, page)
             }
+            if (generation == searchGeneration) state = result
         }
     }
 
     fun clearFilters() {
         filters = clearedFiltersPreservingQuery(filters)
+        // Clearing filters must also clear what's on screen — this only updated the
+        // filter state before, leaving stale Results/Error visible until the user
+        // manually searched again.
+        if (state !is SearchUiState.Idle) runSearch()
     }
 
     fun presentSaveDialog() {
@@ -204,7 +217,12 @@ fun SearchScreen(
         SearchControlsRow(
             filters = filters,
             activeChipCount = activeChips.size,
-            onSortSelected = { filters = filters.copy(sort = it) },
+            onSortSelected = {
+                filters = filters.copy(sort = it)
+                // Otherwise the visible results/pagination stay under the old sort
+                // until the user notices and taps Search again.
+                if (state !is SearchUiState.Idle) runSearch()
+            },
             onOpenFilters = { showFilterSheet = true },
             onClearFilters = ::clearFilters
         )

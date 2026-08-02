@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -115,6 +116,7 @@ fun SettingsScreen(
     var fontStatus by remember { mutableStateOf<String?>(null) }
     var fontStatusIsError by remember { mutableStateOf(false) }
     var fontBusy by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
 
     fun launchUpdate(block: suspend () -> Unit) {
         scope.launch { block() }
@@ -456,7 +458,7 @@ fun SettingsScreen(
                     Text("Export / Import Backup…")
                 }
                 OutlinedButton(
-                    onClick = { scope.launch { repository.resetToDefaults() } },
+                    onClick = { showResetConfirm = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Reset settings to defaults")
@@ -575,6 +577,34 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Reset settings to defaults?") },
+            text = {
+                Text(
+                    "This clears reader, theme, privacy, and other app preferences back to " +
+                        "their defaults. Your Library, downloads, and AO3 session are not affected."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetConfirm = false
+                        scope.launch { repository.resetToDefaults() }
+                    }
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

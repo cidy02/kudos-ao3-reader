@@ -60,12 +60,18 @@ fun CollectionDetailScreen(
         ?: kotlinx.coroutines.flow.flowOf(PrivacySettings()))
         .collectAsState(initial = PrivacySettings())
     val reveal by privacyGate.state.collectAsState()
+    // "Ask before removing a work" toggle in Settings — persisted and round-tripped
+    // through backup, but no delete/remove action anywhere actually read it yet.
+    val confirmBeforeDelete by (settingsRepository?.settings?.map { it.app.confirmBeforeDelete }
+        ?: kotlinx.coroutines.flow.flowOf(true))
+        .collectAsState(initial = true)
     var loading by remember(collectionId) { mutableStateOf(true) }
     var working by remember(collectionId) { mutableStateOf(false) }
     var error by remember(collectionId) { mutableStateOf<String?>(null) }
     var collection by remember(collectionId) { mutableStateOf<WorkCollection?>(null) }
     var works by remember(collectionId) { mutableStateOf<List<SavedWork>>(emptyList()) }
     var confirmDelete by remember(collectionId) { mutableStateOf(false) }
+    var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -151,6 +157,33 @@ fun CollectionDetailScreen(
         )
     }
 
+    pendingRemoveWork?.let { work ->
+        AlertDialog(
+            onDismissRequest = { if (!working) pendingRemoveWork = null },
+            title = { Text("Remove “${work.title}”?") },
+            text = { Text("This only removes it from this collection — the work stays in your Library.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !working,
+                    onClick = {
+                        pendingRemoveWork = null
+                        removeWork(work.id)
+                    }
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !working,
+                    onClick = { pendingRemoveWork = null }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
@@ -216,7 +249,13 @@ fun CollectionDetailScreen(
                                 if (work.hasEpub) onOpenReader(work.id)
                             },
                             onReveal = { privacyGate.reveal(work.id) },
-                            onRemove = { removeWork(work.id) }
+                            onRemove = {
+                                if (confirmBeforeDelete) {
+                                    pendingRemoveWork = work
+                                } else {
+                                    removeWork(work.id)
+                                }
+                            }
                         )
                     }
                 }

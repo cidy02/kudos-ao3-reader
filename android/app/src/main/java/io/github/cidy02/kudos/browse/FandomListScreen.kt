@@ -34,6 +34,7 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -45,7 +46,15 @@ fun FandomListScreen(
 ) {
     var state by remember(category.name) { mutableStateOf<FandomListState>(FandomListState.Loading) }
     var filter by remember(category.name) { mutableStateOf("") }
+    var debouncedFilter by remember(category.name) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+
+    // 120ms debounce, matching iOS's normalized fandom filter, so fast typing doesn't
+    // recompute the match list (and, on a big category, re-render it) every keystroke.
+    LaunchedEffect(filter) {
+        delay(120)
+        debouncedFilter = filter
+    }
 
     fun webFallback() {
         AO3BrowseUrls.resolveAo3Url(category.fandomsPath)?.let(onOpenWebFallback)
@@ -92,8 +101,13 @@ fun FandomListScreen(
                 onWebFallback = ::webFallback
             )
             is FandomListState.Loaded -> {
-                val matches = current.fandoms.filter {
-                    filter.isBlank() || it.name.contains(filter.trim(), ignoreCase = true)
+                val normalizedFilter = remember(debouncedFilter) { foldDiacritics(debouncedFilter.trim()) }
+                val matches = remember(current.fandoms, normalizedFilter) {
+                    if (normalizedFilter.isBlank()) {
+                        current.fandoms
+                    } else {
+                        current.fandoms.filter { foldDiacritics(it.name).contains(normalizedFilter) }
+                    }
                 }
                 OutlinedTextField(
                     value = filter,
@@ -161,4 +175,10 @@ private sealed interface FandomListState {
     data object Loading : FandomListState
     data class Loaded(val fandoms: List<AO3Fandom>) : FandomListState
     data class Error(val message: String) : FandomListState
+}
+
+/** Diacritic-insensitive, case-insensitive fold — "pokemon" matches "Pokémon". */
+internal fun foldDiacritics(text: String): String {
+    val decomposed = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+    return decomposed.replace(Regex("\\p{Mn}+"), "").lowercase()
 }

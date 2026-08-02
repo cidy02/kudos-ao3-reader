@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,17 +43,22 @@ fun FandomWorksScreen(
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
+    // Guards a fast Previous/Next double-tap from letting the first (older) page's
+    // response land after the second (newer) one and overwrite it.
+    var loadGeneration by remember(fandomName) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val savedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
 
     fun load(page: Int = 1) {
         state = FandomWorksState.Loading
+        val generation = ++loadGeneration
         scope.launch {
-            state = when (val result = repository.worksForFandom(fandomName, page)) {
+            val result = when (val result = repository.worksForFandom(fandomName, page)) {
                 is AO3Result.Success -> FandomWorksState.Loaded(result.value)
                 is AO3Result.Failure -> FandomWorksState.Error(result.error.browseMessage(), page)
             }
+            if (generation == loadGeneration) state = result
         }
     }
 

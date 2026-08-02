@@ -68,6 +68,7 @@ import io.github.cidy02.kudos.reader.readium.ReadiumSettingsAdapter
 import io.github.cidy02.kudos.reader.readium.ReadiumTocAdapter
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
+import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 import kotlinx.coroutines.launch
@@ -94,7 +95,15 @@ fun ReaderScreen(
     onOpenWorkDetail: (Long) -> Unit
 ) {
     val uiState by viewModel.state.collectAsState()
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    // Once reading, use the reader's own selected theme, not the app theme — the two
+    // can diverge (matchAppReaderTheme = false), and using the app's background here
+    // caused a visible flash against the Readium navigator's correctly-reader-themed
+    // content. Loading/Error have no reader preferences yet, so they keep the app
+    // background — a brief loading flash if the two differ, not fixed in this pass.
+    val backgroundColor = (uiState as? ReaderUiState.Reading)
+        ?.preferences?.theme?.backgroundColor()
+        ?: MaterialTheme.colorScheme.background
+    Surface(modifier = Modifier.fillMaxSize(), color = backgroundColor) {
         when (val state = uiState) {
             // Skeleton-only open path (hig-review): no centered spinner flash.
             ReaderUiState.Loading -> ReaderPageSkeleton(message = "Opening…")
@@ -147,7 +156,10 @@ private fun ReaderReading(
     }
 
     when (val result = opening) {
-        null -> ReaderPageSkeleton(message = "Opening “${state.work.title}”…")
+        null -> ReaderPageSkeleton(
+            message = "Opening “${state.work.title}”…",
+            backgroundColor = state.preferences.theme.backgroundColor()
+        )
         is ReadiumOpenResult.Failure -> ReaderErrorView(
             error = result.error,
             onBack = onBack,

@@ -39,7 +39,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ReaderPageSkeleton(
     message: String = "Opening…",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = MaterialTheme.colorScheme.background
 ) {
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     val shimmerAlpha by rememberInfiniteTransition(label = "readerSkeleton")
@@ -59,7 +60,7 @@ fun ReaderPageSkeleton(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(backgroundColor)
             .semantics {
                 contentDescription = message
             }
