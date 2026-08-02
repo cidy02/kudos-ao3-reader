@@ -28,6 +28,7 @@ import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.browse.FandomListScreen
 import io.github.cidy02.kudos.browse.FandomWorksScreen
 import io.github.cidy02.kudos.comments.CommentsScreen
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.home.HomeScreen
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
@@ -246,8 +247,12 @@ fun AppNavHost(
             if (url == null) {
                 navController.popBackStack()
             } else {
+                val settings by container.settingsRepository.settings.collectAsState(
+                    initial = KudosSettings.Defaults
+                )
                 AO3WebViewFallbackScreen(
                     url = url,
+                    appTheme = settings.app.appTheme,
                     onBack = { navController.popBackStack() }
                 )
             }
