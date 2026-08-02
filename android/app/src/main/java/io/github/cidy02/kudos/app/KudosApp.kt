@@ -4,8 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.support.ShakeToReportEffect
+import io.github.cidy02.kudos.support.openBugReport
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import kotlinx.coroutines.launch
@@ -36,6 +39,11 @@ fun KudosApp(container: KudosAppContainer) {
     val scope = rememberCoroutineScope()
 
     KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
+        // App-wide shake-to-report (iOS UIWindow.motionEnded parity). Sensor
+        // listener is lifecycle-bound to this composition and unregistered on leave.
+        val context = LocalContext.current
+        ShakeToReportEffect { openBugReport(context) }
+
         MainScaffold(
             container = container,
             themeMode = themeMode,

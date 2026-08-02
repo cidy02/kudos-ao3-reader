@@ -46,11 +46,15 @@ order (owner said "fold in wherever makes sense"):
    (`expandAll` seed on `AO3WorkCard`). Commit subject:
    `Android: T-74 batch 1 — About credits, Verify Session, Expand all`.
    `android/Scripts/verify.sh` green.
-   *(Items 2–6 below remain backlog — T-74 is not fully done.)*
-2. **Shake-to-report gesture** (T-50/Support: `SensorManager`+`TYPE_ACCELEROMETER`
-   threshold detection triggering the existing "Report a Bug" `mailto:` flow — the
-   mailto-vs-GitHub-prefill gap is separately tracked, this item is just the missing
-   shake trigger).
+2. **Shake-to-report gesture** — ✅ **DONE** — App-wide `SensorManager`+
+   `TYPE_ACCELEROMETER` listener (`ShakeMath` threshold 13.5 m/s² + 1.5s debounce,
+   lifecycle-bound `ShakeToReportEffect` in `KudosApp`) opens the same
+   `openBugReport` mailto as Settings → Report a Bug. Unit tests for threshold/
+   debounce. Commit: `8360381`
+   (`Android: T-74 item 2 — shake-to-report via accelerometer`).
+   `android/Scripts/verify.sh` green.
+   *(Items 3–6 below remain backlog — T-74 is not fully done.)*
+
 3. **In-app AO3 WebView theme CSS injection** (T-15: `AO3WebViewFallbackScreen.kt`
    has no `evaluateJavascript`/CSS injection at all; iOS's `WebBrowser.swift` injects
    a `<style id="kudos-app-theme">` tag for Dark/Sepia only, deliberately leaves

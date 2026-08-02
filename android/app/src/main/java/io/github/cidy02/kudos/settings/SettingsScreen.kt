@@ -66,6 +66,7 @@ import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
+import io.github.cidy02.kudos.support.openBugReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -551,17 +552,7 @@ fun SettingsScreen(
                 SettingsLinkRow(
                     label = "Report a Bug",
                     icon = Icons.Outlined.BugReport,
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_SENDTO).apply {
-                            data = Uri.parse("mailto:")
-                            putExtra(
-                                Intent.EXTRA_EMAIL,
-                                arrayOf("cidy02@users.noreply.github.com")
-                            )
-                            putExtra(Intent.EXTRA_SUBJECT, "Kudos Android bug report")
-                        }
-                        runCatching { context.startActivity(intent) }
-                    }
+                    onClick = { openBugReport(context) }
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SettingsLinkRow(
