@@ -23,8 +23,21 @@ class SettingsRepository(
 ) {
     val settings: Flow<KudosSettings> = dataStore.data.map(::settingsFromPreferences)
 
+    /**
+     * First-launch onboarding gate (iOS `@AppStorage("hasCompletedOnboarding")`).
+     * Device-local only — not part of [KudosSettings] / backup restore, so a
+     * restored backup never re-triggers the welcome screen on an already-used device.
+     */
+    val hasCompletedOnboarding: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.HasCompletedOnboarding] ?: false
+    }
+
     suspend fun snapshot(): KudosSettings {
         return settings.first()
+    }
+
+    suspend fun setHasCompletedOnboarding(completed: Boolean) {
+        dataStore.edit { it[Keys.HasCompletedOnboarding] = completed }
     }
 
     suspend fun updateReaderMode(mode: ReaderMode) {
@@ -201,6 +214,8 @@ class SettingsRepository(
         val ReaderTheme = stringPreferencesKey("readerTheme")
         val MatchAppReaderTheme = booleanPreferencesKey("matchAppReaderTheme")
         val AccentColorHex = stringPreferencesKey("accentColorHex")
+        /** Device-local first-launch flag; not included in backup-compatible settings. */
+        val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
     }
 
     companion object {

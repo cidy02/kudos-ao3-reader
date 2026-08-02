@@ -53,7 +53,6 @@ order (owner said "fold in wherever makes sense"):
    debounce. Commit: `eb3a646`
    (`Android: T-74 item 2 — shake-to-report via accelerometer`).
    `android/Scripts/verify.sh` green.
-   *(Items 4–6 below remain backlog — T-74 is not fully done.)*
 
 3. **In-app AO3 WebView theme CSS injection** — ✅ **DONE** — Ported iOS
    `BrowserThemeStyle` (`WebBrowser.swift`) to Android `BrowserThemeStyle` +
@@ -63,8 +62,16 @@ order (owner said "fold in wherever makes sense"):
    System resolves via `isSystemInDarkTheme()` like `KudosTheme`. Unit tests for
    Light-null / Sepia+Dark palette / inject-vs-remove script branches.
    `android/Scripts/verify.sh` green.
-4. **Onboarding / Welcome screen** (T-50: zero `*Onboard*`/`*Welcome*` files;
-   first-launch screen + persisted DataStore "seen it" flag).
+4. **Onboarding / Welcome screen** — ✅ **DONE** — Material 3 first-launch
+   `WelcomeScreen` (`onboarding/WelcomeScreen.kt`) matching iOS `WelcomeView`
+   intent (AO3-unofficial disclaimer, privacy, community, shake-to-report help).
+   Device-local `SettingsRepository.hasCompletedOnboarding` DataStore Flow +
+   `setHasCompletedOnboarding` (key `hasCompletedOnboarding`, not in backup
+   `KudosSettings`). Gated in `KudosApp` before `MainScaffold` until Continue.
+   Unit test for default-false + round-trip. Commit: `abae955`
+   (`Android: T-74 item 4 — first-launch onboarding Welcome screen`).
+   `android/Scripts/verify.sh` green.
+   *(Items 5–6 below remain backlog — T-74 is not fully done.)*
 5. **Local `.epub` file import** (T-58: AO3 downloads only, no "add my own EPUB"
    path; reuse the existing SAF font-import picker pattern, not the AO3 download
    path, for the picker mechanics — decide how a sourceUrl-less `SavedWork` behaves

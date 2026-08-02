@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -113,5 +114,16 @@ class SettingsRepositoryTest {
         repository.resetToDefaults()
 
         assertEquals(KudosSettings.Defaults, repository.snapshot())
+    }
+
+    @Test
+    fun hasCompletedOnboardingDefaultsFalseAndRoundTrips() = runBlocking {
+        assertFalse(repository.hasCompletedOnboarding.first())
+
+        repository.setHasCompletedOnboarding(true)
+        assertTrue(repository.hasCompletedOnboarding.first())
+
+        repository.setHasCompletedOnboarding(false)
+        assertFalse(repository.hasCompletedOnboarding.first())
     }
 }
