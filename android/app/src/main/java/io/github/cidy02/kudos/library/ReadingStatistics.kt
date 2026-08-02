@@ -84,6 +84,7 @@ data class ReadingStatistics(
         fun hasStarted(work: SavedWork): Boolean {
             return work.isFinished ||
                 work.lastReadDate != null ||
+                !work.readiumLocator.isNullOrBlank() ||
                 work.lastSpineIndex > 0 ||
                 work.lastScrollFraction > 0.0
         }

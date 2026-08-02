@@ -41,8 +41,14 @@ class WorkUpdateChecker(
                 }
                 is AO3Result.Success -> {
                     val chapters = result.value.chapters
-                    if (chapters.isBlank()) continue
-                    workRepository.upsert(applyChapterUpdate(work, chapters, now))
+                    if (chapters.isBlank()) {
+                        // Fetched fine but nothing usable came back (e.g. a locked or
+                        // restricted work) — still stamp the check, same reasoning as
+                        // the Failure branch above.
+                        workRepository.upsert(work.copy(lastUpdateCheck = now))
+                    } else {
+                        workRepository.upsert(applyChapterUpdate(work, chapters, now))
+                    }
                 }
             }
         }

@@ -203,6 +203,7 @@ private fun ReaderReading(
                 ) {
                     ReaderTopBar(
                         title = state.work.title,
+                        author = state.work.author,
                         finished = state.finished,
                         commentsWorkId = state.endOfWork.workId.takeIf { state.endOfWork.commentsAvailable },
                         onBack = onBack,
@@ -267,6 +268,7 @@ private fun ReaderReading(
 @Composable
 private fun ReaderTopBar(
     title: String,
+    author: String,
     finished: Boolean,
     commentsWorkId: Long?,
     onBack: () -> Unit,
@@ -290,13 +292,23 @@ private fun ReaderTopBar(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (author.isNotBlank()) {
+                    Text(
+                        text = author,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
             IconButton(onClick = onOpenToc) {
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters")
             }

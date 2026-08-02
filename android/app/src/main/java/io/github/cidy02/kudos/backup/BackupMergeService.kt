@@ -411,6 +411,15 @@ object BackupMergeService {
                 val mergedWorkIds = (existing.workIds + archived.workIDs)
                     .map { BackupPaths.normalizeIdForComparison(it) }
                     .distinct()
+                    // A work the user explicitly removed from this collection locally
+                    // must not silently come back just because an older backup still
+                    // lists it as a member.
+                    .filterNot { workId ->
+                        tombstoneIndex.collectionMembershipResolution(
+                            "$id:$workId",
+                            incomingModified
+                        ) == TombstoneResolution.SUPPRESS_STALE
+                    }
                 collectionsById[id] = existing.copy(
                     name = if (archivedIsDeleted) existing.name else archived.name,
                     dateAdded = BackupValidator.parseInstant(archived.dateAdded, "collection.dateAdded"),
@@ -754,6 +763,7 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
     private val membershipById = mutableMapOf<String, SyncTombstone>()
     private val annotationById = mutableMapOf<String, SyncTombstone>()
     private val collectionById = mutableMapOf<String, SyncTombstone>()
+    private val collectionMembershipById = mutableMapOf<String, SyncTombstone>()
 
     init {
         tombstones.forEach { tombstone ->
@@ -774,6 +784,8 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
                     indexNewest(annotationById, recordId, tombstone)
                 SyncTombstoneRecordType.WORK_COLLECTION ->
                     indexNewest(collectionById, recordId, tombstone)
+                SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP ->
+                    indexNewest(collectionMembershipById, recordId, tombstone)
                 else -> Unit
             }
         }
@@ -817,6 +829,15 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
         return SyncMerge.tombstoneResolution(
             incomingModifiedAt = incomingModifiedAt,
             tombstoneDeletedAt = annotationById[BackupPaths.normalizeIdForComparison(id)]
+                ?.lastModifiedAt
+        )
+    }
+
+    /** [id] is a `"<collectionId>:<workId>"` pairing — see [io.github.cidy02.kudos.works.WorkRepository]. */
+    fun collectionMembershipResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt = incomingModifiedAt,
+            tombstoneDeletedAt = collectionMembershipById[BackupPaths.normalizeIdForComparison(id)]
                 ?.lastModifiedAt
         )
     }

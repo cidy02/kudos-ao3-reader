@@ -485,31 +485,26 @@ private fun formatLatestRead(date: Instant?): String {
 internal fun formatCompactNumber(value: Int): String {
     val abs = kotlin.math.abs(value.toLong())
     val sign = if (value < 0) "-" else ""
-    return when {
-        abs < 1_000L -> "$sign$abs"
-        abs < 1_000_000L -> {
-            val scaled = abs / 100.0 / 10.0
-            if (scaled % 1.0 == 0.0) {
-                "$sign${scaled.toInt()}K"
-            } else {
-                String.format(Locale.US, "%s%.1fK", sign, scaled)
-            }
-        }
-        abs < 1_000_000_000L -> {
-            val scaled = abs / 100_000.0 / 10.0
-            if (scaled % 1.0 == 0.0) {
-                "$sign${scaled.toInt()}M"
-            } else {
-                String.format(Locale.US, "%s%.1fM", sign, scaled)
-            }
-        }
-        else -> {
-            val scaled = abs / 100_000_000.0 / 10.0
-            if (scaled % 1.0 == 0.0) {
-                "$sign${scaled.toInt()}B"
-            } else {
-                String.format(Locale.US, "%s%.1fB", sign, scaled)
-            }
-        }
+    if (abs < 1_000L) return "$sign$abs"
+
+    // Round-then-pick-unit, not pick-unit-then-round: rounding a tier's scaled
+    // value to 1 decimal can itself reach 1000 (e.g. 999,950 / 1000 = 999.95,
+    // which rounds to "1000.0"), which belongs in the next unit up, not this
+    // one — check the rounded value before committing to a suffix.
+    var scaled = abs / 1_000.0
+    var suffix = "K"
+    for (nextSuffix in listOf("M", "B")) {
+        if (roundToOneDecimal(scaled) < 1_000.0) break
+        scaled /= 1_000.0
+        suffix = nextSuffix
+    }
+
+    val rounded = roundToOneDecimal(scaled)
+    return if (rounded % 1.0 == 0.0) {
+        "$sign${rounded.toLong()}$suffix"
+    } else {
+        String.format(Locale.US, "%s%.1f%s", sign, rounded, suffix)
     }
 }
+
+private fun roundToOneDecimal(value: Double): Double = Math.round(value * 10) / 10.0

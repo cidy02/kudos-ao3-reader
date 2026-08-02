@@ -81,6 +81,22 @@ class ReadingQueueRepositoryTest {
     }
 
     @Test
+    fun listWorksExcludesSoftDeletedWorks() = runTest {
+        // Same bug class already fixed for Collections: a queue membership must not
+        // surface a work that's currently sitting in Recently Deleted.
+        val kept = savedWork("work-kept", title = "Kept")
+        val softDeleted = savedWork("work-deleted", title = "Deleted").copy(isDeleted = true)
+        database.workDao().upsert(kept.toEntity())
+        database.workDao().upsert(softDeleted.toEntity())
+
+        val queue = repository.ensureSavedForLaterQueue()
+        repository.addWork(queue.id, kept.id)
+        repository.addWork(queue.id, softDeleted.id)
+
+        assertEquals(listOf("Kept"), repository.listWorks(queue.id).map { it.title })
+    }
+
+    @Test
     fun listWorksShowsMissingWorkFallbackTitle() = runTest {
         val queue = repository.ensureSavedForLaterQueue()
         // Membership without a corresponding work row (tombstone / restore edge case).

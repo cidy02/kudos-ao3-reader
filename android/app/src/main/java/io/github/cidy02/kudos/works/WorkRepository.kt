@@ -348,14 +348,43 @@ class WorkRepository(
         val collection = createCollection(name)
         collectionDao.addWork(CollectionWorkCrossRef(collection.id, workId))
         touchCollection(collection.id)
+        // Retract any tombstone from a prior removal of this same pairing — a
+        // stale one here would make a later backup restore silently drop this
+        // work back out of the collection despite the user just re-adding it.
+        tombstoneDao.deleteByRecord(
+            membershipRecordId(collection.id, workId),
+            SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
+        )
         return collectionsForWork(workId)
     }
 
     suspend fun removeFromCollection(workId: String, collectionId: String): List<WorkCollection> {
         collectionDao.removeWork(collectionId, workId)
         touchCollection(collectionId)
+        val now = clock()
+        // Without a tombstone, restoring a backup that still lists this membership
+        // silently resurrects it — same reasoning as reading-queue removeWork.
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = membershipRecordId(collectionId, workId),
+                recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+                createdAt = now,
+                lastModifiedAt = now,
+                deletedOnDeviceID = "",
+                deletionReason = "collectionMembershipRemoved"
+            )
+        )
         return collectionsForWork(workId)
     }
+
+    /**
+     * [CollectionWorkCrossRef] has no id of its own (plain composite key), unlike
+     * [io.github.cidy02.kudos.library.ReadingQueueMembership] — build a stable
+     * tombstone record id from the pairing instead.
+     */
+    private fun membershipRecordId(collectionId: String, workId: String): String =
+        "$collectionId:$workId"
 
     private suspend fun touchCollection(collectionId: String) {
         val entity = collectionDao.getById(collectionId) ?: return

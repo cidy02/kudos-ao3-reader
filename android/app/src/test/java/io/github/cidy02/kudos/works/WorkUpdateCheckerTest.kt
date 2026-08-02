@@ -140,6 +140,23 @@ class WorkUpdateCheckerFailureBackoffTest {
     }
 
     @Test
+    fun aSuccessfulCheckWithBlankChaptersStillStampsLastUpdateCheck() = runTest {
+        val saved = repository.upsert(
+            work(id = "w2", isComplete = false, sourceUrl = "https://archiveofourown.org/works/456", lastCheck = null)
+        )
+        val blankChaptersMetadata = object : AO3WorkMetadataRepository() {
+            override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> =
+                AO3Result.Success(AO3WorkMetadata(chapters = ""))
+        }
+        val checker = WorkUpdateChecker(repository, blankChaptersMetadata)
+
+        checker.checkForUpdates(listOf(saved))
+
+        val after = repository.getWork(saved.id)
+        assertNotNull("a blank-chapters success must still stamp lastUpdateCheck", after?.lastUpdateCheck)
+    }
+
+    @Test
     fun aFailedCheckStillStampsLastUpdateCheckSoItBacksOff() = runTest {
         val saved = repository.upsert(
             work(id = "w1", isComplete = false, sourceUrl = "https://archiveofourown.org/works/123", lastCheck = null)

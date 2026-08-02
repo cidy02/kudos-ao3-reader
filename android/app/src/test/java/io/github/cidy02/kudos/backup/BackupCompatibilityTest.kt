@@ -296,6 +296,47 @@ class BackupCollectionMergeTest {
     }
 
     @Test
+    fun suppressesResurrectionOfAWorkRemovedFromACollection() {
+        // The user removed WORK_ID from the collection locally (it's no longer in
+        // `local.workIds`) and that removal recorded a membership tombstone. An
+        // older backup that still lists WORK_ID as a member must not bring it back.
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-06-01T00:00:00Z"),
+            workIds = listOf(OTHER_WORK_ID)
+        )
+        val removedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = "$COLLECTION_ID:$WORK_ID",
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = removedAt,
+            lastModifiedAt = removedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            workIDs = listOf(WORK_ID, OTHER_WORK_ID)
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                collections = listOf(local),
+                tombstones = listOf(membershipTombstone)
+            ),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertTrue(OTHER_WORK_ID in merged.workIds)
+        assertTrue(WORK_ID !in merged.workIds)
+    }
+
+    @Test
     fun revivesCollectionWhenArchiveIsNewerThanTombstone() {
         val deletedAt = Instant.parse("2026-01-01T00:00:00Z")
         val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(

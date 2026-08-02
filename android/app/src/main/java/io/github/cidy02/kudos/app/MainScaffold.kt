@@ -145,12 +145,13 @@ fun MainScaffold(
                             .fillMaxSize()
                     )
                 }
-                if (!isReader) {
-                    DownloadQueueBanner(
-                        queue = container.downloadQueue,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
-                }
+                // Shown over the reader too (Apple ContentView overlays it above the whole
+                // tab container regardless of what's presented) — a download in progress
+                // shouldn't become invisible just because the user opened something else.
+                DownloadQueueBanner(
+                    queue = container.downloadQueue,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
     }

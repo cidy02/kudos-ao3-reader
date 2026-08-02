@@ -125,11 +125,28 @@ class ReadingStatisticsTest {
     }
 
     @Test
+    fun readiumLocatorOnlyStillCountsAsStarted() {
+        // A backup restore can land a work with only a Readium locator and no
+        // lastReadDate/spine/scroll — SavedWork.hasStartedReading and
+        // CategoryStats.hasBeenRead both already treat that as started.
+        val locatorOnly = work("Locator only", readiumLocator = "{\"href\":\"chapter1.xhtml\"}")
+        assertEquals(true, ReadingStatistics.hasStarted(locatorOnly))
+    }
+
+    @Test
     fun formatCompactNumberUsesKAndMSuffixes() {
         assertEquals("999", formatCompactNumber(999))
         assertEquals("1.3K", formatCompactNumber(1_250))
         assertEquals("12.5K", formatCompactNumber(12_500))
         assertEquals("1M", formatCompactNumber(1_000_000))
+    }
+
+    @Test
+    fun formatCompactNumberPromotesUnitWhenRoundingCrossesAThousand() {
+        // 999,950 / 1000 = 999.95, which rounds to "1000.0" at one decimal —
+        // that belongs to the M tier, not a bogus "1000.0K".
+        assertEquals("1M", formatCompactNumber(999_950))
+        assertEquals("1B", formatCompactNumber(999_999_500))
     }
 
     private fun work(
@@ -139,7 +156,8 @@ class ReadingStatisticsTest {
         lastReadDate: Instant? = null,
         lastScrollFraction: Double = 0.0,
         lastSpineIndex: Int = 0,
-        workFandoms: List<String> = emptyList()
+        workFandoms: List<String> = emptyList(),
+        readiumLocator: String? = null
     ): SavedWork {
         return SavedWork(
             title = title,
@@ -149,7 +167,8 @@ class ReadingStatisticsTest {
             lastReadDate = lastReadDate,
             lastScrollFraction = lastScrollFraction,
             lastSpineIndex = lastSpineIndex,
-            workFandoms = workFandoms
+            workFandoms = workFandoms,
+            readiumLocator = readiumLocator
         )
     }
 }

@@ -34,13 +34,17 @@ class ReadingQueueRepository(
     }
 
     /**
-     * Memberships for [queueId] joined with work titles from WorkDao.
-     * Works that were tombstoned/missing still appear with a fallback title.
+     * Memberships for [queueId] joined with work titles from WorkDao, excluding
+     * works currently soft-deleted (Recently Deleted) — same as Collections'
+     * getActiveWorkIdsForCollection. The membership row itself is untouched, so a
+     * restored work reappears here automatically. Works missing outright (hard
+     * deleted/tombstoned) still appear with a fallback title.
      */
     suspend fun listWorks(queueId: String): List<QueueMembershipItem> {
-        return queueDao.getMembershipsForQueue(queueId).map { membershipEntity ->
+        return queueDao.getMembershipsForQueue(queueId).mapNotNull { membershipEntity ->
             val membership = membershipEntity.toDomain()
             val work = workDao.getById(membership.workID)?.toDomain()
+            if (work?.isDeleted == true) return@mapNotNull null
             QueueMembershipItem(
                 membership = membership,
                 work = work,

@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 
 enum class KudosThemeMode(val label: String) {
     System("System"),
@@ -22,8 +24,8 @@ enum class KudosThemeMode(val label: String) {
     }
 }
 
-private val LightScheme = lightColorScheme(
-    primary = Ao3Red,
+private fun lightScheme(accent: Color) = lightColorScheme(
+    primary = accent,
     onPrimary = Paper,
     secondary = AccentBlue,
     onSecondary = Paper,
@@ -35,9 +37,9 @@ private val LightScheme = lightColorScheme(
     onSurfaceVariant = InkMuted
 )
 
-private val DarkScheme = darkColorScheme(
+private fun darkScheme(accent: Color) = darkColorScheme(
     primary = PaperWarm,
-    onPrimary = Ao3RedDark,
+    onPrimary = accent,
     secondary = AccentBlue,
     onSecondary = Paper,
     background = SurfaceDark,
@@ -66,13 +68,17 @@ private val SepiaScheme = lightColorScheme(
 @Composable
 fun KudosTheme(
     themeMode: KudosThemeMode,
+    accentColorHex: String = DefaultAccentHex,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
+    val accent = remember(accentColorHex) { parseAccentColor(accentColorHex) }
     val colorScheme = when (themeMode) {
-        KudosThemeMode.System -> if (systemDark) DarkScheme else LightScheme
-        KudosThemeMode.Light -> LightScheme
-        KudosThemeMode.Dark -> DarkScheme
+        KudosThemeMode.System -> if (systemDark) darkScheme(accent) else lightScheme(accent)
+        KudosThemeMode.Light -> lightScheme(accent)
+        // Apple suppresses the user's accent choice in Sepia too (see SepiaScheme
+        // above) — Sepia always uses its own warm-brown tint, by design.
+        KudosThemeMode.Dark -> darkScheme(accent)
         KudosThemeMode.Sepia -> SepiaScheme
     }
 
@@ -81,6 +87,17 @@ fun KudosTheme(
         typography = KudosTypography,
         content = content
     )
+}
+
+const val DefaultAccentHex = "#990000"
+
+/** Settings validates/normalizes to #RRGGBB before persisting; fall back to the AO3 red default for anything else. */
+fun parseAccentColor(hex: String): Color {
+    return try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (_: IllegalArgumentException) {
+        Ao3Red
+    }
 }
 
 private object ColorTokens {

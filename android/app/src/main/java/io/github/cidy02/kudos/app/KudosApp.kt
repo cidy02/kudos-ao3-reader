@@ -35,7 +35,7 @@ fun KudosApp(container: KudosAppContainer) {
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
 
-    KudosTheme(themeMode = themeMode) {
+    KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
         MainScaffold(
             container = container,
             themeMode = themeMode,
