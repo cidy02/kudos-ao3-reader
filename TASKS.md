@@ -69,12 +69,15 @@ order (owner said "fold in wherever makes sense"):
    path; reuse the existing SAF font-import picker pattern, not the AO3 download
    path, for the picker mechanics — decide how a sourceUrl-less `SavedWork` behaves
    everywhere that currently assumes one exists).
-6. **Reader progress-pill section indexing** (T-76: `ReaderProgressDisplay.label()`
-   unconditionally formats every spine index as "Ch. N/total," so a work's Preface/
-   Afterword shows as a fake chapter and the count is inflated by front/back matter;
-   most involved item here — read iOS `ReaderSection.swift`/`ReaderSectionBuilder`'s
-   full TOC-based detection algorithm, including its non-AO3-EPUB fallback guard,
-   before starting — real nuance to preserve exactly, not re-derive).
+6. **Reader progress-pill section indexing** — ✅ **DONE** — Ported iOS
+   `ReaderSectionKind`/`ReaderSection`/`ReaderSectionBuilder` (Preface-gate before
+   Summary-gap synthesis, exact-title classify, hrefKey fragment/path matching,
+   `storyChapterCount`) into engine-agnostic `ReaderSection.kt`. `ReadiumTocAdapter.sections()`
+   resolves TOC Links → spine indices and builds sections; `ReaderProgressDisplay.label()`
+   uses kind-aware labels ("Preface"/"Summary"/"Afterword"/"Ch. i/storyTotal") instead of
+   raw spine "Ch. N/spineCount". Non-AO3 EPUBs (no Preface TOC entry) still number every
+   TOC-matched spine item 1..N unchanged. Unit tests for builder matrix + display labels.
+   `android/Scripts/verify.sh` green.
 
 ### P2 — features (roadmap "Later" list; ID assigned on pickup)
 - **Automatic CloudKit backup/sync** — portable file Export / Import completed
