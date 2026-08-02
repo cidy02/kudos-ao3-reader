@@ -34,8 +34,10 @@ class WorkUpdateChecker(
             val workId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
             when (val result = metadataRepository.fetch(workId)) {
                 is AO3Result.Failure -> {
-                    // Network / parse / locked page — keep what we have and retry later.
-                    continue
+                    // Network / parse / locked page — keep what we have, but still
+                    // stamp the check time so a failing work backs off for MinInterval
+                    // like a successful one, instead of retrying on every Home open.
+                    workRepository.upsert(work.copy(lastUpdateCheck = now))
                 }
                 is AO3Result.Success -> {
                     val chapters = result.value.chapters

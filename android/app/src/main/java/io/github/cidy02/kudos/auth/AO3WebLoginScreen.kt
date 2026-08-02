@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
-import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import kotlinx.coroutines.launch
 
@@ -78,7 +77,7 @@ fun AO3WebLoginScreen(
                             view: WebView,
                             request: WebResourceRequest
                         ): Boolean {
-                            return !request.url.host.orEmpty().endsWith(AO3Constants.WORKS_HOST)
+                            return !AO3StoredCookie.isAO3Domain(request.url.host.orEmpty())
                         }
 
                         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {

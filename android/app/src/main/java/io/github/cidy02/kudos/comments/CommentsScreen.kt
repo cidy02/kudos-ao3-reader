@@ -132,6 +132,17 @@ fun CommentsScreen(
                                             state = CommentsUiState.AuthRequired(
                                                 "Log in to AO3 before commenting."
                                             )
+                                        } else if (result.error is AO3Error.Network) {
+                                            // A network-layer failure (timeout, dropped
+                                            // connection) is ambiguous: the POST may have
+                                            // already reached AO3 before the response was
+                                            // lost. Reload the thread instead of silently
+                                            // inviting an immediate resubmit that could
+                                            // double-post.
+                                            message =
+                                                "Couldn't confirm this posted — reloading the " +
+                                                    "thread before you try again."
+                                            load()
                                         } else {
                                             message = result.error.displayMessage()
                                         }

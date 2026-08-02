@@ -86,6 +86,19 @@ class AO3CookieJarTest {
     }
 }
 
+class AO3SessionRestoreIOFailureTest {
+    @Test
+    fun restoreSessionSurvivesSessionStoreIOExceptionAsSignedOut() = runTest {
+        val store = ThrowingSessionStore(java.io.IOException("disk error"))
+        val cookies = MemoryCookieStore()
+        val repository = AO3AuthRepository(store, cookies)
+
+        repository.restoreSession()
+
+        assertEquals(AO3AuthState.SignedOut, repository.state.value)
+    }
+}
+
 class AO3AuthenticatedRequestTest {
     @Test
     fun repositoryBuildsAuthenticatedHeadersForAo3Only() = runTest {
@@ -152,6 +165,12 @@ internal class MemorySessionStore(
     override suspend fun delete() {
         session = null
     }
+}
+
+internal class ThrowingSessionStore(private val error: Exception) : AO3SessionStore {
+    override suspend fun load(): AO3Session? = throw error
+    override suspend fun save(session: AO3Session) {}
+    override suspend fun delete() {}
 }
 
 internal class MemoryCookieStore(

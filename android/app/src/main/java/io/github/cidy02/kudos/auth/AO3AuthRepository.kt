@@ -30,7 +30,17 @@ class AO3AuthRepository(
         if (didRestore) return
         didRestore = true
         mutableState.value = AO3AuthState.Restoring
-        val restored = sessionStore.load()
+        // sessionStore.load() only guarantees catching malformed-content errors
+        // (IllegalArgumentException/SerializationException) internally; a plain
+        // IOException (corrupt/half-written file, disk error) must not crash
+        // launch — fall back to signed-out, same as a missing session.
+        val restored = try {
+            sessionStore.load()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
         if (restored == null || !restored.hasSessionCookie()) {
             currentSession = null
             mutableState.value = AO3AuthState.SignedOut

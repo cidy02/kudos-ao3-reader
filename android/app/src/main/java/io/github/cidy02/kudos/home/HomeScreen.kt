@@ -141,8 +141,14 @@ fun HomeScreen(
                 title = "Favorites",
                 items = state.favorites.take(HomeShelfLimit),
                 emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
-                onOpenWork = onOpenWork,
-                onOpenReader = onOpenReader,
+                onOpenWork = { id ->
+                    viewModel.onOpenLocalWork(id)
+                    onOpenWork(id)
+                },
+                onOpenReader = { id ->
+                    viewModel.onOpenLocalWork(id)
+                    onOpenReader(id)
+                },
                 onReveal = onReveal,
                 footerFor = null
             )
@@ -152,8 +158,14 @@ fun HomeScreen(
                 title = "Recently Opened",
                 items = state.recentlyOpened.take(HomeShelfLimit),
                 emptyMessage = "Nothing opened recently. Start reading to see your history here.",
-                onOpenWork = onOpenWork,
-                onOpenReader = onOpenReader,
+                onOpenWork = { id ->
+                    viewModel.onOpenLocalWork(id)
+                    onOpenWork(id)
+                },
+                onOpenReader = { id ->
+                    viewModel.onOpenLocalWork(id)
+                    onOpenReader(id)
+                },
                 onReveal = onReveal,
                 footerFor = null
             )

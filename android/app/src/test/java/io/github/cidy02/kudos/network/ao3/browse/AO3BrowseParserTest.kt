@@ -61,6 +61,29 @@ class AO3BrowseParserTest {
     }
 
     @Test
+    fun parsesFandomListAcrossMultipleLetterSectionsAndDecodesEntities() {
+        // The real /media/<name>/fandoms page is one <ol class="fandom index"> per
+        // letter (A, B, C...), which is exactly why the parser must be a linear scan
+        // across the whole page rather than one DOM select() — this pins that the
+        // scan actually continues past the first section's closing </ol>.
+        val html = """
+            <ol class="fandom index group">
+              <li><a class="tag" href="/tags/Ai/works">Ai &amp; Friends</a> (3)</li>
+            </ol>
+            <p>-- B --</p>
+            <ol class="fandom index group">
+              <li><a class="tag" href="/tags/Bleach/works">Bleach</a> (6,789)</li>
+            </ol>
+        """.trimIndent()
+
+        val fandoms = parser.parseFandomList(html)
+
+        assertEquals(listOf("Ai & Friends", "Bleach"), fandoms.map { it.name })
+        assertEquals(3, fandoms[0].workCount)
+        assertEquals(6789, fandoms[1].workCount)
+    }
+
+    @Test
     fun overloadPageThrowsTypedError() {
         try {
             parser.parseMediaCategories(fixture("ao3/browse/overload.html"))

@@ -56,7 +56,10 @@ fun FandomListScreen(
         state = FandomListState.Loading
         scope.launch {
             state = when (val result = repository.fandoms(category)) {
-                is AO3Result.Success -> FandomListState.Loaded(result.value)
+                // Surface the biggest fandoms first; the AO3 index page arrives alphabetical.
+                is AO3Result.Success -> FandomListState.Loaded(
+                    result.value.sortedByDescending { it.workCount ?: 0 }
+                )
                 is AO3Result.Failure -> FandomListState.Error(result.error.browseMessage())
             }
         }
