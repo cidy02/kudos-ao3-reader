@@ -100,19 +100,7 @@ class LiveAO3SessionValidator(
                 byKey[cookieKey(cookie)] = cookie
             }
             setCookies.forEach { cookie ->
-                val stored = AO3StoredCookie(
-                    name = cookie.name,
-                    value = cookie.value,
-                    domain = cookie.domain,
-                    path = cookie.path,
-                    expiresAtEpochMillis = if (cookie.expiresAt != Long.MAX_VALUE) {
-                        cookie.expiresAt
-                    } else {
-                        null
-                    },
-                    isSecure = cookie.secure,
-                    isHttpOnly = cookie.httpOnly
-                )
+                val stored = AO3StoredCookie.fromOkHttp(cookie)
                 byKey[cookieKey(stored)] = stored
             }
             return AO3Session(username = username, cookies = byKey.values.toList())

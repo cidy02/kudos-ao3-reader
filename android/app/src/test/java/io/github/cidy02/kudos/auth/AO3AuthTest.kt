@@ -53,6 +53,46 @@ class AO3CookieStoreTest {
         assertEquals("secret", cookies[0].value)
         assertTrue(cookies.all { it.domain == ".archiveofourown.org" })
     }
+
+    @Test
+    fun parseSetCookieHeadersRetainsPathExpirySecureHttpOnly() {
+        val expires = Instant.parse("2027-01-15T12:00:00Z")
+        val line =
+            "_otwarchive_session=secret; Domain=.archiveofourown.org; Path=/users; " +
+                "Expires=Fri, 15 Jan 2027 12:00:00 GMT; Secure; HttpOnly"
+        val cookies = AndroidAO3CookieStore.parseSetCookieHeaders(
+            setCookieLines = listOf(line)
+        )
+
+        assertEquals(1, cookies.size)
+        val cookie = cookies.single()
+        assertEquals("_otwarchive_session", cookie.name)
+        assertEquals("secret", cookie.value)
+        assertEquals("archiveofourown.org", cookie.domain.trimStart('.'))
+        assertEquals("/users", cookie.path)
+        assertEquals(expires.toEpochMilli(), cookie.expiresAtEpochMillis)
+        assertTrue(cookie.isSecure)
+        assertTrue(cookie.isHttpOnly)
+    }
+
+    @Test
+    fun setCookieHeaderEmitsExpiresWhenKnown() {
+        val expires = Instant.parse("2027-06-01T00:00:00Z")
+        val header = AO3StoredCookie(
+            name = "_otwarchive_session",
+            value = "secret",
+            path = "/works",
+            expiresAtEpochMillis = expires.toEpochMilli(),
+            isSecure = true,
+            isHttpOnly = true
+        ).toCookieManagerSetCookieHeader()
+
+        assertTrue(header.contains("Path=/works"))
+        assertTrue(header.contains("Expires=Tue, 01 Jun 2027 00:00:00 GMT"))
+        assertTrue(header.contains("Secure"))
+        assertTrue(header.contains("HttpOnly"))
+        assertFalse(header.contains("Max-Age=0"))
+    }
 }
 
 class AO3CookieJarTest {
