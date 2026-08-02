@@ -21,6 +21,7 @@ import io.github.cidy02.kudos.account.LocalLibraryListKind
 import io.github.cidy02.kudos.account.LocalLibraryListsScreen
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3WebLoginScreen
+import io.github.cidy02.kudos.auth.usernameOrNull
 import io.github.cidy02.kudos.author.AuthorWorksScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
@@ -448,9 +449,13 @@ fun AppNavHost(
             }
         }
         composable(Routes.Comments) {
+            val commentsAuthState by container.authRepository.state.collectAsState(
+                initial = AO3AuthState.Restoring
+            )
             CommentsScreen(
                 target = selectedCommentTarget,
                 repository = container.commentRepository,
+                currentUsername = commentsAuthState.usernameOrNull,
                 onLogin = { navController.navigate(Routes.AccountLogin) }
             )
         }

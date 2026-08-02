@@ -29,16 +29,21 @@ import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.comments.AO3Comment
+import io.github.cidy02.kudos.network.ao3.comments.AO3CommentParticipantRole
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentThread
+import io.github.cidy02.kudos.network.ao3.comments.AO3CommentWorkAuthor
+import io.github.cidy02.kudos.ui.components.CommentAvatar
+import io.github.cidy02.kudos.ui.components.CommentParticipantBadge
 import kotlinx.coroutines.launch
 
 @Composable
 fun CommentsScreen(
     target: AO3CommentTarget?,
     repository: AO3CommentRepository,
-    onLogin: () -> Unit
+    onLogin: () -> Unit,
+    currentUsername: String? = null
 ) {
     var state by remember(target) { mutableStateOf<CommentsUiState>(CommentsUiState.Loading) }
     var draft by remember { mutableStateOf("") }
@@ -176,7 +181,11 @@ fun CommentsScreen(
                         items = thread.comments,
                         key = { it.id ?: "${it.author.name}-${it.date}-${it.body.hashCode()}" }
                     ) { comment ->
-                        CommentRow(comment)
+                        CommentRow(
+                            comment = comment,
+                            currentUsername = currentUsername,
+                            workAuthors = thread.workAuthors
+                        )
                     }
                 }
             }
@@ -230,24 +239,62 @@ private fun CommentComposer(
 }
 
 @Composable
-private fun CommentRow(comment: AO3Comment) {
-    Column(
-        modifier = Modifier.padding(start = (comment.depth * 12).dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(comment.author.name, style = MaterialTheme.typography.titleSmall)
-        if (comment.date.isNotBlank()) {
-            Text(comment.date, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Text(
-            comment.body,
-            color = if (comment.isDeletedOrHidden) {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            }
+private fun CommentRow(
+    comment: AO3Comment,
+    currentUsername: String?,
+    workAuthors: List<AO3CommentWorkAuthor>
+) {
+    val role = remember(comment, currentUsername, workAuthors) {
+        AO3CommentParticipantRole.resolve(
+            name = comment.author.name,
+            isGuest = comment.isGuest,
+            isAnonymousCreator = comment.isAnonymousCreator,
+            commenterUsername = comment.author.username,
+            currentUsername = currentUsername,
+            workAuthors = workAuthors.map { it.displayName },
+            workAuthorUsernames = workAuthors.mapNotNull { it.username }
         )
-        HorizontalDivider()
+    }
+    Row(
+        modifier = Modifier.padding(start = (comment.depth * 12).dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        CommentAvatar(
+            avatarUrl = comment.avatarUrl,
+            isGuest = comment.isGuest
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = comment.author.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                CommentParticipantBadge(role = role)
+            }
+            if (comment.date.isNotBlank()) {
+                Text(
+                    comment.date,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                comment.body,
+                color = if (comment.isDeletedOrHidden) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+            HorizontalDivider()
+        }
     }
 }
 
