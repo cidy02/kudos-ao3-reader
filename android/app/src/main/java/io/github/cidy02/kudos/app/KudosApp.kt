@@ -1,16 +1,21 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.onboarding.WelcomeScreen
 import io.github.cidy02.kudos.support.ShakeToReportEffect
 import io.github.cidy02.kudos.support.openBugReport
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 // Settings' persisted 4-option app theme and the quick-toggle palette icon in
@@ -35,6 +40,10 @@ private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
 fun KudosApp(container: KudosAppContainer) {
     val settings by container.settingsRepository.settings
         .collectAsState(initial = KudosSettings())
+    // null until DataStore emits — avoids flashing Welcome at returning users.
+    val hasCompletedOnboarding by container.settingsRepository.hasCompletedOnboarding
+        .map<Boolean, Boolean?> { completed -> completed }
+        .collectAsState(initial = null)
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
 
@@ -44,14 +53,24 @@ fun KudosApp(container: KudosAppContainer) {
         val context = LocalContext.current
         ShakeToReportEffect { openBugReport(context) }
 
-        MainScaffold(
-            container = container,
-            themeMode = themeMode,
-            onCycleTheme = {
-                scope.launch {
-                    container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+        when (hasCompletedOnboarding) {
+            null -> Box(Modifier.fillMaxSize())
+            false -> WelcomeScreen(
+                onContinue = {
+                    scope.launch {
+                        container.settingsRepository.setHasCompletedOnboarding(true)
+                    }
                 }
-            }
-        )
+            )
+            true -> MainScaffold(
+                container = container,
+                themeMode = themeMode,
+                onCycleTheme = {
+                    scope.launch {
+                        container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                    }
+                }
+            )
+        }
     }
 }
