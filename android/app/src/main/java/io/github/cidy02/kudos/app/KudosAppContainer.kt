@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.app
 
 import android.content.Context
 import androidx.room.Room
+import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.auth.AndroidAO3CookieStore
 import io.github.cidy02.kudos.auth.AO3AuthRepository
@@ -27,8 +28,14 @@ import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
+import io.github.cidy02.kudos.network.github.GitHubReleaseClient
 import io.github.cidy02.kudos.reader.ReaderRepository
 import io.github.cidy02.kudos.search.SavedSearchRepository
+import io.github.cidy02.kudos.update.AppUpdateInstaller
+import io.github.cidy02.kudos.update.AppUpdateNotifier
+import io.github.cidy02.kudos.update.AppUpdatePreferences
+import io.github.cidy02.kudos.update.AppUpdateRepository
+import io.github.cidy02.kudos.update.AppVersion
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
@@ -178,5 +185,32 @@ class KudosAppContainer(context: Context) {
 
     val savedSearchRepository: SavedSearchRepository by lazy {
         SavedSearchRepository(database.savedSearchDao())
+    }
+
+    val gitHubReleaseClient: GitHubReleaseClient by lazy {
+        GitHubReleaseClient(appVersionForUserAgent = BuildConfig.VERSION_NAME)
+    }
+
+    val appUpdateInstaller: AppUpdateInstaller by lazy {
+        AppUpdateInstaller(appContext)
+    }
+
+    val appUpdateNotifier: AppUpdateNotifier by lazy {
+        AppUpdateNotifier(appContext)
+    }
+
+    val appUpdatePreferences: AppUpdatePreferences by lazy {
+        AppUpdatePreferences(appContext.kudosSettingsDataStore)
+    }
+
+    val appUpdateRepository: AppUpdateRepository by lazy {
+        AppUpdateRepository(
+            releaseClient = gitHubReleaseClient,
+            installer = appUpdateInstaller,
+            notifier = appUpdateNotifier,
+            preferences = appUpdatePreferences,
+            currentVersion = AppVersion.parse(BuildConfig.VERSION_NAME)
+                ?: error("BuildConfig.VERSION_NAME (${BuildConfig.VERSION_NAME}) is not a valid X.Y.Z version.")
+        )
     }
 }

@@ -21,6 +21,9 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.VERSION_NAME is the single source of truth AppUpdateRepository
+        // compares against GitHub releases — do not duplicate the version elsewhere.
+        buildConfig = true
     }
 
     compileOptions {

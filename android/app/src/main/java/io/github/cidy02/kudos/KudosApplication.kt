@@ -23,5 +23,10 @@ class KudosApplication : Application() {
             runCatching { container.workRepository.sweepExpiredSoftDeletes() }
             runCatching { container.workRepository.sweepExpiredCollectionSoftDeletes() }
         }
+        // Throttled GitHub update check (default: at most once/24h). Silent on
+        // failure — a broken GitHub check must never affect app startup.
+        applicationScope.launch {
+            runCatching { container.appUpdateRepository.checkIfDue() }
+        }
     }
 }

@@ -490,7 +490,8 @@ fun AppNavHost(
                 authRepository = container.authRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenAbout = { navController.navigate(Routes.About) },
-                onOpenBackup = { navController.navigate(Routes.Backup) }
+                onOpenBackup = { navController.navigate(Routes.Backup) },
+                appUpdateRepository = container.appUpdateRepository
             )
         }
         composable(Routes.Backup) {
