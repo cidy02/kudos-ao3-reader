@@ -68,7 +68,7 @@ order (owner said "fold in wherever makes sense"):
    Device-local `SettingsRepository.hasCompletedOnboarding` DataStore Flow +
    `setHasCompletedOnboarding` (key `hasCompletedOnboarding`, not in backup
    `KudosSettings`). Gated in `KudosApp` before `MainScaffold` until Continue.
-   Unit test for default-false + round-trip. Commit: `b665c4b`
+   Unit test for default-false + round-trip. Commit: `abae955`
    (`Android: T-74 item 4 — first-launch onboarding Welcome screen`).
    `android/Scripts/verify.sh` green.
    *(Items 5–6 below remain backlog — T-74 is not fully done.)*
