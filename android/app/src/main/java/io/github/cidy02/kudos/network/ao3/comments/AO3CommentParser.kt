@@ -20,19 +20,24 @@ class AO3CommentParser(
     fun parseThread(
         html: String,
         finalUrl: String,
-        target: AO3CommentTarget
+        target: AO3CommentTarget,
+        page: Int = 1
     ): AO3CommentThread {
         if (AO3OverloadDetector.isOverloadPage(html)) throw AO3CommentParseException.Overloaded()
 
         val document = Jsoup.parse(html, finalUrl)
         if (document.loginRequired()) throw AO3CommentParseException.LoginRequired()
 
+        val currentPage = page.coerceAtLeast(1)
         return AO3CommentThread(
             target = target,
             comments = parseComments(document),
             form = parseCommentForm(document, html, target),
             commentsLocked = commentsLocked(document),
-            workAuthors = parseWorkAuthors(document)
+            workAuthors = parseWorkAuthors(document),
+            currentPage = currentPage,
+            totalPages = parseTotalPages(document, currentPage),
+            totalComments = parseTotalComments(document)
         )
     }
 
@@ -107,9 +112,47 @@ class AO3CommentParser(
                 isDeletedOrHidden = deleted,
                 isGuest = parsedAuthor.isGuest,
                 isAnonymousCreator = parsedAuthor.isAnonymousCreator,
-                avatarUrl = avatarUrl
+                avatarUrl = avatarUrl,
+                canReply = parseCanReply(element)
             )
         }
+    }
+
+    /**
+     * True when AO3 rendered a Reply action for this comment in this session.
+     * Mirrors iOS `applyAction` on `ul[id^=navigation_for_comment_], ul.actions`:
+     * any `<a>` whose label is "reply" or whose href contains `add_comment_reply`.
+     */
+    private fun parseCanReply(element: Element): Boolean {
+        val actions = element.selectFirst("ul[id^=navigation_for_comment_], ul.actions")
+            ?: return false
+        for (link in actions.select("a")) {
+            val label = link.normalizedText().lowercase()
+            val href = link.attr("href")
+            if (label == "reply" || href.contains("add_comment_reply")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Highest numeric page in `ol.pagination li` text, never less than the
+     * requested page. Same idiom as account/inbox/search parsers — non-numeric
+     * entries ("Next ›", "…") yield null from `toIntOrNull` and are skipped.
+     */
+    private fun parseTotalPages(document: Document, currentPage: Int): Int {
+        return document.select("ol.pagination li")
+            .mapNotNull { it.normalizedText().toIntOrNull() }
+            .fold(currentPage) { total, pageNumber -> maxOf(total, pageNumber) }
+    }
+
+    /** Work-level comment total from `dl.stats dd.comments`, if present. */
+    private fun parseTotalComments(document: Document): Int? {
+        val text = document.selectFirst("dl.stats dd.comments")?.normalizedText()
+            ?: return null
+        val digits = text.filter { it.isDigit() }
+        return digits.takeIf { it.isNotEmpty() }?.toIntOrNull()
     }
 
     /**

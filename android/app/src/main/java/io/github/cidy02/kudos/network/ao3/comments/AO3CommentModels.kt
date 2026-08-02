@@ -9,18 +9,24 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 sealed interface AO3CommentTarget {
     val workId: Long
 
-    fun pageUrl(): String
+    /**
+     * Comments page URL. [page] is included as `?page=N` only when N > 1,
+     * matching iOS `AO3Client.commentsPageURL`.
+     */
+    fun pageUrl(page: Int = 1): String
     fun defaultSubmitUrl(): String
 
     data class Work(override val workId: Long) : AO3CommentTarget {
-        override fun pageUrl(): String {
-            return AO3Constants.baseHttpUrl.newBuilder()
+        override fun pageUrl(page: Int): String {
+            val builder = AO3Constants.baseHttpUrl.newBuilder()
                 .addPathSegment("works")
                 .addPathSegment(workId.toString())
                 .addQueryParameter("view_adult", "true")
                 .addQueryParameter("show_comments", "true")
-                .build()
-                .toString()
+            if (page > 1) {
+                builder.addQueryParameter("page", page.toString())
+            }
+            return builder.build().toString()
         }
 
         override fun defaultSubmitUrl(): String = AO3WriteUrls.commentsEndpoint(workId)
@@ -30,19 +36,49 @@ sealed interface AO3CommentTarget {
         override val workId: Long,
         val chapterId: Long
     ) : AO3CommentTarget {
-        override fun pageUrl(): String {
-            return AO3Constants.baseHttpUrl.newBuilder()
+        override fun pageUrl(page: Int): String {
+            val builder = AO3Constants.baseHttpUrl.newBuilder()
                 .addPathSegment("works")
                 .addPathSegment(workId.toString())
                 .addPathSegment("chapters")
                 .addPathSegment(chapterId.toString())
                 .addQueryParameter("show_comments", "true")
-                .build()
-                .toString()
+            if (page > 1) {
+                builder.addQueryParameter("page", page.toString())
+            }
+            return builder.build().toString()
         }
 
         override fun defaultSubmitUrl(): String =
             AO3WriteUrls.chapterCommentsEndpoint(workId, chapterId)
+    }
+}
+
+/**
+ * Local URL helpers for comment replies. Kept inside the comments package so
+ * we don't need to touch shared [AO3WriteUrls] (out of scope for this task).
+ * Mirrors iOS `AO3AuthService.commentThreadURL` / `commentReplyEndpoint`.
+ */
+object AO3CommentUrls {
+    /** Standalone comment-thread page used as the CSRF/pseud source for replies. */
+    fun commentThreadUrl(commentId: Long): String {
+        require(commentId > 0) { "AO3 comment id must be positive." }
+        return AO3Constants.baseHttpUrl.newBuilder()
+            .addPathSegment("comments")
+            .addPathSegment(commentId.toString())
+            .build()
+            .toString()
+    }
+
+    /** POST target for a reply to [parentCommentId]. */
+    fun commentReplyEndpoint(parentCommentId: Long): String {
+        require(parentCommentId > 0) { "AO3 comment id must be positive." }
+        return AO3Constants.baseHttpUrl.newBuilder()
+            .addPathSegment("comments")
+            .addPathSegment(parentCommentId.toString())
+            .addPathSegment("comments")
+            .build()
+            .toString()
     }
 }
 
@@ -130,7 +166,16 @@ data class AO3CommentThread(
     val form: AO3CommentForm?,
     val commentsLocked: Boolean = false,
     /** Work creators from the page preface byline (for Author role chips). */
-    val workAuthors: List<AO3CommentWorkAuthor> = emptyList()
+    val workAuthors: List<AO3CommentWorkAuthor> = emptyList(),
+    /** One-based page that was requested / parsed (iOS `AO3CommentsPage.currentPage`). */
+    val currentPage: Int = 1,
+    /**
+     * Highest page number found in `ol.pagination li` (never less than
+     * [currentPage]). Matches iOS / Android account/inbox pagination idiom.
+     */
+    val totalPages: Int = 1,
+    /** Opportunistic work-level comment total from `dl.stats dd.comments`. */
+    val totalComments: Int? = null
 )
 
 data class AO3Comment(
@@ -152,8 +197,29 @@ data class AO3Comment(
      * fell back to its default logo / guest / missing icon. Never the AO3
      * skin logo under `/images/skins/`.
      */
-    val avatarUrl: String? = null
-)
+    val avatarUrl: String? = null,
+    /**
+     * AO3 exposed a Reply action for this comment in this session
+     * (parsed from the comment's own action list).
+     */
+    val canReply: Boolean = false
+) {
+    /**
+     * Numeric AO3 comment id for reply endpoints (`comment_1252794206` → 1252794206).
+     * Null when [id] is missing or not the expected `comment_<digits>` shape.
+     */
+    val numericId: Long?
+        get() {
+            val raw = id?.trim().orEmpty()
+            if (raw.isEmpty()) return null
+            val digits = if (raw.startsWith("comment_", ignoreCase = true)) {
+                raw.substring("comment_".length)
+            } else {
+                raw
+            }
+            return digits.toLongOrNull()?.takeIf { it > 0 }
+        }
+}
 
 data class AO3CommentAuthor(
     val name: String,
