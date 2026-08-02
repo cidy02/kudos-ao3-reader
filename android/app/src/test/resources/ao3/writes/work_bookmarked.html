@@ -1,0 +1,24 @@
+<html>
+<head>
+  <meta name="csrf-token" content="bookmarked-token">
+</head>
+<body class="works-show logged-in">
+  <form action="/users/AO3_Reader/subscriptions" method="post">
+    <input type="hidden" name="authenticity_token" value="bookmarked-token">
+    <input type="submit" value="Subscribe">
+  </form>
+  <form action="/bookmarks/456" method="post" id="bookmark-form">
+    <input type="hidden" name="_method" value="put">
+    <input type="hidden" name="authenticity_token" value="bookmarked-token">
+    <select name="bookmark[pseud_id]">
+      <option value="44" selected="selected">Main</option>
+    </select>
+    <textarea name="bookmark[bookmarker_notes]">Loved chapter 3</textarea>
+    <input type="text" name="bookmark[tag_string]" value="favorite, reread">
+    <input type="text" name="bookmark[collection_names]" value="">
+    <input type="checkbox" name="bookmark[private]" value="1" checked="checked">
+    <input type="checkbox" name="bookmark[rec]" value="1" checked="checked">
+    <input type="submit" value="Update">
+  </form>
+</body>
+</html>

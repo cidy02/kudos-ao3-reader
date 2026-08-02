@@ -54,6 +54,30 @@ class AO3WriteFormParserTest {
     }
 
     @Test
+    fun detectsExistingBookmarkAndPrefillsFields() {
+        val bookmarked = parser.parseBookmarkState(writeResource("ao3/writes/work_bookmarked.html"))
+        val notBookmarked = parser.parseBookmarkState(writeResource("ao3/writes/work_with_forms.html"))
+        val missingForm = parser.parseBookmarkState("<html><body>No form</body></html>")
+
+        assertTrue(bookmarked.exists)
+        assertEquals("/bookmarks/456", bookmarked.editPath)
+        assertEquals("Loved chapter 3", bookmarked.input.notes)
+        assertEquals("favorite, reread", bookmarked.input.tags)
+        assertTrue(bookmarked.input.isPrivate)
+        assertTrue(bookmarked.input.isRecommendation)
+
+        assertFalse(notBookmarked.exists)
+        assertNull(notBookmarked.editPath)
+        assertEquals("", notBookmarked.input.notes)
+        assertEquals("", notBookmarked.input.tags)
+        assertFalse(notBookmarked.input.isPrivate)
+        assertFalse(notBookmarked.input.isRecommendation)
+
+        assertFalse(missingForm.exists)
+        assertNull(missingForm.editPath)
+    }
+
+    @Test
     fun extractsValidationErrorsAndAlreadyKudosedText() {
         assertEquals(
             "Comment content can't be blank",

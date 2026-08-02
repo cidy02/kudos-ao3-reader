@@ -118,6 +118,16 @@ class AO3WriteRepository(
         return response.toOutcome(AO3WriteActionKind.MarkForLater, "Marked for later.", "Couldn't mark for later.")
     }
 
+    suspend fun fetchBookmarkState(workId: Long): AO3Result<AO3BookmarkState> {
+        val workUrl = AO3WriteUrls.workUrl(workId)
+        val html = when (val page = client.getAuthenticated(workUrl)) {
+            is AO3Result.Failure -> return page
+            is AO3Result.Success -> page.value.body
+        }
+        val state = withContext(Dispatchers.Default) { parser.parseBookmarkState(html) }
+        return AO3Result.Success(state)
+    }
+
     suspend fun createBookmark(workId: Long, input: AO3BookmarkInput): AO3Result<AO3WriteOutcome> {
         val workUrl = AO3WriteUrls.workUrl(workId)
         val html = when (val page = client.getAuthenticated(workUrl)) {
@@ -125,7 +135,11 @@ class AO3WriteRepository(
             is AO3Result.Success -> page.value.body
         }
         val token = parseToken(html) ?: return missingToken()
+        val state = withContext(Dispatchers.Default) { parser.parseBookmarkState(html) }
         val fields = buildList {
+            if (state.exists) {
+                add("_method" to "put")
+            }
             add("authenticity_token" to token)
             add("bookmark[bookmarker_notes]" to input.notes)
             add("bookmark[tag_string]" to input.tags)
@@ -136,12 +150,19 @@ class AO3WriteRepository(
                 add("bookmark[pseud_id]" to it)
             }
         }
+        val postUrl = if (state.exists) {
+            state.editPath?.let(AO3WriteUrls::absoluteUrl)
+                ?: return AO3Result.Failure(AO3Error.Validation("Couldn't find AO3's bookmark edit form."))
+        } else {
+            AO3WriteUrls.bookmarksEndpoint(workId)
+        }
         val response = client.postAuthenticated(
-            url = AO3WriteUrls.bookmarksEndpoint(workId),
+            url = postUrl,
             formFields = fields,
             headers = writeHeaders(token, workUrl)
         )
-        return response.toOutcome(AO3WriteActionKind.Bookmark, "Bookmarked.", "Couldn't bookmark this work.")
+        val successMessage = if (state.exists) "Bookmark updated." else "Bookmarked."
+        return response.toOutcome(AO3WriteActionKind.Bookmark, successMessage, "Couldn't bookmark this work.")
     }
 
     private suspend fun parseToken(html: String): String? {
