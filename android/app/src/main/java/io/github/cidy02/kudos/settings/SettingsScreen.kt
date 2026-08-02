@@ -28,12 +28,14 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -67,6 +69,8 @@ import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.support.openBugReport
+import io.github.cidy02.kudos.update.AppUpdateRepository
+import io.github.cidy02.kudos.update.AppUpdateState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -103,7 +107,8 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     authRepository: AO3AuthRepository? = null,
     onLogin: () -> Unit = {},
-    onOpenAbout: () -> Unit = {}
+    onOpenAbout: () -> Unit = {},
+    appUpdateRepository: AppUpdateRepository? = null
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val importedFonts by customFontRepository.observeImported()
@@ -112,6 +117,20 @@ fun SettingsScreen(
         authRepository?.state ?: flowOf(AO3AuthState.SignedOut)
     }
     val authState by authFlow.collectAsState(initial = AO3AuthState.SignedOut)
+    val updateFlow = remember(appUpdateRepository) {
+        appUpdateRepository?.state ?: flowOf(AppUpdateState.Idle)
+    }
+    val updateState by updateFlow.collectAsState(initial = AppUpdateState.Idle)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(updateState) {
+        if (updateState is AppUpdateState.ReadyToInstall &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
+        ) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var fontStatus by remember { mutableStateOf<String?>(null) }
@@ -540,6 +559,23 @@ fun SettingsScreen(
             )
         }
 
+        // ── Software Update ────────────────────────────────────────────
+        if (appUpdateRepository != null) {
+            item {
+                SettingsGroup(title = "Software Update") {
+                    UpdateSection(
+                        state = updateState,
+                        onCheckNow = { launchUpdate { appUpdateRepository.checkNow(autoDownload = true) } },
+                        onInstall = { apkPath ->
+                            runCatching {
+                                context.startActivity(appUpdateRepository.installIntentFor(apkPath))
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
         // ── Help & Project ─────────────────────────────────────────────
         item {
             SettingsGroup(title = "Help & Project") {
@@ -616,6 +652,87 @@ private fun isThemeChipSelected(current: AppThemeSetting, option: ThemeChipOptio
     return when (option) {
         ThemeChipOption.Oled -> false
         else -> current == option.setting
+    }
+}
+
+@Composable
+private fun UpdateSection(
+    state: AppUpdateState,
+    onCheckNow: () -> Unit,
+    onInstall: (java.nio.file.Path) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Kudos Android is Alpha until it reaches iOS feature parity — " +
+                "expect rougher edges and more frequent updates.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        when (state) {
+            AppUpdateState.Idle -> {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Up to date", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = onCheckNow) { Text("Check Now") }
+                }
+            }
+            AppUpdateState.Checking -> {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Checking GitHub for updates…", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            AppUpdateState.UpToDate -> {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Up to date", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = onCheckNow) { Text("Check Now") }
+                }
+            }
+            is AppUpdateState.UpdateAvailable -> {
+                Text(
+                    "Version ${state.match.version} is available.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            is AppUpdateState.Downloading -> {
+                Text(
+                    "Downloading version ${state.match.version}…",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                LinearProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            is AppUpdateState.ReadyToInstall -> {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Version ${state.match.version} is ready to install.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(onClick = { onInstall(state.apkPath) }) { Text("Install Update") }
+                }
+            }
+            is AppUpdateState.Failed -> {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    OutlinedButton(onClick = onCheckNow) { Text("Try Again") }
+                }
+            }
+        }
     }
 }
 
