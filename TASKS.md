@@ -71,11 +71,16 @@ order (owner said "fold in wherever makes sense"):
    Unit test for default-false + round-trip. Commit: `abae955`
    (`Android: T-74 item 4 — first-launch onboarding Welcome screen`).
    `android/Scripts/verify.sh` green.
-   *(Items 5–6 below remain backlog — T-74 is not fully done.)*
-5. **Local `.epub` file import** (T-58: AO3 downloads only, no "add my own EPUB"
-   path; reuse the existing SAF font-import picker pattern, not the AO3 download
-   path, for the picker mechanics — decide how a sourceUrl-less `SavedWork` behaves
-   everywhere that currently assumes one exists).
+5. **Local `.epub` file import** — ✅ **DONE** — Settings › Library **Import EPUB**
+   multi-select SAF picker (`OpenMultipleDocuments`, distinct from AO3 download).
+   `WorkImporter.importLocalEpub` validates `.epub` extension + ZIP local-file-header
+   magic (`0x50 0x4B 0x03 0x04`), titles from filename (no OPF parse), author/sourceUrl
+   blank, `hasEpub`+`isSaved` via `WorkFileStore`/`WorkRepository`. Batch reports
+   per-file success/failure. Audited blank-`sourceUrl` call sites (update checker,
+   identity index, browse indicators, detail Open-on-AO3 / Origin / redownload,
+   end-of-work, download queue) — hide or no-op AO3 affordances rather than crash.
+   Unit tests for accept/reject paths. `android/Scripts/verify.sh` green.
+   *(Item 6 below remains backlog — T-74 is not fully done.)*
 6. **Reader progress-pill section indexing** (T-76: `ReaderProgressDisplay.label()`
    unconditionally formats every spine index as "Ch. N/total," so a work's Preface/
    Afterword shows as a fake chapter and the count is inflated by front/back matter;
