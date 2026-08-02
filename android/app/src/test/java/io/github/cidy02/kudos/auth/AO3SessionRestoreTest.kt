@@ -5,6 +5,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import java.io.IOException
+import java.time.Instant
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -307,7 +308,10 @@ class LiveAO3SessionValidatorTest {
                     url = "https://archiveofourown.org/",
                     statusCode = 200,
                     headers = mapOf(
-                        "Set-Cookie" to listOf("_otwarchive_session=rotated-from-ao3; path=/; secure")
+                        "Set-Cookie" to listOf(
+                            "_otwarchive_session=rotated-from-ao3; Path=/; " +
+                                "Expires=Fri, 15 Jan 2027 12:00:00 GMT; Secure; HttpOnly"
+                        )
                     ),
                     body = html
                 )
@@ -316,11 +320,13 @@ class LiveAO3SessionValidatorTest {
         val validator = LiveAO3SessionValidator(client)
         val result = validator.validate(testSession()) as AO3SessionValidation.Valid
 
-        assertTrue(
-            result.session.cookies.any {
-                it.name == AO3StoredCookie.SessionCookieName && it.value == "rotated-from-ao3"
-            }
-        )
+        val rotated = result.session.cookies.single {
+            it.name == AO3StoredCookie.SessionCookieName && it.value == "rotated-from-ao3"
+        }
+        assertEquals("/", rotated.path)
+        assertEquals(Instant.parse("2027-01-15T12:00:00Z").toEpochMilli(), rotated.expiresAtEpochMillis)
+        assertTrue(rotated.isSecure)
+        assertTrue(rotated.isHttpOnly)
     }
 }
 

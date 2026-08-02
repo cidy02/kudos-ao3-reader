@@ -46,6 +46,21 @@ class AO3WriteRepository(
         }
     }
 
+    /**
+     * Reads the live Subscribe/Unsubscribe form on the work page without writing.
+     * Used by Work Detail so the overflow menu label matches AO3 before the user taps.
+     */
+    suspend fun fetchSubscriptionState(workId: Long): AO3Result<AO3SubscriptionState> {
+        val workUrl = AO3WriteUrls.workUrl(workId)
+        val html = when (val page = client.getAuthenticated(workUrl)) {
+            is AO3Result.Failure -> return page
+            is AO3Result.Success -> page.value.body
+        }
+        return AO3Result.Success(
+            withContext(Dispatchers.Default) { parser.parseSubscription(html) }
+        )
+    }
+
     suspend fun toggleSubscribe(workId: Long): AO3Result<AO3WriteOutcome> {
         val username = client.username() ?: return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val workUrl = AO3WriteUrls.workUrl(workId)

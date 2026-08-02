@@ -84,6 +84,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
+import io.github.cidy02.kudos.network.ao3.writes.AO3WriteActionKind
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteOutcome
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
@@ -234,6 +235,24 @@ fun WorkDetailScreen(
         }
     }
 
+    // Prefetch live Subscribe/Unsubscribe label so the menu matches AO3 before tap.
+    // Re-runs when the work id changes; failures leave isSubscribed null (label stays
+    // "Subscribe") rather than blocking the rest of Work Detail.
+    LaunchedEffect(state.ao3WorkId, state.loading) {
+        val workId = state.ao3WorkId
+        if (state.loading || workId == null) return@LaunchedEffect
+        when (val result = writeRepository.fetchSubscriptionState(workId)) {
+            is AO3Result.Success -> {
+                // Don't clobber a value already set by a completed toggle while this
+                // prefetch was still in flight.
+                if (state.isSubscribed == null && state.ao3WorkId == workId) {
+                    state = state.copy(isSubscribed = result.value.isSubscribed)
+                }
+            }
+            is AO3Result.Failure -> Unit
+        }
+    }
+
     fun runWorkAction(block: suspend () -> Unit) {
         scope.launch {
             state = state.copy(working = true, error = null, ao3Message = null)
@@ -381,7 +400,17 @@ fun WorkDetailScreen(
 
     fun handleWriteResult(result: AO3Result<AO3WriteOutcome>) {
         state = when (result) {
-            is AO3Result.Success -> state.copy(ao3Message = result.value.message)
+            is AO3Result.Success -> {
+                val subscribedAfter = when (result.value.kind) {
+                    AO3WriteActionKind.Subscribe -> true
+                    AO3WriteActionKind.Unsubscribe -> false
+                    else -> state.isSubscribed
+                }
+                state.copy(
+                    ao3Message = result.value.message,
+                    isSubscribed = subscribedAfter
+                )
+            }
             is AO3Result.Failure -> state.copy(error = result.error.displayMessage())
         }
     }
@@ -800,7 +829,11 @@ private fun WorkDetailContent(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Subscribe") },
+                        text = {
+                            Text(
+                                if (state.isSubscribed == true) "Unsubscribe" else "Subscribe"
+                            )
+                        },
                         enabled = !busy && state.ao3WorkId != null,
                         onClick = {
                             overflowExpanded = false
@@ -1930,7 +1963,12 @@ private data class WorkDetailUiState(
     /** True while scraping series pages before enqueue. */
     val queuingSeries: Boolean = false,
     val error: String? = null,
-    val ao3Message: String? = null
+    val ao3Message: String? = null,
+    /**
+     * Live AO3 subscription state for the overflow Subscribe/Unsubscribe label.
+     * `null` = not loaded yet (or unavailable when signed out / offline).
+     */
+    val isSubscribed: Boolean? = null
 ) {
     val title: String = local?.title ?: remote?.title ?: "Work"
     val author: String = local?.author ?: remote?.authorText ?: ""
