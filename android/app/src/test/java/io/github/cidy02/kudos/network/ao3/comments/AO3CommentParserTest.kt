@@ -94,4 +94,64 @@ class AO3CommentThreadParserTest {
         assertFalse(anon.isGuest)
         assertEquals("Anonymous Creator", anon.author.name)
     }
+
+    @Test
+    fun parsesPaginationAndTotalComments() {
+        val thread = parser.parseThread(
+            html = writeResource("ao3/comments/comments_paginated.html"),
+            finalUrl = "https://archiveofourown.org/works/123?show_comments=true",
+            target = AO3CommentTarget.Work(123),
+            page = 1
+        )
+
+        assertEquals(1, thread.currentPage)
+        // Max numeric li in ol.pagination is 5; non-numeric "Next →" / "…" skipped.
+        assertEquals(5, thread.totalPages)
+        assertEquals(42, thread.totalComments)
+        assertEquals(2, thread.comments.size)
+    }
+
+    @Test
+    fun totalPagesNeverBelowRequestedPage() {
+        val thread = parser.parseThread(
+            html = writeResource("ao3/comments/comments_empty.html"),
+            finalUrl = "https://archiveofourown.org/works/123?show_comments=true&page=3",
+            target = AO3CommentTarget.Work(123),
+            page = 3
+        )
+
+        assertEquals(3, thread.currentPage)
+        assertEquals(3, thread.totalPages)
+    }
+
+    @Test
+    fun parsesCanReplyAndNumericId() {
+        val thread = parser.parseThread(
+            html = writeResource("ao3/comments/comments_paginated.html"),
+            finalUrl = "https://archiveofourown.org/works/123?show_comments=true",
+            target = AO3CommentTarget.Work(123)
+        )
+
+        val withReply = thread.comments.first { it.id == "comment_1252794206" }
+        assertTrue(withReply.canReply)
+        assertEquals(1_252_794_206L, withReply.numericId)
+
+        val noReply = thread.comments.first { it.id == "comment_99" }
+        assertFalse(noReply.canReply)
+        assertEquals(99L, noReply.numericId)
+    }
+
+    @Test
+    fun basicFixtureHasNoReplyActions() {
+        val thread = parser.parseThread(
+            html = writeResource("ao3/comments/comments_basic.html"),
+            finalUrl = "https://archiveofourown.org/works/123?show_comments=true",
+            target = AO3CommentTarget.Work(123)
+        )
+
+        assertTrue(thread.comments.none { it.canReply })
+        assertEquals(1, thread.currentPage)
+        assertEquals(1, thread.totalPages)
+        assertNull(thread.totalComments)
+    }
 }

@@ -1,0 +1,63 @@
+<html>
+<body class="works-show logged-in">
+  <div id="workskin">
+    <div class="preface group">
+      <h2 class="title heading">Sample Work</h2>
+      <h3 class="byline heading">
+        <a rel="author" href="/users/WorkAuthor/pseuds/WorkAuthor">Work Author</a>
+      </h3>
+      <dl class="stats">
+        <dt class="comments">Comments:</dt>
+        <dd class="comments">42</dd>
+      </dl>
+    </div>
+  </div>
+  <div id="comments_placeholder">
+    <ol class="thread">
+      <li id="comment_1252794206" class="comment depth-0">
+        <div class="icon">
+          <img class="icon" alt="" src="/images/icons/AO3_Reader.png">
+        </div>
+        <h4 class="heading byline"><a rel="author" href="/users/AO3_Reader">AO3_Reader</a></h4>
+        <p class="datetime">27 Jun 2026</p>
+        <blockquote class="userstuff"><p>Page-one comment with reply.</p></blockquote>
+        <ul id="navigation_for_comment_1252794206" class="actions" role="navigation">
+          <li><a href="/comments/1252794206/edit">Edit</a></li>
+          <li>
+            <a href="/comments/1252794206?add_comment_reply=true&amp;comment_id=1252794206">
+              Reply
+            </a>
+          </li>
+        </ul>
+      </li>
+      <li id="comment_99" class="comment depth-0">
+        <h4 class="heading byline"><a rel="author" href="/users/NoReply">NoReply</a></h4>
+        <p class="datetime">28 Jun 2026</p>
+        <blockquote class="userstuff"><p>No reply action here.</p></blockquote>
+        <ul class="actions" role="navigation">
+          <li><a href="/comments/99">Thread</a></li>
+        </ul>
+      </li>
+    </ol>
+    <ol class="pagination actions" role="navigation" aria-label="Pagination">
+      <li class="previous" title="previous">
+        <span class="disabled">← Previous</span>
+      </li>
+      <li><span class="current">1</span></li>
+      <li><a rel="next" href="/works/123?page=2&amp;show_comments=true">2</a></li>
+      <li><a href="/works/123?page=3&amp;show_comments=true">3</a></li>
+      <li class="gap">…</li>
+      <li><a href="/works/123?page=5&amp;show_comments=true">5</a></li>
+      <li class="next" title="next">
+        <a rel="next" href="/works/123?page=2&amp;show_comments=true">Next →</a>
+      </li>
+    </ol>
+  </div>
+  <form id="new_comment" action="/works/123/comments" method="post">
+    <input type="hidden" name="authenticity_token" value="comment-token">
+    <select name="comment[pseud_id]">
+      <option value="5" selected="selected">AO3_Reader</option>
+    </select>
+  </form>
+</body>
+</html>
