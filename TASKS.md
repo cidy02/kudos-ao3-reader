@@ -53,12 +53,16 @@ order (owner said "fold in wherever makes sense"):
    debounce. Commit: `eb3a646`
    (`Android: T-74 item 2 — shake-to-report via accelerometer`).
    `android/Scripts/verify.sh` green.
-   *(Items 3–6 below remain backlog — T-74 is not fully done.)*
+   *(Items 4–6 below remain backlog — T-74 is not fully done.)*
 
-3. **In-app AO3 WebView theme CSS injection** (T-15: `AO3WebViewFallbackScreen.kt`
-   has no `evaluateJavascript`/CSS injection at all; iOS's `WebBrowser.swift` injects
-   a `<style id="kudos-app-theme">` tag for Dark/Sepia only, deliberately leaves
-   Light alone — read that file directly before porting).
+3. **In-app AO3 WebView theme CSS injection** — ✅ **DONE** — Ported iOS
+   `BrowserThemeStyle` (`WebBrowser.swift`) to Android `BrowserThemeStyle` +
+   `evaluateJavascript` on `onPageFinished` (and live theme change). Injects
+   `<style id="kudos-app-theme">` for Dark/Sepia with the same selectors/hex;
+   Light is deliberately a no-op that removes the tag (AO3 native skin untouched).
+   System resolves via `isSystemInDarkTheme()` like `KudosTheme`. Unit tests for
+   Light-null / Sepia+Dark palette / inject-vs-remove script branches.
+   `android/Scripts/verify.sh` green.
 4. **Onboarding / Welcome screen** (T-50: zero `*Onboard*`/`*Welcome*` files;
    first-launch screen + persisted DataStore "seen it" flag).
 5. **Local `.epub` file import** (T-58: AO3 downloads only, no "add my own EPUB"

@@ -9,6 +9,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,16 +34,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import io.github.cidy02.kudos.core.model.AppThemeSetting
 
 /**
  * Read-only AO3 WebView fallback for pages not yet native. AO3 https pages load
  * in-app; any other http(s) link is handed to an external browser; non-web schemes
- * are blocked. No JavaScript bridge / script injection is added. Android back walks
- * WebView history first. This is NOT the auth/login WebView (that lives in `auth/`).
+ * are blocked. Theme CSS is injected via `evaluateJavascript` for Dark/Sepia only
+ * (Light leaves AO3's native skin untouched); there is no app↔page JavaScript
+ * bridge. Android back walks WebView history first. This is NOT the auth/login
+ * WebView (that lives in `auth/`).
  */
 @Composable
 fun AO3WebViewFallbackScreen(
     url: String,
+    appTheme: AppThemeSetting,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -50,12 +56,26 @@ fun AO3WebViewFallbackScreen(
     var currentTitle by remember { mutableStateOf(url) }
     var webView by remember { mutableStateOf<WebView?>(null) }
 
+    // Mirror KudosTheme: System → Dark or Light from the device setting.
+    val systemDark = isSystemInDarkTheme()
+    val resolvedTheme = when (appTheme) {
+        AppThemeSetting.System -> if (systemDark) AppThemeSetting.Dark else AppThemeSetting.Light
+        else -> appTheme
+    }
+    val currentTheme by rememberUpdatedState(resolvedTheme)
+
     // Never host a non-AO3 page in the in-app WebView.
     LaunchedEffect(url) {
         if (!AO3WebUrlPolicy.isAllowedInApp(url)) {
             openExternal(context, url)
             onBack()
         }
+    }
+
+    // Re-inject when the user changes theme live (iOS applyTheme parity).
+    LaunchedEffect(resolvedTheme, webView) {
+        val wv = webView ?: return@LaunchedEffect
+        injectTheme(wv, resolvedTheme, wv.url)
     }
 
     BackHandler {
@@ -146,6 +166,11 @@ fun AO3WebViewFallbackScreen(
                         override fun onPageFinished(view: WebView?, url2: String?) {
                             loading = false
                             currentTitle = view?.title?.takeIf { it.isNotBlank() } ?: url2 ?: currentTitle
+                            // Always evaluate (including Light / non-AO3 remove branch)
+                            // so a prior kudos-app-theme tag is actively cleared when needed.
+                            if (view != null) {
+                                injectTheme(view, currentTheme, url2 ?: view.url)
+                            }
                         }
 
                         override fun onReceivedError(
@@ -169,6 +194,13 @@ fun AO3WebViewFallbackScreen(
             }
         )
     }
+}
+
+private fun injectTheme(webView: WebView, theme: AppThemeSetting, pageUrl: String?) {
+    webView.evaluateJavascript(
+        BrowserThemeStyle.injectionScript(theme, pageUrl),
+        null
+    )
 }
 
 private fun openExternal(context: Context, url: String) {
