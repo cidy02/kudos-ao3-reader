@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -127,7 +128,6 @@ fun WorkDetailScreen(
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
-    var newCollectionName by remember { mutableStateOf("") }
     var confirmRemove by remember { mutableStateOf(false) }
     var bookmarkDialog by remember { mutableStateOf(false) }
     var bookmarkNotes by remember { mutableStateOf("") }
@@ -137,6 +137,11 @@ fun WorkDetailScreen(
     var queuePickerOpen by remember { mutableStateOf(false) }
     var availableQueues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var collectionDialogOpen by remember { mutableStateOf(false) }
+    // Add-to-Collection checklist sheet state (iOS AddToCollectionView parity).
+    var allCollections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
+    var collectionMemberIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var newCollectionName by remember { mutableStateOf("") }
+    var collectionDialogWorking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
@@ -584,54 +589,190 @@ fun WorkDetailScreen(
         )
     }
 
+    // Load full collection list + current membership when the checklist opens.
+    LaunchedEffect(collectionDialogOpen) {
+        if (!collectionDialogOpen) return@LaunchedEffect
+        newCollectionName = ""
+        collectionDialogWorking = false
+        try {
+            allCollections = workRepository.allCollections()
+                .sortedBy { it.name.lowercase() }
+            val localId = state.local?.id
+            collectionMemberIds = if (localId != null) {
+                workRepository.collectionsForWork(localId).map { it.id }.toSet()
+            } else {
+                state.collections.map { it.id }.toSet()
+            }
+        } catch (_: Exception) {
+            allCollections = emptyList()
+            collectionMemberIds = state.collections.map { it.id }.toSet()
+        }
+    }
+
     if (collectionDialogOpen) {
         AlertDialog(
-            onDismissRequest = { collectionDialogOpen = false },
+            onDismissRequest = {
+                if (!collectionDialogWorking) {
+                    collectionDialogOpen = false
+                    // Refresh work membership label after checklist edits.
+                    val localId = state.local?.id
+                    if (localId != null) {
+                        scope.launch {
+                            state = state.copy(
+                                collections = workRepository.collectionsForWork(localId)
+                            )
+                        }
+                    }
+                }
+            },
             title = { Text("Add to Collection") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (state.collections.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Create-new row (iOS: TextField + Add).
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newCollectionName,
+                            onValueChange = { newCollectionName = it },
+                            label = { Text("New collection") },
+                            singleLine = true,
+                            enabled = !collectionDialogWorking && !state.working,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            enabled = newCollectionName.trim().isNotEmpty() &&
+                                !collectionDialogWorking &&
+                                !state.working,
+                            onClick = {
+                                val name = newCollectionName.trim()
+                                if (name.isEmpty()) return@TextButton
+                                ensureLocalThen { work ->
+                                    collectionDialogWorking = true
+                                    try {
+                                        val collections = workRepository.addToCollection(
+                                            work.id,
+                                            name
+                                        )
+                                        newCollectionName = ""
+                                        collectionMemberIds = collections.map { it.id }.toSet()
+                                        allCollections = workRepository.allCollections()
+                                            .sortedBy { it.name.lowercase() }
+                                        state = state.copy(
+                                            local = workRepository.getWork(work.id),
+                                            collections = collections,
+                                            ao3Message = "Added to collection."
+                                        )
+                                    } finally {
+                                        collectionDialogWorking = false
+                                    }
+                                }
+                            }
+                        ) {
+                            Text("Add")
+                        }
+                    }
+
+                    if (allCollections.isEmpty()) {
                         Text(
-                            text = "Currently in: ${state.collections.joinToString { it.name }}",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "No collections yet. Create one above to start grouping works.",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    } else {
+                        Text(
+                            text = "Collections",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        allCollections.forEach { collection ->
+                            val isMember = collection.id in collectionMemberIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        enabled = !collectionDialogWorking && !state.working
+                                    ) {
+                                        ensureLocalThen { work ->
+                                            collectionDialogWorking = true
+                                            try {
+                                                val collections = if (isMember) {
+                                                    workRepository.removeFromCollection(
+                                                        work.id,
+                                                        collection.id
+                                                    )
+                                                } else {
+                                                    workRepository.addWorkToCollection(
+                                                        work.id,
+                                                        collection.id
+                                                    )
+                                                }
+                                                collectionMemberIds =
+                                                    collections.map { it.id }.toSet()
+                                                allCollections =
+                                                    workRepository.allCollections()
+                                                        .sortedBy { it.name.lowercase() }
+                                                state = state.copy(
+                                                    local = workRepository.getWork(work.id),
+                                                    collections = collections
+                                                )
+                                            } finally {
+                                                collectionDialogWorking = false
+                                            }
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isMember,
+                                    onCheckedChange = null,
+                                    enabled = !collectionDialogWorking && !state.working
+                                )
+                                Text(
+                                    text = collection.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = when (val count = collection.workIds.size) {
+                                        0 -> "0"
+                                        else -> count.toString()
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
-                    OutlinedTextField(
-                        value = newCollectionName,
-                        onValueChange = { newCollectionName = it },
-                        label = { Text("Collection name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             },
             confirmButton = {
                 TextButton(
-                    enabled = newCollectionName.isNotBlank() && !state.working,
+                    enabled = !collectionDialogWorking,
                     onClick = {
                         collectionDialogOpen = false
-                        ensureLocalThen { work ->
-                            if (newCollectionName.isNotBlank()) {
-                                val collections = workRepository.addToCollection(
-                                    work.id,
-                                    newCollectionName
-                                )
-                                newCollectionName = ""
+                        val localId = state.local?.id
+                        if (localId != null) {
+                            scope.launch {
                                 state = state.copy(
-                                    local = workRepository.getWork(work.id),
-                                    collections = collections,
-                                    ao3Message = "Added to collection."
+                                    collections = workRepository.collectionsForWork(localId)
                                 )
                             }
                         }
                     }
                 ) {
-                    Text("Add")
+                    Text("Done")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { collectionDialogOpen = false }) { Text("Cancel") }
             }
         )
     }

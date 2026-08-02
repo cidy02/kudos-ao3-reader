@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.library
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.List
@@ -54,11 +57,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +87,7 @@ import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 private const val ShelfLimit = 12
 
@@ -117,6 +123,7 @@ fun LibraryScreen(
         )
     )
     val state by viewModel.state.collectAsState()
+    val scope = rememberCoroutineScope()
     var confirmBulkRemove by remember { mutableStateOf(false) }
     var confirmRemoveOne by remember { mutableStateOf<String?>(null) }
     var createQueueName by remember { mutableStateOf<String?>(null) }
@@ -269,55 +276,117 @@ fun LibraryScreen(
     }
 
     addToCollectionWorkId?.let { workId ->
+        // Checklist of existing shelves + create-new (iOS AddToCollectionView).
+        // Membership is tracked locally because Library snapshot only re-emits when
+        // the works Flow changes, not on cross-ref-only membership toggles.
         var newName by remember(workId) { mutableStateOf("") }
+        var memberIds by remember(workId) { mutableStateOf<Set<String>>(emptySet()) }
+        var membershipLoaded by remember(workId) { mutableStateOf(false) }
+        LaunchedEffect(workId) {
+            membershipLoaded = false
+            memberIds = runCatching {
+                workRepository.collectionsForWork(workId).map { it.id }.toSet()
+            }.getOrDefault(emptySet())
+            membershipLoaded = true
+        }
         AlertDialog(
             onDismissRequest = { addToCollectionWorkId = null },
             title = { Text("Add to Collection") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New collection") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("New collection") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            enabled = newName.trim().isNotEmpty(),
+                            onClick = {
+                                val name = newName.trim()
+                                if (name.isEmpty()) return@TextButton
+                                newName = ""
+                                // Create-or-match by name and attach; update local
+                                // checklist from the returned membership list.
+                                scope.launch {
+                                    val updated = runCatching {
+                                        workRepository.addToCollection(workId, name)
+                                    }.getOrDefault(emptyList())
+                                    memberIds = updated.map { it.id }.toSet()
+                                }
+                            }
+                        ) { Text("Add") }
+                    }
                     if (state.collections.isEmpty()) {
                         Text(
-                            "No collections yet. Create one above.",
+                            "No collections yet. Create one above to start grouping works.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        state.collections.forEach { collection ->
-                            TextButton(
-                                onClick = {
-                                    addToCollectionWorkId = null
-                                    viewModel.addToCollection(workId, collection.name)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    "${collection.name} (${collection.workIds.size})",
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                        Text(
+                            text = "Collections",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        state.collections
+                            .sortedBy { it.name.lowercase() }
+                            .forEach { collection ->
+                                val isMember = collection.id in memberIds
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = membershipLoaded) {
+                                            val next = !isMember
+                                            memberIds = if (next) {
+                                                memberIds + collection.id
+                                            } else {
+                                                memberIds - collection.id
+                                            }
+                                            viewModel.setCollectionMembership(
+                                                workId,
+                                                collection.id,
+                                                member = next
+                                            )
+                                        }
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isMember,
+                                        onCheckedChange = null,
+                                        enabled = membershipLoaded
+                                    )
+                                    Text(
+                                        text = collection.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = collection.workIds.size.toString(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        }
                     }
                 }
             },
             confirmButton = {
-                TextButton(
-                    enabled = newName.trim().isNotEmpty(),
-                    onClick = {
-                        val name = newName.trim()
-                        addToCollectionWorkId = null
-                        viewModel.addToCollection(workId, name)
-                    }
-                ) { Text("Add") }
-            },
-            dismissButton = {
-                TextButton(onClick = { addToCollectionWorkId = null }) { Text("Cancel") }
+                TextButton(onClick = { addToCollectionWorkId = null }) { Text("Done") }
             }
         )
     }

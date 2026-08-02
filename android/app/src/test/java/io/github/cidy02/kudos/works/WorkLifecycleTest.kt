@@ -414,6 +414,36 @@ class WorkLifecycleRepositoryTest {
     }
 
     @Test
+    fun renameCollectionUpdatesNameInPlaceAndPreservesMemberships() = runTest {
+        repository.upsert(sampleSavedWork())
+        val shelf = repository.createCollection("Classics")
+        repository.addWorkToCollection(workUuid, shelf.id)
+        assertEquals(listOf(workUuid), repository.worksForCollection(shelf.id).map { it.id })
+
+        val renamed = repository.renameCollection(shelf.id, "  Favorites  ")
+        assertNotNull(renamed)
+        assertEquals(shelf.id, renamed?.id)
+        assertEquals("Favorites", renamed?.name)
+        // Same row id — memberships and history stay put (not delete+recreate).
+        assertEquals(listOf(workUuid), repository.worksForCollection(shelf.id).map { it.id })
+        assertEquals("Favorites", repository.getCollection(shelf.id)?.name)
+        assertEquals(1, repository.allCollections().size)
+    }
+
+    @Test
+    fun addWorkToCollectionTogglesMembershipById() = runTest {
+        repository.upsert(sampleSavedWork())
+        val shelf = repository.createCollection("Weekend")
+        val added = repository.addWorkToCollection(workUuid, shelf.id)
+        assertEquals(1, added.size)
+        assertEquals(shelf.id, added.single().id)
+
+        val removed = repository.removeFromCollection(workUuid, shelf.id)
+        assertTrue(removed.isEmpty())
+        assertTrue(repository.worksForCollection(shelf.id).isEmpty())
+    }
+
+    @Test
     fun libraryRepositoryListsSavedWorksOnly() = runTest {
         repository.upsert(sampleSavedWork())
         repository.upsert(sampleSavedWork("33333333-3333-3333-3333-333333333333").copy(isSaved = false))
