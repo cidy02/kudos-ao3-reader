@@ -543,6 +543,45 @@ class WorkImporterLifecycleTest {
         assertNull(work.deletedAt)
         assertNull(work.permanentDeletionScheduledAt)
         assertTrue(repository.observeSavedWorks().first().any { it.id == workUuid })
+        // WorkMetadataMerger clears the soft-delete fields but has no repository
+        // access to retract the tombstone itself — WorkImporter must do that after
+        // the merge, or a later backup merge would treat the stale tombstone as
+        // authoritative and silently re-hide the just-revived work on another device.
+        assertTrue(
+            "reviving via download must retract the sync tombstone",
+            database.syncTombstoneDao().getByRecord(
+                workUuid,
+                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
+            ).isEmpty()
+        )
+    }
+
+    @Test
+    fun savingMetadataOnlyForARecentlyDeletedRowRevivesItAndRetractsTombstone() = runTest {
+        // Same bug class as the download-revival case above, for the "Save" (no EPUB)
+        // path: WorkMetadataMerger clears the soft-delete fields on its own, but only
+        // WorkImporter can retract the sync tombstone, since the merger is a pure
+        // function with no repository access.
+        repository.upsert(sampleSavedWork())
+        repository.softDelete(workUuid)
+        assertTrue(repository.getWork(workUuid)!!.isDeleted)
+
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+        val result = importer.saveMetadataOnly(sampleSummary())
+
+        val work = (result as WorkImportResult.Success).work
+        assertFalse("re-saving a soft-deleted work must revive it", work.isDeleted)
+        assertNull(work.deletedAt)
+        assertNull(work.permanentDeletionScheduledAt)
+        assertTrue(
+            database.syncTombstoneDao().getByRecord(
+                workUuid,
+                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
+            ).isEmpty()
+        )
     }
 
     @Test

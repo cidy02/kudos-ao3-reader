@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import java.time.Instant
 
 sealed interface WorkImportResult {
     data class Success(val work: SavedWork) : WorkImportResult
@@ -32,13 +33,14 @@ class WorkImporter(
             markSaved = true,
             hasEpub = existing?.hasEpub ?: false
         )
-        return WorkImportResult.Success(workRepository.upsert(work))
+        val saved = workRepository.upsert(work)
+        return WorkImportResult.Success(reviveIfNeeded(existing, saved))
     }
 
     suspend fun download(summary: AO3WorkSummary): WorkImportResult {
         val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
-        val base = workRepository.upsert(
+        val merged = workRepository.upsert(
             merger.merge(
                 summary = summary,
                 canonical = metadata,
@@ -47,11 +49,26 @@ class WorkImporter(
                 hasEpub = existing?.hasEpub ?: false
             )
         )
+        val base = reviveIfNeeded(existing, merged)
 
         return when (val download = downloader.download(summary.id)) {
             is AO3Result.Failure -> WorkImportResult.Failure(base, download.error)
             is AO3Result.Success -> persistDownloadedEpub(base, download.value)
         }
+    }
+
+    /**
+     * WorkMetadataMerger.merge already clears a revived match's soft-delete fields
+     * (it's a pure function with no repository access), but that leaves the match's
+     * sync tombstone in place — a later backup merge would treat the tombstone as
+     * authoritative and silently re-hide the just-revived work on another device.
+     * Route confirmed revivals through the repository's own restore path so the
+     * tombstone is retracted and lastModifiedAt reflects the revival, same as the
+     * DownloadQueue resolved-match path already does.
+     */
+    private suspend fun reviveIfNeeded(existing: SavedWork?, saved: SavedWork): SavedWork {
+        if (existing?.isDeleted != true) return saved
+        return workRepository.restoreFromRecentlyDeleted(saved.id) ?: saved
     }
 
     suspend fun downloadExisting(work: SavedWork): WorkImportResult {
@@ -77,17 +94,22 @@ class WorkImporter(
                 //
                 // `downloadExisting` (the DownloadQueue resolved-match path) hands this
                 // `work` straight through without going via WorkMetadataMerger, so a
-                // soft-deleted match reaching here still has isDeleted=true — clear it
-                // here too, or the download reports success while the row stays hidden
-                // in Recently Deleted and is later purged for good regardless. See the
-                // matching fix in WorkMetadataMerger.merge for the download(summary) path.
+                // soft-deleted match reaching here can still have isDeleted=true (the
+                // DownloadQueue caller already revives via restoreFromRecentlyDeleted
+                // before calling in, but that isn't guaranteed for every caller) —
+                // restore it through the repository so the tombstone is retracted too,
+                // not just the local fields, before writing the download-specific ones.
+                if (work.isDeleted) {
+                    workRepository.restoreFromRecentlyDeleted(work.id)
+                }
                 val updated = workRepository.upsert(
                     work.copy(
                         hasEpub = true,
                         isSaved = true,
                         isDeleted = false,
                         deletedAt = null,
-                        permanentDeletionScheduledAt = null
+                        permanentDeletionScheduledAt = null,
+                        lastModifiedAt = Instant.now()
                     )
                 )
                 WorkImportResult.Success(updated)

@@ -409,7 +409,11 @@ fun WorkDetailScreen(
                 // "revival on any interaction, not only an explicit restore tap" — not
                 // gated behind a separate confirmation, since the user's own action
                 // (saving/favoriting/finishing it again) already expresses the intent
-                // a Restore tap would.
+                // a Restore tap would. restoreFromRecentlyDeleted also retracts the
+                // sync tombstone, which the plain field-clearing copy() below doesn't.
+                if (local.isDeleted) {
+                    workRepository.restoreFromRecentlyDeleted(local.id)
+                }
                 val updated = workRepository.upsert(
                     local.copy(
                         isSaved = !local.isSaved,
