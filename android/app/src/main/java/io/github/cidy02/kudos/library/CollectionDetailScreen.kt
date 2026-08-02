@@ -15,6 +15,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,6 +72,8 @@ fun CollectionDetailScreen(
     var collection by remember(collectionId) { mutableStateOf<WorkCollection?>(null) }
     var works by remember(collectionId) { mutableStateOf<List<SavedWork>>(emptyList()) }
     var confirmDelete by remember(collectionId) { mutableStateOf(false) }
+    var showRename by remember(collectionId) { mutableStateOf(false) }
+    var renameText by remember(collectionId) { mutableStateOf("") }
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -112,6 +115,28 @@ fun CollectionDetailScreen(
         }
     }
 
+    fun renameCollection() {
+        val name = renameText.trim()
+        if (name.isEmpty() || working) return
+        scope.launch {
+            working = true
+            error = null
+            try {
+                val updated = workRepository.renameCollection(collectionId, name)
+                if (updated != null) {
+                    collection = updated
+                    showRename = false
+                } else {
+                    error = "Could not rename collection."
+                }
+            } catch (e: Exception) {
+                error = e.message ?: "Could not rename collection."
+            } finally {
+                working = false
+            }
+        }
+    }
+
     fun deleteCollection() {
         scope.launch {
             working = true
@@ -125,6 +150,47 @@ fun CollectionDetailScreen(
                 working = false
             }
         }
+    }
+
+    if (showRename) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!working) {
+                    showRename = false
+                    renameText = ""
+                }
+            },
+            title = { Text("Rename Collection") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !working && renameText.trim().isNotEmpty(),
+                    onClick = { renameCollection() }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !working,
+                    onClick = {
+                        showRename = false
+                        renameText = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (confirmDelete) {
@@ -200,11 +266,24 @@ fun CollectionDetailScreen(
                 },
                 trailing = {
                     if (collection != null) {
-                        OutlinedButton(
-                            enabled = !working && !loading,
-                            onClick = { confirmDelete = true }
-                        ) {
-                            Text("Delete")
+                        // Rename in place (preserves memberships) + soft-delete —
+                        // matches iOS CollectionDetailView menu.
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                enabled = !working && !loading,
+                                onClick = {
+                                    renameText = collection?.name.orEmpty()
+                                    showRename = true
+                                }
+                            ) {
+                                Text("Rename")
+                            }
+                            OutlinedButton(
+                                enabled = !working && !loading,
+                                onClick = { confirmDelete = true }
+                            ) {
+                                Text("Delete")
+                            }
                         }
                     }
                 }

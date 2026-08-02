@@ -320,7 +320,7 @@ class WorkRepository(
 
     /**
      * Creates an empty named shelf, or returns the existing case-insensitive match.
-     * Does not attach a work — use [addToCollection] for membership.
+     * Does not attach a work — use [addToCollection] / [addWorkToCollection] for membership.
      */
     suspend fun createCollection(name: String): WorkCollection {
         val trimmed = name.trim()
@@ -344,15 +344,45 @@ class WorkRepository(
         return entity.toDomain(emptyList())
     }
 
+    /**
+     * Renames an existing collection in place (same id / membership / metadata).
+     * Does **not** delete+recreate — that would drop work memberships and history.
+     * Soft-deleted collections cannot be renamed here; restore first.
+     * Returns null if the id is missing or soft-deleted.
+     */
+    suspend fun renameCollection(collectionId: String, newName: String): WorkCollection? {
+        val trimmed = newName.trim()
+        require(trimmed.isNotEmpty()) { "Collection name must not be blank." }
+        val entity = collectionDao.getById(collectionId) ?: return null
+        if (entity.isDeleted) return null
+        if (entity.name == trimmed) {
+            return entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
+        }
+        val updated = entity.copy(name = trimmed, lastModifiedAt = clock())
+        // @Upsert is an in-place UPDATE — memberships stay on the same row id.
+        collectionDao.upsert(updated)
+        return updated.toDomain(collectionDao.getActiveWorkIdsForCollection(updated.id))
+    }
+
     suspend fun addToCollection(workId: String, name: String): List<WorkCollection> {
         val collection = createCollection(name)
-        collectionDao.addWork(CollectionWorkCrossRef(collection.id, workId))
-        touchCollection(collection.id)
+        return addWorkToCollection(workId, collection.id)
+    }
+
+    /**
+     * Adds [workId] to an existing collection by id (checklist membership toggle).
+     * No-ops if the collection is missing or soft-deleted.
+     */
+    suspend fun addWorkToCollection(workId: String, collectionId: String): List<WorkCollection> {
+        val entity = collectionDao.getById(collectionId) ?: return collectionsForWork(workId)
+        if (entity.isDeleted) return collectionsForWork(workId)
+        collectionDao.addWork(CollectionWorkCrossRef(collectionId, workId))
+        touchCollection(collectionId)
         // Retract any tombstone from a prior removal of this same pairing — a
         // stale one here would make a later backup restore silently drop this
         // work back out of the collection despite the user just re-adding it.
         tombstoneDao.deleteByRecord(
-            membershipRecordId(collection.id, workId),
+            membershipRecordId(collectionId, workId),
             SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
         )
         return collectionsForWork(workId)

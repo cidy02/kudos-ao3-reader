@@ -238,6 +238,22 @@ class LibraryViewModel(
         }
     }
 
+    /**
+     * Toggle a work's membership in an existing collection by id (checklist picker).
+     * Prefer this over name-based [addToCollection] so renames/duplicates don't matter.
+     */
+    fun setCollectionMembership(workId: String, collectionId: String, member: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                if (member) {
+                    workRepository.addWorkToCollection(workId, collectionId)
+                } else {
+                    workRepository.removeFromCollection(workId, collectionId)
+                }
+            }
+        }
+    }
+
     fun createCollection(name: String, onCreated: (String) -> Unit = {}) {
         viewModelScope.launch {
             val created = runCatching { workRepository.createCollection(name) }.getOrNull()
