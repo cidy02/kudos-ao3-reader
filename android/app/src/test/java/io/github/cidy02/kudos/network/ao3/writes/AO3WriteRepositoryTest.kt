@@ -51,6 +51,36 @@ class AO3KudosRepositoryTest {
 
 class AO3SubscribeRepositoryTest {
     @Test
+    fun fetchSubscriptionStateReportsSubscribedFromWorkPage() = runTest {
+        val client = FakeAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/writes/work_subscribed.html"))),
+            postResults = emptyList()
+        )
+        val repository = AO3WriteRepository(client)
+
+        val state = (repository.fetchSubscriptionState(123) as AO3Result.Success).value
+
+        assertTrue(state.isSubscribed)
+        assertEquals("/users/AO3_Reader/subscriptions/789", state.unsubscribePath)
+        assertTrue(client.posts.isEmpty())
+    }
+
+    @Test
+    fun fetchSubscriptionStateReportsUnsubscribedFromWorkPage() = runTest {
+        val client = FakeAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/writes/work_with_forms.html"))),
+            postResults = emptyList()
+        )
+        val repository = AO3WriteRepository(client)
+
+        val state = (repository.fetchSubscriptionState(123) as AO3Result.Success).value
+
+        assertTrue(!state.isSubscribed)
+        assertEquals(null, state.unsubscribePath)
+        assertTrue(client.posts.isEmpty())
+    }
+
+    @Test
     fun subscribedStatePostsDeleteToUnsubscribePath() = runTest {
         val client = FakeAuthenticatedClient(
             getResults = listOf(success(writeResource("ao3/writes/work_subscribed.html"))),
