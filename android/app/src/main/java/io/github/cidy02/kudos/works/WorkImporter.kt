@@ -10,6 +10,7 @@ import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import java.time.Instant
+import java.util.Locale
 
 sealed interface WorkImportResult {
     data class Success(val work: SavedWork) : WorkImportResult
@@ -81,6 +82,57 @@ class WorkImporter(
         }
     }
 
+    /**
+     * Import a user-picked local `.epub` (SAF), not an AO3 download.
+     *
+     * Title comes from the file display name (minus extension) — no OPF metadata
+     * parse. [SavedWork.sourceUrl] is left blank so AO3-only affordances no-op.
+     */
+    suspend fun importLocalEpub(
+        displayName: String?,
+        bytes: ByteArray
+    ): WorkImportResult {
+        if (!isSupportedEpubFileName(displayName)) {
+            return WorkImportResult.Failure(
+                null,
+                AO3Error.Validation("Only .epub files can be imported.")
+            )
+        }
+        if (bytes.isEmpty()) {
+            return WorkImportResult.Failure(
+                null,
+                AO3Error.Validation("The selected file was empty.")
+            )
+        }
+        if (!looksLikeZip(bytes)) {
+            return WorkImportResult.Failure(
+                null,
+                AO3Error.Validation("Not a valid EPUB (file is not a ZIP archive).")
+            )
+        }
+
+        val title = titleFromDisplayName(displayName)
+        val work = SavedWork(
+            title = title,
+            author = "",
+            sourceUrl = "",
+            hasEpub = true,
+            isSaved = true,
+            lastModifiedAt = Instant.now()
+        )
+
+        return when (val write = fileStore.writeWorkEpub(work.id, bytes)) {
+            is FileWriteResult.Failure -> WorkImportResult.Failure(
+                work,
+                AO3Error.Validation(write.message)
+            )
+            is FileWriteResult.Success -> {
+                val saved = workRepository.upsert(work)
+                WorkImportResult.Success(saved)
+            }
+        }
+    }
+
     private suspend fun persistDownloadedEpub(work: SavedWork, bytes: ByteArray): WorkImportResult {
         return when (val write = fileStore.writeWorkEpub(work.id, bytes)) {
             is FileWriteResult.Failure -> WorkImportResult.Failure(
@@ -129,6 +181,38 @@ class WorkImporter(
         return when (val metadata = metadataRepository.fetch(workId)) {
             is AO3Result.Failure -> null
             is AO3Result.Success -> metadata.value.takeUnless { it.isEmpty }
+        }
+    }
+
+    companion object {
+        /** ZIP local-file-header magic — a real EPUB is a ZIP container. */
+        private val ZIP_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+
+        fun isSupportedEpubFileName(fileName: String?): Boolean {
+            if (fileName.isNullOrBlank()) return false
+            val last = fileName.substringAfterLast('/').substringAfterLast('\\')
+            val ext = last.substringAfterLast('.', missingDelimiterValue = "")
+                .lowercase(Locale.ROOT)
+            return ext == "epub"
+        }
+
+        fun looksLikeZip(bytes: ByteArray): Boolean {
+            if (bytes.size < ZIP_MAGIC.size) return false
+            return bytes[0] == ZIP_MAGIC[0] &&
+                bytes[1] == ZIP_MAGIC[1] &&
+                bytes[2] == ZIP_MAGIC[2] &&
+                bytes[3] == ZIP_MAGIC[3]
+        }
+
+        /** Filename-minus-extension title, same style as Settings font import. */
+        fun titleFromDisplayName(displayName: String?): String {
+            val nameWithoutExt = displayName
+                ?.substringAfterLast('/')
+                ?.substringAfterLast('\\')
+                ?.substringBeforeLast('.')
+                ?.trim()
+                .orEmpty()
+            return nameWithoutExt.ifBlank { "Imported EPUB" }
         }
     }
 }

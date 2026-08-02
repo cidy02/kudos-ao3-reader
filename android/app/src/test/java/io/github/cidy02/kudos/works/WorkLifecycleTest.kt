@@ -599,6 +599,70 @@ class WorkImporterLifecycleTest {
         assertFalse(fileStore.workEpubExists(failure.work.id))
     }
 
+    @Test
+    fun importLocalEpubPersistsSavedWorkWithBlankSourceUrl() = runTest {
+        val importer = importer(
+            metadata = AO3Result.Failure(AO3Error.NotFound),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+
+        val result = importer.importLocalEpub(
+            displayName = "My Favorite Fic.epub",
+            bytes = epubBytes
+        )
+
+        val work = (result as WorkImportResult.Success).work
+        assertEquals("My Favorite Fic", work.title)
+        assertEquals("", work.author)
+        assertEquals("", work.sourceUrl)
+        assertTrue(work.hasEpub)
+        assertTrue(work.isSaved)
+        assertTrue(fileStore.workEpubExists(work.id))
+        val stored = repository.getWork(work.id)
+        assertNotNull(stored)
+        assertEquals(work.id, stored!!.id)
+        assertEquals(work.title, stored.title)
+        assertEquals("", stored.sourceUrl)
+        assertTrue(stored.hasEpub)
+        assertTrue(stored.isSaved)
+    }
+
+    @Test
+    fun importLocalEpubRejectsNonEpubExtension() = runTest {
+        val importer = importer(
+            metadata = AO3Result.Failure(AO3Error.NotFound),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+
+        val result = importer.importLocalEpub(
+            displayName = "notes.txt",
+            bytes = epubBytes
+        )
+
+        val failure = result as WorkImportResult.Failure
+        assertTrue(failure.error is AO3Error.Validation)
+        assertNull(failure.work)
+    }
+
+    @Test
+    fun importLocalEpubRejectsNonZipPayload() = runTest {
+        val importer = importer(
+            metadata = AO3Result.Failure(AO3Error.NotFound),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+
+        val result = importer.importLocalEpub(
+            displayName = "fake.epub",
+            bytes = "not a zip".toByteArray()
+        )
+
+        val failure = result as WorkImportResult.Failure
+        assertTrue(failure.error is AO3Error.Validation)
+        assertTrue(
+            (failure.error as AO3Error.Validation).message.contains("ZIP", ignoreCase = true)
+        )
+    }
+
     private fun importer(
         metadata: AO3Result<AO3WorkMetadata>,
         download: AO3Result<ByteArray>

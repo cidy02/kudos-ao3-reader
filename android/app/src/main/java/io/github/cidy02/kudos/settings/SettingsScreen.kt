@@ -68,9 +68,12 @@ import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
+import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.support.openBugReport
 import io.github.cidy02.kudos.update.AppUpdateRepository
 import io.github.cidy02.kudos.update.AppUpdateState
+import io.github.cidy02.kudos.works.WorkImportResult
+import io.github.cidy02.kudos.works.WorkImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -96,6 +99,12 @@ private val FontOpenMimeTypes = arrayOf(
     "application/octet-stream"
 )
 
+/** SAF MIME types for EPUB (plus octet-stream for pickers that omit the type). */
+private val EpubOpenMimeTypes = arrayOf(
+    "application/epub+zip",
+    "application/octet-stream"
+)
+
 /**
  * Settings section map aligned with iOS Form groups (portable prefs only):
  * AO3 Account · Theme · Appearance/Reading · Library · Backup · Sync N/A · Privacy · Help.
@@ -108,7 +117,8 @@ fun SettingsScreen(
     authRepository: AO3AuthRepository? = null,
     onLogin: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
-    appUpdateRepository: AppUpdateRepository? = null
+    appUpdateRepository: AppUpdateRepository? = null,
+    workImporter: WorkImporter? = null
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val importedFonts by customFontRepository.observeImported()
@@ -136,6 +146,9 @@ fun SettingsScreen(
     var fontStatus by remember { mutableStateOf<String?>(null) }
     var fontStatusIsError by remember { mutableStateOf(false) }
     var fontBusy by remember { mutableStateOf(false) }
+    var epubStatus by remember { mutableStateOf<String?>(null) }
+    var epubStatusIsError by remember { mutableStateOf(false) }
+    var epubBusy by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
 
     fun launchUpdate(block: suspend () -> Unit) {
@@ -188,6 +201,61 @@ fun SettingsScreen(
                 fontStatus = error.message ?: "Could not import font."
             } finally {
                 fontBusy = false
+            }
+        }
+    }
+
+    val importEpubLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty() || workImporter == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            epubBusy = true
+            epubStatus = null
+            try {
+                val successes = mutableListOf<String>()
+                val failures = mutableListOf<String>()
+                for (uri in uris) {
+                    val displayName = withContext(Dispatchers.IO) {
+                        queryDisplayName(context, uri)
+                    }
+                    val label = displayName
+                        ?.substringAfterLast('/')
+                        ?.substringAfterLast('\\')
+                        ?.ifBlank { null }
+                        ?: "file"
+                    try {
+                        val bytes = withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                ?: error("Could not read the selected file.")
+                        }
+                        when (val result = workImporter.importLocalEpub(displayName, bytes)) {
+                            is WorkImportResult.Success -> {
+                                successes += "“${result.work.title}”"
+                            }
+                            is WorkImportResult.Failure -> {
+                                val message = when (val error = result.error) {
+                                    is AO3Error.Validation -> error.message
+                                    else -> error.toString()
+                                }
+                                failures += "$label: $message"
+                            }
+                        }
+                    } catch (error: Exception) {
+                        failures += "$label: ${error.message ?: "Could not import."}"
+                    }
+                }
+                epubStatusIsError = failures.isNotEmpty() && successes.isEmpty()
+                epubStatus = buildEpubImportStatus(
+                    successCount = successes.size,
+                    failureMessages = failures,
+                    successTitles = successes
+                )
+            } catch (error: Exception) {
+                epubStatusIsError = true
+                epubStatus = error.message ?: "Could not import EPUB."
+            } finally {
+                epubBusy = false
             }
         }
     }
@@ -464,8 +532,42 @@ fun SettingsScreen(
                         launchUpdate { repository.updateConfirmBeforeDelete(it) }
                     }
                 )
+                if (workImporter != null) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Add your own .epub files to the Library " +
+                                "(not downloaded from AO3).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                if (!epubBusy) importEpubLauncher.launch(EpubOpenMimeTypes)
+                            },
+                            enabled = !epubBusy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (epubBusy) "Importing…" else "Import EPUB")
+                        }
+                        if (epubStatus != null) {
+                            Text(
+                                text = epubStatus!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (epubStatusIsError) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                }
             }
-            SettingsFooter("Ask before removing a work from your Library.")
+            SettingsFooter(
+                "Ask before removing a work from your Library. Imported EPUBs " +
+                    "appear as saved works without an AO3 link."
+            )
         }
 
         // ── Backup ─────────────────────────────────────────────────────
@@ -1051,4 +1153,33 @@ private fun queryDisplayName(context: android.content.Context, uri: Uri): String
         }
     }.getOrNull()
     return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment
+}
+
+/**
+ * Compact multi-file import summary: successes first, then each failure.
+ * Partial success is reported as a non-error status so one bad file doesn't
+ * paint the whole batch red when others imported fine.
+ */
+private fun buildEpubImportStatus(
+    successCount: Int,
+    failureMessages: List<String>,
+    successTitles: List<String>
+): String {
+    val parts = mutableListOf<String>()
+    when {
+        successCount == 1 && successTitles.isNotEmpty() -> {
+            parts += "Imported ${successTitles.first()}."
+        }
+        successCount > 1 -> {
+            parts += "Imported $successCount EPUBs."
+        }
+    }
+    if (failureMessages.isNotEmpty()) {
+        parts += if (failureMessages.size == 1) {
+            failureMessages.first()
+        } else {
+            failureMessages.joinToString(separator = "\n")
+        }
+    }
+    return parts.joinToString(separator = "\n").ifBlank { "Nothing imported." }
 }

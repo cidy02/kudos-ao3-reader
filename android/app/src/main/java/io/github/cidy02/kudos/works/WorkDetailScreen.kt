@@ -814,7 +814,9 @@ private fun WorkDetailContent(
                             onLogin()
                         }
                     )
-                    if (hasEpub) {
+                    // Local-only imports have no AO3 id — hide redownload rather
+                    // than offering an action that can only fail with "No work selected."
+                    if (hasEpub && state.ao3WorkId != null) {
                         DropdownMenuItem(
                             text = { Text("Redownload EPUB") },
                             enabled = !busy,
@@ -1158,7 +1160,8 @@ private fun OverviewTab(
             state.updatedDate.takeIf { it.isNotBlank() }?.let { "Updated" to it },
             state.language.takeIf { it.isNotBlank() }?.let { "Language" to it },
             state.dateAddedLabel?.let { "Added" to it },
-            "Source" to "Archive of Our Own"
+            // Local file imports keep sourceUrl blank — don't claim AO3 origin.
+            state.sourceUrl.takeIf { it.isNotBlank() }?.let { "Source" to "Archive of Our Own" }
         )
     )
 
@@ -1368,10 +1371,13 @@ private fun LibraryTab(
 
     SectionLabel("Storage")
     DetailCard {
+        // Download / redownload only makes sense with an AO3 work id. Local file
+        // imports show status only (no dead tap that ends in "No work selected").
+        val canDownloadFromAo3 = state.ao3WorkId != null
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = !busy && (state.remote != null || state.local != null)) {
+                .clickable(enabled = !busy && canDownloadFromAo3) {
                     onDownload()
                 },
             horizontalArrangement = Arrangement.SpaceBetween,
