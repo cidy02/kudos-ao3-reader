@@ -50,7 +50,7 @@ order (owner said "fold in wherever makes sense"):
    `TYPE_ACCELEROMETER` listener (`ShakeMath` threshold 13.5 m/s² + 1.5s debounce,
    lifecycle-bound `ShakeToReportEffect` in `KudosApp`) opens the same
    `openBugReport` mailto as Settings → Report a Bug. Unit tests for threshold/
-   debounce. Commit: `8360381`
+   debounce. Commit: `eb3a646`
    (`Android: T-74 item 2 — shake-to-report via accelerometer`).
    `android/Scripts/verify.sh` green.
    *(Items 3–6 below remain backlog — T-74 is not fully done.)*
