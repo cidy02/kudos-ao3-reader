@@ -284,6 +284,15 @@ fun AppNavHost(
                         displayTitle = collection.title
                     )
                     navController.navigate(Routes.AccountList)
+                },
+                inboxRepository = container.inboxRepository,
+                commentRepository = container.commentRepository,
+                onOpenWorkComments = { workId ->
+                    // Deliberate simplification: chapter-position rows still open the
+                    // work's general thread (Android has no chapter-id resolution from
+                    // Inbox subject labels yet — same gap as Comments chapter routing).
+                    selectedCommentTarget = AO3CommentTarget.Work(workId)
+                    navController.navigate(Routes.Comments)
                 }
             )
         }

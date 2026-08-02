@@ -121,6 +121,9 @@ fun AccountScreen(
     onOpenWeb: (String) -> Unit = {},
     onOpenWork: (AO3WorkSummary) -> Unit = {},
     onOpenCollection: (AO3Collection) -> Unit = {},
+    inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
+    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
+    onOpenWorkComments: (workId: Long) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(factory = AccountViewModel.factory(authRepository))
 ) {
@@ -213,7 +216,11 @@ fun AccountScreen(
                     onKindChange = { activityKind = it.name },
                     listRepository = listRepository,
                     onLogin = onLogin,
-                    onOpenWork = onOpenWork
+                    onOpenWork = onOpenWork,
+                    username = username,
+                    inboxRepository = inboxRepository,
+                    commentRepository = commentRepository,
+                    onOpenWorkComments = onOpenWorkComments
                 )
             }
         }
@@ -818,7 +825,11 @@ private fun ActivityTabContent(
     onKindChange: (AccountActivityKind) -> Unit,
     listRepository: AccountListRepository,
     onLogin: () -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    username: String? = null,
+    inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
+    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
+    onOpenWorkComments: (workId: Long) -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
         AccountListKindPicker(
@@ -847,10 +858,19 @@ private fun ActivityTabContent(
                 )
             }
             AccountActivityKind.Inbox -> {
-                EmptyStateCard(
-                    title = "Inbox not available yet",
-                    message = "AO3 inbox messages stay on the website for now."
-                )
+                if (inboxRepository != null && commentRepository != null) {
+                    AccountInboxPane(
+                        inboxRepository = inboxRepository,
+                        commentRepository = commentRepository,
+                        currentUsername = username,
+                        onOpenWorkComments = onOpenWorkComments
+                    )
+                } else {
+                    EmptyStateCard(
+                        title = "Inbox not available yet",
+                        message = "AO3 inbox messages stay on the website for now."
+                    )
+                }
             }
         }
     }

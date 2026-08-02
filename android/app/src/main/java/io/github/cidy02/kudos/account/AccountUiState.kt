@@ -32,7 +32,7 @@ enum class AccountWritingKind(val label: String) {
     Drafts("Drafts")
 }
 
-/** Activity-tab list picker options. Inbox is a stub until an inbox API lands. */
+/** Activity-tab list picker options. Inbox uses a dedicated ViewModel/repository. */
 enum class AccountActivityKind(val label: String) {
     History("History"),
     Inbox("Inbox")

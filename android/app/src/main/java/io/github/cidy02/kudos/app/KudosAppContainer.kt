@@ -20,6 +20,7 @@ import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
+import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
@@ -107,6 +108,10 @@ class KudosAppContainer(context: Context) {
             publicClient = ao3Client,
             authenticatedClient = authenticatedClient
         )
+    }
+
+    val inboxRepository: AO3InboxRepository by lazy {
+        AO3InboxRepository(authenticatedClient)
     }
 
     val workRepository: WorkRepository by lazy {
