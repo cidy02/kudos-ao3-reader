@@ -116,11 +116,68 @@ class AO3BookmarkRepositoryTest {
         ) as AO3Result.Success).value
 
         assertEquals(AO3WriteActionKind.Bookmark, outcome.kind)
+        assertEquals("Bookmarked.", outcome.message)
         assertEquals("https://archiveofourown.org/works/123/bookmarks", client.posts.single().url)
         assertTrue(client.posts.single().fields.contains("bookmark[bookmarker_notes]" to "Loved it"))
         assertTrue(client.posts.single().fields.contains("bookmark[tag_string]" to "favorite"))
         assertTrue(client.posts.single().fields.contains("bookmark[private]" to "1"))
         assertTrue(client.posts.single().fields.contains("bookmark[pseud_id]" to "44"))
+        assertTrue(client.posts.single().fields.none { it.first == "_method" })
+    }
+
+    @Test
+    fun fetchBookmarkStateReturnsPrefillWhenAlreadyBookmarked() = runTest {
+        val client = FakeAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/writes/work_bookmarked.html"))),
+            postResults = emptyList()
+        )
+        val repository = AO3WriteRepository(client)
+
+        val state = (repository.fetchBookmarkState(123) as AO3Result.Success).value
+
+        assertTrue(state.exists)
+        assertEquals("/bookmarks/456", state.editPath)
+        assertEquals("Loved chapter 3", state.input.notes)
+        assertEquals("favorite, reread", state.input.tags)
+        assertTrue(state.input.isPrivate)
+        assertTrue(state.input.isRecommendation)
+        assertEquals(0, client.posts.size)
+    }
+
+    @Test
+    fun existingBookmarkPostsPutToEditPath() = runTest {
+        val client = FakeAuthenticatedClient(
+            getResults = listOf(success(writeResource("ao3/writes/work_bookmarked.html"))),
+            postResults = listOf(success("ok"))
+        )
+        val repository = AO3WriteRepository(client)
+
+        val outcome = (repository.createBookmark(
+            123,
+            AO3BookmarkInput(
+                notes = "Updated notes",
+                tags = "favorite",
+                isPrivate = false,
+                isRecommendation = true
+            )
+        ) as AO3Result.Success).value
+
+        assertEquals(AO3WriteActionKind.Bookmark, outcome.kind)
+        assertEquals("Bookmark updated.", outcome.message)
+        assertEquals("https://archiveofourown.org/bookmarks/456", client.posts.single().url)
+        assertEquals(
+            listOf(
+                "_method" to "put",
+                "authenticity_token" to "bookmarked-token",
+                "bookmark[bookmarker_notes]" to "Updated notes",
+                "bookmark[tag_string]" to "favorite",
+                "bookmark[collection_names]" to "",
+                "bookmark[private]" to "0",
+                "bookmark[rec]" to "1",
+                "bookmark[pseud_id]" to "44"
+            ),
+            client.posts.single().fields
+        )
     }
 }
 

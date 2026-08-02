@@ -129,6 +129,8 @@ fun WorkDetailScreen(
     var newCollectionName by remember { mutableStateOf("") }
     var confirmRemove by remember { mutableStateOf(false) }
     var bookmarkDialog by remember { mutableStateOf(false) }
+    var bookmarkLoading by remember { mutableStateOf(false) }
+    var bookmarkIsEdit by remember { mutableStateOf(false) }
     var bookmarkNotes by remember { mutableStateOf("") }
     var bookmarkTags by remember { mutableStateOf("") }
     var bookmarkPrivate by remember { mutableStateOf(false) }
@@ -465,30 +467,44 @@ fun WorkDetailScreen(
 
     if (bookmarkDialog) {
         AlertDialog(
-            onDismissRequest = { bookmarkDialog = false },
-            title = { Text("AO3 Bookmark") },
+            onDismissRequest = { if (!bookmarkLoading) bookmarkDialog = false },
+            title = { Text(if (bookmarkIsEdit) "Edit Bookmark" else "AO3 Bookmark") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (bookmarkLoading) {
+                        Text(
+                            text = "Loading bookmark…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     OutlinedTextField(
                         value = bookmarkNotes,
                         onValueChange = { bookmarkNotes = it },
                         label = { Text("Notes") },
-                        minLines = 3
+                        minLines = 3,
+                        enabled = !bookmarkLoading
                     )
                     OutlinedTextField(
                         value = bookmarkTags,
                         onValueChange = { bookmarkTags = it },
                         label = { Text("Tags, comma-separated") },
-                        singleLine = true
+                        singleLine = true,
+                        enabled = !bookmarkLoading
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Checkbox(checked = bookmarkPrivate, onCheckedChange = { bookmarkPrivate = it })
+                        Checkbox(
+                            checked = bookmarkPrivate,
+                            onCheckedChange = { bookmarkPrivate = it },
+                            enabled = !bookmarkLoading
+                        )
                         Text("Private")
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(
                             checked = bookmarkRecommendation,
-                            onCheckedChange = { bookmarkRecommendation = it }
+                            onCheckedChange = { bookmarkRecommendation = it },
+                            enabled = !bookmarkLoading
                         )
                         Text("Recommendation")
                     }
@@ -496,6 +512,7 @@ fun WorkDetailScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = !bookmarkLoading,
                     onClick = {
                         bookmarkDialog = false
                         val input = AO3BookmarkInput(
@@ -507,11 +524,14 @@ fun WorkDetailScreen(
                         runAo3Write { writeRepository.createBookmark(it, input) }
                     }
                 ) {
-                    Text("Create")
+                    Text(if (bookmarkIsEdit) "Save" else "Create")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { bookmarkDialog = false }) { Text("Cancel") }
+                TextButton(
+                    enabled = !bookmarkLoading,
+                    onClick = { bookmarkDialog = false }
+                ) { Text("Cancel") }
             }
         )
     }
@@ -683,7 +703,41 @@ fun WorkDetailScreen(
             }
         },
         onAddToCollection = { collectionDialogOpen = true },
-        onBookmark = { bookmarkDialog = true },
+        onBookmark = {
+            val workId = state.ao3WorkId
+            if (workId == null) {
+                state = state.copy(error = "This action needs a canonical AO3 work URL.")
+                return@WorkDetailContent
+            }
+            // Open immediately so the dialog isn't blocked on network; prefill
+            // when fetchBookmarkState resolves. Fail-safe: leave create mode blank.
+            bookmarkNotes = ""
+            bookmarkTags = ""
+            bookmarkPrivate = false
+            bookmarkRecommendation = false
+            bookmarkIsEdit = false
+            bookmarkLoading = true
+            bookmarkDialog = true
+            scope.launch {
+                when (val result = writeRepository.fetchBookmarkState(workId)) {
+                    is AO3Result.Success -> {
+                        val bookmarkState = result.value
+                        bookmarkIsEdit = bookmarkState.exists
+                        bookmarkNotes = bookmarkState.input.notes
+                        bookmarkTags = bookmarkState.input.tags
+                        bookmarkPrivate = bookmarkState.input.isPrivate
+                        bookmarkRecommendation = bookmarkState.input.isRecommendation
+                    }
+                    is AO3Result.Failure -> {
+                        // Keep blank create-mode fields; surface the error if useful.
+                        if (result.error is AO3Error.AuthenticationRequired) {
+                            state = state.copy(error = result.error.displayMessage())
+                        }
+                    }
+                }
+                bookmarkLoading = false
+            }
+        },
         onComments = {
             state.ao3WorkId?.let(onOpenComments)
                 ?: run { state = state.copy(error = "This action needs a canonical AO3 work URL.") }
