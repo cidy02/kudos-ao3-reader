@@ -34,12 +34,16 @@ handoff channel between sessions and between agents.
   resolve each chapter's CSS/image/font resources). Low ROI — do only if large-work
   perf becomes a real problem. Target: legacy `EPUBDocument.open` upfront-unzip.
 
-### T-74 — Android: 8 whole-feature gaps from iOS task-history cross-check 🅿️
+### T-74 — Android: 8 whole-feature gaps from iOS task-history cross-check ✅ DONE
 Found by walking `hig-review`'s full DONE task history (T-05–T-186) feature-by-feature
 against current Android source — a different discovery method than the area-by-area
 sweeps that produced T-72's findings; none overlap those. Full writeup + verification
-method in `docs/audits/IOS_TASK_HISTORY_VS_ANDROID.md`. None urgent-blocking. Proposed
-order (owner said "fold in wherever makes sense"):
+method in `docs/audits/IOS_TASK_HISTORY_VS_ANDROID.md`. All 6 items delegated to Grok
+CLI across several rounds (some via a multi-agent Workflow, isolated per-item worktrees
+after an early attempt hit a worktree-provisioning bug), each independently verified
+against the real git diff, a fresh build, and the iOS reference before being merged —
+see [[android-inbox-t73]] memory for the full blow-by-blow, including two failed
+workflow attempts before the pre-made-worktree fix worked.
 1. **Quick batch** — ✅ **DONE (batch 1)** — About version/GPL-3.0/Jsoup+Readium
    credits; Account **Verify Session** + orthogonal `AO3SessionHealth` (valid/
    expired/transient-keep) + unit tests; Search **Expand all / Collapse all**
@@ -80,13 +84,19 @@ order (owner said "fold in wherever makes sense"):
    identity index, browse indicators, detail Open-on-AO3 / Origin / redownload,
    end-of-work, download queue) — hide or no-op AO3 affordances rather than crash.
    Unit tests for accept/reject paths. `android/Scripts/verify.sh` green.
-   *(Item 6 below remains backlog — T-74 is not fully done.)*
-6. **Reader progress-pill section indexing** (T-76: `ReaderProgressDisplay.label()`
-   unconditionally formats every spine index as "Ch. N/total," so a work's Preface/
-   Afterword shows as a fake chapter and the count is inflated by front/back matter;
-   most involved item here — read iOS `ReaderSection.swift`/`ReaderSectionBuilder`'s
-   full TOC-based detection algorithm, including its non-AO3-EPUB fallback guard,
-   before starting — real nuance to preserve exactly, not re-derive).
+6. **Reader progress-pill section indexing** — ✅ **DONE** — Ported iOS
+   `ReaderSectionKind`/`ReaderSection`/`ReaderSectionBuilder` (Preface-gate before
+   Summary-gap synthesis, exact-title classify, hrefKey fragment/path matching,
+   `storyChapterCount`) into engine-agnostic `ReaderSection.kt`. `ReadiumTocAdapter.sections()`
+   resolves TOC Links → spine indices and builds sections; `ReaderProgressDisplay.label()`
+   uses kind-aware labels ("Preface"/"Summary"/"Afterword"/"Ch. i/storyTotal") instead of
+   raw spine "Ch. N/spineCount". Non-AO3 EPUBs (no Preface TOC entry) still number every
+   TOC-matched spine item 1..N unchanged. Unit tests for builder matrix + display labels.
+   Commit: `a9fd32bd`
+   (`Android: T-74 item 6 — reader progress-pill section indexing`).
+   `android/Scripts/verify.sh` green.
+
+**All 6 T-74 items are now done.**
 
 ### P2 — features (roadmap "Later" list; ID assigned on pickup)
 - **Automatic CloudKit backup/sync** — portable file Export / Import completed

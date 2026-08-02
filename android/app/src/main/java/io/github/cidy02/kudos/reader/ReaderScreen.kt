@@ -179,8 +179,8 @@ private fun ReaderReading(
                 ReadiumProgressAdapter.initialLocator(state.restoreTarget, publication)
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
-            val spineCount = publication.readingOrder.size
-            val progressLabel = ReaderProgressDisplay.label(state.liveProgress, spineCount)
+            val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
+            val progressLabel = ReaderProgressDisplay.label(state.liveProgress, sections)
 
             Box(modifier = Modifier.fillMaxSize()) {
                 ReadiumNavigatorHost(

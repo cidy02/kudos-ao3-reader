@@ -5,6 +5,10 @@ package io.github.cidy02.kudos.reader
  *
  * Prefer whole-book [ReaderProgress.totalProgression] when present; otherwise
  * estimate from spine index + intra-spine scroll fraction.
+ *
+ * Chapter labels use normalized [ReaderSection]s so Preface/Summary/Afterword
+ * are never shown as fake numbered chapters, and the denominator is the real
+ * story-chapter count only.
  */
 object ReaderProgressDisplay {
 
@@ -20,21 +24,33 @@ object ReaderProgressDisplay {
         return (overall * 100.0).toInt().coerceIn(0, 100)
     }
 
-    fun label(progress: ReaderProgress?, spineCount: Int): String {
+    fun label(progress: ReaderProgress?, sections: List<ReaderSection>): String {
+        val spineCount = sections.size
         val pct = percent(progress, spineCount)
-        val chapter = progress?.let { p ->
-            if (spineCount > 0) {
-                val idx = (p.spineIndex + 1).coerceIn(1, spineCount)
-                "Ch. $idx/$spineCount"
-            } else {
-                null
-            }
-        }
+        val sectionPart = progress?.let { sectionLabel(it, sections) }
         return when {
-            pct != null && chapter != null -> "$chapter · $pct%"
+            pct != null && sectionPart != null -> "$sectionPart · $pct%"
             pct != null -> "$pct%"
-            chapter != null -> chapter
+            sectionPart != null -> sectionPart
             else -> ""
+        }
+    }
+
+    private fun sectionLabel(progress: ReaderProgress, sections: List<ReaderSection>): String? {
+        if (sections.isEmpty()) return null
+        val idx = progress.spineIndex.coerceIn(0, sections.lastIndex)
+        val section = sections[idx]
+        val storyTotal = sections.storyChapterCount
+        return when (section.kind) {
+            ReaderSectionKind.PREFACE -> "Preface"
+            ReaderSectionKind.SUMMARY -> "Summary"
+            ReaderSectionKind.AFTERWORD -> "Afterword"
+            ReaderSectionKind.CHAPTER -> {
+                val i = section.storyChapterIndex ?: return null
+                val total = maxOf(storyTotal, i)
+                "Ch. $i/$total"
+            }
+            ReaderSectionKind.OTHER -> null
         }
     }
 }
