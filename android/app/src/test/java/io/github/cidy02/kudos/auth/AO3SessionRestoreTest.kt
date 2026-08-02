@@ -111,6 +111,101 @@ class AO3SessionRestoreValidationTest {
     }
 }
 
+/**
+ * On-demand [AO3AuthRepository.verifySession] — same valid / expired / transient
+ * branches as restore, plus [AO3SessionHealth] transitions.
+ */
+class AO3VerifySessionTest {
+    @Test
+    fun verifySessionValidMarksHealthyAndKeepsSignedIn() = runTest {
+        val session = testSession("AO3_Reader")
+        val store = MemorySessionStore(session)
+        val cookies = MemoryCookieStore()
+        val repository = AO3AuthRepository(
+            sessionStore = store,
+            cookieStore = cookies,
+            sessionValidator = FixedValidator(AO3SessionValidation.Valid(session))
+        )
+        repository.restoreSession()
+        assertEquals(AO3AuthState.SignedIn("AO3_Reader"), repository.state.value)
+        assertTrue(repository.sessionHealth.value is AO3SessionHealth.Healthy)
+
+        repository.verifySession()
+
+        assertEquals(AO3AuthState.SignedIn("AO3_Reader"), repository.state.value)
+        assertTrue(repository.sessionHealth.value is AO3SessionHealth.Healthy)
+        assertEquals(session, store.session)
+    }
+
+    @Test
+    fun verifySessionExpiredClearsSession() = runTest {
+        val session = testSession("AO3_Reader")
+        val store = MemorySessionStore(session)
+        val cookies = MemoryCookieStore()
+        val sequence = SequenceValidator(
+            first = AO3SessionValidation.Valid(session),
+            rest = AO3SessionValidation.Expired
+        )
+        val repository = AO3AuthRepository(
+            sessionStore = store,
+            cookieStore = cookies,
+            sessionValidator = sequence
+        )
+        repository.restoreSession()
+        assertEquals(AO3AuthState.SignedIn("AO3_Reader"), repository.state.value)
+        assertTrue(repository.sessionHealth.value is AO3SessionHealth.Healthy)
+
+        repository.verifySession()
+
+        assertTrue(repository.state.value is AO3AuthState.Expired)
+        assertEquals(AO3SessionHealth.Expired, repository.sessionHealth.value)
+        assertNull(store.session)
+        assertTrue(cookies.cleared)
+        assertNull(repository.username())
+    }
+
+    @Test
+    fun verifySessionTransientKeepsSessionAndMarksUnreachable() = runTest {
+        val session = testSession("AO3_Reader")
+        val store = MemorySessionStore(session)
+        val cookies = MemoryCookieStore()
+        val sequence = SequenceValidator(
+            first = AO3SessionValidation.Valid(session),
+            throwOnRest = IOException("offline")
+        )
+        val repository = AO3AuthRepository(
+            sessionStore = store,
+            cookieStore = cookies,
+            sessionValidator = sequence
+        )
+        repository.restoreSession()
+        assertEquals(AO3AuthState.SignedIn("AO3_Reader"), repository.state.value)
+
+        repository.verifySession()
+
+        assertEquals(AO3AuthState.SignedIn("AO3_Reader"), repository.state.value)
+        assertEquals(AO3SessionHealth.Unreachable, repository.sessionHealth.value)
+        assertEquals(session, store.session)
+        assertEquals(session, cookies.installed)
+    }
+
+    @Test
+    fun verifySessionWhenSignedOutIsNoOpUnknown() = runTest {
+        val repository = AO3AuthRepository(
+            sessionStore = MemorySessionStore(null),
+            cookieStore = MemoryCookieStore(),
+            sessionValidator = FixedValidator(AO3SessionValidation.Expired)
+        )
+        repository.restoreSession()
+        assertEquals(AO3AuthState.SignedOut, repository.state.value)
+
+        repository.verifySession()
+
+        assertEquals(AO3AuthState.SignedOut, repository.state.value)
+        assertEquals(AO3SessionHealth.Unknown, repository.sessionHealth.value)
+    }
+}
+
 class LiveAO3SessionValidatorTest {
     @Test
     fun validLoggedInFixtureKeepsSession() = runTest {
@@ -240,6 +335,25 @@ private class FailingValidator(
 ) : AO3SessionValidating {
     override suspend fun validate(session: AO3Session): AO3SessionValidation {
         throw error
+    }
+}
+
+/**
+ * First [validate] returns [first]; subsequent calls return [rest] or throw [throwOnRest].
+ * Used to exercise restore-then-verifySession sequences with different outcomes.
+ */
+private class SequenceValidator(
+    private val first: AO3SessionValidation,
+    private val rest: AO3SessionValidation? = null,
+    private val throwOnRest: Exception? = null
+) : AO3SessionValidating {
+    private var calls = 0
+
+    override suspend fun validate(session: AO3Session): AO3SessionValidation {
+        calls += 1
+        if (calls == 1) return first
+        throwOnRest?.let { throw it }
+        return rest ?: first
     }
 }
 

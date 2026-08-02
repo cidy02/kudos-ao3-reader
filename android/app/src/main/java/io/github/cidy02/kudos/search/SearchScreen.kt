@@ -3,8 +3,10 @@ package io.github.cidy02.kudos.search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,6 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.UnfoldLess
+import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -87,6 +92,9 @@ fun SearchScreen(
     // (e.g. Search, then immediately Sort, then immediately Search again) — only the
     // launch that's still current when it resolves is allowed to write `state`.
     var searchGeneration by remember { mutableIntStateOf(0) }
+    // Batch seed for result cards (Expand all / Collapse all). Individual cards
+    // keep their own local expand state after the seed — matching iOS.
+    var expandAllCards by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activeChips = remember(filters) { activeFilterChips(filters) }
 
@@ -217,6 +225,8 @@ fun SearchScreen(
         SearchControlsRow(
             filters = filters,
             activeChipCount = activeChips.size,
+            expandAllCards = expandAllCards,
+            onToggleExpandAll = { expandAllCards = !expandAllCards },
             onSortSelected = {
                 filters = filters.copy(sort = it)
                 // Otherwise the visible results/pagination stay under the old sort
@@ -274,6 +284,7 @@ fun SearchScreen(
                 } else {
                     SearchResultsList(
                         page = current.page,
+                        expandAll = expandAllCards,
                         onOpenWork = onOpenWork,
                         onPage = { runSearch(it) },
                         modifier = Modifier.weight(1f)
@@ -429,11 +440,14 @@ private fun SavedSearchRow(
 private fun SearchControlsRow(
     filters: AO3SearchFilters,
     activeChipCount: Int,
+    expandAllCards: Boolean,
+    onToggleExpandAll: () -> Unit,
     onSortSelected: (AO3SearchSort) -> Unit,
     onOpenFilters: () -> Unit,
     onClearFilters: () -> Unit
 ) {
     var sortExpanded by remember { mutableStateOf(false) }
+    var moreExpanded by remember { mutableStateOf(false) }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -484,6 +498,41 @@ private fun SearchControlsRow(
                 Text("Clear")
             }
         }
+
+        Spacer(Modifier.weight(1f))
+
+        Box {
+            IconButton(onClick = { moreExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Outlined.MoreVert,
+                    contentDescription = "More search options"
+                )
+            }
+            DropdownMenu(
+                expanded = moreExpanded,
+                onDismissRequest = { moreExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Text(if (expandAllCards) "Collapse all" else "Expand all")
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (expandAllCards) {
+                                Icons.Outlined.UnfoldLess
+                            } else {
+                                Icons.Outlined.UnfoldMore
+                            },
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        moreExpanded = false
+                        onToggleExpandAll()
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -517,6 +566,7 @@ private fun ActiveFilterChipRow(
 @Composable
 private fun SearchResultsList(
     page: AO3SearchPage,
+    expandAll: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onPage: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -532,7 +582,7 @@ private fun SearchResultsList(
             )
         }
         items(page.works, key = { it.id }) { work ->
-            AO3WorkCard(work = work, onOpenWork = onOpenWork)
+            AO3WorkCard(work = work, onOpenWork = onOpenWork, expandAll = expandAll)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

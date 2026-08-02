@@ -4,25 +4,27 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.auth.AO3AuthRepository
-import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class AccountViewModel(
     private val authRepository: AO3AuthRepository
 ) : ViewModel() {
-    val uiState: StateFlow<AccountUiState> = authRepository.state
-        .map { AccountUiState(authState = it) }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5_000),
-            AccountUiState()
-        )
+    val uiState: StateFlow<AccountUiState> = combine(
+        authRepository.state,
+        authRepository.sessionHealth
+    ) { authState, sessionHealth ->
+        AccountUiState(authState = authState, sessionHealth = sessionHealth)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        AccountUiState()
+    )
 
     init {
         viewModelScope.launch { authRepository.restoreSession() }
@@ -30,6 +32,10 @@ class AccountViewModel(
 
     fun logout() {
         viewModelScope.launch { authRepository.logout() }
+    }
+
+    fun verifySession() {
+        viewModelScope.launch { authRepository.verifySession() }
     }
 
     companion object {

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Description
@@ -37,8 +38,11 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,6 +89,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.R
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
+import io.github.cidy02.kudos.auth.AO3SessionHealth
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
@@ -96,6 +101,7 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.ui.theme.Ao3Red
+import java.util.concurrent.TimeUnit
 
 /**
  * Account hub — Material 3 expression of the iOS Account SoT:
@@ -158,8 +164,10 @@ fun AccountScreen(
     ) {
         AccountProfileHeader(
             authState = state.authState,
+            sessionHealth = state.sessionHealth,
             onLogin = onLogin,
             onLogout = viewModel::logout,
+            onVerifySession = viewModel::verifySession,
             onOpenSettings = onOpenSettings,
             onOpenAbout = onOpenAbout,
             onOpenPrivacy = onOpenPrivacy,
@@ -232,8 +240,10 @@ fun AccountScreen(
 @Composable
 private fun AccountProfileHeader(
     authState: AO3AuthState,
+    sessionHealth: AO3SessionHealth,
     onLogin: () -> Unit,
     onLogout: () -> Unit,
+    onVerifySession: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenPrivacy: () -> Unit,
@@ -295,18 +305,16 @@ private fun AccountProfileHeader(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
                             )
-                            Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
-                                contentDescription = "Signed in",
-                                tint = Color(0xFF34C759),
-                                modifier = Modifier.size(20.dp)
-                            )
+                            SessionHealthIcon(sessionHealth)
                         }
-                        // Pseud picker is iOS-only until AO3 pseuds are scraped; show a quiet status line.
                         Text(
-                            text = "Signed in to AO3",
+                            text = sessionHealthDetailText(sessionHealth),
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = when (sessionHealth) {
+                                AO3SessionHealth.Expired -> MaterialTheme.colorScheme.error
+                                AO3SessionHealth.Unreachable -> Color(0xFFFF9500)
+                                else -> MaterialTheme.colorScheme.primary
+                            }
                         )
                     }
                     AO3AuthState.SignedOut -> {
@@ -364,6 +372,34 @@ private fun AccountProfileHeader(
                     )
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (authState is AO3AuthState.SignedIn) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (sessionHealth.isChecking) "Checking…" else "Verify Session"
+                                )
+                            },
+                            leadingIcon = {
+                                if (sessionHealth.isChecking) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Refresh,
+                                        contentDescription = null
+                                    )
+                                }
+                            },
+                            enabled = !sessionHealth.isChecking,
+                            onClick = {
+                                menuOpen = false
+                                onVerifySession()
+                            }
+                        )
+                        HorizontalDivider()
+                    }
                     DropdownMenuItem(
                         text = { Text("Settings") },
                         onClick = {
@@ -435,6 +471,76 @@ private fun AccountProfileHeader(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SessionHealthIcon(health: AO3SessionHealth) {
+    when (health) {
+        AO3SessionHealth.Unknown -> {
+            Icon(
+                imageVector = Icons.Outlined.CheckCircle,
+                contentDescription = "Signed in",
+                tint = Color(0xFF34C759),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AO3SessionHealth.Verifying -> {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp
+            )
+        }
+        is AO3SessionHealth.Healthy -> {
+            Icon(
+                imageVector = Icons.Outlined.Verified,
+                contentDescription = "Session verified",
+                tint = Color(0xFF34C759),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AO3SessionHealth.Expired -> {
+            Icon(
+                imageVector = Icons.Outlined.Cancel,
+                contentDescription = "Session expired",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AO3SessionHealth.Unreachable -> {
+            Icon(
+                imageVector = Icons.Outlined.WifiOff,
+                contentDescription = "Couldn't verify session",
+                tint = Color(0xFFFF9500),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+private fun sessionHealthDetailText(health: AO3SessionHealth): String {
+    return when (health) {
+        AO3SessionHealth.Unknown -> "Signed in to AO3"
+        AO3SessionHealth.Verifying -> "Checking session…"
+        is AO3SessionHealth.Healthy -> {
+            val ageMs = (System.currentTimeMillis() - health.verifiedAtEpochMillis).coerceAtLeast(0L)
+            val minutes = TimeUnit.MILLISECONDS.toMinutes(ageMs)
+            when {
+                minutes < 1L -> "Signed in · verified just now"
+                minutes == 1L -> "Signed in · verified 1 minute ago"
+                minutes < 60L -> "Signed in · verified $minutes minutes ago"
+                else -> {
+                    val hours = TimeUnit.MILLISECONDS.toHours(ageMs)
+                    if (hours == 1L) {
+                        "Signed in · verified 1 hour ago"
+                    } else {
+                        "Signed in · verified $hours hours ago"
+                    }
+                }
+            }
+        }
+        AO3SessionHealth.Expired -> "Session expired"
+        AO3SessionHealth.Unreachable -> "Signed in · couldn't verify"
     }
 }
 

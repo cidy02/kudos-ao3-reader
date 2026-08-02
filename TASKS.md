@@ -40,12 +40,13 @@ against current Android source — a different discovery method than the area-by
 sweeps that produced T-72's findings; none overlap those. Full writeup + verification
 method in `docs/audits/IOS_TASK_HISTORY_VS_ANDROID.md`. None urgent-blocking. Proposed
 order (owner said "fold in wherever makes sense"):
-1. **Quick batch** — About screen version/GPL-3.0/dependency credits (T-39/T-101,
-   ~30 min: `account/AboutScreen.kt` has the AO3/OTW disclaimer only, nothing else);
-   **Verify Session** button on Account (T-80: `AO3AuthRepository.restoreSession()`
-   only validates once at launch, no on-demand recheck / `AO3SessionHealth` state);
-   Search toolbar **Expand all/Collapse all** (T-26: per-card expand exists, no
-   batch toggle). Small, independent — bundle like T-72's rounds did.
+1. **Quick batch** — ✅ **DONE (batch 1)** — About version/GPL-3.0/Jsoup+Readium
+   credits; Account **Verify Session** + orthogonal `AO3SessionHealth` (valid/
+   expired/transient-keep) + unit tests; Search **Expand all / Collapse all**
+   (`expandAll` seed on `AO3WorkCard`). Commit subject:
+   `Android: T-74 batch 1 — About credits, Verify Session, Expand all`.
+   `android/Scripts/verify.sh` green.
+   *(Items 2–6 below remain backlog — T-74 is not fully done.)*
 2. **Shake-to-report gesture** (T-50/Support: `SensorManager`+`TYPE_ACCELEROMETER`
    threshold detection triggering the existing "Report a Bug" `mailto:` flow — the
    mailto-vs-GitHub-prefill gap is separately tracked, this item is just the missing

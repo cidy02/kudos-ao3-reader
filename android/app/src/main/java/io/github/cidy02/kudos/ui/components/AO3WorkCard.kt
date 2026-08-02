@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,10 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
  * title → author → fandom → summary → divider → list stats.
  * Tags use progressive disclosure (expand) so the default row stays scannable.
  *
+ * [expandAll] is a batch seed from the parent (Search "Expand all" / "Collapse
+ * all"): every time it changes, local expand state is reset to match. Individual
+ * cards can still be toggled afterward — expand-all is not a permanent lock.
+ *
  * Whole-card tap opens Work Detail. [WorkDetailsIconButton] is the explicit
  * MD3 detail affordance (same destination for remote works until download-into-
  * reader lands).
@@ -41,9 +46,15 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 fun AO3WorkCard(
     work: AO3WorkSummary,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    expandAll: Boolean = false
 ) {
-    var expanded by remember(work.id) { mutableStateOf(false) }
+    var expanded by remember(work.id) { mutableStateOf(expandAll) }
+    // Seed/reset local expand state whenever the parent batch toggle flips
+    // (Compose equivalent of iOS `onChange(of: expandAll, initial: true)`).
+    LaunchedEffect(expandAll) {
+        expanded = expandAll
+    }
     val discoveryTags = (work.relationships + work.characters + work.freeforms)
         .filter { it.isNotBlank() }
     val expandable = work.summary.length > 120 || discoveryTags.isNotEmpty() ||

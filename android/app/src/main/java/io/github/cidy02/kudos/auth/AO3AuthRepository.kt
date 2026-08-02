@@ -16,6 +16,13 @@ class AO3AuthRepository(
     private val mutableState = MutableStateFlow<AO3AuthState>(AO3AuthState.Restoring)
     val state: StateFlow<AO3AuthState> = mutableState.asStateFlow()
 
+    private val mutableSessionHealth = MutableStateFlow<AO3SessionHealth>(AO3SessionHealth.Unknown)
+    /**
+     * Orthogonal to [state]: confidence that an already-held session is still live.
+     * Driven by launch-time [restoreSession] validation and on-demand [verifySession].
+     */
+    val sessionHealth: StateFlow<AO3SessionHealth> = mutableSessionHealth.asStateFlow()
+
     private var currentSession: AO3Session? = null
     private var didRestore = false
 
@@ -44,6 +51,7 @@ class AO3AuthRepository(
         if (restored == null || !restored.hasSessionCookie()) {
             currentSession = null
             mutableState.value = AO3AuthState.SignedOut
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
             return
         }
 
@@ -53,20 +61,19 @@ class AO3AuthRepository(
         val validator = sessionValidator
         if (validator == null) {
             mutableState.value = AO3AuthState.SignedIn(restored.username)
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
             return
         }
 
         try {
             when (val validation = validator.validate(restored)) {
                 is AO3SessionValidation.Valid -> {
-                    sessionStore.save(validation.session)
-                    cookieStore.install(validation.session)
-                    currentSession = validation.session
-                    mutableState.value = AO3AuthState.SignedIn(validation.session.username)
+                    applyValidSession(validation.session)
                 }
                 AO3SessionValidation.Expired -> {
                     clearSession()
                     mutableState.value = AO3AuthState.Expired()
+                    mutableSessionHealth.value = AO3SessionHealth.Expired
                 }
             }
         } catch (error: CancellationException) {
@@ -74,6 +81,47 @@ class AO3AuthRepository(
         } catch (_: Exception) {
             // Connectivity or non-definitive response — keep the saved session.
             mutableState.value = AO3AuthState.SignedIn(restored.username)
+            mutableSessionHealth.value = AO3SessionHealth.Unreachable
+        }
+    }
+
+    /**
+     * On-demand re-validation of the stored session, driven by the account UI's
+     * "Verify Session" control. Unlike [restoreSession] (single-shot at launch),
+     * this can run whenever the user asks. Mirrors restore's valid/expired/
+     * transient handling: a transient failure keeps the session and reports
+     * [AO3SessionHealth.Unreachable] rather than logging the user out.
+     */
+    suspend fun verifySession() {
+        val session = currentSession
+        if (session == null || mutableState.value !is AO3AuthState.SignedIn) {
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
+            return
+        }
+        val validator = sessionValidator
+        if (validator == null) {
+            // No live check available — leave health as-is / unknown.
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
+            return
+        }
+
+        mutableSessionHealth.value = AO3SessionHealth.Verifying
+        try {
+            when (val validation = validator.validate(session)) {
+                is AO3SessionValidation.Valid -> {
+                    applyValidSession(validation.session)
+                }
+                AO3SessionValidation.Expired -> {
+                    clearSession()
+                    mutableState.value = AO3AuthState.Expired()
+                    mutableSessionHealth.value = AO3SessionHealth.Expired
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Transient (offline / server hiccup): keep the session, flag unverified.
+            mutableSessionHealth.value = AO3SessionHealth.Unreachable
         }
     }
 
@@ -83,6 +131,7 @@ class AO3AuthRepository(
         if (trimmed.isBlank()) {
             val error = AO3Error.Validation("AO3 username could not be detected.")
             mutableState.value = AO3AuthState.Error(error.message)
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
             return AO3Result.Failure(error)
         }
 
@@ -90,6 +139,7 @@ class AO3AuthRepository(
         if (session == null) {
             val error = AO3Error.AuthenticationRequired
             mutableState.value = AO3AuthState.Error("AO3 login did not produce a usable session.")
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
             return AO3Result.Failure(error)
         }
 
@@ -97,6 +147,8 @@ class AO3AuthRepository(
         cookieStore.install(session)
         currentSession = session
         mutableState.value = AO3AuthState.SignedIn(session.username)
+        // Fresh login is trusted for gating but has not been re-checked on demand.
+        mutableSessionHealth.value = AO3SessionHealth.Unknown
         return AO3Result.Success(session)
     }
 
@@ -112,11 +164,21 @@ class AO3AuthRepository(
     suspend fun sessionDidExpire() {
         clearSession()
         mutableState.value = AO3AuthState.Expired()
+        mutableSessionHealth.value = AO3SessionHealth.Expired
     }
 
     suspend fun logout() {
         clearSession()
         mutableState.value = AO3AuthState.SignedOut
+        mutableSessionHealth.value = AO3SessionHealth.Unknown
+    }
+
+    private suspend fun applyValidSession(session: AO3Session) {
+        sessionStore.save(session)
+        cookieStore.install(session)
+        currentSession = session
+        mutableState.value = AO3AuthState.SignedIn(session.username)
+        mutableSessionHealth.value = AO3SessionHealth.Healthy(System.currentTimeMillis())
     }
 
     private suspend fun clearSession() {
