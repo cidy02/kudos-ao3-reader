@@ -218,30 +218,17 @@ object LibraryQuery {
     private fun matchesSearch(display: LibraryDisplayItem, query: String): Boolean {
         if (query.isBlank()) return true
         if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) return false
-        val needle = query.lowercase()
-        return searchableText(display.item).any { it.lowercase().contains(needle) }
-    }
-
-    private fun searchableText(item: LibraryWorkListItem): List<String> {
-        val work = item.work
-        return buildList {
-            add(work.title)
-            add(work.author)
-            add(work.summary)
-            add(work.rating)
-            add(work.language)
-            add(work.chapters)
-            add(work.seriesTitle)
-            addAll(work.workFandoms)
-            addAll(work.workRelationships)
-            addAll(work.workCharacters)
-            addAll(work.workFreeforms)
-            addAll(work.workWarnings)
-            addAll(work.workCategories)
-            addAll(work.workTags)
-            addAll(item.userTags.map { it.normalizedName })
-            addAll(item.collections.map { it.name })
-        }
+        val terms = io.github.cidy02.kudos.works.WorkSearchIndex.terms(query)
+        val userTags = display.item.userTags.map { it.normalizedName }
+        // Collection membership names aren't on SavedWork; keep them as match extras
+        // so "weekend" still finds works in the Weekend collection.
+        val collections = display.item.collections.map { it.name }
+        return io.github.cidy02.kudos.works.WorkSearchIndex.matches(
+            work = display.item.work,
+            terms = terms,
+            userTags = userTags,
+            extraTerms = collections
+        )
     }
 
     private fun containsAllIds(actual: List<String>, required: Set<String>): Boolean {
