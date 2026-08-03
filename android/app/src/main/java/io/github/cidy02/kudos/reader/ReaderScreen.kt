@@ -202,7 +202,8 @@ private fun ReaderReading(
                             is ReaderLinkDestination.TagSearch -> openExternal(context, url)
                             ReaderLinkDestination.Unhandled -> Unit
                         }
-                    }
+                    },
+                    fontDeclarations = state.preferences.fontDeclarations
                 )
 
                 AnimatedVisibility(

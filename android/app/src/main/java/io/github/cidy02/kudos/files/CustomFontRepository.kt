@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.data.local.dao.CustomFontDao
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import java.nio.file.Path
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -90,6 +91,12 @@ class CustomFontRepository(
             settingsRepository.updateReaderFontId("system")
         }
     }
+
+    fun fontPath(fileName: String): Path = fontFileStore.fontPath(fileName)
+
+    fun fontPath(font: CustomFont): Path = fontFileStore.fontPath(font.fileName)
+
+    suspend fun fontExists(fileName: String): Boolean = fontFileStore.fontExists(fileName)
 
     companion object {
         private val AllowedExtensions = setOf("ttf", "otf")

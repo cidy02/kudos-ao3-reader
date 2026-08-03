@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
+import io.github.cidy02.kudos.reader.settings.CustomFontDeclaration
 import kotlinx.coroutines.delay
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -51,7 +52,8 @@ fun ReadiumNavigatorHost(
     onExternalLink: (String) -> Unit,
     modifier: Modifier = Modifier,
     controller: ReadiumNavigatorController? = null,
-    onContentTap: (() -> Unit)? = null
+    onContentTap: (() -> Unit)? = null,
+    fontDeclarations: List<CustomFontDeclaration> = emptyList()
 ) {
     val activity = LocalContext.current.findFragmentActivity() ?: return
     val containerId = remember { View.generateViewId() }
@@ -68,11 +70,15 @@ fun ReadiumNavigatorHost(
         }
     }
 
-    val fragmentFactory = remember(publication, initialLocator) {
+    val fragmentFactory = remember(publication, initialLocator, fontDeclarations) {
+        val configuration = EpubNavigatorFragment.Configuration().apply {
+            ReadiumSettingsAdapter.configureFontDeclarations(this, fontDeclarations)
+        }
         EpubNavigatorFactory(publication).createFragmentFactory(
             initialLocator = initialLocator,
             initialPreferences = preferences,
-            listener = listener
+            listener = listener,
+            configuration = configuration
         )
     }
 

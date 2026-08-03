@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.files
 
+import io.github.cidy02.kudos.backup.BackupPaths
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -60,5 +61,20 @@ class WorkFileStore(
         val path = worksDirectory.resolve("$uuid.epub").normalize()
         require(path.startsWith(worksDirectory)) { "Unsafe work EPUB path." }
         return path
+    }
+
+    fun fontPath(fileName: String): Path {
+        BackupPaths.requireSafeFontFileName(fileName)
+        val fontsDirectory = filesRoot.resolve("fonts").normalize()
+        val path = fontsDirectory.resolve(fileName).normalize()
+        require(path.startsWith(fontsDirectory)) { "Unsafe font path." }
+        return path
+    }
+
+    suspend fun fontExists(fileName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val path = runCatching { fontPath(fileName) }.getOrNull() ?: return@withContext false
+            runCatching { Files.isRegularFile(path) }.getOrDefault(false)
+        }
     }
 }

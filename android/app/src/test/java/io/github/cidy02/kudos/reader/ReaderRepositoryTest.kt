@@ -190,4 +190,35 @@ class ReaderRepositoryTest {
         assertFalse(updated.hasEpub)
         assertTrue(workRepository.getWork(WORK_UUID) != null)
     }
+
+    @Test
+    fun openMapsCustomFontDeclarationsWhenCustomFontSelected() = runTest {
+        val customFont = io.github.cidy02.kudos.core.model.CustomFont(
+            name = "OpenDyslexic",
+            fileName = "opendyslexic.ttf"
+        )
+        settingsSnapshot = KudosSettings(
+            reader = ReaderSettings(
+                readerFontId = customFont.selectionId
+            )
+        )
+        workRepository.upsert(savedWork(hasEpub = true))
+        fileStore.writeWorkEpub(WORK_UUID, EPUB_BYTES)
+
+        val fontPathResolver: (String) -> String? = { fileName ->
+            if (fileName == "opendyslexic.ttf") "/tmp/fonts/opendyslexic.ttf" else null
+        }
+        val customRepository = ReaderRepository(
+            workRepository = workRepository,
+            fileStore = fileStore,
+            settingsProvider = { settingsSnapshot },
+            customFontsProvider = { listOf(customFont) },
+            fontPathResolver = fontPathResolver
+        )
+
+        val result = customRepository.open(WORK_UUID) as ReaderOpenResult.Success
+        assertEquals("custom:opendyslexic.ttf", result.preferences.fontFamily)
+        assertEquals(1, result.preferences.fontDeclarations.size)
+        assertEquals("/tmp/fonts/opendyslexic.ttf", result.preferences.fontDeclarations.first().fontPath)
+    }
 }
