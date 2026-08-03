@@ -113,6 +113,14 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderTwoPage] = twoPage }
     }
 
+    suspend fun updateReaderLetterSpacing(em: Double) {
+        dataStore.edit { it[Keys.ReaderLetterSpacing] = em }
+    }
+
+    suspend fun updateReaderWordSpacing(em: Double) {
+        dataStore.edit { it[Keys.ReaderWordSpacing] = em }
+    }
+
     suspend fun updateAccentColor(hex: String) {
         dataStore.edit { it[Keys.AccentColorHex] = hex }
     }

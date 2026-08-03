@@ -15,14 +15,11 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  * Maps engine-agnostic [ReaderPreferences] to Readium [EpubPreferences] and
  * configures font family declarations on Readium's [EpubNavigatorFragment.Configuration].
  *
- * Documented fallbacks:
- * - Bold text (`readerBoldText`) is NOT applied here yet: Readium's `fontWeight`
- *   is a value-class preference.
- * - Explicit font families are passed into `EpubPreferences` via [FontFamily], and
- *   imported font files on disk are declared on [EpubNavigatorFragment.Configuration]
- *   via [configureFontDeclarations].
- * - `publisherStyles = true` keeps the EPUB's own CSS; user overrides apply when
- *   the reader "Customize" toggle is on.
+ * Explicit font families are passed into `EpubPreferences` via [FontFamily], and
+ * imported font files on disk are declared on [EpubNavigatorFragment.Configuration]
+ * via [configureFontDeclarations]. Bold (`fontWeight`), letter/word spacing are
+ * applied when [ReaderPreferences.publisherStyles] is false.
+ * `publisherStyles = true` keeps the EPUB's own CSS.
  */
 @OptIn(ExperimentalReadiumApi::class)
 object ReadiumSettingsAdapter {
@@ -42,6 +39,7 @@ object ReadiumSettingsAdapter {
             publisherStyles = prefs.publisherStyles,
             letterSpacing = prefs.letterSpacingEm.takeIf { it > 0.0 },
             wordSpacing = prefs.wordSpacingEm.takeIf { it > 0.0 },
+            fontWeight = if (prefs.bold) 2.0 else null,
             fontFamily = prefs.fontFamily?.let { FontFamily(it) }
         )
     }

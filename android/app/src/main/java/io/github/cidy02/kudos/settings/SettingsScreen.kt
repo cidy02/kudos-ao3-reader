@@ -517,8 +517,44 @@ fun SettingsScreen(
                         )
                     }
                 }
+                SettingSwitchRow(
+                    label = "Bold text",
+                    checked = settings.reader.readerBoldText,
+                    onCheckedChange = { checked ->
+                        launchUpdate {
+                            repository.updateReaderBoldText(checked)
+                            repository.updateReaderCustomize(true)
+                        }
+                    }
+                )
+                SettingSliderRow(
+                    label = "Letter spacing",
+                    value = settings.reader.readerLetterSpacing.toFloat().coerceIn(0f, 0.5f),
+                    valueRange = 0f..0.5f,
+                    steps = 9,
+                    formatValue = { String.format("%.2f em", it) },
+                    onValueChangeFinished = { value ->
+                        launchUpdate {
+                            repository.updateReaderLetterSpacing(value.toDouble())
+                            repository.updateReaderCustomize(true)
+                        }
+                    }
+                )
+                SettingSliderRow(
+                    label = "Word spacing",
+                    value = settings.reader.readerWordSpacing.toFloat().coerceIn(0f, 1f),
+                    valueRange = 0f..1f,
+                    steps = 9,
+                    formatValue = { String.format("%.2f em", it) },
+                    onValueChangeFinished = { value ->
+                        launchUpdate {
+                            repository.updateReaderWordSpacing(value.toDouble())
+                            repository.updateReaderCustomize(true)
+                        }
+                    }
+                )
             }
-            SettingsFooter("Choose how pages turn while reading.")
+            SettingsFooter("Choose how pages turn while reading. Bold and spacing also appear in the reader Display sheet.")
         }
         item {
             SettingsGroup(title = "Font") {
