@@ -24,19 +24,29 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
@@ -605,6 +615,8 @@ private fun OverviewTabContent(
     onOpenWeb: (String) -> Unit
 ) {
     val context = LocalContext.current
+    var moreOnAo3MenuOpen by remember { mutableStateOf(false) }
+    val moreOnAo3Enabled = !username.isNullOrBlank()
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
@@ -628,18 +640,50 @@ private fun OverviewTabContent(
                     icon = Icons.Outlined.Tune,
                     onClick = { onOpenWeb("https://archiveofourown.org/preferences") }
                 )
-                AccountLinkRow(
-                    title = "More on AO3",
-                    icon = Icons.Outlined.Public,
-                    onClick = {
-                        val url = if (!username.isNullOrBlank()) {
-                            "https://archiveofourown.org/users/$username"
-                        } else {
-                            "https://archiveofourown.org"
+                // Curated account-scoped AO3 destinations (iOS AccountMoreOnAO3View parity).
+                // Opens a menu first; each item hits the WebView fallback with the user path.
+                Box {
+                    AccountLinkRow(
+                        title = "More on AO3",
+                        icon = Icons.Outlined.Public,
+                        onClick = { moreOnAo3MenuOpen = true }
+                    )
+                    DropdownMenu(
+                        expanded = moreOnAo3MenuOpen,
+                        onDismissRequest = { moreOnAo3MenuOpen = false }
+                    ) {
+                        val destinations = listOf(
+                            Triple("Drafts", Icons.Outlined.Drafts, "works/drafts"),
+                            Triple("Pseuds", Icons.Outlined.People, "pseuds"),
+                            Triple("Skins", Icons.Outlined.Palette, "skins"),
+                            Triple("Statistics", Icons.Outlined.BarChart, "stats"),
+                            Triple("Co-Creator Requests", Icons.Outlined.PersonAdd, "creatorships"),
+                            Triple("Sign-ups", Icons.Outlined.EditNote, "signups"),
+                            Triple("Assignments", Icons.AutoMirrored.Outlined.Assignment, "assignments"),
+                            Triple("Claims", Icons.Outlined.Flag, "claims"),
+                            Triple("Related Works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
+                            Triple("Gifts", Icons.Outlined.CardGiftcard, "gifts")
+                        )
+                        destinations.forEach { (title, icon, pathSuffix) ->
+                            DropdownMenuItem(
+                                text = { Text(title) },
+                                leadingIcon = {
+                                    Icon(imageVector = icon, contentDescription = null)
+                                },
+                                enabled = moreOnAo3Enabled,
+                                onClick = {
+                                    moreOnAo3MenuOpen = false
+                                    val user = username
+                                    if (!user.isNullOrBlank()) {
+                                        onOpenWeb(
+                                            "https://archiveofourown.org/users/$user/$pathSuffix"
+                                        )
+                                    }
+                                }
+                            )
                         }
-                        onOpenWeb(url)
                     }
-                )
+                }
             }
         }
         if (!signedIn) {
