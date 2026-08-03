@@ -12,13 +12,15 @@ enum class KudosThemeMode(val label: String) {
     System("System"),
     Light("Light"),
     Dark("Dark"),
+    Oled("OLED"),
     Sepia("Sepia");
 
     fun next(): KudosThemeMode {
         return when (this) {
             System -> Light
             Light -> Dark
-            Dark -> Sepia
+            Dark -> Oled
+            Oled -> Sepia
             Sepia -> System
         }
     }
@@ -47,6 +49,19 @@ private fun darkScheme(accent: Color) = darkColorScheme(
     surface = SurfaceDark,
     onSurface = Paper,
     surfaceVariant = SurfaceDarkElevated,
+    onSurfaceVariant = PaperWarm
+)
+
+private fun oledScheme(accent: Color) = darkColorScheme(
+    primary = PaperWarm,
+    onPrimary = accent,
+    secondary = AccentBlue,
+    onSecondary = Paper,
+    background = SurfaceOled,
+    onBackground = Paper,
+    surface = SurfaceOled,
+    onSurface = Paper,
+    surfaceVariant = SurfaceOledElevated,
     onSurfaceVariant = PaperWarm
 )
 
@@ -79,6 +94,7 @@ fun KudosTheme(
         // Apple suppresses the user's accent choice in Sepia too (see SepiaScheme
         // above) — Sepia always uses its own warm-brown tint, by design.
         KudosThemeMode.Dark -> darkScheme(accent)
+        KudosThemeMode.Oled -> oledScheme(accent)
         KudosThemeMode.Sepia -> SepiaScheme
     }
 

@@ -56,6 +56,24 @@ class BrowserThemeStyleTest {
     }
 
     @Test
+    fun oledReturnsIosPaletteColors() {
+        val css = BrowserThemeStyle.css(AppThemeSetting.Oled)
+        assertNotNull(css)
+        // Exact hex from iOS BrowserThemeStyle.palette(for: .oled)
+        assertTrue(css!!.contains("#000000"))
+        assertTrue(css.contains("#1C1C1E"))
+        assertTrue(css.contains("#0A0A0C"))
+        assertTrue(css.contains("#CFCFD4"))
+        assertTrue(css.contains("#A5A5AD"))
+        assertTrue(css.contains("#7FB0E8"))
+        assertTrue(css.contains("#AD93D8"))
+        assertTrue(css.contains("#3A3A42"))
+        assertTrue(css.contains("#2D2D35"))
+        assertTrue(css.contains("#44444F"))
+        assertTrue(css.contains("color-scheme: dark"))
+    }
+
+    @Test
     fun lightOrNonAo3InjectionRemovesThemeTag() {
         val light = BrowserThemeStyle.injectionScript(
             AppThemeSetting.Light,

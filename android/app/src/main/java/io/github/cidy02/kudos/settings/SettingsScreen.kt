@@ -369,11 +369,11 @@ fun SettingsScreen(
         item {
             SettingsGroup(title = "Theme") {
                 SettingChipRow(label = "App theme") {
-                    // Light / Sepia / Dark / OLED / System. OLED maps to Dark
-                    // storage (AppThemeSetting has no distinct OLED value yet).
+                    // Light / Sepia / Dark / OLED / System — each chip stores its
+                    // own AppThemeSetting value (OLED is true-black, not Dark).
                     ThemeChipOption.entries.forEach { option ->
                         FilterChip(
-                            selected = isThemeChipSelected(settings.app.appTheme, option),
+                            selected = settings.app.appTheme == option.setting,
                             onClick = {
                                 launchUpdate { repository.updateAppTheme(option.setting) }
                             },
@@ -397,8 +397,8 @@ fun SettingsScreen(
                 )
             }
             SettingsFooter(
-                "Light, Sepia, Dark, or System across the app. Dark is used for " +
-                    "OLED-style dark chrome on Android. Sepia keeps its warm tint."
+                "Light, Sepia, Dark, OLED, or System across the app. OLED uses " +
+                    "true-black surfaces for AMOLED panels. Sepia keeps its warm tint."
             )
         }
 
@@ -737,24 +737,13 @@ fun SettingsScreen(
     }
 }
 
-/** Theme chips shown in Settings. OLED maps to [AppThemeSetting.Dark]. */
+/** Theme chips shown in Settings. Each option maps 1:1 to [AppThemeSetting]. */
 private enum class ThemeChipOption(val label: String, val setting: AppThemeSetting) {
     Light("Light", AppThemeSetting.Light),
     Sepia("Sepia", AppThemeSetting.Sepia),
     Dark("Dark", AppThemeSetting.Dark),
-    Oled("OLED", AppThemeSetting.Dark),
+    Oled("OLED", AppThemeSetting.Oled),
     System("System", AppThemeSetting.System)
-}
-
-/**
- * Dark and OLED both store [AppThemeSetting.Dark]. Prefer highlighting Dark so
- * only one chip looks selected; OLED remains a one-tap alias for Dark.
- */
-private fun isThemeChipSelected(current: AppThemeSetting, option: ThemeChipOption): Boolean {
-    return when (option) {
-        ThemeChipOption.Oled -> false
-        else -> current == option.setting
-    }
 }
 
 @Composable

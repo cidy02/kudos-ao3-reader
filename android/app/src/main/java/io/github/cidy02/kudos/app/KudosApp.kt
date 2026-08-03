@@ -26,6 +26,7 @@ private fun AppThemeSetting.toThemeMode(): KudosThemeMode = when (this) {
     AppThemeSetting.System -> KudosThemeMode.System
     AppThemeSetting.Light -> KudosThemeMode.Light
     AppThemeSetting.Dark -> KudosThemeMode.Dark
+    AppThemeSetting.Oled -> KudosThemeMode.Oled
     AppThemeSetting.Sepia -> KudosThemeMode.Sepia
 }
 
@@ -33,6 +34,7 @@ private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
     KudosThemeMode.System -> AppThemeSetting.System
     KudosThemeMode.Light -> AppThemeSetting.Light
     KudosThemeMode.Dark -> AppThemeSetting.Dark
+    KudosThemeMode.Oled -> AppThemeSetting.Oled
     KudosThemeMode.Sepia -> AppThemeSetting.Sepia
 }
 
