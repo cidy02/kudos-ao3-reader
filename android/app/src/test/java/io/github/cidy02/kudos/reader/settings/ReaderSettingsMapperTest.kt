@@ -77,6 +77,61 @@ class ReaderSettingsMapperTest {
         assertFalse(prefs.publisherStyles)
         assertTrue(prefs.justify)
     }
+
+    @Test
+    fun customFontMappedToFontFamilyAndDeclarations() {
+        val customFont = io.github.cidy02.kudos.core.model.CustomFont(
+            name = "Literata",
+            fileName = "abc-123.ttf"
+        )
+        val fontPathResolver: (String) -> String? = { fileName ->
+            if (fileName == "abc-123.ttf") "/data/user/0/app/files/fonts/abc-123.ttf" else null
+        }
+        val prefs = mapper.map(
+            reader = ReaderSettings(readerFontId = customFont.selectionId),
+            app = AppSettings(),
+            customFonts = listOf(customFont),
+            fontPathResolver = fontPathResolver
+        )
+
+        assertEquals("custom:abc-123.ttf", prefs.fontFamily)
+        assertEquals(1, prefs.fontDeclarations.size)
+        val decl = prefs.fontDeclarations.first()
+        assertEquals("custom:abc-123.ttf", decl.fontFamily)
+        assertEquals("/data/user/0/app/files/fonts/abc-123.ttf", decl.fontPath)
+        assertTrue(decl.alternates.contains("Literata"))
+        assertTrue(decl.alternates.contains("abc-123.ttf"))
+    }
+
+    @Test
+    fun customFontWithoutCustomFontListResolvedViaPathResolver() {
+        val fontPathResolver: (String) -> String? = { fileName ->
+            if (fileName == "xyz-789.otf") "/data/user/0/app/files/fonts/xyz-789.otf" else null
+        }
+        val prefs = mapper.map(
+            reader = ReaderSettings(readerFontId = "custom:xyz-789.otf"),
+            app = AppSettings(),
+            customFonts = emptyList(),
+            fontPathResolver = fontPathResolver
+        )
+
+        assertEquals("custom:xyz-789.otf", prefs.fontFamily)
+        assertEquals(1, prefs.fontDeclarations.size)
+        val decl = prefs.fontDeclarations.first()
+        assertEquals("custom:xyz-789.otf", decl.fontFamily)
+        assertEquals("/data/user/0/app/files/fonts/xyz-789.otf", decl.fontPath)
+    }
+
+    @Test
+    fun systemFontProducesNullFontFamilyAndEmptyDeclarations() {
+        val prefs = mapper.map(
+            reader = ReaderSettings(readerFontId = "system"),
+            app = AppSettings()
+        )
+
+        assertEquals(null, prefs.fontFamily)
+        assertTrue(prefs.fontDeclarations.isEmpty())
+    }
 }
 
 class ReaderThemeMappingTest {

@@ -1,7 +1,9 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.works.WorkRepository
@@ -23,9 +25,12 @@ class ReaderRepository(
     private val workRepository: WorkRepository,
     private val fileStore: WorkFileStore,
     private val settingsProvider: suspend () -> KudosSettings,
+    private val customFontRepository: CustomFontRepository? = null,
     private val progressMapper: ReaderProgressMapper = ReaderProgressMapper(),
     private val settingsMapper: ReaderSettingsMapper = ReaderSettingsMapper(),
-    private val clock: () -> Instant = { Instant.now() }
+    private val clock: () -> Instant = { Instant.now() },
+    private val customFontsProvider: (suspend () -> List<CustomFont>)? = null,
+    private val fontPathResolver: ((String) -> String?)? = null
 ) {
     /**
      * Resolve a work for reading. On success, [ReaderOpenResult.Success.preferences]
@@ -42,11 +47,33 @@ class ReaderRepository(
             ?: return ReaderOpenResult.Failure(work, ReaderError.OpenFailed("Invalid work file path."))
 
         val settings = settingsProvider()
+        val customFonts = customFontsProvider?.invoke()
+            ?: customFontRepository?.listImported()
+            ?: emptyList()
+        val pathResolver = fontPathResolver
+            ?: customFontRepository?.let { repo ->
+                { fileName ->
+                    val fontPath = runCatching { repo.fontPath(fileName) }.getOrNull()
+                    if (fontPath != null && java.nio.file.Files.isRegularFile(fontPath)) fontPath.toAbsolutePath().toString() else null
+                }
+            }
+            ?: { fileName ->
+                val fontPath = runCatching { fileStore.fontPath(fileName) }.getOrNull()
+                if (fontPath != null && java.nio.file.Files.isRegularFile(fontPath)) fontPath.toAbsolutePath().toString() else null
+            }
+
+        val preferences = settingsMapper.map(
+            reader = settings.reader,
+            app = settings.app,
+            customFonts = customFonts,
+            fontPathResolver = pathResolver
+        )
+
         return ReaderOpenResult.Success(
             work = work,
             epubPath = path,
             restoreTarget = progressMapper.restoreTarget(work),
-            preferences = settingsMapper.map(settings.reader, settings.app)
+            preferences = preferences
         )
     }
 

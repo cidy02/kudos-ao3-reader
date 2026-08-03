@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.reader.settings
 
 import io.github.cidy02.kudos.core.model.AppSettings
 import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderSettings
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
@@ -13,14 +14,19 @@ import kotlin.math.roundToInt
  * - `appTheme = System` resolves to Light (Readium has no "follow system" EPUB theme here).
  * - `readerFontPt` becomes a percentage of an 18pt base.
  * - `readerMargin` becomes a multiplier of a 28pt base, clamped to [0.5, 2.0].
- * - Custom font ids other than system/default are passed through by name; actual
- *   custom-font *import* is deferred (see HANDOFF.md), so unknown fonts fall back
- *   to the publisher/default font at the adapter layer.
+ * - Custom font ids other than system/default are passed through by name and registered
+ *   with disk font paths via [CustomFontDeclaration]s for Readium font loading.
  */
 class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT) {
 
-    fun map(reader: ReaderSettings, app: AppSettings): ReaderPreferences {
+    fun map(
+        reader: ReaderSettings,
+        app: AppSettings,
+        customFonts: List<CustomFont> = emptyList(),
+        fontPathResolver: ((String) -> String?)? = null
+    ): ReaderPreferences {
         val scroll = reader.readerMode == ReaderMode.Scroll
+        val fontDeclarations = buildFontDeclarations(reader.readerFontId, customFonts, fontPathResolver)
         return ReaderPreferences(
             theme = resolveTheme(reader, app),
             scroll = scroll,
@@ -32,8 +38,9 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
             pageMarginsFactor = marginsFactor(reader.readerMargin),
             justify = reader.readerJustify,
             bold = reader.readerBoldText,
-            fontFamily = fontFamily(reader.readerFontId),
-            publisherStyles = !reader.readerCustomize
+            fontFamily = fontFamily(reader.readerFontId, fontDeclarations),
+            publisherStyles = !reader.readerCustomize,
+            fontDeclarations = fontDeclarations
         )
     }
 
@@ -59,10 +66,58 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
     private fun marginsFactor(marginPt: Double): Double =
         (marginPt / DEFAULT_MARGIN_PT).coerceIn(MIN_MARGIN_FACTOR, MAX_MARGIN_FACTOR)
 
-    private fun fontFamily(fontId: String): String? =
-        fontId.takeIf {
-            it.isNotBlank() && !it.equals("system", true) && !it.equals("default", true)
+    /**
+     * A custom font id is only requested from Readium if [fontDeclarations] actually
+     * registered an @font-face for it - otherwise Readium would be asked for a family
+     * with no matching face and silently fall back to the default font anyway, which
+     * is harder to debug than just not requesting a family at all.
+     */
+    private fun fontFamily(fontId: String, fontDeclarations: List<CustomFontDeclaration>): String? {
+        if (fontId.isBlank() || fontId.equals("system", true) || fontId.equals("default", true)) {
+            return null
         }
+        if (fontId.startsWith("custom:")) {
+            return fontId.takeIf { id -> fontDeclarations.any { it.fontFamily == id } }
+        }
+        return fontId
+    }
+
+    private fun buildFontDeclarations(
+        selectedFontId: String,
+        customFonts: List<CustomFont>,
+        fontPathResolver: ((String) -> String?)?
+    ): List<CustomFontDeclaration> {
+        if (fontPathResolver == null) return emptyList()
+        val declarations = mutableListOf<CustomFontDeclaration>()
+        val registeredFontIds = mutableSetOf<String>()
+
+        for (font in customFonts) {
+            val path = fontPathResolver(font.fileName) ?: continue
+            val decl = CustomFontDeclaration(
+                fontFamily = font.selectionId,
+                fontPath = path,
+                alternates = listOf(font.name, font.fileName).filter { it.isNotBlank() && it != font.selectionId }
+            )
+            declarations.add(decl)
+            registeredFontIds.add(font.selectionId)
+        }
+
+        if (selectedFontId.startsWith("custom:") && selectedFontId !in registeredFontIds) {
+            val fileName = selectedFontId.removePrefix("custom:")
+            val path = fontPathResolver(fileName)
+            if (path != null) {
+                declarations.add(
+                    CustomFontDeclaration(
+                        fontFamily = selectedFontId,
+                        fontPath = path,
+                        alternates = listOf(fileName)
+                    )
+                )
+            }
+        }
+
+        return declarations
+    }
 
     companion object {
         const val DEFAULT_BASE_FONT_PT = 18.0
