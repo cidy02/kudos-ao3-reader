@@ -13,7 +13,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import java.net.URLDecoder
 import java.net.URLEncoder
 
 data class TopLevelDestination(
@@ -49,8 +48,16 @@ object Routes {
     // different content, then pressing Back through both entries, showed the wrong
     // (most recently set) content on the older entry. The var is gone; the value now
     // travels as a real navigation argument, tied to that specific back-stack entry.
-    private fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
-    private fun decode(value: String) = URLDecoder.decode(value, "UTF-8")
+    // AndroidX Navigation's own string-route matching already percent-decodes a path
+    // segment once when it populates NavBackStackEntry.arguments (confirmed empirically
+    // in RoutesNavigationTest, not just assumed) - so encode() must only run on the way
+    // IN, and routeArg() must NOT decode again on the way out, or a literal '+'/':' gets
+    // silently corrupted by a second decode pass. URLEncoder's own '+'-for-space form
+    // encoding is also wrong here for the same reason (Navigation's decode is
+    // percent-only, not form-encoding-aware) - normalize '+' to '%20' after encoding so
+    // the single decode pass Navigation performs is standard percent-decoding, not form
+    // decoding.
+    private fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     private const val ARG_WORK_SOURCE = "workSource"
     const val WorkDetail = "work-detail/{$ARG_WORK_SOURCE}"
@@ -95,7 +102,7 @@ object Routes {
     fun authorWorks(authorName: String) = "author-works/${encode(authorName)}"
 
     fun routeArg(entry: NavBackStackEntry, name: String): String? =
-        entry.arguments?.getString(name)?.let(::decode)
+        entry.arguments?.getString(name)
 
     fun navArgOf(name: String) = navArgument(name) { type = NavType.StringType }
 
