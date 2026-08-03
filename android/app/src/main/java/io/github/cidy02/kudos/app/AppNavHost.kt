@@ -2,9 +2,7 @@ package io.github.cidy02.kudos.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -30,8 +28,8 @@ import io.github.cidy02.kudos.browse.FandomWorksScreen
 import io.github.cidy02.kudos.comments.CommentsScreen
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.home.HomeScreen
-import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
+import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
 import io.github.cidy02.kudos.library.CollectionDetailScreen
 import io.github.cidy02.kudos.library.CollectionsScreen
@@ -54,16 +52,31 @@ fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier
 ) {
-    var selectedWorkSource by remember { mutableStateOf<WorkDetailSource?>(null) }
-    var readerWorkId by remember { mutableStateOf<String?>(null) }
-    var selectedAccountListType by remember { mutableStateOf<AccountListType?>(null) }
-    var selectedCommentTarget by remember { mutableStateOf<AO3CommentTarget?>(null) }
-    var selectedBrowseCategory by remember { mutableStateOf<AO3MediaCategory?>(null) }
-    var selectedBrowseFandom by remember { mutableStateOf<AO3Fandom?>(null) }
-    var webFallbackUrl by remember { mutableStateOf<String?>(null) }
-    var selectedQueueId by remember { mutableStateOf<String?>(null) }
-    var selectedCollectionId by remember { mutableStateOf<String?>(null) }
-    var selectedAuthorName by remember { mutableStateOf<String?>(null) }
+    // The only state left here (T-90): a small id-keyed cache so opening Work
+    // Detail from a search/browse/account-list result still shows instantly
+    // from the AO3WorkSummary already in hand, without carrying the full
+    // object through the route itself. Keyed by AO3 work id, so unlike the
+    // single shared vars this replaced, two different works never collide -
+    // an older back-stack entry's lookup by its own id is unaffected by a
+    // newer entry adding a different id. A miss (evicted, or reached another
+    // way) just falls back to the same AO3 fetch WorkDetailSource.Ao3WorkId
+    // already does.
+    val remoteSummaryCache = remember { mutableMapOf<Long, AO3WorkSummary>() }
+
+    fun navigateToWorkDetail(source: WorkDetailSource) {
+        if (source is WorkDetailSource.RemoteSummary) {
+            remoteSummaryCache[source.summary.id] = source.summary
+        }
+        navController.navigate(Routes.workDetail(NavArgCodecs.encodeWorkDetailSource(source)))
+    }
+
+    fun resolveWorkDetailSource(encoded: String): WorkDetailSource? {
+        val decoded = NavArgCodecs.decodeWorkDetailSource(encoded) ?: return null
+        if (decoded is WorkDetailSource.Ao3WorkId) {
+            remoteSummaryCache[decoded.workId]?.let { return WorkDetailSource.RemoteSummary(it) }
+        }
+        return decoded
+    }
 
     NavHost(
         navController = navController,
@@ -79,20 +92,20 @@ fun AppNavHost(
                 accountListRepository = container.accountListRepository,
                 privacyGate = container.privacyGate,
                 onOpenWork = { workId ->
-                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
                 onOpenReader = { workId ->
-                    readerWorkId = workId
-                    navController.navigate(Routes.Reader)
+                    navController.navigate(Routes.reader(workId))
                 },
                 onOpenRemoteWork = { summary ->
-                    selectedWorkSource = WorkDetailSource.RemoteSummary(summary)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.RemoteSummary(summary))
                 },
                 onOpenSubscriptionsList = {
-                    selectedAccountListType = AccountListType.Subscriptions
-                    navController.navigate(Routes.AccountList)
+                    navController.navigate(
+                        Routes.accountList(
+                            NavArgCodecs.encodeAccountListType(AccountListType.Subscriptions)
+                        )
+                    )
                 },
                 onOpenLibrary = { navController.navigate(Routes.Library) },
                 onOpenBrowse = { navController.navigate(Routes.Browse) }
@@ -106,28 +119,23 @@ fun AppNavHost(
                 queueRepository = container.readingQueueRepository,
                 privacyGate = container.privacyGate,
                 onOpenWork = { workId ->
-                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
                 onOpenReader = { workId ->
-                    readerWorkId = workId
-                    navController.navigate(Routes.Reader)
+                    navController.navigate(Routes.reader(workId))
                 },
                 onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
                 onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) },
                 onOpenReadingStatistics = { navController.navigate(Routes.ReadingStatistics) },
                 onOpenCollections = { navController.navigate(Routes.Collections) },
                 onOpenQueue = { queueId ->
-                    selectedQueueId = queueId
-                    navController.navigate(Routes.QueueDetail)
+                    navController.navigate(Routes.queueDetail(queueId))
                 },
                 onOpenCollection = { collectionId ->
-                    selectedCollectionId = collectionId
-                    navController.navigate(Routes.CollectionDetail)
+                    navController.navigate(Routes.collectionDetail(collectionId))
                 },
                 onOpenComments = { workId ->
-                    selectedCommentTarget = AO3CommentTarget.Work(workId)
-                    navController.navigate(Routes.Comments)
+                    navController.navigate(Routes.comments(workId))
                 }
             )
         }
@@ -135,13 +143,15 @@ fun AppNavHost(
             CollectionsScreen(
                 workRepository = container.workRepository,
                 onOpenCollection = { collectionId ->
-                    selectedCollectionId = collectionId
-                    navController.navigate(Routes.CollectionDetail)
+                    navController.navigate(Routes.collectionDetail(collectionId))
                 }
             )
         }
-        composable(Routes.CollectionDetail) {
-            val collectionId = selectedCollectionId
+        composable(
+            Routes.CollectionDetail,
+            arguments = listOf(Routes.navArgOf("collectionId"))
+        ) { backStackEntry ->
+            val collectionId = Routes.routeArg(backStackEntry, "collectionId")
             if (collectionId == null) {
                 navController.popBackStack()
             } else {
@@ -151,17 +161,12 @@ fun AppNavHost(
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
                     onOpenWork = { workId ->
-                        selectedWorkSource = WorkDetailSource.LocalWork(workId)
-                        navController.navigate(Routes.WorkDetail)
+                        navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },
                     onOpenReader = { workId ->
-                        readerWorkId = workId
-                        navController.navigate(Routes.Reader)
+                        navController.navigate(Routes.reader(workId))
                     },
-                    onCollectionDeleted = {
-                        selectedCollectionId = null
-                        navController.popBackStack()
-                    }
+                    onCollectionDeleted = { navController.popBackStack() }
                 )
             }
         }
@@ -169,13 +174,15 @@ fun AppNavHost(
             ReadingQueuesScreen(
                 repository = container.readingQueueRepository,
                 onOpenQueue = { queueId ->
-                    selectedQueueId = queueId
-                    navController.navigate(Routes.QueueDetail)
+                    navController.navigate(Routes.queueDetail(queueId))
                 }
             )
         }
-        composable(Routes.QueueDetail) {
-            val queueId = selectedQueueId
+        composable(
+            Routes.QueueDetail,
+            arguments = listOf(Routes.navArgOf("queueId"))
+        ) { backStackEntry ->
+            val queueId = Routes.routeArg(backStackEntry, "queueId")
             if (queueId == null) {
                 navController.popBackStack()
             } else {
@@ -183,8 +190,7 @@ fun AppNavHost(
                     queueId = queueId,
                     repository = container.readingQueueRepository,
                     onOpenWork = { workId ->
-                        selectedWorkSource = WorkDetailSource.LocalWork(workId)
-                        navController.navigate(Routes.WorkDetail)
+                        navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     }
                 )
             }
@@ -194,56 +200,63 @@ fun AppNavHost(
                 repository = container.browseRepository,
                 workRepository = container.workRepository,
                 onOpenCategory = { category ->
-                    selectedBrowseCategory = category
-                    navController.navigate(Routes.BrowseFandoms)
+                    navController.navigate(Routes.browseFandoms(category.name, category.fandomsPath))
                 },
                 onOpenFandom = { fandomName ->
-                    selectedBrowseFandom = AO3Fandom(name = fandomName)
-                    navController.navigate(Routes.BrowseWorks)
+                    navController.navigate(Routes.browseWorks(fandomName))
                 },
                 onOpenWebFallback = { url ->
-                    webFallbackUrl = url
-                    navController.navigate(Routes.WebFallback)
+                    navController.navigate(Routes.webFallback(url))
                 }
             )
         }
-        composable(Routes.BrowseFandoms) {
-            val category = selectedBrowseCategory
-            if (category == null) {
+        composable(
+            Routes.BrowseFandoms,
+            arguments = listOf(
+                Routes.navArgOf("categoryName"),
+                Routes.navArgOf("categoryFandomsPath")
+            )
+        ) { backStackEntry ->
+            val name = Routes.routeArg(backStackEntry, "categoryName")
+            val fandomsPath = Routes.routeArg(backStackEntry, "categoryFandomsPath")
+            if (name == null || fandomsPath == null) {
                 navController.popBackStack()
             } else {
                 FandomListScreen(
-                    category = category,
+                    category = AO3MediaCategory(name = name, fandomsPath = fandomsPath),
                     repository = container.browseRepository,
                     onOpenFandom = { fandom ->
-                        selectedBrowseFandom = fandom
-                        navController.navigate(Routes.BrowseWorks)
+                        navController.navigate(Routes.browseWorks(fandom.name))
                     },
                     onOpenWebFallback = { url ->
-                        webFallbackUrl = url
-                        navController.navigate(Routes.WebFallback)
+                        navController.navigate(Routes.webFallback(url))
                     }
                 )
             }
         }
-        composable(Routes.BrowseWorks) {
-            val fandom = selectedBrowseFandom
-            if (fandom == null) {
+        composable(
+            Routes.BrowseWorks,
+            arguments = listOf(Routes.navArgOf("fandomName"))
+        ) { backStackEntry ->
+            val fandomName = Routes.routeArg(backStackEntry, "fandomName")
+            if (fandomName.isNullOrBlank()) {
                 navController.popBackStack()
             } else {
                 FandomWorksScreen(
-                    fandomName = fandom.name,
+                    fandomName = fandomName,
                     workRepository = container.workRepository,
                     repository = container.browseRepository,
                     onOpenWork = { work ->
-                        selectedWorkSource = WorkDetailSource.RemoteSummary(work)
-                        navController.navigate(Routes.WorkDetail)
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
                 )
             }
         }
-        composable(Routes.WebFallback) {
-            val url = webFallbackUrl
+        composable(
+            Routes.WebFallback,
+            arguments = listOf(Routes.navArgOf("url"))
+        ) { backStackEntry ->
+            val url = Routes.routeArg(backStackEntry, "url")
             if (url == null) {
                 navController.popBackStack()
             } else {
@@ -263,8 +276,7 @@ fun AppNavHost(
                 listRepository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenList = { type ->
-                    selectedAccountListType = type
-                    navController.navigate(Routes.AccountList)
+                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
                 onOpenSettings = { navController.navigate(Routes.Settings) },
@@ -276,19 +288,17 @@ fun AppNavHost(
                 onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenPrivacy = { navController.navigate(Routes.Settings) },
                 onOpenWeb = { url ->
-                    webFallbackUrl = url
-                    navController.navigate(Routes.WebFallback)
+                    navController.navigate(Routes.webFallback(url))
                 },
                 onOpenWork = { work ->
-                    selectedWorkSource = WorkDetailSource.RemoteSummary(work)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                 },
                 onOpenCollection = { collection ->
-                    selectedAccountListType = AccountListType.Collection(
+                    val type = AccountListType.Collection(
                         name = collection.name,
                         displayTitle = collection.title
                     )
-                    navController.navigate(Routes.AccountList)
+                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
@@ -296,8 +306,7 @@ fun AppNavHost(
                     // Deliberate simplification: chapter-position rows still open the
                     // work's general thread (Android has no chapter-id resolution from
                     // Inbox subject labels yet — same gap as Comments chapter routing).
-                    selectedCommentTarget = AO3CommentTarget.Work(workId)
-                    navController.navigate(Routes.Comments)
+                    navController.navigate(Routes.comments(workId))
                 }
             )
         }
@@ -309,8 +318,7 @@ fun AppNavHost(
             AO3DashboardScreen(
                 username = username,
                 onOpenList = { type ->
-                    selectedAccountListType = type
-                    navController.navigate(Routes.AccountList)
+                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) }
             )
@@ -320,12 +328,10 @@ fun AppNavHost(
                 kind = LocalLibraryListKind.History,
                 repository = container.libraryRepository,
                 onOpenWork = { workId ->
-                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
                 onOpenReader = { workId ->
-                    readerWorkId = workId
-                    navController.navigate(Routes.Reader)
+                    navController.navigate(Routes.reader(workId))
                 }
             )
         }
@@ -334,12 +340,10 @@ fun AppNavHost(
                 kind = LocalLibraryListKind.Favorites,
                 repository = container.libraryRepository,
                 onOpenWork = { workId ->
-                    selectedWorkSource = WorkDetailSource.LocalWork(workId)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
                 onOpenReader = { workId ->
-                    readerWorkId = workId
-                    navController.navigate(Routes.Reader)
+                    navController.navigate(Routes.reader(workId))
                 }
             )
         }
@@ -358,16 +362,20 @@ fun AppNavHost(
                 repository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenCollection = { collection ->
-                    selectedAccountListType = AccountListType.Collection(
+                    val type = AccountListType.Collection(
                         name = collection.name,
                         displayTitle = collection.title
                     )
-                    navController.navigate(Routes.AccountList)
+                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 }
             )
         }
-        composable(Routes.AccountList) {
-            val type = selectedAccountListType
+        composable(
+            Routes.AccountList,
+            arguments = listOf(Routes.navArgOf("listType"))
+        ) { backStackEntry ->
+            val type = Routes.routeArg(backStackEntry, "listType")
+                ?.let(NavArgCodecs::decodeAccountListType)
             if (type == null) {
                 navController.popBackStack()
             } else {
@@ -376,8 +384,7 @@ fun AppNavHost(
                     repository = container.accountListRepository,
                     onLogin = { navController.navigate(Routes.AccountLogin) },
                     onOpenWork = { work ->
-                        selectedWorkSource = WorkDetailSource.RemoteSummary(work)
-                        navController.navigate(Routes.WorkDetail)
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
                 )
             }
@@ -385,16 +392,20 @@ fun AppNavHost(
         composable(Routes.Search) {
             SearchScreen(
                 onOpenWork = { work ->
-                    selectedWorkSource = WorkDetailSource.RemoteSummary(work)
-                    navController.navigate(Routes.WorkDetail)
+                    navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                 },
                 savedSearchRepository = container.savedSearchRepository,
                 workRepository = container.workRepository
             )
         }
-        composable(Routes.WorkDetail) {
+        composable(
+            Routes.WorkDetail,
+            arguments = listOf(Routes.navArgOf("workSource"))
+        ) { backStackEntry ->
+            val source = Routes.routeArg(backStackEntry, "workSource")
+                ?.let(::resolveWorkDetailSource)
             WorkDetailScreen(
-                source = selectedWorkSource,
+                source = source,
                 workRepository = container.workRepository,
                 workImporter = container.workImporter,
                 downloadQueue = container.downloadQueue,
@@ -403,21 +414,21 @@ fun AppNavHost(
                 metadataRepository = container.metadataRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenComments = { workId ->
-                    selectedCommentTarget = AO3CommentTarget.Work(workId)
-                    navController.navigate(Routes.Comments)
+                    navController.navigate(Routes.comments(workId))
                 },
                 onOpenReader = { workId ->
-                    readerWorkId = workId
-                    navController.navigate(Routes.Reader)
+                    navController.navigate(Routes.reader(workId))
                 },
                 onOpenAuthor = { authorName ->
-                    selectedAuthorName = authorName
-                    navController.navigate(Routes.AuthorWorks)
+                    navController.navigate(Routes.authorWorks(authorName))
                 }
             )
         }
-        composable(Routes.AuthorWorks) {
-            val authorName = selectedAuthorName
+        composable(
+            Routes.AuthorWorks,
+            arguments = listOf(Routes.navArgOf("authorName"))
+        ) { backStackEntry ->
+            val authorName = Routes.routeArg(backStackEntry, "authorName")
             if (authorName.isNullOrBlank()) {
                 navController.popBackStack()
             } else {
@@ -425,14 +436,16 @@ fun AppNavHost(
                     authorName = authorName,
                     workRepository = container.workRepository,
                     onOpenWork = { work ->
-                        selectedWorkSource = WorkDetailSource.RemoteSummary(work)
-                        navController.navigate(Routes.WorkDetail)
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
                 )
             }
         }
-        composable(Routes.Reader) {
-            val workId = readerWorkId
+        composable(
+            Routes.Reader,
+            arguments = listOf(Routes.navArgOf("workId"))
+        ) { backStackEntry ->
+            val workId = Routes.routeArg(backStackEntry, "workId")
             if (workId == null) {
                 navController.popBackStack()
             } else {
@@ -447,33 +460,39 @@ fun AppNavHost(
                 ReaderScreen(
                     viewModel = readerViewModel,
                     onBack = { navController.popBackStack() },
-                    onOpenComments = { workId ->
-                        selectedCommentTarget = AO3CommentTarget.Work(workId)
-                        navController.navigate(Routes.Comments)
+                    onOpenComments = { commentsWorkId ->
+                        navController.navigate(Routes.comments(commentsWorkId))
                     },
-                    onOpenWorkDetail = { workId ->
+                    onOpenWorkDetail = { ao3WorkId ->
                         // Deep-link hydration from a raw work id is deferred (see HANDOFF),
                         // but keep the route native so the later parser can fill it in.
-                        selectedWorkSource = WorkDetailSource.Ao3WorkId(workId)
-                        navController.navigate(Routes.WorkDetail) {
+                        navController.navigate(
+                            Routes.workDetail(
+                                NavArgCodecs.encodeWorkDetailSource(WorkDetailSource.Ao3WorkId(ao3WorkId))
+                            )
+                        ) {
                             popUpTo(Routes.Reader) { inclusive = true }
                         }
                     }
                 )
             }
         }
-        composable(Routes.Comments) {
+        composable(
+            Routes.Comments,
+            arguments = listOf(Routes.navArgOf("commentWorkId"))
+        ) { backStackEntry ->
+            val workId = Routes.routeArg(backStackEntry, "commentWorkId")?.toLongOrNull()
             val commentsAuthState by container.authRepository.state.collectAsState(
                 initial = AO3AuthState.Restoring
             )
             CommentsScreen(
-                target = selectedCommentTarget,
+                target = workId?.let { AO3CommentTarget.Work(it) },
                 repository = container.commentRepository,
                 currentUsername = commentsAuthState.usernameOrNull,
                 onLogin = { navController.navigate(Routes.AccountLogin) }
             )
         }
-        
+
         composable(Routes.RecentlyDeleted) {
             RecentlyDeletedScreen(
                 workRepository = container.workRepository

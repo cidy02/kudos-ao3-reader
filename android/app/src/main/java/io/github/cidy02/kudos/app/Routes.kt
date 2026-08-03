@@ -10,6 +10,11 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 data class TopLevelDestination(
     val route: String,
@@ -24,28 +29,75 @@ object Routes {
     const val Browse = "browse"
     const val Account = "account"
     const val Search = "search"
-    const val WorkDetail = "work-detail"
-    const val Reader = "reader"
-    const val Comments = "comments"
     const val AccountLogin = "account-login"
-    const val AccountList = "account-list"
     const val AO3Collections = "ao3-collections"
     const val Settings = "settings"
     const val Backup = "backup"
-    const val BrowseFandoms = "browse-fandoms"
-    const val BrowseWorks = "browse-works"
-    const val WebFallback = "web-fallback"
     const val RecentlyDeleted = "recently-deleted"
     const val ReadingQueues = "reading-queues"
-    const val QueueDetail = "queue-detail"
     const val ReadingStatistics = "reading-statistics"
     const val Collections = "collections"
-    const val CollectionDetail = "collection-detail"
-    const val AuthorWorks = "author-works"
     const val AO3Dashboard = "ao3-dashboard"
     const val LocalHistory = "local-history"
     const val LocalFavorites = "local-favorites"
     const val About = "about"
+
+    // --- Routes carrying a per-back-stack-entry argument (T-90) ---
+    //
+    // Each of these used to be a shared mutable Compose var in AppNavHost that every
+    // instance of the route read from - so navigating to the same route twice with
+    // different content, then pressing Back through both entries, showed the wrong
+    // (most recently set) content on the older entry. The var is gone; the value now
+    // travels as a real navigation argument, tied to that specific back-stack entry.
+    private fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
+    private fun decode(value: String) = URLDecoder.decode(value, "UTF-8")
+
+    private const val ARG_WORK_SOURCE = "workSource"
+    const val WorkDetail = "work-detail/{$ARG_WORK_SOURCE}"
+    fun workDetail(encodedSource: String) = "work-detail/${encode(encodedSource)}"
+
+    private const val ARG_READER_WORK_ID = "workId"
+    const val Reader = "reader/{$ARG_READER_WORK_ID}"
+    fun reader(workId: String) = "reader/${encode(workId)}"
+
+    private const val ARG_COMMENT_WORK_ID = "commentWorkId"
+    const val Comments = "comments/{$ARG_COMMENT_WORK_ID}"
+    fun comments(workId: Long) = "comments/$workId"
+
+    private const val ARG_ACCOUNT_LIST_TYPE = "listType"
+    const val AccountList = "account-list/{$ARG_ACCOUNT_LIST_TYPE}"
+    fun accountList(encodedType: String) = "account-list/${encode(encodedType)}"
+
+    private const val ARG_CATEGORY_NAME = "categoryName"
+    private const val ARG_CATEGORY_FANDOMS_PATH = "categoryFandomsPath"
+    const val BrowseFandoms = "browse-fandoms/{$ARG_CATEGORY_NAME}/{$ARG_CATEGORY_FANDOMS_PATH}"
+    fun browseFandoms(name: String, fandomsPath: String) =
+        "browse-fandoms/${encode(name)}/${encode(fandomsPath)}"
+
+    private const val ARG_FANDOM_NAME = "fandomName"
+    const val BrowseWorks = "browse-works/{$ARG_FANDOM_NAME}"
+    fun browseWorks(fandomName: String) = "browse-works/${encode(fandomName)}"
+
+    private const val ARG_WEB_URL = "url"
+    const val WebFallback = "web-fallback/{$ARG_WEB_URL}"
+    fun webFallback(url: String) = "web-fallback/${encode(url)}"
+
+    private const val ARG_QUEUE_ID = "queueId"
+    const val QueueDetail = "queue-detail/{$ARG_QUEUE_ID}"
+    fun queueDetail(queueId: String) = "queue-detail/${encode(queueId)}"
+
+    private const val ARG_COLLECTION_ID = "collectionId"
+    const val CollectionDetail = "collection-detail/{$ARG_COLLECTION_ID}"
+    fun collectionDetail(collectionId: String) = "collection-detail/${encode(collectionId)}"
+
+    private const val ARG_AUTHOR_NAME = "authorName"
+    const val AuthorWorks = "author-works/{$ARG_AUTHOR_NAME}"
+    fun authorWorks(authorName: String) = "author-works/${encode(authorName)}"
+
+    fun routeArg(entry: NavBackStackEntry, name: String): String? =
+        entry.arguments?.getString(name)?.let(::decode)
+
+    fun navArgOf(name: String) = navArgument(name) { type = NavType.StringType }
 
     val topLevelDestinations = listOf(
         TopLevelDestination(
