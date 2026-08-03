@@ -5,7 +5,10 @@ import io.github.cidy02.kudos.reader.ReaderError
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.search.StringSearchService
+import org.readium.r2.shared.publication.services.search.searchServiceFactory
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -22,13 +25,25 @@ sealed interface ReadiumOpenResult {
  * the main thread and maps failures to [ReaderError]. This is the only place the
  * streamer API is touched.
  */
+@OptIn(ExperimentalReadiumApi::class)
 class ReadiumPublicationOpener(context: Context) {
     private val appContext = context.applicationContext
     private val httpClient by lazy { DefaultHttpClient() }
     private val assetRetriever by lazy { AssetRetriever(appContext.contentResolver, httpClient) }
     private val opener by lazy {
         PublicationOpener(
-            DefaultPublicationParser(appContext, httpClient, assetRetriever, pdfFactory = null)
+            publicationParser = DefaultPublicationParser(
+                appContext,
+                httpClient,
+                assetRetriever,
+                pdfFactory = null
+            ),
+            // Register StringSearchService so Find-in-Work works on every open.
+            // Receiver is Publication.Builder.
+            onCreatePublication = {
+                servicesBuilder.searchServiceFactory =
+                    StringSearchService.createDefaultFactory()
+            }
         )
     }
 
