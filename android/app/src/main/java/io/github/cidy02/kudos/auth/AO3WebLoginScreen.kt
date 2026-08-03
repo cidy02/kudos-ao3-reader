@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -37,10 +39,11 @@ fun AO3WebLoginScreen(
 ) {
     var loading by remember { mutableStateOf(true) }
     var message by remember {
-        mutableStateOf("Log in on AO3's page below. Kudos never sees or stores your password.")
+        mutableStateOf(DefaultMessage)
     }
     val scope = rememberCoroutineScope()
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var timeoutJob by remember { mutableStateOf<Job?>(null) }
 
     Column(
         modifier = modifier
@@ -82,9 +85,19 @@ fun AO3WebLoginScreen(
 
                         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                             loading = true
+                            message = DefaultMessage
+                            timeoutJob?.cancel()
+                            timeoutJob = scope.launch {
+                                delay(PageLoadTimeoutMs)
+                                if (loading) {
+                                    message = StallMessage
+                                }
+                            }
                         }
 
                         override fun onPageFinished(view: WebView, url: String?) {
+                            timeoutJob?.cancel()
+                            timeoutJob = null
                             loading = false
                             view.evaluateJavascript(AO3WebLoginInspection.Script) { raw ->
                                 val inspection = AO3WebLoginInspection.parseJavascriptResult(raw)
@@ -110,6 +123,8 @@ fun AO3WebLoginScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            timeoutJob?.cancel()
+            timeoutJob = null
             webViewRef?.stopLoading()
             webViewRef = null
         }
@@ -155,4 +170,8 @@ data class AO3WebLoginInspection(
     }
 }
 
+private const val DefaultMessage = "Log in on AO3's page below. Kudos never sees or stores your password."
+private const val StallMessage = "This is taking a while - try Reload, or check your connection."
+private const val PageLoadTimeoutMs = 25_000L
 private const val LoginUrl = "https://archiveofourown.org/users/login"
+
