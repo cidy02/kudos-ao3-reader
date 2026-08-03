@@ -12,6 +12,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * v2 → v3: LWW timestamp + soft-delete on collections, matching works — collection
  * deletion had no Recently Deleted / undo at all, and backup restore couldn't tell
  * whether a local rename was newer than an archived one.
+ *
+ * v3 → v4: `isQueuedForLater` on works (T-89 queue-only semantics) — a work added
+ * to a reading queue is no longer implicitly marked `isSaved`.
  */
 object KudosDatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -163,6 +166,14 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE collections ADD COLUMN permanentDeletionScheduledAt INTEGER")
             db.execSQL(
                 "UPDATE collections SET lastModifiedAt = dateAdded WHERE lastModifiedAt IS NULL"
+            )
+        }
+    }
+
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE works ADD COLUMN isQueuedForLater INTEGER NOT NULL DEFAULT 0"
             )
         }
     }

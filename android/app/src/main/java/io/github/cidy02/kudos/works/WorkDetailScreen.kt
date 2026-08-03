@@ -399,7 +399,15 @@ fun WorkDetailScreen(
     fun ensureLocalThen(queueOnly: Boolean = false, action: suspend (SavedWork) -> Unit) {
         val local = state.local
         if (local != null) {
-            runWorkAction { action(local) }
+            // A work can already be local without ever having been queued or saved
+            // (e.g. reading-history tracking) - stamp isQueuedForLater here too, not
+            // only on the cold-localize path below, so queue-add is consistent
+            // regardless of whether this was the work's first localization.
+            if (queueOnly && !local.isQueuedForLater) {
+                runWorkAction { action(workRepository.upsert(local.copy(isQueuedForLater = true))) }
+            } else {
+                runWorkAction { action(local) }
+            }
             return
         }
         val remote = state.remote ?: return

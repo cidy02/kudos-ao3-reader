@@ -52,7 +52,8 @@ class KudosAppContainer(context: Context) {
         )
             .addMigrations(
                 KudosDatabaseMigrations.MIGRATION_1_2,
-                KudosDatabaseMigrations.MIGRATION_2_3
+                KudosDatabaseMigrations.MIGRATION_2_3,
+                KudosDatabaseMigrations.MIGRATION_3_4
             )
             .build()
     }

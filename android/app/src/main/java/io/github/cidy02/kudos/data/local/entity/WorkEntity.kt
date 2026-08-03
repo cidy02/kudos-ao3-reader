@@ -53,5 +53,6 @@ data class WorkEntity(
     val progressModifiedAt: Instant? = null,
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
-    val permanentDeletionScheduledAt: Instant? = null
+    val permanentDeletionScheduledAt: Instant? = null,
+    val isQueuedForLater: Boolean = false
 )

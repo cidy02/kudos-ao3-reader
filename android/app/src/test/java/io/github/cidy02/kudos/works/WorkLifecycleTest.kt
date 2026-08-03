@@ -682,6 +682,30 @@ class WorkImporterLifecycleTest {
     }
 
     @Test
+    fun downloadExistingOnAQueueOnlyWorkDoesNotSilentlyMarkItSaved() = runTest {
+        // Regression test for a real bug found in review: persistDownloadedEpub used
+        // to hardcode isSaved=true, so a queue-only work's EPUB-preserve download
+        // (WorkDetailScreen.preserveEpubForQueue -> DownloadQueue -> downloadExisting)
+        // would silently undo T-89's whole point the moment the download finished.
+        val queueOnly = sampleSavedWork().copy(isSaved = false, isQueuedForLater = true, hasEpub = false)
+        repository.upsert(queueOnly)
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Success(epubBytes)
+        )
+
+        val result = importer.downloadExisting(queueOnly)
+
+        val work = (result as WorkImportResult.Success).work
+        assertTrue(work.hasEpub)
+        assertFalse("EPUB-preserve download must not mark a queue-only work isSaved", work.isSaved)
+        assertTrue(
+            "still excluded from the saved-works library query after the download completes",
+            repository.observeSavedWorks().first().none { it.id == work.id }
+        )
+    }
+
+    @Test
     fun downloadFailureDoesNotSetHasEpub() = runTest {
         val importer = importer(
             metadata = AO3Result.Failure(AO3Error.NotFound),
