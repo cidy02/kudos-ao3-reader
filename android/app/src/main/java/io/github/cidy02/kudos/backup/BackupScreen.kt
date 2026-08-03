@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -18,6 +19,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +45,8 @@ fun BackupScreen(
     var busy by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusIsError by remember { mutableStateOf(false) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
@@ -75,6 +79,19 @@ fun BackupScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        pendingImportUri = uri
+        showImportConfirm = true
+    }
+
+    fun clearPendingImport() {
+        showImportConfirm = false
+        pendingImportUri = null
+    }
+
+    fun confirmImport() {
+        val uri = pendingImportUri
+        clearPendingImport()
+        if (uri == null) return
         scope.launch {
             busy = true
             statusMessage = null
@@ -205,6 +222,29 @@ fun BackupScreen(
                 }
             }
         }
+    }
+
+    if (showImportConfirm) {
+        AlertDialog(
+            onDismissRequest = { clearPendingImport() },
+            title = { Text("Import this backup?") },
+            text = {
+                Text(
+                    "This merges the selected backup into your existing library. " +
+                        "Existing works, bookmarks, fonts, and settings won't be deleted."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmImport() }) {
+                    Text("Import and Merge")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearPendingImport() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
