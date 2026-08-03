@@ -76,4 +76,13 @@ interface ReadingQueueDao {
         """
     )
     suspend fun deleteMembershipForWork(queueId: String, workId: String)
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM reading_queue_memberships m
+        INNER JOIN reading_queues q ON m.queueID = q.id
+        WHERE m.workID = :workId AND q.isDeleted = 0
+        """
+    )
+    suspend fun getActiveMembershipCountForWork(workId: String): Int
 }

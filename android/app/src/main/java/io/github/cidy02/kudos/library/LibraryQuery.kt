@@ -11,24 +11,33 @@ object LibraryQuery {
         filters: LibraryFilterState,
         sort: LibrarySort
     ): LibraryUiState {
-        val visible = snapshot.items.mapNotNull { item ->
+        // A queue-only work (isQueueOnlyWork) is intentionally not on the main saved
+        // shelves - it's excluded upstream too (WorkRepository.observeSavedWorks()
+        // filters on isSaved), but LibraryQuery is a general-purpose, reusable
+        // computation over whatever LibrarySnapshot it's given, so it shouldn't rely
+        // on an undocumented precondition about the caller's pre-filtering. Enforcing
+        // it here, alongside the other "what's visible on Library shelves" rules
+        // (privacy, mature content) already computed in this function, is where a
+        // reader would expect to find it.
+        val savedItems = snapshot.items.filter { !it.work.isQueueOnlyWork }
+        val visible = savedItems.mapNotNull { item ->
             when (val visibility = LibraryPrivacy.visibility(item.work, snapshot.privacy)) {
                 LibraryPrivacyVisibility.Hidden -> null
                 LibraryPrivacyVisibility.Visible,
                 LibraryPrivacyVisibility.Obscured -> LibraryDisplayItem(item, visibility)
             }
         }
-        val hiddenCount = snapshot.items.size - visible.size
+        val hiddenCount = savedItems.size - visible.size
         val filtered = apply(visible, searchQuery, filters, sort)
         // Fandom chips / facet filters narrow every shelf (Apple LibraryView).
         val shelfSource = filterOnly(visible, searchQuery, filters)
-        val matureCount = snapshot.items.count { isMatureWork(it.work) }
+        val matureCount = savedItems.count { isMatureWork(it.work) }
         return LibraryUiState(
             loading = false,
             searchQuery = searchQuery,
             filters = filters,
             sort = sort,
-            totalSaved = snapshot.items.size,
+            totalSaved = savedItems.size,
             hiddenByPrivacyCount = hiddenCount,
             items = filtered,
             continueReading = continueReading(shelfSource),

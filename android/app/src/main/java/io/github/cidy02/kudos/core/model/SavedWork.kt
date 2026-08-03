@@ -55,8 +55,12 @@ data class SavedWork(
     val deletedAt: Instant? = null,
     val permanentDeletionScheduledAt: Instant? = null
 ) {
+    // isQueuedForLater counts as protection too - queue-add now preserves the EPUB
+    // (T-89), and without this a queue-only work marked Finished would have that
+    // freshly-preserved file immediately freed by the existing unprotected-finish
+    // cleanup, defeating the point of preserving it.
     val isProtected: Boolean
-        get() = isSaved || isFavorite
+        get() = isSaved || isFavorite || isQueuedForLater
 
     /** iOS `SavedWork.isQueueOnlyWork`: queued but not otherwise protected. */
     val isQueueOnlyWork: Boolean

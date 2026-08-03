@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -122,6 +123,52 @@ class ReadingQueueRepositoryTest {
         repository.removeFromSavedForLater(work.id)
         assertTrue(repository.listWorks(queue.id).isEmpty())
         assertFalse(repository.isInSavedForLater(work.id))
+    }
+
+    @Test
+    fun addWorkSetsIsQueuedForLaterAndPreservesIsSaved() = runTest {
+        val savedWork = savedWork("work-saved", title = "Saved").copy(isSaved = true, isQueuedForLater = false)
+        val notSavedWork = savedWork("work-unsaved", title = "Unsaved").copy(isSaved = false, isQueuedForLater = false)
+        database.workDao().upsert(savedWork.toEntity())
+        database.workDao().upsert(notSavedWork.toEntity())
+
+        val queue = repository.ensureSavedForLaterQueue()
+
+        repository.addWork(queue.id, savedWork.id)
+        val updatedSaved = database.workDao().getById(savedWork.id)!!.toDomain()
+        assertTrue(updatedSaved.isQueuedForLater)
+        assertTrue(updatedSaved.isSaved)
+        assertFalse(updatedSaved.isQueueOnlyWork)
+
+        repository.addWork(queue.id, notSavedWork.id)
+        val updatedUnsaved = database.workDao().getById(notSavedWork.id)!!.toDomain()
+        assertTrue(updatedUnsaved.isQueuedForLater)
+        assertFalse(updatedUnsaved.isSaved)
+        assertTrue(updatedUnsaved.isQueueOnlyWork)
+    }
+
+    @Test
+    fun removeWorkClearsIsQueuedForLaterWhenNoQueuesRemainAndSoftDeletesIfQueueOnly() = runTest {
+        val notSavedWork = savedWork("work-unsaved", title = "Unsaved").copy(isSaved = false, isQueuedForLater = false)
+        database.workDao().upsert(notSavedWork.toEntity())
+
+        val queue = repository.ensureSavedForLaterQueue()
+        repository.addWork(queue.id, notSavedWork.id)
+
+        repository.removeWork(queue.id, notSavedWork.id)
+        val updatedUnsaved = database.workDao().getById(notSavedWork.id)!!.toDomain()
+        assertFalse(updatedUnsaved.isQueuedForLater)
+        assertTrue("queue-only work loses its only queue -> soft-deleted", updatedUnsaved.isDeleted)
+
+        val savedWork = savedWork("work-saved", title = "Saved").copy(isSaved = true, isQueuedForLater = false)
+        database.workDao().upsert(savedWork.toEntity())
+        repository.addWork(queue.id, savedWork.id)
+
+        repository.removeWork(queue.id, savedWork.id)
+        val updatedSaved = database.workDao().getById(savedWork.id)!!.toDomain()
+        assertFalse(updatedSaved.isQueuedForLater)
+        assertTrue("an explicitly-saved work is never deleted just for losing a queue", updatedSaved.isSaved)
+        assertFalse(updatedSaved.isDeleted)
     }
 
     private fun savedWork(id: String, title: String): SavedWork {

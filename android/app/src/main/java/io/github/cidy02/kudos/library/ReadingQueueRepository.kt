@@ -9,6 +9,7 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
+import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
 import java.util.UUID
 
@@ -76,12 +77,25 @@ class ReadingQueueRepository(
         )
         queueDao.upsertMembership(membership.toEntity())
         touchQueueMembershipChanged(queueId, now)
+
+        // Queue-add localizes a not-yet-local work as queue-only (T-89), but a work
+        // that was already local (e.g. reading history) needs the flag stamped here
+        // too - this runs for every addWork caller, not just the ones that already
+        // went through WorkDetailScreen's queue-add localize path.
+        val workEntity = workDao.getById(workId)
+        if (workEntity != null && !workEntity.isQueuedForLater) {
+            workDao.upsert(workEntity.copy(isQueuedForLater = true, lastModifiedAt = now))
+        }
+
         return membership
     }
 
     suspend fun removeWork(queueId: String, workId: String) {
         val existing = queueDao.getMembershipForWork(queueId, workId) ?: return
         val now = clock()
+        val workEntity = workDao.getById(workId)
+        val wasQueueOnly = workEntity?.toDomain()?.isQueueOnlyWork == true
+
         queueDao.deleteMembershipById(existing.id)
         // Without a tombstone, restoring a backup that still lists this membership
         // silently resurrects it (mergeQueues/TombstoneIndex.membershipResolution
@@ -98,6 +112,29 @@ class ReadingQueueRepository(
             )
         )
         touchQueueMembershipChanged(queueId, now)
+
+        // iOS parity: removeFromQueueAndDeleteIfQueueOnly. Once a work loses its last
+        // queue membership, clear the flag; if it was queue-only (never explicitly
+        // saved or favorited), the user is abandoning it entirely - soft-delete it
+        // the same way any other removal goes to Recently Deleted, rather than
+        // leaving an orphaned, invisible row behind forever.
+        if (workEntity != null) {
+            val remainingCount = queueDao.getActiveMembershipCountForWork(workId)
+            if (remainingCount == 0 && workEntity.isQueuedForLater) {
+                val cleared = workEntity.copy(isQueuedForLater = false, lastModifiedAt = now)
+                if (wasQueueOnly && !cleared.isSaved && !cleared.isFavorite) {
+                    workDao.upsert(
+                        cleared.copy(
+                            isDeleted = true,
+                            deletedAt = now,
+                            permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                        )
+                    )
+                } else {
+                    workDao.upsert(cleared)
+                }
+            }
+        }
     }
 
     suspend fun ensureSavedForLaterQueue(): ReadingQueue {

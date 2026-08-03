@@ -461,3 +461,57 @@ private fun work(
 }
 
 private fun List<LibraryDisplayItem>.ids(): List<String> = map { it.item.work.id }
+
+class QueueOnlyWorkSemanticsTest {
+    @Test
+    fun queueOnlyWorkHelperMatchesDefinition() {
+        val queueOnly = SavedWork(
+            title = "Queue Only",
+            author = "Author",
+            isQueuedForLater = true,
+            isSaved = false,
+            isFavorite = false
+        )
+        assertTrue(queueOnly.isQueueOnlyWork)
+        assertTrue("queued works are protected from EPUB cleanup too", queueOnly.isProtected)
+
+        val savedAndQueued = queueOnly.copy(isSaved = true)
+        assertFalse(savedAndQueued.isQueueOnlyWork)
+        assertTrue(savedAndQueued.isSaved)
+
+        val favoriteAndQueued = queueOnly.copy(isFavorite = true)
+        assertFalse(favoriteAndQueued.isQueueOnlyWork)
+    }
+
+    @Test
+    fun queueOnlyWorksExcludedFromLibraryShelves() {
+        val saved = SavedWork(id = "saved-1", title = "Saved", author = "A", isSaved = true)
+        val queueOnly = SavedWork(
+            id = "queue-1",
+            title = "Queue Only",
+            author = "B",
+            isQueuedForLater = true,
+            isSaved = false
+        )
+
+        val snapshot = LibrarySnapshot(
+            items = listOf(
+                LibraryWorkListItem(saved, emptyList(), emptyList()),
+                LibraryWorkListItem(queueOnly, emptyList(), emptyList())
+            ),
+            userTags = emptyList(),
+            collections = emptyList(),
+            privacy = PrivacySettings()
+        )
+
+        val state = LibraryQuery.buildState(
+            snapshot = snapshot,
+            searchQuery = "",
+            filters = LibraryFilterState(),
+            sort = LibrarySort.RecentlyAdded
+        )
+
+        assertEquals(1, state.totalSaved)
+        assertEquals(listOf("saved-1"), state.items.map { it.item.work.id })
+    }
+}

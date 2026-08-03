@@ -191,6 +191,7 @@ object BackupMergeService {
                 // Never lose a local EPUB just because the archive lacked one.
                 hasEpub = existing.hasEpub || restored.hasEpub,
                 isSaved = restored.isSaved || existing.isSaved || (existing.hasEpub || restored.hasEpub),
+                isQueuedForLater = restored.isQueuedForLater || existing.isQueuedForLater,
                 dateAdded = minInstant(existing.dateAdded, restored.dateAdded),
                 lastModifiedAt = maxInstant(existing.lastModifiedAt, incomingModifiedAt)
                     ?: incomingModifiedAt,
@@ -203,6 +204,7 @@ object BackupMergeService {
             // Keep local flags/metadata; still absorb non-destructive fills.
             existing.copy(
                 hasEpub = existing.hasEpub || restored.hasEpub,
+                isQueuedForLater = existing.isQueuedForLater || restored.isQueuedForLater,
                 title = existing.title.ifBlank { restored.title },
                 author = existing.author.ifBlank { restored.author },
                 summary = existing.summary.ifBlank { restored.summary },

@@ -78,6 +78,7 @@ fun SavedWork.toBackupWork(
         dateAdded = BackupValidator.formatInstant(dateAdded),
         isFavorite = isFavorite,
         isSaved = isSaved,
+        isQueuedForLater = isQueuedForLater,
         isFinished = isFinished,
         hasEPUB = hasEpub,
         isComplete = isComplete,
@@ -138,6 +139,7 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         // Prefer archive flag; default to saved when Apple marks hasEPUB so the
         // work appears in the offline Library after import.
         isSaved = isSaved || hasEpub,
+        isQueuedForLater = isQueuedForLater ?: false,
         isFinished = isFinished,
         hasEpub = hasEpub,
         isComplete = isComplete,
