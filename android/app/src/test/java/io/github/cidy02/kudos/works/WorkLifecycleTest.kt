@@ -480,7 +480,39 @@ class WorkLifecycleRepositoryTest {
         assertTrue(finished.hasEpub)
         assertTrue(fileStore.workEpubExists(workUuid))
     }
+
+    @Test
+    fun softDeleteAllFinishedMovesOnlyActiveFinishedWorksToRecentlyDeleted() = runTest {
+        val finished1 = sampleSavedWork("11111111-1111-1111-1111-111111111111").copy(isFinished = true)
+        val finished2 = sampleSavedWork("22222222-2222-2222-2222-222222222222").copy(isFinished = true)
+        val unfinished = sampleSavedWork("33333333-3333-3333-3333-333333333333").copy(isFinished = false)
+        val alreadyDeleted = sampleSavedWork("44444444-4444-4444-4444-444444444444").copy(isFinished = true, isDeleted = true)
+        repository.upsert(finished1)
+        repository.upsert(finished2)
+        repository.upsert(unfinished)
+        repository.upsert(alreadyDeleted)
+
+        val beforeCount = repository.observeFinishedWorks().first().size
+        assertEquals(2, beforeCount)
+
+        val clearedCount = repository.softDeleteAllFinished()
+        assertEquals(2, clearedCount)
+
+        val afterCount = repository.observeFinishedWorks().first().size
+        assertEquals(0, afterCount)
+
+        // Unfinished work is unaffected
+        val activeUnfinished = repository.getWork("33333333-3333-3333-3333-333333333333")
+        assertNotNull(activeUnfinished)
+        assertFalse(activeUnfinished!!.isDeleted)
+
+        // Finished works are now in Recently Deleted
+        val recentlyDeletedIds = repository.listRecentlyDeleted().map { it.id }
+        assertTrue(recentlyDeletedIds.contains("11111111-1111-1111-1111-111111111111"))
+        assertTrue(recentlyDeletedIds.contains("22222222-2222-2222-2222-222222222222"))
+    }
 }
+
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])

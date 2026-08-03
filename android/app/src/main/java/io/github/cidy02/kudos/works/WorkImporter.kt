@@ -18,7 +18,7 @@ sealed interface WorkImportResult {
 }
 
 class WorkImporter(
-    private val workRepository: WorkRepository,
+    val workRepository: WorkRepository,
     private val metadataRepository: AO3WorkMetadataRepository,
     private val downloader: AO3EpubDownloader,
     private val fileStore: WorkFileStore,

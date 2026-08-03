@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -69,11 +70,13 @@ import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
+import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
 import io.github.cidy02.kudos.support.openBugReport
 import io.github.cidy02.kudos.update.AppUpdateRepository
 import io.github.cidy02.kudos.update.AppUpdateState
 import io.github.cidy02.kudos.works.WorkImportResult
 import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -118,7 +121,9 @@ fun SettingsScreen(
     onLogin: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
     appUpdateRepository: AppUpdateRepository? = null,
-    workImporter: WorkImporter? = null
+    workImporter: WorkImporter? = null,
+    fandomCatalogCache: FandomCatalogCache? = null,
+    workRepository: WorkRepository? = null
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val importedFonts by customFontRepository.observeImported()
@@ -143,6 +148,14 @@ fun SettingsScreen(
     }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val effectiveFandomCatalogCache = remember(fandomCatalogCache, context) {
+        fandomCatalogCache ?: FandomCatalogCache(context.cacheDir.toPath())
+    }
+    val effectiveWorkRepository = workRepository ?: workImporter?.workRepository
+    val finishedWorksFlow = remember(effectiveWorkRepository) {
+        effectiveWorkRepository?.observeFinishedWorks() ?: flowOf(emptyList())
+    }
+    val finishedWorks by finishedWorksFlow.collectAsState(initial = emptyList())
     var fontStatus by remember { mutableStateOf<String?>(null) }
     var fontStatusIsError by remember { mutableStateOf(false) }
     var fontBusy by remember { mutableStateOf(false) }
@@ -150,6 +163,9 @@ fun SettingsScreen(
     var epubStatusIsError by remember { mutableStateOf(false) }
     var epubBusy by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var browseCacheCleared by remember { mutableStateOf(false) }
+    var showClearBrowseCacheConfirm by remember { mutableStateOf(false) }
+    var showClearHistoryConfirm by remember { mutableStateOf(false) }
 
     fun launchUpdate(block: suspend () -> Unit) {
         scope.launch { block() }
@@ -670,6 +686,46 @@ fun SettingsScreen(
                         launchUpdate { repository.updateRequireBiometricToReveal(it) }
                     }
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Cached AO3 fandom and category data used to show Browse instantly. " +
+                            "Safe to clear — it rebuilds the next time you open Browse.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = { showClearBrowseCacheConfirm = true },
+                        enabled = !browseCacheCleared,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (browseCacheCleared) "Browse Cache Cleared" else "Clear Browse Cache")
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val count = finishedWorks.size
+                    val countText = "$count finished work${if (count == 1) "" else "s"}"
+                    Text(
+                        text = "$countText in your local reading history (their files were already freed). " +
+                            "Your saved and downloaded works aren't affected.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = { showClearHistoryConfirm = true },
+                        enabled = finishedWorks.isNotEmpty(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Clear Reading History")
+                    }
+                }
             }
             SettingsFooter(
                 "Mature and Explicit works can be blurred or hidden in Library, History, " +
@@ -746,6 +802,69 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showClearBrowseCacheConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearBrowseCacheConfirm = false },
+            title = { Text("Clear Browse Cache?") },
+            text = {
+                Text(
+                    "Cached AO3 fandom and category data used to show Browse instantly. " +
+                        "Safe to clear — it rebuilds the next time you open Browse."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearBrowseCacheConfirm = false
+                        scope.launch {
+                            effectiveFandomCatalogCache.clear()
+                            browseCacheCleared = true
+                        }
+                    }
+                ) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearBrowseCacheConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showClearHistoryConfirm) {
+        val count = finishedWorks.size
+        val workText = "Work${if (count == 1) "" else "s"}"
+        AlertDialog(
+            onDismissRequest = { showClearHistoryConfirm = false },
+            title = { Text("Clear Reading History?") },
+            text = {
+                Text(
+                    "Moves your local reading-history records to Recently Deleted for 90 days. " +
+                        "The works themselves can also be re-downloaded from AO3 anytime."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearHistoryConfirm = false
+                        scope.launch {
+                            effectiveWorkRepository?.softDeleteAllFinished()
+                        }
+                    }
+                ) {
+                    Text("Clear $count $workText", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryConfirm = false }) {
                     Text("Cancel")
                 }
             }

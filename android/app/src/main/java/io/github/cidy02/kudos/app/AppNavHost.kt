@@ -497,7 +497,9 @@ fun AppNavHost(
                 onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
                 appUpdateRepository = container.appUpdateRepository,
-                workImporter = container.workImporter
+                workImporter = container.workImporter,
+                fandomCatalogCache = container.fandomCatalogCache,
+                workRepository = container.workRepository
             )
         }
         composable(Routes.Backup) {
