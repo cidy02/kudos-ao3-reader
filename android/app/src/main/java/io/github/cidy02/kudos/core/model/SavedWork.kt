@@ -12,6 +12,13 @@ data class SavedWork(
     val dateAdded: Instant = Instant.now(),
     val isFavorite: Boolean = false,
     val isSaved: Boolean = false,
+    /**
+     * Added to a reading queue without being explicitly saved (iOS
+     * `SavedWork.isQueuedForLater`). Kept distinct from [isSaved] so a
+     * queue-only work stays out of Home/Library "saved" shelves until the
+     * user explicitly saves or favorites it.
+     */
+    val isQueuedForLater: Boolean = false,
     val isFinished: Boolean = false,
     val hasEpub: Boolean = true,
     val isComplete: Boolean = false,
@@ -50,6 +57,10 @@ data class SavedWork(
 ) {
     val isProtected: Boolean
         get() = isSaved || isFavorite
+
+    /** iOS `SavedWork.isQueueOnlyWork`: queued but not otherwise protected. */
+    val isQueueOnlyWork: Boolean
+        get() = isQueuedForLater && !isSaved && !isFavorite
 
     val hasStartedReading: Boolean
         get() = lastReadDate != null ||

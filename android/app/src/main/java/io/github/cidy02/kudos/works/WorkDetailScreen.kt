@@ -390,7 +390,13 @@ fun WorkDetailScreen(
         }
     }
 
-    fun ensureLocalThen(action: suspend (SavedWork) -> Unit) {
+    /**
+     * [queueOnly] is for reading-queue adds only (see the two call sites below):
+     * a not-yet-local work is localized without becoming a full Library item
+     * (`markSaved = false, isQueuedForLater = true`). Every other caller keeps
+     * the ordinary explicit-save behavior.
+     */
+    fun ensureLocalThen(queueOnly: Boolean = false, action: suspend (SavedWork) -> Unit) {
         val local = state.local
         if (local != null) {
             runWorkAction { action(local) }
@@ -398,11 +404,34 @@ fun WorkDetailScreen(
         }
         val remote = state.remote ?: return
         runWorkAction {
-            when (val result = workImporter.saveMetadataOnly(remote)) {
+            when (
+                val result = workImporter.saveMetadataOnly(
+                    remote,
+                    markSaved = !queueOnly,
+                    isQueuedForLater = queueOnly
+                )
+            ) {
                 is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
                 is WorkImportResult.Success -> action(result.work)
             }
         }
+    }
+
+    /**
+     * Reading-queue adds also preserve the EPUB for offline reading (iOS parity)
+     * instead of leaving the queued work metadata-only. Skips silently if there's
+     * no resolvable AO3 work id (e.g. a locally-imported EPUB) or it's already
+     * downloaded — `force = false` lets DownloadQueue's own dedupe skip it.
+     */
+    fun preserveEpubForQueue(work: SavedWork) {
+        if (work.hasEpub) return
+        val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: return
+        downloadQueue.enqueueLocal(
+            ao3WorkId = ao3Id,
+            title = work.title,
+            sourceUrl = work.sourceUrl,
+            force = false
+        )
     }
 
     fun handleWriteResult(result: AO3Result<AO3WriteOutcome>) {
@@ -587,8 +616,9 @@ fun WorkDetailScreen(
                             TextButton(
                                 onClick = {
                                     queuePickerOpen = false
-                                    ensureLocalThen { work ->
+                                    ensureLocalThen(queueOnly = true) { work ->
                                         readingQueueRepository.addWork(queue.id, work.id)
+                                        preserveEpubForQueue(work)
                                         state = state.copy(
                                             ao3Message = "Added to ${queue.displayName}."
                                         )
@@ -854,11 +884,12 @@ fun WorkDetailScreen(
         onSubscribe = { runAo3Write { writeRepository.toggleSubscribe(it) } },
         onMarkForLater = { runAo3Write { writeRepository.markForLater(it) } },
         onAddToSavedForLater = {
-            ensureLocalThen { work ->
+            ensureLocalThen(queueOnly = true) { work ->
                 if (state.inSavedForLater) {
                     readingQueueRepository.removeFromSavedForLater(work.id)
                 } else {
                     readingQueueRepository.addToSavedForLater(work.id)
+                    preserveEpubForQueue(work)
                 }
                 refreshLocal(work.id, state.remote)
             }

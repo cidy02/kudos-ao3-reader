@@ -124,6 +124,41 @@ class WorkMetadataMergerTest {
         val merged = WorkMetadataMerger().merge(summary = null, canonical = null, existing = null, markSaved = true)
         assertFalse(merged.isDeleted)
     }
+
+    // Queue-only semantics (T-89): queuing a not-yet-saved work must not silently
+    // save it — mirrors iOS SavedWork.isQueuedForLater staying separate from isSaved.
+
+    @Test
+    fun queueingANewWorkMarksItQueuedOnlyNotSaved() {
+        val merged = WorkMetadataMerger().merge(
+            summary = sampleSummary(),
+            canonical = null,
+            existing = null,
+            markSaved = false,
+            isQueuedForLater = true
+        )
+
+        assertFalse("a queue-only add must not mark isSaved", merged.isSaved)
+        assertTrue(merged.isQueuedForLater)
+        assertTrue("queued, not saved, not favorite -> queue-only", merged.isQueueOnlyWork)
+    }
+
+    @Test
+    fun queueingAnAlreadySavedWorkKeepsItSaved() {
+        val alreadySaved = sampleSavedWork().copy(isSaved = true)
+
+        val merged = WorkMetadataMerger().merge(
+            summary = sampleSummary(),
+            canonical = null,
+            existing = alreadySaved,
+            markSaved = false,
+            isQueuedForLater = true
+        )
+
+        assertTrue("an already-saved work must stay saved when also queued", merged.isSaved)
+        assertTrue(merged.isQueuedForLater)
+        assertFalse("saved works are never queue-only", merged.isQueueOnlyWork)
+    }
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -704,6 +739,29 @@ class WorkImporterLifecycleTest {
         val failure = result as WorkImportResult.Failure
         assertTrue(failure.error is AO3Error.Validation)
         assertNull(failure.work)
+    }
+
+    @Test
+    fun savingMetadataOnlyAsQueueOnlyDoesNotMarkSavedAndIsExcludedFromTheLibrary() = runTest {
+        // End-to-end: a queue-only work must not appear in observeSavedWorks() (the
+        // same query Home/Library shelves are built from), while still being a real
+        // row a reading-queue screen can look up by id.
+        val importer = importer(
+            metadata = AO3Result.Success(AO3WorkMetadata(chapters = "1/1")),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+
+        val result = importer.saveMetadataOnly(sampleSummary(), markSaved = false, isQueuedForLater = true)
+
+        val work = (result as WorkImportResult.Success).work
+        assertFalse(work.isSaved)
+        assertTrue(work.isQueuedForLater)
+        assertTrue(work.isQueueOnlyWork)
+        assertTrue(
+            "a queue-only work must not show up in the saved-works library query",
+            repository.observeSavedWorks().first().none { it.id == work.id }
+        )
+        assertNotNull("the row itself still exists for the Reading Queues screen", repository.getWork(work.id))
     }
 
     @Test

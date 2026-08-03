@@ -24,15 +24,28 @@ class WorkImporter(
     private val fileStore: WorkFileStore,
     private val merger: WorkMetadataMerger = WorkMetadataMerger()
 ) {
-    suspend fun saveMetadataOnly(summary: AO3WorkSummary): WorkImportResult {
+    /**
+     * [markSaved] defaults true for the ordinary explicit-save/download callers.
+     * Queue-add (see `WorkDetailScreen.ensureLocalThen`) passes `markSaved = false,
+     * isQueuedForLater = true` so a not-yet-saved work stays queue-only
+     * (`SavedWork.isQueueOnlyWork`) instead of becoming a full Library item — an
+     * already-saved match still keeps `isSaved = true` either way, since the merger
+     * ORs onto the existing value rather than overwriting it.
+     */
+    suspend fun saveMetadataOnly(
+        summary: AO3WorkSummary,
+        markSaved: Boolean = true,
+        isQueuedForLater: Boolean = false
+    ): WorkImportResult {
         val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
         val work = merger.merge(
             summary = summary,
             canonical = metadata,
             existing = existing,
-            markSaved = true,
-            hasEpub = existing?.hasEpub ?: false
+            markSaved = markSaved,
+            hasEpub = existing?.hasEpub ?: false,
+            isQueuedForLater = isQueuedForLater
         )
         val saved = workRepository.upsert(work)
         return WorkImportResult.Success(reviveIfNeeded(existing, saved))
