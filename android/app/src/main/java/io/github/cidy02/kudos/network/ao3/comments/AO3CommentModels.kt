@@ -204,7 +204,17 @@ data class AO3Comment(
      * AO3 exposed a Reply action for this comment in this session
      * (parsed from the comment's own action list).
      */
-    val canReply: Boolean = false
+    val canReply: Boolean = false,
+    val editPath: String? = null,
+    val deletePath: String? = null,
+    val chapterId: Long? = null,
+    val chapterLabel: String? = null,
+    val threadPath: String? = null,
+    val parentThreadPath: String? = null,
+    val isThreadCutoff: Boolean = false,
+    val cutoffCount: Int? = null,
+    val cutoffThreadPath: String? = null,
+    val replies: List<AO3Comment> = emptyList()
 ) {
     /**
      * Numeric AO3 comment id for reply endpoints (`comment_1252794206` → 1252794206).
