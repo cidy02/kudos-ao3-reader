@@ -93,8 +93,6 @@ class ReadingQueueRepository(
     suspend fun removeWork(queueId: String, workId: String) {
         val existing = queueDao.getMembershipForWork(queueId, workId) ?: return
         val now = clock()
-        val workEntity = workDao.getById(workId)
-        val wasQueueOnly = workEntity?.toDomain()?.isQueueOnlyWork == true
 
         queueDao.deleteMembershipById(existing.id)
         // Without a tombstone, restoring a backup that still lists this membership
@@ -118,11 +116,25 @@ class ReadingQueueRepository(
         // saved or favorited), the user is abandoning it entirely - soft-delete it
         // the same way any other removal goes to Recently Deleted, rather than
         // leaving an orphaned, invisible row behind forever.
-        if (workEntity != null) {
+        //
+        // Re-read the row here rather than reusing an entity fetched before the
+        // membership delete above: this suspends across several DB writes
+        // (tombstone insert, queue touch), a real window for something else -
+        // a completed download setting hasEpub, a favorite toggle - to have
+        // changed the row in the meantime. Deciding and writing from a stale
+        // snapshot could soft-delete a work that just became protected, or
+        // clobber a concurrent field change.
+        val freshEntity = workDao.getById(workId)
+        if (freshEntity != null) {
             val remainingCount = queueDao.getActiveMembershipCountForWork(workId)
-            if (remainingCount == 0 && workEntity.isQueuedForLater) {
-                val cleared = workEntity.copy(isQueuedForLater = false, lastModifiedAt = now)
-                if (wasQueueOnly && !cleared.isSaved && !cleared.isFavorite) {
+            // Must read isQueueOnlyWork from the still-queued entity, before the
+            // flag gets cleared below - isQueueOnlyWork is defined in terms of
+            // isQueuedForLater, so checking it on the already-cleared copy would
+            // always read false regardless of prior state.
+            val wasQueueOnly = freshEntity.toDomain().isQueueOnlyWork
+            if (remainingCount == 0 && freshEntity.isQueuedForLater) {
+                val cleared = freshEntity.copy(isQueuedForLater = false, lastModifiedAt = now)
+                if (wasQueueOnly) {
                     workDao.upsert(
                         cleared.copy(
                             isDeleted = true,

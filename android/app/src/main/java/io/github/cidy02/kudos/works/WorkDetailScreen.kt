@@ -404,7 +404,10 @@ fun WorkDetailScreen(
             // only on the cold-localize path below, so queue-add is consistent
             // regardless of whether this was the work's first localization.
             if (queueOnly && !local.isQueuedForLater) {
-                runWorkAction { action(workRepository.upsert(local.copy(isQueuedForLater = true))) }
+                runWorkAction {
+                    val updated = local.copy(isQueuedForLater = true, lastModifiedAt = Instant.now())
+                    action(workRepository.upsert(updated))
+                }
             } else {
                 runWorkAction { action(local) }
             }

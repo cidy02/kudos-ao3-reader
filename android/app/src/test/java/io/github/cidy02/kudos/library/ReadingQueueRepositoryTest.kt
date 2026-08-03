@@ -171,6 +171,42 @@ class ReadingQueueRepositoryTest {
         assertFalse(updatedSaved.isDeleted)
     }
 
+    @Test
+    fun removeWorkDoesNotSoftDeleteAFavoritedQueueOnlyWork() = runTest {
+        val favoritedWork = savedWork("work-fav", title = "Favorited")
+            .copy(isSaved = false, isFavorite = true, isQueuedForLater = false)
+        database.workDao().upsert(favoritedWork.toEntity())
+        val queue = repository.ensureSavedForLaterQueue()
+        repository.addWork(queue.id, favoritedWork.id)
+
+        repository.removeWork(queue.id, favoritedWork.id)
+
+        val updated = database.workDao().getById(favoritedWork.id)!!.toDomain()
+        assertFalse(updated.isQueuedForLater)
+        assertTrue("favoriting also protects a queue-only work from deletion on removal", updated.isFavorite)
+        assertFalse(updated.isDeleted)
+    }
+
+    @Test
+    fun removeWorkOnlyClearsTheFlagWhileOtherQueueMembershipsRemain() = runTest {
+        val work = savedWork("work-multi", title = "In two queues").copy(isSaved = false, isQueuedForLater = false)
+        database.workDao().upsert(work.toEntity())
+        val savedForLater = repository.ensureSavedForLaterQueue()
+        val custom = repository.createQueue("Custom Queue")
+        repository.addWork(savedForLater.id, work.id)
+        repository.addWork(custom.id, work.id)
+
+        repository.removeWork(savedForLater.id, work.id)
+        val afterFirstRemoval = database.workDao().getById(work.id)!!.toDomain()
+        assertTrue("still queued via the second membership", afterFirstRemoval.isQueuedForLater)
+        assertFalse("not deleted while still in another queue", afterFirstRemoval.isDeleted)
+
+        repository.removeWork(custom.id, work.id)
+        val afterLastRemoval = database.workDao().getById(work.id)!!.toDomain()
+        assertFalse(afterLastRemoval.isQueuedForLater)
+        assertTrue("last queue membership dropped for a queue-only work -> soft-deleted", afterLastRemoval.isDeleted)
+    }
+
     private fun savedWork(id: String, title: String): SavedWork {
         return SavedWork(
             id = id,
