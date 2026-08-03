@@ -52,7 +52,8 @@ fun SavedWork.toEntity(): WorkEntity {
         progressModifiedAt = progressModifiedAt,
         isDeleted = isDeleted,
         deletedAt = deletedAt,
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt,
+        isQueuedForLater = isQueuedForLater
     )
 }
 
@@ -97,7 +98,8 @@ fun WorkEntity.toDomain(): SavedWork {
         progressModifiedAt = progressModifiedAt,
         isDeleted = isDeleted,
         deletedAt = deletedAt,
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt,
+        isQueuedForLater = isQueuedForLater
     )
 }
 

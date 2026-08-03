@@ -24,15 +24,28 @@ class WorkImporter(
     private val fileStore: WorkFileStore,
     private val merger: WorkMetadataMerger = WorkMetadataMerger()
 ) {
-    suspend fun saveMetadataOnly(summary: AO3WorkSummary): WorkImportResult {
+    /**
+     * [markSaved] defaults true for the ordinary explicit-save/download callers.
+     * Queue-add (see `WorkDetailScreen.ensureLocalThen`) passes `markSaved = false,
+     * isQueuedForLater = true` so a not-yet-saved work stays queue-only
+     * (`SavedWork.isQueueOnlyWork`) instead of becoming a full Library item — an
+     * already-saved match still keeps `isSaved = true` either way, since the merger
+     * ORs onto the existing value rather than overwriting it.
+     */
+    suspend fun saveMetadataOnly(
+        summary: AO3WorkSummary,
+        markSaved: Boolean = true,
+        isQueuedForLater: Boolean = false
+    ): WorkImportResult {
         val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
         val work = merger.merge(
             summary = summary,
             canonical = metadata,
             existing = existing,
-            markSaved = true,
-            hasEpub = existing?.hasEpub ?: false
+            markSaved = markSaved,
+            hasEpub = existing?.hasEpub ?: false,
+            isQueuedForLater = isQueuedForLater
         )
         val saved = workRepository.upsert(work)
         return WorkImportResult.Success(reviveIfNeeded(existing, saved))
@@ -144,6 +157,15 @@ class WorkImporter(
                 // file-backed flags change here. A re-download of a finished work must
                 // not silently clear the user's Finished marker.
                 //
+                // isSaved is deliberately NOT forced true here (it used to be) - a
+                // queue-only work (T-89) whose EPUB preserve-download completes here
+                // must not have that silently flip it into a full Library item. Every
+                // caller that actually wants isSaved=true already produced a `work`
+                // with isSaved=true before reaching this point (download()'s merge step
+                // runs markSaved=true; downloadExisting()'s callers redownload an
+                // already-saved work), so omitting it from the copy and letting it keep
+                // `work.isSaved` as-is is a no-op for them and the fix for queue-only.
+                //
                 // `downloadExisting` (the DownloadQueue resolved-match path) hands this
                 // `work` straight through without going via WorkMetadataMerger, so a
                 // soft-deleted match reaching here can still have isDeleted=true (the
@@ -157,7 +179,6 @@ class WorkImporter(
                 val updated = workRepository.upsert(
                     work.copy(
                         hasEpub = true,
-                        isSaved = true,
                         isDeleted = false,
                         deletedAt = null,
                         permanentDeletionScheduledAt = null,

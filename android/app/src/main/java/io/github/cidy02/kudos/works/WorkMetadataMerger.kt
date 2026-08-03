@@ -15,7 +15,8 @@ class WorkMetadataMerger(
         canonical: AO3WorkMetadata?,
         existing: SavedWork?,
         markSaved: Boolean,
-        hasEpub: Boolean? = null
+        hasEpub: Boolean? = null,
+        isQueuedForLater: Boolean = false
     ): SavedWork {
         val base = existing ?: SavedWork(
             id = uuidFactory(),
@@ -51,6 +52,7 @@ class WorkMetadataMerger(
             summary = choose(summary?.summary, base.summary),
             sourceUrl = choose(summary?.workUrl, base.sourceUrl),
             isSaved = base.isSaved || markSaved,
+            isQueuedForLater = base.isQueuedForLater || isQueuedForLater,
             hasEpub = hasEpub ?: base.hasEpub,
             isComplete = summary?.isComplete ?: base.isComplete,
             rating = choose(summary?.rating, base.rating),
