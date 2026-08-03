@@ -53,7 +53,8 @@ class KudosAppContainer(context: Context) {
             .addMigrations(
                 KudosDatabaseMigrations.MIGRATION_1_2,
                 KudosDatabaseMigrations.MIGRATION_2_3,
-                KudosDatabaseMigrations.MIGRATION_3_4
+                KudosDatabaseMigrations.MIGRATION_3_4,
+                KudosDatabaseMigrations.MIGRATION_4_5
             )
             .build()
     }
@@ -171,6 +172,10 @@ class KudosAppContainer(context: Context) {
             settingsProvider = { settingsRepository.snapshot() },
             customFontRepository = customFontRepository
         )
+    }
+
+    val annotationRepository: io.github.cidy02.kudos.reader.AnnotationRepository by lazy {
+        io.github.cidy02.kudos.reader.AnnotationRepository(database.annotationDao())
     }
 
     val fandomCatalogCache: FandomCatalogCache by lazy {

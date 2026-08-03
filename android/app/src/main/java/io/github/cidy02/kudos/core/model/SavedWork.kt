@@ -53,7 +53,15 @@ data class SavedWork(
     /** Soft-delete / Recently Deleted (Apple `isPendingDeletion`). */
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
-    val permanentDeletionScheduledAt: Instant? = null
+    val permanentDeletionScheduledAt: Instant? = null,
+    /**
+     * Derived, normalized search blob (title/author/tags/…). Not source of truth —
+     * rebuilt from fields via [io.github.cidy02.kudos.works.WorkSearchIndex].
+     * Excluded from backup export (rebuilt on restore/launch).
+     */
+    val searchText: String = "",
+    /** Stamp for [io.github.cidy02.kudos.works.WorkSearchIndex.currentVersion]; 0 = never indexed. */
+    val searchIndexVersion: Int = 0
 ) {
     // isQueuedForLater counts as protection too - queue-add now preserves the EPUB
     // (T-89), and without this a queue-only work marked Finished would have that

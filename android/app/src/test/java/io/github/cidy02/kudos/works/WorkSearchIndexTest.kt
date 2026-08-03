@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,5 +27,14 @@ class WorkSearchIndexTest {
         assertTrue(WorkSearchIndex.matches(work, listOf("heroine", "fluff")))
         assertTrue(WorkSearchIndex.matches(work, listOf("potter", "journey")))
         assertFalse(WorkSearchIndex.matches(work, listOf("heroine", "angst")))
+    }
+
+    @Test
+    fun reindexStampsCurrentVersionAndIncludesUserTags() {
+        val work = SavedWork(title = "Story", author = "Author")
+        val indexed = WorkSearchIndex.reindex(work, userTags = listOf("Comfort"))
+        assertEquals(WorkSearchIndex.CURRENT_VERSION, indexed.searchIndexVersion)
+        assertTrue(indexed.searchText.contains("comfort"))
+        assertTrue(WorkSearchIndex.matches(indexed, listOf("comfort")))
     }
 }

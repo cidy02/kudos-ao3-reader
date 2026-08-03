@@ -54,5 +54,7 @@ data class WorkEntity(
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
     val permanentDeletionScheduledAt: Instant? = null,
-    val isQueuedForLater: Boolean = false
+    val isQueuedForLater: Boolean = false,
+    val searchText: String = "",
+    val searchIndexVersion: Int = 0
 )

@@ -77,4 +77,8 @@ interface WorkDao {
 
     @Query("DELETE FROM works WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    /** Works whose search index stamp is not [version] (includes never-indexed = 0). */
+    @Query("SELECT * FROM works WHERE searchIndexVersion != :version")
+    suspend fun getWithStaleSearchIndex(version: Int): List<WorkEntity>
 }

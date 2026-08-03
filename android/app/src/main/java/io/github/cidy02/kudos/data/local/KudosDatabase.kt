@@ -41,7 +41,7 @@ import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
         ReadingQueueMembershipEntity::class,
         AnnotationEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(KudosTypeConverters::class)

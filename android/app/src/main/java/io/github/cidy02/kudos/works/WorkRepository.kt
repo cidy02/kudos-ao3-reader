@@ -108,8 +108,29 @@ class WorkRepository(
     }
 
     suspend fun upsert(work: SavedWork): SavedWork {
-        workDao.upsert(work.toEntity())
-        return work
+        // Keep searchText derived and current without bumping lastModifiedAt.
+        val userTags = runCatching { userTagsForWork(work.id).map { it.name } }.getOrDefault(emptyList())
+        val indexed = WorkSearchIndex.reindex(work, userTags)
+        workDao.upsert(indexed.toEntity())
+        return indexed
+    }
+
+    /**
+     * Launch-time paced rebuild of stale [SavedWork.searchText] rows
+     * (schema bump, pre-index libraries, backup restores). Cheap no-op when current.
+     */
+    suspend fun rebuildSearchIndexIfNeeded(): Int {
+        return WorkSearchIndex.rebuildIfNeeded(
+            loadStale = { version ->
+                workDao.getWithStaleSearchIndex(version).map { it.toDomain() }
+            },
+            userTagsFor = { workId ->
+                userTagsForWork(workId).map { it.name }
+            },
+            save = { batch ->
+                workDao.upsertAll(batch.map { it.toEntity() })
+            }
+        )
     }
 
     suspend fun setHasEpub(workId: String, hasEpub: Boolean): SavedWork? {
@@ -293,12 +314,20 @@ class WorkRepository(
             dateCreated = clock()
         ).also { tagDao.upsert(it) }
         tagDao.addToWork(WorkTagCrossRef(workId = workId, tagId = tag.id))
+        reindexSearchForWork(workId)
         return userTagsForWork(workId)
     }
 
     suspend fun removeUserTag(workId: String, tagId: String): List<Tag> {
         tagDao.removeFromWork(workId, tagId)
+        reindexSearchForWork(workId)
         return userTagsForWork(workId)
+    }
+
+    private suspend fun reindexSearchForWork(workId: String) {
+        val work = getWork(workId) ?: return
+        val tags = userTagsForWork(workId).map { it.name }
+        workDao.upsert(WorkSearchIndex.reindex(work, tags).toEntity())
     }
 
     suspend fun collectionsForWork(workId: String): List<WorkCollection> {

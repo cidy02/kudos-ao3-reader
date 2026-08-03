@@ -177,4 +177,15 @@ object KudosDatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE works ADD COLUMN searchText TEXT NOT NULL DEFAULT ''"
+            )
+            db.execSQL(
+                "ALTER TABLE works ADD COLUMN searchIndexVersion INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
 }
