@@ -53,7 +53,9 @@ fun ReadiumNavigatorHost(
     modifier: Modifier = Modifier,
     controller: ReadiumNavigatorController? = null,
     onContentTap: (() -> Unit)? = null,
-    fontDeclarations: List<CustomFontDeclaration> = emptyList()
+    fontDeclarations: List<CustomFontDeclaration> = emptyList(),
+    /** Fired once the fragment is attached and ready for decorations/go(). */
+    onNavigatorReady: (() -> Unit)? = null
 ) {
     val activity = LocalContext.current.findFragmentActivity() ?: return
     val containerId = remember { View.generateViewId() }
@@ -61,6 +63,7 @@ fun ReadiumNavigatorHost(
     val currentOnExternalLink by rememberUpdatedState(onExternalLink)
     val currentOnContentTap by rememberUpdatedState(onContentTap)
     val currentController by rememberUpdatedState(controller)
+    val currentOnNavigatorReady by rememberUpdatedState(onNavigatorReady)
 
     val listener = remember(publication) {
         object : EpubNavigatorFragment.Listener {
@@ -118,6 +121,7 @@ fun ReadiumNavigatorHost(
         val navigator = fragment ?: return@LaunchedEffect
         currentController?.attach(navigator)
         navigator.submitPreferences(preferences)
+        currentOnNavigatorReady?.invoke()
 
         val tapListener = object : InputListener {
             override fun onTap(event: TapEvent): Boolean {

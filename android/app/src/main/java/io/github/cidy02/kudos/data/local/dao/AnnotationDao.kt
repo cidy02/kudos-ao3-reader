@@ -19,8 +19,8 @@ interface AnnotationDao {
     @Query("SELECT * FROM annotations WHERE id = :id")
     suspend fun getById(id: String): AnnotationEntity?
 
-    @Query("SELECT * FROM annotations WHERE workID = :workId")
-    suspend fun getForWork(workId: String): List<AnnotationEntity>
+    @Query("SELECT * FROM annotations WHERE workID = :workId AND isPendingDeletion = 0 ORDER BY spineIndex ASC, progression ASC")
+    fun observeForWork(workId: String): kotlinx.coroutines.flow.Flow<List<AnnotationEntity>>
 
     @Query("DELETE FROM annotations WHERE id = :id")
     suspend fun deleteById(id: String)
