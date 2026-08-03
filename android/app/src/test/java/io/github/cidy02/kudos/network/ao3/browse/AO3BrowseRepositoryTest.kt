@@ -1,11 +1,14 @@
 package io.github.cidy02.kudos.network.ao3.browse
 
 import io.github.cidy02.kudos.network.ao3.AO3Client
+import io.github.cidy02.kudos.network.ao3.AO3Clock
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
+import java.nio.file.Files
+import java.time.Duration
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -39,6 +42,14 @@ private fun ok(body: String): AO3Result<AO3HttpResponse> = AO3Result.Success(
 
 private fun repoWith(client: FakeAO3Client) =
     AO3BrowseRepository(client = client, searchRepository = AO3SearchRepository(client))
+
+private fun repoWithCache(client: FakeAO3Client, cache: FandomCatalogCache, nowMillis: Long) =
+    AO3BrowseRepository(
+        client = client,
+        searchRepository = AO3SearchRepository(client),
+        cache = cache,
+        clock = AO3Clock { nowMillis }
+    )
 
 class AO3BrowseRepositoryTest {
     @Test
@@ -118,5 +129,53 @@ class AO3BrowseRepositoryTest {
         val result = repoWith(client).worksForFandom("   ")
         assertTrue((result as AO3Result.Failure).error is AO3Error.Validation)
         assertTrue(client.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun fandomsFreshCacheHitSkipsNetwork() = runTest {
+        val cache = FandomCatalogCache(Files.createTempDirectory("kudos-fandom-cache"))
+        val category = AO3MediaCategory(name = "Anime & Manga", fandomsPath = "/media/Anime/fandoms")
+        cache.save(mapOf(category.name to FandomCatalogCache.Entry(listOf(AO3Fandom("Naruto")), 0L)))
+        val client = FakeAO3Client { ok("") }
+
+        val result = repoWithCache(client, cache, nowMillis = 0L).fandoms(category)
+
+        assertTrue(result is AO3Result.Success)
+        assertEquals(listOf("Naruto"), (result as AO3Result.Success).value.map { it.name })
+        assertTrue(client.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun fandomsStaleCacheRefetchesAndPersistsTheNewResult() = runTest {
+        val cache = FandomCatalogCache(Files.createTempDirectory("kudos-fandom-cache"))
+        val category = AO3MediaCategory(name = "Anime & Manga", fandomsPath = "/media/Anime/fandoms")
+        cache.save(mapOf(category.name to FandomCatalogCache.Entry(listOf(AO3Fandom("Stale")), 0L)))
+        val eightDaysMillis = Duration.ofDays(8).toMillis()
+        val client = FakeAO3Client { ok(browseFixture("ao3/browse/fandom_list.html")) }
+
+        val result = repoWithCache(client, cache, nowMillis = eightDaysMillis).fandoms(category)
+
+        assertTrue(result is AO3Result.Success)
+        assertEquals(
+            listOf("Naruto", "Bleach", "Example Fandom"),
+            (result as AO3Result.Success).value.map { it.name }
+        )
+        assertEquals(1, client.requestedUrls.size)
+        val persisted = cache.load()[category.name]
+        assertEquals(eightDaysMillis, persisted?.fetchedAtEpochMillis)
+        assertEquals(listOf("Naruto", "Bleach", "Example Fandom"), persisted?.fandoms?.map { it.name })
+    }
+
+    @Test
+    fun fandomsCacheMissPersistsAlongsideExistingCategories() = runTest {
+        val cache = FandomCatalogCache(Files.createTempDirectory("kudos-fandom-cache"))
+        val existingCategory = "TV Shows"
+        cache.save(mapOf(existingCategory to FandomCatalogCache.Entry(listOf(AO3Fandom("Existing")), 0L)))
+        val category = AO3MediaCategory(name = "Anime & Manga", fandomsPath = "/media/Anime/fandoms")
+        val client = FakeAO3Client { ok(browseFixture("ao3/browse/fandom_list.html")) }
+
+        repoWithCache(client, cache, nowMillis = 1L).fandoms(category)
+
+        assertEquals(setOf(existingCategory, category.name), cache.load().keys)
     }
 }

@@ -1,13 +1,16 @@
 package io.github.cidy02.kudos.network.ao3.browse
 
 import io.github.cidy02.kudos.network.ao3.AO3Client
+import io.github.cidy02.kudos.network.ao3.AO3Clock
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
+import io.github.cidy02.kudos.network.ao3.SystemAO3Clock
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -15,12 +18,17 @@ import kotlinx.coroutines.withContext
  * Read-only AO3 Browse data layer. Fetches the media index and per-category fandom
  * lists through the Phase 4 polite client, and delegates fandom work lists to the
  * Phase 5 search repository (a fandom list = a search filtered by `fandom_names`).
- * Never mutates local Library state.
+ * Never mutates local Library state. When [cache] is given, a category's fandom
+ * list is served from disk while fresh (mirrors iOS `FandomCatalogCache`'s
+ * stale-while-revalidate intent) instead of re-scraping AO3's `/media/<name>/fandoms`
+ * pages — some run to thousands of fandoms — on every Browse open.
  */
 class AO3BrowseRepository(
     private val client: AO3Client = OkHttpAO3Client(),
     private val parser: AO3BrowseParser = AO3BrowseParser(),
-    private val searchRepository: AO3SearchRepository = AO3SearchRepository(client)
+    private val searchRepository: AO3SearchRepository = AO3SearchRepository(client),
+    private val cache: FandomCatalogCache? = null,
+    private val clock: AO3Clock = SystemAO3Clock
 ) {
     suspend fun categories(): AO3Result<List<AO3MediaCategory>> {
         return when (val result = client.get(AO3BrowseUrls.mediaIndexUrl())) {
@@ -32,6 +40,12 @@ class AO3BrowseRepository(
     }
 
     suspend fun fandoms(category: AO3MediaCategory): AO3Result<List<AO3Fandom>> {
+        val cached = cache?.load()
+        val entry = cached?.get(category.name)
+        val now = Instant.ofEpochMilli(clock.nowMillis())
+        if (entry != null && !FandomCatalogCache.isStale(entry, now)) {
+            return AO3Result.Success(entry.fandoms)
+        }
         val url = AO3BrowseUrls.resolveAo3Url(category.fandomsPath)
             ?: return AO3Result.Failure(
                 AO3Error.Validation("This category has no native AO3 fandom index.")
@@ -40,6 +54,11 @@ class AO3BrowseRepository(
             is AO3Result.Failure -> result
             is AO3Result.Success -> runParse(result.value.statusCode) {
                 parser.parseFandomList(result.value.body)
+            }.also { parsed ->
+                if (cache != null && parsed is AO3Result.Success) {
+                    val newEntry = FandomCatalogCache.Entry(parsed.value, clock.nowMillis())
+                    cache.save((cached ?: emptyMap()) + (category.name to newEntry))
+                }
             }
         }
     }

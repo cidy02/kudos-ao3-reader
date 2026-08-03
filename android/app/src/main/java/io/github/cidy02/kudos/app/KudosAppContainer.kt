@@ -20,6 +20,7 @@ import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
+import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
@@ -170,8 +171,12 @@ class KudosAppContainer(context: Context) {
         )
     }
 
+    val fandomCatalogCache: FandomCatalogCache by lazy {
+        FandomCatalogCache(appContext.cacheDir.toPath())
+    }
+
     val browseRepository: AO3BrowseRepository by lazy {
-        AO3BrowseRepository(client = ao3Client)
+        AO3BrowseRepository(client = ao3Client, cache = fandomCatalogCache)
     }
 
     val backupRepository: BackupRepository by lazy {
