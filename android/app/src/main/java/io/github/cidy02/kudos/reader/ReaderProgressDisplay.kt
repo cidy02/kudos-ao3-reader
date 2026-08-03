@@ -36,6 +36,19 @@ object ReaderProgressDisplay {
         }
     }
 
+    /**
+     * Rough remaining-time estimate from remaining word count / 200 wpm
+     * (iOS `ReaderTimeEstimate` spirit — not exact page-of-page).
+     */
+    fun minutesRemaining(progress: ReaderProgress?, wordCount: Int): Int? {
+        if (wordCount <= 0) return null
+        val fraction = progress?.totalProgression
+            ?: return null
+        val remaining = ((1.0 - fraction.coerceIn(0.0, 1.0)) * wordCount).toInt()
+        if (remaining <= 0) return 0
+        return (remaining / 200.0).toInt().coerceAtLeast(1)
+    }
+
     private fun sectionLabel(progress: ReaderProgress, sections: List<ReaderSection>): String? {
         if (sections.isEmpty()) return null
         val idx = progress.spineIndex.coerceIn(0, sections.lastIndex)
