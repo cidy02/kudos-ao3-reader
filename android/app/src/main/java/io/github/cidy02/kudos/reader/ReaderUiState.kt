@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import java.nio.file.Path
@@ -17,6 +18,8 @@ sealed interface ReaderUiState {
         val endOfWork: EndOfWorkActions,
         val finished: Boolean,
         /** Latest navigator position for bottom progress chrome (not a second save path). */
-        val liveProgress: ReaderProgress? = null
+        val liveProgress: ReaderProgress? = null,
+        val bookmarks: List<ReadingAnnotation> = emptyList(),
+        val highlights: List<ReadingAnnotation> = emptyList()
     ) : ReaderUiState
 }

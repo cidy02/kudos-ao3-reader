@@ -454,7 +454,9 @@ fun AppNavHost(
                     factory = ReaderViewModel.factory(
                         container.readerRepository,
                         container.settingsRepository,
-                        workId
+                        container.annotationRepository,
+                        workId,
+                        container.writeRepository
                     )
                 )
                 ReaderScreen(
@@ -463,16 +465,16 @@ fun AppNavHost(
                     onOpenComments = { commentsWorkId ->
                         navController.navigate(Routes.comments(commentsWorkId))
                     },
-                    onOpenWorkDetail = { ao3WorkId ->
-                        // Deep-link hydration from a raw work id is deferred (see HANDOFF),
-                        // but keep the route native so the later parser can fill it in.
+                    onOpenWorkDetail = { localWorkId ->
+                        // Keep Reader under Work Detail so Back returns to reading
+                        // (iOS title-tap opens detail over the reader).
                         navController.navigate(
                             Routes.workDetail(
-                                NavArgCodecs.encodeWorkDetailSource(WorkDetailSource.Ao3WorkId(ao3WorkId))
+                                NavArgCodecs.encodeWorkDetailSource(
+                                    WorkDetailSource.LocalWork(localWorkId)
+                                )
                             )
-                        ) {
-                            popUpTo(Routes.Reader) { inclusive = true }
-                        }
+                        )
                     }
                 )
             }
