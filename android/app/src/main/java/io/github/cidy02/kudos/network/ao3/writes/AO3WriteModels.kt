@@ -33,6 +33,9 @@ data class AO3SubscriptionState(
  * pointing at `/bookmarks/{id}`) with [input] pre-filled from the existing
  * bookmark. When false, the create form (or no form) is present and [input]
  * is blank defaults.
+ *
+ * [collectionNames] is carried through on every update so we never strip AO3
+ * collection membership the app's composer doesn't edit (iOS `saveBookmark`).
  */
 data class AO3BookmarkState(
     val exists: Boolean,

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -134,6 +135,7 @@ fun WorkDetailScreen(
     var bookmarkIsEdit by remember { mutableStateOf(false) }
     var bookmarkNotes by remember { mutableStateOf("") }
     var bookmarkTags by remember { mutableStateOf("") }
+    var bookmarkCollections by remember { mutableStateOf("") }
     var bookmarkPrivate by remember { mutableStateOf(false) }
     var bookmarkRecommendation by remember { mutableStateOf(false) }
     var queuePickerOpen by remember { mutableStateOf(false) }
@@ -144,6 +146,7 @@ fun WorkDetailScreen(
     var collectionMemberIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var newCollectionName by remember { mutableStateOf("") }
     var collectionDialogWorking by remember { mutableStateOf(false) }
+    var chapterIndexSheetOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
@@ -566,6 +569,15 @@ fun WorkDetailScreen(
                         singleLine = true,
                         enabled = !bookmarkLoading
                     )
+                    if (bookmarkCollections.isNotBlank()) {
+                        // Read-only: write path always re-submits scraped collection_names
+                        // so updates never strip AO3 membership the composer doesn't edit.
+                        Text(
+                            text = "AO3 collections: $bookmarkCollections",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(
                             checked = bookmarkPrivate,
@@ -838,6 +850,35 @@ fun WorkDetailScreen(
         )
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
+    if (chapterIndexSheetOpen) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { chapterIndexSheetOpen = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("Chapter Index", style = MaterialTheme.typography.titleLarge)
+                if (state.ao3WorkId != null) {
+                    val navigateUrl = "https://archiveofourown.org/works/${state.ao3WorkId}/navigate"
+                    Button(onClick = {
+                        chapterIndexSheetOpen = false
+                        uriHandler.openUri(navigateUrl)
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open Chapter Index on AO3")
+                    }
+                } else {
+                    Text("Chapter Index is not available for local-only works.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
     WorkDetailContent(
         state = state,
         newTagName = newTagName,
@@ -925,6 +966,7 @@ fun WorkDetailScreen(
             // when fetchBookmarkState resolves. Fail-safe: leave create mode blank.
             bookmarkNotes = ""
             bookmarkTags = ""
+            bookmarkCollections = ""
             bookmarkPrivate = false
             bookmarkRecommendation = false
             bookmarkIsEdit = false
@@ -937,6 +979,7 @@ fun WorkDetailScreen(
                         bookmarkIsEdit = bookmarkState.exists
                         bookmarkNotes = bookmarkState.input.notes
                         bookmarkTags = bookmarkState.input.tags
+                        bookmarkCollections = bookmarkState.collectionNames
                         bookmarkPrivate = bookmarkState.input.isPrivate
                         bookmarkRecommendation = bookmarkState.input.isRecommendation
                     }
@@ -954,6 +997,7 @@ fun WorkDetailScreen(
             state.ao3WorkId?.let(onOpenComments)
                 ?: run { state = state.copy(error = "This action needs a canonical AO3 work URL.") }
         },
+        onChapterIndex = { chapterIndexSheetOpen = true },
         onOpenReader = onOpenReader,
         onOpenAuthor = onOpenAuthor
     )
@@ -985,11 +1029,13 @@ private fun WorkDetailContent(
     onAddToCollection: () -> Unit,
     onBookmark: () -> Unit,
     onComments: () -> Unit,
+    onChapterIndex: () -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenAuthor: (String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(WorkDetailTab.Overview) }
     var overflowExpanded by remember { mutableStateOf(false) }
+    var chapterIndexSheetOpen by remember { mutableStateOf(false) }
     val busy = state.working || state.queuingSeries
     val local = state.local
     val isFavorite = local?.isFavorite == true
@@ -1136,7 +1182,10 @@ private fun WorkDetailContent(
 
         WorkDetailHeaderCard(
             state = state,
-            onOpenAuthor = onOpenAuthor
+            onOpenAuthor = onOpenAuthor,
+            onKudos = onKudos,
+            onBookmark = onBookmark,
+            onChapterIndex = onChapterIndex
         )
 
         Spacer(Modifier.height(12.dp))
@@ -1228,7 +1277,10 @@ private fun WorkDetailContent(
 @Composable
 private fun WorkDetailHeaderCard(
     state: WorkDetailUiState,
-    onOpenAuthor: (String) -> Unit
+    onOpenAuthor: (String) -> Unit,
+    onKudos: () -> Unit,
+    onBookmark: () -> Unit,
+    onChapterIndex: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -1315,6 +1367,27 @@ private fun WorkDetailHeaderCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     compactStats.forEach { WorkStatLabel(item = it) }
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                TextButton(onClick = onKudos, enabled = state.ao3WorkId != null) {
+                    Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.padding(end = 4.dp))
+                    Text("Kudos")
+                }
+                TextButton(onClick = onBookmark, enabled = state.ao3WorkId != null) {
+                    Icon(Icons.Outlined.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.padding(end = 4.dp))
+                    Text("Bookmark")
+                }
+                TextButton(onClick = onChapterIndex) {
+                    Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.padding(end = 4.dp))
+                    Text("Chapter Index")
                 }
             }
         }

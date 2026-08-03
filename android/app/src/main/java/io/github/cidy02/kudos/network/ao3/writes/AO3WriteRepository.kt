@@ -142,6 +142,8 @@ class AO3WriteRepository(
             add("authenticity_token" to token)
             add("bookmark[bookmarker_notes]" to input.notes)
             add("bookmark[tag_string]" to input.tags)
+            // Always re-scrape collection_names at submit time (iOS saveBookmark).
+            // Never trust the caller's composer — it doesn't edit collections.
             add("bookmark[collection_names]" to state.collectionNames)
             add("bookmark[private]" to if (input.isPrivate) "1" else "0")
             add("bookmark[rec]" to if (input.isRecommendation) "1" else "0")

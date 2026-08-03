@@ -59,6 +59,10 @@ class AO3WriteFormParser {
             ?: return AO3BookmarkState(exists = false, editPath = null)
         val action = form.attr("action").trim()
         val method = form.selectFirst("input[name=_method]")?.attr("value")?.trim()?.lowercase()
+        val collectionNames = form.selectFirst("input[name=\"bookmark[collection_names]\"]")
+            ?.attr("value")
+            ?.trim()
+            .orEmpty()
         val input = AO3BookmarkInput(
             notes = form.selectFirst("textarea[name=\"bookmark[bookmarker_notes]\"]")
                 ?.text()
@@ -73,15 +77,21 @@ class AO3WriteFormParser {
             isRecommendation = form.selectFirst("input[name=\"bookmark[rec]\"]")
                 ?.hasAttr("checked") == true
         )
-        val collectionNames = form.selectFirst("input[name=\"bookmark[collection_names]\"]")
-            ?.attr("value")
-            ?.trim()
-            .orEmpty()
         return if (method == "put" && action.isNotEmpty()) {
-            AO3BookmarkState(exists = true, editPath = action, input = input, collectionNames = collectionNames)
+            AO3BookmarkState(
+                exists = true,
+                editPath = action,
+                input = input,
+                collectionNames = collectionNames
+            )
         } else {
             // Create form (or unexpected markup): never throw; open blank create mode.
-            AO3BookmarkState(exists = false, editPath = null, input = AO3BookmarkInput(), collectionNames = collectionNames)
+            AO3BookmarkState(
+                exists = false,
+                editPath = null,
+                input = AO3BookmarkInput(),
+                collectionNames = collectionNames
+            )
         }
     }
 
