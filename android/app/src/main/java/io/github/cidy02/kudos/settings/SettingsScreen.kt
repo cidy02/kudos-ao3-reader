@@ -156,45 +156,61 @@ fun SettingsScreen(
     }
 
     val importFontLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             fontBusy = true
             fontStatus = null
             try {
-                val displayName = withContext(Dispatchers.IO) {
-                    queryDisplayName(context, uri)
-                }
-                if (!CustomFontRepository.isSupportedFontFileName(displayName)) {
-                    fontStatusIsError = true
-                    fontStatus = "Only .ttf and .otf font files are supported."
-                    return@launch
-                }
-                val bytes = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: error("Could not read the selected font file.")
-                }
-                val nameWithoutExt = displayName
-                    ?.substringAfterLast('/')
-                    ?.substringAfterLast('\\')
-                    ?.substringBeforeLast('.')
-                    ?.trim()
-                    .orEmpty()
-                val result = customFontRepository.importFont(
-                    displayName = nameWithoutExt,
-                    originalFileName = displayName,
-                    bytes = bytes
-                )
-                result.fold(
-                    onSuccess = { font ->
-                        fontStatusIsError = false
-                        fontStatus = "Imported “${font.name}”."
-                    },
-                    onFailure = { error ->
-                        fontStatusIsError = true
-                        fontStatus = error.message ?: "Could not import font."
+                val successes = mutableListOf<String>()
+                val failures = mutableListOf<String>()
+                for (uri in uris) {
+                    val displayName = withContext(Dispatchers.IO) {
+                        queryDisplayName(context, uri)
                     }
+                    val label = displayName
+                        ?.substringAfterLast('/')
+                        ?.substringAfterLast('\\')
+                        ?.ifBlank { null }
+                        ?: "file"
+                    if (!CustomFontRepository.isSupportedFontFileName(displayName)) {
+                        failures += "$label: Only .ttf and .otf font files are supported."
+                        continue
+                    }
+                    try {
+                        val bytes = withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                ?: error("Could not read the selected font file.")
+                        }
+                        val nameWithoutExt = displayName
+                            ?.substringAfterLast('/')
+                            ?.substringAfterLast('\\')
+                            ?.substringBeforeLast('.')
+                            ?.trim()
+                            .orEmpty()
+                        val result = customFontRepository.importFont(
+                            displayName = nameWithoutExt,
+                            originalFileName = displayName,
+                            bytes = bytes
+                        )
+                        result.fold(
+                            onSuccess = { font ->
+                                successes += "“${font.name}”"
+                            },
+                            onFailure = { error ->
+                                failures += "$label: ${error.message ?: "Could not import font."}"
+                            }
+                        )
+                    } catch (error: Exception) {
+                        failures += "$label: ${error.message ?: "Could not import font."}"
+                    }
+                }
+                fontStatusIsError = failures.isNotEmpty() && successes.isEmpty()
+                fontStatus = buildFontImportStatus(
+                    successCount = successes.size,
+                    failureMessages = failures,
+                    successTitles = successes
                 )
             } catch (error: Exception) {
                 fontStatusIsError = true
@@ -1172,6 +1188,35 @@ private fun buildEpubImportStatus(
         }
         successCount > 1 -> {
             parts += "Imported $successCount EPUBs."
+        }
+    }
+    if (failureMessages.isNotEmpty()) {
+        parts += if (failureMessages.size == 1) {
+            failureMessages.first()
+        } else {
+            failureMessages.joinToString(separator = "\n")
+        }
+    }
+    return parts.joinToString(separator = "\n").ifBlank { "Nothing imported." }
+}
+
+/**
+ * Compact multi-file font import summary: successes first, then each failure.
+ * Same partial-success-is-not-an-error shape as [buildEpubImportStatus], with
+ * font-appropriate wording.
+ */
+private fun buildFontImportStatus(
+    successCount: Int,
+    failureMessages: List<String>,
+    successTitles: List<String>
+): String {
+    val parts = mutableListOf<String>()
+    when {
+        successCount == 1 && successTitles.isNotEmpty() -> {
+            parts += "Imported ${successTitles.first()}."
+        }
+        successCount > 1 -> {
+            parts += "Imported $successCount fonts."
         }
     }
     if (failureMessages.isNotEmpty()) {
