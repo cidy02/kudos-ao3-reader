@@ -40,6 +40,10 @@ import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlin.math.roundToInt
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     libraryRepository: LibraryRepository,
@@ -66,13 +70,19 @@ fun HomeScreen(
         )
     )
     val state by viewModel.state.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val onReveal: (String) -> Unit = viewModel::revealWork
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = viewModel::refresh,
+        modifier = Modifier.fillMaxSize()
     ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
         item {
             HomeHeader(
                 state = state,
@@ -181,6 +191,7 @@ fun HomeScreen(
                 OutlinedButton(onClick = onOpenBrowse) {
                     Text("Browse")
                 }
+            }
             }
         }
     }

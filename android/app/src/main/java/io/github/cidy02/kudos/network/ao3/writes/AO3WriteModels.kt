@@ -37,5 +37,6 @@ data class AO3SubscriptionState(
 data class AO3BookmarkState(
     val exists: Boolean,
     val editPath: String?,
-    val input: AO3BookmarkInput = AO3BookmarkInput()
+    val input: AO3BookmarkInput = AO3BookmarkInput(),
+    val collectionNames: String = ""
 )

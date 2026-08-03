@@ -121,7 +121,7 @@ class AO3CommentRepositoryTest {
             getResults = listOf(
                 success(
                     body = writeResource("ao3/comments/comment_thread_reply_form.html"),
-                    url = AO3CommentUrls.commentThreadUrl(parentId)
+                    url = AO3CommentUrls.commentThreadUrl(parentId, isReply = true)
                 )
             ),
             postResults = listOf(success("ok"))
@@ -141,7 +141,7 @@ class AO3CommentRepositoryTest {
 
         assertEquals(AO3WriteActionKind.Comment, outcome.kind)
         assertEquals("Reply posted.", outcome.message)
-        assertEquals(AO3CommentUrls.commentThreadUrl(parentId), auth.gets.single())
+        assertEquals(AO3CommentUrls.commentThreadUrl(parentId, isReply = true), auth.gets.single())
         assertEquals(AO3CommentUrls.commentReplyEndpoint(parentId), auth.posts.single().url)
         assertEquals(
             listOf(
@@ -151,7 +151,7 @@ class AO3CommentRepositoryTest {
             ),
             auth.posts.single().fields
         )
-        assertEquals(AO3CommentUrls.commentThreadUrl(parentId), auth.posts.single().headers["Referer"])
+        assertEquals(AO3CommentUrls.commentThreadUrl(parentId, isReply = true), auth.posts.single().headers["Referer"])
     }
 
     @Test

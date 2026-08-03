@@ -61,13 +61,15 @@ sealed interface AO3CommentTarget {
  */
 object AO3CommentUrls {
     /** Standalone comment-thread page used as the CSRF/pseud source for replies. */
-    fun commentThreadUrl(commentId: Long): String {
+    fun commentThreadUrl(commentId: Long, isReply: Boolean = false): String {
         require(commentId > 0) { "AO3 comment id must be positive." }
-        return AO3Constants.baseHttpUrl.newBuilder()
+        val builder = AO3Constants.baseHttpUrl.newBuilder()
             .addPathSegment("comments")
             .addPathSegment(commentId.toString())
-            .build()
-            .toString()
+        if (isReply) {
+            builder.addQueryParameter("add_comment_reply_id", commentId.toString())
+        }
+        return builder.build().toString()
     }
 
     /** POST target for a reply to [parentCommentId]. */

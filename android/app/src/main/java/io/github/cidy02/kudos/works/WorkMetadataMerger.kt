@@ -39,12 +39,12 @@ class WorkMetadataMerger(
         // explicit "restore" tap.
         val isRevival = existing?.isDeleted == true
 
-        val fandoms = canonical?.fandoms?.takeIf { it.isNotEmpty() } ?: summary?.fandoms ?: base.workFandoms
-        val relationships = canonical?.relationships?.takeIf { it.isNotEmpty() } ?: summary?.relationships ?: base.workRelationships
-        val characters = canonical?.characters?.takeIf { it.isNotEmpty() } ?: summary?.characters ?: base.workCharacters
-        val freeforms = canonical?.freeforms?.takeIf { it.isNotEmpty() } ?: summary?.freeforms ?: base.workFreeforms
-        val warnings = canonical?.warnings?.takeIf { it.isNotEmpty() } ?: summary?.warnings ?: base.workWarnings
-        val categories = canonical?.categories?.takeIf { it.isNotEmpty() } ?: summary?.categories ?: base.workCategories
+        val fandoms = mergeTagLists(base.workFandoms, canonical?.fandoms, summary?.fandoms)
+        val relationships = mergeTagLists(base.workRelationships, canonical?.relationships, summary?.relationships)
+        val characters = mergeTagLists(base.workCharacters, canonical?.characters, summary?.characters)
+        val freeforms = mergeTagLists(base.workFreeforms, canonical?.freeforms, summary?.freeforms)
+        val warnings = mergeTagLists(base.workWarnings, canonical?.warnings, summary?.warnings)
+        val categories = mergeTagLists(base.workCategories, canonical?.categories, summary?.categories)
 
         return base.copy(
             title = choose(summary?.title, base.title, fallback = "Untitled"),
@@ -65,12 +65,12 @@ class WorkMetadataMerger(
             seriesTitle = choose(summary?.seriesTitle, base.seriesTitle),
             seriesPosition = summary?.seriesPosition ?: base.seriesPosition,
             seriesUrl = choose(summary?.seriesUrl, base.seriesUrl),
-            workWarnings = warnings.dedupeFirstSeen(),
-            workCategories = categories.dedupeFirstSeen(),
-            workFandoms = fandoms.dedupeFirstSeen(),
-            workCharacters = characters.dedupeFirstSeen(),
-            workRelationships = relationships.dedupeFirstSeen(),
-            workFreeforms = freeforms.dedupeFirstSeen(),
+            workWarnings = warnings,
+            workCategories = categories,
+            workFandoms = fandoms,
+            workCharacters = characters,
+            workRelationships = relationships,
+            workFreeforms = freeforms,
             workTags = WorkTags.flattenedWorkTags(fandoms, relationships, characters, freeforms),
             workTagsFetched = if (canonical != null && !canonical.isEmpty) true else base.workTagsFetched,
             isFavorite = base.isFavorite,
@@ -85,6 +85,18 @@ class WorkMetadataMerger(
             deletedAt = if (isRevival) null else base.deletedAt,
             permanentDeletionScheduledAt = if (isRevival) null else base.permanentDeletionScheduledAt
         )
+    }
+
+    private fun mergeTagLists(
+        existing: List<String>,
+        canonical: List<String>?,
+        summary: List<String>?
+    ): List<String> {
+        val list = mutableListOf<Iterable<String>>()
+        list.add(existing)
+        if (!canonical.isNullOrEmpty()) list.add(canonical)
+        if (!summary.isNullOrEmpty()) list.add(summary)
+        return list.flatten().dedupeFirstSeen()
     }
 
     private fun choose(remote: String?, local: String, fallback: String = ""): String {

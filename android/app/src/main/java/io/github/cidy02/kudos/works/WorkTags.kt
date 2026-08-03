@@ -29,10 +29,13 @@ object WorkTags {
 }
 
 internal fun Iterable<String>.dedupeFirstSeen(): List<String> {
-    val seen = linkedSetOf<String>()
+    val seenKeys = mutableSetOf<String>()
+    val result = mutableListOf<String>()
     forEach { value ->
         val trimmed = value.trim()
-        if (trimmed.isNotEmpty()) seen += trimmed
+        if (trimmed.isNotEmpty() && seenKeys.add(trimmed.lowercase())) {
+            result.add(trimmed)
+        }
     }
-    return seen.toList()
+    return result
 }

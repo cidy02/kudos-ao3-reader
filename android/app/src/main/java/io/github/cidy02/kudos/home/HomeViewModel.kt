@@ -20,6 +20,7 @@ import io.github.cidy02.kudos.works.WorkUpdateChecker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -95,10 +96,18 @@ class HomeViewModel(
         }
     }
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     fun refresh() {
         viewModelScope.launch {
-            runUpdateCheck()
-            loadSubscriptions(authRepository.state.value)
+            _isRefreshing.value = true
+            try {
+                runUpdateCheck()
+                loadSubscriptions(authRepository.state.value)
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
 

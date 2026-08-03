@@ -112,7 +112,7 @@ class AO3WriteRepository(
         val token = parseToken(html) ?: return missingToken()
         val response = client.postAuthenticated(
             url = AO3WriteUrls.markForLaterEndpoint(workId),
-            formFields = listOf("authenticity_token" to token),
+            formFields = listOf("_method" to "patch", "authenticity_token" to token),
             headers = writeHeaders(token, workUrl)
         )
         return response.toOutcome(AO3WriteActionKind.MarkForLater, "Marked for later.", "Couldn't mark for later.")
@@ -124,8 +124,7 @@ class AO3WriteRepository(
             is AO3Result.Failure -> return page
             is AO3Result.Success -> page.value.body
         }
-        val state = withContext(Dispatchers.Default) { parser.parseBookmarkState(html) }
-        return AO3Result.Success(state)
+        return AO3Result.Success(parser.parseBookmarkState(html))
     }
 
     suspend fun createBookmark(workId: Long, input: AO3BookmarkInput): AO3Result<AO3WriteOutcome> {
@@ -135,7 +134,7 @@ class AO3WriteRepository(
             is AO3Result.Success -> page.value.body
         }
         val token = parseToken(html) ?: return missingToken()
-        val state = withContext(Dispatchers.Default) { parser.parseBookmarkState(html) }
+        val state = parser.parseBookmarkState(html)
         val fields = buildList {
             if (state.exists) {
                 add("_method" to "put")
@@ -143,7 +142,7 @@ class AO3WriteRepository(
             add("authenticity_token" to token)
             add("bookmark[bookmarker_notes]" to input.notes)
             add("bookmark[tag_string]" to input.tags)
-            add("bookmark[collection_names]" to "")
+            add("bookmark[collection_names]" to state.collectionNames)
             add("bookmark[private]" to if (input.isPrivate) "1" else "0")
             add("bookmark[rec]" to if (input.isRecommendation) "1" else "0")
             parser.parseDefaultPseudId(html, field = "bookmark[pseud_id]")?.let {

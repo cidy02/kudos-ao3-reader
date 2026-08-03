@@ -65,7 +65,7 @@ class AO3CommentRepository(
 
         val replyParentId = parentCommentId?.takeIf { it > 0 }
         val csrfSourceUrl = if (replyParentId != null) {
-            AO3CommentUrls.commentThreadUrl(replyParentId)
+            AO3CommentUrls.commentThreadUrl(replyParentId, isReply = true)
         } else {
             // Work page (view_adult) is enough for token/pseud — same as iOS workURL.
             AO3WriteUrls.workUrl(target.workId)

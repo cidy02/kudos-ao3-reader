@@ -127,7 +127,7 @@ class AO3MarkForLaterRepositoryTest {
 
         assertEquals(AO3WriteActionKind.MarkForLater, outcome.kind)
         assertEquals("https://archiveofourown.org/works/123/mark_for_later", client.posts.single().url)
-        assertEquals(listOf("authenticity_token" to "token-from-input"), client.posts.single().fields)
+        assertEquals(listOf("_method" to "patch", "authenticity_token" to "token-from-input"), client.posts.single().fields)
     }
 }
 
