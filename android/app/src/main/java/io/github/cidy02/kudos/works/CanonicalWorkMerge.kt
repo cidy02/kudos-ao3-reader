@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.network.ao3.AO3URLResolver
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
 /** Pairs a remote work summary with a local [SavedWork] if present in the library. */
@@ -36,14 +37,26 @@ object CanonicalWorkMerge {
     }
 }
 
+/**
+ * In-memory bulk identity index for pairing a page of remote results.
+ * Complements the suspend DAO-based [WorkIdentityIndex.findExisting].
+ */
 class WorkIdentityIndexInstance(works: List<SavedWork>) {
     private val byAo3Id: Map<Long, SavedWork> = works.mapNotNull { work ->
         WorkTags.ao3WorkIdFromUrl(work.sourceUrl)?.let { it to work }
     }.toMap()
 
-    private val byCanonicalUrl: Map<String, SavedWork> = works.mapNotNull { work ->
-        WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { it to work }
-    }.toMap()
+    private val byCanonicalUrl: Map<String, SavedWork> = buildMap {
+        for (work in works) {
+            val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+            if (ao3Id != null) {
+                put(AO3URLResolver.canonicalWorkUrl(ao3Id), work)
+                WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { put(it, work) }
+            } else {
+                WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { put(it, work) }
+            }
+        }
+    }
 
     private val bySourceUrl: Map<String, SavedWork> = works.filter { it.sourceUrl.isNotBlank() }
         .associateBy { it.sourceUrl }
@@ -52,9 +65,9 @@ class WorkIdentityIndexInstance(works: List<SavedWork>) {
         val summaryAo3Id = summary.id.takeIf { it > 0 } ?: WorkTags.ao3WorkIdFromUrl(summary.workUrl)
         if (summaryAo3Id != null) {
             byAo3Id[summaryAo3Id]?.let { return it }
-            val canonical = WorkTags.canonicalAO3WorkURL(summary.workUrl)
-            if (canonical != null) {
-                byCanonicalUrl[canonical]?.let { return it }
+            byCanonicalUrl[AO3URLResolver.canonicalWorkUrl(summaryAo3Id)]?.let { return it }
+            WorkTags.canonicalAO3WorkURL(summary.workUrl)?.let { canon ->
+                byCanonicalUrl[canon]?.let { return it }
             }
         }
         if (summary.workUrl.isNotBlank()) {
