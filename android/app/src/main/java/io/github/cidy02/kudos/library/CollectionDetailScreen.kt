@@ -76,6 +76,8 @@ fun CollectionDetailScreen(
     var renameText by remember(collectionId) { mutableStateOf("") }
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }
     val scope = rememberCoroutineScope()
+    val activity = androidx.compose.ui.platform.LocalContext.current
+        as? androidx.fragment.app.FragmentActivity
 
     suspend fun refresh() {
         loading = true
@@ -327,7 +329,7 @@ fun CollectionDetailScreen(
                             onOpenReader = {
                                 if (work.hasEpub) onOpenReader(work.id)
                             },
-                            onReveal = { privacyGate.reveal(work.id) },
+                            onReveal = { privacyGate.reveal(work.id, activity) },
                             onRemove = {
                                 if (confirmBeforeDelete) {
                                     pendingRemoveWork = work

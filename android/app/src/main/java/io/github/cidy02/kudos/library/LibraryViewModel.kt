@@ -271,8 +271,8 @@ class LibraryViewModel(
     }
 
     /** Session reveal for an obscured mature card (Apple `PrivacyGate.reveal`). */
-    fun revealWork(workId: String) {
-        privacyGate.reveal(workId)
+    fun revealWork(workId: String, activity: androidx.fragment.app.FragmentActivity? = null) {
+        privacyGate.reveal(workId, activity)
     }
 
     /**
@@ -286,8 +286,8 @@ class LibraryViewModel(
      * current session — a real behavioural mismatch from Apple's session-only toggle,
      * found in review and fixed here.
      */
-    fun toggleRevealAll() {
-        privacyGate.toggleRevealAll()
+    fun toggleRevealAll(activity: androidx.fragment.app.FragmentActivity? = null) {
+        privacyGate.toggleRevealAll(activity)
     }
 
     // endregion

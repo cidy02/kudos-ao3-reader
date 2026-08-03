@@ -71,7 +71,9 @@ fun HomeScreen(
     )
     val state by viewModel.state.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
-    val onReveal: (String) -> Unit = viewModel::revealWork
+    val activity = androidx.compose.ui.platform.LocalContext.current
+        as? androidx.fragment.app.FragmentActivity
+    val onReveal: (String) -> Unit = { id -> viewModel.revealWork(id, activity) }
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,

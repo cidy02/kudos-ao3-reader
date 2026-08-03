@@ -54,4 +54,21 @@ class PrivacyGateTest {
         val state = PrivacyRevealState(revealAll = true, revealedIds = emptySet())
         assertEquals(true, state.isRevealed("literally-anything"))
     }
+
+    @Test
+    fun biometricSettingWithNoActivityDoesNotSilentlyReveal() {
+        val gate = PrivacyGate()
+        gate.requireBiometricToReveal = true
+        // No Activity to host BiometricPrompt — stay locked (no silent downgrade).
+        gate.reveal("w1", activity = null)
+        assertFalse(gate.isRevealed("w1"))
+    }
+
+    @Test
+    fun biometricSettingOffStillRevealsWithoutActivity() {
+        val gate = PrivacyGate()
+        gate.requireBiometricToReveal = false
+        gate.reveal("w1", activity = null)
+        assertTrue(gate.isRevealed("w1"))
+    }
 }

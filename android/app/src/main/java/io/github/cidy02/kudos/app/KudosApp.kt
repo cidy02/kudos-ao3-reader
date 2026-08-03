@@ -43,6 +43,11 @@ private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
 fun KudosApp(container: KudosAppContainer) {
     val settings by container.settingsRepository.settings
         .collectAsState(initial = KudosSettings())
+    // Keep PrivacyGate's biometric flag in lockstep with Settings (iOS UserDefaults).
+    androidx.compose.runtime.SideEffect {
+        container.privacyGate.requireBiometricToReveal =
+            settings.privacy.requireBiometricToReveal
+    }
     // null until DataStore emits — avoids flashing Welcome at returning users.
     val hasCompletedOnboarding by remember(container.settingsRepository) {
         container.settingsRepository.hasCompletedOnboarding.map<Boolean, Boolean?> { completed -> completed }

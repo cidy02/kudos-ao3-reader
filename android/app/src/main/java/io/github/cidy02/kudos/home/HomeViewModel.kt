@@ -118,8 +118,8 @@ class HomeViewModel(
     }
 
     /** Session reveal for an obscured mature card (Apple `PrivacyGate.reveal`). */
-    fun revealWork(workId: String) {
-        privacyGate.reveal(workId)
+    fun revealWork(workId: String, activity: androidx.fragment.app.FragmentActivity? = null) {
+        privacyGate.reveal(workId, activity)
     }
 
     private suspend fun runUpdateCheck() {

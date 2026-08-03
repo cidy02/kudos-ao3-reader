@@ -28,9 +28,11 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
@@ -68,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -123,6 +126,7 @@ fun LibraryScreen(
         )
     )
     val state by viewModel.state.collectAsState()
+    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
     val scope = rememberCoroutineScope()
     var confirmBulkRemove by remember { mutableStateOf(false) }
     var confirmRemoveOne by remember { mutableStateOf<String?>(null) }
@@ -393,6 +397,8 @@ fun LibraryScreen(
 
     LibraryContent(
         state = state,
+        onUpdateSearchQuery = viewModel::updateSearchQuery,
+        onUpdateSort = viewModel::updateSort,
         onSetFandomFilter = viewModel::setFandomFilter,
         onClearFilters = viewModel::clearFilters,
         onOpenWork = onOpenWork,
@@ -417,17 +423,19 @@ fun LibraryScreen(
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
         onSetSavedOne = viewModel::setSavedOne,
-        onRevealWork = viewModel::revealWork,
+        onRevealWork = { viewModel.revealWork(it, activity) },
         onAddToQueue = { addToQueueWorkId = it },
         onAddToCollection = { addToCollectionWorkId = it },
         onOpenComments = onOpenComments,
-        onTogglePrivacy = viewModel::toggleRevealAll
+        onTogglePrivacy = { viewModel.toggleRevealAll(activity) }
     )
 }
 
 @Composable
 private fun LibraryContent(
     state: LibraryUiState,
+    onUpdateSearchQuery: (String) -> Unit,
+    onUpdateSort: (LibrarySort) -> Unit,
     onSetFandomFilter: (String?) -> Unit,
     onClearFilters: () -> Unit,
     onOpenWork: (String) -> Unit,
@@ -496,6 +504,52 @@ private fun LibraryContent(
                     onOpenRecentlyDeleted = onOpenRecentlyDeleted,
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = state.searchQuery,
+                        onValueChange = onUpdateSearchQuery,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Search library") },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (state.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { onUpdateSearchQuery("") }) {
+                                    Icon(Icons.Filled.Clear, "Clear search")
+                                }
+                            }
+                        }
+                    )
+
+                    var sortMenuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { sortMenuOpen = true }) {
+                            Icon(Icons.Filled.Sort, "Sort")
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false }
+                        ) {
+                            LibrarySort.entries.forEach { sortOption ->
+                                DropdownMenuItem(
+                                    text = { Text(sortOption.label) },
+                                    onClick = {
+                                        onUpdateSort(sortOption)
+                                        sortMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             if (state.loading) {
