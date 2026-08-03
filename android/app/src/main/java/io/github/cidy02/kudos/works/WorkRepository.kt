@@ -53,6 +53,29 @@ class WorkRepository(
         return workDao.getAll().map { it.toDomain() }.filter { it.isSaved }
     }
 
+    /** Active finished works in local reading history (excludes soft-deleted). */
+    fun observeFinishedWorks(): Flow<List<SavedWork>> {
+        return observeLibraryWorks().map { works -> works.filter { it.isFinished } }
+    }
+
+    /** One-shot list of active finished works in local reading history (excludes soft-deleted). */
+    suspend fun listFinishedWorks(): List<SavedWork> {
+        return workDao.getAll().map { it.toDomain() }.filter { it.isFinished }
+    }
+
+    /**
+     * Soft-deletes all active finished works into Recently Deleted for [RECOVERY_WINDOW] (90 days).
+     * Mirrors Apple `PrivacyDataView` clear reading history intent. Returns the count of works cleared.
+     */
+    suspend fun softDeleteAllFinished(): Int {
+        val finished = listFinishedWorks()
+        for (work in finished) {
+            softDelete(work.id)
+        }
+        return finished.size
+    }
+
+
     /** Soft-deleted works in Recently Deleted (newest first). */
     fun observeRecentlyDeleted(): Flow<List<SavedWork>> {
         return workDao.observeDeleted().map { works -> works.map { it.toDomain() } }
