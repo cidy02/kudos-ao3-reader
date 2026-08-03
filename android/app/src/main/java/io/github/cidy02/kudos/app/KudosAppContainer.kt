@@ -167,7 +167,8 @@ class KudosAppContainer(context: Context) {
         ReaderRepository(
             workRepository = workRepository,
             fileStore = workFileStore,
-            settingsProvider = { settingsRepository.snapshot() }
+            settingsProvider = { settingsRepository.snapshot() },
+            customFontRepository = customFontRepository
         )
     }
 
