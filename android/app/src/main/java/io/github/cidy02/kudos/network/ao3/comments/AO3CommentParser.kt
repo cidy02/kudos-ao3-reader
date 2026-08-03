@@ -81,41 +81,141 @@ class AO3CommentParser(
         return emptyList()
     }
 
+    /**
+     * Builds a real comment tree from the page's top-level `ol.thread`
+     * (iOS `parseThread`). Nested replies hang under [AO3Comment.replies].
+     */
     private fun parseComments(document: Document): List<AO3Comment> {
-        return document.select("li.comment, div.comment").mapIndexedNotNull { index, element ->
-            val body = element.selectFirst("blockquote.userstuff, .userstuff")?.normalizedText()
-                ?: element.selectFirst(".comment-text")?.normalizedText()
-                ?: ""
-            val deleted = element.hasClass("deleted") ||
-                element.hasClass("hidden") ||
-                body.contains("deleted comment", ignoreCase = true) ||
-                body.contains("hidden comment", ignoreCase = true)
-            if (body.isBlank() && !deleted) return@mapIndexedNotNull null
+        val root = document.selectFirst(
+            "#comments_placeholder ol.thread, #main > ol.thread, main > ol.thread, ol.thread"
+        ) ?: return emptyList()
+        return parseThread(root, depth = 0, parentId = null)
+    }
 
-            val parsedAuthor = parseCommentAuthor(element, deleted)
-            val avatarUrl = if (!parsedAuthor.isGuest) {
-                parseAvatarUrl(element)
-            } else {
-                null
+    /**
+     * Walks one `ol.thread`. AO3's structure: a comment `li.comment`, then —
+     * when it has replies — either a nested `ol.thread` *inside* that `li`
+     * (simpler fixtures) or a *sibling* wrapper `li` (no id) containing
+     * `ol.thread` (live otwarchive). Both attach as [AO3Comment.replies] of
+     * the preceding comment.
+     */
+    private fun parseThread(
+        thread: Element,
+        depth: Int,
+        parentId: String?
+    ): List<AO3Comment> {
+        val comments = mutableListOf<AO3Comment>()
+        for (li in thread.children()) {
+            if (!li.tagName().equals("li", ignoreCase = true)) continue
+            val effectiveParent = comments.lastOrNull()?.id ?: parentId
+
+            val cutoff = parseThreadCutoff(li, effectiveParent, depth)
+            if (cutoff != null) {
+                comments.add(cutoff)
+                continue
             }
-            val id = element.id().ifBlank { null }
-            AO3Comment(
-                id = id,
-                author = AO3CommentAuthor(
-                    name = parsedAuthor.name,
-                    profileUrl = parsedAuthor.profileUrl,
-                    username = parsedAuthor.username
-                ),
-                date = element.selectFirst(".datetime, p.datetime, .posted")?.normalizedText().orEmpty(),
-                body = body.ifBlank { "Deleted or hidden comment." },
-                depth = commentDepth(element, index),
-                isDeletedOrHidden = deleted,
-                isGuest = parsedAuthor.isGuest,
-                isAnonymousCreator = parsedAuthor.isAnonymousCreator,
-                avatarUrl = avatarUrl,
-                canReply = parseCanReply(element)
-            )
+
+            if (li.hasClass("comment") || li.id().startsWith("comment_")) {
+                val parsed = parseOneComment(li, depth) ?: continue
+                // Nested ol.thread inside this comment li (fixture / some pages).
+                val nestedInside = li.children().firstOrNull {
+                    it.tagName().equals("ol", ignoreCase = true) && it.hasClass("thread")
+                }
+                val withReplies = if (nestedInside != null) {
+                    parsed.copy(
+                        replies = parseThread(nestedInside, depth + 1, parsed.id)
+                    )
+                } else {
+                    parsed
+                }
+                comments.add(withReplies)
+            } else {
+                // Sibling wrapper li containing a nested ol.thread (live AO3).
+                val nested = li.selectFirst("ol.thread")
+                if (nested != null && comments.isNotEmpty()) {
+                    val last = comments.removeAt(comments.lastIndex)
+                    comments.add(
+                        last.copy(
+                            replies = last.replies + parseThread(nested, depth + 1, last.id)
+                        )
+                    )
+                }
+            }
         }
+        return comments
+    }
+
+    private fun parseOneComment(element: Element, depth: Int): AO3Comment? {
+        val body = element.selectFirst("blockquote.userstuff, .userstuff")?.normalizedText()
+            ?: element.selectFirst(".comment-text")?.normalizedText()
+            ?: ""
+        val deleted = element.hasClass("deleted") ||
+            element.hasClass("hidden") ||
+            body.contains("deleted comment", ignoreCase = true) ||
+            body.contains("hidden comment", ignoreCase = true) ||
+            body.contains("Previous comment deleted", ignoreCase = true)
+        if (body.isBlank() && !deleted && !element.id().startsWith("comment_")) {
+            return null
+        }
+
+        val parsedAuthor = parseCommentAuthor(element, deleted)
+        val avatarUrl = if (!parsedAuthor.isGuest) parseAvatarUrl(element) else null
+        val id = element.id().ifBlank { null }
+        val actions = parseActionPaths(element)
+        return AO3Comment(
+            id = id,
+            author = AO3CommentAuthor(
+                name = parsedAuthor.name,
+                profileUrl = parsedAuthor.profileUrl,
+                username = parsedAuthor.username
+            ),
+            date = element.selectFirst(".datetime, p.datetime, .posted")?.normalizedText().orEmpty(),
+            body = body.ifBlank { if (deleted) "(Previous comment deleted.)" else "Deleted or hidden comment." },
+            depth = depth,
+            isDeletedOrHidden = deleted,
+            isGuest = parsedAuthor.isGuest,
+            isAnonymousCreator = parsedAuthor.isAnonymousCreator,
+            avatarUrl = avatarUrl,
+            canReply = parseCanReply(element),
+            editPath = actions.editPath,
+            deletePath = actions.deletePath,
+            threadPath = actions.threadPath,
+            parentThreadPath = actions.parentThreadPath,
+            chapterId = null,
+            chapterLabel = element.selectFirst(".parent")?.normalizedText()?.takeIf { it.isNotBlank() }
+        )
+    }
+
+    /**
+     * AO3 deep-thread cutoff (CAA-7): id-less `li.comment` with a single
+     * "N more comments in this thread" link to `/comments/<id>`.
+     */
+    private fun parseThreadCutoff(li: Element, parentId: String?, depth: Int): AO3Comment? {
+        if (!li.hasClass("comment") || li.id().isNotBlank() || li.hasAttr("role")) return null
+        val children = li.children()
+        if (children.size != 1) return null
+        val paragraph = children.first() ?: return null
+        if (!paragraph.tagName().equals("p", ignoreCase = true)) return null
+        val anchors = paragraph.select("a")
+        if (anchors.size != 1) return null
+        val link = anchors.first() ?: return null
+        val href = link.attr("href")
+        if (!href.contains("/comments/")) return null
+        val lastSegment = href.trimEnd('/').substringAfterLast('/')
+        if (lastSegment.toLongOrNull() == null) return null
+        val digits = link.normalizedText().takeWhile { it.isDigit() }
+        val cutoffId = "cutoff_${parentId ?: "root"}_$lastSegment"
+        return AO3Comment(
+            id = cutoffId,
+            author = AO3CommentAuthor(name = ""),
+            date = "",
+            body = link.normalizedText(),
+            depth = depth,
+            isDeletedOrHidden = false,
+            isThreadCutoff = true,
+            cutoffCount = digits.toIntOrNull(),
+            cutoffThreadPath = href
+        )
     }
 
     /**
@@ -134,6 +234,36 @@ class AO3CommentParser(
             }
         }
         return false
+    }
+
+    private data class ActionPaths(
+        val editPath: String? = null,
+        val deletePath: String? = null,
+        val threadPath: String? = null,
+        val parentThreadPath: String? = null
+    )
+
+    private fun parseActionPaths(element: Element): ActionPaths {
+        // Only look at this comment's own action list — not nested replies.
+        val actions = element.selectFirst("ul[id^=navigation_for_comment_], ul.actions")
+            ?: return ActionPaths()
+        var editPath: String? = null
+        var deletePath: String? = null
+        var threadPath: String? = null
+        var parentThreadPath: String? = null
+        for (link in actions.select("a")) {
+            val label = link.normalizedText().lowercase()
+            val href = link.attr("href").takeIf { it.isNotBlank() } ?: continue
+            when {
+                label == "edit" -> editPath = href
+                label == "delete" || label.contains("delete") -> deletePath = href
+                label.contains("thread") && label.contains("parent") -> parentThreadPath = href
+                label.contains("thread") || href.matches(Regex(".*/comments/\\d+/?$")) -> {
+                    if (threadPath == null) threadPath = href
+                }
+            }
+        }
+        return ActionPaths(editPath, deletePath, threadPath, parentThreadPath)
     }
 
     /**
@@ -279,15 +409,6 @@ class AO3CommentParser(
             text.contains("comments are disabled", ignoreCase = true)
     }
 
-    private fun commentDepth(element: Element, fallback: Int): Int {
-        val explicit = element.classNames().firstNotNullOfOrNull { className ->
-            Regex("""depth[-_]?(\d+)""").find(className)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        }
-        if (explicit != null) return explicit.coerceAtLeast(0)
-        return element.parents().count { it.hasClass("thread") || it.hasClass("children") }
-            .takeIf { it > 0 }
-            ?: fallback.coerceAtMost(0)
-    }
 
     private data class ParsedCommentAuthor(
         val name: String,

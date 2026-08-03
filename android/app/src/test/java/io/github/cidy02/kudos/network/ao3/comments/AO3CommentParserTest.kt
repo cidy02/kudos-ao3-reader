@@ -18,11 +18,13 @@ class AO3CommentThreadParserTest {
             target = AO3CommentTarget.Work(123)
         )
 
-        // Top-level comments only (nested reply is a separate li.comment with depth).
-        assertEquals(4, thread.comments.size)
+        // Real tree: 3 top-level comments; ReplyUser is nested under the first.
+        assertEquals(3, thread.comments.size)
         assertEquals("AO3_Reader", thread.comments[0].author.name)
         assertEquals("Hello, café ☕", thread.comments[0].body)
-        val reply = thread.comments.first { it.author.name == "ReplyUser" }
+        assertEquals(1, thread.comments[0].replies.size)
+        val reply = thread.comments[0].replies.single()
+        assertEquals("ReplyUser", reply.author.name)
         assertEquals(1, reply.depth)
         assertEquals("comment-token", thread.form?.authenticityToken)
         assertEquals("5", thread.form?.pseudId)
@@ -69,7 +71,8 @@ class AO3CommentThreadParserTest {
         assertEquals("AO3_Reader", first.author.username)
         assertFalse(first.isGuest)
 
-        val reply = thread.comments.first { it.author.name == "ReplyUser" }
+        val reply = thread.comments.first { it.author.name == "AO3_Reader" }.replies.single()
+        assertEquals("ReplyUser", reply.author.name)
         // Default AO3 skin icon must become null, not a renderable avatar.
         assertNull(reply.avatarUrl)
     }

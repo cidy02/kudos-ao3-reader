@@ -30,8 +30,9 @@ class AO3CommentRepositoryTest {
 
         val thread = (repository.loadThread(AO3CommentTarget.Work(123)) as AO3Result.Success).value
 
-        // Fixture includes registered, nested reply, guest, and anonymous-creator comments.
-        assertEquals(4, thread.comments.size)
+        // Tree model: 3 top-level (registered w/ nested reply, guest, anonymous creator).
+        assertEquals(3, thread.comments.size)
+        assertEquals(1, thread.comments[0].replies.size)
     }
 
     @Test
@@ -45,7 +46,8 @@ class AO3CommentRepositoryTest {
         )
 
         val thread = (repository.loadThread(AO3CommentTarget.Work(123)) as AO3Result.Success).value
-        assertEquals(4, thread.comments.size)
+        assertEquals(3, thread.comments.size)
+        assertEquals(1, thread.comments[0].replies.size)
         assertEquals("comment-token", thread.form?.authenticityToken)
     }
 
