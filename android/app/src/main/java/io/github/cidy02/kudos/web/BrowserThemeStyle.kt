@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets
  *
  * Callers should resolve [AppThemeSetting.System] to Light or Dark (via
  * `isSystemInDarkTheme()`) before calling; System is treated as no-op (Light).
+ * [AppThemeSetting.Oled] applies a true-black palette (same scheme as Dark).
  */
 object BrowserThemeStyle {
     private data class Palette(
@@ -158,7 +159,8 @@ object BrowserThemeStyle {
 
     /**
      * Exact hex values from iOS `BrowserThemeStyle.palette(for:)` in
-     * `WebBrowser.swift`. Light/System → null (no palette).
+     * `WebBrowser.swift`. Light/System → null (no palette). Oled uses true-black
+     * surfaces while sharing Dark's text/link/control tokens.
      */
     private fun palette(theme: AppThemeSetting): Palette? = when (theme) {
         AppThemeSetting.Light, AppThemeSetting.System -> null
@@ -180,6 +182,19 @@ object BrowserThemeStyle {
             background = "#16161A",
             raised = "#222228",
             recessed = "#111115",
+            text = "#CFCFD4",
+            secondaryText = "#A5A5AD",
+            link = "#7FB0E8",
+            visitedLink = "#AD93D8",
+            border = "#3A3A42",
+            control = "#2D2D35",
+            activeControl = "#44444F"
+        )
+        AppThemeSetting.Oled -> Palette(
+            scheme = "dark",
+            background = "#000000",
+            raised = "#1C1C1E",
+            recessed = "#0A0A0C",
             text = "#CFCFD4",
             secondaryText = "#A5A5AD",
             link = "#7FB0E8",

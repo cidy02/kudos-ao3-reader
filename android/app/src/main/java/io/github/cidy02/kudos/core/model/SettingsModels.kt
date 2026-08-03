@@ -27,6 +27,7 @@ enum class AppThemeSetting(val storageValue: String) {
     Light("light"),
     Sepia("sepia"),
     Dark("dark"),
+    Oled("oled"),
     System("system");
 
     companion object {

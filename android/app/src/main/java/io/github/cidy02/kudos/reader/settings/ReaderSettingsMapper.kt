@@ -40,7 +40,7 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
     fun resolveTheme(reader: ReaderSettings, app: AppSettings): ReaderColorTheme {
         return if (reader.matchAppReaderTheme) {
             when (app.appTheme) {
-                AppThemeSetting.Dark -> ReaderColorTheme.Dark
+                AppThemeSetting.Dark, AppThemeSetting.Oled -> ReaderColorTheme.Dark
                 AppThemeSetting.Sepia -> ReaderColorTheme.Sepia
                 AppThemeSetting.Light, AppThemeSetting.System -> ReaderColorTheme.Light
             }
