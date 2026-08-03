@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,9 +44,9 @@ fun KudosApp(container: KudosAppContainer) {
     val settings by container.settingsRepository.settings
         .collectAsState(initial = KudosSettings())
     // null until DataStore emits — avoids flashing Welcome at returning users.
-    val hasCompletedOnboarding by container.settingsRepository.hasCompletedOnboarding
-        .map<Boolean, Boolean?> { completed -> completed }
-        .collectAsState(initial = null)
+    val hasCompletedOnboarding by remember(container.settingsRepository) {
+        container.settingsRepository.hasCompletedOnboarding.map<Boolean, Boolean?> { completed -> completed }
+    }.collectAsState(initial = null)
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
 

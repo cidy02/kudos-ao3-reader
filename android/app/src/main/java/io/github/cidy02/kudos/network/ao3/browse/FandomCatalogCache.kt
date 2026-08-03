@@ -29,7 +29,7 @@ class FandomCatalogCache(private val cacheDir: Path) {
     suspend fun load(): Map<String, Entry> = withContext(Dispatchers.IO) {
         if (!Files.isRegularFile(filePath)) return@withContext emptyMap()
         runCatching {
-            json.decodeFromString<Map<String, Entry>>(Files.readString(filePath))
+            json.decodeFromString<Map<String, Entry>>(filePath.toFile().readText(Charsets.UTF_8))
         }.getOrDefault(emptyMap())
     }
 
@@ -43,7 +43,7 @@ class FandomCatalogCache(private val cacheDir: Path) {
             Files.createDirectories(cacheDir)
             val temp = Files.createTempFile(cacheDir, ".fandom-catalog-", ".json.tmp")
             try {
-                Files.writeString(temp, json.encodeToString(entries))
+                temp.toFile().writeText(json.encodeToString(entries), Charsets.UTF_8)
                 try {
                     Files.move(
                         temp,
