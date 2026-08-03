@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -50,6 +51,7 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -59,6 +61,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 
 @Composable
 fun BrowseScreen(
@@ -138,12 +141,22 @@ fun BrowseScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         items(current.categories, key = { it.name }) { category ->
-                            val stats = remember(category, fandomLists[category.name], library) {
-                                CategoryStatsCalculator.stats(
-                                    category = category,
-                                    fandomList = fandomLists[category.name],
-                                    library = library
-                                )
+                            // Stats scan the full library once per category — never do that
+                            // on the composition/main thread (jank on large libraries).
+                            val fandomList = fandomLists[category.name]
+                            val stats by produceState(
+                                initialValue = CategoryStats(),
+                                category,
+                                fandomList,
+                                library
+                            ) {
+                                value = withContext(Dispatchers.Default) {
+                                    CategoryStatsCalculator.stats(
+                                        category = category,
+                                        fandomList = fandomList,
+                                        library = library
+                                    )
+                                }
                             }
                             CategoryCard(
                                 category = category,
