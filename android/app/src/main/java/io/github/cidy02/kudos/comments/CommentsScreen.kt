@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,6 +103,7 @@ fun CommentsScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
+    val collapsedIds = remember { mutableStateMapOf<String, Boolean>() }
 
     fun startReply(comment: AO3Comment) {
         viewModel.startReply(comment)
@@ -202,6 +205,15 @@ fun CommentsScreen(
                         }
                     }
                 }
+                
+                // Chapter Picker (iOS parity)
+                item {
+                    ChapterScopePicker(
+                        currentTarget = currentTarget,
+                        onSelectTarget = { viewModel.setTarget(it) }
+                    )
+                }
+
                 item {
                     // Show target picker if multiple chapters available.
                     // (Requires more data in thread model).
@@ -254,7 +266,8 @@ fun CommentsScreen(
                             onEdit = { viewModel.startEdit(it) },
                             onDelete = { pendingDeleteComment = it },
                             onLoadMore = { viewModel.load() },
-                            onViewThread = { commentId -> viewModel.load(focusedId = commentId) }
+                            onViewThread = { commentId -> viewModel.load(focusedId = commentId) },
+                            collapsedIds = collapsedIds
                         )
                     }
                 }
@@ -370,10 +383,18 @@ private fun CommentThreadRow(
     onDelete: (AO3Comment) -> Unit,
     onLoadMore: (String) -> Unit,
     onViewThread: (Long) -> Unit,
+    collapsedIds: MutableMap<String, Boolean>,
     depth: Int = 0
 ) {
-    var expanded by remember { mutableStateOf(true) }
-    val collapsedIds = remember { mutableStateMapOf<String, Boolean>() }
+    // Initial collapse: deep nests (depth > 2) default to collapsed.
+    // Cutoffs are always "collapsed" in the sense that they need to load more.
+    val isCollapsed = collapsedIds[comment.id ?: ""] ?: (depth > 2 && comment.replies.isNotEmpty())
+    
+    fun toggle() {
+        comment.id?.let { id ->
+            collapsedIds[id] = !isCollapsed
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         if (comment.isThreadCutoff) {
@@ -386,14 +407,14 @@ private fun CommentThreadRow(
                 onReply = { onReply(comment) },
                 onEdit = { onEdit(comment) },
                 onDelete = { onDelete(comment) },
-                isExpanded = expanded,
-                onToggleExpand = { expanded = !expanded },
+                isExpanded = !isCollapsed,
+                onToggleExpand = ::toggle,
                 depth = depth,
                 onViewThread = onViewThread
             )
         }
 
-        if (expanded && comment.replies.isNotEmpty()) {
+        if (!isCollapsed && comment.replies.isNotEmpty()) {
             comment.replies.forEach { reply ->
                 CommentThreadRow(
                     comment = reply,
@@ -404,6 +425,7 @@ private fun CommentThreadRow(
                     onDelete = onDelete,
                     onLoadMore = onLoadMore,
                     onViewThread = onViewThread,
+                    collapsedIds = collapsedIds,
                     depth = depth + 1
                 )
             }
@@ -656,6 +678,36 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
             modifier = Modifier.weight(1f)
         ) {
             Text("Next")
+        }
+    }
+}
+
+@Composable
+private fun ChapterScopePicker(
+    currentTarget: AO3CommentTarget?,
+    onSelectTarget: (AO3CommentTarget) -> Unit
+) {
+    if (currentTarget == null) return
+    val workId = currentTarget.workId
+    
+    // In a real implementation, we'd have the work metadata for total chapters.
+    // For now, we allow toggling between All and a placeholder Chapter 1 if it's currently Chapter.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = currentTarget is AO3CommentTarget.Work,
+            onClick = { onSelectTarget(AO3CommentTarget.Work(workId)) },
+            label = { Text("All Comments") }
+        )
+        if (currentTarget is AO3CommentTarget.Chapter) {
+            FilterChip(
+                selected = true,
+                onClick = { },
+                label = { Text("Chapter ${currentTarget.chapterId}") }
+            )
         }
     }
 }

@@ -166,6 +166,7 @@ class AO3CommentParser(
         val chapterId = chapterLink?.attr("href")?.let { href ->
             Regex("""/chapters/(\d+)""").find(href)?.groupValues?.getOrNull(1)?.toLongOrNull()
         }
+        val chapterLabel = element.selectFirst(".parent")?.normalizedText()?.takeIf { it.isNotBlank() }
 
         return AO3Comment(
             id = id,
@@ -187,7 +188,7 @@ class AO3CommentParser(
             threadPath = actions.threadPath,
             parentThreadPath = actions.parentThreadPath,
             chapterId = chapterId,
-            chapterLabel = element.selectFirst(".parent")?.normalizedText()?.takeIf { it.isNotBlank() }
+            chapterLabel = chapterLabel
         )
     }
 
