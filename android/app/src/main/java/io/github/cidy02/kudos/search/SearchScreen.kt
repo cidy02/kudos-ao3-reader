@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -66,6 +67,13 @@ import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import kotlinx.coroutines.launch
 
+sealed interface SearchUiState {
+    data object Idle : SearchUiState
+    data object Loading : SearchUiState
+    data class Results(val page: AO3SearchPage) : SearchUiState
+    data class Error(val error: AO3Error, val page: Int) : SearchUiState
+}
+
 @Composable
 fun SearchScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
@@ -73,132 +81,30 @@ fun SearchScreen(
     savedSearchRepository: SavedSearchRepository? = null,
     workRepository: WorkRepository? = null
 ) {
-    val works by (workRepository?.observeSavedWorks() ?: kotlinx.coroutines.flow.flowOf(emptyList()))
-        .collectAsState(initial = emptyList())
-    var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(workRepository) {
-        userTagNames = workRepository?.allUserTags()?.map { it.normalizedName }.orEmpty()
-    }
-    val localTagSuggestions = remember(works, userTagNames) {
-        collectLocalTagSuggestions(works, userTagNames)
-    }
-    var filters by remember { mutableStateOf(AO3SearchFilters()) }
+    val viewModel: SearchViewModel = viewModel(
+        factory = SearchViewModel.factory(repository, savedSearchRepository, workRepository)
+    )
+    val filters by viewModel.filters.collectAsState()
+    val state by viewModel.state.collectAsState()
+    val savedSearches by viewModel.savedSearches.collectAsState()
+    val localMatches by viewModel.localMatches.collectAsState()
+
     var showFilterSheet by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
-    var state by remember { mutableStateOf<SearchUiState>(SearchUiState.Idle) }
-    var lastFilters by remember { mutableStateOf(AO3SearchFilters()) }
-    var savedSearches by remember { mutableStateOf<List<SavedSearch>>(emptyList()) }
-    // Guards against an older in-flight search/retry overwriting a newer one's result
-    // (e.g. Search, then immediately Sort, then immediately Search again) — only the
-    // launch that's still current when it resolves is allowed to write `state`.
-    var searchGeneration by remember { mutableIntStateOf(0) }
+    
     // Batch seed for result cards (Expand all / Collapse all). Individual cards
     // keep their own local expand state after the seed — matching iOS.
     var expandAllCards by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activeChips = remember(filters) { activeFilterChips(filters) }
 
-    val localMatches = remember(filters.query, works, userTagNames) {
-        val query = filters.query.trim()
-        if (query.length < 2) emptyList<io.github.cidy02.kudos.works.CanonicalWork>()
-        else {
-            val terms = io.github.cidy02.kudos.works.WorkSearchIndex.terms(query)
-            works.filter { work ->
-                io.github.cidy02.kudos.works.WorkSearchIndex.matches(
-                    work,
-                    terms,
-                    userTags = userTagNames // Later: filter per work
-                )
-            }.map { io.github.cidy02.kudos.works.CanonicalWork(local = it, remote = it.toRemoteSummary()) }
-        }
-    }
-
-    fun refreshSavedSearches() {
-        val repo = savedSearchRepository ?: return
-        scope.launch {
-            savedSearches = repo.getAll()
-        }
-    }
-
-    LaunchedEffect(savedSearchRepository) {
-        refreshSavedSearches()
-    }
-
-    fun runSearch(page: Int = 1, searchFilters: AO3SearchFilters = filters) {
-        if (!searchFilters.isSearchable) {
-            state = SearchUiState.Idle
-            return
-        }
-
-        lastFilters = searchFilters
-        state = SearchUiState.Loading
-        val generation = ++searchGeneration
-        scope.launch {
-            val result = when (val result = repository.search(searchFilters, page)) {
-                is AO3Result.Success -> SearchUiState.Results(result.value)
-                is AO3Result.Failure -> SearchUiState.Error(result.error, page)
-            }
-            if (generation == searchGeneration) state = result
-        }
-    }
-
-    fun retry() {
-        val page = when (val current = state) {
-            is SearchUiState.Error -> current.page
-            is SearchUiState.Results -> current.page.currentPage
-            else -> 1
-        }
-        state = SearchUiState.Loading
-        val generation = ++searchGeneration
-        scope.launch {
-            val result = when (val result = repository.search(lastFilters, page)) {
-                is AO3Result.Success -> SearchUiState.Results(result.value)
-                is AO3Result.Failure -> SearchUiState.Error(result.error, page)
-            }
-            if (generation == searchGeneration) state = result
-        }
-    }
-
-    fun clearFilters() {
-        filters = clearedFiltersPreservingQuery(filters)
-        // Clearing filters must also clear what's on screen — this only updated the
-        // filter state before, leaving stale Results/Error visible until the user
-        // manually searched again.
-        if (state !is SearchUiState.Idle) runSearch()
-    }
-
-    fun presentSaveDialog() {
-        if (savedSearchRepository == null || !filters.isSearchable) return
-        saveName = defaultSavedSearchName(filters)
-        showSaveDialog = true
-    }
-
     fun commitSavedSearch() {
-        val repo = savedSearchRepository ?: return
         val name = saveName.trim()
-        if (name.isEmpty() || !filters.isSearchable) return
-        scope.launch {
-            repo.save(name, filters)
-            savedSearches = repo.getAll()
-            showSaveDialog = false
-            saveName = ""
-        }
-    }
-
-    fun runSaved(saved: SavedSearch) {
-        val repo = savedSearchRepository ?: return
-        val restored = repo.filtersOf(saved)
-        filters = restored
-        runSearch(page = 1, searchFilters = restored)
-    }
-
-    fun deleteSaved(id: String) {
-        val repo = savedSearchRepository ?: return
-        scope.launch {
-            repo.delete(id)
-            savedSearches = repo.getAll()
-        }
+        if (name.isEmpty()) return
+        viewModel.saveCurrentSearch(name)
+        showSaveDialog = false
+        saveName = ""
     }
 
     Column(
@@ -214,7 +120,7 @@ fun SearchScreen(
         ) {
             OutlinedTextField(
                 value = filters.query,
-                onValueChange = { filters = filters.copy(query = it) },
+                onValueChange = { viewModel.updateFilters(filters.copy(query = it)) },
                 label = { Text("Query") },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
@@ -222,7 +128,10 @@ fun SearchScreen(
             if (savedSearchRepository != null) {
                 IconButton(
                     enabled = filters.isSearchable,
-                    onClick = ::presentSaveDialog
+                    onClick = {
+                        saveName = defaultSavedSearchName(filters)
+                        showSaveDialog = true
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.BookmarkAdd,
@@ -232,7 +141,7 @@ fun SearchScreen(
             }
             Button(
                 enabled = state !is SearchUiState.Loading && filters.isSearchable,
-                onClick = { runSearch() }
+                onClick = { viewModel.runSearch() }
             ) {
                 Text("Search")
             }
@@ -244,19 +153,17 @@ fun SearchScreen(
             expandAllCards = expandAllCards,
             onToggleExpandAll = { expandAllCards = !expandAllCards },
             onSortSelected = {
-                filters = filters.copy(sort = it)
-                // Otherwise the visible results/pagination stay under the old sort
-                // until the user notices and taps Search again.
-                if (state !is SearchUiState.Idle) runSearch()
+                viewModel.updateFilters(filters.copy(sort = it))
+                if (state !is SearchUiState.Idle) viewModel.runSearch()
             },
             onOpenFilters = { showFilterSheet = true },
-            onClearFilters = ::clearFilters
+            onClearFilters = { viewModel.clearFilters() }
         )
 
         if (activeChips.isNotEmpty()) {
             ActiveFilterChipRow(
                 chips = activeChips,
-                onClear = ::clearFilters
+                onClear = { viewModel.clearFilters() }
             )
         }
 
@@ -265,7 +172,8 @@ fun SearchScreen(
                 localMatches = localMatches,
                 query = filters.query,
                 onOpenWork = onOpenWork,
-                onSearchAo3 = { runSearch() }
+                onSearchAo3 = { viewModel.runSearch() },
+                onTagClick = { viewModel.searchTag(it) }
             )
         }
 
@@ -279,8 +187,8 @@ fun SearchScreen(
                                 ?.filtersOf(saved)
                                 ?.let(::savedSearchSubtitle)
                         },
-                        onRun = ::runSaved,
-                        onDelete = ::deleteSaved,
+                        onRun = { viewModel.runSavedSearch(it) },
+                        onDelete = { viewModel.deleteSavedSearch(it) },
                         modifier = Modifier.weight(1f)
                     )
                 } else {
@@ -297,7 +205,7 @@ fun SearchScreen(
                     title = "AO3 search failed",
                     message = current.error.displayMessage(),
                     primaryActionLabel = "Retry",
-                    onPrimaryAction = ::retry
+                    onPrimaryAction = { viewModel.retry() }
                 )
             }
             is SearchUiState.Results -> {
@@ -311,7 +219,8 @@ fun SearchScreen(
                         page = current.page,
                         expandAll = expandAllCards,
                         onOpenWork = onOpenWork,
-                        onPage = { runSearch(it) },
+                        onPage = { viewModel.runSearch(it) },
+                        onTagClick = { viewModel.searchTag(it) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -321,19 +230,20 @@ fun SearchScreen(
 
     if (showFilterSheet) {
         SearchFilterSheet(
-                    localTagSuggestions = localTagSuggestions,
+            localTagSuggestions = LocalTagSuggestions(),
             filters = filters,
-            onFiltersChange = { filters = it },
+            onFiltersChange = { viewModel.updateFilters(it) },
             onApply = {
                 showFilterSheet = false
-                runSearch(page = 1, searchFilters = filters)
+                viewModel.runSearch(page = 1, searchFilters = filters)
             },
-            onClear = ::clearFilters,
+            onClear = { viewModel.clearFilters() },
             onDismiss = { showFilterSheet = false },
             onSave = if (savedSearchRepository != null) {
                 {
                     showFilterSheet = false
-                    presentSaveDialog()
+                    saveName = defaultSavedSearchName(filters)
+                    showSaveDialog = true
                 }
             } else {
                 null
@@ -594,6 +504,7 @@ private fun SearchResultsList(
     expandAll: Boolean,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onPage: (Int) -> Unit,
+    onTagClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -611,7 +522,7 @@ private fun SearchResultsList(
                 work = work,
                 onOpenWork = onOpenWork,
                 expandAll = expandAll,
-                onTagClick = { tag -> /* Trigger new search with tag */ }
+                onTagClick = onTagClick
             )
         }
         item {
@@ -644,6 +555,7 @@ private fun LocalFirstResultsList(
     query: String,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onSearchAo3: () -> Unit,
+    onTagClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -661,7 +573,7 @@ private fun LocalFirstResultsList(
                 AO3WorkCard(
                     work = match.remote,
                     onOpenWork = onOpenWork,
-                    onTagClick = { tag -> onSearchAo3() /* Later: update filter and search */ }
+                    onTagClick = onTagClick
                 )
             }
             item {
@@ -698,13 +610,6 @@ private fun io.github.cidy02.kudos.core.model.SavedWork.toRemoteSummary(): AO3Wo
         comments = comments,
         hits = hits
     )
-}
-
-private sealed interface SearchUiState {
-    data object Idle : SearchUiState
-    data object Loading : SearchUiState
-    data class Results(val page: AO3SearchPage) : SearchUiState
-    data class Error(val error: AO3Error, val page: Int) : SearchUiState
 }
 
 private fun AO3Error.displayMessage(): String {
