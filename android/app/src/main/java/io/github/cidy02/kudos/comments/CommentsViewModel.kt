@@ -44,15 +44,19 @@ class CommentsViewModel(
     private val _currentTarget = MutableStateFlow(initialTarget)
     val currentTarget: StateFlow<AO3CommentTarget?> = _currentTarget
 
+    private val _focusedCommentId = MutableStateFlow<Long?>(null)
+    val focusedCommentId: StateFlow<Long?> = _focusedCommentId
+
     init {
         load(1)
     }
 
-    fun load(page: Int = 1, focusedCommentId: Long? = null) {
+    fun load(page: Int = 1, focusedId: Long? = null) {
         val target = _currentTarget.value ?: return
+        _focusedCommentId.value = focusedId
         viewModelScope.launch {
             _state.value = CommentsUiState.Loading
-            when (val result = repository.loadThread(target, page, focusedCommentId)) {
+            when (val result = repository.loadThread(target, page, focusedId)) {
                 is AO3Result.Success -> {
                     _state.value = CommentsUiState.Loaded(result.value)
                     // Load draft if applicable

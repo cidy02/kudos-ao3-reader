@@ -93,6 +93,7 @@ fun CommentsScreen(
     val submitting by viewModel.submitting.collectAsState()
     val message by viewModel.message.collectAsState()
     val currentTarget by viewModel.currentTarget.collectAsState()
+    val focusedCommentId by viewModel.focusedCommentId.collectAsState()
     
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -152,6 +153,29 @@ fun CommentsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
+                    if (focusedCommentId != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Viewing focused thread",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                TextButton(onClick = { viewModel.load(1, null) }) {
+                                    Text("Show all")
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
                     // Show target picker if multiple chapters available.
                     // (Requires more data in thread model).
                     
@@ -199,7 +223,7 @@ fun CommentsScreen(
                             workAuthors = thread.workAuthors,
                             onReply = { /* viewModel.startReply(it) */ },
                             onLoadMore = { viewModel.load() },
-                            onViewThread = { commentId -> viewModel.load(focusedCommentId = commentId) }
+                            onViewThread = { commentId -> viewModel.load(focusedId = commentId) }
                         )
                     }
                 }
