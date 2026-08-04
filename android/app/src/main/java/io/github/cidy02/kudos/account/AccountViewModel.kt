@@ -109,7 +109,7 @@ class AccountListViewModel(
     private val mutableState = MutableStateFlow<AccountListUiState>(AccountListUiState.Loading)
     val uiState: StateFlow<AccountListUiState> = combine(
         mutableState,
-        workRepository.observeSavedWorks()
+        workRepository.observeLibraryWorks()
     ) { state, local ->
         if (state is AccountListUiState.Loaded) {
             state.copy(

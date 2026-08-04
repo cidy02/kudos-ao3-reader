@@ -27,6 +27,9 @@ interface TagDao {
     @Query("SELECT * FROM user_tags ORDER BY name COLLATE NOCASE")
     suspend fun getAll(): List<TagEntity>
 
+    @Query("SELECT * FROM user_tags ORDER BY name COLLATE NOCASE")
+    fun observeAll(): kotlinx.coroutines.flow.Flow<List<TagEntity>>
+
     @Query(
         """
         SELECT user_tags.* FROM user_tags

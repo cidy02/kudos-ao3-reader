@@ -1,15 +1,20 @@
 package io.github.cidy02.kudos.library
 
+import androidx.room.withTransaction
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.Tag
+import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.util.UUID
 
@@ -24,6 +29,8 @@ class ReadingQueueRepository(
 ) {
     private val queueDao = database.readingQueueDao()
     private val workDao = database.workDao()
+    private val tagDao = database.tagDao()
+    private val collectionDao = database.collectionDao()
     private val tombstoneDao = database.syncTombstoneDao()
 
     suspend fun listQueues(): List<ReadingQueue> {
@@ -234,14 +241,16 @@ class ReadingQueueRepository(
 
     suspend fun updateSortOrder(queueId: String, workIds: List<String>) {
         val now = clock()
-        workIds.forEachIndexed { index, workId ->
-            queueDao.getMembershipForWork(queueId, workId)?.let { membership ->
-                queueDao.upsertMembership(
-                    membership.copy(
-                        sortOrderInQueue = index,
-                        lastModifiedAt = now
+        database.withTransaction {
+            workIds.forEachIndexed { index, workId ->
+                queueDao.getMembershipForWork(queueId, workId)?.let { membership ->
+                    queueDao.upsertMembership(
+                        membership.copy(
+                            sortOrderInQueue = index,
+                            lastModifiedAt = now
+                        )
                     )
-                )
+                }
             }
         }
         touchQueueMembershipChanged(queueId, now)
@@ -290,6 +299,16 @@ class ReadingQueueRepository(
             hardDeleteQueue(entity.id)
         }
         return expired.size
+    }
+
+    fun observeAllUserTags(): Flow<List<Tag>> {
+        return tagDao.observeAll().map { tags -> tags.map { it.toDomain() } }
+    }
+
+    fun observeAllCollections(): Flow<List<WorkCollection>> {
+        return collectionDao.observeAllActive().map { entities ->
+            entities.map { it.toDomain() }
+        }
     }
 
     private suspend fun touchQueueMembershipChanged(queueId: String, now: Instant) {

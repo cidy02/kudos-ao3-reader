@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +67,8 @@ fun QueueDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val userTags by repository.observeAllUserTags().collectAsState(initial = emptyList())
+    val allCollections by repository.observeAllCollections().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -314,8 +317,8 @@ fun QueueDetailScreen(
         LibraryFilterPanel(
             filters = filters,
             sort = sort,
-            userTags = emptyList(), // Later: pass all tags from repo
-            collections = emptyList(), // Later: pass all collections from repo
+            userTags = userTags,
+            collections = allCollections,
             onFiltersChange = { filters = it },
             onSortChange = { sort = it },
             onApply = { showFilterPanel = false },

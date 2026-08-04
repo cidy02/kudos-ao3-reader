@@ -31,6 +31,9 @@ interface CollectionDao {
     @Query("SELECT * FROM collections WHERE isDeleted = 0 ORDER BY dateAdded DESC")
     suspend fun getAll(): List<CollectionEntity>
 
+    @Query("SELECT * FROM collections WHERE isDeleted = 0 ORDER BY dateAdded DESC")
+    fun observeAllActive(): Flow<List<CollectionEntity>>
+
     /** All collections including soft-deleted — used by backup capture/export. */
     @Query("SELECT * FROM collections ORDER BY dateAdded DESC")
     suspend fun getAllIncludingDeleted(): List<CollectionEntity>
