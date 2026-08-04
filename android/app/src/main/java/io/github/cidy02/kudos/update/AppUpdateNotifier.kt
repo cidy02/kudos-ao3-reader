@@ -44,7 +44,7 @@ class AppUpdateNotifier(private val appContext: Context) {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("Kudos update ready")
-            .setContentText("Version $versionLabel is available — tap to download and install.")
+            .setContentText("Version $versionLabel downloaded — tap to install.")
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
