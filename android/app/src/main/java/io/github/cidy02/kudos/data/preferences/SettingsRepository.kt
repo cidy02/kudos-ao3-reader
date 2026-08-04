@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import io.github.cidy02.kudos.core.model.AppSettings
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
@@ -40,6 +41,23 @@ class SettingsRepository(
 
     suspend fun setHasCompletedOnboarding(completed: Boolean) {
         dataStore.edit { it[Keys.HasCompletedOnboarding] = completed }
+    }
+
+    /**
+     * Ids of carousel/shelf sections the user has collapsed, on Home and Library
+     * (iOS backs the same state with `@AppStorage`). Device-local layout state,
+     * deliberately outside [KudosSettings] and the backup surface.
+     */
+    val collapsedSections: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[Keys.CollapsedSections] ?: emptySet()
+    }
+
+    suspend fun setSectionCollapsed(sectionId: String, collapsed: Boolean) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.CollapsedSections] ?: emptySet()
+            prefs[Keys.CollapsedSections] =
+                if (collapsed) current + sectionId else current - sectionId
+        }
     }
 
     suspend fun updateReaderMode(mode: ReaderMode) {
@@ -249,6 +267,7 @@ class SettingsRepository(
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         /** Device-local first-launch flag; not included in backup-compatible settings. */
         val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
+        val CollapsedSections = stringSetPreferencesKey("collapsedSections")
         val SyncIsEnabled = booleanPreferencesKey("syncIsEnabled")
         val SyncFolderUri = stringPreferencesKey("syncFolderUri")
         val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")

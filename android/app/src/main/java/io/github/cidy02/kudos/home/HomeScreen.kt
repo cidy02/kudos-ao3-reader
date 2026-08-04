@@ -85,7 +85,7 @@ fun HomeScreen(
     val activity = androidx.compose.ui.platform.LocalContext.current
         as? androidx.fragment.app.FragmentActivity
     
-    val collapsedShelves = remember { mutableStateMapOf<String, Boolean>() }
+    val collapsedShelves = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
     val onReveal: (String) -> Unit = { id -> viewModel.revealWork(id, activity) }
 
     PullToRefreshBox(
@@ -137,8 +137,8 @@ fun HomeScreen(
                 items = state.continueReading.take(HomeShelfLimit),
                 emptyMessage =
                     "You're not reading anything right now. Start exploring in Browse or open something from your Library.",
-                isCollapsed = collapsedShelves["reading"] ?: false,
-                onToggleCollapse = { collapsedShelves["reading"] = !(collapsedShelves["reading"] ?: false) },
+                isCollapsed = collapsedShelves["reading"],
+                onToggleCollapse = { collapsedShelves.toggle("reading") },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -156,8 +156,8 @@ fun HomeScreen(
                 title = "Recently Updated",
                 items = state.recentlyUpdated.take(HomeShelfLimit),
                 emptyMessage = "No recent updates from your library works yet.",
-                isCollapsed = collapsedShelves["updated"] ?: false,
-                onToggleCollapse = { collapsedShelves["updated"] = !(collapsedShelves["updated"] ?: false) },
+                isCollapsed = collapsedShelves["updated"],
+                onToggleCollapse = { collapsedShelves.toggle("updated") },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -175,8 +175,8 @@ fun HomeScreen(
                 works = state.subscriptions.take(HomeShelfLimit),
                 isLoading = state.subscriptionsLoading,
                 isSignedIn = state.isSignedIn,
-                isCollapsed = collapsedShelves["subscriptions"] ?: false,
-                onToggleCollapse = { collapsedShelves["subscriptions"] = !(collapsedShelves["subscriptions"] ?: false) },
+                isCollapsed = collapsedShelves["subscriptions"],
+                onToggleCollapse = { collapsedShelves.toggle("subscriptions") },
                 onOpenRemoteWork = onOpenRemoteWork,
                 onSeeAll = onOpenSubscriptionsList
             )
@@ -186,8 +186,8 @@ fun HomeScreen(
                 title = "Favorites",
                 items = state.favorites.take(HomeShelfLimit),
                 emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
-                isCollapsed = collapsedShelves["favorites"] ?: false,
-                onToggleCollapse = { collapsedShelves["favorites"] = !(collapsedShelves["favorites"] ?: false) },
+                isCollapsed = collapsedShelves["favorites"],
+                onToggleCollapse = { collapsedShelves.toggle("favorites") },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -205,8 +205,8 @@ fun HomeScreen(
                 title = "Recently Opened",
                 items = state.recentlyOpened.take(HomeShelfLimit),
                 emptyMessage = "Nothing opened recently. Start reading to see your history here.",
-                isCollapsed = collapsedShelves["opened"] ?: false,
-                onToggleCollapse = { collapsedShelves["opened"] = !(collapsedShelves["opened"] ?: false) },
+                isCollapsed = collapsedShelves["opened"],
+                onToggleCollapse = { collapsedShelves.toggle("opened") },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)

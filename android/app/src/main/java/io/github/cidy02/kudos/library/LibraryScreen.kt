@@ -535,7 +535,7 @@ private fun LibraryContent(
     onOpenComments: (Long) -> Unit,
     onTogglePrivacy: () -> Unit
 ) {
-    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+    val collapsed = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
     val bottomPad = if (state.selectionMode) 88.dp else 12.dp
     val cardActions = LibraryCardActions(
         onOpenWork = onOpenWork,
@@ -717,9 +717,9 @@ private fun LibraryContent(
                         emptyMessage =
                             "You're not reading anything right now. Open something below or find a new work in Browse.",
                         showProgress = true,
-                        collapsed = collapsed["readingNow"] == true,
+                        collapsed = collapsed["readingNow"],
                         onToggleCollapsed = {
-                            collapsed["readingNow"] = !(collapsed["readingNow"] ?: false)
+                            collapsed.toggle("readingNow")
                         },
                         actions = cardActions
                     )
@@ -732,10 +732,9 @@ private fun LibraryContent(
                         emptyMessage =
                             "Nothing saved for later yet. Save works here, or mark them for later on AO3.",
                         showProgress = false,
-                        collapsed = collapsed["savedForLater"] == true,
+                        collapsed = collapsed["savedForLater"],
                         onToggleCollapsed = {
-                            collapsed["savedForLater"] =
-                                !(collapsed["savedForLater"] ?: false)
+                            collapsed.toggle("savedForLater")
                         },
                         actions = cardActions
                     )
@@ -748,9 +747,9 @@ private fun LibraryContent(
                         emptyMessage = "No finished works yet. Works you complete show up here.",
                         showProgress = false,
                         footerFor = { "Finished" },
-                        collapsed = collapsed["finished"] == true,
+                        collapsed = collapsed["finished"],
                         onToggleCollapsed = {
-                            collapsed["finished"] = !(collapsed["finished"] ?: false)
+                            collapsed.toggle("finished")
                         },
                         actions = cardActions
                     )
@@ -764,9 +763,9 @@ private fun LibraryContent(
                         items = state.favorites.take(ShelfLimit),
                         emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
                         showProgress = false,
-                        collapsed = collapsed["favorites"] == true,
+                        collapsed = collapsed["favorites"],
                         onToggleCollapsed = {
-                            collapsed["favorites"] = !(collapsed["favorites"] ?: false)
+                            collapsed.toggle("favorites")
                         },
                         actions = cardActions
                     )
@@ -774,9 +773,9 @@ private fun LibraryContent(
                 item {
                     ReadingQueuesShelf(
                         queues = state.readingQueues,
-                        collapsed = collapsed["queues"] == true,
+                        collapsed = collapsed["queues"],
                         onToggleCollapsed = {
-                            collapsed["queues"] = !(collapsed["queues"] ?: false)
+                            collapsed.toggle("queues")
                         },
                         onSeeAll = onOpenReadingQueues,
                         onCreate = onCreateQueue,
@@ -786,9 +785,9 @@ private fun LibraryContent(
                 item {
                     CollectionsShelf(
                         collections = state.collections,
-                        collapsed = collapsed["collections"] == true,
+                        collapsed = collapsed["collections"],
                         onToggleCollapsed = {
-                            collapsed["collections"] = !(collapsed["collections"] ?: false)
+                            collapsed.toggle("collections")
                         },
                         onSeeAll = onOpenCollections,
                         onCreate = onCreateCollection,
@@ -803,9 +802,9 @@ private fun LibraryContent(
                         emptyMessage =
                             "No downloads yet. Download a work as EPUB to read it offline.",
                         showProgress = false,
-                        collapsed = collapsed["downloaded"] == true,
+                        collapsed = collapsed["downloaded"],
                         onToggleCollapsed = {
-                            collapsed["downloaded"] = !(collapsed["downloaded"] ?: false)
+                            collapsed.toggle("downloaded")
                         },
                         actions = cardActions
                     )
@@ -818,9 +817,9 @@ private fun LibraryContent(
                         emptyMessage =
                             "Nothing opened recently. Start reading to see your history here.",
                         showProgress = false,
-                        collapsed = collapsed["history"] == true,
+                        collapsed = collapsed["history"],
                         onToggleCollapsed = {
-                            collapsed["history"] = !(collapsed["history"] ?: false)
+                            collapsed.toggle("history")
                         },
                         actions = cardActions
                     )
