@@ -26,6 +26,10 @@ object WorkTags {
     ): List<String> {
         return (fandoms + relationships + characters + freeforms).dedupeFirstSeen()
     }
+
+    fun ao3WorkUrl(workId: Long): String {
+        return "https://archiveofourown.org/works/$workId?view_adult=true"
+    }
 }
 
 internal fun Iterable<String>.dedupeFirstSeen(): List<String> {

@@ -67,13 +67,14 @@ class AO3BrowseRepository(
     suspend fun worksForFandom(
         fandomName: String,
         page: Int = 1,
-        sort: AO3SearchSort = AO3SearchSort.RELEVANCE
+        filters: AO3SearchFilters? = null
     ): AO3Result<AO3SearchPage> {
         val trimmed = fandomName.trim()
         if (trimmed.isEmpty()) {
             return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
         }
-        return searchRepository.search(AO3SearchFilters(fandom = trimmed, sort = sort), page)
+        val searchFilters = (filters ?: AO3SearchFilters()).copy(fandom = trimmed)
+        return searchRepository.search(searchFilters, page)
     }
 
     private suspend fun <T> runParse(statusCode: Int, block: () -> T): AO3Result<T> {

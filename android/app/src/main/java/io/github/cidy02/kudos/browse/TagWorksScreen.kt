@@ -14,7 +14,6 @@ import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,9 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
-import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.search.SearchFilterSheet
 import io.github.cidy02.kudos.search.activeFilterChips
@@ -51,20 +50,18 @@ import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun FandomWorksScreen(
-    fandomName: String,
+fun TagWorksScreen(
+    tagName: String,
     workRepository: WorkRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
-    repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
+    repository: AO3SearchRepository = remember { AO3SearchRepository() }
 ) {
-    var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
+    var state by remember(tagName) { mutableStateOf<TagWorksState>(TagWorksState.Loading) }
     var filters by remember { mutableStateOf(AO3SearchFilters()) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
     
-    // Guards a fast Previous/Next double-tap from letting the first (older) page's
-    // response land after the second (newer) one and overwrite it.
-    var loadGeneration by remember(fandomName) { mutableIntStateOf(0) }
+    var loadGeneration by remember(tagName) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val savedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
     var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -78,18 +75,22 @@ fun FandomWorksScreen(
     val activeChips = remember(filters) { activeFilterChips(filters) }
 
     fun load(page: Int = 1) {
-        state = FandomWorksState.Loading
+        state = TagWorksState.Loading
         val generation = ++loadGeneration
         scope.launch {
-            val result = when (val result = repository.worksForFandom(fandomName, page, filters)) {
-                is AO3Result.Success -> FandomWorksState.Loaded(result.value)
-                is AO3Result.Failure -> FandomWorksState.Error(result.error.browseMessage(), page)
+            // General "tag works" uses the query-free additionalTags field in AO3 search
+            // (or query "tag:TagName" if we wanted to be broad, but Apple usually
+            // pins to a specific tag field).
+            val searchFilters = filters.copy(additionalTags = tagName)
+            val result = when (val result = repository.search(searchFilters, page)) {
+                is AO3Result.Success -> TagWorksState.Loaded(result.value)
+                is AO3Result.Failure -> TagWorksState.Error(result.error.toString(), page)
             }
             if (generation == loadGeneration) state = result
         }
     }
 
-    LaunchedEffect(fandomName, filters) { load() }
+    LaunchedEffect(tagName, filters) { load() }
 
     Column(
         modifier = Modifier
@@ -97,10 +98,9 @@ fun FandomWorksScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // TopAppBar is generic ("Works"); fandom name is useful context.
         KudosScreenHeader(
-            title = fandomName,
-            subtitle = "AO3 works for this fandom.",
+            title = tagName,
+            subtitle = "AO3 works for this tag.",
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { showFilterSheet = true }) {
@@ -127,13 +127,13 @@ fun FandomWorksScreen(
         )
 
         when (val current = state) {
-            FandomWorksState.Loading -> LoadingStateCard("Loading fandom works")
-            is FandomWorksState.Error -> BrowseErrorBlock(message = current.message, onRetry = { load(current.page) })
-            is FandomWorksState.Loaded -> {
+            TagWorksState.Loading -> LoadingStateCard("Loading works")
+            is TagWorksState.Error -> ErrorBlock(message = current.message, onRetry = { load(current.page) })
+            is TagWorksState.Loaded -> {
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No works found",
-                        message = "AO3 returned no works for this fandom."
+                        message = "AO3 returned no works for this tag."
                     )
                 } else {
                     LazyColumn(
@@ -157,7 +157,7 @@ fun FandomWorksScreen(
                             }
                         }
                         item {
-                            PaginationRow(page = current.page, onPage = { load(it) })
+                            TagPaginationRow(page = current.page, onPage = { load(it) })
                         }
                     }
                 }
@@ -190,7 +190,7 @@ private fun LocalIndicatorRow(indicator: BrowseLocalIndicator) {
 }
 
 @Composable
-private fun PaginationRow(page: AO3SearchPage, onPage: (Int) -> Unit) {
+private fun TagPaginationRow(page: AO3SearchPage, onPage: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(enabled = page.currentPage > 1, onClick = { onPage(page.currentPage - 1) }) {
             Text("Previous")
@@ -206,8 +206,19 @@ private fun PaginationRow(page: AO3SearchPage, onPage: (Int) -> Unit) {
     }
 }
 
-private sealed interface FandomWorksState {
-    data object Loading : FandomWorksState
-    data class Loaded(val page: AO3SearchPage) : FandomWorksState
-    data class Error(val message: String, val page: Int) : FandomWorksState
+@Composable
+private fun ErrorBlock(message: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(message, color = MaterialTheme.colorScheme.error)
+        OutlinedButton(onClick = onRetry) { Text("Retry") }
+    }
+}
+
+private sealed interface TagWorksState {
+    data object Loading : TagWorksState
+    data class Loaded(val page: AO3SearchPage) : TagWorksState
+    data class Error(val message: String, val page: Int) : TagWorksState
 }

@@ -29,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -97,6 +98,21 @@ fun SearchScreen(
     var expandAllCards by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activeChips = remember(filters) { activeFilterChips(filters) }
+
+    val localMatches = remember(filters.query, works, userTagNames) {
+        val query = filters.query.trim()
+        if (query.length < 2) emptyList<io.github.cidy02.kudos.works.CanonicalWork>()
+        else {
+            val terms = io.github.cidy02.kudos.works.WorkSearchIndex.terms(query)
+            works.filter { work ->
+                io.github.cidy02.kudos.works.WorkSearchIndex.matches(
+                    work,
+                    terms,
+                    userTags = userTagNames // Later: filter per work
+                )
+            }.map { io.github.cidy02.kudos.works.CanonicalWork(local = it, remote = it.toRemoteSummary()) }
+        }
+    }
 
     fun refreshSavedSearches() {
         val repo = savedSearchRepository ?: return
@@ -241,6 +257,15 @@ fun SearchScreen(
             ActiveFilterChipRow(
                 chips = activeChips,
                 onClear = ::clearFilters
+            )
+        }
+
+        if (state is SearchUiState.Idle && filters.query.trim().length >= 2) {
+            LocalFirstResultsList(
+                localMatches = localMatches,
+                query = filters.query,
+                onOpenWork = onOpenWork,
+                onSearchAo3 = { runSearch() }
             )
         }
 
@@ -582,7 +607,12 @@ private fun SearchResultsList(
             )
         }
         items(page.works, key = { it.id }) { work ->
-            AO3WorkCard(work = work, onOpenWork = onOpenWork, expandAll = expandAll)
+            AO3WorkCard(
+                work = work,
+                onOpenWork = onOpenWork,
+                expandAll = expandAll,
+                onTagClick = { tag -> /* Trigger new search with tag */ }
+            )
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -606,6 +636,68 @@ private fun SearchResultsList(
             }
         }
     }
+}
+
+@Composable
+private fun LocalFirstResultsList(
+    localMatches: List<io.github.cidy02.kudos.works.CanonicalWork>,
+    query: String,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    onSearchAo3: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (localMatches.isNotEmpty()) {
+            item {
+                KudosSectionHeader(
+                    title = "Library matches",
+                    subtitle = if (localMatches.size == 1) "1 work" else "${localMatches.size} works"
+                )
+            }
+            items(localMatches, key = { it.local!!.id }) { match ->
+                AO3WorkCard(
+                    work = match.remote,
+                    onOpenWork = onOpenWork,
+                    onTagClick = { tag -> onSearchAo3() /* Later: update filter and search */ }
+                )
+            }
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+        }
+        item {
+            Button(
+                onClick = onSearchAo3,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Search AO3 for \"$query\"")
+            }
+        }
+    }
+}
+
+private fun io.github.cidy02.kudos.core.model.SavedWork.toRemoteSummary(): AO3WorkSummary {
+    return AO3WorkSummary(
+        id = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(sourceUrl) ?: 0,
+        title = title,
+        authors = author.split(",").map { it.trim() },
+        fandoms = workFandoms,
+        rating = rating,
+        warnings = workWarnings,
+        categories = workCategories,
+        relationships = workRelationships,
+        characters = workCharacters,
+        freeforms = workFreeforms,
+        language = language,
+        wordCount = wordCount,
+        chapters = chapters,
+        kudos = kudos,
+        comments = comments,
+        hits = hits
+    )
 }
 
 private sealed interface SearchUiState {

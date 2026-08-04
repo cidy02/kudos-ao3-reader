@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -99,13 +100,14 @@ fun KudosSectionHeader(
 fun MetadataChip(
     label: String,
     modifier: Modifier = Modifier,
-    prominent: Boolean = false
+    prominent: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
     if (label.isBlank()) return
     // MD3 assist-chip–like capsule: primaryContainer for emphasis, surface
     // container + outline for quiet tags.
     Surface(
-        modifier = modifier,
+        modifier = modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         shape = MaterialTheme.shapes.small,
         color = if (prominent) {
             MaterialTheme.colorScheme.primaryContainer
@@ -150,7 +152,8 @@ fun MetadataChipRow(
     labels: List<String>,
     modifier: Modifier = Modifier,
     maxItems: Int = Int.MAX_VALUE,
-    prominent: Boolean = false
+    prominent: Boolean = false,
+    onLabelClick: ((String) -> Unit)? = null
 ) {
     val clean = labels.map { it.trim() }.filter { it.isNotBlank() }
     if (clean.isEmpty()) return
@@ -162,7 +165,11 @@ fun MetadataChipRow(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         visible.forEach { label ->
-            MetadataChip(label = label, prominent = prominent)
+            MetadataChip(
+                label = label,
+                prominent = prominent,
+                onClick = onLabelClick?.let { { it(label) } }
+            )
         }
         if (hiddenCount > 0) {
             MetadataChip(label = "+$hiddenCount", prominent = prominent)

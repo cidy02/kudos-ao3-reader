@@ -47,7 +47,8 @@ fun AO3WorkCard(
     work: AO3WorkSummary,
     onOpenWork: (AO3WorkSummary) -> Unit,
     modifier: Modifier = Modifier,
-    expandAll: Boolean = false
+    expandAll: Boolean = false,
+    onTagClick: ((String) -> Unit)? = null
 ) {
     var expanded by remember(work.id) { mutableStateOf(expandAll) }
     // Seed/reset local expand state whenever the parent batch toggle flips
@@ -121,7 +122,11 @@ fun AO3WorkCard(
             // Rating lives in stats; keep warnings/categories as chips when present.
             val safetyTags = (work.warnings + work.categories).filter { it.isNotBlank() }
             if (safetyTags.isNotEmpty()) {
-                MetadataChipRow(labels = safetyTags, maxItems = if (expanded) 12 else 4)
+                MetadataChipRow(
+                    labels = safetyTags,
+                    maxItems = if (expanded) 12 else 4,
+                    onLabelClick = onTagClick
+                )
             }
 
             if (work.summary.isNotBlank()) {
@@ -135,7 +140,11 @@ fun AO3WorkCard(
             }
 
             if (expanded && discoveryTags.isNotEmpty()) {
-                MetadataChipRow(labels = discoveryTags, maxItems = 16)
+                MetadataChipRow(
+                    labels = discoveryTags,
+                    maxItems = 16,
+                    onLabelClick = onTagClick
+                )
             }
 
             HorizontalDivider(

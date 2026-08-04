@@ -107,6 +107,10 @@ object Routes {
     const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}"
     fun authorProfile(username: String) = "author-profile/${encode(username)}"
 
+    private const val ARG_TAG_NAME = "tagName"
+    const val TagWorks = "tag-works/{$ARG_TAG_NAME}"
+    fun tagWorks(tagName: String) = "tag-works/${encode(tagName)}"
+
     fun routeArg(entry: NavBackStackEntry, name: String): String? =
         entry.arguments?.getString(name)
 
@@ -165,6 +169,7 @@ object Routes {
             CollectionDetail -> "Collection"
             AuthorWorks -> "Author"
             AuthorProfile -> "Author"
+            TagWorks -> "Works"
             AO3Dashboard -> "My Dashboard"
             LocalHistory -> "Reading History"
             LocalFavorites -> "Favorites"

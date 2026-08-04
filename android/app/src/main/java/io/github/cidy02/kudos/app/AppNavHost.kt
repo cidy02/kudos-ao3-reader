@@ -28,6 +28,7 @@ import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
 import io.github.cidy02.kudos.browse.FandomListScreen
 import io.github.cidy02.kudos.browse.FandomWorksScreen
+import io.github.cidy02.kudos.browse.TagWorksScreen
 import io.github.cidy02.kudos.comments.CommentsScreen
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.home.HomeScreen
@@ -249,6 +250,23 @@ fun AppNavHost(
                     fandomName = fandomName,
                     workRepository = container.workRepository,
                     repository = container.browseRepository,
+                    onOpenWork = { work ->
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
+                    }
+                )
+            }
+        }
+        composable(
+            Routes.TagWorks,
+            arguments = listOf(Routes.navArgOf("tagName"))
+        ) { backStackEntry ->
+            val tagName = Routes.routeArg(backStackEntry, "tagName")
+            if (tagName.isNullOrBlank()) {
+                navController.popBackStack()
+            } else {
+                TagWorksScreen(
+                    tagName = tagName,
+                    workRepository = container.workRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
