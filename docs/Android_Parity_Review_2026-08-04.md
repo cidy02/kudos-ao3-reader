@@ -16,7 +16,7 @@ Nothing is restated from a prior report.
 | Question | Answer |
 |---|---|
 | Does the branch build? | **Yes** — `assembleDebug` succeeds, 33 MB APK |
-| Did the gate pass? | **No, it was red** — one stale test. Fixed here (`4c2c2818`); now ALL GREEN |
+| Did the gate pass? | **No, it was red** — one stale test. Fixed here (`45125954`); now ALL GREEN |
 | Are the write-path bugs fixed? | **Yes**, all three |
 | Is `auth/` secure? | **Yes** — one dead invariant check to fix |
 | Was anything reverted by the merges? | **No** |
@@ -42,7 +42,7 @@ concentrated in **Phase 9** (8 of 11 failed or absent) and **Phase 11** (6 of 8)
 
 ## Headline findings
 
-### F0 — `verify.sh` was red through two releases  ✅ FIXED (`4c2c2818`)
+### F0 — `verify.sh` was red through two releases  ✅ FIXED (`45125954`)
 
 `483d874a` widened `isSupportedFileName` to `epub/pdf/html/htm/txt`
 (`WorkImporter.kt:251`) but left `importLocalEpubRejectsNonEpubExtension`
@@ -56,9 +56,9 @@ WorkImporterLifecycleTest > importLocalEpubRejectsNonEpubExtension FAILED
 
 `verify.sh` aborts at step 2/5, so **steps 3/5, 4/5 and 5/5 had never run on this
 branch** — and the red gate spanned both the 0.1.8 and 0.1.9 release bumps. After
-the fix: `android verify: ALL GREEN`. **Cherry-pick `4c2c2818`.**
+the fix: `android verify: ALL GREEN`. **Cherry-pick `45125954`.**
 
-### F1 — Phase 9 item 1: the intent-filter is dead (High)
+### F1 — Phase 9 item 1: the intent-filter is dead (High)  ✅ FIXED (`d1b0c514`)
 
 `AndroidManifest.xml:28-34` registers `ACTION_VIEW` + `ACTION_SEND` for
 epub/pdf. `MainActivity.kt` never reads the Intent — no `onNewIntent`, no
@@ -66,7 +66,7 @@ epub/pdf. `MainActivity.kt` never reads the Intent — no `onNewIntent`, no
 codebase is outbound. "Open with Kudos" and Share → Kudos open the app to Home
 and **silently discard the file**.
 
-### F2 — Phase 9 item 3: `PDFWorkConverter` emits binary noise (High)
+### F2 — Phase 9 item 3: `PDFWorkConverter` emits binary noise (High)  ✅ FIXED (`d1b0c514`)
 
 `PDFWorkConverter.kt:7` regexes `\((.*?)\)` over ISO-8859-1-decoded raw bytes.
 Measured against a real PDF:
@@ -99,7 +99,7 @@ The reader has never laid out correctly in landscape. **Do not revert
 `ReaderScreen.kt:285` passes `Modifier.fillMaxSize()`; the constraint is inside
 `ReadiumNavigatorHost`'s `FragmentContainerView` / the Readium WebView.
 
-### F4 — Debug `println`s ship in release (Medium)
+### F4 — Debug `println`s ship in release (Medium)  ✅ FIXED (`b07be588`)
 
 8 calls: `CommentsViewModel.kt` 80, 85, 88, 97; `AO3CommentRepository.kt` 47, 50,
 56, 63. Two dump whole objects (`"Repository returned: $result"`,
@@ -107,14 +107,14 @@ The reader has never laid out correctly in landscape. **Do not revert
 `proguard-rules.pro` is empty, so release keeps them — **user comment content to
 logcat**. Delete all 8.
 
-### F5 — Room `exportSchema = true` but no schemas committed (Medium)
+### F5 — Room `exportSchema = true` but no schemas committed (Medium)  ✅ FIXED (`882b68c4`)
 
 `KudosDatabase.kt:45` + `build.gradle.kts:121` set schema export, but
 `android/app/schemas/` doesn't exist and isn't gitignored. Migrations themselves
 are fine (1→7 defined, all registered `KudosAppContainer.kt:64-69`, DB v7).
 Nothing is broken today, but no `MigrationTestHelper` coverage is possible.
 
-### F6 — A security invariant that can never fail (Low)
+### F6 — A security invariant that can never fail (Low)  ✅ FIXED (`b07be588`)
 
 `android/Scripts/check-invariants.sh` check #2 ("No password storage APIs") is
 `if grep …; then : fi` — no-op `then`, no `else`. It passes unconditionally.
@@ -136,15 +136,20 @@ So the shipped `if (entry == null) continue` stopped the crash but left the
 Account hub **silently missing counts** for whichever rows lost the ordering.
 Fixed by making `hubEntries` `by lazy`.
 
-### F7 — Dead code and stray files (Low)
+### F7 — Dead code and stray files (Low)  ◐ PARTLY FIXED (`882b68c4`)
 
-- `works/WorkMetadataRefresh.kt` — zero references, tests included (Phase 10
-  item 4). Duplicated by `WorkRepository.refreshMetadata` (called
-  `KudosApplication.kt:49`). **Delete or wire.**
-- `scratch.kt` at repo root — untracked 14-line Flow scratchpad. **Delete.**
-- `AccountScreenCrashTest.kt` + `android/app/src/debug/AndroidManifest.xml` —
-  untracked. **The Account crash that shipped twice has no committed regression
-  test.** Commit both.
+- ✅ `works/WorkMetadataRefresh.kt` — **wired**, not deleted: it is not redundant
+  with `WorkRepository.refreshMetadata` (which only re-pulls tag groups), so it
+  now backs a "Refresh Metadata" action in the Work Detail overflow menu.
+- ⚠️ `scratch.kt` at repo root — **left in place, owner's call.** It is untracked
+  in the main working directory, so deleting it is unrecoverable and it is not
+  mine to remove.
+- ✅ The Account crash now has a committed regression test — but not the one that
+  was sitting uncommitted. `AccountScreenCrashTest.kt` needed Compose-on-Robolectric
+  dependencies the project does not have (`compose.ui.test.junit4` is
+  `androidTestImplementation` only), which is why it never landed. Replaced with a
+  dependency-free JVM test that pins the actual invariant — and which promptly
+  found F8.
 
 ---
 
@@ -410,7 +415,7 @@ worktrees and their branches can be deleted.**
 
 ## Suggested order of work
 
-1. Cherry-pick `4c2c2818` (F0) — restores the gate before anything else lands.
+1. Cherry-pick `45125954` (F0) — restores the gate before anything else lands.
 2. F4 + F7 — delete the 8 `println`s, `WorkMetadataRefresh.kt`, `scratch.kt`;
    commit `AccountScreenCrashTest.kt` + `debug/AndroidManifest.xml`.
 3. F2 (P9-3) — stop PDF import emitting garbage. Ships corrupt data today.
