@@ -71,8 +71,13 @@ class AccountViewModel(
     private fun refreshCounts(username: String) {
         val cache = countsCache ?: return
         val map = mutableMapOf<String, AO3AccountListCountsCache.Count>()
-        AccountListType.hubEntries.forEach { type ->
-            cache.get(type, username)?.let { map[type.listKey] = it }
+        for (entry in AccountListType.hubEntries) {
+            // Sealed-class data-object singletons can be JVM-null during class
+            // init when the companion's hubEntries list is accessed early in a
+            // coroutine dispatch.  Guard defensively — the cache is best-effort.
+            @Suppress("SENSELESS_COMPARISON")
+            if (entry == null) continue
+            cache.get(entry, username)?.let { map[entry.listKey] = it }
         }
         countsFlow.value = map
     }
