@@ -277,6 +277,7 @@ fun AppNavHost(
             AccountScreen(
                 authRepository = container.authRepository,
                 listRepository = container.accountListRepository,
+                workRepository = container.workRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenList = { type ->
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
@@ -402,6 +403,7 @@ fun AppNavHost(
                 AccountListScreen(
                     type = type,
                     repository = container.accountListRepository,
+                    workRepository = container.workRepository,
                     onLogin = { navController.navigate(Routes.AccountLogin) },
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
@@ -518,7 +520,8 @@ fun AppNavHost(
 
         composable(Routes.RecentlyDeleted) {
             RecentlyDeletedScreen(
-                workRepository = container.workRepository
+                workRepository = container.workRepository,
+                queueRepository = container.readingQueueRepository
             )
         }
 

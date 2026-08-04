@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.network.ao3.account.AO3Collection
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.works.CanonicalWork
 
 data class AccountUiState(
     val authState: AO3AuthState = AO3AuthState.Restoring,
@@ -46,7 +47,10 @@ enum class AccountActivityKind(val label: String) {
 sealed interface AccountListUiState {
     data object Loading : AccountListUiState
     data object AuthRequired : AccountListUiState
-    data class Loaded(val page: AO3SearchPage) : AccountListUiState
+    data class Loaded(
+        val page: AO3SearchPage,
+        val canonicalWorks: List<CanonicalWork> = emptyList()
+    ) : AccountListUiState
     data class Failed(val message: String) : AccountListUiState
 }
 

@@ -134,6 +134,79 @@ fun LibraryScreen(
     var createCollectionName by remember { mutableStateOf<String?>(null) }
     var addToQueueWorkId by remember { mutableStateOf<String?>(null) }
     var addToCollectionWorkId by remember { mutableStateOf<String?>(null) }
+    var bulkAddToQueueOpen by remember { mutableStateOf(false) }
+    var bulkAddToCollectionOpen by remember { mutableStateOf(false) }
+
+    if (bulkAddToQueueOpen) {
+        AlertDialog(
+            onDismissRequest = { bulkAddToQueueOpen = false },
+            title = { Text("Add Selection to Queue") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (state.readingQueues.isEmpty()) {
+                        Text("No custom queues yet.", style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        state.readingQueues.forEach { queue ->
+                            TextButton(
+                                onClick = {
+                                    bulkAddToQueueOpen = false
+                                    viewModel.bulkAddToQueue(queue.id)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(queue.name, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { bulkAddToQueueOpen = false }) { Text("Close") } }
+        )
+    }
+
+    if (bulkAddToCollectionOpen) {
+        var newName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { bulkAddToCollectionOpen = false },
+            title = { Text("Add Selection to Collection") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("New or existing collection") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (state.collections.isNotEmpty()) {
+                        Text("Existing collections:", style = MaterialTheme.typography.labelMedium)
+                        state.collections.forEach { col ->
+                            TextButton(
+                                onClick = {
+                                    bulkAddToCollectionOpen = false
+                                    viewModel.bulkAddToCollection(col.name)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(col.name, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = newName.trim().isNotEmpty(),
+                    onClick = {
+                        val name = newName.trim()
+                        bulkAddToCollectionOpen = false
+                        viewModel.bulkAddToCollection(name)
+                    }
+                ) { Text("Add") }
+            },
+            dismissButton = { TextButton(onClick = { bulkAddToCollectionOpen = false }) { Text("Cancel") } }
+        )
+    }
 
     if (confirmBulkRemove) {
         val count = state.selectedCount
@@ -416,6 +489,10 @@ fun LibraryScreen(
         onToggleSelection = viewModel::toggleWorkSelection,
         onBulkFavorite = { viewModel.bulkSetFavorite(true) },
         onBulkUnfavorite = { viewModel.bulkSetFavorite(false) },
+        onBulkSave = { viewModel.bulkSetSaved(true) },
+        onBulkUnsave = { viewModel.bulkSetSaved(false) },
+        onBulkAddToQueue = { bulkAddToQueueOpen = true },
+        onBulkAddToCollection = { bulkAddToCollectionOpen = true },
         onBulkMarkFinished = { viewModel.bulkSetFinished(true) },
         onBulkMarkUnfinished = { viewModel.bulkSetFinished(false) },
         onBulkRemove = { confirmBulkRemove = true },
@@ -453,6 +530,10 @@ private fun LibraryContent(
     onToggleSelection: (String) -> Unit,
     onBulkFavorite: () -> Unit,
     onBulkUnfavorite: () -> Unit,
+    onBulkSave: () -> Unit,
+    onBulkUnsave: () -> Unit,
+    onBulkAddToQueue: () -> Unit,
+    onBulkAddToCollection: () -> Unit,
     onBulkMarkFinished: () -> Unit,
     onBulkMarkUnfinished: () -> Unit,
     onBulkRemove: () -> Unit,
@@ -745,6 +826,10 @@ private fun LibraryContent(
                 hasSelection = state.hasSelection,
                 onFavorite = onBulkFavorite,
                 onUnfavorite = onBulkUnfavorite,
+                onSave = onBulkSave,
+                onUnsave = onBulkUnsave,
+                onAddToQueue = onBulkAddToQueue,
+                onAddToCollection = onBulkAddToCollection,
                 onMarkFinished = onBulkMarkFinished,
                 onMarkUnfinished = onBulkMarkUnfinished,
                 onRemove = onBulkRemove,
@@ -755,7 +840,7 @@ private fun LibraryContent(
     }
 }
 
-private data class LibraryCardActions(
+data class LibraryCardActions(
     val onOpenWork: (String) -> Unit,
     val onOpenReader: (String) -> Unit,
     val onToggleFavorite: (String) -> Unit,
@@ -1051,7 +1136,7 @@ private fun LibraryCarousel(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LibraryCarouselCard(
+fun LibraryCarouselCard(
     display: LibraryDisplayItem,
     showProgress: Boolean,
     footerOverride: String?,
@@ -1510,6 +1595,10 @@ private fun LibrarySelectionActionBar(
     hasSelection: Boolean,
     onFavorite: () -> Unit,
     onUnfavorite: () -> Unit,
+    onSave: () -> Unit,
+    onUnsave: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onAddToCollection: () -> Unit,
     onMarkFinished: () -> Unit,
     onMarkUnfinished: () -> Unit,
     onRemove: () -> Unit,
@@ -1531,6 +1620,10 @@ private fun LibrarySelectionActionBar(
         ) {
             TextButton(onClick = onFavorite, enabled = hasSelection) { Text("Favorite") }
             TextButton(onClick = onUnfavorite, enabled = hasSelection) { Text("Unfavorite") }
+            TextButton(onClick = onSave, enabled = hasSelection) { Text("Save") }
+            TextButton(onClick = onUnsave, enabled = hasSelection) { Text("Unsave") }
+            TextButton(onClick = onAddToQueue, enabled = hasSelection) { Text("Queue") }
+            TextButton(onClick = onAddToCollection, enabled = hasSelection) { Text("Collection") }
             TextButton(onClick = onMarkFinished, enabled = hasSelection) { Text("Finished") }
             TextButton(onClick = onMarkUnfinished, enabled = hasSelection) { Text("Unfinished") }
             TextButton(onClick = onRemove, enabled = hasSelection) {

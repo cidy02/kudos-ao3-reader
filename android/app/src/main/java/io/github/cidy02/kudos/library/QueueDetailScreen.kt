@@ -14,11 +14,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +47,7 @@ import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueDetailScreen(
     queueId: String,
@@ -55,6 +59,9 @@ fun QueueDetailScreen(
     var error by remember(queueId) { mutableStateOf<String?>(null) }
     var queue by remember(queueId) { mutableStateOf<ReadingQueue?>(null) }
     var items by remember(queueId) { mutableStateOf<List<QueueMembershipItem>>(emptyList()) }
+    var filters by remember { mutableStateOf(LibraryFilterState()) }
+    var sort by remember { mutableStateOf(LibrarySort.RecentlyAdded) }
+    var showFilterPanel by remember { mutableStateOf(false) }
     var overflowExpanded by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf("") }
@@ -80,6 +87,14 @@ fun QueueDetailScreen(
     }
 
     LaunchedEffect(queueId) { refresh() }
+
+    val filteredItems = remember(items, filters, sort) {
+        val displayItems = items.map { LibraryDisplayItem(LibraryWorkListItem(it.work!!)) }
+        val results = LibraryQuery.apply(displayItems, "", filters, sort)
+        results.mapNotNull { display ->
+            items.find { it.membership.workID == display.item.work.id }
+        }
+    }
 
     fun removeWork(workId: String) {
         scope.launch {
@@ -205,28 +220,41 @@ fun QueueDetailScreen(
                 )
 
                 if (queue != null && queue!!.kindRaw != io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER) {
-                    Box {
-                        IconButton(onClick = { overflowExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Queue actions")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showFilterPanel = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Sort,
+                                contentDescription = "Filter and Sort",
+                                tint = if (filters.hasActiveFilters) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
                         }
-                        DropdownMenu(
-                            expanded = overflowExpanded,
-                            onDismissRequest = { overflowExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Rename") },
-                                onClick = {
-                                    overflowExpanded = false
-                                    showRenameDialog = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    overflowExpanded = false
-                                    showDeleteConfirm = true
-                                }
-                            )
+                        Box {
+                            IconButton(onClick = { overflowExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Queue actions")
+                            }
+                            DropdownMenu(
+                                expanded = overflowExpanded,
+                                onDismissRequest = { overflowExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename") },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showRenameDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showDeleteConfirm = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -257,8 +285,17 @@ fun QueueDetailScreen(
                             message = "Add works from Work Detail with Add to Saved for Later."
                         )
                     }
+                } else if (filteredItems.isEmpty()) {
+                    item {
+                        EmptyStateCard(
+                            title = "No matches",
+                            message = "No works in this queue match your filters.",
+                            primaryActionLabel = "Clear filters",
+                            onPrimaryAction = { filters = LibraryFilterState() }
+                        )
+                    }
                 } else {
-                    items(items, key = { it.membership.id }) { item ->
+                    items(filteredItems, key = { it.membership.id }) { item ->
                         QueueWorkRow(
                             item = item,
                             enabled = !working,
@@ -271,6 +308,20 @@ fun QueueDetailScreen(
                 }
             }
         }
+    }
+
+    if (showFilterPanel) {
+        LibraryFilterPanel(
+            filters = filters,
+            sort = sort,
+            userTags = emptyList(), // Later: pass all tags from repo
+            collections = emptyList(), // Later: pass all collections from repo
+            onFiltersChange = { filters = it },
+            onSortChange = { sort = it },
+            onApply = { showFilterPanel = false },
+            onClear = { filters = LibraryFilterState() },
+            onDismiss = { showFilterPanel = false }
+        )
     }
 }
 

@@ -115,6 +115,11 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.ui.theme.Ao3Red
+import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.library.LibraryWorkListItem
+import io.github.cidy02.kudos.library.LibraryDisplayItem
+import io.github.cidy02.kudos.library.LibraryCarouselCard
+import io.github.cidy02.kudos.library.LibraryCardActions
 import java.util.concurrent.TimeUnit
 
 /**
@@ -127,6 +132,7 @@ import java.util.concurrent.TimeUnit
 fun AccountScreen(
     authRepository: AO3AuthRepository,
     listRepository: AccountListRepository,
+    workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
     onOpenBackup: () -> Unit,
@@ -146,7 +152,11 @@ fun AccountScreen(
     onOpenWorkComments: (workId: Long) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
-        factory = AccountViewModel.factory(authRepository)
+        factory = AccountViewModel.factory(
+            authRepository,
+            null, // authorRepository
+            null  // countsCache
+        )
     )
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -218,6 +228,7 @@ fun AccountScreen(
                     kind = selectedReading,
                     onKindChange = { readingKind = it.name },
                     listRepository = listRepository,
+                    workRepository = workRepository,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     onOpenCollection = onOpenCollection,
@@ -232,6 +243,7 @@ fun AccountScreen(
                     selectedFandom = selectedFandom,
                     onFandomChange = { selectedFandom = it },
                     listRepository = listRepository,
+                    workRepository = workRepository,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork
                 )
@@ -242,6 +254,7 @@ fun AccountScreen(
                     kind = selectedActivity,
                     onKindChange = { activityKind = it.name },
                     listRepository = listRepository,
+                    workRepository = workRepository,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     username = username,
@@ -932,6 +945,7 @@ private fun ReadingTabContent(
     kind: AccountReadingKind,
     onKindChange: (AccountReadingKind) -> Unit,
     listRepository: AccountListRepository,
+    workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenCollection: (AO3Collection) -> Unit,
@@ -969,6 +983,7 @@ private fun ReadingTabContent(
                 HubWorksPane(
                     listType = listType,
                     listRepository = listRepository,
+                    workRepository = workRepository,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     sectionTitle = kind.label
@@ -986,6 +1001,7 @@ private fun WritingTabContent(
     selectedFandom: String?,
     onFandomChange: (String?) -> Unit,
     listRepository: AccountListRepository,
+    workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
 ) {
@@ -1007,6 +1023,7 @@ private fun WritingTabContent(
                 HubWorksPane(
                     listType = AccountListType.MyWorks,
                     listRepository = listRepository,
+                    workRepository = workRepository,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     sectionTitle = "Works",
@@ -1037,6 +1054,7 @@ private fun ActivityTabContent(
     kind: AccountActivityKind,
     onKindChange: (AccountActivityKind) -> Unit,
     listRepository: AccountListRepository,
+    workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     username: String? = null,
@@ -1065,6 +1083,7 @@ private fun ActivityTabContent(
                 HubWorksPane(
                     listType = AccountListType.History,
                     listRepository = listRepository,
+                    workRepository = workRepository,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     sectionTitle = "My AO3 History"
@@ -1156,6 +1175,7 @@ private fun SignInRequiredCard(onLogin: () -> Unit) {
 private fun HubWorksPane(
     listType: AccountListType,
     listRepository: AccountListRepository,
+    workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     sectionTitle: String,
@@ -1164,7 +1184,7 @@ private fun HubWorksPane(
     showFandomChips: Boolean = false,
     viewModel: AccountListViewModel = viewModel(
         key = "hub-${listType.listKey}",
-        factory = AccountListViewModel.factory(listType, listRepository)
+        factory = AccountListViewModel.factory(listType, listRepository, workRepository)
     )
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -1179,15 +1199,15 @@ private fun HubWorksPane(
             onPrimaryAction = { viewModel.load(1) }
         )
         is AccountListUiState.Loaded -> {
-            val allWorks = current.page.works
-            if (allWorks.isEmpty()) {
+            val allWorks = current.canonicalWorks
+            if (allWorks.isEmpty() && current.page.works.isEmpty()) {
                 EmptyStateCard(title = listType.emptyTitle, message = listType.emptyMessage)
                 return
             }
 
             val fandomCounts = remember(allWorks) {
                 allWorks
-                    .flatMap { it.fandoms }
+                    .flatMap { it.remote.fandoms }
                     .filter { it.isNotBlank() }
                     .groupingBy { it }
                     .eachCount()
@@ -1197,7 +1217,7 @@ private fun HubWorksPane(
             val works = if (fandomFilter.isNullOrBlank()) {
                 allWorks
             } else {
-                allWorks.filter { work -> work.fandoms.any { it == fandomFilter } }
+                allWorks.filter { work -> work.remote.fandoms.any { it == fandomFilter } }
             }
 
             LazyVerticalGrid(
@@ -1266,7 +1286,34 @@ private fun HubWorksPane(
                     }
                 } else {
                     gridItems(works, key = { "${listType.listKey}-${it.id}" }) { work ->
-                        AccountRemoteWorkCover(work = work, onOpen = { onOpenWork(work) })
+                        if (work.local != null) {
+                            LibraryCarouselCard(
+                                display = LibraryDisplayItem(
+                                    item = LibraryWorkListItem(
+                                        work = work.local,
+                                        userTags = emptyList(), // Later: pair tags too
+                                        collections = emptyList()
+                                    )
+                                ),
+                                showProgress = true,
+                                footerOverride = null,
+                                actions = LibraryCardActions(
+                                    onOpenWork = { onOpenWork(work.remote) },
+                                    onOpenReader = { onOpenWork(work.remote) }, // Detail handles read
+                                    onToggleFavorite = { },
+                                    onToggleFinished = { },
+                                    onRemove = { },
+                                    onSetSaved = { _, _ -> },
+                                    onSelect = { },
+                                    onReveal = { },
+                                    onAddToQueue = { },
+                                    onAddToCollection = { },
+                                    onOpenComments = { }
+                                )
+                            )
+                        } else {
+                            AccountRemoteWorkCover(work = work.remote, onOpen = { onOpenWork(work.remote) })
+                        }
                     }
                 }
 
@@ -1404,12 +1451,13 @@ private fun AccountRemoteWorkCover(
 fun AccountListScreen(
     type: AccountListType,
     repository: AccountListRepository,
+    workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AccountListViewModel = viewModel(
         key = type.listKey,
-        factory = AccountListViewModel.factory(type, repository)
+        factory = AccountListViewModel.factory(type, repository, workRepository)
     )
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -1437,7 +1485,7 @@ fun AccountListScreen(
                 )
             }
             is AccountListUiState.Loaded -> {
-                if (current.page.works.isEmpty()) {
+                if (current.canonicalWorks.isEmpty() && current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = type.emptyTitle,
                         message = type.emptyMessage
@@ -1447,7 +1495,7 @@ fun AccountListScreen(
                         type = type,
                         page = current.page.currentPage,
                         totalPages = current.page.totalPages,
-                        works = current.page.works,
+                        works = current.canonicalWorks,
                         onLoadPage = viewModel::load,
                         onOpenWork = onOpenWork
                     )
@@ -1462,7 +1510,7 @@ private fun AccountListContent(
     type: AccountListType,
     page: Int,
     totalPages: Int,
-    works: List<AO3WorkSummary>,
+    works: List<io.github.cidy02.kudos.works.CanonicalWork>,
     onLoadPage: (Int) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
 ) {
@@ -1473,7 +1521,34 @@ private fun AccountListContent(
             }
         }
         items(works, key = { "${type.listKey}-${it.id}" }) { work ->
-            AO3WorkCard(work = work, onOpenWork = onOpenWork)
+            if (work.local != null) {
+                LibraryCarouselCard(
+                    display = LibraryDisplayItem(
+                        item = LibraryWorkListItem(
+                            work = work.local,
+                            userTags = emptyList(), // Later: pair tags too
+                            collections = emptyList()
+                        )
+                    ),
+                    showProgress = true,
+                    footerOverride = null,
+                    actions = LibraryCardActions(
+                        onOpenWork = { onOpenWork(work.remote) },
+                        onOpenReader = { onOpenWork(work.remote) }, // Detail handles read
+                        onToggleFavorite = { },
+                        onToggleFinished = { },
+                        onRemove = { },
+                        onSetSaved = { _, _ -> },
+                        onSelect = { },
+                        onReveal = { },
+                        onAddToQueue = { },
+                        onAddToCollection = { },
+                        onOpenComments = { }
+                    )
+                )
+            } else {
+                AO3WorkCard(work = work.remote, onOpenWork = onOpenWork)
+            }
         }
         item {
             if (totalPages > 1) {

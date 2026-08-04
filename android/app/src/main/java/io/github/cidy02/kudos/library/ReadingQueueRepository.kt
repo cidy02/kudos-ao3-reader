@@ -247,6 +247,51 @@ class ReadingQueueRepository(
         touchQueueMembershipChanged(queueId, now)
     }
 
+    suspend fun listRecentlyDeletedQueues(): List<ReadingQueue> {
+        return queueDao.getAllQueues().filter { it.isDeleted }.map { it.toDomain() }
+    }
+
+    suspend fun restoreQueueFromRecentlyDeleted(queueId: String): ReadingQueue? {
+        val queue = queueDao.getQueueById(queueId) ?: return null
+        val now = clock()
+        val restored = queue.copy(
+            isDeleted = false,
+            deletedAt = null,
+            permanentDeletionScheduledAt = null,
+            dateUpdated = now
+        )
+        queueDao.upsertQueue(restored)
+        tombstoneDao.deleteByRecord(queueId, SyncTombstoneRecordType.READING_QUEUE)
+        return restored.toDomain()
+    }
+
+    suspend fun hardDeleteQueue(queueId: String) {
+        queueDao.deleteQueueById(queueId)
+        // Membership rows cascade via FK in DB.
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = queueId,
+                recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE,
+                createdAt = clock(),
+                lastModifiedAt = clock(),
+                deletedOnDeviceID = "",
+                deletionReason = "queueDeleted"
+            )
+        )
+    }
+
+    suspend fun sweepExpiredQueueSoftDeletes(): Int {
+        val now = clock()
+        val expired = queueDao.getAllQueues().filter { 
+            it.isDeleted && it.permanentDeletionScheduledAt != null && it.permanentDeletionScheduledAt!! <= now 
+        }
+        for (entity in expired) {
+            hardDeleteQueue(entity.id)
+        }
+        return expired.size
+    }
+
     private suspend fun touchQueueMembershipChanged(queueId: String, now: Instant) {
         val queue = queueDao.getQueueById(queueId) ?: return
         queueDao.upsertQueue(

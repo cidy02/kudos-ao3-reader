@@ -166,6 +166,17 @@ class LibraryViewModel(
         }
     }
 
+    fun bulkSetSaved(saved: Boolean) {
+        val ids = selectedWorkIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                workRepository.setSaved(id, saved)
+            }
+            exitSelectionMode()
+        }
+    }
+
     fun bulkSetFinished(finished: Boolean) {
         val ids = selectedWorkIds.value
         if (ids.isEmpty()) return
@@ -183,6 +194,30 @@ class LibraryViewModel(
         viewModelScope.launch {
             for (id in ids) {
                 workRepository.softDelete(id)
+            }
+            exitSelectionMode()
+        }
+    }
+
+    fun bulkAddToQueue(queueId: String) {
+        val ids = selectedWorkIds.value
+        val queues = queueRepository ?: return
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                runCatching { queues.addWork(queueId, id) }
+            }
+            queueRefreshTick.update { it + 1 }
+            exitSelectionMode()
+        }
+    }
+
+    fun bulkAddToCollection(collectionName: String) {
+        val ids = selectedWorkIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                runCatching { workRepository.addToCollection(id, collectionName) }
             }
             exitSelectionMode()
         }

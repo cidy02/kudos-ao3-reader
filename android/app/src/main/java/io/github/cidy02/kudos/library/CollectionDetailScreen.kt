@@ -2,32 +2,46 @@ package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.app.PrivacyGate
@@ -43,6 +57,7 @@ import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionDetailScreen(
     collectionId: String,
@@ -53,19 +68,14 @@ fun CollectionDetailScreen(
     onOpenReader: (String) -> Unit,
     onCollectionDeleted: () -> Unit
 ) {
-    // A Collection had no mature-content gating at all: title, author and a live
-    // Read button rendered unconditionally, unlike every other screen showing local
-    // works (Library, Home). Reuses the same LibraryPrivacy computation and the
-    // shared PrivacyGate those use, rather than a third parallel privacy mechanism.
     val privacy by (settingsRepository?.settings?.map { it.privacy }
         ?: kotlinx.coroutines.flow.flowOf(PrivacySettings()))
         .collectAsState(initial = PrivacySettings())
     val reveal by privacyGate.state.collectAsState()
-    // "Ask before removing a work" toggle in Settings — persisted and round-tripped
-    // through backup, but no delete/remove action anywhere actually read it yet.
     val confirmBeforeDelete by (settingsRepository?.settings?.map { it.app.confirmBeforeDelete }
         ?: kotlinx.coroutines.flow.flowOf(true))
         .collectAsState(initial = true)
+    
     var loading by remember(collectionId) { mutableStateOf(true) }
     var working by remember(collectionId) { mutableStateOf(false) }
     var error by remember(collectionId) { mutableStateOf<String?>(null) }
@@ -75,6 +85,7 @@ fun CollectionDetailScreen(
     var showRename by remember(collectionId) { mutableStateOf(false) }
     var renameText by remember(collectionId) { mutableStateOf("") }
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }
+    var showAddPicker by remember(collectionId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activity = androidx.compose.ui.platform.LocalContext.current
         as? androidx.fragment.app.FragmentActivity
@@ -101,14 +112,28 @@ fun CollectionDetailScreen(
 
     LaunchedEffect(collectionId) { refresh() }
 
+    fun addWorks(workIds: Set<String>) {
+        scope.launch {
+            working = true
+            error = null
+            try {
+                workIds.forEach { workRepository.addWorkToCollection(it, collectionId) }
+                refresh()
+            } catch (e: Exception) {
+                error = e.message ?: "Could not add works."
+            } finally {
+                working = false
+            }
+        }
+    }
+
     fun removeWork(workId: String) {
         scope.launch {
             working = true
             error = null
             try {
                 workRepository.removeFromCollection(workId, collectionId)
-                works = workRepository.worksForCollection(collectionId)
-                collection = workRepository.getCollection(collectionId)
+                refresh()
             } catch (e: Exception) {
                 error = e.message ?: "Could not remove work."
             } finally {
@@ -268,9 +293,15 @@ fun CollectionDetailScreen(
                 },
                 trailing = {
                     if (collection != null) {
-                        // Rename in place (preserves memberships) + soft-delete —
-                        // matches iOS CollectionDetailView menu.
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                enabled = !working && !loading,
+                                onClick = { showAddPicker = true }
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.padding(end = 4.dp))
+                                Text("Add Works")
+                            }
                             OutlinedButton(
                                 enabled = !working && !loading,
                                 onClick = {
@@ -313,8 +344,10 @@ fun CollectionDetailScreen(
                     item {
                         EmptyStateCard(
                             title = "Nothing here yet",
-                            message = "Add works from Work Detail with Add collection. " +
-                                "You can delete this empty shelf with Delete."
+                            message = "Add works with the Add button above. " +
+                                "You can delete this empty shelf with Delete.",
+                            primaryActionLabel = "Add works",
+                            onPrimaryAction = { showAddPicker = true }
                         )
                     }
                 } else {
@@ -339,6 +372,121 @@ fun CollectionDetailScreen(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+
+    if (showAddPicker) {
+        val allSavedWorks by workRepository.observeSavedWorks().collectAsState(initial = emptyList())
+        val currentWorkIds = works.map { it.id }.toSet()
+        val availableToAdd = allSavedWorks.filter { it.id !in currentWorkIds }
+
+        AddWorksToCollectionDialog(
+            availableWorks = availableToAdd,
+            onDismiss = { showAddPicker = false },
+            onAdd = { selected ->
+                showAddPicker = false
+                addWorks(selected)
+            }
+        )
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AddWorksToCollectionDialog(
+    availableWorks: List<SavedWork>,
+    onDismiss: () -> Unit,
+    onAdd: (Set<String>) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val selectedIds = remember { mutableStateMapOf<String, Boolean>() }
+    val filteredWorks = remember(availableWorks, searchQuery) {
+        if (searchQuery.isBlank()) availableWorks
+        else availableWorks.filter { 
+            it.title.contains(searchQuery, ignoreCase = true) || 
+            it.author.contains(searchQuery, ignoreCase = true) 
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Add Works to Collection", style = MaterialTheme.typography.titleLarge)
+            
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search your Library") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (filteredWorks.isEmpty()) {
+                    item {
+                        Text(
+                            if (availableWorks.isEmpty()) "No other works in Library to add." 
+                            else "No matches in Library.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
+                    }
+                } else {
+                    items(filteredWorks, key = { it.id }) { work ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val current = selectedIds[work.id] ?: false
+                                    selectedIds[work.id] = !current
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Checkbox(
+                                checked = selectedIds[work.id] ?: false,
+                                onCheckedChange = { selectedIds[work.id] = it }
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(work.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(work.author, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = { onAdd(selectedIds.filterValues { it }.keys) },
+                    modifier = Modifier.weight(1f),
+                    enabled = selectedIds.any { it.value }
+                ) {
+                    val count = selectedIds.count { it.value }
+                    Text(if (count > 0) "Add $count work${if (count > 1) "s" else ""}" else "Add")
                 }
             }
         }
@@ -370,9 +518,6 @@ private fun CollectionWorkRow(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Obscured: the whole title/author block reveals on tap instead of
-                    // opening the work — this screen had no such gate at all before
-                    // (found in review), unlike every other place a local work renders.
                     .clickable(
                         enabled = enabled,
                         onClick = if (obscured) onReveal else onOpenWork

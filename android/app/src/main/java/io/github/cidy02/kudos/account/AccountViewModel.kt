@@ -7,8 +7,11 @@ import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.usernameOrNull
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
+import io.github.cidy02.kudos.works.CanonicalWorkMerge
+import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -100,12 +103,26 @@ class AccountViewModel(
 
 class AccountListViewModel(
     private val type: AccountListType,
-    private val repository: AccountListRepository
+    private val repository: AccountListRepository,
+    private val workRepository: WorkRepository
 ) : ViewModel() {
-    private val mutableState = kotlinx.coroutines.flow.MutableStateFlow<AccountListUiState>(
-        AccountListUiState.Loading
+    private val mutableState = MutableStateFlow<AccountListUiState>(AccountListUiState.Loading)
+    val uiState: StateFlow<AccountListUiState> = combine(
+        mutableState,
+        workRepository.observeSavedWorks()
+    ) { state, local ->
+        if (state is AccountListUiState.Loaded) {
+            state.copy(
+                canonicalWorks = CanonicalWorkMerge.remoteLed(state.page.works, local)
+            )
+        } else {
+            state
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = AccountListUiState.Loading
     )
-    val uiState: StateFlow<AccountListUiState> = mutableState
 
     init {
         load(1)
@@ -114,7 +131,8 @@ class AccountListViewModel(
     fun load(page: Int) {
         viewModelScope.launch {
             mutableState.value = AccountListUiState.Loading
-            mutableState.value = when (val result = repository.load(type, page)) {
+            val result = repository.load(type, page)
+            mutableState.value = when (result) {
                 is AO3Result.Success -> {
                     // Update the counts cache whenever a list page is loaded (Item 9).
                     val username = repository.authRepository.username()
@@ -144,12 +162,13 @@ class AccountListViewModel(
     companion object {
         fun factory(
             type: AccountListType,
-            repository: AccountListRepository
+            repository: AccountListRepository,
+            workRepository: WorkRepository
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return AccountListViewModel(type, repository) as T
+                    return AccountListViewModel(type, repository, workRepository) as T
                 }
             }
         }

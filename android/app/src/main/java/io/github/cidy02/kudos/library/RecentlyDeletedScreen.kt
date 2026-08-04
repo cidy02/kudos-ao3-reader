@@ -32,6 +32,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
@@ -39,10 +40,12 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.library.ReadingQueueRepository
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -54,17 +57,28 @@ data class RecentlyDeletedUiState(
     val loading: Boolean = true,
     val items: List<SavedWork> = emptyList(),
     val deletedCollections: List<WorkCollection> = emptyList(),
+    val deletedQueues: List<ReadingQueue> = emptyList(),
     val error: String? = null
 )
 
 class RecentlyDeletedViewModel(
-    private val workRepository: WorkRepository
+    private val workRepository: WorkRepository,
+    private val queueRepository: ReadingQueueRepository? = null
 ) : ViewModel() {
+    private val queueTick = MutableStateFlow(0)
+
     val state: StateFlow<RecentlyDeletedUiState> = combine(
         workRepository.observeRecentlyDeleted(),
-        workRepository.observeRecentlyDeletedCollections()
-    ) { works, collections ->
-        RecentlyDeletedUiState(loading = false, items = works, deletedCollections = collections)
+        workRepository.observeRecentlyDeletedCollections(),
+        queueTick
+    ) { works, collections, _ ->
+        val queues = queueRepository?.listRecentlyDeletedQueues().orEmpty()
+        RecentlyDeletedUiState(
+            loading = false,
+            items = works,
+            deletedCollections = collections,
+            deletedQueues = queues
+        )
     }
         .catch { throwable ->
             emit(
@@ -105,10 +119,32 @@ class RecentlyDeletedViewModel(
         }
     }
 
+    fun restoreQueue(queueId: String) {
+        viewModelScope.launch {
+            queueRepository?.restoreQueueFromRecentlyDeleted(queueId)
+            // Manual refresh since we don't have an observeRecentlyDeletedQueues flow yet.
+            loadQueues()
+        }
+    }
+
+    fun deleteQueueForever(queueId: String) {
+        viewModelScope.launch {
+            queueRepository?.hardDeleteQueue(queueId)
+            loadQueues()
+        }
+    }
+
+    private fun loadQueues() {
+        queueTick.value += 1
+    }
+
     companion object {
-        fun factory(workRepository: WorkRepository): ViewModelProvider.Factory =
+        fun factory(
+            workRepository: WorkRepository,
+            queueRepository: ReadingQueueRepository? = null
+        ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { RecentlyDeletedViewModel(workRepository) }
+                initializer { RecentlyDeletedViewModel(workRepository, queueRepository) }
             }
     }
 }
@@ -123,14 +159,19 @@ private sealed interface PendingHardDelete {
     data class Collection(val collection: WorkCollection) : PendingHardDelete {
         override val label: String get() = collection.name
     }
+
+    data class Queue(val queue: ReadingQueue) : PendingHardDelete {
+        override val label: String get() = queue.displayName
+    }
 }
 
 @Composable
 fun RecentlyDeletedScreen(
-    workRepository: WorkRepository
+    workRepository: WorkRepository,
+    queueRepository: ReadingQueueRepository? = null
 ) {
     val viewModel: RecentlyDeletedViewModel = viewModel(
-        factory = RecentlyDeletedViewModel.factory(workRepository)
+        factory = RecentlyDeletedViewModel.factory(workRepository, queueRepository)
     )
     val state by viewModel.state.collectAsState()
     var pendingHardDelete by remember { mutableStateOf<PendingHardDelete?>(null) }
@@ -155,6 +196,8 @@ fun RecentlyDeletedScreen(
                             is PendingHardDelete.Work -> viewModel.deleteForever(toDelete.work.id)
                             is PendingHardDelete.Collection ->
                                 viewModel.deleteCollectionForever(toDelete.collection.id)
+                            is PendingHardDelete.Queue ->
+                                viewModel.deleteQueueForever(toDelete.queue.id)
                             null -> Unit
                         }
                     }
@@ -175,6 +218,10 @@ fun RecentlyDeletedScreen(
         onRestoreCollection = viewModel::restoreCollection,
         onDeleteCollectionForever = { collection ->
             pendingHardDelete = PendingHardDelete.Collection(collection)
+        },
+        onRestoreQueue = viewModel::restoreQueue,
+        onDeleteQueueForever = { queue ->
+            pendingHardDelete = PendingHardDelete.Queue(queue)
         }
     )
 }
@@ -185,7 +232,9 @@ private fun RecentlyDeletedContent(
     onRestore: (String) -> Unit,
     onDeleteForever: (SavedWork) -> Unit,
     onRestoreCollection: (String) -> Unit,
-    onDeleteCollectionForever: (WorkCollection) -> Unit
+    onDeleteCollectionForever: (WorkCollection) -> Unit,
+    onRestoreQueue: (String) -> Unit,
+    onDeleteQueueForever: (ReadingQueue) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -195,7 +244,7 @@ private fun RecentlyDeletedContent(
         item {
             // TopAppBar already says "Recently Deleted".
             KudosScreenHeader(
-                subtitle = "Deleted works and collections stay here for 90 days before " +
+                subtitle = "Deleted works, collections, and queues stay here for 90 days before " +
                     "permanent removal."
             )
         }
@@ -215,15 +264,23 @@ private fun RecentlyDeletedContent(
             return@LazyColumn
         }
 
-        if (state.items.isEmpty() && state.deletedCollections.isEmpty()) {
+        if (state.items.isEmpty() && state.deletedCollections.isEmpty() && state.deletedQueues.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = "Nothing here",
-                    message = "Deleted works and collections stay here for 90 days " +
+                    message = "Deleted items stay here for 90 days " +
                         "before they're permanently removed."
                 )
             }
             return@LazyColumn
+        }
+
+        items(state.deletedQueues, key = { "queue-${it.id}" }) { queue ->
+            RecentlyDeletedQueueRow(
+                queue = queue,
+                onRestore = { onRestoreQueue(queue.id) },
+                onDeleteForever = { onDeleteQueueForever(queue) }
+            )
         }
 
         items(state.deletedCollections, key = { "collection-${it.id}" }) { collection ->
@@ -240,6 +297,58 @@ private fun RecentlyDeletedContent(
                 onRestore = { onRestore(work.id) },
                 onDeleteForever = { onDeleteForever(work) }
             )
+        }
+    }
+}
+
+@Composable
+private fun RecentlyDeletedQueueRow(
+    queue: ReadingQueue,
+    onRestore: () -> Unit,
+    onDeleteForever: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = queue.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "Reading Queue",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            expiryCaption(queue.permanentDeletionScheduledAt, queue.deletedAt)
+                ?.let { caption ->
+                    Text(
+                        text = caption,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onRestore) { Text("Restore") }
+                OutlinedButton(onClick = onDeleteForever) { Text("Delete forever") }
+            }
         }
     }
 }
