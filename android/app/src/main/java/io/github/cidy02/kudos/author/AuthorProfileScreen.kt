@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.author
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -53,6 +55,7 @@ import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import kotlinx.coroutines.launch
 
 private enum class AuthorTab(val label: String) {
@@ -196,10 +199,12 @@ fun AuthorProfileScreen(
 
                 // Pseud scope
                 val pseuds = h?.pseuds.orEmpty()
-                if (pseuds.isNotEmpty()) {
+                if (pseuds.size > 1) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                     ) {
                         FilterChip(
                             selected = route.pseud == null,
@@ -208,7 +213,7 @@ fun AuthorProfileScreen(
                             },
                             label = { Text("All Pseuds") }
                         )
-                        pseuds.take(6).forEach { pseud ->
+                        pseuds.forEach { pseud ->
                             FilterChip(
                                 selected = route.pseud.equals(pseud.route.pseud, true),
                                 onClick = { route = pseud.route },
@@ -346,18 +351,32 @@ fun AuthorProfileScreen(
                         contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         items(pageData.bookmarks, key = { it.id }) { bm ->
-                            bm.work?.let { work ->
-                                AO3WorkCard(
-                                    work = work,
-                                    onOpenWork = onOpenWork
+                            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                                if (bm.isPrivate || bm.isRecommendation) {
+                                    val labels = buildList {
+                                        if (bm.isPrivate) add("Private")
+                                        if (bm.isRecommendation) add("Recommendation")
+                                    }
+                                    MetadataChipRow(labels = labels, prominent = true)
+                                    Spacer(Modifier.height(4.dp))
+                                }
+                                bm.work?.let { work ->
+                                    AO3WorkCard(
+                                        work = work,
+                                        onOpenWork = onOpenWork
+                                    )
+                                } ?: Text(
+                                    "Bookmark #${bm.id}",
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
-                            } ?: Text("Bookmark #${bm.id}", style = MaterialTheme.typography.bodyMedium)
-                            if (bm.notes.isNotBlank()) {
-                                Text(
-                                    bm.notes,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (bm.notes.isNotBlank()) {
+                                    Text(
+                                        bm.notes,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
                             }
                         }
                         item {
@@ -409,7 +428,18 @@ fun AuthorProfileScreen(
                             item {
                                 Text("Pseuds", style = MaterialTheme.typography.titleSmall)
                                 a.pseuds.forEach { p ->
-                                    Text("• ${p.name}", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        text = "• ${p.name}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                route = p.route
+                                                tab = AuthorTab.Works
+                                            }
+                                            .padding(vertical = 4.dp)
+                                    )
                                 }
                             }
                         }

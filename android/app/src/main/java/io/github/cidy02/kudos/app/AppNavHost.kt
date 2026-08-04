@@ -291,7 +291,17 @@ fun AppNavHost(
                 onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenPrivacy = { navController.navigate(Routes.Settings) },
                 onOpenWeb = { url ->
-                    navController.navigate(Routes.webFallback(url))
+                    when (url) {
+                        "native:preferences" -> navController.navigate(Routes.AO3Preferences)
+                        "native:profile" -> {
+                            val auth = (container.authRepository.state.value as? AO3AuthState.SignedIn)
+                            val username = auth?.username
+                            if (username != null) {
+                                navController.navigate(Routes.authorProfile(username))
+                            }
+                        }
+                        else -> navController.navigate(Routes.webFallback(url))
+                    }
                 },
                 onOpenWork = { work ->
                     navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
@@ -431,7 +441,7 @@ fun AppNavHost(
                     navController.navigate(Routes.reader(workId))
                 },
                 onOpenAuthor = { authorName ->
-                    navController.navigate(Routes.authorWorks(authorName))
+                    navController.navigate(Routes.authorProfile(authorName))
                 }
             )
         }

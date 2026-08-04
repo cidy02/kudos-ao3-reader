@@ -15,7 +15,8 @@ class AO3CommentRepository(
     private val publicClient: AO3Client,
     private val authenticatedClient: AO3AuthenticatedClient,
     private val parser: AO3CommentParser = AO3CommentParser(),
-    private val formParser: AO3WriteFormParser = AO3WriteFormParser()
+    private val formParser: AO3WriteFormParser = AO3WriteFormParser(),
+    private val pseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null
 ) {
     /**
      * Loads one page of the comment thread. Prefer an authenticated GET when a
@@ -93,12 +94,21 @@ class AO3CommentRepository(
         } else {
             form?.actionUrl?.takeIf { it.isNotBlank() } ?: target.defaultSubmitUrl()
         }
-        val pseudId = form?.pseudId ?: formParser.parseDefaultPseudId(page.body)
+
+        // Preference resolution: persisted > AO3 default.
+        val preferredPseudId = if (pseudStore != null && form != null) {
+            val username = authenticatedClient.username()
+            val persisted = if (username != null) pseudStore.pseudName(username) else null
+            form.availablePseuds.find { it.name.equals(persisted, true) }?.id
+                ?: form.pseudId
+        } else {
+            form?.pseudId ?: formParser.parseDefaultPseudId(page.body)
+        }
 
         val fields = buildList {
             add("authenticity_token" to token)
             add("comment[comment_content]" to text)
-            if (!pseudId.isNullOrBlank()) add("comment[pseud_id]" to pseudId)
+            if (!preferredPseudId.isNullOrBlank()) add("comment[pseud_id]" to preferredPseudId)
         }
         return when (val response = authenticatedClient.postAuthenticated(
             url = submitUrl,
@@ -112,6 +122,14 @@ class AO3CommentRepository(
             is AO3Result.Success -> {
                 val error = formParser.writeErrorMessage(response.value.body)
                 if (response.value.statusCode in 200..399 && error == null) {
+                    // Persist choice on success.
+                    if (preferredPseudId != null && form != null) {
+                        val chosenName = form.availablePseuds.find { it.id == preferredPseudId }?.name
+                        val username = authenticatedClient.username()
+                        if (chosenName != null && username != null) {
+                            pseudStore?.setPseudName(chosenName, username)
+                        }
+                    }
                     AO3Result.Success(
                         AO3WriteOutcome(
                             AO3WriteActionKind.Comment,

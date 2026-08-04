@@ -205,6 +205,48 @@ class ReadingQueueRepository(
         removeWork(queue.id, workId)
     }
 
+    suspend fun renameQueue(queueId: String, newName: String) {
+        val trimmed = newName.trim()
+        require(trimmed.isNotEmpty()) { "Queue name must not be blank." }
+        val queue = queueDao.getQueueById(queueId) ?: return
+        require(queue.kindRaw != ReadingQueueKind.SAVED_FOR_LATER) { "Cannot rename system queues." }
+        queueDao.upsertQueue(
+            queue.copy(
+                name = trimmed,
+                dateUpdated = clock()
+            )
+        )
+    }
+
+    suspend fun deleteQueue(queueId: String) {
+        val queue = queueDao.getQueueById(queueId) ?: return
+        require(queue.kindRaw != ReadingQueueKind.SAVED_FOR_LATER) { "Cannot delete system queues." }
+        val now = clock()
+        queueDao.upsertQueue(
+            queue.copy(
+                isDeleted = true,
+                deletedAt = now,
+                permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW),
+                dateUpdated = now
+            )
+        )
+    }
+
+    suspend fun updateSortOrder(queueId: String, workIds: List<String>) {
+        val now = clock()
+        workIds.forEachIndexed { index, workId ->
+            queueDao.getMembershipForWork(queueId, workId)?.let { membership ->
+                queueDao.upsertMembership(
+                    membership.copy(
+                        sortOrderInQueue = index,
+                        lastModifiedAt = now
+                    )
+                )
+            }
+        }
+        touchQueueMembershipChanged(queueId, now)
+    }
+
     private suspend fun touchQueueMembershipChanged(queueId: String, now: Instant) {
         val queue = queueDao.getQueueById(queueId) ?: return
         queueDao.upsertQueue(

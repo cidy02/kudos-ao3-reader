@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +60,20 @@ fun AO3NativeLoginScreen(
     var useWebFallback by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var pendingSubmit by remember { mutableStateOf(false) }
+    var submitTimestamp by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+
+    // iOS parity: 25s timeout for login submission (Item 7 note).
+    LaunchedEffect(loading, submitTimestamp) {
+        if (!loading || submitTimestamp == 0L) return@LaunchedEffect
+        kotlinx.coroutines.delay(25_000)
+        if (loading) {
+            loading = false
+            useWebFallback = true
+            message = "Login timed out. Showing original AO3 page."
+            password = ""
+        }
+    }
 
     if (useWebFallback) {
         Column(modifier = modifier.fillMaxSize()) {
@@ -115,13 +129,14 @@ fun AO3NativeLoginScreen(
             enabled = !loading
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onCancel, enabled = !loading) { Text("Cancel") }
+            OutlinedButton(onClick = onCancel) { Text("Cancel") }
             Button(
                 enabled = !loading && username.isNotBlank() && password.isNotBlank(),
                 onClick = {
                     loading = true
                     message = "Signing in…"
                     pendingSubmit = true
+                    submitTimestamp = System.currentTimeMillis()
                     // Reload login page then inject credentials into AO3's form.
                     webViewRef?.loadUrl(LoginUrl)
                 }
@@ -130,7 +145,7 @@ fun AO3NativeLoginScreen(
                 else Text("Sign in")
             }
         }
-        TextButton(onClick = { useWebFallback = true }, enabled = !loading) {
+        TextButton(onClick = { useWebFallback = true }) {
             Text("Use alternative method")
         }
 
@@ -145,6 +160,18 @@ fun AO3NativeLoginScreen(
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     webViewClient = object : WebViewClient() {
+                        override fun onReceivedError(
+                            view: WebView?,
+                            request: android.webkit.WebResourceRequest?,
+                            error: android.webkit.WebResourceError?
+                        ) {
+                            if (loading && request?.isForMainFrame == true) {
+                                loading = false
+                                message = "Network error: ${error?.description ?: "Unknown"}"
+                                password = ""
+                            }
+                        }
+
                         override fun onPageFinished(view: WebView, url: String?) {
                             if (pendingSubmit && url?.contains("/users/login") == true) {
                                 pendingSubmit = false

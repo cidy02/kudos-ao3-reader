@@ -397,7 +397,9 @@ class AO3CommentParser(
             actionUrl = action,
             authenticityToken = token,
             pseudId = formParser.parseDefaultPseudId(form.outerHtml())
-                ?: formParser.parseDefaultPseudId(html)
+                ?: formParser.parseDefaultPseudId(html),
+            availablePseuds = formParser.parsePostingPseuds(form.outerHtml(), "comment[pseud_id]")
+                .ifEmpty { formParser.parsePostingPseuds(html, "comment[pseud_id]") }
         )
     }
 

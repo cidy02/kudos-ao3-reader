@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -74,6 +76,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import io.github.cidy02.kudos.core.model.ReaderFontCatalog
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorController
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorHost
@@ -651,6 +654,34 @@ private fun ReaderReading(
 
 
 @Composable
+private fun ReaderFontSection(
+    currentFontId: String?,
+    onFontFamilyChange: (String?) -> Unit
+) {
+    val options = ReaderFontCatalog.builtIns
+    val currentId = currentFontId ?: "system"
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = "Font", style = MaterialTheme.typography.titleSmall)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = currentId == option.id,
+                    onClick = { onFontFamilyChange(if (option.id == "system") null else option.id) },
+                    label = { Text(option.name) }
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
 private fun ReaderTopBar(
     title: String,
     author: String,
@@ -1036,7 +1067,12 @@ private fun ReaderDisplaySheet(
         }
 
         Text(text = "Reading mode", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+        ) {
             FilterChip(
                 selected = preferences.scroll,
                 onClick = { onScrollModeChange(true) },
@@ -1054,29 +1090,10 @@ private fun ReaderDisplaySheet(
             )
         }
 
-        Text(text = "Font", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = preferences.fontFamily == null,
-                onClick = { onFontFamilyChange(null) },
-                label = { Text("Publisher") }
-            )
-            FilterChip(
-                selected = preferences.fontFamily == "serif",
-                onClick = { onFontFamilyChange("serif") },
-                label = { Text("Serif") }
-            )
-            FilterChip(
-                selected = preferences.fontFamily == "sans-serif",
-                onClick = { onFontFamilyChange("sans-serif") },
-                label = { Text("Sans") }
-            )
-            FilterChip(
-                selected = preferences.fontFamily == "monospace",
-                onClick = { onFontFamilyChange("monospace") },
-                label = { Text("Mono") }
-            )
-        }
+        ReaderFontSection(
+            currentFontId = preferences.fontFamily,
+            onFontFamilyChange = onFontFamilyChange
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),

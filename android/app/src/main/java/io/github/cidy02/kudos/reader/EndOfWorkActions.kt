@@ -21,8 +21,11 @@ data class EndOfWorkActions(
 
         fun forWork(work: SavedWork): EndOfWorkActions {
             val sourceUrl = work.sourceUrl.ifBlank { null }
+            // Item 10: only auto-finish completed fics. An incomplete fic's "end" is just
+            // the end of the currently-downloaded chapters, not the story.
+            val canAutoFinish = work.isComplete && !work.isFinished
             return EndOfWorkActions(
-                canMarkFinished = !work.isFinished,
+                canMarkFinished = canAutoFinish,
                 workId = sourceUrl?.let(WorkTags::ao3WorkIdFromUrl),
                 sourceUrl = sourceUrl,
                 seriesUrl = work.seriesUrl.ifBlank { null },

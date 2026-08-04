@@ -1,14 +1,26 @@
 # Task Management
 
 - [x] Verify Phase 0-2 implementation and correctness
-- [/] Verify and Complete Phase 3 (Account / Auth / Author profiles)
-    - [x] Fix compilation error in `AO3PreferencesScreen.kt`
-    - [ ] Verify Author Profile implementation (Dashboard, Series, Bookmarks, About)
-    - [ ] Verify Native Login implementation
-    - [ ] Complete Posting-pseud selection (Item 5)
-    - [ ] Implement Account-list size caching and Avatar in Account Screen (Items 9, 10)
-    - [ ] Verify session encryption (Item 6) - ALREADY DONE
+- [x] Verify and Complete Phase 3 (Account / Auth / Author profiles)
+- [/] Address Review Findings (Phases 2 & 3)
+    - [ ] Fix critical: Auto-finish data loss for incomplete works (Phase 2 item 10)
+    - [ ] Fix critical: Reader font picker corrupting Settings (Phase 2 item 11)
+    - [ ] Wire `Routes.authorProfile` and `Routes.AO3Preferences` into navigation
+    - [ ] Fix: Comments ignoring preferred posting pseud
+    - [ ] Improve: Native Login reliability (timeout/error handling)
+    - [ ] Address other Phase 2 notes (TTS, Highlighting, Contents sheet, etc.)
 - [ ] Phase 4: Library / Reading Queues / Collections
+    - [ ] Implement drag-to-reorder in reading queues (Item 1)
+    - [ ] Rename and delete reading queues (Item 2)
+    - [ ] Add filters and display toggle to queue detail (Item 3)
+    - [ ] AO3 series preservation when adding to queue (Item 4)
+    - [ ] Create new queue inline from picker (Item 5)
+    - [ ] Queue Storage screen (Item 6)
+    - [ ] Recently Deleted for reading queues (Item 7)
+    - [ ] Add Works to Collection from collection page (Item 8)
+    - [ ] Library bulk-selection bar additions (Item 9)
+    - [ ] Remote work bulk actions (Item 10)
+    - [ ] Refine filters for account list screens (Item 12)
 - [ ] Phase 5: Comments / Discussion
 - [ ] Phase 6: Browse / Search
 - [ ] Phase 7: Home / Onboarding / Privacy / Support

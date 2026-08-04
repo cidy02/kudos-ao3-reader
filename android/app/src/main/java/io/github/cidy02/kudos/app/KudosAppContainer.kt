@@ -140,7 +140,8 @@ class KudosAppContainer(context: Context) {
     val commentRepository: AO3CommentRepository by lazy {
         AO3CommentRepository(
             publicClient = ao3Client,
-            authenticatedClient = authenticatedClient
+            authenticatedClient = authenticatedClient,
+            pseudStore = postingPseudStore
         )
     }
 

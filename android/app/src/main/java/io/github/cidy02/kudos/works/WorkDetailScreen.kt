@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
@@ -83,6 +85,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.AO3URLResolver
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
@@ -123,6 +126,7 @@ fun WorkDetailScreen(
     readingQueueRepository: ReadingQueueRepository,
     postingPseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null,
     metadataRepository: AO3WorkMetadataRepository? = null,
+    seriesRepository: AO3SeriesRepository = AO3SeriesRepository(),
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
     onOpenReader: (String) -> Unit,
@@ -142,7 +146,10 @@ fun WorkDetailScreen(
     var bookmarkAvailablePseuds by remember { mutableStateOf<List<io.github.cidy02.kudos.network.ao3.writes.AO3PostingPseudOption>>(emptyList()) }
     var bookmarkPseudId by remember { mutableStateOf<String?>(null) }
     var queuePickerOpen by remember { mutableStateOf(false) }
+    var createQueueDraft by remember { mutableStateOf<String?>(null) }
     var availableQueues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
+    var queueMembershipIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var includeSeriesInQueue by remember { mutableStateOf(false) }
     var collectionDialogOpen by remember { mutableStateOf(false) }
     // Add-to-Collection checklist sheet state (iOS AddToCollectionView parity).
     var allCollections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
@@ -656,11 +663,54 @@ fun WorkDetailScreen(
     }
 
     if (queuePickerOpen) {
+        if (createQueueDraft != null) {
+            AlertDialog(
+                onDismissRequest = { createQueueDraft = null },
+                title = { Text("New Queue") },
+                text = {
+                    OutlinedTextField(
+                        value = createQueueDraft!!,
+                        onValueChange = { createQueueDraft = it },
+                        label = { Text("Queue name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = createQueueDraft!!.trim().isNotEmpty() && !state.working,
+                        onClick = {
+                            val name = createQueueDraft!!.trim()
+                            createQueueDraft = null
+                            runWorkAction {
+                                val created = readingQueueRepository.createQueue(name)
+                                availableQueues = readingQueueRepository.listQueues()
+                                    .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+                            }
+                        }
+                    ) { Text("Create") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { createQueueDraft = null }) { Text("Cancel") }
+                }
+            )
+        }
+
         AlertDialog(
             onDismissRequest = { queuePickerOpen = false },
             title = { Text("Add to Queue") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = { createQueueDraft = "" },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text("Create New Queue", modifier = Modifier.weight(1f))
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                     if (availableQueues.isEmpty()) {
                         Text(
                             text = "No reading queues yet. Create one from Library → Reading Queues.",

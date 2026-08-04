@@ -2,19 +2,30 @@ package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,6 +55,10 @@ fun QueueDetailScreen(
     var error by remember(queueId) { mutableStateOf<String?>(null) }
     var queue by remember(queueId) { mutableStateOf<ReadingQueue?>(null) }
     var items by remember(queueId) { mutableStateOf<List<QueueMembershipItem>>(emptyList()) }
+    var overflowExpanded by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameDraft by remember { mutableStateOf("") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -54,6 +69,8 @@ fun QueueDetailScreen(
             items = if (queue != null) repository.listWorks(queueId) else emptyList()
             if (queue == null) {
                 error = "This reading queue no longer exists."
+            } else {
+                renameDraft = queue!!.name
             }
         } catch (e: Exception) {
             error = e.message ?: "Could not load queue."
@@ -79,22 +96,141 @@ fun QueueDetailScreen(
         }
     }
 
+    fun renameQueue() {
+        val name = renameDraft.trim()
+        if (name.isEmpty()) return
+        scope.launch {
+            working = true
+            error = null
+            try {
+                repository.renameQueue(queueId, name)
+                refresh()
+            } catch (e: Exception) {
+                error = e.message ?: "Could not rename queue."
+            } finally {
+                working = false
+            }
+        }
+    }
+
+    fun deleteQueue() {
+        scope.launch {
+            working = true
+            error = null
+            try {
+                repository.deleteQueue(queueId)
+                // Navigation should pop back, but for now we'll just refresh and let caller handle.
+                queue = null
+                items = emptyList()
+            } catch (e: Exception) {
+                error = e.message ?: "Could not delete queue."
+            } finally {
+                working = false
+            }
+        }
+    }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename Queue") },
+            text = {
+                OutlinedTextField(
+                    value = renameDraft,
+                    onValueChange = { renameDraft = it },
+                    label = { Text("Queue name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = renameDraft.trim().isNotEmpty() && !working,
+                    onClick = {
+                        showRenameDialog = false
+                        renameQueue()
+                    }
+                ) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Queue?") },
+            text = {
+                Text("This queue will be moved to Recently Deleted. Its works will remain in your Library.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        deleteQueue()
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            // TopAppBar is generic ("Queue"); show queue name + count as context.
-            KudosScreenHeader(
-                title = queue?.displayName?.takeIf { it.isNotBlank() && it != "Queue" },
-                subtitle = when {
-                    loading -> "Loading…"
-                    items.isEmpty() -> "No works in this queue."
-                    items.size == 1 -> "1 work"
-                    else -> "${items.size} works"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // TopAppBar is generic ("Queue"); show queue name + count as context.
+                KudosScreenHeader(
+                    title = queue?.displayName?.takeIf { it.isNotBlank() && it != "Queue" },
+                    subtitle = when {
+                        loading -> "Loading…"
+                        items.isEmpty() -> "No works in this queue."
+                        items.size == 1 -> "1 work"
+                        else -> "${items.size} works"
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (queue != null && queue!!.kindRaw != io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER) {
+                    Box {
+                        IconButton(onClick = { overflowExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Queue actions")
+                        }
+                        DropdownMenu(
+                            expanded = overflowExpanded,
+                            onDismissRequest = { overflowExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = {
+                                    overflowExpanded = false
+                                    showRenameDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    showDeleteConfirm = true
+                                }
+                            )
+                        }
+                    }
                 }
-            )
+            }
         }
 
         when {

@@ -243,7 +243,8 @@ data class AO3CommentAuthor(
 data class AO3CommentForm(
     val actionUrl: String,
     val authenticityToken: String,
-    val pseudId: String?
+    val pseudId: String?,
+    val availablePseuds: List<io.github.cidy02.kudos.network.ao3.writes.AO3PostingPseudOption> = emptyList()
 )
 
 /**

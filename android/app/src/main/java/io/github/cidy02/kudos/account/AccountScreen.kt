@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.account
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -190,7 +191,8 @@ fun AccountScreen(
             onOpenBackup = onOpenBackup,
             onOpenLocalHistory = onOpenLocalHistory,
             onOpenLocalFavorites = onOpenLocalFavorites,
-            onOpenCollections = onOpenCollections
+            onOpenCollections = onOpenCollections,
+            onOpenAuthorProfile = { onOpenWeb("native:profile") }
         )
 
         AccountHubTabRow(
@@ -268,7 +270,8 @@ private fun AccountProfileHeader(
     onOpenBackup: () -> Unit,
     onOpenLocalHistory: () -> Unit,
     onOpenLocalFavorites: () -> Unit,
-    onOpenCollections: () -> Unit
+    onOpenCollections: () -> Unit,
+    onOpenAuthorProfile: () -> Unit = {}
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -286,7 +289,11 @@ private fun AccountProfileHeader(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AccountAvatar(avatarUrl = avatarUrl)
+            Box(modifier = Modifier.clickable(enabled = authState is AO3AuthState.SignedIn) {
+                onOpenAuthorProfile()
+            }) {
+                AccountAvatar(avatarUrl = avatarUrl)
+            }
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -661,7 +668,13 @@ private fun OverviewTabContent(
                 AccountLinkRow(
                     title = "Preferences",
                     icon = Icons.Outlined.Tune,
-                    onClick = { onOpenWeb("https://archiveofourown.org/preferences") }
+                    onClick = {
+                        if (signedIn) {
+                            onOpenWeb("native:preferences")
+                        } else {
+                            onOpenWeb("https://archiveofourown.org/preferences")
+                        }
+                    }
                 )
                 // Curated account-scoped AO3 destinations (iOS AccountMoreOnAO3View parity).
                 // Opens a menu first; each item hits the WebView fallback with the user path.
