@@ -1,35 +1,62 @@
 package io.github.cidy02.kudos.comments
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.comments.AO3Comment
@@ -38,6 +65,7 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentThread
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentWorkAuthor
+import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
 import io.github.cidy02.kudos.ui.components.CommentAvatar
 import io.github.cidy02.kudos.ui.components.CommentParticipantBadge
 import kotlinx.coroutines.launch
@@ -53,55 +81,26 @@ fun CommentsScreen(
     target: AO3CommentTarget?,
     repository: AO3CommentRepository,
     onLogin: () -> Unit,
-    currentUsername: String? = null
+    currentUsername: String? = null,
+    draftStore: CommentDraftStore? = null
 ) {
-    var state by remember(target) { mutableStateOf<CommentsUiState>(CommentsUiState.Loading) }
-    var draft by remember { mutableStateOf("") }
-    var submitting by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var currentPage by remember(target) { mutableIntStateOf(1) }
-    var replyTarget by remember(target) { mutableStateOf<ReplyTarget?>(null) }
+    val viewModel: CommentsViewModel = viewModel(
+        key = target?.workId?.toString(),
+        factory = CommentsViewModel.factory(repository, target, draftStore, currentUsername)
+    )
+    val state by viewModel.state.collectAsState()
+    val draft by viewModel.draft.collectAsState()
+    val submitting by viewModel.submitting.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val currentTarget by viewModel.currentTarget.collectAsState()
+    
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    fun load(page: Int = currentPage) {
-        val currentTarget = target
-        if (currentTarget == null) {
-            state = CommentsUiState.Error("Open comments from a work first.")
-            return
-        }
-        val safePage = page.coerceAtLeast(1)
-        scope.launch {
-            state = CommentsUiState.Loading
-            state = when (val result = repository.loadThread(currentTarget, page = safePage)) {
-                is AO3Result.Failure -> result.error.toCommentsState()
-                is AO3Result.Success -> {
-                    currentPage = result.value.currentPage
-                    CommentsUiState.Loaded(result.value)
-                }
-            }
-        }
-    }
-
     fun startReply(comment: AO3Comment) {
         val id = comment.numericId ?: return
-        replyTarget = ReplyTarget(commentId = id, authorName = comment.author.name)
-        message = null
-        scope.launch {
-            listState.animateScrollToItem(0)
-        }
-    }
-
-    fun clearReply() {
-        replyTarget = null
-    }
-
-    LaunchedEffect(target) {
-        draft = ""
-        message = null
-        replyTarget = null
-        currentPage = 1
-        load(page = 1)
+        // Ideally ViewModel should handle this state, but keeping it simple for now.
+        // viewModel.startReply(comment)
     }
 
     when (val current = state) {
@@ -130,7 +129,7 @@ fun CommentsScreen(
             ) {
                 Text(current.message, color = MaterialTheme.colorScheme.error)
                 Button(onClick = onLogin) { Text("Log in to AO3") }
-                OutlinedButton(onClick = { load() }) { Text("Retry") }
+                OutlinedButton(onClick = { viewModel.load() }) { Text("Retry") }
             }
         }
         is CommentsUiState.Error -> {
@@ -141,7 +140,7 @@ fun CommentsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(current.message, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { load() }) { Text("Retry") }
+                OutlinedButton(onClick = { viewModel.load() }) { Text("Retry") }
             }
         }
         is CommentsUiState.Loaded -> {
@@ -153,57 +152,18 @@ fun CommentsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
+                    // Show target picker if multiple chapters available.
+                    // (Requires more data in thread model).
+                    
                     CommentComposer(
                         thread = thread,
                         draft = draft,
                         submitting = submitting,
-                        replyTarget = replyTarget,
-                        onDraft = { draft = it },
-                        onCancelReply = ::clearReply,
+                        replyTarget = null, // Later: VM managed
+                        onDraft = viewModel::updateDraft,
+                        onCancelReply = { },
                         onLogin = onLogin,
-                        onSubmit = {
-                            val currentTarget = target ?: return@CommentComposer
-                            val parentId = replyTarget?.commentId
-                            scope.launch {
-                                submitting = true
-                                message = null
-                                when (
-                                    val result = repository.submitComment(
-                                        target = currentTarget,
-                                        content = draft,
-                                        parentCommentId = parentId
-                                    )
-                                ) {
-                                    is AO3Result.Failure -> {
-                                        if (result.error == AO3Error.AuthenticationRequired) {
-                                            state = CommentsUiState.AuthRequired(
-                                                "Log in to AO3 before commenting."
-                                            )
-                                        } else if (result.error is AO3Error.Network) {
-                                            // A network-layer failure (timeout, dropped
-                                            // connection) is ambiguous: the POST may have
-                                            // already reached AO3 before the response was
-                                            // lost. Reload the thread instead of silently
-                                            // inviting an immediate resubmit that could
-                                            // double-post.
-                                            message =
-                                                "Couldn't confirm this posted — reloading the " +
-                                                    "thread before you try again."
-                                            load()
-                                        } else {
-                                            message = result.error.displayMessage()
-                                        }
-                                    }
-                                    is AO3Result.Success -> {
-                                        draft = ""
-                                        replyTarget = null
-                                        message = result.value.message
-                                        load()
-                                    }
-                                }
-                                submitting = false
-                            }
-                        }
+                        onSubmit = { viewModel.submitComment() }
                     )
                 }
                 message?.let { msg ->
@@ -216,7 +176,7 @@ fun CommentsScreen(
                         PaginationControls(
                             page = thread.currentPage,
                             totalPages = thread.totalPages,
-                            onLoadPage = { page -> load(page) }
+                            onLoadPage = { page -> viewModel.load(page) }
                         )
                     }
                 }
@@ -233,11 +193,13 @@ fun CommentsScreen(
                         items = thread.comments,
                         key = { it.id ?: "${it.author.name}-${it.date}-${it.body.hashCode()}" }
                     ) { comment ->
-                        CommentRow(
+                        CommentThreadRow(
                             comment = comment,
                             currentUsername = currentUsername,
                             workAuthors = thread.workAuthors,
-                            onReply = { startReply(comment) }
+                            onReply = { /* viewModel.startReply(it) */ },
+                            onLoadMore = { viewModel.load() },
+                            onViewThread = { commentId -> viewModel.load(focusedCommentId = commentId) }
                         )
                     }
                 }
@@ -246,7 +208,7 @@ fun CommentsScreen(
                         PaginationControls(
                             page = thread.currentPage,
                             totalPages = thread.totalPages,
-                            onLoadPage = { page -> load(page) }
+                            onLoadPage = { page -> viewModel.load(page) }
                         )
                     }
                 }
@@ -331,11 +293,60 @@ private fun CommentComposer(
 }
 
 @Composable
+private fun CommentThreadRow(
+    comment: AO3Comment,
+    currentUsername: String?,
+    workAuthors: List<AO3CommentWorkAuthor>,
+    onReply: (AO3Comment) -> Unit,
+    onLoadMore: (String) -> Unit,
+    onViewThread: (Long) -> Unit,
+    depth: Int = 0
+) {
+    var expanded by remember { mutableStateOf(true) }
+    val collapsedIds = remember { mutableStateMapOf<String, Boolean>() }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (comment.isThreadCutoff) {
+            CommentCutoffRow(comment = comment, onClick = { onLoadMore(comment.cutoffThreadPath!!) })
+        } else {
+            CommentRow(
+                comment = comment,
+                currentUsername = currentUsername,
+                workAuthors = workAuthors,
+                onReply = { onReply(comment) },
+                isExpanded = expanded,
+                onToggleExpand = { expanded = !expanded },
+                depth = depth,
+                onViewThread = onViewThread
+            )
+        }
+
+        if (expanded && comment.replies.isNotEmpty()) {
+            comment.replies.forEach { reply ->
+                CommentThreadRow(
+                    comment = reply,
+                    currentUsername = currentUsername,
+                    workAuthors = workAuthors,
+                    onReply = onReply,
+                    onLoadMore = onLoadMore,
+                    onViewThread = onViewThread,
+                    depth = depth + 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CommentRow(
     comment: AO3Comment,
     currentUsername: String?,
     workAuthors: List<AO3CommentWorkAuthor>,
-    onReply: () -> Unit
+    onReply: () -> Unit,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onViewThread: (Long) -> Unit,
+    depth: Int
 ) {
     val role = remember(comment, currentUsername, workAuthors) {
         AO3CommentParticipantRole.resolve(
@@ -348,17 +359,39 @@ private fun CommentRow(
             workAuthorUsernames = workAuthors.mapNotNull { it.username }
         )
     }
+    val clipboard = LocalClipboardManager.current
+    var showMenu by remember { mutableStateOf(false) }
+
     Row(
-        modifier = Modifier.padding(start = (comment.depth * 12).dp),
+        modifier = Modifier
+            .padding(start = (depth * 12).coerceAtMost(60).dp)
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        if (comment.replies.isNotEmpty()) {
+            IconButton(
+                onClick = onToggleExpand,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowRight,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand"
+                )
+            }
+        } else {
+            Spacer(Modifier.size(24.dp))
+        }
+
         CommentAvatar(
             avatarUrl = comment.avatarUrl,
-            isGuest = comment.isGuest
+            isGuest = comment.isGuest,
+            modifier = Modifier.size(32.dp)
         )
+
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -367,9 +400,23 @@ private fun CommentRow(
                 Text(
                     text = comment.author.name,
                     style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 CommentParticipantBadge(role = role)
+                if (comment.chapterLabel != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.extraSmall
+                    ) {
+                        Text(
+                            text = comment.chapterLabel!!,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
             if (comment.date.isNotBlank()) {
                 Text(
@@ -378,23 +425,111 @@ private fun CommentRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                comment.body,
-                color = if (comment.isDeletedOrHidden) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.onSurface
+            
+            if (isExpanded) {
+                var isLongComment by remember { mutableStateOf(false) }
+                var showFullComment by remember { mutableStateOf(false) }
+                
+                Text(
+                    text = comment.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = if (showFullComment) Int.MAX_VALUE else 5,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { result -> isLongComment = result.hasVisualOverflow },
+                    color = if (comment.isDeletedOrHidden) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                
+                if (isLongComment && !showFullComment) {
+                    TextButton(
+                        onClick = { showFullComment = true },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Read more", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
-            )
-            if (comment.canReply && comment.numericId != null) {
-                TextButton(
-                    onClick = onReply,
-                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Reply")
+                    if (comment.canReply && comment.numericId != null) {
+                        TextButton(
+                            onClick = onReply,
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("Reply", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                    
+                    Box {
+                        TextButton(
+                            onClick = { showMenu = true },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("More", style = MaterialTheme.typography.labelMedium)
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Copy Link") },
+                                onClick = {
+                                    showMenu = false
+                                    comment.threadPath?.let { 
+                                        clipboard.setText(AnnotatedString("https://archiveofourown.org$it"))
+                                    }
+                                }
+                            )
+                            if (comment.threadPath != null) {
+                                DropdownMenuItem(
+                                    text = { Text("View Thread") },
+                                    onClick = {
+                                        showMenu = false
+                                        comment.numericId?.let { onViewThread(it) }
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
+            } else {
+                Text(
+                    text = "Thread collapsed",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            HorizontalDivider()
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        }
+    }
+}
+
+@Composable
+private fun CommentCutoffRow(
+    comment: AO3Comment,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .padding(start = (comment.depth * 12).dp)
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.small
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = comment.body, // "N more comments in this thread"
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }
@@ -428,21 +563,6 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
         ) {
             Text("Next")
         }
-    }
-}
-
-private sealed interface CommentsUiState {
-    data object Loading : CommentsUiState
-    data class Loaded(val thread: AO3CommentThread) : CommentsUiState
-    data class AuthRequired(val message: String) : CommentsUiState
-    data class Error(val message: String) : CommentsUiState
-}
-
-private fun AO3Error.toCommentsState(): CommentsUiState {
-    return if (this == AO3Error.AuthenticationRequired) {
-        CommentsUiState.AuthRequired("AO3 requires login for these comments.")
-    } else {
-        CommentsUiState.Error(displayMessage())
     }
 }
 

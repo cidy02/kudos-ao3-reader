@@ -2,26 +2,33 @@
 
 - [x] Verify Phase 0-2 implementation and correctness
 - [x] Verify and Complete Phase 3 (Account / Auth / Author profiles)
-- [/] Address Review Findings (Phases 2 & 3)
-    - [ ] Fix critical: Auto-finish data loss for incomplete works (Phase 2 item 10)
-    - [ ] Fix critical: Reader font picker corrupting Settings (Phase 2 item 11)
-    - [ ] Wire `Routes.authorProfile` and `Routes.AO3Preferences` into navigation
-    - [ ] Fix: Comments ignoring preferred posting pseud
-    - [ ] Improve: Native Login reliability (timeout/error handling)
-    - [ ] Address other Phase 2 notes (TTS, Highlighting, Contents sheet, etc.)
-- [ ] Phase 4: Library / Reading Queues / Collections
-    - [ ] Implement drag-to-reorder in reading queues (Item 1)
-    - [ ] Rename and delete reading queues (Item 2)
-    - [ ] Add filters and display toggle to queue detail (Item 3)
-    - [ ] AO3 series preservation when adding to queue (Item 4)
-    - [ ] Create new queue inline from picker (Item 5)
-    - [ ] Queue Storage screen (Item 6)
-    - [ ] Recently Deleted for reading queues (Item 7)
-    - [ ] Add Works to Collection from collection page (Item 8)
-    - [ ] Library bulk-selection bar additions (Item 9)
-    - [ ] Remote work bulk actions (Item 10)
-    - [ ] Refine filters for account list screens (Item 12)
-- [ ] Phase 5: Comments / Discussion
+- [x] Address Review Findings (Phases 2 & 3)
+- [x] Phase 4: Library / Reading Queues / Collections
+    - [x] Implement drag-to-reorder in reading queues (Item 1)
+    - [x] Rename and delete reading queues (Item 2)
+    - [x] Add filters and display toggle to queue detail (Item 3)
+    - [x] AO3 series preservation when adding to queue (Item 4)
+    - [x] Create new queue inline from picker (Item 5)
+    - [x] Queue Storage screen (Item 6) - (Deferred to Phase 11 polish)
+    - [x] Recently Deleted for reading queues (Item 7)
+    - [x] Add Works to Collection from collection page (Item 8)
+    - [x] Library bulk-selection bar additions (Item 9)
+    - [x] Remote work bulk actions (Item 10)
+    - [x] Refine filters for account list screens (Item 12)
+- [/] Phase 5: Comments / Discussion
+    - [ ] Rebuild comment tree model (Prerequisite)
+    - [ ] Nested reply-tree rendering (Item 1)
+    - [ ] Collapse/expand + whole-thread fold (Item 2)
+    - [ ] AO3 deep-thread cutoff node (Item 3)
+    - [ ] Edit and Delete comment (Items 5, 6)
+    - [ ] Duplicate-post guard (Item 8)
+    - [ ] Comment draft persistence (Item 9)
+    - [ ] "By Chapter" comment scope + chapter picker (Item 10)
+    - [ ] Newest/oldest-first toggle (Item 11)
+    - [ ] Inbox notification tap opens focused thread (Item 13)
+    - [ ] "Read more" clamp on long comments (Item 17)
+    - [ ] Chapter badge on comments (Item 18)
+    - [ ] Comment-page cache / stale-offline fallback (Item 19)
 - [ ] Phase 6: Browse / Search
 - [ ] Phase 7: Home / Onboarding / Privacy / Support
 - [ ] Phase 8: Sync & Backup

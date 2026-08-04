@@ -211,6 +211,7 @@ data class AO3Comment(
     val chapterLabel: String? = null,
     val threadPath: String? = null,
     val parentThreadPath: String? = null,
+    val parentCommentId: Long? = null,
     val isThreadCutoff: Boolean = false,
     val cutoffCount: Int? = null,
     val cutoffThreadPath: String? = null,

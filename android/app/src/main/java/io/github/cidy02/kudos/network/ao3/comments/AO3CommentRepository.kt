@@ -26,10 +26,15 @@ class AO3CommentRepository(
      */
     suspend fun loadThread(
         target: AO3CommentTarget,
-        page: Int = 1
+        page: Int = 1,
+        focusedCommentId: Long? = null
     ): AO3Result<AO3CommentThread> {
         val safePage = page.coerceAtLeast(1)
-        val pageUrl = target.pageUrl(safePage)
+        val pageUrl = if (focusedCommentId != null) {
+            AO3CommentUrls.commentThreadUrl(focusedCommentId)
+        } else {
+            target.pageUrl(safePage)
+        }
         val authAttempt = authenticatedClient.getAuthenticated(pageUrl)
         val response = when (authAttempt) {
             is AO3Result.Success -> authAttempt.value
@@ -147,6 +152,53 @@ class AO3CommentRepository(
                         )
                     )
                 }
+            }
+        }
+    }
+
+    suspend fun editComment(path: String, content: String): AO3Result<AO3WriteOutcome> {
+        val text = content.trim()
+        if (text.isEmpty()) return AO3Result.Failure(AO3Error.Validation("Comment cannot be empty."))
+        val url = AO3WriteUrls.absoluteUrl(path) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        
+        val page = when (val result = authenticatedClient.getAuthenticated(url)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        val token = formParser.parseAuthenticityToken(page.body) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        
+        val fields = listOf(
+            "_method" to "put",
+            "authenticity_token" to token,
+            "comment[comment_content]" to text
+        )
+        return when (val response = authenticatedClient.postAuthenticated(url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                val error = formParser.writeErrorMessage(response.value.body)
+                if (response.value.statusCode in 200..399 && error == null) {
+                    AO3Result.Success(AO3WriteOutcome(AO3WriteActionKind.Comment, "Comment updated."))
+                } else {
+                    AO3Result.Failure(AO3Error.Validation(error ?: "Couldn't update comment."))
+                }
+            }
+        }
+    }
+
+    suspend fun deleteComment(path: String): AO3Result<Unit> {
+        val url = AO3WriteUrls.absoluteUrl(path) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        val page = when (val result = authenticatedClient.getAuthenticated(url)) {
+            is AO3Result.Failure -> return result
+            is AO3Result.Success -> result.value
+        }
+        val token = formParser.parseAuthenticityToken(page.body) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        
+        val fields = listOf("_method" to "delete", "authenticity_token" to token)
+        return when (val response = authenticatedClient.postAuthenticated(url, fields, mapOf("X-CSRF-Token" to token, "Referer" to url))) {
+            is AO3Result.Failure -> response
+            is AO3Result.Success -> {
+                if (response.value.statusCode in 200..399) AO3Result.Success(Unit)
+                else AO3Result.Failure(AO3Error.Http(response.value.statusCode))
             }
         }
     }
