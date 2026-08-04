@@ -39,7 +39,7 @@ class WorkImporter(
     ): WorkImportResult {
         val existing = findExisting(summary)
         val metadata = fetchCanonical(summary.id)
-        val work = merger.merge(
+        var work = merger.merge(
             summary = summary,
             canonical = metadata,
             existing = existing,
@@ -47,6 +47,16 @@ class WorkImporter(
             hasEpub = existing?.hasEpub ?: false,
             isQueuedForLater = isQueuedForLater
         )
+        
+        // Ensure series data is properly preserved from summary when queuing
+        if (isQueuedForLater && !summary.seriesTitle.isNullOrBlank()) {
+            work = work.copy(
+                seriesTitle = summary.seriesTitle,
+                seriesPosition = summary.seriesPosition ?: work.seriesPosition,
+                seriesUrl = summary.seriesUrl ?: work.seriesUrl
+            )
+        }
+        
         val saved = workRepository.upsert(work)
         return WorkImportResult.Success(reviveIfNeeded(existing, saved))
     }
@@ -119,10 +129,10 @@ class WorkImporter(
         displayName: String?,
         bytes: ByteArray
     ): WorkImportResult {
-        if (!isSupportedEpubFileName(displayName)) {
+        if (!isSupportedFileName(displayName)) {
             return WorkImportResult.Failure(
                 null,
-                AO3Error.Validation("Only .epub files can be imported.")
+                AO3Error.Validation("Unsupported file type. Only EPUB, PDF, HTML, and TXT are supported.")
             )
         }
         if (bytes.isEmpty()) {
@@ -131,14 +141,24 @@ class WorkImporter(
                 AO3Error.Validation("The selected file was empty.")
             )
         }
-        if (!looksLikeZip(bytes)) {
+
+        val title = titleFromDisplayName(displayName)
+        val ext = displayName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT) ?: ""
+        
+        val finalBytes = when (ext) {
+            "pdf" -> io.github.cidy02.kudos.works.converters.PDFWorkConverter().convert(title, bytes)
+            "html", "htm" -> io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(title, bytes)
+            "txt" -> io.github.cidy02.kudos.works.converters.PlainTextWorkConverter().convert(title, bytes)
+            else -> bytes
+        }
+
+        if (ext == "epub" && !looksLikeZip(finalBytes)) {
             return WorkImportResult.Failure(
                 null,
                 AO3Error.Validation("Not a valid EPUB (file is not a ZIP archive).")
             )
         }
 
-        val title = titleFromDisplayName(displayName)
         val work = SavedWork(
             title = title,
             author = "",
@@ -148,7 +168,7 @@ class WorkImporter(
             lastModifiedAt = Instant.now()
         )
 
-        return when (val write = fileStore.writeWorkEpub(work.id, bytes)) {
+        return when (val write = fileStore.writeWorkEpub(work.id, finalBytes)) {
             is FileWriteResult.Failure -> WorkImportResult.Failure(
                 work,
                 AO3Error.Validation(write.message)
@@ -223,12 +243,12 @@ class WorkImporter(
         /** ZIP local-file-header magic — a real EPUB is a ZIP container. */
         private val ZIP_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
 
-        fun isSupportedEpubFileName(fileName: String?): Boolean {
+        fun isSupportedFileName(fileName: String?): Boolean {
             if (fileName.isNullOrBlank()) return false
             val last = fileName.substringAfterLast('/').substringAfterLast('\\')
             val ext = last.substringAfterLast('.', missingDelimiterValue = "")
                 .lowercase(Locale.ROOT)
-            return ext == "epub"
+            return ext in listOf("epub", "pdf", "html", "htm", "txt")
         }
 
         fun looksLikeZip(bytes: ByteArray): Boolean {

@@ -582,7 +582,11 @@ fun AppNavHost(
                 appUpdateRepository = container.appUpdateRepository,
                 workImporter = container.workImporter,
                 fandomCatalogCache = container.fandomCatalogCache,
-                workRepository = container.workRepository
+                workRepository = container.workRepository,
+                workAvailabilitySweep = io.github.cidy02.kudos.works.WorkAvailabilitySweep(
+                    container.workRepository,
+                    container.tagsRepository
+                )
             )
         }
         composable(Routes.Backup) {

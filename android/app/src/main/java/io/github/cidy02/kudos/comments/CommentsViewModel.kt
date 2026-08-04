@@ -32,7 +32,7 @@ sealed interface CommentsUiState {
 
 class CommentsViewModel(
     private val repository: AO3CommentRepository,
-    private val initialTarget: AO3CommentTarget?,
+    val initialTarget: AO3CommentTarget?,
     private val draftStore: CommentDraftStore? = null,
     private val currentUsername: String? = null
 ) : ViewModel() {

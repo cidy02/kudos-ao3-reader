@@ -81,19 +81,29 @@ class SyncRepository(
     }
 
     /**
-     * Performs a one-way export sync cycle:
-     * 1. Export current library to Kudos.kudosbackup in the SAF folder.
-     * 2. Copy any not-yet-present EPUBs into an epubs/ subdirectory.
-     * (Future) Import/merge changes made on another device (requires last-modified tracking).
+     * Performs a two-way sync cycle:
+     * 1. Import/merge changes from Kudos.kudosbackup in the SAF folder if present.
+     * 2. Export current merged library back to Kudos.kudosbackup.
+     * 3. Copy any not-yet-present EPUBs into an epubs/ subdirectory.
      */
     suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
         val uri = getSyncFolderUri() ?: return@withContext SyncResult.Error("No sync folder selected.")
         val root = DocumentFile.fromTreeUri(context, uri) ?: return@withContext SyncResult.Error("Could not access sync folder.")
-        
+        val fileName = "Kudos.kudosbackup"
+
         try {
-            // 1. Export database
+            // 1. Import and merge remote changes first
+            root.findFile(fileName)?.let { remoteBackup ->
+                context.contentResolver.openInputStream(remoteBackup.uri)?.use { input ->
+                    val bytes = input.readBytes()
+                    if (bytes.isNotEmpty()) {
+                        backupRepository.importV2ZipBytes(bytes)
+                    }
+                }
+            }
+
+            // 2. Export database
             val bytes = backupRepository.exportV2ZipBytes()
-            val fileName = "Kudos.kudosbackup"
             var backupFile = root.findFile(fileName)
             if (backupFile == null) {
                 backupFile = root.createFile("application/zip", fileName)

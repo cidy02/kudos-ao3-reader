@@ -107,6 +107,9 @@ private val FontOpenMimeTypes = arrayOf(
 /** SAF MIME types for EPUB (plus octet-stream for pickers that omit the type). */
 private val EpubOpenMimeTypes = arrayOf(
     "application/epub+zip",
+    "application/pdf",
+    "text/html",
+    "text/plain",
     "application/octet-stream"
 )
 
@@ -126,7 +129,8 @@ fun SettingsScreen(
     appUpdateRepository: AppUpdateRepository? = null,
     workImporter: WorkImporter? = null,
     fandomCatalogCache: FandomCatalogCache? = null,
-    workRepository: WorkRepository? = null
+    workRepository: WorkRepository? = null,
+    workAvailabilitySweep: io.github.cidy02.kudos.works.WorkAvailabilitySweep? = null
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val syncRepository = (androidx.compose.ui.platform.LocalContext.current.applicationContext as? io.github.cidy02.kudos.KudosApplication)
@@ -295,6 +299,14 @@ fun SettingsScreen(
             } finally {
                 epubBusy = false
             }
+        }
+    }
+
+    val syncFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch { syncRepository?.connect(uri) }
         }
     }
 
@@ -637,6 +649,48 @@ fun SettingsScreen(
                         }
                     }
                 }
+                
+                if (workAvailabilitySweep != null) {
+                    var sweepBusy by remember { mutableStateOf(false) }
+                    var sweepStatus by remember { mutableStateOf<String?>(null) }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Check library for deleted/hidden works on AO3.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                if (!sweepBusy) {
+                                    sweepBusy = true
+                                    sweepStatus = null
+                                    scope.launch {
+                                        try {
+                                            val unavailable = workAvailabilitySweep.sweep()
+                                            sweepStatus = "Sweep complete: $unavailable works marked unavailable."
+                                        } catch (e: Exception) {
+                                            sweepStatus = "Sweep failed: ${e.message}"
+                                        } finally {
+                                            sweepBusy = false
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !sweepBusy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (sweepBusy) "Sweeping…" else "Run Availability Sweep")
+                        }
+                        if (sweepStatus != null) {
+                            Text(
+                                text = sweepStatus!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
             SettingsFooter(
                 "Ask before removing a work from your Library. Imported EPUBs " +
@@ -679,13 +733,25 @@ fun SettingsScreen(
                     SettingSwitchRow(
                         label = "Enable folder sync",
                         checked = settings.sync.isEnabled,
-                        onCheckedChange = { launchUpdate { repository.updateSyncIsEnabled(it) } }
+                        onCheckedChange = { enabled ->
+                            launchUpdate {
+                                if (enabled) {
+                                    if (settings.sync.folderUri != null) {
+                                        syncRepository?.connect(Uri.parse(settings.sync.folderUri))
+                                    } else {
+                                        syncFolderLauncher.launch(null)
+                                    }
+                                } else {
+                                    syncRepository?.disconnect()
+                                }
+                            }
+                        }
                     )
                     SettingsLinkRow(
                         label = if (settings.sync.folderUri == null) "Select sync folder" else "Change sync folder",
                         icon = Icons.Outlined.Folder,
                         onClick = {
-                            // Activity Result logic for SAF
+                            syncFolderLauncher.launch(null)
                         }
                     )
                     if (settings.sync.isEnabled && settings.sync.folderUri != null) {

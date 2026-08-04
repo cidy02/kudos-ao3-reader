@@ -223,6 +223,7 @@ fun CommentsScreen(
                     ) {
                         ChapterScopePicker(
                             currentTarget = currentTarget,
+                            initialTarget = viewModel.initialTarget,
                             onSelectTarget = { viewModel.setTarget(it) },
                             modifier = Modifier.weight(1f)
                         )
@@ -567,18 +568,31 @@ private fun CommentRow(
                 var isLongComment by remember { mutableStateOf(false) }
                 var showFullComment by remember { mutableStateOf(false) }
                 
-                Text(
-                    text = comment.body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = if (showFullComment) Int.MAX_VALUE else 5,
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { result -> isLongComment = result.hasVisualOverflow },
-                    color = if (comment.isDeletedOrHidden) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
+                if (comment.isDeletedOrHidden) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = comment.body,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            ),
+                            modifier = Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                } else {
+                    Text(
+                        text = comment.body,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = if (showFullComment) Int.MAX_VALUE else 5,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { result -> isLongComment = result.hasVisualOverflow },
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 
                 if (isLongComment && !showFullComment) {
                     TextButton(
@@ -724,14 +738,15 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
 @Composable
 private fun ChapterScopePicker(
     currentTarget: AO3CommentTarget?,
+    initialTarget: AO3CommentTarget?,
     onSelectTarget: (AO3CommentTarget) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (currentTarget == null) return
     val workId = currentTarget.workId
+    val chapterTarget = (initialTarget as? AO3CommentTarget.Chapter)
+        ?: (currentTarget as? AO3CommentTarget.Chapter)
     
-    // In a real implementation, we'd have the work metadata for total chapters.
-    // For now, we allow toggling between All and a placeholder Chapter 1 if it's currently Chapter.
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -742,11 +757,11 @@ private fun ChapterScopePicker(
             onClick = { onSelectTarget(AO3CommentTarget.Work(workId)) },
             label = { Text("All Comments") }
         )
-        if (currentTarget is AO3CommentTarget.Chapter) {
+        if (chapterTarget != null) {
             FilterChip(
-                selected = true,
-                onClick = { },
-                label = { Text("Chapter ${currentTarget.chapterId}") }
+                selected = currentTarget is AO3CommentTarget.Chapter,
+                onClick = { onSelectTarget(chapterTarget) },
+                label = { Text("Chapter ${chapterTarget.chapterId}") }
             )
         }
     }
