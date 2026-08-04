@@ -73,6 +73,7 @@ class CommentsViewModel(
                     val draftContent = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                        parentId = focusedId, // focusedId is the parent when loading a specific thread
                         username = currentUsername
                     )
                     if (draftContent != null) _draft.value = draftContent
@@ -91,11 +92,13 @@ class CommentsViewModel(
     fun updateDraft(content: String) {
         _draft.value = content
         val target = _currentTarget.value ?: return
+        val reply = _replyTarget.value
         viewModelScope.launch {
             draftStore?.saveDraft(
                 content = content,
                 workId = target.workId,
                 chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                parentId = reply?.commentId,
                 username = currentUsername
             )
         }
@@ -169,6 +172,7 @@ class CommentsViewModel(
                     draftStore?.clearDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                        parentId = reply?.commentId,
                         username = currentUsername
                     )
                     load()

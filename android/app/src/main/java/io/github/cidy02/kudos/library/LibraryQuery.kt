@@ -182,6 +182,7 @@ object LibraryQuery {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
             )
+            LibrarySort.Manual -> items
         }
     }
 

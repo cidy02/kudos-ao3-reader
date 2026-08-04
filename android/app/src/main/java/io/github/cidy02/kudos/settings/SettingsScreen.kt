@@ -25,7 +25,9 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -126,6 +128,9 @@ fun SettingsScreen(
     workRepository: WorkRepository? = null
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
+    val syncRepository = (androidx.compose.ui.platform.LocalContext.current.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+        ?.container?.syncRepository
+
     val importedFonts by customFontRepository.observeImported()
         .collectAsState(initial = emptyList())
     val authFlow = remember(authRepository) {
@@ -660,30 +665,44 @@ fun SettingsScreen(
             )
         }
 
-        // ── Library Sync Folder (iOS iCloud — not on Android) ──────────
+        // ── Folder Sync (Parity with iOS Shared Folder) ──────────────
         item {
-            SettingsGroup(title = "Library Sync Folder") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CloudOff,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+            if (syncRepository != null) {
+                SettingsGroup(title = "Folder Sync") {
+                    Text(
+                        text = "Automatically back up your library to a folder on this device or a cloud provider. Matches iOS shared-folder sync.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Not available on Android",
-                            style = MaterialTheme.typography.bodyMedium
+                    SettingSwitchRow(
+                        label = "Enable folder sync",
+                        checked = settings.sync.isEnabled,
+                        onCheckedChange = { launchUpdate { repository.updateSyncIsEnabled(it) } }
+                    )
+                    SettingsLinkRow(
+                        label = if (settings.sync.folderUri == null) "Select sync folder" else "Change sync folder",
+                        icon = Icons.Outlined.Folder,
+                        onClick = {
+                            // Activity Result logic for SAF
+                        }
+                    )
+                    if (settings.sync.isEnabled && settings.sync.folderUri != null) {
+                        SettingsLinkRow(
+                            label = "Sync Now",
+                            icon = Icons.Outlined.Sync,
+                            onClick = {
+                                launchUpdate { syncRepository.runSync() }
+                            }
                         )
-                        Text(
-                            text = "iOS uses an iCloud Documents folder for multi-device " +
-                                "library sync. Android will use a folder picker later.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        settings.sync.lastSyncAt?.let { last ->
+                            Text(
+                                text = "Last synced: ${java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.SHORT).withZone(java.time.ZoneId.systemDefault()).format(last)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }

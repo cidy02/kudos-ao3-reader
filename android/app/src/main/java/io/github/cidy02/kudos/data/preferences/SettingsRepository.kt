@@ -14,9 +14,11 @@ import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderSettings
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
+import io.github.cidy02.kudos.core.model.SyncSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 
 class SettingsRepository(
     private val dataStore: DataStore<Preferences>
@@ -125,6 +127,24 @@ class SettingsRepository(
         dataStore.edit { it[Keys.AccentColorHex] = hex }
     }
 
+    suspend fun updateSyncIsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.SyncIsEnabled] = enabled }
+    }
+
+    suspend fun updateSyncFolderUri(uri: String?) {
+        dataStore.edit {
+            if (uri == null) it.remove(Keys.SyncFolderUri)
+            else it[Keys.SyncFolderUri] = uri
+        }
+    }
+
+    suspend fun updateSyncLastSyncAt(instant: Instant?) {
+        dataStore.edit {
+            if (instant == null) it.remove(Keys.SyncLastSyncAt)
+            else it[Keys.SyncLastSyncAt] = instant.toEpochMilli()
+        }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -198,6 +218,11 @@ class SettingsRepository(
                 ),
                 requireBiometricToReveal = preferences[Keys.RequireBiometricToReveal]
                     ?: defaults.privacy.requireBiometricToReveal
+            ),
+            sync = SyncSettings(
+                folderUri = preferences[Keys.SyncFolderUri],
+                isEnabled = preferences[Keys.SyncIsEnabled] ?: false,
+                lastSyncAt = preferences[Keys.SyncLastSyncAt]?.let { Instant.ofEpochMilli(it) }
             )
         )
     }
@@ -224,6 +249,9 @@ class SettingsRepository(
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         /** Device-local first-launch flag; not included in backup-compatible settings. */
         val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
+        val SyncIsEnabled = booleanPreferencesKey("syncIsEnabled")
+        val SyncFolderUri = stringPreferencesKey("syncFolderUri")
+        val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")
     }
 
     companion object {

@@ -23,6 +23,7 @@ sealed interface AO3CommentTarget {
                 .addPathSegment(workId.toString())
                 .addQueryParameter("view_adult", "true")
                 .addQueryParameter("show_comments", "true")
+                .addQueryParameter("view_full_work", "true")
             if (page > 1) {
                 builder.addQueryParameter("page", page.toString())
             }

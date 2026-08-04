@@ -199,6 +199,18 @@ class LibraryViewModel(
         }
     }
 
+    fun bulkRemoveFromSaveForLater() {
+        val ids = selectedWorkIds.value
+        val repo = queueRepository ?: return
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) {
+                repo.removeFromSavedForLater(id)
+            }
+            exitSelectionMode()
+        }
+    }
+
     fun bulkAddToQueue(queueId: String) {
         val ids = selectedWorkIds.value
         val queues = queueRepository ?: return

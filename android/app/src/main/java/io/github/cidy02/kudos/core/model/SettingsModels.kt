@@ -76,10 +76,17 @@ data class PrivacySettings(
     val requireBiometricToReveal: Boolean = false
 )
 
+data class SyncSettings(
+    val folderUri: String? = null,
+    val isEnabled: Boolean = false,
+    val lastSyncAt: java.time.Instant? = null
+)
+
 data class KudosSettings(
     val reader: ReaderSettings = ReaderSettings(),
     val app: AppSettings = AppSettings(),
-    val privacy: PrivacySettings = PrivacySettings()
+    val privacy: PrivacySettings = PrivacySettings(),
+    val sync: SyncSettings = SyncSettings()
 ) {
     companion object {
         val Defaults = KudosSettings()

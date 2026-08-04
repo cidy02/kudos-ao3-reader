@@ -6,5 +6,6 @@ enum class LibrarySort(val label: String) {
     Title("Title"),
     Author("Author"),
     WordCount("Words"),
-    Kudos("Kudos")
+    Kudos("Kudos"),
+    Manual("Manual")
 }

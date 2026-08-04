@@ -296,6 +296,18 @@ class AO3CommentParser(
      * name fallbacks for malformed bylines keep Android's previous behaviour.
      */
     private fun parseCommentAuthor(element: Element, deleted: Boolean): ParsedCommentAuthor {
+        // If the <li> itself has the 'deleted' class, AO3 usually hides the
+        // author entirely.
+        if (deleted) {
+            return ParsedCommentAuthor(
+                name = "Deleted comment",
+                profileUrl = null,
+                username = null,
+                isGuest = true,
+                isAnonymousCreator = false
+            )
+        }
+
         // Prefer a real profile link (iOS: `a[href^=/users/]` on the byline).
         // Keep the broader author-link selectors as a registered-user fallback so
         // existing fixtures and slightly drifted markup still resolve a name.

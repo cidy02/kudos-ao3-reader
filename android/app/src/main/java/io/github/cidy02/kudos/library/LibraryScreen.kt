@@ -40,9 +40,11 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -51,6 +53,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -496,6 +499,7 @@ fun LibraryScreen(
         onBulkMarkFinished = { viewModel.bulkSetFinished(true) },
         onBulkMarkUnfinished = { viewModel.bulkSetFinished(false) },
         onBulkRemove = { confirmBulkRemove = true },
+        onBulkRemoveFromSaveForLater = viewModel::bulkRemoveFromSaveForLater,
         onToggleFavoriteOne = viewModel::toggleFavoriteOne,
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
@@ -537,6 +541,7 @@ private fun LibraryContent(
     onBulkMarkFinished: () -> Unit,
     onBulkMarkUnfinished: () -> Unit,
     onBulkRemove: () -> Unit,
+    onBulkRemoveFromSaveForLater: () -> Unit,
     onToggleFavoriteOne: (String) -> Unit,
     onToggleFinishedOne: (String) -> Unit,
     onRemoveOne: (String) -> Unit,
@@ -583,6 +588,7 @@ private fun LibraryContent(
                     onExitSelection = onExitSelection,
                     onTogglePrivacy = onTogglePrivacy,
                     onOpenRecentlyDeleted = onOpenRecentlyDeleted,
+                    onBulkRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
             }
@@ -611,6 +617,7 @@ private fun LibraryContent(
                     )
 
                     var sortMenuOpen by remember { mutableStateOf(false) }
+                    var moreMenuOpen by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { sortMenuOpen = true }) {
                             Icon(Icons.Filled.Sort, "Sort")
@@ -628,6 +635,23 @@ private fun LibraryContent(
                                     }
                                 )
                             }
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { moreMenuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, "More")
+                        }
+                        DropdownMenu(
+                            expanded = moreMenuOpen,
+                            onDismissRequest = { moreMenuOpen = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Remove from Save for Later") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    onBulkRemoveFromSaveForLater()
+                                }
+                            )
                         }
                     }
                 }
@@ -833,6 +857,7 @@ private fun LibraryContent(
                 onMarkFinished = onBulkMarkFinished,
                 onMarkUnfinished = onBulkMarkUnfinished,
                 onRemove = onBulkRemove,
+                onRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
                 onCancel = onExitSelection,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
@@ -863,6 +888,7 @@ private fun LibraryToolbarPill(
     onExitSelection: () -> Unit,
     onTogglePrivacy: () -> Unit,
     onOpenRecentlyDeleted: () -> Unit,
+    onBulkRemoveFromSaveForLater: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -928,6 +954,7 @@ private fun LibraryToolbarPill(
                             )
                         }
                         var overflowOpen by remember { mutableStateOf(false) }
+                        var selectionMoreOpen by remember { mutableStateOf(false) }
                         Box {
                             IconButton(onClick = { overflowOpen = true }) {
                                 Icon(
@@ -940,6 +967,13 @@ private fun LibraryToolbarPill(
                                 expanded = overflowOpen,
                                 onDismissRequest = { overflowOpen = false }
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("Remove from Save for Later") },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onBulkRemoveFromSaveForLater()
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Reading Insights") },
                                     leadingIcon = {
@@ -1602,9 +1636,11 @@ private fun LibrarySelectionActionBar(
     onMarkFinished: () -> Unit,
     onMarkUnfinished: () -> Unit,
     onRemove: () -> Unit,
+    onRemoveFromSaveForLater: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var overflowExpanded by remember { mutableStateOf(false) }
     Surface(
         tonalElevation = 6.dp,
         shadowElevation = 8.dp,
@@ -1613,30 +1649,64 @@ private fun LibrarySelectionActionBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onFavorite, enabled = hasSelection) { Text("Favorite") }
-            TextButton(onClick = onUnfavorite, enabled = hasSelection) { Text("Unfavorite") }
-            TextButton(onClick = onSave, enabled = hasSelection) { Text("Save") }
-            TextButton(onClick = onUnsave, enabled = hasSelection) { Text("Unsave") }
-            TextButton(onClick = onAddToQueue, enabled = hasSelection) { Text("Queue") }
-            TextButton(onClick = onAddToCollection, enabled = hasSelection) { Text("Collection") }
-            TextButton(onClick = onMarkFinished, enabled = hasSelection) { Text("Finished") }
-            TextButton(onClick = onMarkUnfinished, enabled = hasSelection) { Text("Unfinished") }
-            TextButton(onClick = onRemove, enabled = hasSelection) {
-                Text(
-                    "Remove",
-                    color = if (hasSelection) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    }
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onFavorite, enabled = hasSelection) {
+                    Icon(Icons.Outlined.Star, "Favorite")
+                }
+                IconButton(onClick = onSave, enabled = hasSelection) {
+                    Icon(Icons.Outlined.Bookmark, "Save")
+                }
+                IconButton(onClick = onAddToQueue, enabled = hasSelection) {
+                    Icon(Icons.Outlined.Queue, "Add to Queue")
+                }
+                IconButton(onClick = onAddToCollection, enabled = hasSelection) {
+                    Icon(Icons.Outlined.CollectionsBookmark, "Add to Collection")
+                }
+                IconButton(onClick = onMarkFinished, enabled = hasSelection) {
+                    Icon(Icons.Outlined.CheckCircle, "Mark Finished")
+                }
             }
-            TextButton(onClick = onCancel) { Text("Cancel") }
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    IconButton(onClick = { overflowExpanded = true }, enabled = hasSelection) {
+                        Icon(Icons.Default.MoreVert, "More actions")
+                    }
+                    DropdownMenu(
+                        expanded = overflowExpanded,
+                        onDismissRequest = { overflowExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Unfavorite") },
+                            onClick = { overflowExpanded = false; onUnfavorite() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Unsave") },
+                            onClick = { overflowExpanded = false; onUnsave() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Mark Unfinished") },
+                            onClick = { overflowExpanded = false; onMarkUnfinished() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remove from Save for Later") },
+                            onClick = { overflowExpanded = false; onRemoveFromSaveForLater() }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Remove from Library", color = MaterialTheme.colorScheme.error) },
+                            onClick = { overflowExpanded = false; onRemove() }
+                        )
+                    }
+                }
+                TextButton(onClick = onCancel) {
+                    Text("Cancel")
+                }
+            }
         }
     }
 }

@@ -1336,7 +1336,9 @@ private fun WorkDetailContent(
                 WorkDetailTab.Tags -> TagsTab(state = state)
                 WorkDetailTab.Discussion -> DiscussionTab(
                     state = state,
-                    onComments = onComments
+                    onAllComments = onComments,
+                    onChapterComments = { /* Chapter id needed */ },
+                    onWriteComment = onComments
                 )
                 WorkDetailTab.Library -> LibraryTab(
                     state = state,
@@ -1688,7 +1690,9 @@ private fun TagsTab(state: WorkDetailUiState) {
 @Composable
 private fun DiscussionTab(
     state: WorkDetailUiState,
-    onComments: () -> Unit
+    onAllComments: () -> Unit,
+    onChapterComments: (Long) -> Unit,
+    onWriteComment: () -> Unit
 ) {
     SectionLabel("Comments")
     DetailFormCard {
@@ -1697,23 +1701,25 @@ private fun DiscussionTab(
             title = "All Comments",
             trailing = state.commentsCount?.let { "%,d".format(it) },
             enabled = state.ao3WorkId != null,
-            onClick = onComments,
+            onClick = onAllComments,
             showDivider = true
         )
-        DiscussionRow(
-            icon = Icons.AutoMirrored.Outlined.MenuBook,
-            title = "Chapter Comments",
-            trailing = null,
-            enabled = state.ao3WorkId != null,
-            onClick = onComments,
-            showDivider = true
-        )
+        if (state.chapters.isNotBlank() && state.chapters != "1") {
+            DiscussionRow(
+                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                title = "Chapter Comments",
+                trailing = null,
+                enabled = state.ao3WorkId != null,
+                onClick = { /* Need chapter id, but WorkDetailUiState doesn't have it yet */ },
+                showDivider = true
+            )
+        }
         DiscussionRow(
             icon = Icons.Outlined.Edit,
             title = "Write a Comment",
             trailing = null,
             enabled = state.ao3WorkId != null,
-            onClick = onComments,
+            onClick = onWriteComment,
             showDivider = false
         )
     }

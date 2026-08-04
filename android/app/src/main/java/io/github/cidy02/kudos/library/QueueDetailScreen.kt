@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
@@ -67,6 +70,7 @@ fun QueueDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var reorderMode by remember { mutableStateOf(false) }
     val userTags by repository.observeAllUserTags().collectAsState(initial = emptyList())
     val allCollections by repository.observeAllCollections().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -96,6 +100,16 @@ fun QueueDetailScreen(
         val results = LibraryQuery.apply(displayItems, "", filters, sort)
         results.mapNotNull { display ->
             items.find { it.membership.workID == display.item.work.id }
+        }
+    }
+
+    fun onReorder(fromIndex: Int, toIndex: Int) {
+        val list = filteredItems.toMutableList()
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
+        items = list // Optimistic update
+        scope.launch {
+            repository.updateSortOrder(queueId, list.map { it.membership.workID })
         }
     }
 
@@ -224,16 +238,18 @@ fun QueueDetailScreen(
 
                 if (queue != null && queue!!.kindRaw != io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { showFilterPanel = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Sort,
-                                contentDescription = "Filter and Sort",
-                                tint = if (filters.hasActiveFilters) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
+                        if (!reorderMode) {
+                            IconButton(onClick = { showFilterPanel = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Sort,
+                                    contentDescription = "Filter and Sort",
+                                    tint = if (filters.hasActiveFilters) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
                         }
                         Box {
                             IconButton(onClick = { overflowExpanded = true }) {
@@ -243,6 +259,14 @@ fun QueueDetailScreen(
                                 expanded = overflowExpanded,
                                 onDismissRequest = { overflowExpanded = false }
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text(if (reorderMode) "Exit Reordering" else "Reorder Works") },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        reorderMode = !reorderMode
+                                        if (reorderMode) sort = LibrarySort.Manual
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Rename") },
                                     onClick = {
@@ -298,14 +322,17 @@ fun QueueDetailScreen(
                         )
                     }
                 } else {
-                    items(filteredItems, key = { it.membership.id }) { item ->
+                    itemsIndexed(filteredItems, key = { _, item -> item.membership.id }) { index, item ->
                         QueueWorkRow(
                             item = item,
                             enabled = !working,
+                            reorderMode = reorderMode,
                             onOpenWork = {
                                 item.work?.id?.let(onOpenWork)
                             },
-                            onRemove = { removeWork(item.membership.workID) }
+                            onRemove = { removeWork(item.membership.workID) },
+                            onMoveUp = if (index > 0) { { onReorder(index, index - 1) } } else null,
+                            onMoveDown = if (index < filteredItems.lastIndex) { { onReorder(index, index + 1) } } else null
                         )
                     }
                 }
@@ -332,8 +359,11 @@ fun QueueDetailScreen(
 private fun QueueWorkRow(
     item: QueueMembershipItem,
     enabled: Boolean,
+    reorderMode: Boolean,
     onOpenWork: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -348,11 +378,22 @@ private fun QueueWorkRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (reorderMode) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = onMoveUp ?: {}, enabled = onMoveUp != null, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.ArrowDropUp, "Move Up")
+                    }
+                    IconButton(onClick = onMoveDown ?: {}, enabled = onMoveDown != null, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.ArrowDropDown, "Move Down")
+                    }
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .then(
-                        if (item.work != null) {
+                        if (item.work != null && !reorderMode) {
                             Modifier.clickable(enabled = enabled, onClick = onOpenWork)
                         } else {
                             Modifier
