@@ -71,8 +71,10 @@ object Routes {
     fun reader(workId: String) = "reader/${encode(workId)}"
 
     private const val ARG_COMMENT_WORK_ID = "commentWorkId"
-    const val Comments = "comments/{$ARG_COMMENT_WORK_ID}"
-    fun comments(workId: Long) = "comments/$workId"
+    private const val ARG_COMMENT_FOCUSED_ID = "focusedCommentId"
+    const val Comments = "comments/{$ARG_COMMENT_WORK_ID}?focused={$ARG_COMMENT_FOCUSED_ID}"
+    fun comments(workId: Long, focusedCommentId: Long? = null) = 
+        "comments/$workId" + (focusedCommentId?.let { "?focused=$it" } ?: "")
 
     private const val ARG_ACCOUNT_LIST_TYPE = "listType"
     const val AccountList = "account-list/{$ARG_ACCOUNT_LIST_TYPE}"

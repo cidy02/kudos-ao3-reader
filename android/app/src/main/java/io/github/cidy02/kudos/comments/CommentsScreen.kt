@@ -85,12 +85,21 @@ fun CommentsScreen(
     repository: AO3CommentRepository,
     onLogin: () -> Unit,
     currentUsername: String? = null,
-    draftStore: CommentDraftStore? = null
+    draftStore: CommentDraftStore? = null,
+    focusedCommentId: Long? = null
 ) {
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
         factory = CommentsViewModel.factory(repository, target, draftStore, currentUsername)
     )
+    
+    // Initial focus from deep-link (Inbox tap)
+    LaunchedEffect(focusedCommentId) {
+        if (focusedCommentId != null) {
+            viewModel.load(focusedId = focusedCommentId)
+        }
+    }
+
     val state by viewModel.state.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val submitting by viewModel.submitting.collectAsState()

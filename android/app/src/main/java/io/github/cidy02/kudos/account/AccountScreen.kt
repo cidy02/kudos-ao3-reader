@@ -149,7 +149,7 @@ fun AccountScreen(
     onOpenCollection: (AO3Collection) -> Unit = {},
     inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
     commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
-    onOpenWorkComments: (workId: Long) -> Unit = {},
+    onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
         factory = AccountViewModel.factory(
@@ -1057,10 +1057,10 @@ private fun ActivityTabContent(
     workRepository: WorkRepository,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenWorkComments: (Long, Long?) -> Unit,
     username: String? = null,
     inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
-    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
-    onOpenWorkComments: (workId: Long) -> Unit = {}
+    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
         AccountListKindPicker(

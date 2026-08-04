@@ -6,8 +6,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.compose.runtime.collectAsState
 import io.github.cidy02.kudos.account.AO3CollectionsScreen
 import io.github.cidy02.kudos.account.AO3DashboardScreen
@@ -335,11 +337,8 @@ fun AppNavHost(
                 },
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
-                onOpenWorkComments = { workId ->
-                    // Deliberate simplification: chapter-position rows still open the
-                    // work's general thread (Android has no chapter-id resolution from
-                    // Inbox subject labels yet — same gap as Comments chapter routing).
-                    navController.navigate(Routes.comments(workId))
+                onOpenWorkComments = { workId, focusedId ->
+                    navController.navigate(Routes.comments(workId, focusedId))
                 },
                 viewModel = viewModel(
                     factory = AccountViewModel.factory(
@@ -530,9 +529,13 @@ fun AppNavHost(
         }
         composable(
             Routes.Comments,
-            arguments = listOf(Routes.navArgOf("commentWorkId"))
+            arguments = listOf(
+                Routes.navArgOf("commentWorkId"),
+                navArgument("focused") { type = NavType.StringType; nullable = true }
+            )
         ) { backStackEntry ->
             val workId = Routes.routeArg(backStackEntry, "commentWorkId")?.toLongOrNull()
+            val focusedId = Routes.routeArg(backStackEntry, "focused")?.toLongOrNull()
             val commentsAuthState by container.authRepository.state.collectAsState(
                 initial = AO3AuthState.Restoring
             )
@@ -540,7 +543,8 @@ fun AppNavHost(
                 target = workId?.let { AO3CommentTarget.Work(it) },
                 repository = container.commentRepository,
                 currentUsername = commentsAuthState.usernameOrNull,
-                onLogin = { navController.navigate(Routes.AccountLogin) }
+                onLogin = { navController.navigate(Routes.AccountLogin) },
+                focusedCommentId = focusedId
             )
         }
 

@@ -78,7 +78,7 @@ fun AccountInboxPane(
     inboxRepository: AO3InboxRepository,
     commentRepository: AO3CommentRepository,
     currentUsername: String?,
-    onOpenWorkComments: (workId: Long) -> Unit,
+    onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AccountInboxViewModel = viewModel(
         key = "account-inbox",
@@ -255,7 +255,7 @@ fun AccountInboxPane(
                                 item
                             ),
                             onOpen = {
-                                item.workId?.let(onOpenWorkComments)
+                                item.workId?.let { onOpenWorkComments(it, item.id) }
                             },
                             onToggleSelection = { viewModel.toggleSelection(item) },
                             onMarkRead = {
