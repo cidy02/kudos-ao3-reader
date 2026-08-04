@@ -749,14 +749,16 @@ class WorkImporterLifecycleTest {
     }
 
     @Test
-    fun importLocalEpubRejectsNonEpubExtension() = runTest {
+    fun importLocalEpubRejectsUnsupportedExtension() = runTest {
         val importer = importer(
             metadata = AO3Result.Failure(AO3Error.NotFound),
             download = AO3Result.Failure(AO3Error.NotFound)
         )
 
+        // epub/pdf/html/htm/txt are all supported imports (txt/html/pdf via
+        // works/converters). Anything outside that list must still be rejected.
         val result = importer.importLocalEpub(
-            displayName = "notes.txt",
+            displayName = "notes.docx",
             bytes = epubBytes
         )
 
