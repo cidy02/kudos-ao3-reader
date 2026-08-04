@@ -83,11 +83,14 @@ class CommentsViewModel(
                 is AO3Result.Success -> {
                     val thread = result.value.withSort(_order.value)
                     _state.value = CommentsUiState.Loaded(thread)
-                    // Load draft if applicable
+                    // Restore a top-level draft on initial load. focusedId is "which
+                    // comment to scroll to" (e.g. from a notification deep link), not a
+                    // reply target, so it must not be used as parentId here — reply
+                    // drafts are restored separately in startReply().
                     val draftContent = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                        parentId = focusedId,
+                        parentId = null,
                         username = currentUsername
                     )
                     if (draftContent != null) _draft.value = draftContent
@@ -120,10 +123,26 @@ class CommentsViewModel(
 
     fun startReply(comment: AO3Comment) {
         val id = comment.numericId ?: return
+        val target = _currentTarget.value
         _replyTarget.value = ReplyTarget(commentId = id, authorName = comment.author.name)
         _editTarget.value = null
         _draft.value = ""
         _message.value = null
+        if (target != null) {
+            viewModelScope.launch {
+                val draftContent = draftStore?.getDraft(
+                    workId = target.workId,
+                    chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
+                    parentId = id,
+                    username = currentUsername
+                )
+                // Only apply if the user hasn't already started typing or switched
+                // reply targets again while this suspend call was in flight.
+                if (draftContent != null && _draft.value.isEmpty() && _replyTarget.value?.commentId == id) {
+                    _draft.value = draftContent
+                }
+            }
+        }
     }
 
     fun cancelReply() {
