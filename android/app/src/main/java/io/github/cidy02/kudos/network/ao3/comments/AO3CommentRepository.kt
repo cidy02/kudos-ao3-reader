@@ -44,23 +44,19 @@ class AO3CommentRepository(
                 if (authAttempt.error != AO3Error.AuthenticationRequired) {
                     // Still try public — may work for open works.
                 }
-                println("Auth failed, trying public GET for $pageUrl")
                 when (val public = publicClient.get(pageUrl)) {
                     is AO3Result.Failure -> {
-                        println("Public GET failed: ${public.error}")
                         // Network failure: try cache if available.
                         cache?.load(target, safePage)?.let { return AO3Result.Success(it) }
                         return public
                     }
                     is AO3Result.Success -> {
-                        println("Public GET success")
                         public.value
                     }
                 }
             }
         }
         val thread = parseThread(response.body, response.url, target, response.statusCode, safePage)
-        println("Parse thread result: $thread")
         if (thread is AO3Result.Success) {
             cache?.save(thread.value, safePage)
         }

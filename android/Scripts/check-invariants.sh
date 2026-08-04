@@ -20,10 +20,19 @@ fi
 grep -q 'KudosReader/' "$SRC/io/github/cidy02/kudos/network/ao3/AO3UserAgent.kt" || \
   fail "AO3UserAgent must include KudosReader/<version> token"
 
-# 2) No password storage APIs
-if grep -RIn --include='*.kt' -E 'password|Password' "$SRC/io/github/cidy02/kudos/backup" | grep -viE 'comment|//|never|excluded|password' >/dev/null 2>&1; then
-  # allow only comments that say passwords are never stored
-  :
+# 2) Backup must never touch credentials.
+# Comment lines are allowed (they document *why* passwords aren't stored);
+# any real code reference is a failure. The previous version of this check
+# could never fail: its `then` branch was a no-op, and its own filter stripped
+# every line the first grep matched.
+# Allowed: comment lines, and UI copy that promises passwords are NOT stored.
+pw_hits=$(grep -RIn --include='*.kt' -iE 'password' \
+  "$SRC/io/github/cidy02/kudos/backup" \
+  | grep -vE ':[0-9]+: *(//|\*|/\*)' \
+  | grep -viE 'never (stored|saved|written|included)' || true)
+if [ -n "$pw_hits" ]; then
+  echo "$pw_hits"
+  fail "backup package must not reference passwords in code"
 fi
 
 # 3) Backup must not touch session/cookie stores

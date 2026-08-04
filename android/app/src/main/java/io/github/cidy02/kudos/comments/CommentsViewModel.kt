@@ -77,15 +77,12 @@ class CommentsViewModel(
 
     fun load(page: Int = 1, focusedId: Long? = null) {
         val target = _currentTarget.value ?: return
-        println("Loading comments for target=$target, focusedId=$focusedId")
         _focusedCommentId.value = focusedId
         _replyTarget.value = null
         _editTarget.value = null
         viewModelScope.launch {
-            println("Coroutine launched for load")
             _state.value = CommentsUiState.Loading
             val result = repository.loadThread(target, page, focusedId)
-            println("Repository returned: $result")
             when (result) {
                 is AO3Result.Success -> {
                     val thread = result.value.withSort(_order.value)
@@ -94,7 +91,6 @@ class CommentsViewModel(
                     // comment to scroll to" (e.g. from a notification deep link), not a
                     // reply target, so it must not be used as parentId here — reply
                     // drafts are restored separately in startReply().
-                    println("Fetching draft for workId=${target.workId}, parentId=null")
                     val draftContent = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
