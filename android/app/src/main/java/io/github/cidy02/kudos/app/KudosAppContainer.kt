@@ -3,10 +3,12 @@ package io.github.cidy02.kudos.app
 import android.content.Context
 import androidx.room.Room
 import io.github.cidy02.kudos.BuildConfig
+import io.github.cidy02.kudos.account.AO3AccountListCountsCache
 import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.auth.AndroidAO3CookieStore
 import io.github.cidy02.kudos.auth.AO3AuthRepository
-import io.github.cidy02.kudos.auth.FileAO3SessionStore
+import io.github.cidy02.kudos.auth.AO3PostingPseudStore
+import io.github.cidy02.kudos.auth.EncryptedFileAO3SessionStore
 import io.github.cidy02.kudos.auth.LiveAO3SessionValidator
 import io.github.cidy02.kudos.backup.BackupRepository
 import io.github.cidy02.kudos.data.local.KudosDatabase
@@ -29,6 +31,8 @@ import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
+import io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesRepository
 import io.github.cidy02.kudos.network.github.GitHubReleaseClient
 import io.github.cidy02.kudos.reader.ReaderRepository
 import io.github.cidy02.kudos.search.SavedSearchRepository
@@ -88,7 +92,7 @@ class KudosAppContainer(context: Context) {
 
     val authRepository: AO3AuthRepository by lazy {
         AO3AuthRepository(
-            sessionStore = FileAO3SessionStore(appContext),
+            sessionStore = EncryptedFileAO3SessionStore(appContext),
             cookieStore = AndroidAO3CookieStore(),
             sessionValidator = LiveAO3SessionValidator(client = ao3Client)
         )
@@ -97,7 +101,8 @@ class KudosAppContainer(context: Context) {
     val accountListRepository: AccountListRepository by lazy {
         AccountListRepository(
             client = ao3Client,
-            authRepository = authRepository
+            authRepository = authRepository,
+            countsCache = accountListCountsCache
         )
     }
 
@@ -111,6 +116,25 @@ class KudosAppContainer(context: Context) {
 
     val writeRepository: AO3WriteRepository by lazy {
         AO3WriteRepository(authenticatedClient)
+    }
+
+    val authorRepository: AO3AuthorRepository by lazy {
+        AO3AuthorRepository(
+            publicClient = ao3Client,
+            authenticatedClient = authenticatedClient
+        )
+    }
+
+    val preferencesRepository: AO3PreferencesRepository by lazy {
+        AO3PreferencesRepository(client = authenticatedClient)
+    }
+
+    val postingPseudStore: AO3PostingPseudStore by lazy {
+        AO3PostingPseudStore(appContext)
+    }
+
+    val accountListCountsCache: AO3AccountListCountsCache by lazy {
+        AO3AccountListCountsCache()
     }
 
     val commentRepository: AO3CommentRepository by lazy {

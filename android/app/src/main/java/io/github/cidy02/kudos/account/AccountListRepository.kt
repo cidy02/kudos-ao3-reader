@@ -15,9 +15,10 @@ import kotlinx.coroutines.withContext
 
 class AccountListRepository(
     private val client: AO3Client = OkHttpAO3Client(),
-    private val authRepository: AO3AuthRepository,
+    val authRepository: AO3AuthRepository,
     private val urls: AO3AccountUrls = AO3AccountUrls(),
-    private val parser: AO3AccountParser = AO3AccountParser()
+    private val parser: AO3AccountParser = AO3AccountParser(),
+    val countsCache: AO3AccountListCountsCache? = null
 ) {
     suspend fun load(type: AccountListType, page: Int = 1): AO3Result<AO3SearchPage> {
         val username = authRepository.username()

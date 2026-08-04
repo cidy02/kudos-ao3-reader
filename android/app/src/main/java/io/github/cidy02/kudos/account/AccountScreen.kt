@@ -96,6 +96,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import io.github.cidy02.kudos.R
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
@@ -141,7 +144,9 @@ fun AccountScreen(
     commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
     onOpenWorkComments: (workId: Long) -> Unit = {},
     modifier: Modifier = Modifier,
-    viewModel: AccountViewModel = viewModel(factory = AccountViewModel.factory(authRepository))
+    viewModel: AccountViewModel = viewModel(
+        factory = AccountViewModel.factory(authRepository)
+    )
 ) {
     val state by viewModel.uiState.collectAsState()
     val signedIn = state.authState is AO3AuthState.SignedIn
@@ -175,6 +180,7 @@ fun AccountScreen(
         AccountProfileHeader(
             authState = state.authState,
             sessionHealth = state.sessionHealth,
+            avatarUrl = state.header?.avatarUrl,
             onLogin = onLogin,
             onLogout = viewModel::logout,
             onVerifySession = viewModel::verifySession,
@@ -197,6 +203,7 @@ fun AccountScreen(
                 OverviewTabContent(
                     signedIn = signedIn,
                     username = username,
+                    counts = state.counts,
                     onOpenDashboard = onOpenDashboard,
                     onOpenList = onOpenList,
                     onOpenAO3Collections = onOpenAO3Collections,
@@ -251,6 +258,7 @@ fun AccountScreen(
 private fun AccountProfileHeader(
     authState: AO3AuthState,
     sessionHealth: AO3SessionHealth,
+    avatarUrl: String?,
     onLogin: () -> Unit,
     onLogout: () -> Unit,
     onVerifySession: () -> Unit,
@@ -278,7 +286,7 @@ private fun AccountProfileHeader(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AccountAvatarPlaceholder()
+            AccountAvatar(avatarUrl = avatarUrl)
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -555,7 +563,8 @@ private fun sessionHealthDetailText(health: AO3SessionHealth): String {
 }
 
 @Composable
-private fun AccountAvatarPlaceholder() {
+private fun AccountAvatar(avatarUrl: String?) {
+    val context = LocalContext.current
     Surface(
         modifier = Modifier
             .size(56.dp)
@@ -564,14 +573,26 @@ private fun AccountAvatarPlaceholder() {
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_kudos_mark),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
+            if (avatarUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(avatarUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_kudos_mark),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
         }
     }
 }
@@ -609,6 +630,7 @@ private fun AccountHubTabRow(
 private fun OverviewTabContent(
     signedIn: Boolean,
     username: String?,
+    counts: Map<String, AO3AccountListCountsCache.Count>,
     onOpenDashboard: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
     onOpenAO3Collections: () -> Unit,
@@ -626,6 +648,7 @@ private fun OverviewTabContent(
             Spacer(Modifier.height(8.dp))
             AccountShortcutsGrid(
                 signedIn = signedIn,
+                counts = counts,
                 onOpenDashboard = onOpenDashboard,
                 onOpenList = onOpenList,
                 onOpenAO3Collections = onOpenAO3Collections
@@ -713,28 +736,37 @@ private fun OverviewTabContent(
 @Composable
 private fun AccountShortcutsGrid(
     signedIn: Boolean,
+    counts: Map<String, AO3AccountListCountsCache.Count>,
     onOpenDashboard: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
     onOpenAO3Collections: () -> Unit
 ) {
     val shortcuts = listOf(
-        ShortcutItem("My Dashboard", Icons.Outlined.GridView, enabled = signedIn, onClick = onOpenDashboard),
+        ShortcutItem(
+            "My Dashboard",
+            Icons.Outlined.GridView,
+            enabled = signedIn,
+            onClick = onOpenDashboard
+        ),
         ShortcutItem(
             "My Subscriptions",
             Icons.Outlined.NotificationsNone,
             enabled = signedIn,
+            count = counts[AccountListType.Subscriptions.listKey],
             onClick = { onOpenList(AccountListType.Subscriptions) }
         ),
         ShortcutItem(
             "My Works",
             Icons.Outlined.Description,
             enabled = signedIn,
+            count = counts[AccountListType.MyWorks.listKey],
             onClick = { onOpenList(AccountListType.MyWorks) }
         ),
         ShortcutItem(
             "My Bookmarks",
             Icons.Outlined.BookmarkBorder,
             enabled = signedIn,
+            count = counts[AccountListType.Bookmarks.listKey],
             onClick = { onOpenList(AccountListType.Bookmarks) }
         ),
         ShortcutItem(
@@ -747,6 +779,7 @@ private fun AccountShortcutsGrid(
             "My History",
             Icons.Outlined.History,
             enabled = signedIn,
+            count = counts[AccountListType.History.listKey],
             onClick = { onOpenList(AccountListType.History) }
         )
     )
@@ -776,6 +809,7 @@ private data class ShortcutItem(
     val title: String,
     val icon: ImageVector,
     val enabled: Boolean,
+    val count: AO3AccountListCountsCache.Count? = null,
     val onClick: () -> Unit
 )
 
@@ -800,28 +834,44 @@ private fun AccountShortcutTile(
         ),
         shape = MaterialTheme.shapes.large
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = item.icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.labelMedium,
-                color = textColor,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = textColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            item.count?.displayText?.let { count ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 0.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                ) {
+                    Text(
+                        text = count,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }

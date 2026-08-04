@@ -11,15 +11,18 @@ import androidx.navigation.compose.composable
 import androidx.compose.runtime.collectAsState
 import io.github.cidy02.kudos.account.AO3CollectionsScreen
 import io.github.cidy02.kudos.account.AO3DashboardScreen
+import io.github.cidy02.kudos.account.AO3PreferencesScreen
 import io.github.cidy02.kudos.account.AboutScreen
 import io.github.cidy02.kudos.account.AccountListScreen
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
+import io.github.cidy02.kudos.account.AccountViewModel
 import io.github.cidy02.kudos.account.LocalLibraryListKind
 import io.github.cidy02.kudos.account.LocalLibraryListsScreen
 import io.github.cidy02.kudos.auth.AO3AuthState
-import io.github.cidy02.kudos.auth.AO3WebLoginScreen
+import io.github.cidy02.kudos.auth.AO3NativeLoginScreen
 import io.github.cidy02.kudos.auth.usernameOrNull
+import io.github.cidy02.kudos.author.AuthorProfileScreen
 import io.github.cidy02.kudos.author.AuthorWorksScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
@@ -307,7 +310,14 @@ fun AppNavHost(
                     // work's general thread (Android has no chapter-id resolution from
                     // Inbox subject labels yet — same gap as Comments chapter routing).
                     navController.navigate(Routes.comments(workId))
-                }
+                },
+                viewModel = viewModel(
+                    factory = AccountViewModel.factory(
+                        container.authRepository,
+                        container.authorRepository,
+                        container.accountListCountsCache
+                    )
+                )
             )
         }
         composable(Routes.AO3Dashboard) {
@@ -351,7 +361,7 @@ fun AppNavHost(
             AboutScreen()
         }
         composable(Routes.AccountLogin) {
-            AO3WebLoginScreen(
+            AO3NativeLoginScreen(
                 authRepository = container.authRepository,
                 onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
                 onCancel = { navController.popBackStack() }
@@ -411,6 +421,7 @@ fun AppNavHost(
                 downloadQueue = container.downloadQueue,
                 writeRepository = container.writeRepository,
                 readingQueueRepository = container.readingQueueRepository,
+                postingPseudStore = container.postingPseudStore,
                 metadataRepository = container.metadataRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenComments = { workId ->
@@ -525,6 +536,49 @@ fun AppNavHost(
         }
         composable(Routes.Backup) {
             BackupScreen(repository = container.backupRepository)
+        }
+
+        composable(
+            Routes.AuthorProfile,
+            arguments = listOf(Routes.navArgOf("authorUsername"))
+        ) { backStackEntry ->
+            val authorUsername = Routes.routeArg(backStackEntry, "authorUsername")
+            if (authorUsername.isNullOrBlank()) {
+                navController.popBackStack()
+            } else {
+                AuthorProfileScreen(
+                    username = authorUsername,
+                    authorRepository = container.authorRepository,
+                    onOpenWork = { work ->
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
+                    },
+                    onOpenWeb = { url ->
+                        navController.navigate(Routes.webFallback(url))
+                    }
+                )
+            }
+        }
+
+        composable(Routes.AO3Preferences) {
+            val prefsAuthState by container.authRepository.state.collectAsState(
+                initial = AO3AuthState.Restoring
+            )
+            val prefsUsername = (prefsAuthState as? AO3AuthState.SignedIn)?.username
+            if (prefsUsername != null) {
+                AO3PreferencesScreen(
+                    username = prefsUsername,
+                    repository = container.preferencesRepository,
+                    onSaved = { navController.popBackStack() }
+                )
+            }
+        }
+
+        composable(Routes.NativeLogin) {
+            AO3NativeLoginScreen(
+                authRepository = container.authRepository,
+                onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
+                onCancel = { navController.popBackStack() }
+            )
         }
     }
 }

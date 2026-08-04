@@ -4,22 +4,39 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.usernameOrNull
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class AccountViewModel(
-    private val authRepository: AO3AuthRepository
+    private val authRepository: AO3AuthRepository,
+    private val authorRepository: AO3AuthorRepository? = null,
+    private val countsCache: AO3AccountListCountsCache? = null
 ) : ViewModel() {
+    private val headerFlow = MutableStateFlow<io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader?>(null)
+    private val countsFlow = MutableStateFlow<Map<String, AO3AccountListCountsCache.Count>>(emptyMap())
+
     val uiState: StateFlow<AccountUiState> = combine(
         authRepository.state,
-        authRepository.sessionHealth
-    ) { authState, sessionHealth ->
-        AccountUiState(authState = authState, sessionHealth = sessionHealth)
+        authRepository.sessionHealth,
+        headerFlow,
+        countsFlow
+    ) { authState, sessionHealth, header, counts ->
+        AccountUiState(
+            authState = authState,
+            sessionHealth = sessionHealth,
+            header = header,
+            counts = counts
+        )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -27,7 +44,34 @@ class AccountViewModel(
     )
 
     init {
-        viewModelScope.launch { authRepository.restoreSession() }
+        viewModelScope.launch {
+            authRepository.restoreSession()
+            val auth = authRepository.state.first()
+            val username = auth.usernameOrNull
+            if (username != null) {
+                refreshHeader(username)
+                refreshCounts(username)
+            }
+        }
+    }
+
+    private fun refreshHeader(username: String) {
+        val repo = authorRepository ?: return
+        viewModelScope.launch {
+            when (val result = repo.loadDashboard(AO3AuthorRoute(username))) {
+                is AO3Result.Success -> headerFlow.value = result.value
+                is AO3Result.Failure -> Unit
+            }
+        }
+    }
+
+    private fun refreshCounts(username: String) {
+        val cache = countsCache ?: return
+        val map = mutableMapOf<String, AO3AccountListCountsCache.Count>()
+        AccountListType.hubEntries.forEach { type ->
+            cache.get(type, username)?.let { map[type.listKey] = it }
+        }
+        countsFlow.value = map
     }
 
     fun logout() {
@@ -39,11 +83,15 @@ class AccountViewModel(
     }
 
     companion object {
-        fun factory(authRepository: AO3AuthRepository): ViewModelProvider.Factory {
+        fun factory(
+            authRepository: AO3AuthRepository,
+            authorRepository: AO3AuthorRepository? = null,
+            countsCache: AO3AccountListCountsCache? = null
+        ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return AccountViewModel(authRepository) as T
+                    return AccountViewModel(authRepository, authorRepository, countsCache) as T
                 }
             }
         }
@@ -67,7 +115,21 @@ class AccountListViewModel(
         viewModelScope.launch {
             mutableState.value = AccountListUiState.Loading
             mutableState.value = when (val result = repository.load(type, page)) {
-                is AO3Result.Success -> AccountListUiState.Loaded(result.value)
+                is AO3Result.Success -> {
+                    // Update the counts cache whenever a list page is loaded (Item 9).
+                    val username = repository.authRepository.username()
+                    if (username != null) {
+                        repository.countsCache?.put(
+                            type,
+                            username,
+                            AO3AccountListCountsCache.Count(
+                                itemsOnPage = result.value.works.size,
+                                totalPages = result.value.totalPages
+                            )
+                        )
+                    }
+                    AccountListUiState.Loaded(result.value)
+                }
                 is AO3Result.Failure -> {
                     if (result.error == AO3Error.AuthenticationRequired) {
                         AccountListUiState.AuthRequired

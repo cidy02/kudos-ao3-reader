@@ -127,7 +127,11 @@ class AO3WriteRepository(
         return AO3Result.Success(parser.parseBookmarkState(html))
     }
 
-    suspend fun createBookmark(workId: Long, input: AO3BookmarkInput): AO3Result<AO3WriteOutcome> {
+    suspend fun createBookmark(
+        workId: Long,
+        input: AO3BookmarkInput,
+        pseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null
+    ): AO3Result<AO3WriteOutcome> {
         val workUrl = AO3WriteUrls.workUrl(workId)
         val html = when (val page = client.getAuthenticated(workUrl)) {
             is AO3Result.Failure -> return page
@@ -135,6 +139,17 @@ class AO3WriteRepository(
         }
         val token = parseToken(html) ?: return missingToken()
         val state = parser.parseBookmarkState(html)
+
+        // Preference resolution: caller-provided (UI dropdown) > persisted > AO3 default.
+        val preferredPseudId = if (!input.pseudId.isNullOrEmpty()) {
+            input.pseudId
+        } else {
+            val username = client.username()
+            val persisted = if (username != null) pseudStore?.pseudName(username) else null
+            state.availablePseuds.find { it.name.equals(persisted, true) }?.id
+                ?: parser.parseDefaultPseudId(html, field = "bookmark[pseud_id]")
+        }
+
         val fields = buildList {
             if (state.exists) {
                 add("_method" to "put")
@@ -147,7 +162,7 @@ class AO3WriteRepository(
             add("bookmark[collection_names]" to state.collectionNames)
             add("bookmark[private]" to if (input.isPrivate) "1" else "0")
             add("bookmark[rec]" to if (input.isRecommendation) "1" else "0")
-            parser.parseDefaultPseudId(html, field = "bookmark[pseud_id]")?.let {
+            preferredPseudId?.let {
                 add("bookmark[pseud_id]" to it)
             }
         }
@@ -163,6 +178,16 @@ class AO3WriteRepository(
             headers = writeHeaders(token, workUrl)
         )
         val successMessage = if (state.exists) "Bookmark updated." else "Bookmarked."
+        
+        // Persist the pseud choice on success.
+        if (response is AO3Result.Success && preferredPseudId != null && !state.exists) {
+            val chosenName = state.availablePseuds.find { it.id == preferredPseudId }?.name
+            val username = client.username()
+            if (chosenName != null && username != null) {
+                pseudStore?.setPseudName(chosenName, username)
+            }
+        }
+
         return response.toOutcome(AO3WriteActionKind.Bookmark, successMessage, "Couldn't bookmark this work.")
     }
 

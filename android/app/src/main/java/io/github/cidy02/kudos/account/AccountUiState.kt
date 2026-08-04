@@ -3,12 +3,15 @@ package io.github.cidy02.kudos.account
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3SessionHealth
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
 data class AccountUiState(
     val authState: AO3AuthState = AO3AuthState.Restoring,
-    val sessionHealth: AO3SessionHealth = AO3SessionHealth.Unknown
+    val sessionHealth: AO3SessionHealth = AO3SessionHealth.Unknown,
+    val header: AO3AuthorHeader? = null,
+    val counts: Map<String, AO3AccountListCountsCache.Count> = emptyMap()
 )
 
 /** Top segmented control on the Account hub (iOS SoT: Overview | Reading | Writing | Activity). */

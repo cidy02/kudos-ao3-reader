@@ -27,6 +27,21 @@ class AO3WriteFormParser {
         return select.selectFirst("option")?.attr("value")?.trim()?.takeIf { it.isNotEmpty() }
     }
 
+    fun parsePostingPseuds(html: String, field: String): List<AO3PostingPseudOption> {
+        val document = Jsoup.parse(html)
+        val select = document.selectFirst("select[name=\"$field\"]") ?: return emptyList()
+        return select.select("option").mapNotNull { option ->
+            val id = option.attr("value").trim()
+            val name = option.text().trim()
+            if (id.isEmpty() || name.isEmpty()) return@mapNotNull null
+            AO3PostingPseudOption(
+                id = id,
+                name = name,
+                selected = option.hasAttr("selected")
+            )
+        }
+    }
+
     fun parseSubscription(html: String): AO3SubscriptionState {
         val document = Jsoup.parse(html)
         val form = document.selectFirst("form[action*=subscriptions]")
@@ -75,22 +90,26 @@ class AO3WriteFormParser {
             isPrivate = form.selectFirst("input[name=\"bookmark[private]\"]")
                 ?.hasAttr("checked") == true,
             isRecommendation = form.selectFirst("input[name=\"bookmark[rec]\"]")
-                ?.hasAttr("checked") == true
+                ?.hasAttr("checked") == true,
+            pseudId = parseDefaultPseudId(html, "bookmark[pseud_id]")
         )
+        val availablePseuds = parsePostingPseuds(html, "bookmark[pseud_id]")
         return if (method == "put" && action.isNotEmpty()) {
             AO3BookmarkState(
                 exists = true,
                 editPath = action,
                 input = input,
-                collectionNames = collectionNames
+                collectionNames = collectionNames,
+                availablePseuds = availablePseuds
             )
         } else {
             // Create form (or unexpected markup): never throw; open blank create mode.
             AO3BookmarkState(
                 exists = false,
                 editPath = null,
-                input = AO3BookmarkInput(),
-                collectionNames = collectionNames
+                input = AO3BookmarkInput(pseudId = availablePseuds.find { it.selected }?.id),
+                collectionNames = collectionNames,
+                availablePseuds = availablePseuds
             )
         }
     }

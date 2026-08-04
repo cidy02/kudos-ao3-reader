@@ -40,6 +40,8 @@ object Routes {
     const val LocalHistory = "local-history"
     const val LocalFavorites = "local-favorites"
     const val About = "about"
+    const val NativeLogin = "native-login"
+    const val AO3Preferences = "ao3-preferences"
 
     // --- Routes carrying a per-back-stack-entry argument (T-90) ---
     //
@@ -101,6 +103,10 @@ object Routes {
     const val AuthorWorks = "author-works/{$ARG_AUTHOR_NAME}"
     fun authorWorks(authorName: String) = "author-works/${encode(authorName)}"
 
+    private const val ARG_AUTHOR_USERNAME = "authorUsername"
+    const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}"
+    fun authorProfile(username: String) = "author-profile/${encode(username)}"
+
     fun routeArg(entry: NavBackStackEntry, name: String): String? =
         entry.arguments?.getString(name)
 
@@ -158,10 +164,13 @@ object Routes {
             Collections -> "Collections"
             CollectionDetail -> "Collection"
             AuthorWorks -> "Author"
+            AuthorProfile -> "Author"
             AO3Dashboard -> "My Dashboard"
             LocalHistory -> "Reading History"
             LocalFavorites -> "Favorites"
             About -> "About"
+            NativeLogin -> "Sign In"
+            AO3Preferences -> "AO3 Preferences"
             else -> "Kudos"
         }
     }

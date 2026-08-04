@@ -121,6 +121,7 @@ fun WorkDetailScreen(
     downloadQueue: DownloadQueue,
     writeRepository: AO3WriteRepository,
     readingQueueRepository: ReadingQueueRepository,
+    postingPseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null,
     metadataRepository: AO3WorkMetadataRepository? = null,
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
@@ -138,6 +139,8 @@ fun WorkDetailScreen(
     var bookmarkCollections by remember { mutableStateOf("") }
     var bookmarkPrivate by remember { mutableStateOf(false) }
     var bookmarkRecommendation by remember { mutableStateOf(false) }
+    var bookmarkAvailablePseuds by remember { mutableStateOf<List<io.github.cidy02.kudos.network.ao3.writes.AO3PostingPseudOption>>(emptyList()) }
+    var bookmarkPseudId by remember { mutableStateOf<String?>(null) }
     var queuePickerOpen by remember { mutableStateOf(false) }
     var availableQueues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var collectionDialogOpen by remember { mutableStateOf(false) }
@@ -578,6 +581,35 @@ fun WorkDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
+                    if (bookmarkAvailablePseuds.size > 1) {
+                        var pseudExpanded by remember { mutableStateOf(false) }
+                        val currentPseud = bookmarkAvailablePseuds.find { it.id == bookmarkPseudId }
+                        Box {
+                            OutlinedButton(
+                                onClick = { pseudExpanded = true },
+                                enabled = !bookmarkLoading,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Posting as: ${currentPseud?.name ?: "Default"}")
+                            }
+                            DropdownMenu(
+                                expanded = pseudExpanded,
+                                onDismissRequest = { pseudExpanded = false }
+                            ) {
+                                bookmarkAvailablePseuds.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.name) },
+                                        onClick = {
+                                            bookmarkPseudId = option.id
+                                            pseudExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(
                             checked = bookmarkPrivate,
@@ -605,9 +637,10 @@ fun WorkDetailScreen(
                             notes = bookmarkNotes,
                             tags = bookmarkTags,
                             isPrivate = bookmarkPrivate,
-                            isRecommendation = bookmarkRecommendation
+                            isRecommendation = bookmarkRecommendation,
+                            pseudId = bookmarkPseudId
                         )
-                        runAo3Write { writeRepository.createBookmark(it, input) }
+                        runAo3Write { writeRepository.createBookmark(it, input, postingPseudStore) }
                     }
                 ) {
                     Text(if (bookmarkIsEdit) "Save" else "Create")
@@ -969,6 +1002,8 @@ fun WorkDetailScreen(
             bookmarkCollections = ""
             bookmarkPrivate = false
             bookmarkRecommendation = false
+            bookmarkPseudId = null
+            bookmarkAvailablePseuds = emptyList()
             bookmarkIsEdit = false
             bookmarkLoading = true
             bookmarkDialog = true
@@ -982,6 +1017,8 @@ fun WorkDetailScreen(
                         bookmarkCollections = bookmarkState.collectionNames
                         bookmarkPrivate = bookmarkState.input.isPrivate
                         bookmarkRecommendation = bookmarkState.input.isRecommendation
+                        bookmarkAvailablePseuds = bookmarkState.availablePseuds
+                        bookmarkPseudId = bookmarkState.input.pseudId
                     }
                     is AO3Result.Failure -> {
                         // Keep blank create-mode fields; surface the error if useful.
