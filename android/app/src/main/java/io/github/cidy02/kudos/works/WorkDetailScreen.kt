@@ -1008,6 +1008,18 @@ fun WorkDetailScreen(
             state.sourceUrl.takeIf { it.isNotBlank() }?.let(uriHandler::openUri)
         },
         onLogin = onLogin,
+        onRefreshMetadata = {
+            val work = state.local
+            val repo = metadataRepository
+            if (work != null && repo != null) {
+                scope.launch {
+                    state = state.copy(working = true)
+                    WorkMetadataRefresh(workRepository, repo).refresh(work)
+                    refreshLocal(work.id, state.remote)
+                    state = state.copy(working = false)
+                }
+            }
+        },
         onKudos = { runAo3Write { writeRepository.giveKudos(it) } },
         onSubscribe = { runAo3Write { writeRepository.toggleSubscribe(it) } },
         onMarkForLater = { runAo3Write { writeRepository.markForLater(it) } },
@@ -1101,6 +1113,7 @@ private fun WorkDetailContent(
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
     onLogin: () -> Unit,
+    onRefreshMetadata: () -> Unit,
     onKudos: () -> Unit,
     onSubscribe: () -> Unit,
     onMarkForLater: () -> Unit,
@@ -1167,6 +1180,14 @@ private fun WorkDetailContent(
                     expanded = overflowExpanded,
                     onDismissRequest = { overflowExpanded = false }
                 ) {
+                    DropdownMenuItem(
+                        text = { Text("Refresh Metadata") },
+                        enabled = !busy && local != null && state.ao3WorkId != null,
+                        onClick = {
+                            overflowExpanded = false
+                            onRefreshMetadata()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text("Give Kudos") },
                         enabled = !busy && state.ao3WorkId != null,
