@@ -47,13 +47,23 @@ class CommentsViewModel(
     private val _focusedCommentId = MutableStateFlow<Long?>(null)
     val focusedCommentId: StateFlow<Long?> = _focusedCommentId
 
+    private val _replyTarget = MutableStateFlow<ReplyTarget?>(null)
+    val replyTarget: StateFlow<ReplyTarget?> = _replyTarget
+
+    private val _editTarget = MutableStateFlow<AO3Comment?>(null)
+    val editTarget: StateFlow<AO3Comment?> = _editTarget
+
     init {
         load(1)
     }
 
+    data class ReplyTarget(val commentId: Long, val authorName: String)
+
     fun load(page: Int = 1, focusedId: Long? = null) {
         val target = _currentTarget.value ?: return
         _focusedCommentId.value = focusedId
+        _replyTarget.value = null
+        _editTarget.value = null
         viewModelScope.launch {
             _state.value = CommentsUiState.Loading
             when (val result = repository.loadThread(target, page, focusedId)) {
@@ -91,22 +101,74 @@ class CommentsViewModel(
         }
     }
 
-    fun submitComment(parentCommentId: Long? = null) {
+    fun startReply(comment: AO3Comment) {
+        val id = comment.numericId ?: return
+        _replyTarget.value = ReplyTarget(commentId = id, authorName = comment.author.name)
+        _editTarget.value = null
+        _draft.value = ""
+        _message.value = null
+    }
+
+    fun cancelReply() {
+        _replyTarget.value = null
+    }
+
+    fun startEdit(comment: AO3Comment) {
+        _editTarget.value = comment
+        _replyTarget.value = null
+        _draft.value = comment.body
+        _message.value = null
+    }
+
+    fun cancelEdit() {
+        _editTarget.value = null
+        _draft.value = ""
+    }
+
+    fun deleteComment(comment: AO3Comment) {
+        val path = comment.deletePath ?: return
+        viewModelScope.launch {
+            _submitting.value = true
+            when (val result = repository.deleteComment(path)) {
+                is AO3Result.Success -> {
+                    _message.value = "Comment deleted."
+                    load()
+                }
+                is AO3Result.Failure -> {
+                    _message.value = result.error.toString()
+                }
+            }
+            _submitting.value = false
+        }
+    }
+
+    fun submitComment() {
         val target = _currentTarget.value ?: return
         val content = _draft.value
         if (content.isBlank()) return
 
+        val edit = _editTarget.value
+        val reply = _replyTarget.value
+
         viewModelScope.launch {
             _submitting.value = true
             _message.value = null
-            when (val result = repository.submitComment(target, content, parentCommentId)) {
+            
+            val result = if (edit != null && edit.editPath != null) {
+                repository.editComment(edit.editPath, content)
+            } else {
+                repository.submitComment(target, content, reply?.commentId)
+            }
+
+            when (result) {
                 is AO3Result.Success -> {
                     _draft.value = ""
+                    _replyTarget.value = null
+                    _editTarget.value = null
                     _message.value = result.value.message
                     draftStore?.clearDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                        parentId = parentCommentId,
                         username = currentUsername
                     )
                     load()

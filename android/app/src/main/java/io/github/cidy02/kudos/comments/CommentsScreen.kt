@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -94,14 +95,40 @@ fun CommentsScreen(
     val message by viewModel.message.collectAsState()
     val currentTarget by viewModel.currentTarget.collectAsState()
     val focusedCommentId by viewModel.focusedCommentId.collectAsState()
+    val replyTarget by viewModel.replyTarget.collectAsState()
+    val editTarget by viewModel.editTarget.collectAsState()
     
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
 
     fun startReply(comment: AO3Comment) {
-        val id = comment.numericId ?: return
-        // Ideally ViewModel should handle this state, but keeping it simple for now.
-        // viewModel.startReply(comment)
+        viewModel.startReply(comment)
+        scope.launch {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    if (pendingDeleteComment != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteComment = null },
+            title = { Text("Delete comment?") },
+            text = { Text("This will permanently remove your comment from AO3.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val comment = pendingDeleteComment!!
+                        pendingDeleteComment = null
+                        viewModel.deleteComment(comment)
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteComment = null }) { Text("Cancel") }
+            }
+        )
     }
 
     when (val current = state) {
@@ -183,9 +210,11 @@ fun CommentsScreen(
                         thread = thread,
                         draft = draft,
                         submitting = submitting,
-                        replyTarget = null, // Later: VM managed
+                        replyTarget = replyTarget?.let { ReplyTarget(it.commentId, it.authorName) },
+                        editTarget = editTarget,
                         onDraft = viewModel::updateDraft,
-                        onCancelReply = { },
+                        onCancelReply = viewModel::cancelReply,
+                        onCancelEdit = viewModel::cancelEdit,
                         onLogin = onLogin,
                         onSubmit = { viewModel.submitComment() }
                     )
@@ -221,7 +250,9 @@ fun CommentsScreen(
                             comment = comment,
                             currentUsername = currentUsername,
                             workAuthors = thread.workAuthors,
-                            onReply = { /* viewModel.startReply(it) */ },
+                            onReply = ::startReply,
+                            onEdit = { viewModel.startEdit(it) },
+                            onDelete = { pendingDeleteComment = it },
                             onLoadMore = { viewModel.load() },
                             onViewThread = { commentId -> viewModel.load(focusedId = commentId) }
                         )
@@ -247,8 +278,10 @@ private fun CommentComposer(
     draft: String,
     submitting: Boolean,
     replyTarget: ReplyTarget?,
+    editTarget: AO3Comment? = null,
     onDraft: (String) -> Unit,
     onCancelReply: () -> Unit,
+    onCancelEdit: () -> Unit = {},
     onLogin: () -> Unit,
     onSubmit: () -> Unit
 ) {
@@ -256,19 +289,24 @@ private fun CommentComposer(
         when {
             // Prefer composer when form is present (signed-in).
             thread.form != null -> {
-                if (replyTarget != null) {
+                if (replyTarget != null || editTarget != null) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Replying to ${replyTarget.authorName}",
+                            text = when {
+                                editTarget != null -> "Editing your comment"
+                                else -> "Replying to ${replyTarget?.authorName}"
+                            },
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = onCancelReply) {
+                        TextButton(onClick = {
+                            if (editTarget != null) onCancelEdit() else onCancelReply()
+                        }) {
                             Text("Cancel")
                         }
                     }
@@ -278,7 +316,11 @@ private fun CommentComposer(
                     onValueChange = onDraft,
                     label = {
                         Text(
-                            if (replyTarget != null) "Write a reply" else "Leave a comment"
+                            when {
+                                editTarget != null -> "Edit comment"
+                                replyTarget != null -> "Write a reply"
+                                else -> "Leave a comment"
+                            }
                         )
                     },
                     minLines = 3,
@@ -290,8 +332,10 @@ private fun CommentComposer(
                 ) {
                     Text(
                         when {
+                            submitting && editTarget != null -> "Saving…"
                             submitting && replyTarget != null -> "Posting reply…"
                             submitting -> "Posting…"
+                            editTarget != null -> "Save Changes"
                             replyTarget != null -> "Post Reply"
                             else -> "Post Comment"
                         }
@@ -322,6 +366,8 @@ private fun CommentThreadRow(
     currentUsername: String?,
     workAuthors: List<AO3CommentWorkAuthor>,
     onReply: (AO3Comment) -> Unit,
+    onEdit: (AO3Comment) -> Unit,
+    onDelete: (AO3Comment) -> Unit,
     onLoadMore: (String) -> Unit,
     onViewThread: (Long) -> Unit,
     depth: Int = 0
@@ -338,6 +384,8 @@ private fun CommentThreadRow(
                 currentUsername = currentUsername,
                 workAuthors = workAuthors,
                 onReply = { onReply(comment) },
+                onEdit = { onEdit(comment) },
+                onDelete = { onDelete(comment) },
                 isExpanded = expanded,
                 onToggleExpand = { expanded = !expanded },
                 depth = depth,
@@ -352,6 +400,8 @@ private fun CommentThreadRow(
                     currentUsername = currentUsername,
                     workAuthors = workAuthors,
                     onReply = onReply,
+                    onEdit = onEdit,
+                    onDelete = onDelete,
                     onLoadMore = onLoadMore,
                     onViewThread = onViewThread,
                     depth = depth + 1
@@ -367,6 +417,8 @@ private fun CommentRow(
     currentUsername: String?,
     workAuthors: List<AO3CommentWorkAuthor>,
     onReply: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onViewThread: (Long) -> Unit,
@@ -497,6 +549,24 @@ private fun CommentRow(
                             Text("More", style = MaterialTheme.typography.labelMedium)
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            if (comment.editPath != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit") },
+                                    onClick = {
+                                        showMenu = false
+                                        onEdit()
+                                    }
+                                )
+                            }
+                            if (comment.deletePath != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        showMenu = false
+                                        onDelete()
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Copy Link") },
                                 onClick = {
