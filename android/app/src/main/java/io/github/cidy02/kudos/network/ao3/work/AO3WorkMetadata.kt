@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.network.ao3.work
 
 data class AO3WorkMetadata(
+    val rating: String = "",
     val fandoms: List<String> = emptyList(),
     val relationships: List<String> = emptyList(),
     val characters: List<String> = emptyList(),

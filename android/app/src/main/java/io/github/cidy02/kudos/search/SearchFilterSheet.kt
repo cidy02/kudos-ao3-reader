@@ -58,7 +58,8 @@ fun SearchFilterSheet(
     onClear: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (() -> Unit)? = null,
-    localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions()
+    localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions(),
+    autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -271,7 +272,7 @@ fun SearchFilterSheet(
 
                 FilterSection(
                     title = "Tags",
-                    footer = "Comma-separated. Suggestions come from your library. " +
+                    footer = "Comma-separated. Suggestions come from your library and AO3. " +
                         "Use Exclude fields for −\"tag\" query clauses."
                 ) {
                     TagPairFields(
@@ -280,6 +281,8 @@ fun SearchFilterSheet(
                         excludeLabel = "Exclude fandoms",
                         excludeValue = filters.excludedFandoms,
                         candidates = localTagSuggestions.fandoms,
+                        ao3Kind = "fandom",
+                        autocompleteRepository = autocompleteRepository,
                         onIncludeChange = { onFiltersChange(filters.copy(fandom = it)) },
                         onExcludeChange = {
                             onFiltersChange(filters.copy(excludedFandoms = it))
@@ -291,6 +294,8 @@ fun SearchFilterSheet(
                         excludeLabel = "Exclude characters",
                         excludeValue = filters.excludedCharacters,
                         candidates = localTagSuggestions.characters,
+                        ao3Kind = "character",
+                        autocompleteRepository = autocompleteRepository,
                         onIncludeChange = { onFiltersChange(filters.copy(characters = it)) },
                         onExcludeChange = {
                             onFiltersChange(filters.copy(excludedCharacters = it))
@@ -302,6 +307,8 @@ fun SearchFilterSheet(
                         excludeLabel = "Exclude relationships",
                         excludeValue = filters.excludedRelationships,
                         candidates = localTagSuggestions.relationships,
+                        ao3Kind = "relationship",
+                        autocompleteRepository = autocompleteRepository,
                         onIncludeChange = {
                             onFiltersChange(filters.copy(relationships = it))
                         },
@@ -315,6 +322,8 @@ fun SearchFilterSheet(
                         excludeLabel = "Exclude additional tags",
                         excludeValue = filters.excludedAdditionalTags,
                         candidates = localTagSuggestions.freeforms,
+                        ao3Kind = "freeform",
+                        autocompleteRepository = autocompleteRepository,
                         onIncludeChange = {
                             onFiltersChange(filters.copy(additionalTags = it))
                         },
@@ -427,6 +436,8 @@ private fun TagPairFields(
     excludeLabel: String,
     excludeValue: String,
     candidates: List<String>,
+    ao3Kind: String? = null,
+    autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null,
     onIncludeChange: (String) -> Unit,
     onExcludeChange: (String) -> Unit
 ) {
@@ -436,6 +447,8 @@ private fun TagPairFields(
             onValueChange = onIncludeChange,
             label = includeLabel,
             candidates = candidates,
+            ao3Kind = ao3Kind,
+            autocompleteRepository = autocompleteRepository,
             modifier = Modifier.fillMaxWidth()
         )
         TagSuggestField(
@@ -443,6 +456,8 @@ private fun TagPairFields(
             onValueChange = onExcludeChange,
             label = excludeLabel,
             candidates = candidates,
+            ao3Kind = ao3Kind,
+            autocompleteRepository = autocompleteRepository,
             modifier = Modifier.fillMaxWidth()
         )
     }

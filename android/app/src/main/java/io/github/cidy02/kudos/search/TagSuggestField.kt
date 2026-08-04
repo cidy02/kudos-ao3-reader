@@ -10,15 +10,19 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
+import kotlinx.coroutines.delay
 
 /**
- * Comma-separated tag text field with **local-only** autocomplete suggestions.
+ * Comma-separated tag text field with **local-only** and **AO3** autocomplete suggestions.
  *
  * Selecting a suggestion replaces the current token (or appends after committed
  * tags) and leaves a trailing `", "` for the next tag. Does not touch the
@@ -33,18 +37,45 @@ fun TagSuggestField(
     label: String,
     candidates: List<String>,
     modifier: Modifier = Modifier,
-    maxSuggestions: Int = 8
+    maxSuggestions: Int = 8,
+    ao3Kind: String? = null,
+    autocompleteRepository: AO3TagAutocompleteRepository? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val suggestions = remember(value, candidates, maxSuggestions) {
-        filterLocalTagSuggestions(candidates, value, maxSuggestions)
+    var remoteSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    
+    val currentToken = remember(value) {
+        val lastComma = value.lastIndexOf(',')
+        if (lastComma < 0) value.trim() else value.substring(lastComma + 1).trim()
     }
-    val showMenu = expanded && suggestions.isNotEmpty()
+
+    val localSuggestions = remember(currentToken, candidates, maxSuggestions) {
+        if (currentToken.isEmpty()) emptyList()
+        else candidates.filter { it.contains(currentToken, ignoreCase = true) }.take(maxSuggestions)
+    }
+
+    LaunchedEffect(currentToken, ao3Kind, autocompleteRepository) {
+        if (ao3Kind != null && autocompleteRepository != null && currentToken.length >= 2) {
+            delay(300) // Debounce
+            val result = autocompleteRepository.autocomplete(ao3Kind, currentToken)
+            if (result is AO3Result.Success) {
+                remoteSuggestions = result.value
+            }
+        } else {
+            remoteSuggestions = emptyList()
+        }
+    }
+
+    val allSuggestions = remember(localSuggestions, remoteSuggestions) {
+        (localSuggestions + remoteSuggestions).distinct().take(maxSuggestions)
+    }
+    
+    val showMenu = expanded && allSuggestions.isNotEmpty()
 
     ExposedDropdownMenuBox(
         expanded = showMenu,
         onExpandedChange = { next ->
-            expanded = next && candidates.isNotEmpty()
+            expanded = next && (candidates.isNotEmpty() || ao3Kind != null)
         },
         modifier = modifier.fillMaxWidth()
     ) {
@@ -57,7 +88,7 @@ fun TagSuggestField(
             label = { Text(label) },
             singleLine = true,
             trailingIcon = {
-                if (candidates.isNotEmpty()) {
+                if (candidates.isNotEmpty() || ao3Kind != null) {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = showMenu)
                 }
             },
@@ -73,7 +104,7 @@ fun TagSuggestField(
             onDismissRequest = { expanded = false },
             modifier = Modifier.heightIn(max = 240.dp)
         ) {
-            suggestions.forEach { suggestion ->
+            allSuggestions.forEach { suggestion ->
                 DropdownMenuItem(
                     text = { Text(suggestion) },
                     onClick = {

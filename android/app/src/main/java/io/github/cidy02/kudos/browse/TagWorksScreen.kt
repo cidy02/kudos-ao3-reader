@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
@@ -18,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +60,7 @@ fun TagWorksScreen(
 ) {
     var state by remember(tagName) { mutableStateOf<TagWorksState>(TagWorksState.Loading) }
     var filters by remember { mutableStateOf(AO3SearchFilters()) }
+    var refine by remember { mutableStateOf("") }
     var showFilterSheet by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
     
@@ -126,11 +129,45 @@ fun TagWorksScreen(
             }
         )
 
+        OutlinedTextField(
+            value = refine,
+            onValueChange = { refine = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Refine results") },
+            singleLine = true,
+            trailingIcon = {
+                if (refine.isNotEmpty()) {
+                    IconButton(onClick = { refine = "" }) {
+                        Icon(Icons.Default.Clear, "Clear")
+                    }
+                }
+            }
+        )
+
         when (val current = state) {
             TagWorksState.Loading -> LoadingStateCard("Loading works")
             is TagWorksState.Error -> ErrorBlock(message = current.message, onRetry = { load(current.page) })
             is TagWorksState.Loaded -> {
-                if (current.page.works.isEmpty()) {
+                val filteredWorks = if (refine.isBlank()) {
+                    current.page.works
+                } else {
+                    val terms = io.github.cidy02.kudos.works.WorkSearchIndex.terms(refine)
+                    current.page.works.filter { work ->
+                        val haystack = io.github.cidy02.kudos.works.WorkSearchIndex.normalize(
+                            work.title + " " + work.authorText + " " + work.fandoms.joinToString(" ") + " " + work.freeforms.joinToString(" ")
+                        )
+                        terms.all { haystack.contains(it) }
+                    }
+                }
+
+                if (filteredWorks.isEmpty() && current.page.works.isNotEmpty()) {
+                    EmptyStateCard(
+                        title = "No matches",
+                        message = "No works on this page match your refinement.",
+                        primaryActionLabel = "Clear refine",
+                        onPrimaryAction = { refine = "" }
+                    )
+                } else if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No works found",
                         message = "AO3 returned no works for this tag."
@@ -146,7 +183,7 @@ fun TagWorksScreen(
                                 subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
                             )
                         }
-                        items(current.page.works, key = { it.id }) { work ->
+                        items(filteredWorks, key = { it.id }) { work ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
                                 AO3WorkCard(

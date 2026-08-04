@@ -16,6 +16,7 @@ class AO3WorkMetadataParser {
 
         val document = Jsoup.parse(html)
         return AO3WorkMetadata(
+            rating = document.selectFirst("dd.rating.tags")?.normalizedText().orEmpty(),
             fandoms = tags(document, "fandom"),
             relationships = tags(document, "relationship"),
             characters = tags(document, "character"),

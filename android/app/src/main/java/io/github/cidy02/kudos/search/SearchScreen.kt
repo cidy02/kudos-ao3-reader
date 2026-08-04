@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.MoreVert
@@ -26,6 +27,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -49,6 +51,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedSearch
@@ -64,13 +68,14 @@ import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
     data object Loading : SearchUiState
-    data class Results(val page: AO3SearchPage) : SearchUiState
+    data class Results(val page: AO3SearchPage, val works: List<io.github.cidy02.kudos.works.CanonicalWork>) : SearchUiState
     data class Error(val error: AO3Error, val page: Int) : SearchUiState
 }
 
@@ -88,6 +93,8 @@ fun SearchScreen(
     val state by viewModel.state.collectAsState()
     val savedSearches by viewModel.savedSearches.collectAsState()
     val localMatches by viewModel.localMatches.collectAsState()
+    val selectionMode by viewModel.selectionMode.collectAsState()
+    val selectedWorkIds by viewModel.selectedWorkIds.collectAsState()
 
     var showFilterSheet by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -151,7 +158,11 @@ fun SearchScreen(
             filters = filters,
             activeChipCount = activeChips.size,
             expandAllCards = expandAllCards,
+            selectionMode = selectionMode,
             onToggleExpandAll = { expandAllCards = !expandAllCards },
+            onToggleSelectionMode = {
+                if (selectionMode) viewModel.exitSelectionMode() else viewModel.enterSelectionMode()
+            },
             onSortSelected = {
                 viewModel.updateFilters(filters.copy(sort = it))
                 if (state !is SearchUiState.Idle) viewModel.runSearch()
@@ -209,15 +220,20 @@ fun SearchScreen(
                 )
             }
             is SearchUiState.Results -> {
-                if (current.page.works.isEmpty()) {
+                if (current.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No works found",
                         message = "AO3 returned no works for this query. Try broader terms or fewer filters."
                     )
                 } else {
                     SearchResultsList(
-                        page = current.page,
+                        works = current.works,
+                        page = current.page.currentPage,
+                        totalPages = current.page.totalPages,
                         expandAll = expandAllCards,
+                        selectionMode = selectionMode,
+                        selectedWorkIds = selectedWorkIds,
+                        onToggleSelection = { viewModel.toggleWorkSelection(it) },
                         onOpenWork = onOpenWork,
                         onPage = { viewModel.runSearch(it) },
                         onTagClick = { viewModel.searchTag(it) },
@@ -226,6 +242,11 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    val context = LocalContext.current
+    val autocompleteRepository = remember {
+        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)?.container?.tagAutocompleteRepository
     }
 
     if (showFilterSheet) {
@@ -247,7 +268,8 @@ fun SearchScreen(
                 }
             } else {
                 null
-            }
+            },
+            autocompleteRepository = autocompleteRepository
         )
     }
 
@@ -376,7 +398,9 @@ private fun SearchControlsRow(
     filters: AO3SearchFilters,
     activeChipCount: Int,
     expandAllCards: Boolean,
+    selectionMode: Boolean,
     onToggleExpandAll: () -> Unit,
+    onToggleSelectionMode: () -> Unit,
     onSortSelected: (AO3SearchSort) -> Unit,
     onOpenFilters: () -> Unit,
     onClearFilters: () -> Unit
@@ -449,6 +473,21 @@ private fun SearchControlsRow(
             ) {
                 DropdownMenuItem(
                     text = {
+                        Text(if (selectionMode) "Exit Selection" else "Select Works")
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Checklist,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        moreExpanded = false
+                        onToggleSelectionMode()
+                    }
+                )
+                DropdownMenuItem(
+                    text = {
                         Text(if (expandAllCards) "Collapse all" else "Expand all")
                     },
                     leadingIcon = {
@@ -500,8 +539,13 @@ private fun ActiveFilterChipRow(
 
 @Composable
 private fun SearchResultsList(
-    page: AO3SearchPage,
+    works: List<io.github.cidy02.kudos.works.CanonicalWork>,
+    page: Int,
+    totalPages: Int,
     expandAll: Boolean,
+    selectionMode: Boolean,
+    selectedWorkIds: Set<Long>,
+    onToggleSelection: (Long) -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onPage: (Int) -> Unit,
     onTagClick: (String) -> Unit,
@@ -514,36 +558,84 @@ private fun SearchResultsList(
         item {
             KudosSectionHeader(
                 title = "Results",
-                subtitle = "Page ${page.currentPage} of ${page.totalPages}"
+                subtitle = "Page $page of $totalPages"
             )
         }
-        items(page.works, key = { it.id }) { work ->
-            AO3WorkCard(
-                work = work,
-                onOpenWork = onOpenWork,
-                expandAll = expandAll,
-                onTagClick = onTagClick
-            )
+        items(works, key = { it.id }) { work ->
+            if (selectionMode) {
+                SelectableRemoteWorkRow(
+                    work = work.remote,
+                    selected = work.remote.id in selectedWorkIds,
+                    onToggle = { onToggleSelection(work.remote.id) }
+                )
+            } else if (work.local != null) {
+                io.github.cidy02.kudos.library.LibraryCarouselCard(
+                    display = io.github.cidy02.kudos.library.LibraryDisplayItem(
+                        item = io.github.cidy02.kudos.library.LibraryWorkListItem(
+                            work = work.local,
+                            userTags = emptyList(),
+                            collections = emptyList()
+                        )
+                    ),
+                    showProgress = true,
+                    footerOverride = null,
+                    actions = io.github.cidy02.kudos.library.LibraryCardActions(
+                        onOpenWork = { onOpenWork(work.remote) },
+                        onOpenReader = { onOpenWork(work.remote) },
+                        onToggleFavorite = { },
+                        onToggleFinished = { },
+                        onRemove = { },
+                        onSetSaved = { _, _ -> },
+                        onSelect = { },
+                        onReveal = { },
+                        onAddToQueue = { },
+                        onAddToCollection = { },
+                        onOpenComments = { }
+                    )
+                )
+            } else {
+                AO3WorkCard(
+                    work = work.remote,
+                    onOpenWork = onOpenWork,
+                    expandAll = expandAll,
+                    onTagClick = onTagClick
+                )
+            }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    enabled = page.currentPage > 1,
-                    onClick = { onPage(page.currentPage - 1) }
-                ) {
-                    Text("Previous")
-                }
-                Text(
-                    text = "Page ${page.currentPage} of ${page.totalPages}",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-                OutlinedButton(
-                    enabled = page.currentPage < page.totalPages,
-                    onClick = { onPage(page.currentPage + 1) }
-                ) {
-                    Text("Next")
-                }
+            KudosPaginationBar(
+                currentPage = page,
+                totalPages = totalPages,
+                onPageChange = onPage,
+                enabled = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectableRemoteWorkRow(
+    work: AO3WorkSummary,
+    selected: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        onClick = onToggle,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer 
+                             else MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Checkbox(checked = selected, onCheckedChange = { onToggle() })
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = work.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = work.authorText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

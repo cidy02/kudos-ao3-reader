@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SearchViewModel(
@@ -38,6 +39,12 @@ class SearchViewModel(
 
     private val _savedSearches = MutableStateFlow<List<SavedSearch>>(emptyList())
     val savedSearches: StateFlow<List<SavedSearch>> = _savedSearches.asStateFlow()
+
+    private val _selectionMode = MutableStateFlow(false)
+    val selectionMode: StateFlow<Boolean> = _selectionMode.asStateFlow()
+
+    private val _selectedWorkIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedWorkIds: StateFlow<Set<Long>> = _selectedWorkIds.asStateFlow()
 
     private var lastFilters = AO3SearchFilters()
     private var searchGeneration = 0
@@ -75,7 +82,14 @@ class SearchViewModel(
         val generation = ++searchGeneration
         viewModelScope.launch {
             val result = when (val res = repository.search(searchFilters, page)) {
-                is AO3Result.Success -> SearchUiState.Results(res.value)
+                is AO3Result.Success -> {
+                    val localWorks = workRepository?.listSavedWorks().orEmpty()
+                    val merged = res.value.works.map { remote ->
+                        val local = localWorks.find { WorkTags.ao3WorkIdFromUrl(it.sourceUrl) == remote.id }
+                        CanonicalWork(local = local, remote = remote)
+                    }
+                    SearchUiState.Results(res.value, merged)
+                }
                 is AO3Result.Failure -> SearchUiState.Error(res.error, page)
             }
             if (generation == searchGeneration) _state.value = result
@@ -132,6 +146,22 @@ class SearchViewModel(
         val next = AO3SearchFilters(additionalTags = tag)
         _filters.value = next
         runSearch(1, next)
+    }
+
+    fun enterSelectionMode() {
+        _selectionMode.value = true
+        _selectedWorkIds.value = emptySet()
+    }
+
+    fun exitSelectionMode() {
+        _selectionMode.value = false
+        _selectedWorkIds.value = emptySet()
+    }
+
+    fun toggleWorkSelection(workId: Long) {
+        _selectedWorkIds.update { current ->
+            if (workId in current) current - workId else current + workId
+        }
     }
 
     companion object {

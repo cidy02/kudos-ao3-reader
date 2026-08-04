@@ -16,6 +16,9 @@ import io.github.cidy02.kudos.files.WorkFileStore
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import io.github.cidy02.kudos.network.ao3.AO3Error
+import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.map
 class WorkRepository(
     private val database: KudosDatabase,
     private val fileStore: WorkFileStore,
+    private val tagsRepository: WorkTagsRepository? = null,
     private val clock: () -> Instant = { Instant.now() },
     private val uuidFactory: () -> String = { UUID.randomUUID().toString() }
 ) {
@@ -351,6 +355,42 @@ class WorkRepository(
     suspend fun listRecentlyDeletedCollections(): List<WorkCollection> {
         return collectionDao.getDeleted().map { entity ->
             entity.toDomain(collectionDao.getActiveWorkIdsForCollection(entity.id))
+        }
+    }
+
+    /**
+     * Re-fetches metadata for one work to detect AO3 deletion (404) or tag updates.
+     * Port of iOS `WorkTagsService.refreshTags`.
+     */
+    suspend fun refreshMetadata(workId: String): AO3Result<Unit> {
+        val repo = tagsRepository ?: return AO3Result.Failure(AO3Error.Validation("No tags repository."))
+        val work = getWork(workId) ?: return AO3Result.Failure(AO3Error.NotFound)
+        val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: return AO3Result.Failure(AO3Error.BadRequest)
+        
+        return when (val result = repo.refreshTags(ao3Id)) {
+            is AO3Result.Failure -> {
+                if (result.error == AO3Error.NotFound) {
+                    // Work is gone from AO3 (404). Stamp lastUpdateCheck so we don't
+                    // immediately retry, but keep the record (Kudos preserves works).
+                    upsert(work.copy(lastUpdateCheck = clock()))
+                    AO3Result.Success(Unit)
+                } else result
+            }
+            is AO3Result.Success -> {
+                val meta = result.value
+                val updated = work.copy(
+                    rating = if (meta.rating.isNotBlank()) meta.rating else work.rating,
+                    workWarnings = if (meta.warnings.isNotEmpty()) meta.warnings else work.workWarnings,
+                    workCategories = if (meta.categories.isNotEmpty()) meta.categories else work.workCategories,
+                    workFandoms = if (meta.fandoms.isNotEmpty()) meta.fandoms else work.workFandoms,
+                    workRelationships = if (meta.relationships.isNotEmpty()) meta.relationships else work.workRelationships,
+                    workCharacters = if (meta.characters.isNotEmpty()) meta.characters else work.workCharacters,
+                    workFreeforms = if (meta.freeforms.isNotEmpty()) meta.freeforms else work.workFreeforms,
+                    lastUpdateCheck = clock()
+                )
+                upsert(updated)
+                AO3Result.Success(Unit)
+            }
         }
     }
 

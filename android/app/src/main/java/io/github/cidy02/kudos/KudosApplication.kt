@@ -25,6 +25,15 @@ class KudosApplication : Application() {
             runCatching { container.readingQueueRepository.sweepExpiredQueueSoftDeletes() }
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
+            // Opportunistic background tag refresh (404 detection).
+            runCatching {
+                val stale = container.workRepository.listSavedWorks()
+                    .filter { it.lastUpdateCheck == null }
+                    .take(5)
+                for (work in stale) {
+                    container.workRepository.refreshMetadata(work.id)
+                }
+            }
         }
         // Throttled GitHub update check (default: at most once/24h). Silent on
         // failure — a broken GitHub check must never affect app startup.

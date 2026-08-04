@@ -157,6 +157,10 @@ class KudosAppContainer(context: Context) {
         AO3InboxRepository(authenticatedClient)
     }
 
+    val tagAutocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository by lazy {
+        io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository(ao3Client)
+    }
+
     val workRepository: WorkRepository by lazy {
         WorkRepository(database, workFileStore)
     }

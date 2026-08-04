@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,13 +47,15 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
  * MD3 detail affordance (same destination for remote works until download-into-
  * reader lands).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AO3WorkCard(
     work: AO3WorkSummary,
     onOpenWork: (AO3WorkSummary) -> Unit,
     modifier: Modifier = Modifier,
     expandAll: Boolean = false,
-    onTagClick: ((String) -> Unit)? = null
+    onTagClick: ((String) -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null
 ) {
     var expanded by remember(work.id) { mutableStateOf(expandAll) }
     // Seed/reset local expand state whenever the parent batch toggle flips
@@ -61,18 +68,24 @@ fun AO3WorkCard(
     val expandable = work.summary.length > 120 || discoveryTags.isNotEmpty() ||
         work.warnings.any { it.isNotBlank() }
 
-    Card(
-        onClick = { onOpenWork(work) },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics {
-                contentDescription = "${work.title}, by ${work.authorText.ifBlank { "Anonymous" }}"
-            }
-    ) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "${work.title}, by ${work.authorText.ifBlank { "Anonymous" }}"
+                }
+                .combinedClickable(
+                    onClick = { onOpenWork(work) },
+                    onLongClick = onLongClick ?: { showMenu = true }
+                )
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -159,6 +172,24 @@ fun AO3WorkCard(
                     chapters = work.chapters,
                     kudos = work.kudos
                 )
+            )
+        }
+    }
+        
+        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(
+                text = { Text("Open Work") },
+                onClick = {
+                    showMenu = false
+                    onOpenWork(work)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Copy Link") },
+                onClick = {
+                    showMenu = false
+                    // clipboard.setText(AnnotatedString(work.workUrl))
+                }
             )
         }
     }

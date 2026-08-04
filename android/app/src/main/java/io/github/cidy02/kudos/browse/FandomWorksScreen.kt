@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
@@ -41,6 +42,7 @@ import io.github.cidy02.kudos.search.SearchFilterSheet
 import io.github.cidy02.kudos.search.activeFilterChips
 import io.github.cidy02.kudos.search.collectLocalTagSuggestions
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
@@ -76,6 +78,11 @@ fun FandomWorksScreen(
     }
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
     val activeChips = remember(filters) { activeFilterChips(filters) }
+    
+    val context = LocalContext.current
+    val autocompleteRepository = remember {
+        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)?.container?.tagAutocompleteRepository
+    }
 
     fun load(page: Int = 1) {
         state = FandomWorksState.Loading
@@ -157,7 +164,11 @@ fun FandomWorksScreen(
                             }
                         }
                         item {
-                            PaginationRow(page = current.page, onPage = { load(it) })
+                            KudosPaginationBar(
+                                currentPage = current.page.currentPage,
+                                totalPages = current.page.totalPages,
+                                onPageChange = { load(it) }
+                            )
                         }
                     }
                 }
@@ -172,7 +183,8 @@ fun FandomWorksScreen(
             onApply = { showFilterSheet = false },
             onClear = { filters = AO3SearchFilters() },
             onDismiss = { showFilterSheet = false },
-            localTagSuggestions = localTagSuggestions
+            localTagSuggestions = localTagSuggestions,
+            autocompleteRepository = autocompleteRepository
         )
     }
 }
@@ -187,23 +199,6 @@ private fun LocalIndicatorRow(indicator: BrowseLocalIndicator) {
         if (indicator.isFinished) add("Finished")
     }
     MetadataChipRow(labels = labels, prominent = true)
-}
-
-@Composable
-private fun PaginationRow(page: AO3SearchPage, onPage: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(enabled = page.currentPage > 1, onClick = { onPage(page.currentPage - 1) }) {
-            Text("Previous")
-        }
-        Text(
-            text = "Page ${page.currentPage} of ${page.totalPages}",
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-        OutlinedButton(enabled = page.currentPage < page.totalPages, onClick = { onPage(page.currentPage + 1) }) {
-            Text("Next")
-        }
-    }
 }
 
 private sealed interface FandomWorksState {
