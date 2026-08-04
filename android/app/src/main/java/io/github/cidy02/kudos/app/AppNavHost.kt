@@ -17,6 +17,7 @@ import io.github.cidy02.kudos.account.AccountListScreen
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
 import io.github.cidy02.kudos.account.AccountViewModel
+import io.github.cidy02.kudos.account.BugReportScreen
 import io.github.cidy02.kudos.account.LocalLibraryListKind
 import io.github.cidy02.kudos.account.LocalLibraryListsScreen
 import io.github.cidy02.kudos.auth.AO3AuthState
@@ -387,7 +388,14 @@ fun AppNavHost(
             )
         }
         composable(Routes.About) {
-            AboutScreen()
+            AboutScreen(
+                onReportBug = { navController.navigate(Routes.BugReport) }
+            )
+        }
+        composable(Routes.BugReport) {
+            BugReportScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
         composable(Routes.AccountLogin) {
             AO3NativeLoginScreen(
@@ -559,6 +567,7 @@ fun AppNavHost(
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
+                onReportBug = { navController.navigate(Routes.BugReport) },
                 appUpdateRepository = container.appUpdateRepository,
                 workImporter = container.workImporter,
                 fandomCatalogCache = container.fandomCatalogCache,

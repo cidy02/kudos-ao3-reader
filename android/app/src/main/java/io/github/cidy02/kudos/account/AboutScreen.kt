@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.BuildConfig
 
 @Composable
-fun AboutScreen(modifier: Modifier = Modifier) {
+fun AboutScreen(
+    onReportBug: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val versionString = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
@@ -44,6 +48,13 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             text = "A native Archive of Our Own reader for Android.",
             style = MaterialTheme.typography.bodyLarge
         )
+
+        OutlinedButton(
+            onClick = onReportBug,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Report a Bug")
+        }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 

@@ -42,6 +42,7 @@ object Routes {
     const val About = "about"
     const val NativeLogin = "native-login"
     const val AO3Preferences = "ao3-preferences"
+    const val BugReport = "bug-report"
 
     // --- Routes carrying a per-back-stack-entry argument (T-90) ---
     //
@@ -176,6 +177,7 @@ object Routes {
             About -> "About"
             NativeLogin -> "Sign In"
             AO3Preferences -> "AO3 Preferences"
+            BugReport -> "Report a Bug"
             else -> "Kudos"
         }
     }

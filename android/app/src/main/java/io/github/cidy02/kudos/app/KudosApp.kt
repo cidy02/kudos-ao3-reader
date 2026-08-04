@@ -5,15 +5,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.MaterialTheme
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.onboarding.WelcomeScreen
 import io.github.cidy02.kudos.support.ShakeToReportEffect
-import io.github.cidy02.kudos.support.openBugReport
+import io.github.cidy02.kudos.account.BugReportScreen
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import kotlinx.coroutines.flow.map
@@ -54,12 +56,26 @@ fun KudosApp(container: KudosAppContainer) {
     }.collectAsState(initial = null)
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
+    var showBugReport by remember { androidx.compose.runtime.mutableStateOf(false) }
 
     KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
         // App-wide shake-to-report (iOS UIWindow.motionEnded parity). Sensor
         // listener is lifecycle-bound to this composition and unregistered on leave.
-        val context = LocalContext.current
-        ShakeToReportEffect { openBugReport(context) }
+        ShakeToReportEffect { showBugReport = true }
+
+        if (showBugReport) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showBugReport = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    BugReportScreen(onBack = { showBugReport = false })
+                }
+            }
+        }
 
         when (hasCompletedOnboarding) {
             null -> Box(Modifier.fillMaxSize())

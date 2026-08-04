@@ -71,7 +71,6 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
-import io.github.cidy02.kudos.support.openBugReport
 import io.github.cidy02.kudos.update.AppUpdateRepository
 import io.github.cidy02.kudos.update.AppUpdateState
 import io.github.cidy02.kudos.works.WorkImportResult
@@ -117,6 +116,7 @@ fun SettingsScreen(
     repository: SettingsRepository,
     customFontRepository: CustomFontRepository,
     onOpenBackup: () -> Unit,
+    onReportBug: () -> Unit = {},
     authRepository: AO3AuthRepository? = null,
     onLogin: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
@@ -798,7 +798,7 @@ fun SettingsScreen(
                 SettingsLinkRow(
                     label = "Report a Bug",
                     icon = Icons.Outlined.BugReport,
-                    onClick = { openBugReport(context) }
+                    onClick = onReportBug
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SettingsLinkRow(

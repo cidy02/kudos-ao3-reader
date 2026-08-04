@@ -10,12 +10,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -71,8 +81,11 @@ fun HomeScreen(
     )
     val state by viewModel.state.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val privacyState by privacyGate.state.collectAsState()
     val activity = androidx.compose.ui.platform.LocalContext.current
         as? androidx.fragment.app.FragmentActivity
+    
+    val collapsedShelves = remember { mutableStateMapOf<String, Boolean>() }
     val onReveal: (String) -> Unit = { id -> viewModel.revealWork(id, activity) }
 
     PullToRefreshBox(
@@ -88,6 +101,8 @@ fun HomeScreen(
         item {
             HomeHeader(
                 state = state,
+                revealAll = privacyState.revealAll,
+                onToggleRevealAll = { privacyGate.toggleRevealAll(activity) },
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
@@ -102,6 +117,18 @@ fun HomeScreen(
             return@LazyColumn
         }
 
+        if (!state.hasSavedWorks) {
+            item {
+                EmptyStateCard(
+                    title = "Welcome to Kudos",
+                    message = "Start by searching AO3 for works you love, or browse through fandoms.",
+                    primaryActionLabel = "Find works to read",
+                    onPrimaryAction = onOpenBrowse,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        }
+
         // Section order matches iOS Home: Reading Now, Recently Updated,
         // Subscriptions, Favorites, Recently Opened (no Recently Added).
         item {
@@ -110,6 +137,8 @@ fun HomeScreen(
                 items = state.continueReading.take(HomeShelfLimit),
                 emptyMessage =
                     "You're not reading anything right now. Start exploring in Browse or open something from your Library.",
+                isCollapsed = collapsedShelves["reading"] ?: false,
+                onToggleCollapse = { collapsedShelves["reading"] = !(collapsedShelves["reading"] ?: false) },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -127,6 +156,8 @@ fun HomeScreen(
                 title = "Recently Updated",
                 items = state.recentlyUpdated.take(HomeShelfLimit),
                 emptyMessage = "No recent updates from your library works yet.",
+                isCollapsed = collapsedShelves["updated"] ?: false,
+                onToggleCollapse = { collapsedShelves["updated"] = !(collapsedShelves["updated"] ?: false) },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -144,6 +175,8 @@ fun HomeScreen(
                 works = state.subscriptions.take(HomeShelfLimit),
                 isLoading = state.subscriptionsLoading,
                 isSignedIn = state.isSignedIn,
+                isCollapsed = collapsedShelves["subscriptions"] ?: false,
+                onToggleCollapse = { collapsedShelves["subscriptions"] = !(collapsedShelves["subscriptions"] ?: false) },
                 onOpenRemoteWork = onOpenRemoteWork,
                 onSeeAll = onOpenSubscriptionsList
             )
@@ -153,6 +186,8 @@ fun HomeScreen(
                 title = "Favorites",
                 items = state.favorites.take(HomeShelfLimit),
                 emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
+                isCollapsed = collapsedShelves["favorites"] ?: false,
+                onToggleCollapse = { collapsedShelves["favorites"] = !(collapsedShelves["favorites"] ?: false) },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -170,6 +205,8 @@ fun HomeScreen(
                 title = "Recently Opened",
                 items = state.recentlyOpened.take(HomeShelfLimit),
                 emptyMessage = "Nothing opened recently. Start reading to see your history here.",
+                isCollapsed = collapsedShelves["opened"] ?: false,
+                onToggleCollapse = { collapsedShelves["opened"] = !(collapsedShelves["opened"] ?: false) },
                 onOpenWork = { id ->
                     viewModel.onOpenLocalWork(id)
                     onOpenWork(id)
@@ -187,10 +224,10 @@ fun HomeScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedButton(onClick = onOpenLibrary) {
+                OutlinedButton(onClick = onOpenLibrary, modifier = Modifier.weight(1f)) {
                     Text("Library")
                 }
-                OutlinedButton(onClick = onOpenBrowse) {
+                OutlinedButton(onClick = onOpenBrowse, modifier = Modifier.weight(1f)) {
                     Text("Browse")
                 }
             }
@@ -200,13 +237,28 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(state: HomeUiState, modifier: Modifier = Modifier) {
+private fun HomeHeader(
+    state: HomeUiState,
+    revealAll: Boolean,
+    onToggleRevealAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
         " · $it hidden by privacy"
     }.orEmpty()
     // TopAppBar already says "Kudos"; keep saved count / privacy as context only.
     KudosScreenHeader(
         subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden",
+        trailing = {
+            if (state.hiddenByPrivacyCount > 0) {
+                IconButton(onClick = onToggleRevealAll) {
+                    Icon(
+                        imageVector = if (revealAll) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (revealAll) "Hide mature content" else "Reveal all mature content"
+                    )
+                }
+            }
+        },
         modifier = modifier
     )
 }
@@ -216,6 +268,8 @@ private fun HomeShelf(
     title: String,
     items: List<LibraryDisplayItem>,
     emptyMessage: String,
+    isCollapsed: Boolean,
+    onToggleCollapse: () -> Unit,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onReveal: (String) -> Unit,
@@ -225,30 +279,40 @@ private fun HomeShelf(
         KudosSectionHeader(
             title = title,
             subtitle = if (items.isEmpty()) null else "${items.size} shown",
+            trailing = {
+                IconButton(onClick = onToggleCollapse) {
+                    Icon(
+                        imageVector = if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                        contentDescription = if (isCollapsed) "Expand" else "Collapse"
+                    )
+                }
+            },
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        if (items.isEmpty()) {
-            EmptyStateCard(
-                title = "Nothing here yet",
-                message = emptyMessage,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        } else {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
-                // Fixed card height: keep cross-axis stable while scrolling.
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.height(WorkCoverCardMetrics.height)
-            ) {
-                items(items, key = { "${title}-${it.item.work.id}" }) { display ->
-                    HomeWorkCover(
-                        display = display,
-                        footerOverride = footerFor?.invoke(display.item.work),
-                        onOpenWork = { onOpenWork(display.item.work.id) },
-                        onOpenReader = { onOpenReader(display.item.work.id) },
-                        onReveal = { onReveal(display.item.work.id) }
-                    )
+        if (!isCollapsed) {
+            if (items.isEmpty()) {
+                EmptyStateCard(
+                    title = "Nothing here yet",
+                    message = emptyMessage,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                    // Fixed card height: keep cross-axis stable while scrolling.
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.height(WorkCoverCardMetrics.height)
+                ) {
+                    items(items, key = { "${title}-${it.item.work.id}" }) { display ->
+                        HomeWorkCover(
+                            display = display,
+                            footerOverride = footerFor?.invoke(display.item.work),
+                            onOpenWork = { onOpenWork(display.item.work.id) },
+                            onOpenReader = { onOpenReader(display.item.work.id) },
+                            onReveal = { onReveal(display.item.work.id) }
+                        )
+                    }
                 }
             }
         }
@@ -260,6 +324,8 @@ private fun SubscriptionsShelf(
     works: List<AO3WorkSummary>,
     isLoading: Boolean,
     isSignedIn: Boolean,
+    isCollapsed: Boolean,
+    onToggleCollapse: () -> Unit,
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
     onSeeAll: () -> Unit
 ) {
@@ -279,43 +345,51 @@ private fun SubscriptionsShelf(
                 else -> "${works.size} shown"
             },
             modifier = Modifier.padding(horizontal = 16.dp),
-            trailing = if (works.isNotEmpty()) {
-                {
-                    TextButton(onClick = onSeeAll) {
-                        Text("See all")
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (works.isNotEmpty()) {
+                        TextButton(onClick = onSeeAll) {
+                            Text("See all")
+                        }
+                    }
+                    IconButton(onClick = onToggleCollapse) {
+                        Icon(
+                            imageVector = if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                            contentDescription = if (isCollapsed) "Expand" else "Collapse"
+                        )
                     }
                 }
-            } else {
-                null
             }
         )
-        when {
-            showSkeleton -> {
-                LoadingStateCard(
-                    message = "Loading subscriptions",
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-            works.isEmpty() -> {
-                EmptyStateCard(
-                    title = "Nothing here yet",
-                    message = emptyMessage,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-            else -> {
-                // Horizontal remote shelf (Apple AO3WorkCoverCard parity).
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.height(WorkCoverCardMetrics.height)
-                ) {
-                    items(works, key = { "sub-${it.id}" }) { work ->
-                        RemoteWorkCover(
-                            work = work,
-                            onOpen = { onOpenRemoteWork(work) }
-                        )
+        if (!isCollapsed) {
+            when {
+                showSkeleton -> {
+                    LoadingStateCard(
+                        message = "Loading subscriptions",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+                works.isEmpty() -> {
+                    EmptyStateCard(
+                        title = "Nothing here yet",
+                        message = emptyMessage,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+                else -> {
+                    // Horizontal remote shelf (Apple AO3WorkCoverCard parity).
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.height(WorkCoverCardMetrics.height)
+                    ) {
+                        items(works, key = { "sub-${it.id}" }) { work ->
+                            RemoteWorkCover(
+                                work = work,
+                                onOpen = { onOpenRemoteWork(work) }
+                            )
+                        }
                     }
                 }
             }
