@@ -862,9 +862,9 @@ fun SettingsScreen(
                     UpdateSection(
                         state = updateState,
                         onCheckNow = { launchUpdate { appUpdateRepository.checkNow(autoDownload = true) } },
-                        onInstall = { apkPath ->
+                        onInstall = { match ->
                             runCatching {
-                                context.startActivity(appUpdateRepository.installIntentFor(apkPath))
+                                context.startActivity(appUpdateRepository.installIntentFor(match))
                             }
                         }
                     )
@@ -963,7 +963,7 @@ private enum class ThemeChipOption(val label: String, val setting: AppThemeSetti
 private fun UpdateSection(
     state: AppUpdateState,
     onCheckNow: () -> Unit,
-    onInstall: (java.nio.file.Path) -> Unit
+    onInstall: (io.github.cidy02.kudos.update.AndroidReleaseMatcher.Match) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1007,23 +1007,13 @@ private fun UpdateSection(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            is AppUpdateState.Downloading -> {
-                Text(
-                    "Downloading version ${state.match.version}…",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                LinearProgressIndicator(
-                    progress = { state.progress },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
             is AppUpdateState.ReadyToInstall -> {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "Version ${state.match.version} is ready to install.",
+                        "Version ${state.match.version} is ready to download.",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Button(onClick = { onInstall(state.apkPath) }) { Text("Install Update") }
+                    Button(onClick = { onInstall(state.match) }) { Text("Download Update") }
                 }
             }
             is AppUpdateState.Failed -> {

@@ -1,8 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Sideloaded self-update: install a downloaded APK via the system installer. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Best-effort "update ready" notification (Android 13+ requires runtime grant). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

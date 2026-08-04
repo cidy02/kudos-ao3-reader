@@ -52,24 +52,16 @@ class AppUpdateRepository(
         mutableState.value = result
 
         if (autoDownload && result is AppUpdateState.UpdateAvailable) {
-            downloadAndPrepareInstall(result.match)
+            prepareInstall(result.match)
         }
         return mutableState.value
     }
 
-    /** Downloads [match]'s APK and, on success, posts the ready-to-install notification. */
-    suspend fun downloadAndPrepareInstall(match: AndroidReleaseMatcher.Match) {
-        mutableState.value = AppUpdateState.Downloading(match, 0f)
-        try {
-            val path = installer.download(match.apk) { progress ->
-                mutableState.value = AppUpdateState.Downloading(match, progress)
-            }
-            mutableState.value = AppUpdateState.ReadyToInstall(match, path)
-            notifier.notifyUpdateReady(match.version.toString(), installer.installIntent(path))
-        } catch (error: Exception) {
-            mutableState.value = AppUpdateState.Failed(error.message ?: "Couldn't download the update.")
-        }
+    /** Prepares the ready-to-install state and posts the notification. */
+    fun prepareInstall(match: AndroidReleaseMatcher.Match) {
+        mutableState.value = AppUpdateState.ReadyToInstall(match)
+        notifier.notifyUpdateReady(match.version.toString(), installer.installIntent(match))
     }
 
-    fun installIntentFor(apkPath: Path): Intent = installer.installIntent(apkPath)
+    fun installIntentFor(match: AndroidReleaseMatcher.Match): Intent = installer.installIntent(match)
 }
