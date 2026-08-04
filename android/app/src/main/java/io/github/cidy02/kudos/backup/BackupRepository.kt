@@ -27,6 +27,7 @@ class BackupRepository(
     private val workFileStore: WorkFileStore,
     private val fontFileStore: FontFileStore,
     private val settingsRepository: SettingsRepository,
+    private val persistenceGate: PersistenceGate,
     private val clock: () -> Instant = { Instant.now() },
     private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
     private val appVersion: String = "0.1.0"
@@ -38,42 +39,48 @@ class BackupRepository(
         return "Kudos-$day.kudosbackup"
     }
 
-    suspend fun exportV2ZipBytes(): ByteArray = withContext(Dispatchers.IO) {
-        val snapshot = captureLibrarySnapshot()
-        val epubFiles = linkedMapOf<String, ByteArray>()
-        snapshot.works.forEach { work ->
-            if (!work.hasEpub) return@forEach
-            val path = workFileStore.workEpubPath(work.id)
-            if (Files.isRegularFile(path)) {
-                val bytes = Files.readAllBytes(path)
-                if (bytes.isNotEmpty()) {
-                    epubFiles[BackupPaths.normalizeIdForComparison(work.id)] = bytes
+    // Gated so a manual export/import can never race a background folder sync
+    // (SyncRepository.runSync -> this) writing the same local state.
+    suspend fun exportV2ZipBytes(): ByteArray = persistenceGate.withLock {
+        withContext(Dispatchers.IO) {
+            val snapshot = captureLibrarySnapshot()
+            val epubFiles = linkedMapOf<String, ByteArray>()
+            snapshot.works.forEach { work ->
+                if (!work.hasEpub) return@forEach
+                val path = workFileStore.workEpubPath(work.id)
+                if (Files.isRegularFile(path)) {
+                    val bytes = Files.readAllBytes(path)
+                    if (bytes.isNotEmpty()) {
+                        epubFiles[BackupPaths.normalizeIdForComparison(work.id)] = bytes
+                    }
                 }
             }
+            val fontFiles = linkedMapOf<String, ByteArray>()
+            snapshot.fonts.forEach { font ->
+                val bytes = fontFileStore.readFont(font.fileName) ?: return@forEach
+                if (bytes.isNotEmpty()) fontFiles[font.fileName] = bytes
+            }
+            val pack = KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = clock(), appVersion = appVersion),
+                epubFilesByWorkId = epubFiles,
+                fontFilesByFileName = fontFiles
+            )
+            BackupExporter.exportV2(pack)
         }
-        val fontFiles = linkedMapOf<String, ByteArray>()
-        snapshot.fonts.forEach { font ->
-            val bytes = fontFileStore.readFont(font.fileName) ?: return@forEach
-            if (bytes.isNotEmpty()) fontFiles[font.fileName] = bytes
-        }
-        val pack = KudosBackupPackage(
-            manifest = snapshot.toV2Manifest(exportedAt = clock(), appVersion = appVersion),
-            epubFilesByWorkId = epubFiles,
-            fontFilesByFileName = fontFiles
-        )
-        BackupExporter.exportV2(pack)
     }
 
     /**
      * Import a ZIP archive (bytes from SAF). Merge-only restore; never deletes
      * existing local works. Returns a human-readable summary.
      */
-    suspend fun importV2ZipBytes(bytes: ByteArray): BackupRestoreSummary = withContext(Dispatchers.IO) {
-        val pack = BackupImporter.importV2Zip(bytes)
-        val current = captureLibrarySnapshot()
-        val merge = BackupMergeService.merge(current, pack)
-        applyMergeResult(merge)
-        merge.summary
+    suspend fun importV2ZipBytes(bytes: ByteArray): BackupRestoreSummary = persistenceGate.withLock {
+        withContext(Dispatchers.IO) {
+            val pack = BackupImporter.importV2Zip(bytes)
+            val current = captureLibrarySnapshot()
+            val merge = BackupMergeService.merge(current, pack)
+            applyMergeResult(merge)
+            merge.summary
+        }
     }
 
     suspend fun captureLibrarySnapshot(): BackupLibrarySnapshot = withContext(Dispatchers.IO) {

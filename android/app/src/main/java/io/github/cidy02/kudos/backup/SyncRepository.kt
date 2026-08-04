@@ -1,15 +1,24 @@
 package io.github.cidy02.kudos.backup
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import java.nio.file.Files
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+
+private const val SYNC_WORK_NAME = "FolderSyncWorker"
+private val SYNC_INTERVAL = 6L to TimeUnit.HOURS
 
 /**
  * Automates library backup/restore via a user-picked SAF folder.
@@ -30,11 +39,52 @@ class SyncRepository(
         return settingsRepository.settings.first().sync.folderUri?.let { Uri.parse(it) }
     }
 
+    /** Grants persisted access to [uri], enables sync, and schedules periodic background sync. */
+    suspend fun connect(uri: Uri) {
+        context.contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        settingsRepository.updateSyncFolderUri(uri.toString())
+        settingsRepository.updateSyncIsEnabled(true)
+        scheduleWorker()
+    }
+
+    /** Releases the folder permission, disables sync, and cancels background sync. */
+    suspend fun disconnect() {
+        getSyncFolderUri()?.let { uri ->
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+        }
+        settingsRepository.updateSyncIsEnabled(false)
+        settingsRepository.updateSyncFolderUri(null)
+        WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
+    }
+
+    private fun scheduleWorker() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+        val (amount, unit) = SYNC_INTERVAL
+        val request = PeriodicWorkRequestBuilder<FolderSyncWorker>(amount, unit)
+            .setConstraints(constraints)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            SYNC_WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
+    }
+
     /**
-     * Performs a full sync cycle:
+     * Performs a one-way export sync cycle:
      * 1. Export current library to Kudos.kudosbackup in the SAF folder.
-     * 2. (Future) Import/merge if remote is newer (requires last-modified tracking).
-     * 3. (Future) Sync EPUBs directory.
+     * 2. Copy any not-yet-present EPUBs into an epubs/ subdirectory.
+     * (Future) Import/merge changes made on another device (requires last-modified tracking).
      */
     suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
         val uri = getSyncFolderUri() ?: return@withContext SyncResult.Error("No sync folder selected.")

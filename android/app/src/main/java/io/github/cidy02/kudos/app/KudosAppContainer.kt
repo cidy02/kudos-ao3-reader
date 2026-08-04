@@ -11,6 +11,7 @@ import io.github.cidy02.kudos.auth.AO3PostingPseudStore
 import io.github.cidy02.kudos.auth.EncryptedFileAO3SessionStore
 import io.github.cidy02.kudos.auth.LiveAO3SessionValidator
 import io.github.cidy02.kudos.backup.BackupRepository
+import io.github.cidy02.kudos.backup.PersistenceGate
 import io.github.cidy02.kudos.backup.SyncRepository
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.KudosDatabaseMigrations
@@ -223,12 +224,17 @@ class KudosAppContainer(context: Context) {
         AO3BrowseRepository(client = ao3Client, cache = fandomCatalogCache)
     }
 
+    val persistenceGate: PersistenceGate by lazy {
+        PersistenceGate()
+    }
+
     val backupRepository: BackupRepository by lazy {
         BackupRepository(
             database = database,
             workFileStore = workFileStore,
             fontFileStore = fontFileStore,
-            settingsRepository = settingsRepository
+            settingsRepository = settingsRepository,
+            persistenceGate = persistenceGate
         )
     }
 
