@@ -63,13 +63,27 @@ sealed class AccountListType {
     }
 
     companion object {
-        /** Hub destinations under "My AO3" (excludes [Collection]). */
-        val hubEntries: List<AccountListType> = listOf(
-            MarkedForLater,
-            Bookmarks,
-            History,
-            Subscriptions,
-            MyWorks
-        )
+        /**
+         * Hub destinations under "My AO3" (excludes [Collection]).
+         *
+         * **Must stay `by lazy`.** As an eager `val` this list was built during
+         * `AccountListType.<clinit>`, and any code touching a subclass first
+         * (e.g. `HomeViewModel` reading [Subscriptions]) starts that subclass's
+         * initializer, which triggers the superclass initializer, which read the
+         * subclass `INSTANCE` fields back while they were still null. The list
+         * then permanently held nulls — an NPE in `AccountViewModel.refreshCounts`
+         * (the 0.1.7 Account-tab crash) and, once that was null-guarded, silently
+         * missing counts for whichever rows lost the race. Deferring construction
+         * to first access means every entry is fully initialized by then.
+         */
+        val hubEntries: List<AccountListType> by lazy {
+            listOf(
+                MarkedForLater,
+                Bookmarks,
+                History,
+                Subscriptions,
+                MyWorks
+            )
+        }
     }
 }
