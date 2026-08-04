@@ -50,12 +50,15 @@ fun SavedWork.toEntity(): WorkEntity {
         lastUpdateCheck = lastUpdateCheck,
         lastModifiedAt = lastModifiedAt,
         progressModifiedAt = progressModifiedAt,
+        ao3Unavailable = ao3Unavailable,
+        lastAvailabilityCheck = lastAvailabilityCheck,
         isDeleted = isDeleted,
         deletedAt = deletedAt,
         permanentDeletionScheduledAt = permanentDeletionScheduledAt,
         isQueuedForLater = isQueuedForLater,
         searchText = searchText,
-        searchIndexVersion = searchIndexVersion
+        searchIndexVersion = searchIndexVersion,
+        lastTagRefreshAttemptAt = lastTagRefreshAttemptAt
     )
 }
 
@@ -98,12 +101,15 @@ fun WorkEntity.toDomain(): SavedWork {
         lastUpdateCheck = lastUpdateCheck,
         lastModifiedAt = lastModifiedAt,
         progressModifiedAt = progressModifiedAt,
+        ao3Unavailable = ao3Unavailable,
+        lastAvailabilityCheck = lastAvailabilityCheck,
         isDeleted = isDeleted,
         deletedAt = deletedAt,
         permanentDeletionScheduledAt = permanentDeletionScheduledAt,
         isQueuedForLater = isQueuedForLater,
         searchText = searchText,
-        searchIndexVersion = searchIndexVersion
+        searchIndexVersion = searchIndexVersion,
+        lastTagRefreshAttemptAt = lastTagRefreshAttemptAt
     )
 }
 

@@ -41,7 +41,7 @@ class WorkRepository(
 
     fun observeSavedWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll()
-            .map { works -> works.map { it.toDomain() }.filter { it.isSaved } }
+            .map { works -> works.map { it.toDomain() }.filter { it.isProtected && !it.isQueueOnlyWork } }
     }
 
     /**
@@ -54,7 +54,7 @@ class WorkRepository(
 
     /** One-shot list of active saved library works (excludes soft-deleted). */
     suspend fun listSavedWorks(): List<SavedWork> {
-        return workDao.getAll().map { it.toDomain() }.filter { it.isSaved }
+        return workDao.getAll().map { it.toDomain() }.filter { it.isProtected && !it.isQueueOnlyWork }
     }
 
     /** Active finished works in local reading history (excludes soft-deleted). */

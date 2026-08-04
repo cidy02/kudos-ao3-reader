@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.network.ao3.comments
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -8,25 +10,25 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-private val Context.commentDraftDataStore by preferencesDataStore(name = "comment_drafts")
+val Context.commentDraftDataStore by preferencesDataStore(name = "comment_drafts")
 
 /**
  * Persists unsent comment drafts keyed by (work, chapter, parent, identity).
  * Port of iOS `CommentDraftStore`.
  */
-class CommentDraftStore(private val context: Context) {
+class CommentDraftStore(private val dataStore: DataStore<Preferences>) {
     private fun keyFor(workId: Long, chapterId: Long?, parentId: Long?, username: String?): String {
         return "draft:${workId}:${chapterId ?: 0}:${parentId ?: 0}:${username ?: "guest"}"
     }
 
     suspend fun getDraft(workId: Long, chapterId: Long? = null, parentId: Long? = null, username: String? = null): String? {
         val key = stringPreferencesKey(keyFor(workId, chapterId, parentId, username))
-        return context.commentDraftDataStore.data.map { it[key] }.first()
+        return dataStore.data.map { it[key] }.first()
     }
 
     suspend fun saveDraft(content: String, workId: Long, chapterId: Long? = null, parentId: Long? = null, username: String? = null) {
         val key = stringPreferencesKey(keyFor(workId, chapterId, parentId, username))
-        context.commentDraftDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (content.isBlank()) prefs.remove(key)
             else prefs[key] = content
         }

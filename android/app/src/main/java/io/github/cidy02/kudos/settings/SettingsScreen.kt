@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -835,96 +836,52 @@ fun SettingsScreen(
         }
     }
 
-    if (showResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset settings to defaults?") },
-            text = {
-                Text(
-                    "This clears reader, theme, privacy, and other app preferences back to " +
-                        "their defaults. Your Library, downloads, and AO3 session are not affected."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showResetConfirm = false
-                        scope.launch { repository.resetToDefaults() }
-                    }
-                ) {
-                    Text("Reset")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = showResetConfirm,
+        title = "Reset settings to defaults?",
+        text = "This clears reader, theme, privacy, and other app preferences back to " +
+            "their defaults. Your Library, downloads, and AO3 session are not affected.",
+        confirmText = "Reset",
+        confirmBeforeDelete = true, // Always confirm reset
+        onConfirm = {
+            showResetConfirm = false
+            scope.launch { repository.resetToDefaults() }
+        },
+        onDismissRequest = { showResetConfirm = false }
+    )
 
-    if (showClearBrowseCacheConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearBrowseCacheConfirm = false },
-            title = { Text("Clear Browse Cache?") },
-            text = {
-                Text(
-                    "Cached AO3 fandom and category data used to show Browse instantly. " +
-                        "Safe to clear — it rebuilds the next time you open Browse."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearBrowseCacheConfirm = false
-                        scope.launch {
-                            effectiveFandomCatalogCache.clear()
-                            browseCacheCleared = true
-                        }
-                    }
-                ) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearBrowseCacheConfirm = false }) {
-                    Text("Cancel")
-                }
+    DestructiveConfirmation(
+        show = showClearBrowseCacheConfirm,
+        title = "Clear Browse Cache?",
+        text = "Cached AO3 fandom and category data used to show Browse instantly. " +
+            "Safe to clear — it rebuilds the next time you open Browse.",
+        confirmText = "Clear",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            showClearBrowseCacheConfirm = false
+            scope.launch {
+                effectiveFandomCatalogCache.clear()
+                browseCacheCleared = true
             }
-        )
-    }
+        },
+        onDismissRequest = { showClearBrowseCacheConfirm = false }
+    )
 
-    if (showClearHistoryConfirm) {
-        val count = finishedWorks.size
-        val workText = "Work${if (count == 1) "" else "s"}"
-        AlertDialog(
-            onDismissRequest = { showClearHistoryConfirm = false },
-            title = { Text("Clear Reading History?") },
-            text = {
-                Text(
-                    "Moves your local reading-history records to Recently Deleted for 90 days. " +
-                        "The works themselves can also be re-downloaded from AO3 anytime."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearHistoryConfirm = false
-                        scope.launch {
-                            effectiveWorkRepository?.softDeleteAllFinished()
-                        }
-                    }
-                ) {
-                    Text("Clear $count $workText", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearHistoryConfirm = false }) {
-                    Text("Cancel")
-                }
+    DestructiveConfirmation(
+        show = showClearHistoryConfirm,
+        title = "Clear Reading History?",
+        text = "Moves your local reading-history records to Recently Deleted for 90 days. " +
+            "The works themselves can also be re-downloaded from AO3 anytime.",
+        confirmText = "Clear ${finishedWorks.size} Work${if (finishedWorks.size == 1) "" else "s"}",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            showClearHistoryConfirm = false
+            scope.launch {
+                effectiveWorkRepository?.softDeleteAllFinished()
             }
-        )
-    }
+        },
+        onDismissRequest = { showClearHistoryConfirm = false }
+    )
 }
 
 /** Theme chips shown in Settings. Each option maps 1:1 to [AppThemeSetting]. */

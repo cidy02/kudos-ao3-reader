@@ -7,9 +7,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class KudosApplication : Application() {
+import androidx.work.Configuration
+import io.github.cidy02.kudos.works.KudosWorkerFactory
+import io.github.cidy02.kudos.works.WorkAvailabilitySweep
+
+class KudosApplication : Application(), Configuration.Provider {
     lateinit var container: KudosAppContainer
         private set
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(
+                KudosWorkerFactory(
+                    tagsRepository = container.tagsRepository,
+                    workRepository = container.workRepository,
+                    sweep = WorkAvailabilitySweep(container.workRepository, container.tagsRepository)
+                )
+            )
+            .build()
 
     /** Process-scoped IO work that outlives any single Activity/composition. */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -40,5 +55,28 @@ class KudosApplication : Application() {
         applicationScope.launch {
             runCatching { container.appUpdateRepository.checkIfDue() }
         }
+
+        scheduleWorkManagerTasks()
+    }
+
+    private fun scheduleWorkManagerTasks() {
+        val sweepWork = androidx.work.PeriodicWorkRequestBuilder<io.github.cidy02.kudos.works.AvailabilitySweepWorker>(
+            7, java.util.concurrent.TimeUnit.DAYS
+        ).build()
+
+        val tagRefreshWork = androidx.work.PeriodicWorkRequestBuilder<io.github.cidy02.kudos.works.WorkTagsRefreshWorker>(
+            1, java.util.concurrent.TimeUnit.DAYS
+        ).build()
+
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "AvailabilitySweepWorker",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            sweepWork
+        )
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "WorkTagsRefreshWorker",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            tagRefreshWork
+        )
     }
 }

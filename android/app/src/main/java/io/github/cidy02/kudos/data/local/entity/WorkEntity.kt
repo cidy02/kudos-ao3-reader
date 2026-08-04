@@ -51,10 +51,14 @@ data class WorkEntity(
     val lastUpdateCheck: Instant?,
     val lastModifiedAt: Instant? = null,
     val progressModifiedAt: Instant? = null,
+    val ao3Unavailable: Boolean = false,
+    val lastAvailabilityCheck: Instant? = null,
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
     val permanentDeletionScheduledAt: Instant? = null,
     val isQueuedForLater: Boolean = false,
     val searchText: String = "",
-    val searchIndexVersion: Int = 0
+    val searchIndexVersion: Int = 0,
+
+    val lastTagRefreshAttemptAt: Instant? = null
 )

@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,9 +78,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -92,6 +95,7 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3BookmarkInput
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteActionKind
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteOutcome
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChip
@@ -126,6 +130,7 @@ fun WorkDetailScreen(
     readingQueueRepository: ReadingQueueRepository,
     postingPseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null,
     metadataRepository: AO3WorkMetadataRepository? = null,
+    settingsRepository: SettingsRepository? = null,
     seriesRepository: AO3SeriesRepository = AO3SeriesRepository(),
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
@@ -160,6 +165,8 @@ fun WorkDetailScreen(
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState?.value ?: KudosSettings.Defaults
 
     suspend fun refreshLocal(workId: String, remote: AO3WorkSummary? = state.remote) {
         val local = workRepository.getWork(workId)
@@ -520,37 +527,23 @@ fun WorkDetailScreen(
         saveMetadataOnly()
     }
 
-    if (confirmRemove) {
-        AlertDialog(
-            onDismissRequest = { confirmRemove = false },
-            title = { Text("Remove from Library") },
-            text = {
-                Text(
-                    "This moves the work to Recently Deleted for 90 days. " +
-                        "You can restore it from Library → Recently Deleted. " +
-                        "After 90 days it is permanently removed (including any downloaded EPUB)."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val workId = state.local?.id ?: return@TextButton
-                        confirmRemove = false
-                        runWorkAction {
-                            // Soft-delete into Recently Deleted (90-day recovery).
-                            workRepository.softDelete(workId)
-                            state = WorkDetailUiState(remote = state.remote, loading = false)
-                        }
-                    }
-                ) {
-                    Text("Remove")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+    DestructiveConfirmation(
+        show = confirmRemove,
+        title = "Remove from Library",
+        text = "This moves the work to Recently Deleted for 90 days. You can restore it from Library → Recently Deleted. After 90 days it is permanently removed (including any downloaded EPUB).",
+        confirmText = "Remove",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            val workId = state.local?.id ?: return@DestructiveConfirmation
+            confirmRemove = false
+            runWorkAction {
+                // Soft-delete into Recently Deleted (90-day recovery).
+                workRepository.softDelete(workId)
+                state = WorkDetailUiState(remote = state.remote, loading = false)
             }
-        )
-    }
+        },
+        onDismissRequest = { confirmRemove = false }
+    )
 
     if (bookmarkDialog) {
         AlertDialog(
@@ -1306,6 +1299,10 @@ private fun WorkDetailContent(
         }
         state.ao3Message?.let {
             StatusBadge(it)
+            Spacer(Modifier.height(8.dp))
+        }
+        if (state.local?.ao3Unavailable == true) {
+            StatusBadge("Unavailable on AO3 (Last Copy)")
             Spacer(Modifier.height(8.dp))
         }
 

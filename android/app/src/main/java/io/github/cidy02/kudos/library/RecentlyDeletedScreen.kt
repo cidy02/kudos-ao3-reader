@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -168,48 +171,38 @@ private sealed interface PendingHardDelete {
 @Composable
 fun RecentlyDeletedScreen(
     workRepository: WorkRepository,
-    queueRepository: ReadingQueueRepository? = null
+    queueRepository: ReadingQueueRepository? = null,
+    settingsRepository: SettingsRepository? = null
 ) {
     val viewModel: RecentlyDeletedViewModel = viewModel(
         factory = RecentlyDeletedViewModel.factory(workRepository, queueRepository)
     )
     val state by viewModel.state.collectAsState()
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState?.value ?: KudosSettings.Defaults
     var pendingHardDelete by remember { mutableStateOf<PendingHardDelete?>(null) }
 
-    if (pendingHardDelete != null) {
-        val pending = pendingHardDelete
-        AlertDialog(
-            onDismissRequest = { pendingHardDelete = null },
-            title = { Text("Delete forever?") },
-            text = {
-                Text(
-                    "This is gone for good — it can't be restored afterward." +
-                        if (pending != null) "\n\n“${pending.label}”" else ""
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val toDelete = pendingHardDelete
-                        pendingHardDelete = null
-                        when (toDelete) {
-                            is PendingHardDelete.Work -> viewModel.deleteForever(toDelete.work.id)
-                            is PendingHardDelete.Collection ->
-                                viewModel.deleteCollectionForever(toDelete.collection.id)
-                            is PendingHardDelete.Queue ->
-                                viewModel.deleteQueueForever(toDelete.queue.id)
-                            null -> Unit
-                        }
-                    }
-                ) {
-                    Text("Delete forever")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingHardDelete = null }) { Text("Cancel") }
+    DestructiveConfirmation(
+        show = pendingHardDelete != null,
+        title = "Delete forever?",
+        text = "This is gone for good — it can't be restored afterward." +
+            (pendingHardDelete?.let { "\n\n“${it.label}”" } ?: ""),
+        confirmText = "Delete forever",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            val toDelete = pendingHardDelete
+            pendingHardDelete = null
+            when (toDelete) {
+                is PendingHardDelete.Work -> viewModel.deleteForever(toDelete.work.id)
+                is PendingHardDelete.Collection ->
+                    viewModel.deleteCollectionForever(toDelete.collection.id)
+                is PendingHardDelete.Queue ->
+                    viewModel.deleteQueueForever(toDelete.queue.id)
+                null -> Unit
             }
-        )
-    }
+        },
+        onDismissRequest = { pendingHardDelete = null }
+    )
 
     RecentlyDeletedContent(
         state = state,

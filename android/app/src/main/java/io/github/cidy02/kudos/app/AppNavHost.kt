@@ -196,6 +196,7 @@ fun AppNavHost(
                 QueueDetailScreen(
                     queueId = queueId,
                     repository = container.readingQueueRepository,
+                    settingsRepository = container.settingsRepository,
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     }
@@ -442,7 +443,8 @@ fun AppNavHost(
                     navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                 },
                 savedSearchRepository = container.savedSearchRepository,
-                workRepository = container.workRepository
+                workRepository = container.workRepository,
+                settingsRepository = container.settingsRepository
             )
         }
         composable(
@@ -460,6 +462,7 @@ fun AppNavHost(
                 readingQueueRepository = container.readingQueueRepository,
                 postingPseudStore = container.postingPseudStore,
                 metadataRepository = container.metadataRepository,
+                settingsRepository = container.settingsRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenComments = { workId ->
                     navController.navigate(Routes.comments(workId))
@@ -523,7 +526,8 @@ fun AppNavHost(
                                 )
                             )
                         )
-                    }
+                    },
+                    settingsRepository = container.settingsRepository
                 )
             }
         }
@@ -545,14 +549,16 @@ fun AppNavHost(
                 currentUsername = commentsAuthState.usernameOrNull,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 focusedCommentId = focusedId,
-                draftStore = container.commentDraftStore
+                draftStore = container.commentDraftStore,
+                settingsRepository = container.settingsRepository
             )
         }
 
         composable(Routes.RecentlyDeleted) {
             RecentlyDeletedScreen(
                 workRepository = container.workRepository,
-                queueRepository = container.readingQueueRepository
+                queueRepository = container.readingQueueRepository,
+                settingsRepository = container.settingsRepository
             )
         }
 

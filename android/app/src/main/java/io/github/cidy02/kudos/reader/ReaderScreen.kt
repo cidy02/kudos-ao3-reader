@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -122,9 +123,12 @@ fun ReaderScreen(
     onBack: () -> Unit,
     onOpenComments: (Long) -> Unit,
     /** Local library work id (not AO3 id) — opens Work Detail over the reader stack. */
-    onOpenWorkDetail: (String) -> Unit
+    onOpenWorkDetail: (String) -> Unit,
+    settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
 ) {
     val uiState by viewModel.state.collectAsState()
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
+    val settings = settingsState?.value ?: io.github.cidy02.kudos.core.model.KudosSettings.Defaults
     // Once reading, use the reader's own selected theme, not the app theme — the two
     // can diverge (matchAppReaderTheme = false), and using the app's background here
     // caused a visible flash against the Readium navigator's correctly-reader-themed
@@ -147,7 +151,7 @@ fun ReaderScreen(
                     null
                 }
             )
-            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenComments, onOpenWorkDetail)
+            is ReaderUiState.Reading -> ReaderReading(state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings)
         }
     }
 }
@@ -159,7 +163,8 @@ private fun ReaderReading(
     viewModel: ReaderViewModel,
     onBack: () -> Unit,
     onOpenComments: (Long) -> Unit,
-    onOpenWorkDetail: (String) -> Unit
+    onOpenWorkDetail: (String) -> Unit,
+    settings: io.github.cidy02.kudos.core.model.KudosSettings
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -177,6 +182,7 @@ private fun ReaderReading(
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
     var annotateDialog by remember { mutableStateOf<AnnotateDialogState?>(null) }
     var noteEditor by remember { mutableStateOf<ReadingAnnotation?>(null) }
+    var showDeleteNoteConfirm by remember { mutableStateOf<ReadingAnnotation?>(null) }
     val scope = rememberCoroutineScope()
 
     val speechController = remember(context) { ReaderSpeechController(context) }
@@ -216,6 +222,19 @@ private fun ReaderReading(
         value = null
         value = opener.open(state.epubPath.toFile())
     }
+
+    DestructiveConfirmation(
+        show = showDeleteNoteConfirm != null,
+        title = "Delete annotation?",
+        text = "This will permanently remove this bookmark or highlight.",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            val id = showDeleteNoteConfirm?.id ?: return@DestructiveConfirmation
+            showDeleteNoteConfirm = null
+            viewModel.deleteAnnotation(id)
+        },
+        onDismissRequest = { showDeleteNoteConfirm = null }
+    )
 
     when (val result = opening) {
         null -> ReaderPageSkeleton(
@@ -573,8 +592,9 @@ private fun ReaderReading(
                         Row {
                             TextButton(
                                 onClick = {
-                                    viewModel.deleteAnnotation(annotation.id)
+                                    val annotationToDelete = annotation
                                     noteEditor = null
+                                    showDeleteNoteConfirm = annotationToDelete
                                 }
                             ) { Text("Delete") }
                             TextButton(onClick = { noteEditor = null }) { Text("Cancel") }
@@ -621,7 +641,7 @@ private fun ReaderReading(
                             }
                         },
                         onDeleteAnnotation = { annotation ->
-                            viewModel.deleteAnnotation(annotation.id)
+                            showDeleteNoteConfirm = annotation
                         }
                     )
                 }

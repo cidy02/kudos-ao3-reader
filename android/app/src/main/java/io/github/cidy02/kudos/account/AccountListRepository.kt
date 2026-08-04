@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 class AccountListRepository(
     private val client: AO3Client = OkHttpAO3Client(),
     val authRepository: AO3AuthRepository,
+    val settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     private val urls: AO3AccountUrls = AO3AccountUrls(),
     private val parser: AO3AccountParser = AO3AccountParser(),
     val countsCache: AO3AccountListCountsCache? = null

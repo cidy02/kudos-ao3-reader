@@ -16,7 +16,8 @@ data class LibrarySnapshot(
     val items: List<LibraryWorkListItem>,
     val userTags: List<Tag>,
     val collections: List<WorkCollection>,
-    val privacy: PrivacySettings
+    val privacy: PrivacySettings,
+    val confirmBeforeDelete: Boolean = true
 )
 
 enum class LibraryPrivacyVisibility { Visible, Obscured, Hidden }
@@ -79,6 +80,7 @@ data class LibraryUiState(
     val selectedWorkIds: Set<String> = emptySet(),
     /** Session-only mature reveals (Tap to reveal). */
     val revealedWorkIds: Set<String> = emptySet(),
+    val confirmBeforeDelete: Boolean = true,
     /**
      * Persisted "Hide mature content" setting — what actually drives Obscure/Hide for
      * every item above (`LibraryQuery.buildState` reads it from `snapshot.privacy`).

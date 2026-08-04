@@ -26,6 +26,9 @@ import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -79,6 +82,7 @@ fun AccountInboxPane(
     commentRepository: AO3CommentRepository,
     currentUsername: String?,
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit,
+    settingsRepository: SettingsRepository? = null,
     modifier: Modifier = Modifier,
     viewModel: AccountInboxViewModel = viewModel(
         key = "account-inbox",
@@ -86,58 +90,34 @@ fun AccountInboxPane(
     )
 ) {
     val state by viewModel.uiState.collectAsState()
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState?.value ?: KudosSettings.Defaults
     var pendingDelete by remember { mutableStateOf<PendingInboxDelete?>(null) }
 
-    if (pendingDelete != null) {
-        val pending = pendingDelete!!
-        AlertDialog(
-            onDismissRequest = {
-                if (!state.isPerformingBulkAction) pendingDelete = null
-            },
-            title = {
-                Text(
-                    if (pending.items.size == 1) {
-                        "Remove this notification from your AO3 Inbox?"
-                    } else {
-                        "Remove ${pending.items.size} notifications from your AO3 Inbox?"
-                    }
+    DestructiveConfirmation(
+        show = pendingDelete != null,
+        title = if (pendingDelete?.items?.size == 1) {
+            "Remove this notification from your AO3 Inbox?"
+        } else {
+            "Remove ${pendingDelete?.items?.size ?: 0} notifications from your AO3 Inbox?"
+        },
+        text = "This only removes the selected notification${if (pendingDelete?.items?.size == 1) "" else "s"} from AO3's Inbox. It does not delete the comment${if (pendingDelete?.items?.size == 1) "" else "s"}.",
+        confirmText = "Delete From Inbox",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            val pending = pendingDelete ?: return@DestructiveConfirmation
+            pendingDelete = null
+            if (pending.items.size == 1) {
+                viewModel.startItemAction(
+                    AO3InboxBulkAction.Delete,
+                    pending.items.first()
                 )
-            },
-            text = {
-                val plural = if (pending.items.size == 1) "" else "s"
-                Text(
-                    "This only removes the selected notification$plural from " +
-                        "AO3's Inbox. It does not delete the comment$plural."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingDelete = null
-                        if (pending.items.size == 1) {
-                            viewModel.startItemAction(
-                                AO3InboxBulkAction.Delete,
-                                pending.items.first()
-                            )
-                        } else {
-                            viewModel.startBulkAction(AO3InboxBulkAction.Delete)
-                        }
-                    },
-                    enabled = !state.isPerformingBulkAction
-                ) {
-                    Text("Delete From Inbox", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { pendingDelete = null },
-                    enabled = !state.isPerformingBulkAction
-                ) {
-                    Text("Cancel")
-                }
+            } else {
+                viewModel.startBulkAction(AO3InboxBulkAction.Delete)
             }
-        )
-    }
+        },
+        onDismissRequest = { pendingDelete = null }
+    )
 
     when {
         state.phase == AccountInboxUiState.Phase.Loading && state.items.isEmpty() -> {

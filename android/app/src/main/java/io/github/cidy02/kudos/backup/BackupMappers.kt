@@ -111,6 +111,8 @@ fun SavedWork.toBackupWork(
         lastModifiedAt = (lastModifiedAt ?: dateAdded).let(BackupValidator::formatInstant),
         progressModifiedAt = progressModifiedAt?.let(BackupValidator::formatInstant)
             ?: lastReadDate?.let(BackupValidator::formatInstant),
+        ao3Unavailable = ao3Unavailable,
+        lastAvailabilityCheck = lastAvailabilityCheck?.let(BackupValidator::formatInstant),
         isDeleted = isDeleted,
         deletedAt = deletedAt?.let(BackupValidator::formatInstant),
         permanentDeletionScheduledAt = permanentDeletionScheduledAt
@@ -177,6 +179,11 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         progressModifiedAt = BackupValidator.parseNullableInstant(
             progressModifiedAt?.takeIf { it.isNotBlank() },
             "work.progressModifiedAt"
+        ),
+        ao3Unavailable = ao3Unavailable ?: false,
+        lastAvailabilityCheck = BackupValidator.parseNullableInstant(
+            lastAvailabilityCheck?.takeIf { it.isNotBlank() },
+            "work.lastAvailabilityCheck"
         ),
         isDeleted = isDeleted == true,
         deletedAt = BackupValidator.parseNullableInstant(

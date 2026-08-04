@@ -11,7 +11,6 @@ import io.github.cidy02.kudos.auth.AO3PostingPseudStore
 import io.github.cidy02.kudos.auth.EncryptedFileAO3SessionStore
 import io.github.cidy02.kudos.auth.LiveAO3SessionValidator
 import io.github.cidy02.kudos.backup.BackupRepository
-import io.github.cidy02.kudos.backup.PersistenceGate
 import io.github.cidy02.kudos.backup.SyncRepository
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.KudosDatabaseMigrations
@@ -28,6 +27,7 @@ import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.CommentCache
 import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
+import io.github.cidy02.kudos.network.ao3.comments.commentDraftDataStore
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
@@ -37,6 +37,8 @@ import io.github.cidy02.kudos.network.ao3.writes.AO3WriteRepository
 import io.github.cidy02.kudos.network.ao3.writes.DefaultAO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
 import io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesRepository
+import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
+import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.github.GitHubReleaseClient
 import io.github.cidy02.kudos.reader.ReaderRepository
 import io.github.cidy02.kudos.search.SavedSearchRepository
@@ -62,7 +64,9 @@ class KudosAppContainer(context: Context) {
                 KudosDatabaseMigrations.MIGRATION_1_2,
                 KudosDatabaseMigrations.MIGRATION_2_3,
                 KudosDatabaseMigrations.MIGRATION_3_4,
-                KudosDatabaseMigrations.MIGRATION_4_5
+                KudosDatabaseMigrations.MIGRATION_4_5,
+                KudosDatabaseMigrations.MIGRATION_5_6,
+                KudosDatabaseMigrations.MIGRATION_6_7
             )
             .build()
     }
@@ -106,6 +110,7 @@ class KudosAppContainer(context: Context) {
         AccountListRepository(
             client = ao3Client,
             authRepository = authRepository,
+            settingsRepository = settingsRepository,
             countsCache = accountListCountsCache
         )
     }
@@ -151,7 +156,7 @@ class KudosAppContainer(context: Context) {
     }
 
     val commentDraftStore: CommentDraftStore by lazy {
-        CommentDraftStore(appContext!!)
+        CommentDraftStore(appContext.commentDraftDataStore)
     }
 
     val inboxRepository: AO3InboxRepository by lazy {
@@ -162,12 +167,20 @@ class KudosAppContainer(context: Context) {
         io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository(ao3Client)
     }
 
+    val searchRepository: AO3SearchRepository by lazy {
+        AO3SearchRepository(ao3Client)
+    }
+
     val workRepository: WorkRepository by lazy {
-        WorkRepository(database, workFileStore)
+        WorkRepository(database, workFileStore, tagsRepository)
     }
 
     val metadataRepository: AO3WorkMetadataRepository by lazy {
         AO3WorkMetadataRepository(ao3Client)
+    }
+
+    val tagsRepository: io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository by lazy {
+        io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository(ao3Client)
     }
 
     val epubDownloader: AO3EpubDownloader by lazy {
@@ -220,12 +233,12 @@ class KudosAppContainer(context: Context) {
         FandomCatalogCache(appContext.cacheDir.toPath())
     }
 
-    val browseRepository: AO3BrowseRepository by lazy {
-        AO3BrowseRepository(client = ao3Client, cache = fandomCatalogCache)
+    val persistenceGate: io.github.cidy02.kudos.backup.PersistenceGate by lazy {
+        io.github.cidy02.kudos.backup.PersistenceGate()
     }
 
-    val persistenceGate: PersistenceGate by lazy {
-        PersistenceGate()
+    val browseRepository: AO3BrowseRepository by lazy {
+        AO3BrowseRepository(client = ao3Client, cache = fandomCatalogCache)
     }
 
     val backupRepository: BackupRepository by lazy {

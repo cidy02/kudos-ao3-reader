@@ -50,6 +50,8 @@ data class SavedWork(
     val lastModifiedAt: Instant? = null,
     /** Progress LWW clock (Apple `progressModifiedAt`). Falls back to [lastReadDate]. */
     val progressModifiedAt: Instant? = null,
+    val ao3Unavailable: Boolean = false,
+    val lastAvailabilityCheck: Instant? = null,
     /** Soft-delete / Recently Deleted (Apple `isPendingDeletion`). */
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
@@ -61,14 +63,19 @@ data class SavedWork(
      */
     val searchText: String = "",
     /** Stamp for [io.github.cidy02.kudos.works.WorkSearchIndex.currentVersion]; 0 = never indexed. */
-    val searchIndexVersion: Int = 0
+    val searchIndexVersion: Int = 0,
+    val lastTagRefreshAttemptAt: Instant? = null
 ) {
     // isQueuedForLater counts as protection too - queue-add now preserves the EPUB
     // (T-89), and without this a queue-only work marked Finished would have that
     // freshly-preserved file immediately freed by the existing unprotected-finish
     // cleanup, defeating the point of preserving it.
+    // Last Copy works are always protected so the EPUB isn't silently deleted.
     val isProtected: Boolean
-        get() = isSaved || isFavorite || isQueuedForLater
+        get() = isSaved || isFavorite || isQueuedForLater || ao3Unavailable
+
+    val needsAO3Refresh: Boolean
+        get() = (System.currentTimeMillis() - (lastTagRefreshAttemptAt?.toEpochMilli() ?: 0)) > 86400000L
 
     /** iOS `SavedWork.isQueueOnlyWork`: queued but not otherwise protected. */
     val isQueueOnlyWork: Boolean

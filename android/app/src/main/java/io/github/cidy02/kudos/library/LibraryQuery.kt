@@ -56,7 +56,8 @@ object LibraryQuery {
                 compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }
             ),
             hideMatureContent = snapshot.privacy.hideMatureContent,
-            matureWorkCount = matureCount
+            matureWorkCount = matureCount,
+            confirmBeforeDelete = snapshot.confirmBeforeDelete
         )
     }
 

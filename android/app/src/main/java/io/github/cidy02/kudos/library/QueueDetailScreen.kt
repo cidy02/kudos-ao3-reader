@@ -44,9 +44,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -58,8 +61,11 @@ import kotlinx.coroutines.launch
 fun QueueDetailScreen(
     queueId: String,
     repository: ReadingQueueRepository,
+    settingsRepository: SettingsRepository? = null,
     onOpenWork: (String) -> Unit
 ) {
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState?.value ?: KudosSettings.Defaults
     var loading by remember(queueId) { mutableStateOf(true) }
     var working by remember(queueId) { mutableStateOf(false) }
     var error by remember(queueId) { mutableStateOf<String?>(null) }
@@ -194,28 +200,18 @@ fun QueueDetailScreen(
         )
     }
 
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Queue?") },
-            text = {
-                Text("This queue will be moved to Recently Deleted. Its works will remain in your Library.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        deleteQueue()
-                    }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = showDeleteConfirm,
+        title = "Delete Queue?",
+        text = "This queue will be moved to Recently Deleted. Its works will remain in your Library.",
+        confirmText = "Delete",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            showDeleteConfirm = false
+            deleteQueue()
+        },
+        onDismissRequest = { showDeleteConfirm = false }
+    )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

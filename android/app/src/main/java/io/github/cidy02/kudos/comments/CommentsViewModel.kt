@@ -45,6 +45,9 @@ class CommentsViewModel(
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
 
+    private val _isDraftRestored = MutableStateFlow(false)
+    val isDraftRestored: StateFlow<Boolean> = _isDraftRestored.asStateFlow()
+
     private val _submitting = MutableStateFlow(false)
     val submitting: StateFlow<Boolean> = _submitting.asStateFlow()
 
@@ -74,12 +77,16 @@ class CommentsViewModel(
 
     fun load(page: Int = 1, focusedId: Long? = null) {
         val target = _currentTarget.value ?: return
+        println("Loading comments for target=$target, focusedId=$focusedId")
         _focusedCommentId.value = focusedId
         _replyTarget.value = null
         _editTarget.value = null
         viewModelScope.launch {
+            println("Coroutine launched for load")
             _state.value = CommentsUiState.Loading
-            when (val result = repository.loadThread(target, page, focusedId)) {
+            val result = repository.loadThread(target, page, focusedId)
+            println("Repository returned: $result")
+            when (result) {
                 is AO3Result.Success -> {
                     val thread = result.value.withSort(_order.value)
                     _state.value = CommentsUiState.Loaded(thread)
@@ -87,6 +94,7 @@ class CommentsViewModel(
                     // comment to scroll to" (e.g. from a notification deep link), not a
                     // reply target, so it must not be used as parentId here — reply
                     // drafts are restored separately in startReply().
+                    println("Fetching draft for workId=${target.workId}, parentId=null")
                     val draftContent = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
@@ -94,6 +102,7 @@ class CommentsViewModel(
                         username = currentUsername
                     )
                     if (draftContent != null) _draft.value = draftContent
+                    _isDraftRestored.value = true
                 }
                 is AO3Result.Failure -> {
                     _state.value = if (result.error == AO3Error.AuthenticationRequired) {

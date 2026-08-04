@@ -26,7 +26,8 @@ class LibraryRepository(
                 items = items,
                 userTags = workRepository.allUserTags(),
                 collections = workRepository.allCollections(),
-                privacy = settings.privacy
+                privacy = settings.privacy,
+                confirmBeforeDelete = settings.app.confirmBeforeDelete
             )
         }
     }

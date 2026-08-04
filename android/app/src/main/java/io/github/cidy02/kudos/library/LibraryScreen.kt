@@ -48,6 +48,7 @@ import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -211,50 +212,32 @@ fun LibraryScreen(
         )
     }
 
-    if (confirmBulkRemove) {
-        val count = state.selectedCount
-        AlertDialog(
-            onDismissRequest = { confirmBulkRemove = false },
-            title = {
-                Text(if (count == 1) "Remove 1 work?" else "Remove $count works?")
-            },
-            text = {
-                Text("Selected works move to Recently Deleted for 90 days.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmBulkRemove = false
-                        viewModel.bulkSoftDelete()
-                    }
-                ) { Text("Remove") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmBulkRemove = false }) { Text("Cancel") }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = confirmBulkRemove,
+        title = if (state.selectedCount == 1) "Remove 1 work?" else "Remove ${state.selectedCount} works?",
+        text = "Selected works move to Recently Deleted for 90 days.",
+        confirmText = "Remove",
+        confirmBeforeDelete = state.confirmBeforeDelete,
+        onConfirm = {
+            confirmBulkRemove = false
+            viewModel.bulkSoftDelete()
+        },
+        onDismissRequest = { confirmBulkRemove = false }
+    )
 
-    confirmRemoveOne?.let { workId ->
-        AlertDialog(
-            onDismissRequest = { confirmRemoveOne = null },
-            title = { Text("Remove from Library?") },
-            text = {
-                Text("This work moves to Recently Deleted for 90 days.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmRemoveOne = null
-                        viewModel.softDeleteOne(workId)
-                    }
-                ) { Text("Remove") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmRemoveOne = null }) { Text("Cancel") }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = confirmRemoveOne != null,
+        title = "Remove from Library?",
+        text = "This work moves to Recently Deleted for 90 days.",
+        confirmText = "Remove",
+        confirmBeforeDelete = state.confirmBeforeDelete,
+        onConfirm = {
+            val workId = confirmRemoveOne ?: return@DestructiveConfirmation
+            confirmRemoveOne = null
+            viewModel.softDeleteOne(workId)
+        },
+        onDismissRequest = { confirmRemoveOne = null }
+    )
 
     createQueueName?.let { draft ->
         AlertDialog(

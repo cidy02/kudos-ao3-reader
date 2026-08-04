@@ -66,7 +66,14 @@ class WorkImporter(
         val base = reviveIfNeeded(existing, merged)
 
         return when (val download = downloader.download(summary.id)) {
-            is AO3Result.Failure -> WorkImportResult.Failure(base, download.error)
+            is AO3Result.Failure -> {
+                if (download.error is AO3Error.NotFound) {
+                    val updated = workRepository.upsert(base.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
+                    WorkImportResult.Failure(updated, download.error)
+                } else {
+                    WorkImportResult.Failure(base, download.error)
+                }
+            }
             is AO3Result.Success -> persistDownloadedEpub(base, download.value)
         }
     }
@@ -90,7 +97,14 @@ class WorkImporter(
             ?: return WorkImportResult.Failure(work, AO3Error.Validation("No AO3 work id found for this work."))
 
         return when (val download = downloader.download(workId)) {
-            is AO3Result.Failure -> WorkImportResult.Failure(work, download.error)
+            is AO3Result.Failure -> {
+                if (download.error is AO3Error.NotFound) {
+                    val updated = workRepository.upsert(work.copy(ao3Unavailable = true, lastAvailabilityCheck = Instant.now(), lastModifiedAt = Instant.now()))
+                    WorkImportResult.Failure(updated, download.error)
+                } else {
+                    WorkImportResult.Failure(work, download.error)
+                }
+            }
             is AO3Result.Success -> persistDownloadedEpub(work, download.value)
         }
     }

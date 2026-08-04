@@ -69,6 +69,9 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentThread
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentWorkAuthor
 import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.CommentAvatar
 import io.github.cidy02.kudos.ui.components.CommentParticipantBadge
 import kotlinx.coroutines.launch
@@ -86,6 +89,7 @@ fun CommentsScreen(
     onLogin: () -> Unit,
     currentUsername: String? = null,
     draftStore: CommentDraftStore? = null,
+    settingsRepository: SettingsRepository? = null,
     focusedCommentId: Long? = null
 ) {
     val viewModel: CommentsViewModel = viewModel(
@@ -101,6 +105,8 @@ fun CommentsScreen(
     }
 
     val state by viewModel.state.collectAsState()
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState?.value ?: KudosSettings.Defaults
     val draft by viewModel.draft.collectAsState()
     val submitting by viewModel.submitting.collectAsState()
     val message by viewModel.message.collectAsState()
@@ -122,27 +128,19 @@ fun CommentsScreen(
         }
     }
 
-    if (pendingDeleteComment != null) {
-        AlertDialog(
-            onDismissRequest = { pendingDeleteComment = null },
-            title = { Text("Delete comment?") },
-            text = { Text("This will permanently remove your comment from AO3.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val comment = pendingDeleteComment!!
-                        pendingDeleteComment = null
-                        viewModel.deleteComment(comment)
-                    }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteComment = null }) { Text("Cancel") }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = pendingDeleteComment != null,
+        title = "Delete comment?",
+        text = "This will permanently remove your comment from AO3.",
+        confirmText = "Delete",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            val comment = pendingDeleteComment ?: return@DestructiveConfirmation
+            pendingDeleteComment = null
+            viewModel.deleteComment(comment)
+        },
+        onDismissRequest = { pendingDeleteComment = null }
+    )
 
     when (val current = state) {
         CommentsUiState.Loading -> {

@@ -172,6 +172,30 @@ class WorkUpdateCheckerFailureBackoffTest {
         assertNotNull("a failed check must still stamp lastUpdateCheck", after?.lastUpdateCheck)
         assertEquals(saved.chapters, after?.chapters)
     }
+
+    @Test
+    fun includesQueuedThenFavoritedWorksInDefaultEligibility() = runTest {
+        val saved = repository.upsert(
+            work(id = "w1", isComplete = false, sourceUrl = "https://archiveofourown.org/works/123", lastCheck = null).copy(
+                isSaved = false,
+                isFavorite = true,
+                isQueuedForLater = true
+            )
+        )
+        
+        var fetched = false
+        val mockMetadata = object : AO3WorkMetadataRepository() {
+            override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> {
+                fetched = true
+                return AO3Result.Success(AO3WorkMetadata(chapters = "2/?"))
+            }
+        }
+        val checker = WorkUpdateChecker(repository, mockMetadata)
+        
+        checker.checkForUpdates(emptyList()) // relies on listSavedWorks()
+        
+        assertTrue("A queued-then-favorited work must be eligible for updates", fetched)
+    }
 }
 
 private fun work(

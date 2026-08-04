@@ -1134,7 +1134,8 @@ private fun ActivityTabContent(
                         inboxRepository = inboxRepository,
                         commentRepository = commentRepository,
                         currentUsername = username,
-                        onOpenWorkComments = onOpenWorkComments
+                        onOpenWorkComments = onOpenWorkComments,
+                        settingsRepository = listRepository.settingsRepository
                     )
                 } else {
                     EmptyStateCard(

@@ -58,9 +58,18 @@ branch, touch only its files, and never revert another agent's commits.**
    [`TASKS.md`](TASKS.md)** (the Bugs / Feature Ideas / UI Polish registries).
 3. If your work touches the reader or the migration, read
    **`READIUM_MIGRATION_NOTES.md`** (gitignored, local-only — ask the human if absent).
-4. Run `git status` + `git branch --show-current`. Know where you are and that the
+4. **Before writing any Swift code**, skim **`docs/xcode/latest/`** (gitignored,
+   local-only). This is Apple's own LLM-oriented Markdown documentation, bundled
+   inside Xcode and synced into the repo via `Scripts/sync-xcode-docs.sh` — current
+   platform APIs and best practices (SwiftUI, SwiftData, Foundation, Swift
+   Concurrency, Liquid Glass, etc.) written for an AI writing Apple-platform code,
+   not general web docs. If the directory is missing or looks stale for the SDK
+   you're targeting, run `Scripts/sync-xcode-docs.sh` to refresh it before
+   proceeding — don't guess at current API shape from training data when this is
+   sitting right there.
+5. Run `git status` + `git branch --show-current`. Know where you are and that the
    tree is clean before you start.
-5. **Claim your task in `TASKS.md`** (set `Owner` + `🔄 IN PROGRESS`) before editing.
+6. **Claim your task in `TASKS.md`** (set `Owner` + `🔄 IN PROGRESS`) before editing.
    If a task is already in progress under another owner, pick a different one.
 
 ## Git workflow

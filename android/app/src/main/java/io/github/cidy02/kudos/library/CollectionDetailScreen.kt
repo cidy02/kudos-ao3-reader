@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -220,62 +221,28 @@ fun CollectionDetailScreen(
         )
     }
 
-    if (confirmDelete) {
-        val name = collection?.name.orEmpty()
-        AlertDialog(
-            onDismissRequest = { if (!working) confirmDelete = false },
-            title = { Text(if (name.isBlank()) "Delete collection?" else "Delete “$name”?") },
-            text = {
-                Text(
-                    "The collection moves to Recently Deleted for 90 days. Works stay in " +
-                        "your Library."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !working,
-                    onClick = { deleteCollection() }
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !working,
-                    onClick = { confirmDelete = false }
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = confirmDelete,
+        title = if (collection?.name.orEmpty().isBlank()) "Delete collection?" else "Delete “${collection?.name}”?",
+        text = "The collection moves to Recently Deleted for 90 days. Works stay in your Library.",
+        confirmBeforeDelete = confirmBeforeDelete,
+        onConfirm = { deleteCollection() },
+        onDismissRequest = { confirmDelete = false }
+    )
 
-    pendingRemoveWork?.let { work ->
-        AlertDialog(
-            onDismissRequest = { if (!working) pendingRemoveWork = null },
-            title = { Text("Remove “${work.title}”?") },
-            text = { Text("This only removes it from this collection — the work stays in your Library.") },
-            confirmButton = {
-                TextButton(
-                    enabled = !working,
-                    onClick = {
-                        pendingRemoveWork = null
-                        removeWork(work.id)
-                    }
-                ) {
-                    Text("Remove")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !working,
-                    onClick = { pendingRemoveWork = null }
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = pendingRemoveWork != null,
+        title = "Remove “${pendingRemoveWork?.title}”?",
+        text = "This only removes it from this collection — the work stays in your Library.",
+        confirmText = "Remove",
+        confirmBeforeDelete = confirmBeforeDelete,
+        onConfirm = {
+            val workId = pendingRemoveWork?.id ?: return@DestructiveConfirmation
+            pendingRemoveWork = null
+            removeWork(workId)
+        },
+        onDismissRequest = { pendingRemoveWork = null }
+    )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

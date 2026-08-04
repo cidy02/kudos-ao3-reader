@@ -56,6 +56,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedSearch
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
@@ -65,6 +67,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
@@ -84,11 +87,14 @@ fun SearchScreen(
     onOpenWork: (AO3WorkSummary) -> Unit,
     repository: AO3SearchRepository = remember { AO3SearchRepository() },
     savedSearchRepository: SavedSearchRepository? = null,
-    workRepository: WorkRepository? = null
+    workRepository: WorkRepository? = null,
+    settingsRepository: SettingsRepository? = null
 ) {
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(repository, savedSearchRepository, workRepository)
     )
+    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState?.value ?: KudosSettings.Defaults
     val filters by viewModel.filters.collectAsState()
     val state by viewModel.state.collectAsState()
     val savedSearches by viewModel.savedSearches.collectAsState()
@@ -99,6 +105,7 @@ fun SearchScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
+    var pendingDeleteSearch by remember { mutableStateOf<SavedSearch?>(null) }
     
     // Batch seed for result cards (Expand all / Collapse all). Individual cards
     // keep their own local expand state after the seed — matching iOS.
@@ -113,6 +120,19 @@ fun SearchScreen(
         showSaveDialog = false
         saveName = ""
     }
+
+    DestructiveConfirmation(
+        show = pendingDeleteSearch != null,
+        title = "Delete saved search?",
+        text = "This will permanently remove “${pendingDeleteSearch?.name}” from your device.",
+        confirmBeforeDelete = true, // Always confirm for saved searches
+        onConfirm = {
+            val id = pendingDeleteSearch?.id ?: return@DestructiveConfirmation
+            pendingDeleteSearch = null
+            viewModel.deleteSavedSearch(id)
+        },
+        onDismissRequest = { pendingDeleteSearch = null }
+    )
 
     Column(
         modifier = Modifier
@@ -199,7 +219,7 @@ fun SearchScreen(
                                 ?.let(::savedSearchSubtitle)
                         },
                         onRun = { viewModel.runSavedSearch(it) },
-                        onDelete = { viewModel.deleteSavedSearch(it) },
+                        onDelete = { pendingDeleteSearch = it },
                         modifier = Modifier.weight(1f)
                     )
                 } else {
@@ -319,7 +339,7 @@ private fun SavedSearchesList(
     savedSearches: List<SavedSearch>,
     subtitleFor: (SavedSearch) -> String?,
     onRun: (SavedSearch) -> Unit,
-    onDelete: (String) -> Unit,
+    onDelete: (SavedSearch) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -337,7 +357,7 @@ private fun SavedSearchesList(
                 saved = saved,
                 subtitle = subtitleFor(saved),
                 onRun = { onRun(saved) },
-                onDelete = { onDelete(saved.id) }
+                onDelete = { onDelete(saved) }
             )
         }
     }

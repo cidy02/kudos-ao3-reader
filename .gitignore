@@ -5,6 +5,8 @@
 Icon?
 
 # ---- Xcode: build output & DerivedData ----
+# AdditionalDocumentation sync (Scripts/sync-xcode-docs.sh) — local only
+docs/xcode/
 build/
 DerivedData/
 *.xcuserstate
