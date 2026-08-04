@@ -167,7 +167,11 @@ fun FandomWorksScreen(
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        // weight(fill = false) so the selection bar below keeps its
+                        // space when selecting, without stretching the list otherwise.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
                     ) {
                         item {
                             KudosSectionHeader(
@@ -204,33 +208,33 @@ fun FandomWorksScreen(
                 }
             }
         }
+        if (selection.isSelecting && workImporter != null) {
+            RemoteWorkSelectionBar(
+                state = selection,
+                busy = bulkBusy,
+                onSaveToLibrary = {
+                    val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
+                    scope.launch {
+                        bulkBusy = true
+                        bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
+                        bulkBusy = false
+                        selection.exit()
+                    }
+                },
+                onSaveForLater = {
+                    val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
+                    val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
+                    scope.launch {
+                        bulkBusy = true
+                        bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
+                        bulkBusy = false
+                        selection.exit()
+                    }
+                }
+            )
+        }
     }
 
-    if (selection.isSelecting && workImporter != null) {
-        RemoteWorkSelectionBar(
-            state = selection,
-            busy = bulkBusy,
-            onSaveToLibrary = {
-                val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
-                scope.launch {
-                    bulkBusy = true
-                    bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
-                    bulkBusy = false
-                    selection.exit()
-                }
-            },
-            onSaveForLater = {
-                val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
-                val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
-                scope.launch {
-                    bulkBusy = true
-                    bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
-                    bulkBusy = false
-                    selection.exit()
-                }
-            }
-        )
-    }
 
     bulkStatus?.let { message ->
         androidx.compose.material3.AlertDialog(

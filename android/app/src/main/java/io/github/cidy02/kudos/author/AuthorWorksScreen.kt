@@ -126,7 +126,11 @@ fun AuthorWorksScreen(
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        // weight(fill = false) so the selection bar below keeps its
+                        // space when selecting, without stretching the list otherwise.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
                     ) {
                         item {
                             KudosSectionHeader(
