@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.files.FileWriteResult
+import io.github.cidy02.kudos.files.ImportedFileFormat
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -129,12 +130,6 @@ class WorkImporter(
         displayName: String?,
         bytes: ByteArray
     ): WorkImportResult {
-        if (!isSupportedFileName(displayName)) {
-            return WorkImportResult.Failure(
-                null,
-                AO3Error.Validation("Unsupported file type. Only EPUB, PDF, HTML, and TXT are supported.")
-            )
-        }
         if (bytes.isEmpty()) {
             return WorkImportResult.Failure(
                 null,
@@ -143,16 +138,24 @@ class WorkImporter(
         }
 
         val title = titleFromDisplayName(displayName)
-        val ext = displayName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT) ?: ""
-        
-        val finalBytes = when (ext) {
-            "pdf" -> io.github.cidy02.kudos.works.converters.PDFWorkConverter().convert(title, bytes)
-            "html", "htm" -> io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(title, bytes)
-            "txt" -> io.github.cidy02.kudos.works.converters.PlainTextWorkConverter().convert(title, bytes)
-            else -> bytes
-        }
 
-        if (ext == "epub" && !looksLikeZip(finalBytes)) {
+        // Sniff the real format rather than trusting the extension: files that
+        // travel through Discord/Reddit arrive renamed (`fic.epub.zip`).
+        val format = ImportedFileFormat.sniff(bytes, displayName)
+        val finalBytes = when (format) {
+            ImportedFileFormat.EPUB -> bytes
+            ImportedFileFormat.PDF ->
+                io.github.cidy02.kudos.works.converters.PDFWorkConverter().convert(title, bytes)
+            ImportedFileFormat.HTML ->
+                io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(title, bytes)
+            ImportedFileFormat.TEXT ->
+                io.github.cidy02.kudos.works.converters.PlainTextWorkConverter().convert(title, bytes)
+            ImportedFileFormat.ZIP, ImportedFileFormat.UNKNOWN -> null
+        } ?: return WorkImportResult.Failure(null, AO3Error.Validation(unsupportedMessage(format)))
+
+        // Every path above either passes an EPUB through or builds one, so the
+        // result must be a ZIP by the time it reaches the file store.
+        if (!looksLikeZip(finalBytes)) {
             return WorkImportResult.Failure(
                 null,
                 AO3Error.Validation("Not a valid EPUB (file is not a ZIP archive).")
@@ -242,6 +245,17 @@ class WorkImporter(
     companion object {
         /** ZIP local-file-header magic — a real EPUB is a ZIP container. */
         private val ZIP_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+
+        /** Format-specific guidance instead of one generic rejection string. */
+        internal fun unsupportedMessage(format: ImportedFileFormat): String = when (format) {
+            ImportedFileFormat.PDF ->
+                "This PDF's text can't be extracted — it's scanned or compressed. " +
+                    "Try exporting it as EPUB, HTML, or plain text first."
+            ImportedFileFormat.ZIP ->
+                "That's a ZIP archive, not an EPUB. Unzip it and import the .epub inside."
+            else ->
+                "Unsupported file type. Kudos can import EPUB, PDF, HTML, and TXT files."
+        }
 
         fun isSupportedFileName(fileName: String?): Boolean {
             if (fileName.isNullOrBlank()) return false

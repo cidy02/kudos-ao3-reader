@@ -41,6 +41,52 @@ private fun KudosThemeMode.toAppTheme(): AppThemeSetting = when (this) {
     KudosThemeMode.Sepia -> AppThemeSetting.Sepia
 }
 
+/**
+ * Reads each shared/opened URI and hands it to [io.github.cidy02.kudos.works.WorkImporter],
+ * returning a one-line summary. Failures are per-file so one bad attachment
+ * doesn't sink the rest of a multi-file share.
+ */
+private suspend fun importExternalFiles(
+    context: android.content.Context,
+    container: KudosAppContainer,
+    uris: List<android.net.Uri>
+): String? {
+    if (uris.isEmpty()) return null
+    val imported = mutableListOf<String>()
+    val failed = mutableListOf<String>()
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        for (uri in uris) {
+            val displayName = io.github.cidy02.kudos.works.ExternalFileImport.displayNameFor(context, uri)
+            val label = displayName?.substringAfterLast('/')?.ifBlank { null } ?: "file"
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }.getOrNull()
+            if (bytes == null) {
+                failed += "$label: couldn't be read"
+                continue
+            }
+            when (val result = container.workImporter.importLocalEpub(displayName, bytes)) {
+                is io.github.cidy02.kudos.works.WorkImportResult.Success ->
+                    imported += "“${result.work.title}”"
+                is io.github.cidy02.kudos.works.WorkImportResult.Failure -> {
+                    val message = (result.error as? io.github.cidy02.kudos.network.ao3.AO3Error.Validation)
+                        ?.message ?: "couldn't be imported"
+                    failed += "$label: $message"
+                }
+            }
+        }
+    }
+    return buildString {
+        if (imported.isNotEmpty()) {
+            append("Added ${imported.size} to your Library: ${imported.joinToString(", ")}.")
+        }
+        if (failed.isNotEmpty()) {
+            if (isNotEmpty()) append("\n\n")
+            append(failed.joinToString("\n"))
+        }
+    }.ifBlank { null }
+}
+
 @Composable
 fun KudosApp(container: KudosAppContainer) {
     val settings by container.settingsRepository.settings
@@ -57,6 +103,31 @@ fun KudosApp(container: KudosAppContainer) {
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
     var showBugReport by remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    // "Open with Kudos" / "Share to Kudos": MainActivity queues the incoming
+    // URIs, we import them and report the outcome. Held until onboarding is
+    // done so a first-launch share isn't swallowed by the Welcome screen.
+    val context = LocalContext.current
+    val pendingImports by io.github.cidy02.kudos.works.ExternalFileImport.pending.collectAsState()
+    var importStatus by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(pendingImports, hasCompletedOnboarding) {
+        if (pendingImports.isEmpty() || hasCompletedOnboarding != true) return@LaunchedEffect
+        val uris = io.github.cidy02.kudos.works.ExternalFileImport.consume()
+        importStatus = importExternalFiles(context, container, uris)
+    }
+
+    if (importStatus != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { importStatus = null },
+            title = { androidx.compose.material3.Text("Import") },
+            text = { androidx.compose.material3.Text(importStatus.orEmpty()) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { importStatus = null }) {
+                    androidx.compose.material3.Text("OK")
+                }
+            }
+        )
+    }
 
     KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
         // App-wide shake-to-report (iOS UIWindow.motionEnded parity). Sensor

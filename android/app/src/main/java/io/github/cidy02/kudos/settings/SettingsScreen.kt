@@ -193,7 +193,7 @@ fun SettingsScreen(
                 val failures = mutableListOf<String>()
                 for (uri in uris) {
                     val displayName = withContext(Dispatchers.IO) {
-                        queryDisplayName(context, uri)
+                        io.github.cidy02.kudos.works.ExternalFileImport.displayNameFor(context, uri)
                     }
                     val label = displayName
                         ?.substringAfterLast('/')
@@ -259,7 +259,7 @@ fun SettingsScreen(
                 val failures = mutableListOf<String>()
                 for (uri in uris) {
                     val displayName = withContext(Dispatchers.IO) {
-                        queryDisplayName(context, uri)
+                        io.github.cidy02.kudos.works.ExternalFileImport.displayNameFor(context, uri)
                     }
                     val label = displayName
                         ?.substringAfterLast('/')
@@ -1337,25 +1337,6 @@ private fun normalizeAccentHex(raw: String): String? {
     return "#${expanded.uppercase()}"
 }
 
-private fun queryDisplayName(context: android.content.Context, uri: Uri): String? {
-    val fromResolver = runCatching {
-        context.contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) cursor.getString(index) else null
-            } else {
-                null
-            }
-        }
-    }.getOrNull()
-    return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment
-}
 
 /**
  * Compact multi-file import summary: successes first, then each failure.
