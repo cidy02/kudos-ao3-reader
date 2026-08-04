@@ -14,7 +14,14 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentThread
 import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class CommentOrder {
+    OldestFirst,
+    NewestFirst
+}
 
 sealed interface CommentsUiState {
     data object Loading : CommentsUiState
@@ -30,28 +37,34 @@ class CommentsViewModel(
     private val currentUsername: String? = null
 ) : ViewModel() {
     private val _state = MutableStateFlow<CommentsUiState>(CommentsUiState.Loading)
-    val state: StateFlow<CommentsUiState> = _state
+    val state: StateFlow<CommentsUiState> = _state.asStateFlow()
+
+    private val _order = MutableStateFlow(CommentOrder.OldestFirst)
+    val order: StateFlow<CommentOrder> = _order.asStateFlow()
 
     private val _draft = MutableStateFlow("")
-    val draft: StateFlow<String> = _draft
+    val draft: StateFlow<String> = _draft.asStateFlow()
 
     private val _submitting = MutableStateFlow(false)
-    val submitting: StateFlow<Boolean> = _submitting
+    val submitting: StateFlow<Boolean> = _submitting.asStateFlow()
 
     private val _message = MutableStateFlow<String?>(null)
-    val message: StateFlow<String?> = _message
+    val message: StateFlow<String?> = _message.asStateFlow()
 
     private val _currentTarget = MutableStateFlow(initialTarget)
-    val currentTarget: StateFlow<AO3CommentTarget?> = _currentTarget
+    val currentTarget: StateFlow<AO3CommentTarget?> = _currentTarget.asStateFlow()
 
     private val _focusedCommentId = MutableStateFlow<Long?>(null)
-    val focusedCommentId: StateFlow<Long?> = _focusedCommentId
+    val focusedCommentId: StateFlow<Long?> = _focusedCommentId.asStateFlow()
 
     private val _replyTarget = MutableStateFlow<ReplyTarget?>(null)
-    val replyTarget: StateFlow<ReplyTarget?> = _replyTarget
+    val replyTarget: StateFlow<ReplyTarget?> = _replyTarget.asStateFlow()
 
     private val _editTarget = MutableStateFlow<AO3Comment?>(null)
-    val editTarget: StateFlow<AO3Comment?> = _editTarget
+    val editTarget: StateFlow<AO3Comment?> = _editTarget.asStateFlow()
+
+    /** Tracks the hash of the last successfully or ambiguously submitted content to prevent double-posts. */
+    private var lastSubmittedContentHash: Int? = null
 
     init {
         load(1)
@@ -68,12 +81,13 @@ class CommentsViewModel(
             _state.value = CommentsUiState.Loading
             when (val result = repository.loadThread(target, page, focusedId)) {
                 is AO3Result.Success -> {
-                    _state.value = CommentsUiState.Loaded(result.value)
+                    val thread = result.value.withSort(_order.value)
+                    _state.value = CommentsUiState.Loaded(thread)
                     // Load draft if applicable
                     val draftContent = draftStore?.getDraft(
                         workId = target.workId,
                         chapterId = (target as? AO3CommentTarget.Chapter)?.chapterId,
-                        parentId = focusedId, // focusedId is the parent when loading a specific thread
+                        parentId = focusedId,
                         username = currentUsername
                     )
                     if (draftContent != null) _draft.value = draftContent
@@ -152,6 +166,12 @@ class CommentsViewModel(
 
         val edit = _editTarget.value
         val reply = _replyTarget.value
+        val contentHash = content.hashCode()
+
+        if (contentHash == lastSubmittedContentHash) {
+            _message.value = "You just posted this. Reload to see if it appeared."
+            return
+        }
 
         viewModelScope.launch {
             _submitting.value = true
@@ -165,6 +185,7 @@ class CommentsViewModel(
 
             when (result) {
                 is AO3Result.Success -> {
+                    lastSubmittedContentHash = contentHash
                     _draft.value = ""
                     _replyTarget.value = null
                     _editTarget.value = null
@@ -178,11 +199,34 @@ class CommentsViewModel(
                     load()
                 }
                 is AO3Result.Failure -> {
-                    _message.value = result.error.toString()
+                    if (result.error is AO3Error.Network) {
+                        // Ambiguous network failure: don't clear draft, block immediate retry of same content.
+                        lastSubmittedContentHash = contentHash
+                        _message.value = "Couldn't confirm this posted — reloading to check."
+                        load()
+                    } else {
+                        _message.value = result.error.toString()
+                    }
                 }
             }
             _submitting.value = false
         }
+    }
+
+    fun setOrder(next: CommentOrder) {
+        _order.value = next
+        val current = _state.value
+        if (current is CommentsUiState.Loaded) {
+            _state.value = current.copy(thread = current.thread.withSort(next))
+        }
+    }
+
+    private fun AO3CommentThread.withSort(order: CommentOrder): AO3CommentThread {
+        val sortedComments = when (order) {
+            CommentOrder.OldestFirst -> comments.sortedBy { it.id }
+            CommentOrder.NewestFirst -> comments.sortedByDescending { it.id }
+        }
+        return copy(comments = sortedComments)
     }
 
     fun clearMessage() {

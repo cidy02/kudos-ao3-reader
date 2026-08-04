@@ -25,6 +25,8 @@ import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
+import io.github.cidy02.kudos.network.ao3.comments.CommentCache
+import io.github.cidy02.kudos.network.ao3.comments.CommentDraftStore
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
@@ -142,8 +144,13 @@ class KudosAppContainer(context: Context) {
         AO3CommentRepository(
             publicClient = ao3Client,
             authenticatedClient = authenticatedClient,
-            pseudStore = postingPseudStore
+            pseudStore = postingPseudStore,
+            cache = CommentCache(appContext!!)
         )
+    }
+
+    val commentDraftStore: CommentDraftStore by lazy {
+        CommentDraftStore(appContext!!)
     }
 
     val inboxRepository: AO3InboxRepository by lazy {

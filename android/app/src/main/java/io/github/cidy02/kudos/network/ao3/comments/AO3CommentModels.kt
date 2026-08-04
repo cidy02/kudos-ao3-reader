@@ -2,10 +2,12 @@ package io.github.cidy02.kudos.network.ao3.comments
 
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteUrls
+import kotlinx.serialization.Serializable
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+@Serializable
 sealed interface AO3CommentTarget {
     val workId: Long
 
@@ -16,6 +18,7 @@ sealed interface AO3CommentTarget {
     fun pageUrl(page: Int = 1): String
     fun defaultSubmitUrl(): String
 
+    @Serializable
     data class Work(override val workId: Long) : AO3CommentTarget {
         override fun pageUrl(page: Int): String {
             val builder = AO3Constants.baseHttpUrl.newBuilder()
@@ -33,6 +36,7 @@ sealed interface AO3CommentTarget {
         override fun defaultSubmitUrl(): String = AO3WriteUrls.commentsEndpoint(workId)
     }
 
+    @Serializable
     data class Chapter(
         override val workId: Long,
         val chapterId: Long
@@ -157,12 +161,14 @@ enum class AO3CommentParticipantRole(val label: String) {
  * One work-preface author identity captured from the comments page byline.
  * Used for Author-role resolution (display name + optional account username).
  */
+@Serializable
 data class AO3CommentWorkAuthor(
     val displayName: String,
     val username: String? = null,
     val profileUrl: String? = null
 )
 
+@Serializable
 data class AO3CommentThread(
     val target: AO3CommentTarget,
     val comments: List<AO3Comment>,
@@ -181,6 +187,7 @@ data class AO3CommentThread(
     val totalComments: Int? = null
 )
 
+@Serializable
 data class AO3Comment(
     val id: String?,
     val author: AO3CommentAuthor,
@@ -235,6 +242,7 @@ data class AO3Comment(
         }
 }
 
+@Serializable
 data class AO3CommentAuthor(
     val name: String,
     val profileUrl: String? = null,
@@ -242,6 +250,7 @@ data class AO3CommentAuthor(
     val username: String? = null
 )
 
+@Serializable
 data class AO3CommentForm(
     val actionUrl: String,
     val authenticityToken: String,

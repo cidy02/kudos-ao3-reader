@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -168,6 +169,7 @@ fun AccountScreen(
     var writingKind by rememberSaveable { mutableStateOf(AccountWritingKind.Works.name) }
     var activityKind by rememberSaveable { mutableStateOf(AccountActivityKind.History.name) }
     var selectedFandom by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailedMode by rememberSaveable { mutableStateOf(false) }
 
     val selectedTab = AccountHubTab.entries.find { it.name == tab } ?: AccountHubTab.Overview
     val selectedReading =
@@ -229,6 +231,8 @@ fun AccountScreen(
                     onKindChange = { readingKind = it.name },
                     listRepository = listRepository,
                     workRepository = workRepository,
+                    detailedMode = detailedMode,
+                    onToggleDetailed = { detailedMode = !detailedMode },
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     onOpenCollection = onOpenCollection,
@@ -244,6 +248,8 @@ fun AccountScreen(
                     onFandomChange = { selectedFandom = it },
                     listRepository = listRepository,
                     workRepository = workRepository,
+                    detailedMode = detailedMode,
+                    onToggleDetailed = { detailedMode = !detailedMode },
                     onLogin = onLogin,
                     onOpenWork = onOpenWork
                 )
@@ -946,23 +952,38 @@ private fun ReadingTabContent(
     onKindChange: (AccountReadingKind) -> Unit,
     listRepository: AccountListRepository,
     workRepository: WorkRepository,
+    detailedMode: Boolean,
+    onToggleDetailed: () -> Unit,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit,
     onOpenCollection: (AO3Collection) -> Unit,
     onOpenAO3Collections: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-        AccountListKindPicker(
-            label = kind.label,
-            icon = when (kind) {
-                AccountReadingKind.MarkedForLater -> Icons.Outlined.Schedule
-                AccountReadingKind.Subscriptions -> Icons.Outlined.NotificationsNone
-                AccountReadingKind.Bookmarks -> Icons.Outlined.BookmarkBorder
-                AccountReadingKind.Collections -> Icons.Outlined.Collections
-            },
-            options = AccountReadingKind.entries.map { it.label to it },
-            onSelect = onKindChange
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AccountListKindPicker(
+                label = kind.label,
+                icon = when (kind) {
+                    AccountReadingKind.MarkedForLater -> Icons.Outlined.Schedule
+                    AccountReadingKind.Subscriptions -> Icons.Outlined.NotificationsNone
+                    AccountReadingKind.Bookmarks -> Icons.Outlined.BookmarkBorder
+                    AccountReadingKind.Collections -> Icons.Outlined.Collections
+                },
+                options = AccountReadingKind.entries.map { it.label to it },
+                onSelect = onKindChange,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onToggleDetailed) {
+                Icon(
+                    imageVector = if (detailedMode) Icons.Outlined.GridView else Icons.AutoMirrored.Outlined.List,
+                    contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
+                )
+            }
+        }
 
         if (!signedIn) {
             SignInRequiredCard(onLogin)
@@ -984,6 +1005,7 @@ private fun ReadingTabContent(
                     listType = listType,
                     listRepository = listRepository,
                     workRepository = workRepository,
+                    detailedMode = detailedMode,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     sectionTitle = kind.label
@@ -1002,16 +1024,31 @@ private fun WritingTabContent(
     onFandomChange: (String?) -> Unit,
     listRepository: AccountListRepository,
     workRepository: WorkRepository,
+    detailedMode: Boolean,
+    onToggleDetailed: () -> Unit,
     onLogin: () -> Unit,
     onOpenWork: (AO3WorkSummary) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-        AccountListKindPicker(
-            label = kind.label,
-            icon = Icons.Outlined.Description,
-            options = AccountWritingKind.entries.map { it.label to it },
-            onSelect = onKindChange
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AccountListKindPicker(
+                label = kind.label,
+                icon = Icons.Outlined.Description,
+                options = AccountWritingKind.entries.map { it.label to it },
+                onSelect = onKindChange,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onToggleDetailed) {
+                Icon(
+                    imageVector = if (detailedMode) Icons.Outlined.GridView else Icons.AutoMirrored.Outlined.List,
+                    contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
+                )
+            }
+        }
 
         if (!signedIn) {
             SignInRequiredCard(onLogin)
@@ -1024,6 +1061,7 @@ private fun WritingTabContent(
                     listType = AccountListType.MyWorks,
                     listRepository = listRepository,
                     workRepository = workRepository,
+                    detailedMode = detailedMode,
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     sectionTitle = "Works",
@@ -1084,6 +1122,7 @@ private fun ActivityTabContent(
                     listType = AccountListType.History,
                     listRepository = listRepository,
                     workRepository = workRepository,
+                    detailedMode = false, // History always compact in activity tab
                     onLogin = onLogin,
                     onOpenWork = onOpenWork,
                     sectionTitle = "My AO3 History"
@@ -1113,10 +1152,11 @@ private fun <T> AccountListKindPicker(
     label: String,
     icon: ImageVector,
     options: List<Pair<String, T>>,
-    onSelect: (T) -> Unit
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth()) {
         Card(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
@@ -1182,6 +1222,7 @@ private fun HubWorksPane(
     fandomFilter: String? = null,
     onFandomFilterChange: (String?) -> Unit = {},
     showFandomChips: Boolean = false,
+    detailedMode: Boolean = false,
     viewModel: AccountListViewModel = viewModel(
         key = "hub-${listType.listKey}",
         factory = AccountListViewModel.factory(listType, listRepository, workRepository)
@@ -1220,110 +1261,165 @@ private fun HubWorksPane(
                 allWorks.filter { work -> work.remote.fandoms.any { it == fandomFilter } }
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = WorkCoverCardMetrics.width),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                if (showFandomChips && fandomCounts.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = "Fandom",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                item {
-                                    FilterChip(
-                                        selected = fandomFilter == null,
-                                        onClick = { onFandomFilterChange(null) },
-                                        label = { Text("All") }
-                                    )
-                                }
-                                items(fandomCounts, key = { it.key }) { entry ->
-                                    val label = if (entry.value > 1) {
-                                        "${entry.key} (${entry.value})"
-                                    } else {
-                                        entry.key
+            if (detailedMode) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = WorkCoverCardMetrics.width),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (showFandomChips && fandomCounts.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Fandom",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        FilterChip(
+                                            selected = fandomFilter == null,
+                                            onClick = { onFandomFilterChange(null) },
+                                            label = { Text("All") }
+                                        )
                                     }
-                                    FilterChip(
-                                        selected = fandomFilter == entry.key,
-                                        onClick = { onFandomFilterChange(entry.key) },
-                                        label = {
-                                            Text(
-                                                text = label,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                    items(fandomCounts, key = { it.key }) { entry ->
+                                        val label = if (entry.value > 1) {
+                                            "${entry.key} (${entry.value})"
+                                        } else {
+                                            entry.key
                                         }
-                                    )
+                                        FilterChip(
+                                            selected = fandomFilter == entry.key,
+                                            onClick = { onFandomFilterChange(entry.key) },
+                                            label = {
+                                                Text(
+                                                    text = label,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    KudosSectionHeader(
-                        title = sectionTitle,
-                        subtitle = if (current.page.totalPages > 1) {
-                            "Page ${current.page.currentPage} of ${current.page.totalPages}"
-                        } else {
-                            null
-                        }
-                    )
-                }
-
-                if (works.isEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        EmptyStateCard(
-                            title = "No works in this fandom",
-                            message = "Try another fandom chip or clear the filter."
+                        KudosSectionHeader(
+                            title = sectionTitle,
+                            subtitle = if (current.page.totalPages > 1) {
+                                "Page ${current.page.currentPage} of ${current.page.totalPages}"
+                            } else {
+                                null
+                            }
                         )
                     }
-                } else {
-                    gridItems(works, key = { "${listType.listKey}-${it.id}" }) { work ->
-                        if (work.local != null) {
-                            LibraryCarouselCard(
-                                display = LibraryDisplayItem(
-                                    item = LibraryWorkListItem(
-                                        work = work.local,
-                                        userTags = emptyList(), // Later: pair tags too
-                                        collections = emptyList()
-                                    )
-                                ),
-                                showProgress = true,
-                                footerOverride = null,
-                                actions = LibraryCardActions(
-                                    onOpenWork = { onOpenWork(work.remote) },
-                                    onOpenReader = { onOpenWork(work.remote) }, // Detail handles read
-                                    onToggleFavorite = { },
-                                    onToggleFinished = { },
-                                    onRemove = { },
-                                    onSetSaved = { _, _ -> },
-                                    onSelect = { },
-                                    onReveal = { },
-                                    onAddToQueue = { },
-                                    onAddToCollection = { },
-                                    onOpenComments = { }
-                                )
+
+                    if (works.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            EmptyStateCard(
+                                title = "No works in this fandom",
+                                message = "Try another fandom chip or clear the filter."
                             )
-                        } else {
-                            AccountRemoteWorkCover(work = work.remote, onOpen = { onOpenWork(work.remote) })
+                        }
+                    } else {
+                        gridItems(works, key = { "${listType.listKey}-${it.id}" }) { work ->
+                            if (work.local != null) {
+                                LibraryCarouselCard(
+                                    display = LibraryDisplayItem(
+                                        item = LibraryWorkListItem(
+                                            work = work.local,
+                                            userTags = emptyList(), // Later: pair tags too
+                                            collections = emptyList()
+                                        )
+                                    ),
+                                    showProgress = true,
+                                    footerOverride = null,
+                                    actions = LibraryCardActions(
+                                        onOpenWork = { onOpenWork(work.remote) },
+                                        onOpenReader = { onOpenWork(work.remote) }, // Detail handles read
+                                        onToggleFavorite = { },
+                                        onToggleFinished = { },
+                                        onRemove = { },
+                                        onSetSaved = { _, _ -> },
+                                        onSelect = { },
+                                        onReveal = { },
+                                        onAddToQueue = { },
+                                        onAddToCollection = { },
+                                        onOpenComments = { }
+                                    )
+                                )
+                            } else {
+                                AccountRemoteWorkCover(work = work.remote, onOpen = { onOpenWork(work.remote) })
+                            }
+                        }
+                    }
+
+                    if (current.page.totalPages > 1) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            PaginationControls(
+                                page = current.page.currentPage,
+                                totalPages = current.page.totalPages,
+                                onLoadPage = viewModel::load
+                            )
                         }
                     }
                 }
-
-                if (current.page.totalPages > 1) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        PaginationControls(
-                            page = current.page.currentPage,
-                            totalPages = current.page.totalPages,
-                            onLoadPage = viewModel::load
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (showFandomChips && fandomCounts.isNotEmpty()) {
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Fandom",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        FilterChip(
+                                            selected = fandomFilter == null,
+                                            onClick = { onFandomFilterChange(null) },
+                                            label = { Text("All") }
+                                        )
+                                    }
+                                    items(fandomCounts, key = { it.key }) { entry ->
+                                        FilterChip(
+                                            selected = fandomFilter == entry.key,
+                                            onClick = { onFandomFilterChange(entry.key) },
+                                            label = { Text(entry.key) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        KudosSectionHeader(title = sectionTitle)
+                    }
+                    items(works, key = { "${listType.listKey}-${it.id}" }) { work ->
+                        AO3WorkCard(
+                            work = work.remote,
+                            onOpenWork = onOpenWork,
+                            modifier = Modifier.fillMaxWidth()
                         )
+                    }
+                    if (current.page.totalPages > 1) {
+                        item {
+                            PaginationControls(
+                                page = current.page.currentPage,
+                                totalPages = current.page.totalPages,
+                                onLoadPage = viewModel::load
+                            )
+                        }
                     }
                 }
             }

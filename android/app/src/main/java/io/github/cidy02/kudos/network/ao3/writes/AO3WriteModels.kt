@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.network.ao3.writes
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class AO3WriteActionKind {
     Kudos,
     Subscribe,
@@ -49,6 +52,7 @@ data class AO3BookmarkState(
 )
 
 /** One option from a write form's `select[name=…pseud_id]`. */
+@Serializable
 data class AO3PostingPseudOption(
     val id: String,
     val name: String,

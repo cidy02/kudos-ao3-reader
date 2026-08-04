@@ -544,7 +544,8 @@ fun AppNavHost(
                 repository = container.commentRepository,
                 currentUsername = commentsAuthState.usernameOrNull,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
-                focusedCommentId = focusedId
+                focusedCommentId = focusedId,
+                draftStore = container.commentDraftStore
             )
         }
 

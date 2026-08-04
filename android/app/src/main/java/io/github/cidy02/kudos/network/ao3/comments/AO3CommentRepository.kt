@@ -16,7 +16,8 @@ class AO3CommentRepository(
     private val authenticatedClient: AO3AuthenticatedClient,
     private val parser: AO3CommentParser = AO3CommentParser(),
     private val formParser: AO3WriteFormParser = AO3WriteFormParser(),
-    private val pseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null
+    private val pseudStore: io.github.cidy02.kudos.auth.AO3PostingPseudStore? = null,
+    private val cache: CommentCache? = null
 ) {
     /**
      * Loads one page of the comment thread. Prefer an authenticated GET when a
@@ -39,17 +40,25 @@ class AO3CommentRepository(
         val response = when (authAttempt) {
             is AO3Result.Success -> authAttempt.value
             is AO3Result.Failure -> {
-                // Not signed in (or session expired): fall back to public HTML.
+                // Not signed in (or session expired): fall back to public HTML or cache.
                 if (authAttempt.error != AO3Error.AuthenticationRequired) {
                     // Still try public — may work for open works.
                 }
                 when (val public = publicClient.get(pageUrl)) {
-                    is AO3Result.Failure -> return public
+                    is AO3Result.Failure -> {
+                        // Network failure: try cache if available.
+                        cache?.load(target, safePage)?.let { return AO3Result.Success(it) }
+                        return public
+                    }
                     is AO3Result.Success -> public.value
                 }
             }
         }
-        return parseThread(response.body, response.url, target, response.statusCode, safePage)
+        val thread = parseThread(response.body, response.url, target, response.statusCode, safePage)
+        if (thread is AO3Result.Success) {
+            cache?.save(thread.value, safePage)
+        }
+        return thread
     }
 
     /**

@@ -45,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -71,6 +73,8 @@ fun QueueDetailScreen(
     var renameDraft by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var reorderMode by remember { mutableStateOf(false) }
+    var detailedMode by remember { mutableStateOf(true) }
+    var expandAll by remember { mutableStateOf(false) }
     val userTags by repository.observeAllUserTags().collectAsState(initial = emptyList())
     val allCollections by repository.observeAllCollections().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -268,6 +272,20 @@ fun QueueDetailScreen(
                                     }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text(if (expandAll) "Collapse All" else "Expand All") },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        expandAll = !expandAll
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (detailedMode) "Show Compact" else "Show Detailed") },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        detailedMode = !detailedMode
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Rename") },
                                     onClick = {
                                         overflowExpanded = false
@@ -327,6 +345,8 @@ fun QueueDetailScreen(
                             item = item,
                             enabled = !working,
                             reorderMode = reorderMode,
+                            detailedMode = detailedMode,
+                            expandAll = expandAll,
                             onOpenWork = {
                                 item.work?.id?.let(onOpenWork)
                             },
@@ -360,66 +380,129 @@ private fun QueueWorkRow(
     item: QueueMembershipItem,
     enabled: Boolean,
     reorderMode: Boolean,
+    detailedMode: Boolean,
+    expandAll: Boolean,
     onOpenWork: () -> Unit,
     onRemove: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    if (detailedMode) {
+        val work = item.work
+        if (work != null) {
+            AO3WorkCard(
+                work = work.toRemoteSummary(),
+                onOpenWork = { onOpenWork() },
+                expandAll = expandAll,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            MissingWorkCard(title = item.title, onRemove = onRemove)
+        }
+    } else {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
         ) {
-            if (reorderMode) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = onMoveUp ?: {}, enabled = onMoveUp != null, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.ArrowDropUp, "Move Up")
-                    }
-                    IconButton(onClick = onMoveDown ?: {}, enabled = onMoveDown != null, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.ArrowDropDown, "Move Down")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (reorderMode) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = onMoveUp ?: {}, enabled = onMoveUp != null, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.ArrowDropUp, "Move Up")
+                        }
+                        IconButton(onClick = onMoveDown ?: {}, enabled = onMoveDown != null, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.ArrowDropDown, "Move Down")
+                        }
                     }
                 }
-            }
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .then(
-                        if (item.work != null && !reorderMode) {
-                            Modifier.clickable(enabled = enabled, onClick = onOpenWork)
-                        } else {
-                            Modifier
-                        }
-                    ),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (item.author.isNotBlank()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (item.work != null && !reorderMode) {
+                                Modifier.clickable(enabled = enabled, onClick = onOpenWork)
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = "by ${item.author}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        text = item.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (item.author.isNotBlank()) {
+                        Text(
+                            text = "by ${item.author}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-            }
-            OutlinedButton(enabled = enabled, onClick = onRemove) {
-                Text("Remove")
+                if (!reorderMode) {
+                    OutlinedButton(enabled = enabled, onClick = onRemove) {
+                        Text("Remove")
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun MissingWorkCard(title: String, onRemove: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Missing: $title",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            TextButton(onClick = onRemove) {
+                Text("Remove", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+private fun SavedWork.toRemoteSummary(): io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary {
+    return io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary(
+        id = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(this.sourceUrl) ?: 0,
+        title = this.title,
+        authors = this.author.split(",").map { it.trim() },
+        fandoms = this.workFandoms,
+        rating = this.rating,
+        warnings = this.workWarnings,
+        categories = this.workCategories,
+        relationships = this.workRelationships,
+        characters = this.workCharacters,
+        freeforms = this.workFreeforms,
+        language = this.language,
+        wordCount = this.wordCount,
+        chapters = this.chapters,
+        kudos = this.kudos,
+        comments = this.comments,
+        hits = this.hits
+    )
 }

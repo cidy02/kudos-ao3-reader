@@ -106,6 +106,7 @@ fun CommentsScreen(
     val message by viewModel.message.collectAsState()
     val currentTarget by viewModel.currentTarget.collectAsState()
     val focusedCommentId by viewModel.focusedCommentId.collectAsState()
+    val order by viewModel.order.collectAsState()
     val replyTarget by viewModel.replyTarget.collectAsState()
     val editTarget by viewModel.editTarget.collectAsState()
     
@@ -215,12 +216,43 @@ fun CommentsScreen(
                     }
                 }
                 
-                // Chapter Picker (iOS parity)
+                // Chapter Picker + Sort (iOS parity)
                 item {
-                    ChapterScopePicker(
-                        currentTarget = currentTarget,
-                        onSelectTarget = { viewModel.setTarget(it) }
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ChapterScopePicker(
+                            currentTarget = currentTarget,
+                            onSelectTarget = { viewModel.setTarget(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        var sortMenuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            TextButton(onClick = { sortMenuOpen = true }) {
+                                Text(if (order == CommentOrder.NewestFirst) "Newest First" else "Oldest First")
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                            DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Oldest First") },
+                                    onClick = {
+                                        viewModel.setOrder(CommentOrder.OldestFirst)
+                                        sortMenuOpen = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Newest First") },
+                                    onClick = {
+                                        viewModel.setOrder(CommentOrder.NewestFirst)
+                                        sortMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
 
                 item {
@@ -694,7 +726,8 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
 @Composable
 private fun ChapterScopePicker(
     currentTarget: AO3CommentTarget?,
-    onSelectTarget: (AO3CommentTarget) -> Unit
+    onSelectTarget: (AO3CommentTarget) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     if (currentTarget == null) return
     val workId = currentTarget.workId
@@ -702,7 +735,7 @@ private fun ChapterScopePicker(
     // In a real implementation, we'd have the work metadata for total chapters.
     // For now, we allow toggling between All and a placeholder Chapter 1 if it's currently Chapter.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
