@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
@@ -48,6 +49,12 @@ import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
+import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
+import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
+import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -56,6 +63,8 @@ fun TagWorksScreen(
     tagName: String,
     workRepository: WorkRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
+    workImporter: WorkImporter? = null,
+    readingQueueRepository: ReadingQueueRepository? = null,
     repository: AO3SearchRepository = remember { AO3SearchRepository() }
 ) {
     var state by remember(tagName) { mutableStateOf<TagWorksState>(TagWorksState.Loading) }
@@ -63,6 +72,9 @@ fun TagWorksScreen(
     var refine by remember { mutableStateOf("") }
     var showFilterSheet by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
+    val selection = rememberRemoteWorkSelection()
+    var bulkBusy by remember { mutableStateOf(false) }
+    var bulkStatus by remember { mutableStateOf<String?>(null) }
     
     var loadGeneration by remember(tagName) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -117,6 +129,14 @@ fun TagWorksScreen(
                             }
                         ) {
                             Icon(Icons.Outlined.FilterList, contentDescription = "Filters")
+                        }
+                    }
+                    if (workImporter != null) {
+                        IconButton(onClick = { if (selection.isSelecting) selection.exit() else selection.enter() }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Checklist,
+                                contentDescription = if (selection.isSelecting) "Exit selection" else "Select works"
+                            )
                         }
                     }
                     IconButton(onClick = { expandAllCards = !expandAllCards }) {
@@ -184,6 +204,14 @@ fun TagWorksScreen(
                             )
                         }
                         items(filteredWorks, key = { it.id }) { work ->
+                            if (selection.isSelecting) {
+                                SelectableRemoteWorkRow(
+                                    work = work,
+                                    selected = selection.isSelected(work.id),
+                                    onToggle = { selection.toggle(work.id) }
+                                )
+                                return@items
+                            }
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
                                 AO3WorkCard(
@@ -197,6 +225,33 @@ fun TagWorksScreen(
                             TagPaginationRow(page = current.page, onPage = { load(it) })
                         }
                     }
+
+                    if (selection.isSelecting && workImporter != null) {
+                        RemoteWorkSelectionBar(
+                            state = selection,
+                            busy = bulkBusy,
+                            onSaveToLibrary = {
+                                val picked = selection.selectedIn(filteredWorks)
+                                scope.launch {
+                                    bulkBusy = true
+                                    bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
+                                    bulkBusy = false
+                                    selection.exit()
+                                }
+                            },
+                            onSaveForLater = {
+                                val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
+                                val picked = selection.selectedIn(filteredWorks)
+                                scope.launch {
+                                    bulkBusy = true
+                                    bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
+                                    bulkBusy = false
+                                    selection.exit()
+                                }
+                            }
+                        )
+                    }
+
                 }
             }
         }
@@ -210,6 +265,17 @@ fun TagWorksScreen(
             onClear = { filters = AO3SearchFilters() },
             onDismiss = { showFilterSheet = false },
             localTagSuggestions = localTagSuggestions
+        )
+    }
+
+    bulkStatus?.let { message ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { bulkStatus = null },
+            title = { Text("Selection") },
+            text = { Text(message) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { bulkStatus = null }) { Text("OK") }
+            }
         )
     }
 }

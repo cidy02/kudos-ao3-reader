@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
@@ -49,6 +50,12 @@ import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.ui.components.rememberRemoteWorkSelection
+import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
+import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
+import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -57,12 +64,17 @@ fun FandomWorksScreen(
     fandomName: String,
     workRepository: WorkRepository,
     onOpenWork: (AO3WorkSummary) -> Unit,
+    workImporter: WorkImporter? = null,
+    readingQueueRepository: ReadingQueueRepository? = null,
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
     var filters by remember { mutableStateOf(AO3SearchFilters()) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
+    val selection = rememberRemoteWorkSelection()
+    var bulkBusy by remember { mutableStateOf(false) }
+    var bulkStatus by remember { mutableStateOf<String?>(null) }
     
     // Guards a fast Previous/Next double-tap from letting the first (older) page's
     // response land after the second (newer) one and overwrite it.
@@ -129,6 +141,16 @@ fun FandomWorksScreen(
                             contentDescription = if (expandAllCards) "Collapse all" else "Expand all"
                         )
                     }
+                    if (workImporter != null) {
+                        IconButton(
+                            onClick = { if (selection.isSelecting) selection.exit() else selection.enter() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Checklist,
+                                contentDescription = if (selection.isSelecting) "Exit selection" else "Select works"
+                            )
+                        }
+                    }
                 }
             }
         )
@@ -154,13 +176,21 @@ fun FandomWorksScreen(
                             )
                         }
                         items(current.page.works, key = { it.id }) { work ->
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
-                                AO3WorkCard(
+                            if (selection.isSelecting) {
+                                SelectableRemoteWorkRow(
                                     work = work,
-                                    onOpenWork = onOpenWork,
-                                    expandAll = expandAllCards
+                                    selected = selection.isSelected(work.id),
+                                    onToggle = { selection.toggle(work.id) }
                                 )
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    LocalIndicatorRow(BrowseLocalIndicators.forWork(work, savedByUrl))
+                                    AO3WorkCard(
+                                        work = work,
+                                        onOpenWork = onOpenWork,
+                                        expandAll = expandAllCards
+                                    )
+                                }
                             }
                         }
                         item {
@@ -174,6 +204,43 @@ fun FandomWorksScreen(
                 }
             }
         }
+    }
+
+    if (selection.isSelecting && workImporter != null) {
+        RemoteWorkSelectionBar(
+            state = selection,
+            busy = bulkBusy,
+            onSaveToLibrary = {
+                val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
+                scope.launch {
+                    bulkBusy = true
+                    bulkStatus = RemoteWorkBulkActions.saveToLibrary(picked, workImporter)
+                    bulkBusy = false
+                    selection.exit()
+                }
+            },
+            onSaveForLater = {
+                val queues = readingQueueRepository ?: return@RemoteWorkSelectionBar
+                val picked = selection.selectedIn((state as? FandomWorksState.Loaded)?.page?.works.orEmpty())
+                scope.launch {
+                    bulkBusy = true
+                    bulkStatus = RemoteWorkBulkActions.saveForLater(picked, workImporter, queues)
+                    bulkBusy = false
+                    selection.exit()
+                }
+            }
+        )
+    }
+
+    bulkStatus?.let { message ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { bulkStatus = null },
+            title = { Text("Selection") },
+            text = { Text(message) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { bulkStatus = null }) { Text("OK") }
+            }
+        )
     }
 
     if (showFilterSheet) {

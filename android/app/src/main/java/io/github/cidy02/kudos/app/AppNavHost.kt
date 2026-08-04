@@ -253,6 +253,8 @@ fun AppNavHost(
                 FandomWorksScreen(
                     fandomName = fandomName,
                     workRepository = container.workRepository,
+                    workImporter = container.workImporter,
+                    readingQueueRepository = container.readingQueueRepository,
                     repository = container.browseRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
@@ -271,6 +273,8 @@ fun AppNavHost(
                 TagWorksScreen(
                     tagName = tagName,
                     workRepository = container.workRepository,
+                    workImporter = container.workImporter,
+                    readingQueueRepository = container.readingQueueRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
@@ -481,6 +485,8 @@ fun AppNavHost(
                 AuthorWorksScreen(
                     authorName = authorName,
                     workRepository = container.workRepository,
+                    workImporter = container.workImporter,
+                    readingQueueRepository = container.readingQueueRepository,
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }

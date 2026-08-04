@@ -74,6 +74,7 @@ import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
@@ -638,33 +639,6 @@ private fun SearchResultsList(
     }
 }
 
-@Composable
-private fun SelectableRemoteWorkRow(
-    work: AO3WorkSummary,
-    selected: Boolean,
-    onToggle: () -> Unit
-) {
-    Card(
-        onClick = onToggle,
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer 
-                             else MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Checkbox(checked = selected, onCheckedChange = { onToggle() })
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = work.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = work.authorText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
 
 @Composable
 private fun LocalFirstResultsList(
