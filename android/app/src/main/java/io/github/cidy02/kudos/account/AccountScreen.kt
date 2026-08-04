@@ -150,13 +150,15 @@ fun AccountScreen(
     onOpenCollection: (AO3Collection) -> Unit = {},
     inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
     commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository? = null,
+    countsCache: io.github.cidy02.kudos.account.AO3AccountListCountsCache? = null,
     onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
         factory = AccountViewModel.factory(
             authRepository,
-            null, // authorRepository
-            null  // countsCache
+            authorRepository,
+            countsCache
         )
     )
 ) {

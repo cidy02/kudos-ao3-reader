@@ -90,8 +90,9 @@ fun AccountInboxPane(
     )
 ) {
     val state by viewModel.uiState.collectAsState()
-    val settingsState = settingsRepository?.settings?.collectAsState(initial = KudosSettings.Defaults)
-    val settings = settingsState?.value ?: KudosSettings.Defaults
+    val settingsFlow = settingsRepository?.settings ?: kotlinx.coroutines.flow.flowOf(KudosSettings.Defaults)
+    val settingsState = settingsFlow.collectAsState(initial = KudosSettings.Defaults)
+    val settings = settingsState.value
     var pendingDelete by remember { mutableStateOf<PendingInboxDelete?>(null) }
 
     DestructiveConfirmation(

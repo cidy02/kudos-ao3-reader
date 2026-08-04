@@ -338,16 +338,11 @@ fun AppNavHost(
                 },
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
+                authorRepository = container.authorRepository,
+                countsCache = container.accountListCountsCache,
                 onOpenWorkComments = { workId, focusedId ->
                     navController.navigate(Routes.comments(workId, focusedId))
-                },
-                viewModel = viewModel(
-                    factory = AccountViewModel.factory(
-                        container.authRepository,
-                        container.authorRepository,
-                        container.accountListCountsCache
-                    )
-                )
+                }
             )
         }
         composable(Routes.AO3Dashboard) {
