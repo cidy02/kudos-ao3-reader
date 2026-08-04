@@ -93,6 +93,7 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -491,7 +492,8 @@ fun LibraryScreen(
         onAddToQueue = { addToQueueWorkId = it },
         onAddToCollection = { addToCollectionWorkId = it },
         onOpenComments = onOpenComments,
-        onTogglePrivacy = { viewModel.toggleRevealAll(activity) }
+        onTogglePrivacy = { viewModel.toggleRevealAll(activity) },
+        onRefresh = { viewModel.refresh() }
     )
 }
 
@@ -533,7 +535,8 @@ private fun LibraryContent(
     onAddToQueue: (String) -> Unit,
     onAddToCollection: (String) -> Unit,
     onOpenComments: (Long) -> Unit,
-    onTogglePrivacy: () -> Unit
+    onTogglePrivacy: () -> Unit,
+    onRefresh: suspend () -> Unit
 ) {
     val collapsed = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
     val bottomPad = if (state.selectionMode) 88.dp else 12.dp
@@ -555,6 +558,7 @@ private fun LibraryContent(
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
+        KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -825,6 +829,7 @@ private fun LibraryContent(
                     )
                 }
             }
+        }
         }
 
         if (state.selectionMode) {

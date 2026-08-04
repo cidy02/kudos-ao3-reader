@@ -48,10 +48,10 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlin.math.roundToInt
 
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,9 +88,8 @@ fun HomeScreen(
     val collapsedShelves = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
     val onReveal: (String) -> Unit = { id -> viewModel.revealWork(id, activity) }
 
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = viewModel::refresh,
+    KudosRefreshBox(
+        onRefresh = { viewModel.refreshNow() },
         modifier = Modifier.fillMaxSize()
     ) {
         LazyColumn(

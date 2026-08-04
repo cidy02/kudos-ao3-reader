@@ -34,6 +34,7 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlinx.coroutines.launch
 
 /**
@@ -144,6 +145,7 @@ fun CollectionsScreen(
         )
     }
 
+    KudosRefreshBox(onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
@@ -196,6 +198,7 @@ fun CollectionsScreen(
                 }
             }
         }
+    }
     }
 }
 

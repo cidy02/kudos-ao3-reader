@@ -51,6 +51,7 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -79,10 +80,12 @@ fun BrowseScreen(
     }
     val library by libraryFlow.collectAsState(initial = emptyList())
 
-    fun load() {
+    // Suspending core so the shared pull-to-refresh spinner tracks the real
+    // request; load() keeps the fire-and-forget shape the rest of the screen uses.
+    suspend fun loadNow() {
         state = BrowseCategoriesState.Loading
         fandomLists = emptyMap()
-        scope.launch {
+        run {
             when (val result = repository.categories()) {
                 is AO3Result.Success -> {
                     state = BrowseCategoriesState.Loaded(result.value)
@@ -98,8 +101,11 @@ fun BrowseScreen(
         }
     }
 
-    LaunchedEffect(Unit) { load() }
+    fun load() { scope.launch { loadNow() } }
 
+    LaunchedEffect(Unit) { loadNow() }
+
+    KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -169,6 +175,7 @@ fun BrowseScreen(
                 }
             }
         }
+    }
     }
 }
 

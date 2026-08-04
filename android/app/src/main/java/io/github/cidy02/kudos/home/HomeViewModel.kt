@@ -100,14 +100,20 @@ class HomeViewModel(
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     fun refresh() {
-        viewModelScope.launch {
-            _isRefreshing.value = true
-            try {
-                runUpdateCheck()
-                loadSubscriptions(authRepository.state.value)
-            } finally {
-                _isRefreshing.value = false
-            }
+        viewModelScope.launch { refreshNow() }
+    }
+
+    /**
+     * Suspending variant used by the shared [KudosRefreshBox] pull gesture, which
+     * owns the spinner and cancels this on navigate-away.
+     */
+    suspend fun refreshNow() {
+        _isRefreshing.value = true
+        try {
+            runUpdateCheck()
+            loadSubscriptions(authRepository.state.value)
+        } finally {
+            _isRefreshing.value = false
         }
     }
 

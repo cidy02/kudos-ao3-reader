@@ -96,6 +96,35 @@ class SearchViewModel(
         }
     }
 
+    /**
+     * Re-runs the current page and suspends until it completes, so the shared
+     * pull-to-refresh spinner tracks the real request instead of clearing
+     * instantly. [runSearch] launches into `viewModelScope` and returns at once,
+     * which is right for a typed query but wrong for a pull gesture.
+     */
+    suspend fun refreshCurrentPage() {
+        val page = when (val current = _state.value) {
+            is SearchUiState.Error -> current.page
+            is SearchUiState.Results -> current.page.currentPage
+            else -> return
+        }
+        val searchFilters = lastFilters
+        if (!searchFilters.isSearchable) return
+        val generation = ++searchGeneration
+        val result = when (val res = repository.search(searchFilters, page)) {
+            is AO3Result.Success -> {
+                val localWorks = workRepository?.listSavedWorks().orEmpty()
+                val merged = res.value.works.map { remote ->
+                    val local = localWorks.find { WorkTags.ao3WorkIdFromUrl(it.sourceUrl) == remote.id }
+                    CanonicalWork(local = local, remote = remote)
+                }
+                SearchUiState.Results(res.value, merged)
+            }
+            is AO3Result.Failure -> SearchUiState.Error(res.error, page)
+        }
+        if (generation == searchGeneration) _state.value = result
+    }
+
     fun retry() {
         val page = when (val current = _state.value) {
             is SearchUiState.Error -> current.page

@@ -26,6 +26,7 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 
 @Composable
 fun ReadingQueuesScreen(
@@ -58,6 +59,7 @@ fun ReadingQueuesScreen(
 
     LaunchedEffect(Unit) { refresh() }
 
+    KudosRefreshBox(onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
@@ -91,6 +93,7 @@ fun ReadingQueuesScreen(
                 )
             }
         }
+    }
     }
 }
 

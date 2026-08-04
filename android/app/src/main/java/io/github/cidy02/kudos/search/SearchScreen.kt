@@ -73,6 +73,7 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
@@ -247,6 +248,7 @@ fun SearchScreen(
                     )
                 } else {
                     SearchResultsList(
+                        onRefresh = { viewModel.refreshCurrentPage() },
                         works = current.works,
                         page = current.page.currentPage,
                         totalPages = current.page.totalPages,
@@ -569,8 +571,10 @@ private fun SearchResultsList(
     onOpenWork: (AO3WorkSummary) -> Unit,
     onPage: (Int) -> Unit,
     onTagClick: (String) -> Unit,
+    onRefresh: suspend () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxWidth()) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier.fillMaxWidth()
@@ -630,6 +634,7 @@ private fun SearchResultsList(
                 enabled = true
             )
         }
+    }
     }
 }
 

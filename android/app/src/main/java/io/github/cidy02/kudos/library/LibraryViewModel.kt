@@ -339,6 +339,29 @@ class LibraryViewModel(
 
     // endregion
 
+    /**
+     * Pull-to-refresh for Library. The work list itself is a Room Flow and is
+     * already live, so this re-reads the reading-queue previews, whose counts do
+     * go stale when queues change elsewhere.
+     *
+     * ponytail: deliberately does not sweep AO3 metadata on every pull — that
+     * would be an unbounded scrape on a gesture users repeat. The paced sweep in
+     * KudosApplication and the per-work "Refresh Metadata" action cover that.
+     */
+    suspend fun refresh() {
+        val queues = queueRepository ?: return
+        runCatching {
+            queues.ensureSavedForLaterQueue()
+            queues.listQueues().map { queue ->
+                LibraryQueuePreview(
+                    id = queue.id,
+                    name = queue.displayName,
+                    workCount = queues.listWorks(queue.id).size
+                )
+            }
+        }.onSuccess { readingQueues.value = it }
+    }
+
     private fun refreshQueues() {
         val queues = queueRepository ?: return
         viewModelScope.launch {
