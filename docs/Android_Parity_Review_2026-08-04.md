@@ -442,21 +442,23 @@ worktrees and their branches can be deleted.**
 
 ---
 
-## Suggested order of work
+## Remaining work
 
-1. Cherry-pick `45125954` (F0) — restores the gate before anything else lands.
-2. F4 + F7 — delete the 8 `println`s, `WorkMetadataRefresh.kt`, `scratch.kt`;
-   commit `AccountScreenCrashTest.kt` + `debug/AndroidManifest.xml`.
-3. F2 (P9-3) — stop PDF import emitting garbage. Ships corrupt data today.
-4. F1 (P9-1) — wire incoming intents, or drop the filter.
-5. P9-2 + F5 — merge `ImportedFileFormat.kt` and the schema JSONs, then delete
-   all six phase worktrees and branches.
-6. P11-3 and P11-5 — the two shared components other phases' gaps depend on
-   (pull-to-refresh unblocks P7-5/P10-4 surfaces; multi-select unblocks
-   P4-10/P6-7). Build once, as the brief specified.
-7. P7-3 / P11-6 — persist collapse state (one fix, two items).
-8. F3 — reader landscape layout.
-9. F6 — fix or delete the no-op invariant.
-10. Remaining NOT_STARTED items by phase, worst-first: Phase 9 (5), Phase 8 (3),
-    Phase 7 (3), Phase 11 (3), Phase 4 (3).
-11. **Owner:** live-session testing of every AO3 write path.
+The original ordering below is spent — every step in it has landed. What is left:
+
+1. **P4-4** AO3 series preservation on queue-add — prompt written, run first.
+2. **P4-6** Queue Storage screen — depends on P4-4's storage model.
+3. **20 PASS-WITH-NOTES** polish items, including the two this branch introduced:
+   P11-1's zoom has no reader destination, and P8-7 discards iOS's
+   `foldedConflicts` count.
+4. **F3** — reader landscape layout. Proven and localised to the Readium
+   fragment/WebView layer, not root-caused.
+5. **`contracts/fixtures/`** — the cross-platform contract-test layer the port
+   plan specifies (§3.3, §6.2) and which was never built. Highest leverage of
+   anything here: without it, "core logic must be identical" stays enforced by
+   people re-reading code, which is what made this whole sweep cost what it did.
+6. **MuPDF** — the largest single piece. iOS has a stripped build script and a
+   verified 157-line wrapper; the flags port to an NDK build unchanged.
+7. **Owner only:** live-session testing of every authenticated AO3 write path.
+   Kudos, comments, bookmarks, Mark for Later, login — all still verified by
+   reading code, never exercised against a real session.
