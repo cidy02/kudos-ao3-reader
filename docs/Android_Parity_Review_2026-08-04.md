@@ -24,16 +24,32 @@ Nothing is restated from a prior report.
 
 **All 121 appendix line-items covered** (116 unique; 5 are cross-references).
 
-| Verdict | At review | After fixes |
+| Verdict | At review | Now |
 |---|---|---|
-| PASS | 71 | **80** |
-| PASS WITH NOTES | 21 | 20 |
-| FAIL | 11 | 4 |
-| NOT_STARTED | 18 | 17 |
+| PASS | 71 | **93** |
+| PASS WITH NOTES | 21 | 19 |
+| FAIL | 11 | 1 |
+| NOT_STARTED | 18 | 8 |
 
-**Fixes applied in this branch** (`45125954`…`882b68c4`): F0, F1, F2, F4, F5, F6,
-F7, plus P9-2, P9-11, P7-3, P11-6, P10-1, P10-4 — and one bug the review itself
-did not catch, found while writing a regression test (see F8 below).
+**Remaining FAIL (1):** P5-12 — the reader's Comments button isn't chapter-aware.
+
+**Remaining NOT_STARTED (8):** P4-4 series preservation on queue-add · P4-6 Queue
+Storage screen · P7-4 Home multi-select · P7-6 sync-folder onboarding ·
+P8-4 dirty-flag tracking · P8-6 delta export · P8-7 concurrent-writer conflicts ·
+P11-1 shared-element zoom · P11-7 shared search field · P11-8 reader
+edge-swipe-back (verify-first).
+
+**Also outstanding:** F3 reader landscape, the PASS-WITH-NOTES polish, the
+`contracts/fixtures/` layer, and MuPDF.
+
+**Fixes applied in this branch:** F0, F1, F2, F4, F5, F6, F7, F8, plus checklist
+items P7-2, P7-3, P7-8, P9-2, P9-4, P9-5, P9-7, P9-8, P9-9, P9-10, P9-11, P10-1,
+P10-4, P11-3, P11-5 — and, unblocked by P9-10, P4-11 and P10-3. Phase 9 is now
+complete apart from the PDF engine itself (MuPDF).
+
+Bugs found in **iOS** while porting are logged separately in
+[iOS_Issues_Found_While_Porting.md](iOS_Issues_Found_While_Porting.md) rather
+than silently propagated to Android.
 
 Phases 0, 1, 3 are **fully clean**. Phase 6 is near-clean (13/14). The debt is
 concentrated in **Phase 9** (8 of 11 failed or absent) and **Phase 11** (6 of 8).
