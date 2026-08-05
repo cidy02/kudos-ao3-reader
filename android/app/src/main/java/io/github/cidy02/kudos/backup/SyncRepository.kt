@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.files.FontFileStore
 import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -20,15 +21,12 @@ import kotlinx.coroutines.withContext
 private const val SYNC_WORK_NAME = "FolderSyncWorker"
 private val SYNC_INTERVAL = 6L to TimeUnit.HOURS
 
-/**
- * Automates library backup/restore via a user-picked SAF folder.
- * Matches iOS shared-folder sync intent.
- */
 class SyncRepository(
     private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val backupRepository: BackupRepository,
     private val workFileStore: WorkFileStore,
+    private val fontFileStore: FontFileStore,
     private val clock: () -> Instant = { Instant.now() }
 ) {
     suspend fun isSyncEnabled(): Boolean {
@@ -39,7 +37,6 @@ class SyncRepository(
         return settingsRepository.settings.first().sync.folderUri?.let { Uri.parse(it) }
     }
 
-    /** Grants persisted access to [uri], enables sync, and schedules periodic background sync. */
     suspend fun connect(uri: Uri) {
         context.contentResolver.takePersistableUriPermission(
             uri,
@@ -50,7 +47,6 @@ class SyncRepository(
         scheduleWorker()
     }
 
-    /** Releases the folder permission, disables sync, and cancels background sync. */
     suspend fun disconnect() {
         getSyncFolderUri()?.let { uri ->
             runCatching {
@@ -80,68 +76,134 @@ class SyncRepository(
         )
     }
 
-    /**
-     * Performs a two-way sync cycle:
-     * 1. Import/merge changes from Kudos.kudosbackup in the SAF folder if present.
-     * 2. Export current merged library back to Kudos.kudosbackup.
-     * 3. Copy any not-yet-present EPUBs into an epubs/ subdirectory.
-     */
     suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
         val uri = getSyncFolderUri() ?: return@withContext SyncResult.Error("No sync folder selected.")
         val root = DocumentFile.fromTreeUri(context, uri) ?: return@withContext SyncResult.Error("Could not access sync folder.")
-        val fileName = "Kudos.kudosbackup"
-
+        
         try {
-            // 1. Import and merge remote changes first
-            root.findFile(fileName)?.let { remoteBackup ->
-                context.contentResolver.openInputStream(remoteBackup.uri)?.use { input ->
+            var syncDir = root.findFile("KudosLibrary")
+            if (syncDir == null) {
+                syncDir = root.createDirectory("KudosLibrary")
+            }
+            if (syncDir == null) return@withContext SyncResult.Error("Could not create KudosLibrary directory.")
+
+            // 1. Import (For now just use the old ZIP import logic if it's there to prevent regression, but we also need to import manifest.json? Actually we'll implement import later or skip for now to focus on export)
+            // Wait, we need to import manifest.json if present!
+            val manifestFile = syncDir.findFile("manifest.json")
+            if (manifestFile != null) {
+                context.contentResolver.openInputStream(manifestFile.uri)?.use { input ->
                     val bytes = input.readBytes()
                     if (bytes.isNotEmpty()) {
-                        backupRepository.importV2ZipBytes(bytes)
-                    }
-                }
-            }
-
-            // 2. Export database
-            val bytes = backupRepository.exportV2ZipBytes()
-            var backupFile = root.findFile(fileName)
-            if (backupFile == null) {
-                backupFile = root.createFile("application/zip", fileName)
-            }
-            if (backupFile == null) return@withContext SyncResult.Error("Could not create backup file in folder.")
-            
-            context.contentResolver.openOutputStream(backupFile.uri, "wt")?.use { 
-                it.write(bytes)
-            }
-
-            // 2. Sync EPUBs
-            var epubsDir = root.findFile("epubs")
-            if (epubsDir == null) {
-                epubsDir = root.createDirectory("epubs")
-            }
-            if (epubsDir != null) {
-                val snapshot = backupRepository.captureLibrarySnapshot()
-                snapshot.works.filter { it.hasEpub }.forEach { work ->
-                    val localPath = workFileStore.workEpubPath(work.id)
-                    if (Files.isRegularFile(localPath)) {
-                        val epubName = "${work.id}.epub"
-                        if (epubsDir.findFile(epubName) == null) {
-                            val remoteFile = epubsDir.createFile("application/epub+zip", epubName)
-                            if (remoteFile != null) {
-                                context.contentResolver.openOutputStream(remoteFile.uri)?.use { out ->
-                                    Files.copy(localPath, out)
+                        val manifest = BackupValidator.decodeManifest(bytes)
+                        val epubFiles = mutableMapOf<String, ByteArray>()
+                        val fontFiles = mutableMapOf<String, ByteArray>()
+                        
+                        syncDir.findFile("Works")?.let { worksDir ->
+                            manifest.works.forEach { work ->
+                                val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
+                                worksDir.findFile(epubName)?.let { file ->
+                                    context.contentResolver.openInputStream(file.uri)?.use { epubFiles[work.id] = it.readBytes() }
                                 }
                             }
+                        }
+                        syncDir.findFile("Fonts")?.let { fontsDir ->
+                            manifest.fonts.forEach { font ->
+                                fontsDir.findFile(font.fileName)?.let { file ->
+                                    context.contentResolver.openInputStream(file.uri)?.use { fontFiles[font.fileName] = it.readBytes() }
+                                }
+                            }
+                        }
+                        
+                        val pack = KudosBackupPackage(manifest, epubFiles, fontFiles)
+                        backupRepository.importPackage(pack)
+                    }
+                }
+            } else {
+                root.findFile("Kudos.kudosbackup")?.let { remoteBackup ->
+                    context.contentResolver.openInputStream(remoteBackup.uri)?.use { input ->
+                        val bytes = input.readBytes()
+                        if (bytes.isNotEmpty()) {
+                            backupRepository.importV2ZipBytes(bytes)
                         }
                     }
                 }
             }
+
+            // 2. Export incrementally
+            val snapshot = backupRepository.captureLibrarySnapshot()
+            val manifestOut = snapshot.toV2Manifest(exportedAt = clock(), appVersion = "0.1.0")
             
+            var worksDir = syncDir.findFile("Works")
+            if (worksDir == null) worksDir = syncDir.createDirectory("Works")
+            
+            var fontsDir = syncDir.findFile("Fonts")
+            if (fontsDir == null) fontsDir = syncDir.createDirectory("Fonts")
+
+            val expectedWorks = mutableSetOf<String>()
+            val expectedFonts = mutableSetOf<String>()
+
+            // Write works
+            if (worksDir != null) {
+                snapshot.works.filter { it.hasEpub }.forEach { work ->
+                    val localPath = workFileStore.workEpubPath(work.id)
+                    if (Files.isRegularFile(localPath)) {
+                        val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
+                        expectedWorks.add(epubName)
+                        val bytes = Files.readAllBytes(localPath)
+                        writeIfChanged(worksDir, epubName, "application/epub+zip", bytes)
+                    }
+                }
+                // Orphan pruning
+                worksDir.listFiles().forEach { file ->
+                    if (file.name != null && !expectedWorks.contains(file.name)) {
+                        file.delete()
+                    }
+                }
+            }
+
+            // Write fonts
+            if (fontsDir != null) {
+                snapshot.fonts.forEach { font ->
+                    val bytes = fontFileStore.readFont(font.fileName)
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        expectedFonts.add(font.fileName)
+                        writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
+                    }
+                }
+                // Orphan pruning
+                fontsDir.listFiles().forEach { file ->
+                    if (file.name != null && !expectedFonts.contains(file.name)) {
+                        file.delete()
+                    }
+                }
+            }
+
+            // Write manifest.json
+            val manifestBytes = BackupJson.encodeToString(manifestOut).toByteArray(Charsets.UTF_8)
+            var manifestDoc = syncDir.findFile("manifest.json")
+            if (manifestDoc == null) manifestDoc = syncDir.createFile("application/json", "manifest.json")
+            if (manifestDoc != null) {
+                context.contentResolver.openOutputStream(manifestDoc.uri, "wt")?.use { it.write(manifestBytes) }
+            }
+
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
             SyncResult.Success
         } catch (e: Exception) {
             SyncResult.Error(e.message ?: "Sync failed.")
+        }
+    }
+    
+    private fun writeIfChanged(dir: DocumentFile, fileName: String, mimeType: String, data: ByteArray) {
+        var file = dir.findFile(fileName)
+        if (file != null && file.length() == data.size.toLong()) {
+            return
+        }
+        if (file == null) {
+            file = dir.createFile(mimeType, fileName)
+        }
+        if (file != null) {
+            context.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(data) }
         }
     }
 }

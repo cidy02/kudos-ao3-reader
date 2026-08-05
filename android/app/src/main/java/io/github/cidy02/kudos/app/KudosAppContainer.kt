@@ -256,7 +256,8 @@ class KudosAppContainer(context: Context) {
             context = appContext!!,
             settingsRepository = settingsRepository,
             backupRepository = backupRepository,
-            workFileStore = workFileStore
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore
         )
     }
 
