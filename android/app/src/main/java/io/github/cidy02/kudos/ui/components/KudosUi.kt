@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.ui.components
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.composed
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +26,44 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { null }
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+val LocalAnimatedVisibilityScope = compositionLocalOf<AnimatedVisibilityScope?> { null }
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+fun Modifier.workCardZoomSource(workId: Long): Modifier = composed {
+    val sharedScope = LocalSharedTransitionScope.current
+    val animatedScope = LocalAnimatedVisibilityScope.current
+    if (sharedScope != null && animatedScope != null) {
+        with(sharedScope) {
+            this@composed.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = "work-$workId"),
+                animatedVisibilityScope = animatedScope
+            )
+        }
+    } else {
+        this
+    }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+fun Modifier.workCardZoomDestination(workId: Long): Modifier = composed {
+    val sharedScope = LocalSharedTransitionScope.current
+    val animatedScope = LocalAnimatedVisibilityScope.current
+    if (sharedScope != null && animatedScope != null) {
+        with(sharedScope) {
+            this@composed.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = "work-$workId"),
+                animatedVisibilityScope = animatedScope
+            )
+        }
+    } else {
+        this
+    }
+}
 
 /**
  * Optional context header under the scaffold TopAppBar.

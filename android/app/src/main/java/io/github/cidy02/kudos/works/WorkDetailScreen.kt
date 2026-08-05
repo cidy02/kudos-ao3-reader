@@ -104,6 +104,7 @@ import io.github.cidy02.kudos.ui.components.StatusBadge
 import io.github.cidy02.kudos.ui.components.WorkStatIcons
 import io.github.cidy02.kudos.ui.components.WorkStatItem
 import io.github.cidy02.kudos.ui.components.WorkStatLabel
+import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -1155,6 +1156,7 @@ private fun WorkDetailContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .let { if (state.ao3WorkId != null) it.workCardZoomDestination(state.ao3WorkId) else it }
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         if (state.loading) {

@@ -70,7 +70,7 @@ fun AO3WorkCard(
 
     var showMenu by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier) {
+    Box(modifier = modifier.workCardZoomSource(work.id)) {
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow

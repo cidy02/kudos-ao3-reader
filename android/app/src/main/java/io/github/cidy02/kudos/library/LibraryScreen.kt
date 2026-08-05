@@ -1184,6 +1184,7 @@ fun LibraryCarouselCard(
 
     Box(modifier = modifier) {
         WorkCoverCard(
+            workId = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(work.sourceUrl),
             title = work.title,
             author = work.author.ifBlank { "Anonymous" },
             fandom = work.workFandoms.firstOrNull { it.isNotBlank() },
