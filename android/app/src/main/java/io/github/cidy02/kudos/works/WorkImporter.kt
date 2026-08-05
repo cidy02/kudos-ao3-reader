@@ -150,7 +150,9 @@ class WorkImporter(
                 io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(title, bytes)
             ImportedFileFormat.TEXT ->
                 io.github.cidy02.kudos.works.converters.PlainTextWorkConverter().convert(title, bytes)
-            ImportedFileFormat.ZIP, ImportedFileFormat.UNKNOWN -> null
+            ImportedFileFormat.ZIP ->
+                io.github.cidy02.kudos.works.converters.ArchiveWorkConverter.convert(title, bytes)
+            ImportedFileFormat.UNKNOWN -> null
         } ?: return WorkImportResult.Failure(null, AO3Error.Validation(unsupportedMessage(format)))
 
         // Every path above either passes an EPUB through or builds one, so the
@@ -171,6 +173,12 @@ class WorkImporter(
             lastModifiedAt = Instant.now()
         )
 
+        // Converted imports keep their source so "Rebuild from Original" can re-run
+        // a newer converter later. A plain EPUB import has nothing to rebuild from.
+        if (format != ImportedFileFormat.EPUB) {
+            fileStore.writeOriginal(work.id, format.name.lowercase(Locale.ROOT), bytes)
+        }
+
         return when (val write = fileStore.writeWorkEpub(work.id, finalBytes)) {
             is FileWriteResult.Failure -> WorkImportResult.Failure(
                 work,
@@ -180,6 +188,48 @@ class WorkImporter(
                 val saved = workRepository.upsert(work)
                 WorkImportResult.Success(saved)
             }
+        }
+    }
+
+    /**
+     * True when this work was converted from a non-EPUB source we still hold, so
+     * the UI can offer "Rebuild from Original" (iOS `WorkReconversion.candidate`).
+     */
+    suspend fun canRebuildFromOriginal(work: SavedWork): Boolean =
+        fileStore.originalExists(work.id)
+
+    /**
+     * Re-runs the current converters over the archived source and replaces the
+     * EPUB (iOS `WorkReconversion.rebuildFromOriginal`).
+     *
+     * Reading progress and every other local field are untouched — only the file
+     * is replaced — so a rebuild never costs the reader their place.
+     */
+    suspend fun rebuildFromOriginal(work: SavedWork): WorkImportResult {
+        val (extension, bytes) = fileStore.readOriginal(work.id)
+            ?: return WorkImportResult.Failure(
+                work,
+                AO3Error.Validation("No archived original for this work.")
+            )
+        val format = ImportedFileFormat.sniff(bytes, "original.$extension")
+        val rebuilt = when (format) {
+            ImportedFileFormat.PDF ->
+                io.github.cidy02.kudos.works.converters.PDFWorkConverter().convert(work.title, bytes)
+            ImportedFileFormat.HTML ->
+                io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(work.title, bytes)
+            ImportedFileFormat.TEXT ->
+                io.github.cidy02.kudos.works.converters.PlainTextWorkConverter().convert(work.title, bytes)
+            ImportedFileFormat.ZIP ->
+                io.github.cidy02.kudos.works.converters.ArchiveWorkConverter.convert(work.title, bytes)
+            ImportedFileFormat.EPUB -> bytes
+            ImportedFileFormat.UNKNOWN -> null
+        } ?: return WorkImportResult.Failure(work, AO3Error.Validation(unsupportedMessage(format)))
+
+        return when (val write = fileStore.writeWorkEpub(work.id, rebuilt)) {
+            is FileWriteResult.Failure -> WorkImportResult.Failure(work, AO3Error.Validation(write.message))
+            is FileWriteResult.Success -> WorkImportResult.Success(
+                workRepository.upsert(work.copy(hasEpub = true, lastModifiedAt = Instant.now()))
+            )
         }
     }
 
@@ -252,7 +302,8 @@ class WorkImporter(
                 "This PDF's text can't be extracted — it's scanned or compressed. " +
                     "Try exporting it as EPUB, HTML, or plain text first."
             ImportedFileFormat.ZIP ->
-                "That's a ZIP archive, not an EPUB. Unzip it and import the .epub inside."
+                "Couldn't find anything readable in that archive. It needs an EPUB, " +
+                    "or HTML/text files to build one from."
             else ->
                 "Unsupported file type. Kudos can import EPUB, PDF, HTML, and TXT files."
         }

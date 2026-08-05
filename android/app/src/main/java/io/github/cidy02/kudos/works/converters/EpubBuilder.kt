@@ -6,6 +6,29 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 object EpubBuilder {
+    /** A single spine document: a display name and its body HTML. */
+    data class Chapter(val title: String, val bodyHtml: String)
+
+    /**
+     * Multi-chapter EPUB, used when an archive stitches several member files
+     * into one work. Single-chapter callers keep using the simpler overload.
+     */
+    fun buildEpub(title: String, chapters: List<Chapter>): ByteArray {
+        if (chapters.size <= 1) {
+            return buildEpub(title, chapters.firstOrNull()?.bodyHtml.orEmpty())
+        }
+        val body = chapters.joinToString("\n") { chapter ->
+            "<h1>${escape(chapter.title)}</h1>\n${chapter.bodyHtml}"
+        }
+        // ponytail: one spine document with per-chapter headings rather than N
+        // spine items. Readium paginates it identically; split it properly if a
+        // real per-chapter TOC becomes a requirement.
+        return buildEpub(title, body)
+    }
+
+    private fun escape(value: String): String =
+        value.replace("&", "&amp;").replace("<", "&lt;")
+
     fun buildEpub(title: String, contentHtml: String): ByteArray {
         val baos = ByteArrayOutputStream()
         val zos = ZipOutputStream(baos)

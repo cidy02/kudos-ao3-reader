@@ -162,6 +162,7 @@ fun WorkDetailScreen(
     var newCollectionName by remember { mutableStateOf("") }
     var collectionDialogWorking by remember { mutableStateOf(false) }
     var chapterIndexSheetOpen by remember { mutableStateOf(false) }
+    var canRebuild by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var downloadWatchJob by remember { mutableStateOf<Job?>(null) }
@@ -170,6 +171,7 @@ fun WorkDetailScreen(
 
     suspend fun refreshLocal(workId: String, remote: AO3WorkSummary? = state.remote) {
         val local = workRepository.getWork(workId)
+        canRebuild = local?.let { workImporter.canRebuildFromOriginal(it) } ?: false
         state = state.copy(
             local = local,
             remote = remote,
@@ -1008,6 +1010,18 @@ fun WorkDetailScreen(
             state.sourceUrl.takeIf { it.isNotBlank() }?.let(uriHandler::openUri)
         },
         onLogin = onLogin,
+        onRebuildFromOriginal = {
+            val work = state.local
+            if (work != null) {
+                scope.launch {
+                    state = state.copy(working = true)
+                    workImporter.rebuildFromOriginal(work)
+                    refreshLocal(work.id, state.remote)
+                    state = state.copy(working = false)
+                }
+            }
+        },
+        canRebuildFromOriginal = canRebuild,
         onRefreshMetadata = {
             val work = state.local
             val repo = metadataRepository
@@ -1113,6 +1127,8 @@ private fun WorkDetailContent(
     onRemoveFromLibrary: () -> Unit,
     onOpenAo3: () -> Unit,
     onLogin: () -> Unit,
+    onRebuildFromOriginal: () -> Unit,
+    canRebuildFromOriginal: Boolean,
     onRefreshMetadata: () -> Unit,
     onKudos: () -> Unit,
     onSubscribe: () -> Unit,
@@ -1180,6 +1196,16 @@ private fun WorkDetailContent(
                     expanded = overflowExpanded,
                     onDismissRequest = { overflowExpanded = false }
                 ) {
+                    if (canRebuildFromOriginal) {
+                        DropdownMenuItem(
+                            text = { Text("Rebuild from Original") },
+                            enabled = !busy,
+                            onClick = {
+                                overflowExpanded = false
+                                onRebuildFromOriginal()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Refresh Metadata") },
                         enabled = !busy && local != null && state.ao3WorkId != null,
