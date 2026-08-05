@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.works
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.files.FileWriteResult
 import io.github.cidy02.kudos.files.ImportedFileFormat
+import io.github.cidy02.kudos.files.TextDecoding
+import io.github.cidy02.kudos.works.converters.CalibreMetadata
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -164,10 +166,23 @@ class WorkImporter(
             )
         }
 
+        // calibre / FanFicFare exports carry a label block; recovering it means a
+        // converted work keeps its real title, tags and — most usefully — the
+        // source URL, instead of being stranded with no origin.
+        val exported = TextDecoding.decode(bytes)
+            ?.lineSequence()
+            ?.take(40)
+            ?.toList()
+            ?.let(CalibreMetadata::parse)
+
         val work = SavedWork(
-            title = title,
-            author = "",
-            sourceUrl = "",
+            title = exported?.title?.takeIf { it.isNotBlank() } ?: title,
+            author = exported?.author.orEmpty(),
+            sourceUrl = exported?.sourceUrl.orEmpty(),
+            summary = exported?.summary.orEmpty(),
+            rating = exported?.rating.orEmpty(),
+            workFandoms = exported?.fandoms.orEmpty(),
+            workFreeforms = exported?.freeforms.orEmpty(),
             hasEpub = true,
             isSaved = true,
             lastModifiedAt = Instant.now()
