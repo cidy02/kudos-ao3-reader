@@ -27,6 +27,7 @@ class SyncRepository(
     private val backupRepository: BackupRepository,
     private val workFileStore: WorkFileStore,
     private val fontFileStore: FontFileStore,
+    private val persistenceGate: PersistenceGate,
     private val clock: () -> Instant = { Instant.now() }
 ) {
     suspend fun isSyncEnabled(): Boolean {
@@ -88,34 +89,44 @@ class SyncRepository(
             if (syncDir == null) return@withContext SyncResult.Error("Could not create KudosLibrary directory.")
 
             // 1. Import (For now just use the old ZIP import logic if it's there to prevent regression, but we also need to import manifest.json? Actually we'll implement import later or skip for now to focus on export)
-            // Wait, we need to import manifest.json if present!
+            val manifestFilesToRead = mutableListOf<DocumentFile>()
             val manifestFile = syncDir.findFile("manifest.json")
-            if (manifestFile != null) {
-                context.contentResolver.openInputStream(manifestFile.uri)?.use { input ->
-                    val bytes = input.readBytes()
-                    if (bytes.isNotEmpty()) {
-                        val manifest = BackupValidator.decodeManifest(bytes)
-                        val epubFiles = mutableMapOf<String, ByteArray>()
-                        val fontFiles = mutableMapOf<String, ByteArray>()
-                        
-                        syncDir.findFile("Works")?.let { worksDir ->
-                            manifest.works.forEach { work ->
-                                val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
-                                worksDir.findFile(epubName)?.let { file ->
-                                    context.contentResolver.openInputStream(file.uri)?.use { epubFiles[work.id] = it.readBytes() }
+            if (manifestFile != null) manifestFilesToRead.add(manifestFile)
+            
+            val conflicts = syncDir.listFiles().filter { it.name?.startsWith("manifest") == true && it.name?.endsWith(".json") == true && it.name != "manifest.json" }
+            manifestFilesToRead.addAll(conflicts)
+            
+            if (manifestFilesToRead.isNotEmpty()) {
+                manifestFilesToRead.forEach { mFile ->
+                    context.contentResolver.openInputStream(mFile.uri)?.use { input ->
+                        val bytes = input.readBytes()
+                        if (bytes.isNotEmpty()) {
+                            val manifest = BackupValidator.decodeManifest(bytes)
+                            val epubFiles = mutableMapOf<String, ByteArray>()
+                            val fontFiles = mutableMapOf<String, ByteArray>()
+                            
+                            syncDir.findFile("Works")?.let { worksDir ->
+                                manifest.works.forEach { work ->
+                                    val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
+                                    worksDir.findFile(epubName)?.let { file ->
+                                        context.contentResolver.openInputStream(file.uri)?.use { epubFiles[work.id] = it.readBytes() }
+                                    }
                                 }
                             }
-                        }
-                        syncDir.findFile("Fonts")?.let { fontsDir ->
-                            manifest.fonts.forEach { font ->
-                                fontsDir.findFile(font.fileName)?.let { file ->
-                                    context.contentResolver.openInputStream(file.uri)?.use { fontFiles[font.fileName] = it.readBytes() }
+                            syncDir.findFile("Fonts")?.let { fontsDir ->
+                                manifest.fonts.forEach { font ->
+                                    fontsDir.findFile(font.fileName)?.let { file ->
+                                        context.contentResolver.openInputStream(file.uri)?.use { fontFiles[font.fileName] = it.readBytes() }
+                                    }
                                 }
                             }
+                            
+                            val pack = KudosBackupPackage(manifest, epubFiles, fontFiles)
+                            backupRepository.importPackage(pack)
                         }
-                        
-                        val pack = KudosBackupPackage(manifest, epubFiles, fontFiles)
-                        backupRepository.importPackage(pack)
+                    }
+                    if (mFile.name != "manifest.json") {
+                        mFile.delete()
                     }
                 }
             } else {
@@ -130,60 +141,62 @@ class SyncRepository(
             }
 
             // 2. Export incrementally
-            val snapshot = backupRepository.captureLibrarySnapshot()
-            val manifestOut = snapshot.toV2Manifest(exportedAt = clock(), appVersion = "0.1.0")
-            
-            var worksDir = syncDir.findFile("Works")
-            if (worksDir == null) worksDir = syncDir.createDirectory("Works")
-            
-            var fontsDir = syncDir.findFile("Fonts")
-            if (fontsDir == null) fontsDir = syncDir.createDirectory("Fonts")
+            persistenceGate.withLock {
+                val snapshot = backupRepository.captureLibrarySnapshot()
+                val manifestOut = snapshot.toV2Manifest(exportedAt = clock(), appVersion = "0.1.0")
+                
+                var worksDir = syncDir.findFile("Works")
+                if (worksDir == null) worksDir = syncDir.createDirectory("Works")
+                
+                var fontsDir = syncDir.findFile("Fonts")
+                if (fontsDir == null) fontsDir = syncDir.createDirectory("Fonts")
 
-            val expectedWorks = mutableSetOf<String>()
-            val expectedFonts = mutableSetOf<String>()
+                val expectedWorks = mutableSetOf<String>()
+                val expectedFonts = mutableSetOf<String>()
 
-            // Write works
-            if (worksDir != null) {
-                snapshot.works.filter { it.hasEpub }.forEach { work ->
-                    val localPath = workFileStore.workEpubPath(work.id)
-                    if (Files.isRegularFile(localPath)) {
-                        val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
-                        expectedWorks.add(epubName)
-                        val bytes = Files.readAllBytes(localPath)
-                        writeIfChanged(worksDir, epubName, "application/epub+zip", bytes)
+                // Write works
+                if (worksDir != null) {
+                    snapshot.works.filter { it.hasEpub }.forEach { work ->
+                        val localPath = workFileStore.workEpubPath(work.id)
+                        if (Files.isRegularFile(localPath)) {
+                            val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
+                            expectedWorks.add(epubName)
+                            val bytes = Files.readAllBytes(localPath)
+                            writeIfChanged(worksDir, epubName, "application/epub+zip", bytes)
+                        }
+                    }
+                    // Orphan pruning
+                    worksDir.listFiles().forEach { file ->
+                        if (file.name != null && !expectedWorks.contains(file.name)) {
+                            file.delete()
+                        }
                     }
                 }
-                // Orphan pruning
-                worksDir.listFiles().forEach { file ->
-                    if (file.name != null && !expectedWorks.contains(file.name)) {
-                        file.delete()
-                    }
-                }
-            }
 
-            // Write fonts
-            if (fontsDir != null) {
-                snapshot.fonts.forEach { font ->
-                    val bytes = fontFileStore.readFont(font.fileName)
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        expectedFonts.add(font.fileName)
-                        writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
+                // Write fonts
+                if (fontsDir != null) {
+                    snapshot.fonts.forEach { font ->
+                        val bytes = fontFileStore.readFont(font.fileName)
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            expectedFonts.add(font.fileName)
+                            writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
+                        }
+                    }
+                    // Orphan pruning
+                    fontsDir.listFiles().forEach { file ->
+                        if (file.name != null && !expectedFonts.contains(file.name)) {
+                            file.delete()
+                        }
                     }
                 }
-                // Orphan pruning
-                fontsDir.listFiles().forEach { file ->
-                    if (file.name != null && !expectedFonts.contains(file.name)) {
-                        file.delete()
-                    }
-                }
-            }
 
-            // Write manifest.json
-            val manifestBytes = BackupJson.encodeToString(manifestOut).toByteArray(Charsets.UTF_8)
-            var manifestDoc = syncDir.findFile("manifest.json")
-            if (manifestDoc == null) manifestDoc = syncDir.createFile("application/json", "manifest.json")
-            if (manifestDoc != null) {
-                context.contentResolver.openOutputStream(manifestDoc.uri, "wt")?.use { it.write(manifestBytes) }
+                // Write manifest.json
+                val manifestBytes = BackupJson.encodeToString(manifestOut).toByteArray(Charsets.UTF_8)
+                var manifestDoc = syncDir.findFile("manifest.json")
+                if (manifestDoc == null) manifestDoc = syncDir.createFile("application/json", "manifest.json")
+                if (manifestDoc != null) {
+                    context.contentResolver.openOutputStream(manifestDoc.uri, "wt")?.use { it.write(manifestBytes) }
+                }
             }
 
             settingsRepository.updateSyncLastSyncAt(clock())

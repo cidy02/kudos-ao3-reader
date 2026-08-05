@@ -257,7 +257,8 @@ class KudosAppContainer(context: Context) {
             settingsRepository = settingsRepository,
             backupRepository = backupRepository,
             workFileStore = workFileStore,
-            fontFileStore = fontFileStore
+            fontFileStore = fontFileStore,
+            persistenceGate = persistenceGate
         )
     }
 
