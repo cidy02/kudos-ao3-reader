@@ -93,6 +93,7 @@ import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
+import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.SkipNext
@@ -279,6 +280,14 @@ private fun ReaderReading(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    // Landing half of the work-card zoom (iOS
+                    // WorkCardZoomTransition). The source is on every work card;
+                    // without this the card animated into Work Detail but jump-cut
+                    // straight into the reader.
+                    .let { base ->
+                        val ao3Id = state.endOfWork.workId
+                        if (ao3Id != null) base.workCardZoomDestination(ao3Id) else base
+                    }
                     .offset { IntOffset(0, dismissOffsetY.roundToInt()) }
             ) {
                 ReadiumNavigatorHost(
@@ -864,15 +873,20 @@ private fun ReaderTopBar(
                     androidx.compose.material3.DropdownMenuItem(
                         text = {
                             Text(
-                                if (isOrientationLocked) "Unlock orientation" else "Lock portrait"
+                                if (isOrientationLocked) "Unlock rotation" else "Lock rotation"
                             )
                         },
                         onClick = {
                             showOverflow = false
                             isOrientationLocked = !isOrientationLocked
                             val activity = context as? android.app.Activity
+                            // Lock to whatever is on screen *now*, matching iOS
+                            // ReaderOrientationLock.lock(to:), which reads the
+                            // scene's current interfaceOrientation. Forcing portrait
+                            // instead yanked a landscape reader upright the moment
+                            // the user asked to hold it still.
                             activity?.requestedOrientation = if (isOrientationLocked) {
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
                             } else {
                                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                             }

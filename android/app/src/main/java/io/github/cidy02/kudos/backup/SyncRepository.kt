@@ -101,6 +101,7 @@ class SyncRepository(
             
             val conflicts = syncDir.listFiles().filter { it.name?.startsWith("manifest") == true && it.name?.endsWith(".json") == true && it.name != "manifest.json" }
             manifestFilesToRead.addAll(conflicts)
+            val foldedConflicts = conflicts.size
             
             if (manifestFilesToRead.isNotEmpty()) {
                 manifestFilesToRead.forEach { mFile ->
@@ -207,7 +208,7 @@ class SyncRepository(
 
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
-            SyncResult.Success
+            SyncResult.Success(foldedConflicts)
         } catch (e: Exception) {
             SyncResult.Error(e.message ?: "Sync failed.")
         }
@@ -228,6 +229,12 @@ class SyncRepository(
 }
 
 sealed interface SyncResult {
-    data object Success : SyncResult
+    /**
+     * [foldedConflicts] counts the conflict manifests merged in on this run
+     * (iOS `FolderSyncResult.foldedConflicts`). Two devices quietly colliding is
+     * exactly the situation a user needs told about, and the fold is silent
+     * otherwise — nothing else in the UI would ever hint it happened.
+     */
+    data class Success(val foldedConflicts: Int = 0) : SyncResult
     data class Error(val message: String) : SyncResult
 }

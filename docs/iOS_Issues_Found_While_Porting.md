@@ -102,9 +102,13 @@ make the two platforms disagree about what "unchanged" means. Fix both together.
 **iOS:** `FolderSyncService.swift:204-217` increments `result.foldedConflicts`
 for every conflict version it folds in.
 
-Android's port merges every conflicting manifest correctly (that is the important
-half), but discards the count, so a user whose devices are quietly colliding gets
-no signal. Not an iOS bug — an Android gap recorded here so it isn't lost.
+Android's port merged every conflicting manifest correctly (that is the important
+half) but discarded the count, so a user whose devices were quietly colliding got
+no signal.
+
+**Resolved on Android:** `SyncResult.Success` now carries `foldedConflicts` and
+Settings reports it after a manual sync. Kept here as the record of why. Not an
+iOS bug — an Android gap that is now closed.
 
 ---
 

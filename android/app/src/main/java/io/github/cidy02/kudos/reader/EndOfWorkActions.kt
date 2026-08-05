@@ -12,7 +12,6 @@ data class EndOfWorkActions(
     val workId: Long?,
     val sourceUrl: String?,
     val seriesUrl: String?,
-    val nextInSeriesAvailable: Boolean = false,
     val commentsAvailable: Boolean = workId != null
 ) {
     companion object {
@@ -28,9 +27,7 @@ data class EndOfWorkActions(
                 canMarkFinished = canAutoFinish,
                 workId = sourceUrl?.let(WorkTags::ao3WorkIdFromUrl),
                 sourceUrl = sourceUrl,
-                seriesUrl = work.seriesUrl.ifBlank { null },
-                // Series "next" requires remote series parse (later phase).
-                nextInSeriesAvailable = false
+                seriesUrl = work.seriesUrl.ifBlank { null }
             )
         }
 
