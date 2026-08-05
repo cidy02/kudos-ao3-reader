@@ -35,12 +35,28 @@ class SettingsRepository(
         prefs[Keys.HasCompletedOnboarding] ?: false
     }
 
+    val hasConfiguredSyncFolder: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.HasConfiguredSyncFolder] ?: false
+    }
+
+    val hasPermanentlyDismissedSyncFolderOnboarding: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.HasPermanentlyDismissedSyncFolderOnboarding] ?: false
+    }
+
     suspend fun snapshot(): KudosSettings {
         return settings.first()
     }
 
     suspend fun setHasCompletedOnboarding(completed: Boolean) {
         dataStore.edit { it[Keys.HasCompletedOnboarding] = completed }
+    }
+
+    suspend fun setHasConfiguredSyncFolder(configured: Boolean) {
+        dataStore.edit { it[Keys.HasConfiguredSyncFolder] = configured }
+    }
+
+    suspend fun setHasPermanentlyDismissedSyncFolderOnboarding(dismissed: Boolean) {
+        dataStore.edit { it[Keys.HasPermanentlyDismissedSyncFolderOnboarding] = dismissed }
     }
 
     /**
@@ -267,6 +283,8 @@ class SettingsRepository(
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         /** Device-local first-launch flag; not included in backup-compatible settings. */
         val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
+        val HasConfiguredSyncFolder = booleanPreferencesKey("hasConfiguredSyncFolder")
+        val HasPermanentlyDismissedSyncFolderOnboarding = booleanPreferencesKey("hasPermanentlyDismissedSyncFolderOnboarding")
         val CollapsedSections = stringSetPreferencesKey("collapsedSections")
         val SyncIsEnabled = booleanPreferencesKey("syncIsEnabled")
         val SyncFolderUri = stringPreferencesKey("syncFolderUri")
