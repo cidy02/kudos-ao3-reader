@@ -481,6 +481,7 @@ private fun RemoteWorkCover(
     onOpen: () -> Unit
 ) {
     WorkCoverCard(
+        workId = work.id,
         title = work.title,
         author = work.authorText,
         fandom = work.fandoms.firstOrNull { it.isNotBlank() },
@@ -524,6 +525,7 @@ private fun HomeWorkCover(
     }
 
     WorkCoverCard(
+        workId = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(work.sourceUrl),
         title = work.title,
         author = work.author.ifBlank { "Anonymous" },
         fandom = work.primaryFandom(),

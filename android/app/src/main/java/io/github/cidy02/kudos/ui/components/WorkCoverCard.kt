@@ -60,6 +60,7 @@ fun WorkCoverCard(
     onOpen: () -> Unit,
     onOpenDetails: () -> Unit,
     modifier: Modifier = Modifier,
+    workId: Long? = null,
     progress: Float? = null,
     progressLabel: String? = null,
     statusChips: List<String> = emptyList(),
@@ -83,6 +84,7 @@ fun WorkCoverCard(
         modifier = modifier
             .width(WorkCoverCardMetrics.width)
             .height(WorkCoverCardMetrics.height)
+            .let { if (workId != null) it.workCardZoomSource(workId) else it }
             .combinedClickable(
                 onClick = {
                     if (isSelecting) {

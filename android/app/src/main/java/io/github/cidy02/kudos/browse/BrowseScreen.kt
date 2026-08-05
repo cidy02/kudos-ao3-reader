@@ -63,6 +63,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import io.github.cidy02.kudos.ui.components.GlassFieldBar
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material.icons.outlined.Search
 
 @Composable
 fun BrowseScreen(
@@ -74,6 +77,7 @@ fun BrowseScreen(
 ) {
     var state by remember { mutableStateOf<BrowseCategoriesState>(BrowseCategoriesState.Loading) }
     var fandomLists by remember { mutableStateOf<Map<String, List<AO3Fandom>>>(emptyMap()) }
+    var addressQuery by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val libraryFlow = remember(workRepository) {
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
@@ -112,6 +116,27 @@ fun BrowseScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        GlassFieldBar(
+            text = addressQuery,
+            onTextChange = { addressQuery = it },
+            placeholder = "Search AO3 or enter a URL",
+            imeAction = ImeAction.Go,
+            onSubmit = {
+                if (addressQuery.isNotBlank()) {
+                    onOpenWebFallback(addressQuery)
+                    addressQuery = ""
+                }
+            },
+            leading = {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
         when (val current = state) {
             BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
             is BrowseCategoriesState.Error -> BrowseErrorBlock(

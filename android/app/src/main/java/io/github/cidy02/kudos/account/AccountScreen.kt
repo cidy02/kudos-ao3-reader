@@ -1522,6 +1522,7 @@ private fun AccountRemoteWorkCover(
     onOpen: () -> Unit
 ) {
     WorkCoverCard(
+        workId = work.id,
         title = work.title,
         author = work.authorText,
         fandom = work.fandoms.firstOrNull { it.isNotBlank() },

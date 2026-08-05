@@ -10,6 +10,15 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.runtime.CompositionLocalProvider
+import io.github.cidy02.kudos.ui.components.LocalSharedTransitionScope
+import io.github.cidy02.kudos.ui.components.LocalAnimatedVisibilityScope
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavDeepLink
+import androidx.navigation.NavGraphBuilder
 import androidx.compose.runtime.collectAsState
 import io.github.cidy02.kudos.account.AO3CollectionsScreen
 import io.github.cidy02.kudos.account.AO3DashboardScreen
@@ -53,6 +62,7 @@ import io.github.cidy02.kudos.settings.SettingsScreen
 import io.github.cidy02.kudos.works.WorkDetailScreen
 import io.github.cidy02.kudos.works.WorkDetailSource
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavHost(
     container: KudosAppContainer,
@@ -85,12 +95,14 @@ fun AppNavHost(
         return decoded
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = Routes.Home,
-        modifier = modifier
-    ) {
-        composable(Routes.Home) {
+    SharedTransitionLayout {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+            NavHost(
+                navController = navController,
+                startDestination = Routes.Home,
+                modifier = modifier
+            ) {
+        sharedComposable(Routes.Home) {
             HomeScreen(
                 libraryRepository = container.libraryRepository,
                 workRepository = container.workRepository,
@@ -121,7 +133,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Routes.Library) {
+        sharedComposable(Routes.Library) {
             LibraryScreen(
                 repository = container.libraryRepository,
                 workRepository = container.workRepository,
@@ -149,7 +161,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Routes.Collections) {
+        sharedComposable(Routes.Collections) {
             CollectionsScreen(
                 workRepository = container.workRepository,
                 onOpenCollection = { collectionId ->
@@ -157,7 +169,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(
+        sharedComposable(
             Routes.CollectionDetail,
             arguments = listOf(Routes.navArgOf("collectionId"))
         ) { backStackEntry ->
@@ -180,7 +192,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(Routes.ReadingQueues) {
+        sharedComposable(Routes.ReadingQueues) {
             ReadingQueuesScreen(
                 repository = container.readingQueueRepository,
                 onOpenQueue = { queueId ->
@@ -188,7 +200,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(
+        sharedComposable(
             Routes.QueueDetail,
             arguments = listOf(Routes.navArgOf("queueId"))
         ) { backStackEntry ->
@@ -206,7 +218,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(Routes.Browse) {
+        sharedComposable(Routes.Browse) {
             BrowseScreen(
                 repository = container.browseRepository,
                 workRepository = container.workRepository,
@@ -221,7 +233,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(
+        sharedComposable(
             Routes.BrowseFandoms,
             arguments = listOf(
                 Routes.navArgOf("categoryName"),
@@ -245,7 +257,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(
+        sharedComposable(
             Routes.HomeSection,
             arguments = listOf(
                 Routes.navArgOf("homeSection"),
@@ -282,7 +294,7 @@ fun AppNavHost(
             }
         }
 
-        composable(
+        sharedComposable(
             Routes.BrowseWorks,
             arguments = listOf(Routes.navArgOf("fandomName"))
         ) { backStackEntry ->
@@ -302,7 +314,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(
+        sharedComposable(
             Routes.TagWorks,
             arguments = listOf(Routes.navArgOf("tagName"))
         ) { backStackEntry ->
@@ -321,7 +333,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(
+        sharedComposable(
             Routes.WebFallback,
             arguments = listOf(Routes.navArgOf("url"))
         ) { backStackEntry ->
@@ -339,7 +351,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(Routes.Account) {
+        sharedComposable(Routes.Account) {
             AccountScreen(
                 authRepository = container.authRepository,
                 listRepository = container.accountListRepository,
@@ -389,7 +401,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Routes.AO3Dashboard) {
+        sharedComposable(Routes.AO3Dashboard) {
             val authState by container.authRepository.state.collectAsState(
                 initial = AO3AuthState.Restoring
             )
@@ -402,7 +414,7 @@ fun AppNavHost(
                 onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) }
             )
         }
-        composable(Routes.LocalHistory) {
+        sharedComposable(Routes.LocalHistory) {
             LocalLibraryListsScreen(
                 kind = LocalLibraryListKind.History,
                 repository = container.libraryRepository,
@@ -414,7 +426,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Routes.LocalFavorites) {
+        sharedComposable(Routes.LocalFavorites) {
             LocalLibraryListsScreen(
                 kind = LocalLibraryListKind.Favorites,
                 repository = container.libraryRepository,
@@ -426,24 +438,24 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Routes.About) {
+        sharedComposable(Routes.About) {
             AboutScreen(
                 onReportBug = { navController.navigate(Routes.BugReport) }
             )
         }
-        composable(Routes.BugReport) {
+        sharedComposable(Routes.BugReport) {
             BugReportScreen(
                 onBack = { navController.popBackStack() }
             )
         }
-        composable(Routes.AccountLogin) {
+        sharedComposable(Routes.AccountLogin) {
             AO3NativeLoginScreen(
                 authRepository = container.authRepository,
                 onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
                 onCancel = { navController.popBackStack() }
             )
         }
-        composable(Routes.AO3Collections) {
+        sharedComposable(Routes.AO3Collections) {
             AO3CollectionsScreen(
                 repository = container.accountListRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
@@ -456,7 +468,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(
+        sharedComposable(
             Routes.AccountList,
             arguments = listOf(Routes.navArgOf("listType"))
         ) { backStackEntry ->
@@ -476,7 +488,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(Routes.Search) {
+        sharedComposable(Routes.Search) {
             SearchScreen(
                 onOpenWork = { work ->
                     navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
@@ -486,7 +498,7 @@ fun AppNavHost(
                 settingsRepository = container.settingsRepository
             )
         }
-        composable(
+        sharedComposable(
             Routes.WorkDetail,
             arguments = listOf(Routes.navArgOf("workSource"))
         ) { backStackEntry ->
@@ -514,7 +526,7 @@ fun AppNavHost(
                 }
             )
         }
-        composable(
+        sharedComposable(
             Routes.AuthorWorks,
             arguments = listOf(Routes.navArgOf("authorName"))
         ) { backStackEntry ->
@@ -533,7 +545,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(
+        sharedComposable(
             Routes.Reader,
             arguments = listOf(Routes.navArgOf("workId"))
         ) { backStackEntry ->
@@ -574,7 +586,7 @@ fun AppNavHost(
                 )
             }
         }
-        composable(
+        sharedComposable(
             Routes.Comments,
             arguments = listOf(
                 Routes.navArgOf("commentWorkId"),
@@ -602,7 +614,7 @@ fun AppNavHost(
             )
         }
 
-        composable(Routes.RecentlyDeleted) {
+        sharedComposable(Routes.RecentlyDeleted) {
             RecentlyDeletedScreen(
                 workRepository = container.workRepository,
                 queueRepository = container.readingQueueRepository,
@@ -610,7 +622,7 @@ fun AppNavHost(
             )
         }
 
-        composable(Routes.ReadingStatistics) {
+        sharedComposable(Routes.ReadingStatistics) {
             ReadingStatisticsScreen(
                 libraryRepository = container.libraryRepository,
                 settingsRepository = container.settingsRepository,
@@ -618,7 +630,7 @@ fun AppNavHost(
             )
         }
 
-        composable(Routes.Settings) {
+        sharedComposable(Routes.Settings) {
             SettingsScreen(
                 repository = container.settingsRepository,
                 customFontRepository = container.customFontRepository,
@@ -637,11 +649,11 @@ fun AppNavHost(
                 )
             )
         }
-        composable(Routes.Backup) {
+        sharedComposable(Routes.Backup) {
             BackupScreen(repository = container.backupRepository)
         }
 
-        composable(
+        sharedComposable(
             Routes.AuthorProfile,
             arguments = listOf(Routes.navArgOf("authorUsername"))
         ) { backStackEntry ->
@@ -662,7 +674,7 @@ fun AppNavHost(
             }
         }
 
-        composable(Routes.AO3Preferences) {
+        sharedComposable(Routes.AO3Preferences) {
             val prefsAuthState by container.authRepository.state.collectAsState(
                 initial = AO3AuthState.Restoring
             )
@@ -676,12 +688,27 @@ fun AppNavHost(
             }
         }
 
-        composable(Routes.NativeLogin) {
+        sharedComposable(Routes.NativeLogin) {
             AO3NativeLoginScreen(
                 authRepository = container.authRepository,
                 onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
                 onCancel = { navController.popBackStack() }
             )
+        }
+    }
+        }
+    }
+}
+
+fun NavGraphBuilder.sharedComposable(
+    route: String,
+    arguments: List<androidx.navigation.NamedNavArgument> = emptyList(),
+    deepLinks: List<NavDeepLink> = emptyList(),
+    content: @Composable AnimatedVisibilityScope.(NavBackStackEntry) -> Unit
+) {
+    composable(route, arguments, deepLinks) { backStackEntry ->
+        CompositionLocalProvider(LocalAnimatedVisibilityScope provides this) {
+            content(backStackEntry)
         }
     }
 }

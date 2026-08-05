@@ -75,6 +75,7 @@ import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
+import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
@@ -147,11 +148,15 @@ fun SearchScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            OutlinedTextField(
-                value = filters.query,
-                onValueChange = { viewModel.updateFilters(filters.copy(query = it)) },
-                label = { Text("Query") },
-                singleLine = true,
+            GlassFieldBar(
+                text = filters.query,
+                onTextChange = { viewModel.updateFilters(filters.copy(query = it)) },
+                placeholder = "Query",
+                onSubmit = {
+                    if (state !is SearchUiState.Loading && filters.isSearchable) {
+                        viewModel.runSearch()
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
             if (savedSearchRepository != null) {
