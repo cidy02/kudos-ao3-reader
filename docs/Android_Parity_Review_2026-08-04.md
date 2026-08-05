@@ -26,14 +26,14 @@ Nothing is restated from a prior report.
 
 | Verdict | At review | Now |
 |---|---|---|
-| PASS | 71 | **93** |
-| PASS WITH NOTES | 21 | 19 |
+| PASS | 71 | **92** |
+| PASS WITH NOTES | 21 | 18 |
 | FAIL | 11 | 1 |
-| NOT_STARTED | 18 | 8 |
+| NOT_STARTED | 18 | 10 |
 
 **Remaining FAIL (1):** P5-12 — the reader's Comments button isn't chapter-aware.
 
-**Remaining NOT_STARTED (8):** P4-4 series preservation on queue-add · P4-6 Queue
+**Remaining NOT_STARTED (10):** P4-4 series preservation on queue-add · P4-6 Queue
 Storage screen · P7-4 Home multi-select · P7-6 sync-folder onboarding ·
 P8-4 dirty-flag tracking · P8-6 delta export · P8-7 concurrent-writer conflicts ·
 P11-1 shared-element zoom · P11-7 shared search field · P11-8 reader
