@@ -139,6 +139,7 @@ fun CommentsScreen(
     val listState = rememberLazyListState()
     var pendingDeleteComment by remember { mutableStateOf<AO3Comment?>(null) }
     val collapsedIds = remember { mutableStateMapOf<String, Boolean>() }
+    val visibleReplyCounts = remember { mutableStateMapOf<String, Int>() }
 
     fun startReply(comment: AO3Comment) {
         viewModel.startReply(comment)
@@ -326,7 +327,8 @@ fun CommentsScreen(
                             onDelete = { pendingDeleteComment = it },
                             onLoadMore = { viewModel.load() },
                             onViewThread = { commentId -> viewModel.load(focusedId = commentId) },
-                            collapsedIds = collapsedIds
+                            collapsedIds = collapsedIds,
+                            visibleReplyCounts = visibleReplyCounts
                         )
                     }
                 }
@@ -443,15 +445,25 @@ private fun CommentThreadRow(
     onLoadMore: (String) -> Unit,
     onViewThread: (Long) -> Unit,
     collapsedIds: MutableMap<String, Boolean>,
+    visibleReplyCounts: MutableMap<String, Int>,
     depth: Int = 0
 ) {
-    // Initial collapse: deep nests (depth > 2) default to collapsed.
-    // Cutoffs are always "collapsed" in the sense that they need to load more.
-    val isCollapsed = collapsedIds[comment.id ?: ""] ?: (depth > 2 && comment.replies.isNotEmpty())
+    // Collapse is decided by thread SIZE, not nesting depth (iOS
+    // CommentThreadGeometry.autoExpandedMaxReplies). It counts every reply in the
+    // stack, not just direct children, because expanding renders the whole
+    // depth-first subtree — a root with three children each holding twenty
+    // replies is a wall of text however shallow it looks.
+    val rootId = comment.id.orEmpty()
+    val totalReplies = remember(comment) { comment.totalReplyCount() }
+    val isCollapsed = collapsedIds[rootId]
+        ?: (depth == 0 && totalReplies > AUTO_EXPANDED_MAX_REPLIES)
     
     fun toggle() {
         comment.id?.let { id ->
             collapsedIds[id] = !isCollapsed
+            // Collapsing drops "show more" progress for that root, matching iOS:
+            // reopening a long thread starts from the first chunk again.
+            if (!isCollapsed) visibleReplyCounts.remove(id)
         }
     }
 
@@ -474,7 +486,16 @@ private fun CommentThreadRow(
         }
 
         if (!isCollapsed && comment.replies.isNotEmpty()) {
-            comment.replies.forEach { reply ->
+            // Once expanded, reveal a chunk at a time so a 200-reply thread doesn't
+            // build every row (and fire every avatar request) on one tap.
+            val shown = if (depth == 0) {
+                visibleReplyCounts[rootId] ?: REPLIES_CHUNK_SIZE
+            } else {
+                Int.MAX_VALUE
+            }
+            var rendered = 0
+            for (reply in comment.replies) {
+                if (rendered >= shown) break
                 CommentThreadRow(
                     comment = reply,
                     currentUsername = currentUsername,
@@ -485,8 +506,20 @@ private fun CommentThreadRow(
                     onLoadMore = onLoadMore,
                     onViewThread = onViewThread,
                     collapsedIds = collapsedIds,
+                    visibleReplyCounts = visibleReplyCounts,
                     depth = depth + 1
                 )
+                rendered += 1 + reply.totalReplyCount()
+            }
+            val remaining = totalReplies - rendered
+            if (depth == 0 && remaining > 0) {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        visibleReplyCounts[rootId] = shown + REPLIES_CHUNK_SIZE
+                    }
+                ) {
+                    Text("Show ${minOf(remaining, REPLIES_CHUNK_SIZE)} more replies")
+                }
             }
         }
     }
@@ -652,6 +685,40 @@ private fun CommentRow(
                                     }
                                 )
                             }
+                            // Copy Link / Thread / Parent Thread, in iOS's order
+                            // (CommentThreadRow.swift:1417-1429). Copy Link copies the
+                            // comment's own thread URL, which is what AO3 links to.
+                            comment.threadPath?.let { path ->
+                                DropdownMenuItem(
+                                    text = { Text("Copy Link") },
+                                    onClick = {
+                                        showMenu = false
+                                        io.github.cidy02.kudos.network.ao3.writes.AO3WriteUrls
+                                            .absoluteUrl(path)
+                                            ?.let { url ->
+                                                clipboard.setText(
+                                                    androidx.compose.ui.text.AnnotatedString(url)
+                                                )
+                                            }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Thread") },
+                                    onClick = {
+                                        showMenu = false
+                                        comment.id?.toLongOrNull()?.let(onViewThread)
+                                    }
+                                )
+                            }
+                            comment.parentCommentId?.let { parentId ->
+                                DropdownMenuItem(
+                                    text = { Text("Parent Thread") },
+                                    onClick = {
+                                        showMenu = false
+                                        onViewThread(parentId)
+                                    }
+                                )
+                            }
                             if (comment.deletePath != null) {
                                 DropdownMenuItem(
                                     text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
@@ -801,3 +868,13 @@ private fun AO3Error.displayMessage(): String {
         is AO3Error.Validation -> message
     }
 }
+
+/** Reply stacks larger than this start collapsed (iOS `autoExpandedMaxReplies`). */
+private const val AUTO_EXPANDED_MAX_REPLIES = 8
+
+/** Once expanded, reveal this many at a time (iOS `repliesChunkSize`). */
+private const val REPLIES_CHUNK_SIZE = 20
+
+/** Every reply beneath this comment, not just its direct children. */
+internal fun AO3Comment.totalReplyCount(): Int =
+    replies.sumOf { 1 + it.totalReplyCount() }

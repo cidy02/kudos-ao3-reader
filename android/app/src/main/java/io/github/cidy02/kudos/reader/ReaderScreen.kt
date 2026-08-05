@@ -864,15 +864,20 @@ private fun ReaderTopBar(
                     androidx.compose.material3.DropdownMenuItem(
                         text = {
                             Text(
-                                if (isOrientationLocked) "Unlock orientation" else "Lock portrait"
+                                if (isOrientationLocked) "Unlock rotation" else "Lock rotation"
                             )
                         },
                         onClick = {
                             showOverflow = false
                             isOrientationLocked = !isOrientationLocked
                             val activity = context as? android.app.Activity
+                            // Lock to whatever is on screen *now*, matching iOS
+                            // ReaderOrientationLock.lock(to:), which reads the
+                            // scene's current interfaceOrientation. Forcing portrait
+                            // instead yanked a landscape reader upright the moment
+                            // the user asked to hold it still.
                             activity?.requestedOrientation = if (isOrientationLocked) {
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
                             } else {
                                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                             }
