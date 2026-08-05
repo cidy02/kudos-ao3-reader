@@ -60,6 +60,8 @@ class WorkMetadataMerger(
             wordCount = canonical?.words ?: summary?.wordCount ?: base.wordCount,
             chapters = choose(canonical?.chapters, choose(summary?.chapters, base.chapters)),
             kudos = canonical?.kudos ?: summary?.kudos ?: base.kudos,
+            datePublished = choose(summary?.publishedDate, base.datePublished),
+            dateUpdated = choose(summary?.updatedDate, base.dateUpdated),
             comments = canonical?.comments ?: summary?.comments ?: base.comments,
             hits = canonical?.hits ?: summary?.hits ?: base.hits,
             seriesTitle = choose(summary?.seriesTitle, base.seriesTitle),

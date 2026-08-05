@@ -81,6 +81,15 @@ interface ReadingQueueDao {
     )
     suspend fun deleteMembershipForWork(queueId: String, workId: String)
 
+    /**
+     * Every queue's membership row for a work, in every queue at once — used when
+     * the work itself is hard-deleted. `workID` is deliberately not a hard foreign
+     * key (to support restore ordering), so without this a hard-deleted work's
+     * memberships become permanent dangling "Missing work" rows.
+     */
+    @Query("DELETE FROM reading_queue_memberships WHERE workID = :workId")
+    suspend fun deleteMembershipsForWork(workId: String)
+
     @Query(
         """
         SELECT COUNT(*) FROM reading_queue_memberships m

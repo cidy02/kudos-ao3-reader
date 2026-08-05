@@ -61,6 +61,14 @@ class KudosApplication : Application(), Configuration.Provider {
     }
 
     private fun scheduleWorkManagerTasks() {
+        // Product-behavior difference from iOS, not (yet) reconciled: iOS's
+        // WorkAvailabilitySweep is explicitly manual-only ("This never runs by
+        // itself" — politeness, since AO3 has no cheap "what changed" signal).
+        // This periodic worker runs the same sweep automatically every 7 days.
+        // Left as-is deliberately — deciding whether Android's auto-run should be
+        // dialed back to match iOS is a product call, not something to change
+        // silently alongside the sweep's own politeness hardening (see
+        // WorkAvailabilitySweep's recheck-interval/pacing/limit, added the same pass).
         val sweepWork = androidx.work.PeriodicWorkRequestBuilder<io.github.cidy02.kudos.works.AvailabilitySweepWorker>(
             7, java.util.concurrent.TimeUnit.DAYS
         ).build()

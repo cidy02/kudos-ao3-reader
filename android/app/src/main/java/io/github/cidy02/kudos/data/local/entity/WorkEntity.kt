@@ -60,5 +60,7 @@ data class WorkEntity(
     val searchText: String = "",
     val searchIndexVersion: Int = 0,
 
-    val lastTagRefreshAttemptAt: Instant? = null
+    val lastTagRefreshAttemptAt: Instant? = null,
+    val datePublished: String = "",
+    val dateUpdated: String = ""
 )

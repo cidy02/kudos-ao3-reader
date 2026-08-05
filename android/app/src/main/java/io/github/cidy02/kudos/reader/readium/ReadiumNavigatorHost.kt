@@ -76,6 +76,9 @@ fun ReadiumNavigatorHost(
     val fragmentFactory = remember(publication, initialLocator, fontDeclarations) {
         val configuration = EpubNavigatorFragment.Configuration().apply {
             ReadiumSettingsAdapter.configureFontDeclarations(this, fontDeclarations)
+            // Otherwise a vertical scroll gesture in scroll-mode reading can latch as a
+            // horizontal drag and fire an accidental chapter change mid-scroll.
+            disablePageTurnsWhileScrolling = true
         }
         EpubNavigatorFactory(publication).createFragmentFactory(
             initialLocator = initialLocator,

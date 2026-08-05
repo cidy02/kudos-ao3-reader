@@ -73,6 +73,26 @@ class WorkMetadataMergerTest {
         assertEquals(9, merged.kudos)
     }
 
+    @Test
+    fun mergePullsPublishedAndUpdatedDatesFromTheRemoteSummary() {
+        val summary = sampleSummary().copy(publishedDate = "2024-01-15", updatedDate = "2024-03-02")
+
+        val merged = WorkMetadataMerger().merge(summary, canonical = null, existing = null, markSaved = true)
+
+        assertEquals("2024-01-15", merged.datePublished)
+        assertEquals("2024-03-02", merged.dateUpdated)
+    }
+
+    @Test
+    fun mergeKeepsExistingDatesWhenTheRemoteSummaryHasNone() {
+        val existing = sampleSavedWork().copy(datePublished = "2024-01-15", dateUpdated = "2024-03-02")
+
+        val merged = WorkMetadataMerger().merge(summary = null, canonical = null, existing = existing, markSaved = true)
+
+        assertEquals("2024-01-15", merged.datePublished)
+        assertEquals("2024-03-02", merged.dateUpdated)
+    }
+
     // The three cases below pin the revival behaviour added to fix a real bug found in
     // review: importing or saving a work that matches a soft-deleted (Recently Deleted)
     // row updated its fields but left `isDeleted` untouched — the download reported
@@ -290,6 +310,66 @@ class WorkLifecycleRepositoryTest {
                 workUuid,
                 io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
             ).isNotEmpty()
+        )
+    }
+
+    @Test
+    fun hardDeleteCleansUpAnnotationsAndQueueMembershipsWithTombstone() = runTest {
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+
+        database.annotationDao().upsert(
+            io.github.cidy02.kudos.data.local.entity.AnnotationEntity(
+                id = "annotation-1",
+                workID = workUuid,
+                kindRaw = "highlight",
+                colorRaw = "yellow",
+                locatorString = "",
+                selectedText = "a passage",
+                note = "",
+                progression = 0.1,
+                spineIndex = 0,
+                chapterTitle = "",
+                createdAt = clockNow
+            )
+        )
+        database.readingQueueDao().upsertQueue(
+            io.github.cidy02.kudos.data.local.entity.ReadingQueueEntity(
+                id = "queue-1",
+                name = "To Read",
+                kindRaw = "custom",
+                sortOrder = 0,
+                dateCreated = clockNow,
+                dateUpdated = clockNow
+            )
+        )
+        database.readingQueueDao().upsertMembership(
+            io.github.cidy02.kudos.data.local.entity.ReadingQueueMembershipEntity(
+                id = "membership-1",
+                queueID = "queue-1",
+                workID = workUuid,
+                queuedAt = clockNow
+            )
+        )
+
+        repository.hardDelete(workUuid)
+
+        assertTrue(
+            "hard-deleting a work must not leave its annotations orphaned",
+            database.annotationDao().getForWork(workUuid).isEmpty()
+        )
+        assertTrue(
+            "hard-deleting a work must not leave dangling queue memberships",
+            database.readingQueueDao().getMembershipsForWork(workUuid).isEmpty()
+        )
+        val annotationTombstones = database.syncTombstoneDao().getByRecord(
+            "annotation-1",
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION
+        )
+        assertEquals(
+            "the orphaned annotation must be tombstoned, or a restore could resurrect it",
+            1,
+            annotationTombstones.size
         )
     }
 

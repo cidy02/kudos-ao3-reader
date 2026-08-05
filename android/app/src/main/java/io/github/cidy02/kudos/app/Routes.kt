@@ -33,6 +33,7 @@ object Routes {
     const val Settings = "settings"
     const val Backup = "backup"
     const val QueueStorage = "queue_storage"
+    const val AvailabilitySweep = "availability_sweep"
     const val RecentlyDeleted = "recently-deleted"
     const val ReadingQueues = "reading-queues"
     const val ReadingStatistics = "reading-statistics"

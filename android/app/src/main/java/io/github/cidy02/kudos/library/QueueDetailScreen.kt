@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 fun QueueDetailScreen(
     queueId: String,
     repository: ReadingQueueRepository,
+    workRepository: io.github.cidy02.kudos.works.WorkRepository,
     settingsRepository: SettingsRepository? = null,
     onOpenWork: (String) -> Unit
 ) {
@@ -81,6 +83,8 @@ fun QueueDetailScreen(
     var reorderMode by remember { mutableStateOf(false) }
     var detailedMode by remember { mutableStateOf(true) }
     var expandAll by remember { mutableStateOf(false) }
+    var isSelecting by remember(queueId) { mutableStateOf(false) }
+    var selectedIds by remember(queueId) { mutableStateOf(setOf<String>()) }
     val userTags by repository.observeAllUserTags().collectAsState(initial = emptyList())
     val allCollections by repository.observeAllCollections().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -136,6 +140,11 @@ fun QueueDetailScreen(
                 working = false
             }
         }
+    }
+
+    suspend fun bulkRemove() {
+        selectedIds.forEach { repository.removeWork(queueId, it) }
+        items = repository.listWorks(queueId)
     }
 
     fun renameQueue() {
@@ -213,6 +222,7 @@ fun QueueDetailScreen(
         onDismissRequest = { showDeleteConfirm = false }
     )
 
+    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
@@ -238,63 +248,81 @@ fun QueueDetailScreen(
 
                 if (queue != null && queue!!.kindRaw != io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (!reorderMode) {
-                            IconButton(onClick = { showFilterPanel = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.Sort,
-                                    contentDescription = "Filter and Sort",
-                                    tint = if (filters.hasActiveFilters) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
+                        if (isSelecting) {
+                            TextButton(onClick = {
+                                isSelecting = false
+                                selectedIds = emptySet()
+                            }) {
+                                Text("Cancel")
                             }
-                        }
-                        Box {
-                            IconButton(onClick = { overflowExpanded = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Queue actions")
+                        } else {
+                            if (!reorderMode) {
+                                IconButton(onClick = { showFilterPanel = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Sort,
+                                        contentDescription = "Filter and Sort",
+                                        tint = if (filters.hasActiveFilters) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
                             }
-                            DropdownMenu(
-                                expanded = overflowExpanded,
-                                onDismissRequest = { overflowExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(if (reorderMode) "Exit Reordering" else "Reorder Works") },
-                                    onClick = {
-                                        overflowExpanded = false
-                                        reorderMode = !reorderMode
-                                        if (reorderMode) sort = LibrarySort.Manual
+                            Box {
+                                IconButton(onClick = { overflowExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Queue actions")
+                                }
+                                DropdownMenu(
+                                    expanded = overflowExpanded,
+                                    onDismissRequest = { overflowExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (reorderMode) "Exit Reordering" else "Reorder Works") },
+                                        onClick = {
+                                            overflowExpanded = false
+                                            reorderMode = !reorderMode
+                                            if (reorderMode) sort = LibrarySort.Manual
+                                        }
+                                    )
+                                    if (!reorderMode && items.isNotEmpty()) {
+                                        DropdownMenuItem(
+                                            text = { Text("Select") },
+                                            onClick = {
+                                                overflowExpanded = false
+                                                isSelecting = true
+                                            }
+                                        )
                                     }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (expandAll) "Collapse All" else "Expand All") },
-                                    onClick = {
-                                        overflowExpanded = false
-                                        expandAll = !expandAll
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (detailedMode) "Show Compact" else "Show Detailed") },
-                                    onClick = {
-                                        overflowExpanded = false
-                                        detailedMode = !detailedMode
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Rename") },
-                                    onClick = {
-                                        overflowExpanded = false
-                                        showRenameDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                    onClick = {
-                                        overflowExpanded = false
-                                        showDeleteConfirm = true
-                                    }
-                                )
+                                    DropdownMenuItem(
+                                        text = { Text(if (expandAll) "Collapse All" else "Expand All") },
+                                        onClick = {
+                                            overflowExpanded = false
+                                            expandAll = !expandAll
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (detailedMode) "Show Compact" else "Show Detailed") },
+                                        onClick = {
+                                            overflowExpanded = false
+                                            detailedMode = !detailedMode
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = {
+                                            overflowExpanded = false
+                                            showRenameDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            overflowExpanded = false
+                                            showDeleteConfirm = true
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -337,12 +365,22 @@ fun QueueDetailScreen(
                     }
                 } else {
                     itemsIndexed(filteredItems, key = { _, item -> item.membership.id }) { index, item ->
+                        val workId = item.membership.workID
                         QueueWorkRow(
                             item = item,
                             enabled = !working,
                             reorderMode = reorderMode,
                             detailedMode = detailedMode,
                             expandAll = expandAll,
+                            isSelecting = isSelecting,
+                            isSelected = workId in selectedIds,
+                            onToggleSelection = {
+                                selectedIds = if (workId in selectedIds) {
+                                    selectedIds - workId
+                                } else {
+                                    selectedIds + workId
+                                }
+                            },
                             onOpenWork = {
                                 item.work?.id?.let(onOpenWork)
                             },
@@ -353,6 +391,24 @@ fun QueueDetailScreen(
                     }
                 }
             }
+        }
+    }
+
+        if (isSelecting) {
+            val selectedWorks = items.mapNotNull { it.work }.filter { it.id in selectedIds }
+            io.github.cidy02.kudos.ui.components.ScopedRemovalBulkActionBar(
+                selectedWorks = selectedWorks,
+                workRepository = workRepository,
+                queueRepository = repository,
+                removeLabel = "Remove from Queue",
+                scopeName = "queue",
+                onRemove = { bulkRemove() },
+                onDone = {
+                    isSelecting = false
+                    selectedIds = emptySet()
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 
@@ -378,12 +434,19 @@ private fun QueueWorkRow(
     reorderMode: Boolean,
     detailedMode: Boolean,
     expandAll: Boolean,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelection: () -> Unit = {},
     onOpenWork: () -> Unit,
     onRemove: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null
 ) {
-    if (detailedMode) {
+    // Selection mode always renders the compact row, even when detailedMode is on —
+    // AO3WorkCard has no selection affordance of its own, and overlaying a checkbox
+    // + click-intercept on top of that shared, already-complex component (also used
+    // by Search) is a bigger, riskier change than this one scoped-down simplification.
+    if (detailedMode && !isSelecting) {
         val work = item.work
         if (work != null) {
             AO3WorkCard(
@@ -399,7 +462,11 @@ private fun QueueWorkRow(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                containerColor = if (isSelected) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                }
             )
         ) {
             Row(
@@ -419,15 +486,20 @@ private fun QueueWorkRow(
                         }
                     }
                 }
+                if (isSelecting && item.work != null) {
+                    Checkbox(checked = isSelected, onCheckedChange = { onToggleSelection() })
+                }
 
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .then(
-                            if (item.work != null && !reorderMode) {
-                                Modifier.clickable(enabled = enabled, onClick = onOpenWork)
-                            } else {
-                                Modifier
+                            when {
+                                isSelecting && item.work != null ->
+                                    Modifier.clickable(enabled = enabled, onClick = onToggleSelection)
+                                item.work != null && !reorderMode ->
+                                    Modifier.clickable(enabled = enabled, onClick = onOpenWork)
+                                else -> Modifier
                             }
                         ),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -448,7 +520,7 @@ private fun QueueWorkRow(
                         )
                     }
                 }
-                if (!reorderMode) {
+                if (!reorderMode && !isSelecting) {
                     OutlinedButton(enabled = enabled, onClick = onRemove) {
                         Text("Remove")
                     }

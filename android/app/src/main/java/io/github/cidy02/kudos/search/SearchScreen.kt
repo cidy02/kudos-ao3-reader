@@ -76,6 +76,7 @@ import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
@@ -115,6 +116,19 @@ fun SearchScreen(
     var expandAllCards by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activeChips = remember(filters) { activeFilterChips(filters) }
+
+    // Local half of the filter sheet's tag suggestions (matches Browse's Fandom/Tag
+    // screens) — empty when signed out of a local library entirely (workRepository
+    // is nil), not just when there happen to be no matches yet.
+    val savedWorks by (workRepository?.observeSavedWorks() ?: emptyFlow())
+        .collectAsState(initial = emptyList())
+    var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(workRepository) {
+        userTagNames = workRepository?.allUserTags()?.map { it.normalizedName } ?: emptyList()
+    }
+    val localTagSuggestions = remember(savedWorks, userTagNames) {
+        collectLocalTagSuggestions(savedWorks, userTagNames)
+    }
 
     fun commitSavedSearch() {
         val name = saveName.trim()
@@ -279,7 +293,7 @@ fun SearchScreen(
 
     if (showFilterSheet) {
         SearchFilterSheet(
-            localTagSuggestions = LocalTagSuggestions(),
+            localTagSuggestions = localTagSuggestions,
             filters = filters,
             onFiltersChange = { viewModel.updateFilters(it) },
             onApply = {

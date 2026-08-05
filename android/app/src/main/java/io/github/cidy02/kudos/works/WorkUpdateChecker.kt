@@ -25,7 +25,10 @@ class WorkUpdateChecker(
      * `knownChapterCount` on first sight. Failures are kept silent and retried later.
      */
     suspend fun checkForUpdates(among: List<SavedWork> = emptyList()) {
-        val works = among.ifEmpty { workRepository.listSavedWorks() }
+        // The full library, not just isProtected (saved/favorited/queued/unavailable)
+        // works — a work that's only in reading history still deserves an update
+        // check, matching iOS's unfiltered candidate set.
+        val works = among.ifEmpty { workRepository.listLibraryWorks() }
         val due = works.filter { shouldCheck(it, clock()) }
         if (due.isEmpty()) return
 

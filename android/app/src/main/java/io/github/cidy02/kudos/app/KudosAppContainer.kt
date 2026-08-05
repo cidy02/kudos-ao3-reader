@@ -66,7 +66,8 @@ class KudosAppContainer(context: Context) {
                 KudosDatabaseMigrations.MIGRATION_3_4,
                 KudosDatabaseMigrations.MIGRATION_4_5,
                 KudosDatabaseMigrations.MIGRATION_5_6,
-                KudosDatabaseMigrations.MIGRATION_6_7
+                KudosDatabaseMigrations.MIGRATION_6_7,
+                KudosDatabaseMigrations.MIGRATION_7_8
             )
             .build()
     }
@@ -226,7 +227,7 @@ class KudosAppContainer(context: Context) {
     }
 
     val annotationRepository: io.github.cidy02.kudos.reader.AnnotationRepository by lazy {
-        io.github.cidy02.kudos.reader.AnnotationRepository(database.annotationDao())
+        io.github.cidy02.kudos.reader.AnnotationRepository(database.annotationDao(), database.syncTombstoneDao())
     }
 
     val fandomCatalogCache: FandomCatalogCache by lazy {

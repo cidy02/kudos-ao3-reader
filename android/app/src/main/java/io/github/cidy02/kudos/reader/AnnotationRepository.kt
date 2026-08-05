@@ -1,7 +1,10 @@
 package io.github.cidy02.kudos.reader
 
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.dao.AnnotationDao
+import io.github.cidy02.kudos.data.local.dao.SyncTombstoneDao
+import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.time.Instant
@@ -18,7 +21,12 @@ import kotlinx.coroutines.flow.map
  * targets the same selected text + similar progression, update color instead of
  * stacking a second row.
  */
-class AnnotationRepository(private val dao: AnnotationDao) {
+class AnnotationRepository(
+    private val dao: AnnotationDao,
+    private val tombstoneDao: SyncTombstoneDao,
+    private val clock: () -> Instant = { Instant.now() },
+    private val uuidFactory: () -> String = { UUID.randomUUID().toString() }
+) {
     fun observeForWork(workId: String): Flow<List<ReadingAnnotation>> {
         return dao.observeForWork(workId).map { rows -> rows.map { it.toDomain() } }
     }
@@ -27,8 +35,45 @@ class AnnotationRepository(private val dao: AnnotationDao) {
         dao.upsert(annotation.copy(lastModifiedAt = Instant.now()).toEntity())
     }
 
+    /**
+     * Deletes a single highlight/bookmark and records a tombstone for it — without
+     * one, restoring an older `.kudosbackup`/cloud archive could silently bring
+     * back a highlight the user explicitly deleted (the merge logic already knows
+     * how to consume a [SyncTombstoneRecordType.READING_ANNOTATION] tombstone to
+     * prevent that resurrection; it just needs one to exist).
+     */
     suspend fun deleteAnnotation(id: String) {
         dao.deleteById(id)
+        recordTombstone(id)
+    }
+
+    /**
+     * Cleans up every annotation for a work being hard-deleted — there's no DB
+     * cascade for `annotations.workID`, so without this call they'd be permanently
+     * orphaned rather than removed. Each one gets its own tombstone, same as a
+     * single [deleteAnnotation] call, for the same restore-resurrection reason.
+     */
+    suspend fun deleteForWork(workId: String) {
+        val orphaned = dao.getForWork(workId)
+        dao.deleteByWorkId(workId)
+        for (annotation in orphaned) {
+            recordTombstone(annotation.id)
+        }
+    }
+
+    private suspend fun recordTombstone(annotationId: String) {
+        val now = clock()
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = annotationId,
+                recordTypeRaw = SyncTombstoneRecordType.READING_ANNOTATION,
+                createdAt = now,
+                lastModifiedAt = now,
+                deletedOnDeviceID = "",
+                deletionReason = "annotationDeleted"
+            )
+        )
     }
 
     suspend fun updateNote(id: String, note: String) {

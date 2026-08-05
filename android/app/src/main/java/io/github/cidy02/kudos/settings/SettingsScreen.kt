@@ -131,7 +131,8 @@ fun SettingsScreen(
     workImporter: WorkImporter? = null,
     fandomCatalogCache: FandomCatalogCache? = null,
     workRepository: WorkRepository? = null,
-    workAvailabilitySweep: io.github.cidy02.kudos.works.WorkAvailabilitySweep? = null
+    workAvailabilitySweep: io.github.cidy02.kudos.works.WorkAvailabilitySweep? = null,
+    onOpenAvailabilitySweep: () -> Unit = {}
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val syncRepository = (androidx.compose.ui.platform.LocalContext.current.applicationContext as? io.github.cidy02.kudos.KudosApplication)
@@ -653,45 +654,12 @@ fun SettingsScreen(
                 }
                 
                 if (workAvailabilitySweep != null) {
-                    var sweepBusy by remember { mutableStateOf(false) }
-                    var sweepStatus by remember { mutableStateOf<String?>(null) }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Check library for deleted/hidden works on AO3.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        OutlinedButton(
-                            onClick = {
-                                if (!sweepBusy) {
-                                    sweepBusy = true
-                                    sweepStatus = null
-                                    scope.launch {
-                                        try {
-                                            val unavailable = workAvailabilitySweep.sweep()
-                                            sweepStatus = "Sweep complete: $unavailable works marked unavailable."
-                                        } catch (e: Exception) {
-                                            sweepStatus = "Sweep failed: ${e.message}"
-                                        } finally {
-                                            sweepBusy = false
-                                        }
-                                    }
-                                }
-                            },
-                            enabled = !sweepBusy,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(if (sweepBusy) "Sweeping…" else "Run Availability Sweep")
-                        }
-                        if (sweepStatus != null) {
-                            Text(
-                                text = sweepStatus!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    SettingsLinkRow(
+                        label = "Check Availability",
+                        icon = Icons.Outlined.CloudOff,
+                        onClick = onOpenAvailabilitySweep
+                    )
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -1031,10 +999,13 @@ private fun UpdateSection(
                 }
             }
             is AppUpdateState.UpdateAvailable -> {
-                Text(
-                    "Version ${state.match.version} is available.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Version ${state.match.version} is available.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    ReleaseNotes(state.match.release.body)
+                }
             }
             is AppUpdateState.Downloading -> {
                 Text(
@@ -1052,6 +1023,7 @@ private fun UpdateSection(
                         "Version ${state.match.version} is ready to install.",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    ReleaseNotes(state.match.release.body)
                     Button(onClick = { onInstall(state.apkPath) }) { Text("Install Update") }
                 }
             }
@@ -1067,6 +1039,24 @@ private fun UpdateSection(
             }
         }
     }
+}
+
+/**
+ * The GitHub release's own plain-English notes — already fetched and threaded to
+ * `AppUpdateState.UpdateAvailable`/`ReadyToInstall` for the update-check machinery,
+ * but never previously rendered here. Shown as-is (GitHub release bodies are plain
+ * text/Markdown source, not rendered Markdown — matching how this Settings screen
+ * treats every other plain string).
+ */
+@Composable
+private fun ReleaseNotes(body: String?) {
+    val trimmed = body?.trim().orEmpty()
+    if (trimmed.isEmpty()) return
+    Text(
+        text = trimmed,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable

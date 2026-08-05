@@ -38,4 +38,28 @@ class WorkStatsTest {
         assertEquals("In Progress", completionStatText(false))
         assertNull(completionStatText(null))
     }
+
+    @Test
+    fun listRowStats_prefersUpdatedDateOverPublished() {
+        val stats = listRowStats(
+            rating = "", wordCount = null, chapters = "", kudos = null,
+            datePublished = "2024-01-15", dateUpdated = "2024-03-02"
+        )
+        assertEquals("2024-03-02", stats.single().text)
+    }
+
+    @Test
+    fun listRowStats_fallsBackToPublishedWhenNeverUpdated() {
+        val stats = listRowStats(
+            rating = "", wordCount = null, chapters = "", kudos = null,
+            datePublished = "2024-01-15", dateUpdated = ""
+        )
+        assertEquals("2024-01-15", stats.single().text)
+    }
+
+    @Test
+    fun listRowStats_omitsDateStatWhenNeitherIsKnown() {
+        val stats = listRowStats(rating = "", wordCount = null, chapters = "", kudos = null)
+        assertEquals(emptyList<WorkStatItem>(), stats)
+    }
 }

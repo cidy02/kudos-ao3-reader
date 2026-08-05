@@ -65,6 +65,7 @@ fun CollectionDetailScreen(
     workRepository: WorkRepository,
     settingsRepository: SettingsRepository? = null,
     privacyGate: PrivacyGate = PrivacyGate(),
+    queueRepository: ReadingQueueRepository? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onCollectionDeleted: () -> Unit
@@ -87,6 +88,8 @@ fun CollectionDetailScreen(
     var renameText by remember(collectionId) { mutableStateOf("") }
     var pendingRemoveWork by remember(collectionId) { mutableStateOf<SavedWork?>(null) }
     var showAddPicker by remember(collectionId) { mutableStateOf(false) }
+    var isSelecting by remember(collectionId) { mutableStateOf(false) }
+    var selectedIds by remember(collectionId) { mutableStateOf(setOf<String>()) }
     val scope = rememberCoroutineScope()
     val activity = androidx.compose.ui.platform.LocalContext.current
         as? androidx.fragment.app.FragmentActivity
@@ -163,6 +166,11 @@ fun CollectionDetailScreen(
                 working = false
             }
         }
+    }
+
+    suspend fun bulkRemove() {
+        selectedIds.forEach { workRepository.removeFromCollection(it, collectionId) }
+        refresh()
     }
 
     fun deleteCollection() {
@@ -244,9 +252,13 @@ fun CollectionDetailScreen(
         onDismissRequest = { pendingRemoveWork = null }
     )
 
+    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+        contentPadding = PaddingValues(
+            horizontal = 20.dp,
+            vertical = 18.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -261,28 +273,45 @@ fun CollectionDetailScreen(
                 trailing = {
                     if (collection != null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                enabled = !working && !loading,
-                                onClick = { showAddPicker = true }
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(Modifier.padding(end = 4.dp))
-                                Text("Add Works")
-                            }
-                            OutlinedButton(
-                                enabled = !working && !loading,
-                                onClick = {
-                                    renameText = collection?.name.orEmpty()
-                                    showRename = true
+                            if (isSelecting) {
+                                OutlinedButton(onClick = {
+                                    isSelecting = false
+                                    selectedIds = emptySet()
+                                }) {
+                                    Text("Cancel")
                                 }
-                            ) {
-                                Text("Rename")
-                            }
-                            OutlinedButton(
-                                enabled = !working && !loading,
-                                onClick = { confirmDelete = true }
-                            ) {
-                                Text("Delete")
+                            } else {
+                                OutlinedButton(
+                                    enabled = !working && !loading,
+                                    onClick = { showAddPicker = true }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(Modifier.padding(end = 4.dp))
+                                    Text("Add Works")
+                                }
+                                if (works.isNotEmpty()) {
+                                    OutlinedButton(
+                                        enabled = !working && !loading,
+                                        onClick = { isSelecting = true }
+                                    ) {
+                                        Text("Select")
+                                    }
+                                }
+                                OutlinedButton(
+                                    enabled = !working && !loading,
+                                    onClick = {
+                                        renameText = collection?.name.orEmpty()
+                                        showRename = true
+                                    }
+                                ) {
+                                    Text("Rename")
+                                }
+                                OutlinedButton(
+                                    enabled = !working && !loading,
+                                    onClick = { confirmDelete = true }
+                                ) {
+                                    Text("Delete")
+                                }
                             }
                         }
                     }
@@ -325,6 +354,15 @@ fun CollectionDetailScreen(
                             work = work,
                             enabled = !working,
                             obscured = obscured,
+                            isSelecting = isSelecting,
+                            isSelected = work.id in selectedIds,
+                            onToggleSelection = {
+                                selectedIds = if (work.id in selectedIds) {
+                                    selectedIds - work.id
+                                } else {
+                                    selectedIds + work.id
+                                }
+                            },
                             onOpenWork = { onOpenWork(work.id) },
                             onOpenReader = {
                                 if (work.hasEpub) onOpenReader(work.id)
@@ -341,6 +379,24 @@ fun CollectionDetailScreen(
                     }
                 }
             }
+        }
+    }
+
+        if (isSelecting) {
+            val selectedWorks = works.filter { it.id in selectedIds }
+            io.github.cidy02.kudos.ui.components.ScopedRemovalBulkActionBar(
+                selectedWorks = selectedWorks,
+                workRepository = workRepository,
+                queueRepository = queueRepository,
+                removeLabel = "Remove from Collection",
+                scopeName = "collection",
+                onRemove = { bulkRemove() },
+                onDone = {
+                    isSelecting = false
+                    selectedIds = emptySet()
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 
@@ -465,6 +521,9 @@ private fun CollectionWorkRow(
     work: SavedWork,
     enabled: Boolean,
     obscured: Boolean,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelection: () -> Unit = {},
     onOpenWork: () -> Unit,
     onOpenReader: () -> Unit,
     onReveal: () -> Unit,
@@ -473,58 +532,75 @@ private fun CollectionWorkRow(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            }
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
         ) {
+            if (isSelecting) {
+                Checkbox(checked = isSelected, onCheckedChange = { onToggleSelection() })
+            }
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        enabled = enabled,
-                        onClick = if (obscured) onReveal else onOpenWork
-                    ),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = if (obscured) "Hidden mature work" else work.title.ifBlank { "Untitled work" },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (obscured) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            enabled = enabled,
+                            onClick = when {
+                                isSelecting -> onToggleSelection
+                                obscured -> onReveal
+                                else -> onOpenWork
+                            }
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = "Tap to reveal",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else if (work.author.isNotBlank()) {
-                    Text(
-                        text = "by ${work.author}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        text = if (obscured) "Hidden mature work" else work.title.ifBlank { "Untitled work" },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (work.hasEpub && !obscured) {
-                    OutlinedButton(enabled = enabled, onClick = onOpenReader) {
-                        Text("Read")
+                    if (obscured) {
+                        Text(
+                            text = "Tap to reveal",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else if (work.author.isNotBlank()) {
+                        Text(
+                            text = "by ${work.author}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-                OutlinedButton(enabled = enabled, onClick = onRemove) {
-                    Text("Remove")
+                if (!isSelecting) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (work.hasEpub && !obscured) {
+                            OutlinedButton(enabled = enabled, onClick = onOpenReader) {
+                                Text("Read")
+                            }
+                        }
+                        OutlinedButton(enabled = enabled, onClick = onRemove) {
+                            Text("Remove")
+                        }
+                    }
                 }
             }
         }

@@ -191,10 +191,38 @@ class WorkUpdateCheckerFailureBackoffTest {
             }
         }
         val checker = WorkUpdateChecker(repository, mockMetadata)
-        
-        checker.checkForUpdates(emptyList()) // relies on listSavedWorks()
-        
+
+        checker.checkForUpdates(emptyList()) // relies on listLibraryWorks()
+
         assertTrue("A queued-then-favorited work must be eligible for updates", fetched)
+    }
+
+    @Test
+    fun includesReadingHistoryOnlyWorksNotJustProtectedOnes() = runTest {
+        // Opened/downloaded but never explicitly saved, favorited, or queued — not
+        // `isProtected`, so the old `listSavedWorks()` candidate set excluded it.
+        // iOS hands its checker the full unfiltered library; Android's default
+        // eligibility (no explicit `among`) must match.
+        val saved = repository.upsert(
+            work(id = "w1", isComplete = false, sourceUrl = "https://archiveofourown.org/works/123", lastCheck = null).copy(
+                isSaved = false,
+                isFavorite = false,
+                isQueuedForLater = false
+            )
+        )
+
+        var fetched = false
+        val mockMetadata = object : AO3WorkMetadataRepository() {
+            override suspend fun fetch(workId: Long): AO3Result<AO3WorkMetadata> {
+                fetched = true
+                return AO3Result.Success(AO3WorkMetadata(chapters = "2/?"))
+            }
+        }
+        val checker = WorkUpdateChecker(repository, mockMetadata)
+
+        checker.checkForUpdates(emptyList())
+
+        assertTrue("A reading-history-only work must be eligible for updates", fetched)
     }
 }
 

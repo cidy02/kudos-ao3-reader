@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -117,6 +118,7 @@ object WorkStatIcons {
     val inProgress: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val words: ImageVector get() = Icons.Outlined.TextFields
     val kudos: ImageVector get() = Icons.Outlined.FavoriteBorder
+    val date: ImageVector get() = Icons.Outlined.CalendarToday
 }
 
 /** AO3 rating → short readable name for cover-card density (not single letters). */
@@ -214,8 +216,19 @@ fun listRowStats(
     rating: String,
     wordCount: Int?,
     chapters: String,
-    kudos: Int?
+    kudos: Int?,
+    datePublished: String? = null,
+    dateUpdated: String? = null
 ): List<WorkStatItem> {
+    // Prefers the updated date (more relevant — it's what changed most recently);
+    // falls back to published. AO3's blurb date text is already display-ready.
+    val displayDate = when {
+        !dateUpdated.isNullOrBlank() && dateUpdated != datePublished ->
+            dateUpdated to "Updated $dateUpdated"
+        !datePublished.isNullOrBlank() -> datePublished to "Published $datePublished"
+        !dateUpdated.isNullOrBlank() -> dateUpdated to "Updated $dateUpdated"
+        else -> null
+    }
     return listOfNotNull(
         rating.takeIf { it.isNotBlank() }?.let {
             WorkStatItem(text = it, icon = WorkStatIcons.rating)
@@ -240,6 +253,9 @@ fun listRowStats(
                 accessibilityLabel = "%,d kudos".format(it),
                 icon = WorkStatIcons.kudos
             )
+        },
+        displayDate?.let { (text, accessibilityLabel) ->
+            WorkStatItem(text = text, accessibilityLabel = accessibilityLabel, icon = WorkStatIcons.date)
         }
     )
 }

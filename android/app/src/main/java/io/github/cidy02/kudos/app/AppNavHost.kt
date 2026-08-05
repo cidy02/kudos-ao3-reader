@@ -182,6 +182,7 @@ fun AppNavHost(
                     workRepository = container.workRepository,
                     settingsRepository = container.settingsRepository,
                     privacyGate = container.privacyGate,
+                    queueRepository = container.readingQueueRepository,
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },
@@ -211,6 +212,7 @@ fun AppNavHost(
                 QueueDetailScreen(
                     queueId = queueId,
                     repository = container.readingQueueRepository,
+                    workRepository = container.workRepository,
                     settingsRepository = container.settingsRepository,
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
@@ -639,6 +641,7 @@ fun AppNavHost(
                 onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
                 onOpenQueueStorage = { navController.navigate(Routes.QueueStorage) },
+                onOpenAvailabilitySweep = { navController.navigate(Routes.AvailabilitySweep) },
                 onReportBug = { navController.navigate(Routes.BugReport) },
                 appUpdateRepository = container.appUpdateRepository,
                 workImporter = container.workImporter,
@@ -648,6 +651,19 @@ fun AppNavHost(
                     container.workRepository,
                     container.tagsRepository
                 )
+            )
+        }
+        sharedComposable(Routes.AvailabilitySweep) {
+            io.github.cidy02.kudos.settings.AvailabilitySweepScreen(
+                workRepository = container.workRepository,
+                sweep = io.github.cidy02.kudos.works.WorkAvailabilitySweep(
+                    container.workRepository,
+                    container.tagsRepository
+                ),
+                onOpenWork = { workId ->
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                },
+                onBack = { navController.popBackStack() }
             )
         }
                 sharedComposable(Routes.QueueStorage) {

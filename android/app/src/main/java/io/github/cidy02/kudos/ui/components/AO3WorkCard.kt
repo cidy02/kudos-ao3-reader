@@ -170,7 +170,9 @@ fun AO3WorkCard(
                     rating = work.rating,
                     wordCount = work.wordCount,
                     chapters = work.chapters,
-                    kudos = work.kudos
+                    kudos = work.kudos,
+                    datePublished = work.publishedDate,
+                    dateUpdated = work.updatedDate
                 )
             )
         }

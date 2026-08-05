@@ -27,6 +27,8 @@ data class SavedWork(
     val wordCount: Int = 0,
     val chapters: String = "",
     val kudos: Int = 0,
+    val datePublished: String = "",
+    val dateUpdated: String = "",
     val seriesTitle: String = "",
     val seriesPosition: Int = 0,
     val seriesUrl: String = "",

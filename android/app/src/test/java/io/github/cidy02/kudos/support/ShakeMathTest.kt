@@ -48,4 +48,26 @@ class ShakeMathTest {
         assertFalse(ShakeMath.shouldFire(t0 + ShakeMath.DEBOUNCE_MS - 1, lastFireMs = t0))
         assertTrue(ShakeMath.shouldFire(t0 + ShakeMath.DEBOUNCE_MS, lastFireMs = t0))
     }
+
+    @Test
+    fun opposingSwingsAboveFloorCountAsReversed() {
+        assertTrue(ShakeMath.samplesReversed(-5f, 0f, 0f, 5f, 0f, 0f))
+    }
+
+    @Test
+    fun sameDirectionSwingsAreNotReversed() {
+        assertFalse(ShakeMath.samplesReversed(5f, 0f, 0f, 4f, 0.5f, 0f))
+    }
+
+    @Test
+    fun belowNoiseFloorNeverCountsEvenIfOpposed() {
+        assertFalse(ShakeMath.samplesReversed(-0.5f, 0f, 0f, 0.5f, 0f, 0f))
+    }
+
+    @Test
+    fun oneSampleBelowFloorStillDoesNotCount() {
+        // First sample is a strong swing, second is noise — direction is
+        // meaningless when either side of the pair can't be trusted.
+        assertFalse(ShakeMath.samplesReversed(-5f, 0f, 0f, 0.1f, 0f, 0f))
+    }
 }

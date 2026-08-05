@@ -24,4 +24,10 @@ interface AnnotationDao {
 
     @Query("DELETE FROM annotations WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("SELECT * FROM annotations WHERE workID = :workId")
+    suspend fun getForWork(workId: String): List<AnnotationEntity>
+
+    @Query("DELETE FROM annotations WHERE workID = :workId")
+    suspend fun deleteByWorkId(workId: String)
 }

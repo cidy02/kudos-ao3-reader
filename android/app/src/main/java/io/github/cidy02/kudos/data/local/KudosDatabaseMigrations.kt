@@ -201,4 +201,14 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE works ADD COLUMN lastTagRefreshAttemptAt INTEGER")
         }
     }
+
+    // v7 -> v8: publish/update dates on local works (parity with AO3WorkSummary,
+    // which already carries these) — closes the gap where local Library cards had
+    // no date field to show at all, unlike remote/search cards.
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN datePublished TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE works ADD COLUMN dateUpdated TEXT NOT NULL DEFAULT ''")
+        }
+    }
 }

@@ -38,6 +38,8 @@ class WorkRepository(
     private val tagDao = database.tagDao()
     private val collectionDao = database.collectionDao()
     private val tombstoneDao = database.syncTombstoneDao()
+    private val annotationDao = database.annotationDao()
+    private val readingQueueDao = database.readingQueueDao()
 
     fun observeSavedWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll()
@@ -50,6 +52,17 @@ class WorkRepository(
      */
     fun observeLibraryWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll().map { works -> works.map { it.toDomain() } }
+    }
+
+    /**
+     * One-shot list of every active library work, unfiltered by protection status
+     * (excludes soft-deleted) — e.g. a work that's only in reading history
+     * (opened/downloaded but never explicitly saved/favorited/queued). Callers that
+     * need to include those, like the update-checker's candidate set, should use
+     * this instead of [listSavedWorks]'s narrower `isProtected` filter.
+     */
+    suspend fun listLibraryWorks(): List<SavedWork> {
+        return workDao.getAll().map { it.toDomain() }
     }
 
     /** One-shot list of active saved library works (excludes soft-deleted). */
@@ -242,9 +255,19 @@ class WorkRepository(
     suspend fun hardDelete(workId: String) {
         val work = getWork(workId)
         fileStore.deleteWorkEpub(workId)
+        // Neither of these has a DB cascade tied to the work row: annotations would
+        // otherwise be permanently orphaned, and queue memberships would become
+        // dangling "Missing work" rows queue screens can never clear (`workID` is
+        // deliberately not a hard FK there, to support restore ordering).
+        val orphanedAnnotations = annotationDao.getForWork(workId)
+        annotationDao.deleteByWorkId(workId)
+        readingQueueDao.deleteMembershipsForWork(workId)
         workDao.deleteById(workId)
         if (work != null) {
             recordWorkTombstone(work, clock(), deletionReason = "workDeleted")
+        }
+        for (annotation in orphanedAnnotations) {
+            recordAnnotationTombstone(annotation.id, clock())
         }
     }
 
@@ -299,6 +322,25 @@ class WorkRepository(
 
     private suspend fun retractWorkTombstone(workId: String) {
         tombstoneDao.deleteByRecord(workId, SyncTombstoneRecordType.SAVED_WORK)
+    }
+
+    /**
+     * Same reasoning as [AnnotationRepository.deleteAnnotation]'s tombstone: without
+     * one, restoring an older backup could resurrect a highlight that was wiped out
+     * by its work being hard-deleted.
+     */
+    private suspend fun recordAnnotationTombstone(annotationId: String, now: Instant) {
+        tombstoneDao.upsert(
+            SyncTombstoneEntity(
+                id = uuidFactory(),
+                recordID = annotationId,
+                recordTypeRaw = SyncTombstoneRecordType.READING_ANNOTATION,
+                createdAt = now,
+                lastModifiedAt = now,
+                deletedOnDeviceID = "",
+                deletionReason = "workDeleted"
+            )
+        )
     }
 
     suspend fun userTagsForWork(workId: String): List<Tag> {
