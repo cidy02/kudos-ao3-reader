@@ -67,7 +67,8 @@ fun HomeScreen(
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
     onOpenSubscriptionsList: () -> Unit,
     onOpenLibrary: () -> Unit,
-    onOpenBrowse: () -> Unit
+    onOpenBrowse: () -> Unit,
+    onOpenSection: (HomeSectionKind) -> Unit = {}
 ) {
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(
@@ -147,7 +148,8 @@ fun HomeScreen(
                     onOpenReader(id)
                 },
                 onReveal = onReveal,
-                footerFor = null
+                footerFor = null,
+                onSeeAll = { onOpenSection(HomeSectionKind.ReadingNow) }
             )
         }
         item {
@@ -166,7 +168,8 @@ fun HomeScreen(
                     onOpenReader(id)
                 },
                 onReveal = onReveal,
-                footerFor = { work -> updateFooter(work) }
+                footerFor = { work -> updateFooter(work) },
+                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyUpdated) }
             )
         }
         item {
@@ -196,7 +199,8 @@ fun HomeScreen(
                     onOpenReader(id)
                 },
                 onReveal = onReveal,
-                footerFor = null
+                footerFor = null,
+                onSeeAll = { onOpenSection(HomeSectionKind.Favorites) }
             )
         }
         item {
@@ -215,7 +219,8 @@ fun HomeScreen(
                     onOpenReader(id)
                 },
                 onReveal = onReveal,
-                footerFor = null
+                footerFor = null,
+                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyOpened) }
             )
         }
         item {
@@ -272,13 +277,19 @@ private fun HomeShelf(
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onReveal: (String) -> Unit,
-    footerFor: ((SavedWork) -> String?)?
+    footerFor: ((SavedWork) -> String?)?,
+    onSeeAll: (() -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         KudosSectionHeader(
             title = title,
             subtitle = if (items.isEmpty()) null else "${items.size} shown",
             trailing = {
+                if (onSeeAll != null) {
+                    androidx.compose.material3.TextButton(onClick = onSeeAll) {
+                        androidx.compose.material3.Text("See all")
+                    }
+                }
                 IconButton(onClick = onToggleCollapse) {
                     Icon(
                         imageVector = if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,

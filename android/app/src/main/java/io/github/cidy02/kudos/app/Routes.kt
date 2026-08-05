@@ -76,6 +76,10 @@ object Routes {
     fun comments(workId: Long, focusedCommentId: Long? = null) = 
         "comments/$workId" + (focusedCommentId?.let { "?focused=$it" } ?: "")
 
+    private const val ARG_HOME_SECTION = "homeSection"
+    const val HomeSection = "home-section/{$ARG_HOME_SECTION}"
+    fun homeSection(sectionId: String) = "home-section/${encode(sectionId)}"
+
     private const val ARG_ACCOUNT_LIST_TYPE = "listType"
     const val AccountList = "account-list/{$ARG_ACCOUNT_LIST_TYPE}"
     fun accountList(encodedType: String) = "account-list/${encode(encodedType)}"
@@ -179,6 +183,7 @@ object Routes {
             About -> "About"
             NativeLogin -> "Sign In"
             AO3Preferences -> "AO3 Preferences"
+            HomeSection -> "Section"
             BugReport -> "Report a Bug"
             else -> "Kudos"
         }

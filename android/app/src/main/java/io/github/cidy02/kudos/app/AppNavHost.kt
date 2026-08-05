@@ -115,7 +115,8 @@ fun AppNavHost(
                     )
                 },
                 onOpenLibrary = { navController.navigate(Routes.Library) },
-                onOpenBrowse = { navController.navigate(Routes.Browse) }
+                onOpenBrowse = { navController.navigate(Routes.Browse) },
+                onOpenSection = { kind -> navController.navigate(Routes.homeSection(kind.id)) }
             )
         }
         composable(Routes.Library) {
@@ -242,6 +243,33 @@ fun AppNavHost(
                 )
             }
         }
+        composable(
+            Routes.HomeSection,
+            arguments = listOf(Routes.navArgOf("homeSection"))
+        ) { backStackEntry ->
+            val kind = io.github.cidy02.kudos.home.HomeSectionKind
+                .fromId(Routes.routeArg(backStackEntry, "homeSection"))
+            if (kind == null) {
+                navController.popBackStack()
+            } else {
+                io.github.cidy02.kudos.home.HomeSectionListScreen(
+                    kind = kind,
+                    repository = container.libraryRepository,
+                    workRepository = container.workRepository,
+                    privacyGate = container.privacyGate,
+                    metadataRefresh = io.github.cidy02.kudos.works.WorkMetadataRefresh(
+                        container.workRepository,
+                        container.metadataRepository
+                    ),
+                    onOpenWork = { workId ->
+                        navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                    },
+                    onOpenReader = { workId -> navController.navigate(Routes.reader(workId)) },
+                    onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) }
+                )
+            }
+        }
+
         composable(
             Routes.BrowseWorks,
             arguments = listOf(Routes.navArgOf("fandomName"))
