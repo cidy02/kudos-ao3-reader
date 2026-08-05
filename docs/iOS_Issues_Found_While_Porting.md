@@ -66,5 +66,47 @@ flags and the two-function wrapper surface port directly.
 
 ---
 
+## 3. Sync skips unchanged files by size alone, so a same-size edit never syncs
+
+**iOS:** `Services/FolderSyncService.swift:707-710`
+
+```swift
+nonisolated private func writeIfChanged(_ data: Data, to url: URL) throws {
+    if let existingSize = fileSize(of: url), existingSize == data.count { return }
+    try data.write(to: url, options: .atomic)
+}
+```
+
+Size equality is not content equality. Any asset whose replacement happens to
+have the same byte length is silently never written to the sync folder, and the
+other device keeps the stale copy indefinitely — there is no later pass that
+would catch it, because the next sync makes the same comparison and skips again.
+
+The blast radius is limited but real: the manifest itself is written
+unconditionally (`:687`), so the *index* stays correct while an asset it points
+at is stale — arguably worse than both being stale, since nothing looks wrong.
+
+A content hash, or size plus modification time, would close it.
+
+**Severity:** low-probability, high-consequence — this is a sync/preservation
+path, and the failure is silent.
+
+**Android:** ported faithfully (`backup/SyncRepository.kt` `writeIfChanged`),
+because iOS is the specification for this sweep and diverging unilaterally would
+make the two platforms disagree about what "unchanged" means. Fix both together.
+
+---
+
+## 4. `foldedConflicts` has no Android counterpart yet
+
+**iOS:** `FolderSyncService.swift:204-217` increments `result.foldedConflicts`
+for every conflict version it folds in.
+
+Android's port merges every conflicting manifest correctly (that is the important
+half), but discards the count, so a user whose devices are quietly colliding gets
+no signal. Not an iOS bug — an Android gap recorded here so it isn't lost.
+
+---
+
 *Add new entries as they're found. Keep the "Android:" line on every one — it's
 what stops an undocumented divergence from looking like an Android defect later.*

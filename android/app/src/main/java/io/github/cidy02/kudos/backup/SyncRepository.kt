@@ -88,7 +88,13 @@ class SyncRepository(
             }
             if (syncDir == null) return@withContext SyncResult.Error("Could not create KudosLibrary directory.")
 
-            // 1. Import (For now just use the old ZIP import logic if it's there to prevent regression, but we also need to import manifest.json? Actually we'll implement import later or skip for now to focus on export)
+            // 1. Import first, folding in any conflict copies.
+            //
+            // A SAF provider that loses a write race leaves "manifest (1).json"
+            // beside the real one. iOS's foldConflictContents restores *every*
+            // unresolved version rather than picking a winner, so nothing a user
+            // did on either device is dropped; we do the same, then delete the
+            // folded copies.
             val manifestFilesToRead = mutableListOf<DocumentFile>()
             val manifestFile = syncDir.findFile("manifest.json")
             if (manifestFile != null) manifestFilesToRead.add(manifestFile)
