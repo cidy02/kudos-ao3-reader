@@ -638,6 +638,7 @@ fun AppNavHost(
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenAbout = { navController.navigate(Routes.About) },
                 onOpenBackup = { navController.navigate(Routes.Backup) },
+                onOpenQueueStorage = { navController.navigate(Routes.QueueStorage) },
                 onReportBug = { navController.navigate(Routes.BugReport) },
                 appUpdateRepository = container.appUpdateRepository,
                 workImporter = container.workImporter,
@@ -647,6 +648,15 @@ fun AppNavHost(
                     container.workRepository,
                     container.tagsRepository
                 )
+            )
+        }
+                sharedComposable(Routes.QueueStorage) {
+            io.github.cidy02.kudos.settings.QueueStorageScreen(
+                workRepository = container.workRepository,
+                readingQueueRepository = container.readingQueueRepository,
+                settingsRepository = container.settingsRepository,
+                workFileStore = container.workFileStore,
+                onBack = { navController.popBackStack() }
             )
         }
         sharedComposable(Routes.Backup) {

@@ -60,6 +60,10 @@ interface ReadingQueueDao {
     )
     suspend fun getMembershipForWork(queueId: String, workId: String): ReadingQueueMembershipEntity?
 
+    @Query("SELECT * FROM reading_queue_memberships WHERE workID = :workId")
+    suspend fun getMembershipsForWork(workId: String): List<ReadingQueueMembershipEntity>
+
+
     @Query("SELECT * FROM reading_queue_memberships WHERE id = :id")
     suspend fun getMembershipById(id: String): ReadingQueueMembershipEntity?
 

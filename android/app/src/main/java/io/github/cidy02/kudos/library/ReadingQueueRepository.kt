@@ -166,6 +166,14 @@ class ReadingQueueRepository(
         }
     }
 
+    
+    suspend fun removeFromAllQueuesAndDeleteIfQueueOnly(workId: String) {
+        val memberships = queueDao.getMembershipsForWork(workId)
+        for (membership in memberships) {
+            removeWork(membership.queueID, workId)
+        }
+    }
+
     suspend fun ensureSavedForLaterQueue(): ReadingQueue {
         queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.let {
             return it.toDomain()

@@ -32,6 +32,7 @@ object Routes {
     const val AO3Collections = "ao3-collections"
     const val Settings = "settings"
     const val Backup = "backup"
+    const val QueueStorage = "queue_storage"
     const val RecentlyDeleted = "recently-deleted"
     const val ReadingQueues = "reading-queues"
     const val ReadingStatistics = "reading-statistics"

@@ -119,6 +119,7 @@ private val EpubOpenMimeTypes = arrayOf(
  */
 @Composable
 fun SettingsScreen(
+    onOpenQueueStorage: () -> Unit = {},
     repository: SettingsRepository,
     customFontRepository: CustomFontRepository,
     onOpenBackup: () -> Unit,
@@ -692,6 +693,12 @@ fun SettingsScreen(
                     }
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SettingsLinkRow(
+                    label = "Queue Storage",
+                    icon = Icons.Outlined.Folder,
+                    onClick = onOpenQueueStorage
+                )
             SettingsFooter(
                 "Ask before removing a work from your Library. Imported EPUBs " +
                     "appear as saved works without an AO3 link."
