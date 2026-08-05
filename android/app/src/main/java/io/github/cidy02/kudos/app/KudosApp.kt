@@ -113,6 +113,9 @@ fun KudosApp(container: KudosAppContainer) {
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
     var showBugReport by remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Survives recomposition but not process death, on purpose: "Not Now" means
+    // "not this launch", while the checkbox means "never again" (persisted).
+    var syncOnboardingDismissedThisSession by remember { androidx.compose.runtime.mutableStateOf(false) }
 
     // "Open with Kudos" / "Share to Kudos": MainActivity queues the incoming
     // URIs, we import them and report the outcome. Held until onboarding is
@@ -168,12 +171,25 @@ fun KudosApp(container: KudosAppContainer) {
                 }
             )
             true -> {
-                if (!hasConfiguredSyncFolder && !hasPermanentlyDismissedSyncFolderOnboarding) {
+                if (!hasConfiguredSyncFolder &&
+                    !hasPermanentlyDismissedSyncFolderOnboarding &&
+                    !syncOnboardingDismissedThisSession
+                ) {
                     SyncFolderOnboardingScreen(
                         container = container,
                         onFinished = { permanentlyDismissed ->
-                            scope.launch {
-                                container.settingsRepository.setHasPermanentlyDismissedSyncFolderOnboarding(permanentlyDismissed)
+                            // "Not Now" must let the user through *now*, whether or
+                            // not they ticked "Don't remind me again". Persisting the
+                            // flag alone is not enough: with the box unticked it
+                            // writes back the value the gate already had, so the
+                            // screen re-showed itself forever and a first-launch user
+                            // could never reach the app.
+                            syncOnboardingDismissedThisSession = true
+                            if (permanentlyDismissed) {
+                                scope.launch {
+                                    container.settingsRepository
+                                        .setHasPermanentlyDismissedSyncFolderOnboarding(true)
+                                }
                             }
                         }
                     )
