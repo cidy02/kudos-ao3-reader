@@ -138,6 +138,7 @@ class SyncRepository(
             }
             
             settingsRepository.updateSyncLastSyncAt(clock())
+            settingsRepository.updateSyncHasPendingChanges(false)
             SyncResult.Success
         } catch (e: Exception) {
             SyncResult.Error(e.message ?: "Sync failed.")

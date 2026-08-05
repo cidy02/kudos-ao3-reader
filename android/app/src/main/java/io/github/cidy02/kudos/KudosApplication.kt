@@ -32,6 +32,7 @@ class KudosApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         container = KudosAppContainer(this)
+        container.databaseChangeTracker.start()
         // Apple PreservedWorkService launch sweep: permanently remove soft-deleted
         // works and collections past permanentDeletionScheduledAt (90-day window).
         applicationScope.launch {

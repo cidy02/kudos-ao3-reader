@@ -179,6 +179,10 @@ class SettingsRepository(
         }
     }
 
+    suspend fun updateSyncHasPendingChanges(hasPending: Boolean) {
+        dataStore.edit { it[Keys.SyncHasPendingChanges] = hasPending }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -256,7 +260,8 @@ class SettingsRepository(
             sync = SyncSettings(
                 folderUri = preferences[Keys.SyncFolderUri],
                 isEnabled = preferences[Keys.SyncIsEnabled] ?: false,
-                lastSyncAt = preferences[Keys.SyncLastSyncAt]?.let { Instant.ofEpochMilli(it) }
+                lastSyncAt = preferences[Keys.SyncLastSyncAt]?.let { Instant.ofEpochMilli(it) },
+                hasPendingChanges = preferences[Keys.SyncHasPendingChanges] ?: false
             )
         )
     }
@@ -289,6 +294,7 @@ class SettingsRepository(
         val SyncIsEnabled = booleanPreferencesKey("syncIsEnabled")
         val SyncFolderUri = stringPreferencesKey("syncFolderUri")
         val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")
+        val SyncHasPendingChanges = booleanPreferencesKey("syncHasPendingChanges")
     }
 
     companion object {

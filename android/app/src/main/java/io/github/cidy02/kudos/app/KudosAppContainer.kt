@@ -260,6 +260,14 @@ class KudosAppContainer(context: Context) {
         )
     }
 
+    val databaseChangeTracker: io.github.cidy02.kudos.backup.DatabaseChangeTracker by lazy {
+        io.github.cidy02.kudos.backup.DatabaseChangeTracker(
+            database = database,
+            settingsRepository = settingsRepository,
+            appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        )
+    }
+
     val savedSearchRepository: SavedSearchRepository by lazy {
         SavedSearchRepository(database.savedSearchDao())
     }
