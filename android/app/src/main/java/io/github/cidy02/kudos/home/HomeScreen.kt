@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,7 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,6 +40,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryRepository
+import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
@@ -49,6 +53,7 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
 import kotlin.math.roundToInt
 
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,13 +67,14 @@ fun HomeScreen(
     authRepository: AO3AuthRepository,
     accountListRepository: AccountListRepository,
     privacyGate: PrivacyGate = PrivacyGate(),
+    queueRepository: ReadingQueueRepository? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
     onOpenSubscriptionsList: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenBrowse: () -> Unit,
-    onOpenSection: (HomeSectionKind) -> Unit = {}
+    onOpenSection: (HomeSectionKind, Boolean, Set<String>) -> Unit
 ) {
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(
@@ -88,6 +94,18 @@ fun HomeScreen(
     
     val collapsedShelves = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
     val onReveal: (String) -> Unit = { id -> viewModel.revealWork(id, activity) }
+    
+    var isSelecting by remember { mutableStateOf(false) }
+    var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    val allLocalWorks = remember(state.continueReading, state.recentlyUpdated, state.favorites, state.recentlyOpened) {
+        (state.continueReading.map { it.item.work } + 
+         state.recentlyUpdated.map { it.item.work } + 
+         state.favorites.map { it.item.work } + 
+         state.recentlyOpened.map { it.item.work }).distinctBy { it.id }
+    }
+    val selectedWorks = allLocalWorks.filter { it.id in selection }
+    val allLocalSelected = allLocalWorks.isNotEmpty() && selection.containsAll(allLocalWorks.map { it.id })
 
     KudosRefreshBox(
         onRefresh = { viewModel.refreshNow() },
@@ -103,8 +121,25 @@ fun HomeScreen(
                 state = state,
                 revealAll = privacyState.revealAll,
                 onToggleRevealAll = { privacyGate.toggleRevealAll(activity) },
+                isSelecting = isSelecting,
+                onToggleSelectMode = { isSelecting = !isSelecting; if (!isSelecting) selection = emptySet() },
+                allLocalSelected = allLocalSelected,
+                onToggleSelectAll = { selection = if (allLocalSelected) emptySet() else allLocalWorks.map { it.id }.toSet() },
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
+        }
+
+        if (isSelecting) {
+            item {
+                WorkBulkActionBar(
+                    selectedWorks = selectedWorks,
+                    workRepository = workRepository,
+                    queueRepository = queueRepository,
+                    onDeleted = { isSelecting = false; selection = emptySet(); viewModel.refresh() },
+                    onDone = { isSelecting = false; selection = emptySet() },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
         }
 
         if (state.loading) {
@@ -149,7 +184,10 @@ fun HomeScreen(
                 },
                 onReveal = onReveal,
                 footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.ReadingNow) }
+                onSeeAll = { onOpenSection(HomeSectionKind.ReadingNow, isSelecting, selection) },
+                isSelecting = isSelecting,
+                selection = selection,
+                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
             )
         }
         item {
@@ -169,7 +207,10 @@ fun HomeScreen(
                 },
                 onReveal = onReveal,
                 footerFor = { work -> updateFooter(work) },
-                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyUpdated) }
+                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyUpdated, isSelecting, selection) },
+                isSelecting = isSelecting,
+                selection = selection,
+                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
             )
         }
         item {
@@ -200,7 +241,10 @@ fun HomeScreen(
                 },
                 onReveal = onReveal,
                 footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.Favorites) }
+                onSeeAll = { onOpenSection(HomeSectionKind.Favorites, isSelecting, selection) },
+                isSelecting = isSelecting,
+                selection = selection,
+                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
             )
         }
         item {
@@ -220,7 +264,10 @@ fun HomeScreen(
                 },
                 onReveal = onReveal,
                 footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyOpened) }
+                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyOpened, isSelecting, selection) },
+                isSelecting = isSelecting,
+                selection = selection,
+                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
             )
         }
         item {
@@ -245,6 +292,10 @@ private fun HomeHeader(
     state: HomeUiState,
     revealAll: Boolean,
     onToggleRevealAll: () -> Unit,
+    isSelecting: Boolean,
+    onToggleSelectMode: () -> Unit,
+    allLocalSelected: Boolean,
+    onToggleSelectAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
@@ -254,12 +305,23 @@ private fun HomeHeader(
     KudosScreenHeader(
         subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden",
         trailing = {
-            if (state.hiddenByPrivacyCount > 0) {
-                IconButton(onClick = onToggleRevealAll) {
-                    Icon(
-                        imageVector = if (revealAll) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (revealAll) "Hide mature content" else "Reveal all mature content"
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isSelecting) {
+                    TextButton(onClick = onToggleSelectAll) {
+                        Text(if (allLocalSelected) "Deselect All" else "Select All")
+                    }
+                } else if (state.hasSavedWorks) {
+                    IconButton(onClick = onToggleSelectMode) {
+                        Icon(Icons.Outlined.Checklist, "Select")
+                    }
+                }
+                if (state.hiddenByPrivacyCount > 0) {
+                    IconButton(onClick = onToggleRevealAll) {
+                        Icon(
+                            imageVector = if (revealAll) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (revealAll) "Hide mature content" else "Reveal all mature content"
+                        )
+                    }
                 }
             }
         },
@@ -278,7 +340,10 @@ private fun HomeShelf(
     onOpenReader: (String) -> Unit,
     onReveal: (String) -> Unit,
     footerFor: ((SavedWork) -> String?)?,
-    onSeeAll: (() -> Unit)? = null
+    onSeeAll: (() -> Unit)? = null,
+    isSelecting: Boolean = false,
+    selection: Set<String> = emptySet(),
+    onToggleSelection: ((String) -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         KudosSectionHeader(
@@ -320,7 +385,10 @@ private fun HomeShelf(
                             footerOverride = footerFor?.invoke(display.item.work),
                             onOpenWork = { onOpenWork(display.item.work.id) },
                             onOpenReader = { onOpenReader(display.item.work.id) },
-                            onReveal = { onReveal(display.item.work.id) }
+                            onReveal = { onReveal(display.item.work.id) },
+                            isSelecting = isSelecting,
+                            isSelected = display.item.work.id in selection,
+                            onToggleSelection = { onToggleSelection?.invoke(display.item.work.id) }
                         )
                     }
                 }
@@ -438,7 +506,10 @@ private fun HomeWorkCover(
     footerOverride: String?,
     onOpenWork: () -> Unit,
     onOpenReader: () -> Unit,
-    onReveal: () -> Unit
+    onReveal: () -> Unit,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelection: (() -> Unit)? = null
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -500,7 +571,10 @@ private fun HomeWorkCover(
         } else {
             val action = if (canRead) "Read" else "Open details for"
             "$action ${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
-        }
+        },
+        isSelecting = isSelecting,
+        isSelected = isSelected,
+        onToggleSelection = onToggleSelection
     )
 }
 

@@ -13,6 +13,8 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -21,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.LibraryCardActions
 import io.github.cidy02.kudos.library.LibraryCarouselCard
@@ -34,8 +38,10 @@ import io.github.cidy02.kudos.library.LibraryQuery
 import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.library.LibrarySort
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
+import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
 import io.github.cidy02.kudos.works.WorkMetadataRefresh
 import io.github.cidy02.kudos.works.WorkRepository
 
@@ -55,6 +61,9 @@ fun HomeSectionListScreen(
     workRepository: WorkRepository,
     privacyGate: PrivacyGate,
     metadataRefresh: WorkMetadataRefresh?,
+    queueRepository: ReadingQueueRepository? = null,
+    initialSelecting: Boolean = false,
+    initialSelection: Set<String> = emptySet(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenComments: (Long) -> Unit = {}
@@ -67,6 +76,9 @@ fun HomeSectionListScreen(
     var filters by remember { mutableStateOf(LibraryFilterState()) }
     var showFilters by remember { mutableStateOf(false) }
     var expandAll by remember { mutableStateOf(false) }
+    
+    var isSelecting by remember(initialSelecting) { mutableStateOf(initialSelecting) }
+    var selection by remember(initialSelection) { mutableStateOf(initialSelection) }
 
     // Privacy is resolved the same way Library resolves it, so a work hidden on
     // the dashboard stays hidden here.
@@ -92,6 +104,10 @@ fun HomeSectionListScreen(
     val visibleItems = remember(sectionItems, filters) {
         if (filters.hasActiveFilters) LibraryQuery.filterOnly(sectionItems, filters = filters) else sectionItems
     }
+    val selectedWorks = remember(visibleItems, selection) {
+        visibleItems.filter { it.item.work.id in selection }.map { it.item.work }
+    }
+    val allSelected = visibleItems.isNotEmpty() && selection.containsAll(visibleItems.map { it.item.work.id })
 
     val cardActions = LibraryCardActions(
         onOpenWork = onOpenWork,
@@ -126,7 +142,18 @@ fun HomeSectionListScreen(
                     title = kind.title,
                     subtitle = "${sectionItems.size} works",
                     trailing = {
-                        androidx.compose.foundation.layout.Row {
+                        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            if (isSelecting) {
+                                TextButton(onClick = { 
+                                    selection = if (allSelected) emptySet() else visibleItems.map { it.item.work.id }.toSet() 
+                                }) {
+                                    Text(if (allSelected) "Deselect All" else "Select All")
+                                }
+                            } else if (sectionItems.isNotEmpty()) {
+                                IconButton(onClick = { isSelecting = true }) {
+                                    Icon(Icons.Outlined.Checklist, "Select")
+                                }
+                            }
                             IconButton(onClick = { showFilters = true }) {
                                 BadgedBox(
                                     badge = {
@@ -148,6 +175,18 @@ fun HomeSectionListScreen(
                     }
                 )
             }
+            
+            if (isSelecting) {
+                item {
+                    WorkBulkActionBar(
+                        selectedWorks = selectedWorks,
+                        workRepository = workRepository,
+                        queueRepository = queueRepository,
+                        onDeleted = { isSelecting = false; selection = emptySet() },
+                        onDone = { isSelecting = false; selection = emptySet() }
+                    )
+                }
+            }
 
             when {
                 sectionItems.isEmpty() -> item {
@@ -168,7 +207,10 @@ fun HomeSectionListScreen(
                         showProgress = true,
                         footerOverride = null,
                         actions = cardActions,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        isSelecting = isSelecting,
+                        isSelected = display.item.work.id in selection,
+                        onToggleSelection = { selection = if (display.item.work.id in selection) selection - display.item.work.id else selection + display.item.work.id }
                     )
                 }
             }

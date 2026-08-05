@@ -116,7 +116,9 @@ fun AppNavHost(
                 },
                 onOpenLibrary = { navController.navigate(Routes.Library) },
                 onOpenBrowse = { navController.navigate(Routes.Browse) },
-                onOpenSection = { kind -> navController.navigate(Routes.homeSection(kind.id)) }
+                onOpenSection = { kind, isSelecting, selection -> 
+                    navController.navigate(Routes.homeSection(kind.id, isSelecting, selection)) 
+                }
             )
         }
         composable(Routes.Library) {
@@ -245,10 +247,17 @@ fun AppNavHost(
         }
         composable(
             Routes.HomeSection,
-            arguments = listOf(Routes.navArgOf("homeSection"))
+            arguments = listOf(
+                Routes.navArgOf("homeSection"),
+                navArgument("selecting") { type = NavType.BoolType; defaultValue = false },
+                navArgument("selection") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
         ) { backStackEntry ->
             val kind = io.github.cidy02.kudos.home.HomeSectionKind
                 .fromId(Routes.routeArg(backStackEntry, "homeSection"))
+            val isSelecting = backStackEntry.arguments?.getBoolean("selecting") ?: false
+            val selectionStr = backStackEntry.arguments?.getString("selection")
+            val selection = if (selectionStr.isNullOrBlank()) emptySet() else selectionStr.split(",").toSet()
             if (kind == null) {
                 navController.popBackStack()
             } else {
@@ -261,6 +270,9 @@ fun AppNavHost(
                         container.workRepository,
                         container.metadataRepository
                     ),
+                    queueRepository = container.readingQueueRepository,
+                    initialSelecting = isSelecting,
+                    initialSelection = selection,
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },

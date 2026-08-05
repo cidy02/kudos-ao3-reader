@@ -67,7 +67,10 @@ fun WorkCoverCard(
     obscuredLabel: String = "Tap to reveal",
     contentDescription: String? = null,
     /** Long-press (e.g. Library context menu). Null = tap-only card. */
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelection: (() -> Unit)? = null
 ) {
     val a11y = contentDescription ?: buildString {
         append(if (obscured) "Hidden mature work. Activate to reveal." else title)
@@ -81,7 +84,13 @@ fun WorkCoverCard(
             .width(WorkCoverCardMetrics.width)
             .height(WorkCoverCardMetrics.height)
             .combinedClickable(
-                onClick = onOpen,
+                onClick = {
+                    if (isSelecting) {
+                        onToggleSelection?.invoke()
+                    } else {
+                        onOpen()
+                    }
+                },
                 onLongClick = onLongClick
             )
             .semantics { this.contentDescription = a11y },
