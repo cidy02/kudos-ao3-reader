@@ -90,7 +90,11 @@ fun CommentsScreen(
     currentUsername: String? = null,
     draftStore: CommentDraftStore? = null,
     settingsRepository: SettingsRepository? = null,
-    focusedCommentId: Long? = null
+    focusedCommentId: Long? = null,
+    /** 1-based AO3 story chapter to open on, from the reader's Comments button. */
+    initialChapterPosition: Int? = null,
+    chapterIndexRepository:
+        io.github.cidy02.kudos.network.ao3.chapters.AO3ChapterIndexRepository? = null
 ) {
     val viewModel: CommentsViewModel = viewModel(
         key = target?.workId?.toString(),
@@ -101,6 +105,21 @@ fun CommentsScreen(
     LaunchedEffect(focusedCommentId) {
         if (focusedCommentId != null) {
             viewModel.load(focusedId = focusedCommentId)
+        }
+    }
+
+    // Reader's chapter-aware Comments button: resolve the 1-based story chapter
+    // against the live /navigate index and open By Chapter on it. If the index is
+    // unavailable or the work is single-chapter, iOS falls back to work-level All
+    // comments, which show the same thread anyway — so do the same rather than
+    // surfacing an error the user can't act on.
+    LaunchedEffect(initialChapterPosition, target?.workId) {
+        val workId = target?.workId ?: return@LaunchedEffect
+        val position = initialChapterPosition ?: return@LaunchedEffect
+        if (focusedCommentId != null) return@LaunchedEffect
+        val chapterId = chapterIndexRepository?.chapterIdForPosition(workId, position)
+        if (chapterId != null) {
+            viewModel.setTarget(AO3CommentTarget.Chapter(workId = workId, chapterId = chapterId))
         }
     }
 

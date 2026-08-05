@@ -542,8 +542,10 @@ fun AppNavHost(
                 ReaderScreen(
                     viewModel = readerViewModel,
                     onBack = { navController.popBackStack() },
-                    onOpenComments = { commentsWorkId ->
-                        navController.navigate(Routes.comments(commentsWorkId))
+                    onOpenComments = { commentsWorkId, chapterPosition ->
+                        navController.navigate(
+                            Routes.comments(commentsWorkId, chapterPosition = chapterPosition)
+                        )
                     },
                     onOpenWorkDetail = { localWorkId ->
                         // Keep Reader under Work Detail so Back returns to reading
@@ -564,11 +566,14 @@ fun AppNavHost(
             Routes.Comments,
             arguments = listOf(
                 Routes.navArgOf("commentWorkId"),
-                navArgument("focused") { type = NavType.StringType; nullable = true }
+                navArgument("focused") { type = NavType.StringType; nullable = true },
+                navArgument("chapterPosition") { type = NavType.StringType; nullable = true }
             )
         ) { backStackEntry ->
             val workId = Routes.routeArg(backStackEntry, "commentWorkId")?.toLongOrNull()
             val focusedId = Routes.routeArg(backStackEntry, "focused")?.toLongOrNull()
+            // 1-based story chapter from the reader's Comments button.
+            val chapterPosition = Routes.routeArg(backStackEntry, "chapterPosition")?.toIntOrNull()
             val commentsAuthState by container.authRepository.state.collectAsState(
                 initial = AO3AuthState.Restoring
             )
@@ -578,6 +583,8 @@ fun AppNavHost(
                 currentUsername = commentsAuthState.usernameOrNull,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 focusedCommentId = focusedId,
+                initialChapterPosition = chapterPosition,
+                chapterIndexRepository = container.chapterIndexRepository,
                 draftStore = container.commentDraftStore,
                 settingsRepository = container.settingsRepository
             )

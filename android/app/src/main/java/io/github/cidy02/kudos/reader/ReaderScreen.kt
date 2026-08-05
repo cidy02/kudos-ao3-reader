@@ -121,7 +121,7 @@ import org.readium.r2.shared.publication.Locator
 fun ReaderScreen(
     viewModel: ReaderViewModel,
     onBack: () -> Unit,
-    onOpenComments: (Long) -> Unit,
+    onOpenComments: (Long, Int?) -> Unit,
     /** Local library work id (not AO3 id) — opens Work Detail over the reader stack. */
     onOpenWorkDetail: (String) -> Unit,
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null
@@ -162,7 +162,7 @@ private fun ReaderReading(
     state: ReaderUiState.Reading,
     viewModel: ReaderViewModel,
     onBack: () -> Unit,
-    onOpenComments: (Long) -> Unit,
+    onOpenComments: (Long, Int?) -> Unit,
     onOpenWorkDetail: (String) -> Unit,
     settings: io.github.cidy02.kudos.core.model.KudosSettings
 ) {
@@ -354,6 +354,8 @@ private fun ReaderReading(
                         finished = state.finished,
                         localWorkId = state.work.id,
                         commentsWorkId = state.endOfWork.workId.takeIf { state.endOfWork.commentsAvailable },
+                        // Spine index is 0-based; AO3 story chapters are 1-based.
+                        chapterPosition = state.liveProgress?.spineIndex?.plus(1),
                         canKudos = state.endOfWork.workId != null,
                         onBack = onBack,
                         onOpenComments = onOpenComments,
@@ -708,9 +710,11 @@ private fun ReaderTopBar(
     finished: Boolean,
     localWorkId: String,
     commentsWorkId: Long?,
+    /** 1-based story chapter currently being read, or null if unknown. */
+    chapterPosition: Int?,
     canKudos: Boolean,
     onBack: () -> Unit,
-    onOpenComments: (Long) -> Unit,
+    onOpenComments: (Long, Int?) -> Unit,
     onOpenWorkDetail: (String) -> Unit,
     onMarkFinished: () -> Unit,
     onOpenToc: () -> Unit,
@@ -805,7 +809,10 @@ private fun ReaderTopBar(
                             text = { Text("Comments") },
                             onClick = {
                                 showOverflow = false
-                                onOpenComments(workId)
+                                // 1-based story chapter, from the live spine
+                                // position — iOS sends the same and resolves it
+                                // against /navigate, falling back to All.
+                                onOpenComments(workId, chapterPosition)
                             }
                         )
                         androidx.compose.material3.DropdownMenuItem(
