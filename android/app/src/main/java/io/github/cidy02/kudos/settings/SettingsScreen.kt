@@ -135,6 +135,7 @@ fun SettingsScreen(
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val syncRepository = (androidx.compose.ui.platform.LocalContext.current.applicationContext as? io.github.cidy02.kudos.KudosApplication)
         ?.container?.syncRepository
+    var lastSyncFolded by remember { mutableStateOf(0) }
 
     val importedFonts by customFontRepository.observeImported()
         .collectAsState(initial = emptyList())
@@ -759,9 +760,30 @@ fun SettingsScreen(
                             label = "Sync Now",
                             icon = Icons.Outlined.Sync,
                             onClick = {
-                                launchUpdate { syncRepository.runSync() }
+                                scope.launch {
+                                    val result = syncRepository.runSync()
+                                    // Surface folded conflicts: two devices writing
+                                    // the sync folder is merged silently otherwise,
+                                    // and nothing else in the UI would hint at it
+                                    // (iOS shows the same count in Last Sync Result).
+                                    lastSyncFolded =
+                                        (result as? io.github.cidy02.kudos.backup.SyncResult.Success)
+                                            ?.foldedConflicts ?: 0
+                                }
                             }
                         )
+                        if (lastSyncFolded > 0) {
+                            Text(
+                                text = if (lastSyncFolded == 1) {
+                                    "Merged 1 conflicting copy from another device."
+                                } else {
+                                    "Merged $lastSyncFolded conflicting copies from other devices."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
                         settings.sync.lastSyncAt?.let { last ->
                             Text(
                                 text = "Last synced: ${java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.SHORT).withZone(java.time.ZoneId.systemDefault()).format(last)}",
