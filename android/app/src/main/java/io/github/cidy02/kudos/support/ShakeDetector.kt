@@ -71,6 +71,7 @@ fun ShakeToReportEffect(onShake: () -> Unit) {
             return@DisposableEffect onDispose { }
         }
 
+        val vibrator = ShakeHaptics.from(context.applicationContext)
         var lastFireMs = 0L
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -82,6 +83,9 @@ fun ShakeToReportEffect(onShake: () -> Unit) {
                 val now = System.currentTimeMillis()
                 if (!ShakeMath.shouldFire(now, lastFireMs)) return
                 lastFireMs = now
+                // Confirm the gesture was accepted before the report UI appears
+                // (iOS fires a success notification haptic at the same point).
+                vibrator?.confirm()
                 latestOnShake()
             }
 
@@ -95,6 +99,37 @@ fun ShakeToReportEffect(onShake: () -> Unit) {
         )
         onDispose {
             sensorManager.unregisterListener(listener)
+        }
+    }
+}
+
+/**
+ * Short confirmation buzz when a shake is accepted. Silently absent on devices
+ * without a vibrator — feedback is a nicety, never a requirement for reporting.
+ */
+private object ShakeHaptics {
+    fun from(context: Context): Buzzer? {
+        val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
+                as? android.os.VibratorManager
+            manager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        }
+        return vibrator?.takeIf { it.hasVibrator() }?.let { Buzzer(it) }
+    }
+
+    class Buzzer(private val vibrator: android.os.Vibrator) {
+        fun confirm() {
+            runCatching {
+                vibrator.vibrate(
+                    android.os.VibrationEffect.createOneShot(
+                        40L,
+                        android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                    )
+                )
+            }
         }
     }
 }
