@@ -35,12 +35,28 @@ class SettingsRepository(
         prefs[Keys.HasCompletedOnboarding] ?: false
     }
 
+    val hasConfiguredSyncFolder: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.HasConfiguredSyncFolder] ?: false
+    }
+
+    val hasPermanentlyDismissedSyncFolderOnboarding: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.HasPermanentlyDismissedSyncFolderOnboarding] ?: false
+    }
+
     suspend fun snapshot(): KudosSettings {
         return settings.first()
     }
 
     suspend fun setHasCompletedOnboarding(completed: Boolean) {
         dataStore.edit { it[Keys.HasCompletedOnboarding] = completed }
+    }
+
+    suspend fun setHasConfiguredSyncFolder(configured: Boolean) {
+        dataStore.edit { it[Keys.HasConfiguredSyncFolder] = configured }
+    }
+
+    suspend fun setHasPermanentlyDismissedSyncFolderOnboarding(dismissed: Boolean) {
+        dataStore.edit { it[Keys.HasPermanentlyDismissedSyncFolderOnboarding] = dismissed }
     }
 
     /**
@@ -163,6 +179,10 @@ class SettingsRepository(
         }
     }
 
+    suspend fun updateSyncHasPendingChanges(hasPending: Boolean) {
+        dataStore.edit { it[Keys.SyncHasPendingChanges] = hasPending }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -240,7 +260,8 @@ class SettingsRepository(
             sync = SyncSettings(
                 folderUri = preferences[Keys.SyncFolderUri],
                 isEnabled = preferences[Keys.SyncIsEnabled] ?: false,
-                lastSyncAt = preferences[Keys.SyncLastSyncAt]?.let { Instant.ofEpochMilli(it) }
+                lastSyncAt = preferences[Keys.SyncLastSyncAt]?.let { Instant.ofEpochMilli(it) },
+                hasPendingChanges = preferences[Keys.SyncHasPendingChanges] ?: false
             )
         )
     }
@@ -267,10 +288,13 @@ class SettingsRepository(
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         /** Device-local first-launch flag; not included in backup-compatible settings. */
         val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
+        val HasConfiguredSyncFolder = booleanPreferencesKey("hasConfiguredSyncFolder")
+        val HasPermanentlyDismissedSyncFolderOnboarding = booleanPreferencesKey("hasPermanentlyDismissedSyncFolderOnboarding")
         val CollapsedSections = stringSetPreferencesKey("collapsedSections")
         val SyncIsEnabled = booleanPreferencesKey("syncIsEnabled")
         val SyncFolderUri = stringPreferencesKey("syncFolderUri")
         val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")
+        val SyncHasPendingChanges = booleanPreferencesKey("syncHasPendingChanges")
     }
 
     companion object {

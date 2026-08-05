@@ -83,6 +83,15 @@ class BackupRepository(
         }
     }
 
+    suspend fun importPackage(pack: KudosBackupPackage): BackupRestoreSummary = persistenceGate.withLock {
+        withContext(Dispatchers.IO) {
+            val current = captureLibrarySnapshot()
+            val merge = BackupMergeService.merge(current, pack)
+            applyMergeResult(merge)
+            merge.summary
+        }
+    }
+
     suspend fun captureLibrarySnapshot(): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
         // Include soft-deleted works so export carries Recently Deleted state.
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }

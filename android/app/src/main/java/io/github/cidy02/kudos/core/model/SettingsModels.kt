@@ -79,7 +79,8 @@ data class PrivacySettings(
 data class SyncSettings(
     val folderUri: String? = null,
     val isEnabled: Boolean = false,
-    val lastSyncAt: java.time.Instant? = null
+    val lastSyncAt: java.time.Instant? = null,
+    val hasPendingChanges: Boolean = false
 )
 
 data class KudosSettings(

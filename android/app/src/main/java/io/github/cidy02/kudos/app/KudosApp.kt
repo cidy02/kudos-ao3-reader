@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.onboarding.WelcomeScreen
+import io.github.cidy02.kudos.onboarding.SyncFolderOnboardingScreen
 import io.github.cidy02.kudos.support.ShakeToReportEffect
 import io.github.cidy02.kudos.account.BugReportScreen
 import io.github.cidy02.kudos.ui.theme.KudosTheme
@@ -100,6 +101,15 @@ fun KudosApp(container: KudosAppContainer) {
     val hasCompletedOnboarding by remember(container.settingsRepository) {
         container.settingsRepository.hasCompletedOnboarding.map<Boolean, Boolean?> { completed -> completed }
     }.collectAsState(initial = null)
+
+    val hasConfiguredSyncFolder by remember(container.settingsRepository) {
+        container.settingsRepository.hasConfiguredSyncFolder
+    }.collectAsState(initial = false)
+
+    val hasPermanentlyDismissedSyncFolderOnboarding by remember(container.settingsRepository) {
+        container.settingsRepository.hasPermanentlyDismissedSyncFolderOnboarding
+    }.collectAsState(initial = false)
+
     val themeMode = settings.app.appTheme.toThemeMode()
     val scope = rememberCoroutineScope()
     var showBugReport by remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -157,15 +167,28 @@ fun KudosApp(container: KudosAppContainer) {
                     }
                 }
             )
-            true -> MainScaffold(
-                container = container,
-                themeMode = themeMode,
-                onCycleTheme = {
-                    scope.launch {
-                        container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
-                    }
+            true -> {
+                if (!hasConfiguredSyncFolder && !hasPermanentlyDismissedSyncFolderOnboarding) {
+                    SyncFolderOnboardingScreen(
+                        container = container,
+                        onFinished = { permanentlyDismissed ->
+                            scope.launch {
+                                container.settingsRepository.setHasPermanentlyDismissedSyncFolderOnboarding(permanentlyDismissed)
+                            }
+                        }
+                    )
+                } else {
+                    MainScaffold(
+                        container = container,
+                        themeMode = themeMode,
+                        onCycleTheme = {
+                            scope.launch {
+                                container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                            }
+                        }
+                    )
                 }
-            )
+            }
         }
     }
 }
