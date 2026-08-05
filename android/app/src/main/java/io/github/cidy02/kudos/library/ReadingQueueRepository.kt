@@ -15,6 +15,16 @@ import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import kotlin.math.max
+import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
+import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.works.WorkImportResult
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.time.Instant
 import java.util.UUID
 
@@ -319,6 +329,143 @@ class ReadingQueueRepository(
                 lastMembershipChangedAt = now
             )
         )
+    }
+
+    suspend fun preserveSeries(
+        seriesUrl: String,
+        targetQueues: List<ReadingQueue>?,
+        seriesRepository: AO3SeriesRepository,
+        workImporter: WorkImporter,
+        pauseMillis: Long = 2000L,
+        progress: ((SeriesPreservationResult) -> Unit)? = null,
+        enqueueDownload: ((AO3WorkSummary) -> Unit)? = null
+    ): SeriesPreservationResult {
+        if (seriesUrl.isBlank()) return SeriesPreservationResult()
+
+        val summaries = try {
+            when (val result = seriesRepository.seriesWorks(seriesUrl)) {
+                is AO3Result.Success -> result.value
+                is AO3Result.Failure -> return SeriesPreservationResult(failed = 1)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            return SeriesPreservationResult(cancelled = 1)
+        } catch (e: Exception) {
+            return SeriesPreservationResult(failed = 1)
+        }
+
+        return preserveSeries(
+            summaries = summaries,
+            targetQueues = targetQueues,
+            workImporter = workImporter,
+            pauseMillis = pauseMillis,
+            progress = progress,
+            enqueueDownload = enqueueDownload
+        )
+    }
+
+    suspend fun preserveSeries(
+        summaries: List<AO3WorkSummary>,
+        targetQueues: List<ReadingQueue>?,
+        workImporter: WorkImporter,
+        pauseMillis: Long = 2000L,
+        progress: ((SeriesPreservationResult) -> Unit)? = null,
+        enqueueDownload: ((AO3WorkSummary) -> Unit)? = null
+    ): SeriesPreservationResult {
+        val result = SeriesPreservationResult(total = summaries.size)
+        val queues = targetQueues ?: listOf(ensureSavedForLaterQueue())
+        progress?.invoke(result.copy())
+
+        for (summary in summaries) {
+            if (!currentCoroutineContext().isActive) {
+                result.cancelled += max(0, result.total - result.completed)
+                progress?.invoke(result.copy())
+                break
+            }
+
+            val existing = workDao.getBySourceUrl(summary.workUrl)?.toDomain()
+                ?: workDao.getById(summary.id.toString())?.toDomain()
+
+            if (existing != null) {
+                if (existing.isDeleted) {
+                    val now = clock()
+                    val entity = workDao.getById(existing.id)
+                    if (entity != null) {
+                        workDao.upsert(entity.copy(
+                            isDeleted = false,
+                            deletedAt = null,
+                            permanentDeletionScheduledAt = null,
+                            lastModifiedAt = now
+                        ))
+                        tombstoneDao.deleteByRecord(existing.id, SyncTombstoneRecordType.SAVED_WORK)
+                    }
+                }
+
+                val isInAllQueues = queues.all { q ->
+                    queueDao.getMembershipForWork(q.id, existing.id) != null
+                }
+
+                if (existing.hasEpub && isInAllQueues) {
+                    result.alreadyPreserved += 1
+                    progress?.invoke(result.copy())
+                    continue
+                }
+
+                if (existing.hasEpub) {
+                    for (queue in queues) {
+                        addWork(queue.id, existing.id)
+                    }
+                    result.alreadyPreserved += 1
+                    progress?.invoke(result.copy())
+                    continue
+                }
+            }
+
+            if (queues.isEmpty()) {
+                result.skipped += 1
+                progress?.invoke(result.copy())
+                continue
+            }
+
+            try {
+                currentCoroutineContext().ensureActive()
+                val importResult = workImporter.saveMetadataOnly(
+                    summary,
+                    markSaved = false,
+                    isQueuedForLater = true
+                )
+                when (importResult) {
+                    is WorkImportResult.Success -> {
+                        val saved = importResult.work
+                        for (queue in queues) {
+                            addWork(queue.id, saved.id)
+                        }
+                        enqueueDownload?.invoke(summary)
+                        result.preserved += 1
+                    }
+                    is WorkImportResult.Failure -> {
+                        result.failed += 1
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                result.cancelled += max(1, result.total - result.completed)
+                progress?.invoke(result.copy())
+                break
+            } catch (e: Exception) {
+                result.failed += 1
+            }
+            progress?.invoke(result.copy())
+
+            if (result.completed < result.total && pauseMillis > 0) {
+                try {
+                    delay(pauseMillis)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    result.cancelled += max(0, result.total - result.completed)
+                    progress?.invoke(result.copy())
+                    break
+                }
+            }
+        }
+        return result
     }
 }
 

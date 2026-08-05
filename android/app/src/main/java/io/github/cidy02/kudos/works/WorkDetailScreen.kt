@@ -156,6 +156,10 @@ fun WorkDetailScreen(
     var availableQueues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var queueMembershipIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var includeSeriesInQueue by remember { mutableStateOf(false) }
+    var checkingSeriesPreview by remember { mutableStateOf(false) }
+    var seriesPrompt by remember { mutableStateOf<io.github.cidy02.kudos.library.SeriesPreservationPrompt?>(null) }
+    var preservingSeries by remember { mutableStateOf(false) }
+    var seriesResult by remember { mutableStateOf<io.github.cidy02.kudos.library.SeriesPreservationResult?>(null) }
     var collectionDialogOpen by remember { mutableStateOf(false) }
     // Add-to-Collection checklist sheet state (iOS AddToCollectionView parity).
     var allCollections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
@@ -707,6 +711,64 @@ fun WorkDetailScreen(
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                    if (state.seriesUrl.isNotBlank()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { includeSeriesInQueue = !includeSeriesInQueue }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Text("Also add works from this AO3 series", modifier = Modifier.weight(1f))
+                            androidx.compose.material3.Switch(
+                                checked = includeSeriesInQueue,
+                                onCheckedChange = { includeSeriesInQueue = it }
+                            )
+                        }
+                        if (includeSeriesInQueue) {
+                            if (checkingSeriesPreview) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Text("Checking series size…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            } else if (seriesPrompt != null) {
+                                Text(seriesPrompt!!.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val queueIds = availableQueues.map { it.id }
+                                androidx.compose.material3.OutlinedButton(
+                                    onClick = {
+                                        if (preservingSeries) return@OutlinedButton
+                                        preservingSeries = true
+                                        seriesResult = null
+                                        scope.launch {
+                                            seriesResult = readingQueueRepository.preserveSeries(
+                                                seriesUrl = state.seriesUrl,
+                                                targetQueues = availableQueues,
+                                                seriesRepository = seriesRepository,
+                                                workImporter = workImporter,
+                                                enqueueDownload = { s -> downloadQueue.enqueue(s, force = false) }
+                                            )
+                                            preservingSeries = false
+                                        }
+                                    },
+                                    enabled = !preservingSeries && availableQueues.isNotEmpty(),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                ) {
+                                    if (preservingSeries) {
+                                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                        Spacer(Modifier.size(8.dp))
+                                    }
+                                    Text("Add Series to Selected Queues")
+                                }
+                                if (seriesResult != null) {
+                                    val parts = seriesResult!!.summaryParts("added")
+                                    val text = if (parts.isEmpty()) "Done." else parts.joinToString(", ")
+                                    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+
                     if (availableQueues.isEmpty()) {
                         Text(
                             text = "No reading queues yet. Create one from Library → Reading Queues.",
@@ -741,6 +803,25 @@ fun WorkDetailScreen(
         )
     }
 
+
+    LaunchedEffect(includeSeriesInQueue) {
+        if (includeSeriesInQueue && state.seriesUrl.isNotBlank()) {
+            checkingSeriesPreview = true
+            try {
+                val page = when (val result = seriesRepository.seriesPage(state.seriesUrl)) {
+                    is io.github.cidy02.kudos.network.ao3.AO3Result.Success -> result.value
+                    is io.github.cidy02.kudos.network.ao3.AO3Result.Failure -> null
+                }
+                seriesPrompt = io.github.cidy02.kudos.library.SeriesPreservationPrompt(preview = page, threshold = 5, previewFailed = page == null)
+            } catch (e: Exception) {
+                seriesPrompt = io.github.cidy02.kudos.library.SeriesPreservationPrompt(preview = null, threshold = 5, previewFailed = true)
+            }
+            checkingSeriesPreview = false
+        } else {
+            seriesPrompt = null
+            seriesResult = null
+        }
+    }
     // Load full collection list + current membership when the checklist opens.
     LaunchedEffect(collectionDialogOpen) {
         if (!collectionDialogOpen) return@LaunchedEffect
