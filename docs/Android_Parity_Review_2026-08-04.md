@@ -26,18 +26,31 @@ Nothing is restated from a prior report.
 
 | Verdict | At review | Now |
 |---|---|---|
-| PASS | 71 | **92** |
-| PASS WITH NOTES | 21 | 18 |
-| FAIL | 11 | 1 |
-| NOT_STARTED | 18 | 10 |
+| PASS | 71 | **98** |
+| PASS WITH NOTES | 21 | 20 |
+| FAIL | 11 | **0** |
+| NOT_STARTED | 18 | **2** |
+| NOT-APPLICABLE | 0 | 1 |
 
-**Remaining FAIL (1):** P5-12 — the reader's Comments button isn't chapter-aware.
+**119 of 121 resolved.** Every FAIL is closed.
 
-**Remaining NOT_STARTED (10):** P4-4 series preservation on queue-add · P4-6 Queue
-Storage screen · P7-4 Home multi-select · P7-6 sync-folder onboarding ·
-P8-4 dirty-flag tracking · P8-6 delta export · P8-7 concurrent-writer conflicts ·
-P11-1 shared-element zoom · P11-7 shared search field · P11-8 reader
-edge-swipe-back (verify-first).
+**Remaining NOT_STARTED (2):** P4-4 AO3 series preservation on queue-add ·
+P4-6 Queue Storage screen. Both were attempted and pushed back as too large for
+one pass; each now has its own prompt.
+
+**NOT-APPLICABLE (1):** P11-8 reader edge-swipe-back. This was always a
+verify-first item, and the verification says don't build it: Android's system
+predictive-back wins at the window edge. Tested in the reader with a book open
+on emulator-5554 — an edge swipe navigated back rather than being eaten by the
+Readium WebView as a page turn, which is the failure iOS's `EdgeSwipeBack`
+exists to work around. **Closed as not-applicable, not skipped.**
+
+**Two items landed as PASS WITH NOTES rather than PASS:**
+- P11-1 shared-element zoom — the destination modifier is applied in
+  `WorkDetailScreen` only, so card → detail animates but card → reader does not.
+- P8-7 conflict handling — the merge itself is right (every conflicting manifest
+  is folded in, not just a winner), but iOS's `foldedConflicts` count is
+  discarded, so colliding devices give the user no signal.
 
 **Also outstanding:** F3 reader landscape, the PASS-WITH-NOTES polish, the
 `contracts/fixtures/` layer, and MuPDF.
@@ -352,7 +365,7 @@ Legend: **P** = PASS · **PN** = PASS WITH NOTES · **F** = FAIL · **NS** = NOT
 | 5 | Remote multi-select (shared) | **F** | = P4-10 / P6-7 |
 | 6 | Carousel collapse persisted | **F** | `LibraryScreen.kt:538` and `HomeScreen.kt:88` both `remember`-only |
 | 7 | Shared search-field / Browse URL entry | **NS** | No `GlassFieldBar` equivalent |
-| 8 | Reader edge-swipe-back | **NS** | Verify-first item — **no evidence anyone checked** whether it's a real problem on-device. Still open as a question, not as code |
+| 8 | Reader edge-swipe-back | **N/A** | Verified in the reader with a book open (emulator-5554): an edge swipe navigated back, so Android's predictive-back already wins over the Readium WebView. The problem iOS works around does not exist here — closed as not-applicable |
 
 ---
 
