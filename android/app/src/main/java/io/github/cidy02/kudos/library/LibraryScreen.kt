@@ -1162,7 +1162,10 @@ fun LibraryCarouselCard(
     showProgress: Boolean,
     footerOverride: String?,
     actions: LibraryCardActions,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelection: (() -> Unit)? = null
 ) {
     val work = display.item.work
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
@@ -1225,7 +1228,10 @@ fun LibraryCarouselCard(
             } else {
                 "${if (canRead) "Read" else "Open"} ${work.title}"
             },
-            onLongClick = { if (!obscured) menuOpen = true }
+            onLongClick = { if (!obscured) menuOpen = true },
+            isSelecting = isSelecting,
+            isSelected = isSelected,
+            onToggleSelection = onToggleSelection
         )
         DropdownMenu(
             expanded = menuOpen,

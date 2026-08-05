@@ -91,8 +91,17 @@ object Routes {
     }
 
     private const val ARG_HOME_SECTION = "homeSection"
-    const val HomeSection = "home-section/{$ARG_HOME_SECTION}"
-    fun homeSection(sectionId: String) = "home-section/${encode(sectionId)}"
+    const val HomeSection = "home-section/{$ARG_HOME_SECTION}?selecting={selecting}&selection={selection}"
+    fun homeSection(sectionId: String, isSelecting: Boolean = false, selection: Set<String> = emptySet()): String {
+        var base = "home-section/${encode(sectionId)}"
+        val params = mutableListOf<String>()
+        if (isSelecting) params.add("selecting=true")
+        if (selection.isNotEmpty()) params.add("selection=${encode(selection.joinToString(","))}")
+        if (params.isNotEmpty()) {
+            base += "?" + params.joinToString("&")
+        }
+        return base
+    }
 
     private const val ARG_ACCOUNT_LIST_TYPE = "listType"
     const val AccountList = "account-list/{$ARG_ACCOUNT_LIST_TYPE}"
