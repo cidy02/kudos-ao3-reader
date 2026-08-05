@@ -26,48 +26,45 @@ Nothing is restated from a prior report.
 
 | Verdict | At review | Now |
 |---|---|---|
-| PASS | 71 | **98** |
-| PASS WITH NOTES | 21 | 20 |
+| PASS | 71 | **106** |
+| PASS WITH NOTES | 21 | 14 |
 | FAIL | 11 | **0** |
-| NOT_STARTED | 18 | **2** |
+| NOT_STARTED | 18 | **0** |
 | NOT-APPLICABLE | 0 | 1 |
 
-**119 of 121 resolved.** Every FAIL is closed.
+**Every item is addressed.** Nothing is failing and nothing is untouched; the 14
+remaining are built and working with a named gap each.
 
-**Remaining NOT_STARTED (2):** P4-4 AO3 series preservation on queue-add ·
-P4-6 Queue Storage screen. Both were attempted and pushed back as too large for
-one pass; each now has its own prompt.
+Shipped as `android-v0.2.0-alpha` (versionCode 8).
 
-**NOT-APPLICABLE (1):** P11-8 reader edge-swipe-back. This was always a
-verify-first item, and the verification says don't build it: Android's system
-predictive-back wins at the window edge. Tested in the reader with a book open
-on emulator-5554 — an edge swipe navigated back rather than being eaten by the
-Readium WebView as a page turn, which is the failure iOS's `EdgeSwipeBack`
-exists to work around. **Closed as not-applicable, not skipped.**
+### The 14 remaining notes
 
-**Two items landed as PASS WITH NOTES rather than PASS:**
-- P11-1 shared-element zoom — the destination modifier is applied in
-  `WorkDetailScreen` only, so card → detail animates but card → reader does not.
-- P8-7 conflict handling — the merge itself is right (every conflicting manifest
-  is folded in, not just a winner), but iOS's `foldedConflicts` count is
-  discarded, so colliding devices give the user no signal.
+| Item | Gap |
+|---|---|
+| P2-1 TTS | `MediaSession` wired, but no `Notification` — so no true lock-screen controls |
+| P2-2 Highlights | Reachable only from the overflow menu, not a text-selection action |
+| P2-4 Contents sheet | No per-chapter start-percent, no swipe actions |
+| P2-6 Fan menu | **Re-check before working this.** The checklist wants "Rebuild from Original" here, but iOS puts it on the work-card menu and Work Detail, not the reader. Android already has Work Detail; the real gap is the work-card menu |
+| P2-9 Progress chrome | No page-of-page count |
+| P2-11 Display sheet | No font-family picker in the in-reader sheet |
+| P4-9 Bulk bar | No bulk Save / Save-for-Later toggle |
+| P4-12 AO3 list screens | No refine filter, display-mode toggle or expand-all |
+| P5-14 Work Detail rows | "Chapter Comments" hidden for single-chapter works — unconfirmed |
+| P5-19 Comment cache | Stale-while-revalidate present; no explicit 300 s TTL |
+| P7-7 Bug report | Prefilled GitHub issue, but no screenshot capture |
+| P8-2 Folder sync | One-way export only; no `syncDown`/`syncUp` split |
+| P9-3 PDF | Fails honestly; real extraction awaits MuPDF |
+| P11-2 Skeletons | Home only, and `ReaderPageSkeleton` pulses without checking "remove animations" |
 
-**Also outstanding:** F3 reader landscape, the PASS-WITH-NOTES polish, the
-`contracts/fixtures/` layer, and MuPDF.
+### Outside the checklist
 
-**Fixes applied in this branch:** F0, F1, F2, F4, F5, F6, F7, F8, plus checklist
-items P7-2, P7-3, P7-8, P9-2, P9-4, P9-5, P9-7, P9-8, P9-9, P9-10, P9-11, P10-1,
-P10-4, P11-3, P11-5 — and, unblocked by P9-10, P4-11 and P10-3. Phase 9 is now
-complete apart from the PDF engine itself (MuPDF).
-
-Bugs found in **iOS** while porting are logged separately in
-[iOS_Issues_Found_While_Porting.md](iOS_Issues_Found_While_Porting.md) rather
-than silently propagated to Android.
-
-Phases 0, 1, 3 are **fully clean**. Phase 6 is near-clean (13/14). The debt is
-concentrated in **Phase 9** (8 of 11 failed or absent) and **Phase 11** (6 of 8).
-
----
+- **F3** — reader layout is wrong in landscape (does not crash). Proven and
+  localised to the Readium fragment/WebView layer, not root-caused.
+- **`contracts/fixtures/`** — the cross-platform contract-test layer the port
+  plan specifies (§3.3, §6.2) and which was never built.
+- **MuPDF** — the largest single piece.
+- **Owner only** — every authenticated AO3 write path is still verified by
+  reading code, never exercised against a live session.
 
 ## Headline findings
 
