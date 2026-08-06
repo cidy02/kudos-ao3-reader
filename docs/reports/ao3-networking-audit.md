@@ -3,7 +3,7 @@
 **Audited tree:** worktree `tasklist-reports-impl-429b9e`, branch `claude/tasklist-reports-impl-429b9e`, HEAD `72267fea`.
 **Date:** 2026-08-06.
 **Method:** static reading of the full networking surface, plus live comparison against `archiveofourown.org` (search form DOM, option values, pagination markup, and four executed search queries), plus the official OTW Archive `WorkQuery` source.
-**Scope note:** the task named branch `hig-review`; this worktree is the one the current session has been working in and is the tree actually audited. Findings should be re-checked if `hig-review` has diverged.
+**Scope note:** the task named branch `hig-review`; this worktree is the one the current session has been working in and is the tree actually audited. ~~Findings should be re-checked if `hig-review` has diverged.~~ **Resolved by the follow-up review: it hasn't.** `origin/hig-review` is `29cd9158`, the exact commit this work branched from, so every finding applies to it directly.
 
 **The audit itself modified no source code.** The findings were implemented in a
 follow-up commit at the maintainer's request — see [Remediation status](#remediation-status)
@@ -516,7 +516,7 @@ Stated explicitly rather than guessed at.
 2. **AO3's Elasticsearch escaping grammar was not empirically tested.** Finding 6's specific escape sequence is a recommendation, not a verified fix.
 3. **No load or rate-limit testing was performed.** Whether 0.6 s + 3 concurrent actually stays under AO3's limits in sustained use is unverified; no observed 429 was available to study.
 4. **Authenticated paths were spot-checked only** (Tier 2). `AO3AuthService` (988 lines) and `AO3SessionVault` (365) were not audited line-by-line. The cookie-isolation *invariant* was verified by reading `makeAnonymousSessionConfiguration` and `purgeSessionCookie` and confirming unit tests exist; the broader auth flow was not.
-5. **`hig-review` divergence.** This audit is of `72267fea` in the current worktree. If `hig-review` differs, re-verify.
+5. ~~**`hig-review` divergence.**~~ **Closed.** `origin/hig-review` is `29cd9158`, the commit this branch descends from — it never diverged.
 6. **AO3 may change at any time.** Every live-verified fact here has today's date on it. This is the standing risk of a scraping client and the reason Finding 5 matters more than its severity suggests.
 
 ---

@@ -1291,23 +1291,32 @@ Listed so the maintainer knows what was actually examined, not only what broke.
    fetches *authenticated*. **Re-measure that one request while signed in** before
    concluding R12 is theoretical; it is the single check most likely to change a
    verdict here.
-2. **`view_adult` on registered-users-only works.** R1 recommends reverting it
-   from `search()`. I verified the *listing* is unaffected; I did not test
-   fetching a work restricted to logged-in users through the search path. Do that
-   one check before committing the revert.
+2. ~~**`view_adult` on registered-users-only works.**~~ **Closed.** Compared full
+   corpus totals rather than page 1: `fandom_names=Naruto` returns **92,493 Found
+   with and without** `view_adult`. If the parameter gated any work class the
+   totals would differ. Nothing is filtered.
 3. **`NSKeyValueObservation` outliving its observed object** (R9) — I reasoned
    about it from Apple's documented semantics but did not instrument the reader
    to confirm no KVO-dealloc warning is logged in practice.
 4. **AO3's `Cache-Control` behaviour is a live-service detail**, not a contract.
    Everything in R1/R2/R12 is dated 2026-08-06 and could change.
-5. **SwiftData migration is untested** for `SavedWork.bookmarks`. I relied on
-   precedent (`comments`, `hits` added the same way) rather than an actual
-   old-store migration run. The failure mode is a `fatalError` at launch, which
-   is loud rather than silent, but it is unproven.
-6. **`hig-review` divergence**, carried forward from the audit. This review is of
-   `claude/ao3-networking-review-3377ae` at `b9d70515`. `origin/hig-review`
-   exists and was never the tree either the audit or the implementation ran
-   against. Nothing here has been verified against it.
+5. ~~**SwiftData migration is untested** for `SavedWork.bookmarks`.~~ **Closed —
+   run against a real pre-change store.** The booted simulator still held a
+   `default.store` written 2026-08-05 19:22, before `30322553` added the column
+   (confirmed by schema: `ZKUDOS`/`ZCOMMENTS`/`ZHITS` present, no `ZBOOKMARKS`),
+   holding 2 `SavedWork` rows. Building HEAD and launching against it: the app
+   started and stayed up, `ZBOOKMARKS` was added by automatic lightweight
+   migration, and both rows survived byte-identical (kudos 483/620, comments
+   367/54, hits 25964/9939) with the new column defaulted to 0. No crash report.
+   *Caveat:* that store had 0 `SavedSearch` rows, so the `AO3SearchFilters`
+   `Codable` path was not exercised against real persisted data — but its wire
+   format is unchanged and its decode is unit-tested against legacy payloads.
+6. ~~**`hig-review` divergence**, carried forward from the audit.~~ **Closed —
+   it never diverged.** `origin/hig-review` is `29cd9158ebd3525d6d63ff6fddeab30e591a0b93`,
+   which *is* this review's base commit, and there are zero commits on it that
+   this branch does not contain. So every finding applies to `hig-review`
+   directly and this branch is a clean fast-forward from it. This also retires
+   the same caveat in the audit's scope note and its Unknown #5.
 7. **R6's real-world magnitude is unmeasured** — I proved the URLs differ, not
    how often users select multiple warnings or categories.
 
