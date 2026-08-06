@@ -104,15 +104,40 @@ struct SearchURLTests {
         #expect(values["work_search[category_ids][]"]?.sorted() == ["21", "23"])
     }
 
-    @Test func exclusionsBecomeNegatedQueryClauses() throws {
+    @Test func exclusionsSplitBetweenTheTagFieldAndQuerySyntax() throws {
         var filters = AO3SearchFilters()
         filters.excludedWarnings = [.chooseNotTo]
         filters.excludedCategories = [.gen]
         filters.excludedFandoms = "Bleach"
-        let query = try #require(try params(filters)["work_search[query]"]?.first)
+        let values = try params(filters)
+        // Tags have a structured field; warnings and categories don't, so those
+        // two still go through AO3's query syntax as negated id clauses.
+        #expect(values["work_search[excluded_tag_names]"] == ["Bleach"])
+        let query = try #require(values["work_search[query]"]?.first)
         #expect(query.contains("-archive_warning_ids:14"))
         #expect(query.contains("-category_ids:21"))
-        #expect(query.contains("-\"Bleach\""))
+        #expect(!query.contains("Bleach"))
+    }
+
+    @Test func absoluteDateBoundsUseAO3sISOFormat() throws {
+        var filters = AO3SearchFilters()
+        var components = DateComponents()
+        components.year = 2024; components.month = 1; components.day = 31
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        filters.dateFrom = try #require(calendar.date(from: components))
+        components.year = 2025; components.month = 12; components.day = 25
+        filters.dateTo = try #require(calendar.date(from: components))
+
+        let values = try params(filters)
+        #expect(values["work_search[date_from]"] == ["2024-01-31"])
+        #expect(values["work_search[date_to]"] == ["2025-12-25"])
+    }
+
+    @Test func absoluteDateBoundsAreOmittedWhenUnset() throws {
+        let values = try params(AO3SearchFilters())
+        #expect(values["work_search[date_from]"] == nil)
+        #expect(values["work_search[date_to]"] == nil)
     }
 
     @Test func facetedChoicesUseAO3sFlagValues() throws {

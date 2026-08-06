@@ -1412,7 +1412,7 @@ it — recorded below, because the discarded version looked better on paper.
 | R11 | Four factual errors | ✅ Fixed | 168 → 162 languages; 885 → 907 → the real 910/911; the `sort_direction`-on-`_score` rationale replaced with the measured behaviour; the cache-header comment rewritten (R1). |
 | R12 | `URLCache` not partitioned by identity | ✅ Fixed | `authenticatedRequest` sets `.reloadIgnoringLocalCacheData`. + assertion in the existing `authenticatedRequest` test. |
 | R13 | `verify.sh` can't run in a clean worktree | ✅ Fixed | Preflight check for `Vendor/MuPDF.xcframework` that names `Scripts/build-mupdf.sh`, instead of dying four minutes later at the test build. |
-| R14 | `excluded_tag_names`, `date_from`/`date_to` unused | ⏭️ **Not changed — maintainer's call** | Both verified to work, but neither is a defect. Moving exclusions to `excluded_tag_names` changes what users get back (canonical-tag exclusion resolves synonyms; the current `-"phrase"` match does not — that is the 89,853 vs 89,676 gap), so it is a product decision, not a repair. `date_from`/`date_to` are a new feature. Left for you. |
+| R14 | `excluded_tag_names`, `date_from`/`date_to` unused | ✅ **Both adopted** (maintainer's call) | Exclusions moved to `work_search[excluded_tag_names]`, which takes a comma list (live-verified with two names). Absolute date bounds added as `dateFrom`/`dateTo`. See the note below — one thing this report got wrong about the date axis. |
 
 ### One fix that changed shape
 
@@ -1429,8 +1429,33 @@ for whoever picks up the larger version later: making the signal sound for
 bookmarks needs *positive* recognition of series/external/deleted blurbs, not a
 smarter negative.
 
+### R14, and one thing this report got wrong
+
+Both items were adopted. Two corrections fell out of implementing them:
+
+1. **`date_from`/`date_to` filter `revised_at` — *updated*, not posted.** This
+   report described the gap as "'posted in 2024' is inexpressible". Wrong:
+   otwarchive's `date_range_filter` returns `{ range: { revised_at: … } }`, the
+   same axis the existing relative "Updated" picker uses. Confirmed live —
+   `date_from=2025-08-06` returns 1,985 works where `revised_at=< 1 year ago`
+   returns 1,979, a six-work drift explained by the hours between the two
+   boundaries. So these are *absolute bounds on the existing axis*, not a new
+   one, and the UI places them under the Updated picker accordingly. AO3 ANDs
+   them, which the panel's footer now says out loud.
+2. **The exclusion difference is phrase-vs-tag, not synonym resolution.**
+   otwarchive turns each excluded name into its own `match` filter on the `tag`
+   field. The old `-"phrase"` route also matched summary and title text, which is
+   why it excluded *more*: on one corpus (92,493 works), excluding "Time Travel"
+   + "Fluff" leaves **74,261** through the tag field and **73,419** through query
+   syntax. The extra 842 are works that merely mention those words.
+
+A pleasant consequence: `quotedPhrase(_:)` — F6's escaping fix — was deleted
+along with its only caller. No user text is interpolated into query syntax any
+more, so the injection hazard is gone structurally rather than patched. The
+escape sequence was correct; it is simply no longer reachable.
+
 ### Verification
 
 `Scripts/verify.sh` — invariants, lint, full iOS suite, macOS build, whitespace.
-Test count **911 → 915** (+4). The live measurements these fixes rest on are in
+Test count **911 → 917** (+6). The live measurements these fixes rest on are in
 the finding bodies above, each with the date it was taken.

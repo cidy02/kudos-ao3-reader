@@ -105,16 +105,32 @@ struct SearchFiltersTests {
         #expect(filters.structuredRatingID == nil)
     }
 
-    @Test func categorizedExclusionsBecomeDeduplicatedQueryClauses() {
+    @Test func categorizedExclusionsBecomeOneDeduplicatedTagNameList() {
         var filters = AO3SearchFilters()
         filters.excludedFandoms = "Naruto, Star Wars"
         filters.excludedCharacters = "Naruto"
         filters.excludedRelationships = "Alice/Bob"
 
-        #expect(
-            filters.searchQuery
-                == "-\"Naruto\" -\"Star Wars\" -\"Alice/Bob\""
-        )
+        // AO3's own `excluded_tag_names` takes a comma list (live-verified to
+        // handle more than one), so these no longer touch the free-text query at
+        // all — which is what removed the need to escape user text into query
+        // syntax. Duplicates across the four fields still collapse.
+        #expect(filters.excludedTagNames == "Naruto,Star Wars,Alice/Bob")
+        #expect(filters.searchQuery.isEmpty)
+    }
+
+    @Test func noExclusionsMeansNoExcludedTagNamesParameter() {
+        #expect(AO3SearchFilters().excludedTagNames == nil)
+    }
+
+    @Test func excludedTagsNeedNoEscapingBecauseTheyLeaveQuerySyntax() {
+        // The quote that used to terminate the phrase early is now just a
+        // character in a structured field value, percent-encoded by URLComponents
+        // like any other. `quotedPhrase` was deleted with its last caller.
+        var filters = AO3SearchFilters()
+        filters.excludedFandoms = "He said \"hi\""
+        #expect(filters.excludedTagNames == "He said \"hi\"")
+        #expect(filters.searchQuery.isEmpty)
     }
 
     @Test func warningExclusionsUseAO3FieldSyntax() {
@@ -132,22 +148,6 @@ struct SearchFiltersTests {
         filters.excludedCategories = [.mm, .other]
 
         #expect(filters.searchQuery == "-category_ids:23 -category_ids:24")
-    }
-
-    @Test func quotedPhraseEscapesCharactersThatWouldEndThePhrase() {
-        // A tag containing a double quote is legal on AO3. Interpolated raw it
-        // closed the phrase early and injected stray tokens into the query.
-        #expect(AO3SearchFilters.quotedPhrase("plain") == "\"plain\"")
-        #expect(AO3SearchFilters.quotedPhrase("He said \"hi\"") == "\"He said \\\"hi\\\"\"")
-        // Backslash is escaped first, so escaping it can't double-escape a quote.
-        #expect(AO3SearchFilters.quotedPhrase("back\\slash") == "\"back\\\\slash\"")
-    }
-
-    @Test func excludedTagWithAQuoteStaysASingleWellFormedClause() {
-        var filters = AO3SearchFilters()
-        filters.excludedFandoms = "He said \"hi\""
-        // One clause, fully quoted, with the inner quotes neutralised.
-        #expect(filters.searchQuery == "-\"He said \\\"hi\\\"\"")
     }
 
     @Test func rangeExpressionCoversBothBoundsAndNeither() {
@@ -188,5 +188,7 @@ struct SearchFiltersTests {
         #expect(filters.bookmarksFrom.isEmpty)
         #expect(filters.sortDirection == .descending)
         #expect(filters.chapterCount == .any)
+        #expect(filters.dateFrom == nil)
+        #expect(filters.dateTo == nil)
     }
 }

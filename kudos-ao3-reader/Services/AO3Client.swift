@@ -342,9 +342,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             items.append(URLQueryItem(name: name, value: value))
         }
 
-        // AO3's structured search has no multi-rating or exclusion fields.
-        // `searchQuery` folds those into AO3's documented text-search syntax.
+        // AO3's structured search has no multi-rating field, and no exclusion for
+        // warnings or categories. `searchQuery` folds those into AO3's documented
+        // text-search syntax. Excluded *tags* have their own field, below.
         add("work_search[query]", filters.searchQuery)
+        add("work_search[excluded_tag_names]", filters.excludedTagNames)
 
         add("work_search[title]", filters.title)
         add("work_search[creators]", filters.creators)
@@ -384,6 +386,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             AO3SearchFilters.rangeExpression(from: filters.bookmarksFrom, to: filters.bookmarksTo)
         )
         add("work_search[revised_at]", filters.updated.value)
+        // Absolute bounds on the same `revised_at` axis as the relative window
+        // above (otwarchive `date_range_filter`), which AO3 ANDs together.
+        add("work_search[date_from]", filters.dateFrom.map(AO3SearchFilters.dateBoundFormatter.string(from:)))
+        add("work_search[date_to]", filters.dateTo.map(AO3SearchFilters.dateBoundFormatter.string(from:)))
         add("work_search[language_id]", filters.language.code)
         add("work_search[sort_column]", filters.sort.column)
         // Only sent alongside an explicit column. Not because a direction is

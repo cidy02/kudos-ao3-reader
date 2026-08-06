@@ -155,6 +155,12 @@ struct AO3FilterPanel: View {
                         Picker("Updated", selection: $filters.updated) {
                             ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
                         }
+                        // Absolute bounds on the same axis as the picker above —
+                        // AO3 filters both on `revised_at` and ANDs them, so the
+                        // footer says so rather than letting a reader guess why
+                        // "Past week" plus a 2020 range returns nothing.
+                        dateBound("After", date: $filters.dateFrom)
+                        dateBound("Before", date: $filters.dateTo)
                     }
                     Picker("Language", selection: $filters.language) {
                         ForEach(AO3SearchFilters.Language.allCases) { Text($0.title).tag($0) }
@@ -228,6 +234,25 @@ struct AO3FilterPanel: View {
     /// A From/To pair for one of AO3's numeric range fields. Five sections need
     /// the identical shape, so they share one builder rather than repeating the
     /// platform-conditional keyboard type five times.
+    /// One optional date bound. `DatePicker` can't bind to a `Date?`, so the
+    /// toggle *is* the optionality: off means "no bound", and switching it on
+    /// seeds today rather than a silent 2001 default.
+    @ViewBuilder
+    private func dateBound(_ title: String, date: Binding<Date?>) -> some View {
+        Toggle(title, isOn: Binding(
+            get: { date.wrappedValue != nil },
+            set: { date.wrappedValue = $0 ? (date.wrappedValue ?? Date()) : nil }
+        ))
+        if let value = date.wrappedValue {
+            DatePicker(
+                title,
+                selection: Binding(get: { value }, set: { date.wrappedValue = $0 }),
+                displayedComponents: .date
+            )
+            .labelsHidden()
+        }
+    }
+
     @ViewBuilder
     private func numberRange(from: Binding<String>, to: Binding<String>) -> some View {
         TextField("From", text: from)
