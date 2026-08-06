@@ -13,6 +13,10 @@ import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * Encode/decode [AO3SearchFilters] for [io.github.cidy02.kudos.core.model.SavedSearch.filtersJson].
@@ -66,9 +70,40 @@ internal data class AO3SearchFiltersDto(
     val wordsFrom: String = "",
     val wordsTo: String = "",
     val updated: String = AO3Updated.ANY.appleCaseName,
-    val language: String = AO3Language.ANY.appleCaseName,
+    /**
+     * Deliberately a raw [JsonElement], not a `String`, because this one field has
+     * been written three different ways and a type mismatch here is not survivable:
+     * `decode` catches the failure and returns default filters, so one unreadable
+     * language silently discards *every other filter* in the saved search.
+     *
+     *  - `"french"` — this app's own older payloads (`appleCaseName`).
+     *  - `"fr"` — Apple's original `enum Language: String`, whose raw value was
+     *    AO3's language code.
+     *  - `{"id": "fr"}` / `{"id": "fr", "title": "Français"}` — Apple today, after
+     *    `Language` became a struct.
+     *
+     * [languageFrom] accepts all four.
+     */
+    val language: JsonElement? = null,
     val sort: String = AO3SearchSort.RELEVANCE.appleCaseName
 )
+
+/**
+ * Resolves the language from whichever shape the payload used. Falls back to
+ * [AO3Language.ANY] rather than throwing — an unknown language is worth losing,
+ * the other twenty filters are not.
+ */
+internal fun languageFrom(element: JsonElement?): AO3Language {
+    val raw = when (element) {
+        is JsonPrimitive -> element.contentOrNull
+        is JsonObject -> (element["id"] as? JsonPrimitive)?.contentOrNull
+        else -> null
+    }
+    if (raw.isNullOrEmpty()) return AO3Language.ANY
+    return AO3Language.entries.firstOrNull { it.appleCaseName == raw }
+        ?: AO3Language.entries.firstOrNull { it.code == raw }
+        ?: AO3Language.ANY
+}
 
 internal fun AO3SearchFilters.toDto(): AO3SearchFiltersDto {
     return AO3SearchFiltersDto(
@@ -93,7 +128,13 @@ internal fun AO3SearchFilters.toDto(): AO3SearchFiltersDto {
         wordsFrom = wordsFrom,
         wordsTo = wordsTo,
         updated = updated.appleCaseName,
-        language = language.appleCaseName,
+        // AO3's language code ("fr"), not this app's `appleCaseName` ("french").
+        // The code is what Apple's `Language.id` holds and what its decoder reads
+        // out of a bare string, so writing it is what makes this payload actually
+        // portable — the KDoc above has always claimed compatibility, and for this
+        // field it was not true. Older builds of this app read it back through
+        // `languageFrom`'s `code` branch. `ANY` has no code and writes "".
+        language = JsonPrimitive(language.code ?: ""),
         sort = sort.appleCaseName
     )
 }
@@ -139,11 +180,7 @@ internal fun AO3SearchFiltersDto.toDomain(): AO3SearchFilters {
         wordsFrom = wordsFrom,
         wordsTo = wordsTo,
         updated = enumByAppleCase(AO3Updated.entries, updated, AO3Updated.ANY) { it.appleCaseName },
-        language = enumByAppleCase(
-            AO3Language.entries,
-            language,
-            AO3Language.ANY
-        ) { it.appleCaseName },
+        language = languageFrom(language),
         sort = enumByAppleCase(
             AO3SearchSort.entries,
             sort,

@@ -51,11 +51,31 @@ data class AO3SearchFilters(
     val isSearchable: Boolean
         get() = query.isNotBlank() || hasActiveFilters
 
+    /**
+     * Excluded tags no longer appear here. They used to be folded in as `-"tag"`
+     * phrases, which was wrong in two ways and unsafe in a third:
+     *
+     *  - **Wrong axis.** A quoted phrase matches summary and title text as well as
+     *    tags, so it removed works that merely *mention* the words. Measured on one
+     *    corpus of 92,495 works, excluding "Time Travel" + "Fluff" leaves 74,261
+     *    through the tag field and 73,419 through phrase syntax — 842 works dropped
+     *    that carry neither tag.
+     *  - **No canonical resolution.** otwarchive turns a *recognised* excluded name
+     *    into `term_filter(:filter_ids, id)` against the work's canonical filter
+     *    tags, so synonyms and sub-tags go too. Phrase syntax gets none of that.
+     *  - **Unescaped interpolation.** `-"$it"` put user text straight into query
+     *    syntax, so a tag containing a double quote (AO3 allows it) closed the
+     *    phrase early and the rest of the query became garbage.
+     *
+     * All three disappear by using AO3's own `excluded_tag_names` field
+     * ([excludedTagNames]) — the endpoint accepts it even though the *form* has no
+     * exclusion input. Warnings and categories stay here because AO3 offers no
+     * structured exclusion field for them, and they are enum ids, not user text.
+     */
     val searchQuery: String
         get() {
             val clauses = mutableListOf<String>()
             query.trim().takeIf { it.isNotEmpty() }?.let(clauses::add)
-            clauses += excludedTags().map { "-\"$it\"" }
             clauses += AO3Warning.entries
                 .filter(excludedWarnings::contains)
                 .map { "-archive_warning_ids:${it.ao3Id}" }
@@ -65,6 +85,21 @@ data class AO3SearchFilters(
             ratingSearchClause()?.let(clauses::add)
             return clauses.joinToString(" ")
         }
+
+    /**
+     * The four excluded-tag fields as AO3's own `work_search[excluded_tag_names]`
+     * — a comma-separated list, verified live to accept more than one name.
+     *
+     * The comma convention matches AO3's: otwarchive splits this field with
+     * `options[field].split(",").map(&:squish)`, the same rule
+     * [commaSeparatedValues] applies here, so both sides agree. A tag whose own
+     * name contains a comma is therefore inexpressible — it was equally
+     * inexpressible through the old phrase route, which also split on commas first.
+     *
+     * null when nothing is excluded, so the parameter is omitted entirely.
+     */
+    val excludedTagNames: String?
+        get() = excludedTags().takeIf { it.isNotEmpty() }?.joinToString(",")
 
     val structuredRatingId: String?
         get() {

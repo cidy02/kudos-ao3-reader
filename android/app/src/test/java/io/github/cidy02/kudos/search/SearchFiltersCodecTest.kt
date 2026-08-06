@@ -127,4 +127,62 @@ class SearchFiltersCodecTest {
         // Known warning is kept; unknown enum token is dropped.
         assertTrue(filters.hasActiveFilters)
     }
+
+    @Test
+    fun anAppleLanguageObjectDoesNotDiscardEveryOtherFilter() {
+        // Apple's `Language` became a struct, so its saved searches carry an
+        // *object* here where this app declared a String. That is a type mismatch,
+        // and `decode` catches the failure by returning default filters — so one
+        // unreadable language silently threw away the whole saved search. The
+        // field is a raw JsonElement now precisely so this cannot happen.
+        val json = """
+            {"query":"time travel","fandom":"Naruto","wordsFrom":"1000",
+             "language":{"id":"fr","title":"Français"},"sort":"kudos"}
+        """.trimIndent()
+
+        val filters = SearchFiltersCodec.decode(json)
+        assertEquals("time travel", filters.query)
+        assertEquals("Naruto", filters.fandom)
+        assertEquals("1000", filters.wordsFrom)
+        assertEquals(AO3SearchSort.KUDOS, filters.sort)
+        assertEquals(AO3Language.FRENCH, filters.language)
+    }
+
+    @Test
+    fun everyLanguageShapeEverWrittenStillDecodes() {
+        fun language(raw: String): AO3Language =
+            SearchFiltersCodec.decode("""{"language":$raw}""").language
+
+        // This app's own older payloads.
+        assertEquals(AO3Language.FRENCH, language(""""french""""))
+        // Apple's original bare-string enum, whose raw value was AO3's code.
+        assertEquals(AO3Language.FRENCH, language(""""fr""""))
+        // Apple today, and the intermediate shape that also carried a title.
+        assertEquals(AO3Language.FRENCH, language("""{"id":"fr"}"""))
+        assertEquals(AO3Language.FRENCH, language("""{"id":"fr","title":"Français"}"""))
+        // Unset, empty and unrecognised all mean "no language filter" — never a throw.
+        assertEquals(AO3Language.ANY, language("""""""))
+        assertEquals(AO3Language.ANY, language("null"))
+        assertEquals(AO3Language.ANY, language(""""klingon""""))
+        assertEquals(AO3Language.ANY, language("""{"id":"zzz"}"""))
+        assertEquals(AO3Language.ANY, language("""{}"""))
+    }
+
+    @Test
+    fun languageIsWrittenAsAO3sCodeSoAppleCanReadItBack() {
+        // The KDoc has always promised these payloads are readable by the Swift
+        // app. For this field it wasn't: "french" is meaningless to Apple, whose
+        // decoder reads a bare string as AO3's language code. Writing the code
+        // makes the promise true, and this app still reads its own older "french".
+        val encoded = SearchFiltersCodec.encode(AO3SearchFilters(language = AO3Language.FRENCH))
+        assertTrue(encoded.contains(""""language":"fr""""))
+
+        // ANY has no AO3 code; "" is what Apple's placeholder id is too.
+        val any = SearchFiltersCodec.encode(AO3SearchFilters())
+        assertTrue(any.contains(""""language":""""))
+
+        // And it round-trips through this app unchanged.
+        val filters = AO3SearchFilters(query = "x", language = AO3Language.JAPANESE)
+        assertEquals(filters, SearchFiltersCodec.decode(SearchFiltersCodec.encode(filters)))
+    }
 }

@@ -19,6 +19,10 @@ class AO3SearchUrlBuilder {
         add("work_search[character_names]", filters.characters)
         add("work_search[relationship_names]", filters.relationships)
         add("work_search[freeform_names]", filters.additionalTags)
+        // AO3's own exclusion field. Not on the search *form*, but it is in
+        // `WorkSearchForm::ATTRIBUTES` and the endpoint honours it — see
+        // AO3SearchFilters.excludedTagNames for why this beats `-"tag"` in the query.
+        add("work_search[excluded_tag_names]", filters.excludedTagNames)
         add("work_search[rating_ids]", filters.structuredRatingId)
 
         AO3Warning.entries

@@ -151,7 +151,7 @@ class AO3SearchWordCountTest {
 
 class AO3SearchIncludeExcludeTest {
     @Test
-    fun exclusionsBecomeDeduplicatedQueryClauses() {
+    fun exclusionsSplitBetweenTheTagFieldAndQuerySyntax() {
         val filters = AO3SearchFilters(
             excludedFandoms = "Naruto, Star Wars",
             excludedCharacters = "Naruto",
@@ -160,12 +160,70 @@ class AO3SearchIncludeExcludeTest {
             excludedCategories = setOf(AO3Category.MM, AO3Category.OTHER)
         )
 
+        // Tags go through AO3's own field: it excludes by canonical tag rather than
+        // by phrase (a phrase also matched summary and title text) and needs no
+        // escaping. Duplicates across the four fields still collapse, first-seen
+        // order preserved.
+        assertEquals("Naruto,Star Wars,Alice/Bob", filters.excludedTagNames)
+
+        // Warnings and categories have no structured exclusion field, so those stay
+        // as negated id clauses — and they are enum ids, never user text.
         assertEquals(
-            "-\"Naruto\" -\"Star Wars\" -\"Alice/Bob\" " +
-                "-archive_warning_ids:16 -archive_warning_ids:20 " +
+            "-archive_warning_ids:16 -archive_warning_ids:20 " +
                 "-category_ids:23 -category_ids:24",
             filters.searchQuery
         )
+    }
+
+    @Test
+    fun excludedTagsNeverReachTheFreeTextQuery() {
+        val filters = AO3SearchFilters(
+            query = "found family",
+            excludedFandoms = "Bleach"
+        )
+
+        val url = AO3SearchUrlBuilder().buildSearchUrl(filters, page = 1).toHttpUrl()
+        assertEquals("Bleach", url.queryParameter("work_search[excluded_tag_names]"))
+        assertEquals("found family", url.queryParameter("work_search[query]"))
+        assertFalse(url.queryParameter("work_search[query]")!!.contains("Bleach"))
+    }
+
+    @Test
+    fun aQuoteInATagNoLongerCorruptsTheQuery() {
+        // The old `-"$tag"` interpolation put user text straight into AO3 query
+        // syntax with no escaping, so a tag carrying a double quote closed the
+        // phrase early and everything appended after it was swallowed. In a
+        // structured field a quote is just a character, percent-encoded like any
+        // other.
+        val filters = AO3SearchFilters(
+            excludedFandoms = "He said \"hi\"",
+            excludedWarnings = setOf(AO3Warning.UNDERAGE)
+        )
+
+        assertEquals("He said \"hi\"", filters.excludedTagNames)
+        assertEquals("-archive_warning_ids:20", filters.searchQuery)
+
+        val url = AO3SearchUrlBuilder().buildSearchUrl(filters, page = 1).toHttpUrl()
+        assertEquals("He said \"hi\"", url.queryParameter("work_search[excluded_tag_names]"))
+        assertEquals("-archive_warning_ids:20", url.queryParameter("work_search[query]"))
+    }
+
+    @Test
+    fun noExclusionsOmitsTheParameterEntirely() {
+        assertNull(AO3SearchFilters().excludedTagNames)
+        val url = AO3SearchUrlBuilder()
+            .buildSearchUrl(AO3SearchFilters(query = "x"), page = 1)
+            .toHttpUrl()
+        assertNull(url.queryParameter("work_search[excluded_tag_names]"))
+    }
+
+    @Test
+    fun theCommaConventionMatchesOtwarchivesOwnSplit() {
+        // otwarchive parses this field with `split(",").map(&:squish)`, so the
+        // separator is a bare comma and surrounding whitespace is the server's
+        // problem, not ours. Spaces inside a name must survive.
+        val filters = AO3SearchFilters(excludedAdditionalTags = " Time Travel , Fluff ")
+        assertEquals("Time Travel,Fluff", filters.excludedTagNames)
     }
 }
 
