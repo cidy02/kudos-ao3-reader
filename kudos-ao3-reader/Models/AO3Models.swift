@@ -343,15 +343,20 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     ///     therefore excludes *nothing*, silently — correct (no work carries that
     ///     tag) but invisible.
     ///
-    /// Case is worth knowing about and is not ours to fix. `taggable_query.rb`
-    /// computes missing names as `names - found.map(&:second)`, a case-*sensitive*
-    /// Ruby array difference, while the DB lookup that produced `found` is
-    /// case-*insensitive*. A wrongly-cased name is therefore both found and
-    /// missing, and gets both filters — so it excludes slightly *more*, never less.
-    /// Measured on the same corpus: `Time Travel` → 89,855, `time travel` →
-    /// 89,741. Harmless direction, but two users typing the same tag differently
-    /// get different counts. The real fix is input quality (AO3 has a tag
-    /// autocomplete endpoint), not normalising the wire format on a guess.
+    /// Case matters on AO3's side, and the app is already insulated from it.
+    /// `taggable_query.rb` computes missing names as `names - found.map(&:second)`,
+    /// a case-*sensitive* Ruby array difference, while the DB lookup that produced
+    /// `found` is case-*insensitive*. A wrongly-cased name is therefore both found
+    /// and missing and gets both filters — so it excludes slightly *more*, never
+    /// less. Measured on the same corpus: `Time Travel` → 89,855, `time travel` →
+    /// 89,741.
+    ///
+    /// Nothing is normalised here on purpose: **these strings are already AO3's
+    /// own.** Every tag in the filter panel arrives from `TagSelectField`, which
+    /// has no free-text entry — the only way in is picking a result from AO3's
+    /// autocomplete (`AO3Client.autocompleteTags`) or tapping a tag on a work,
+    /// both of which are AO3's own spelling. Guessing at case here would risk
+    /// mangling a name AO3 supplied, to fix input the app does not accept.
     nonisolated var excludedTagNames: String? {
         let tags = [excludedFandoms, excludedCharacters, excludedRelationships, excludedAdditionalTags]
             .flatMap(Self.commaSeparatedValues)
@@ -641,24 +646,45 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     /// source of truth for what each id means.
     nonisolated struct Language: Identifiable, Equatable, Hashable, Codable, Sendable {
         /// AO3's `language_id` value; "" for the "Any language" placeholder.
+        ///
+        /// **The only stored property, deliberately.** `title` is derived from it
+        /// (`rawList` is the one source of truth for both), and that is load-bearing
+        /// for persistence, not just tidiness: `SavedSearch.filters` is a SwiftData
+        /// composite attribute, so every *stored* property here becomes its own
+        /// SQLite column. When `title` was stored too, the columns were `ZID` and
+        /// `ZTITLE1` — and because SwiftData fills those columns from the
+        /// `Encodable` conformance, a `singleValueContainer` encoder supplied one
+        /// value for two columns, wrote `title` as `NULL`, and CoreData then
+        /// rejected the whole row ("missing mandatory text data for property
+        /// 'title'"). Every saved search vanished on read. One stored property
+        /// cannot have that failure, and it restores the single-column shape the
+        /// original `enum Language: String` had, so rows written while `title` was
+        /// stored — `NULL` column and all — load again.
         let id: String
-        let title: String
 
-        // The custom `init(from:)` below suppresses Swift's synthesized memberwise
-        // init, so it's spelled out explicitly here.
-        init(id: String, title: String) {
+        init(id: String) {
             self.id = id
-            self.title = title
         }
 
-        static let any = Language(id: "", title: "Any language")
+        static let any = Language(id: "")
+
+        /// AO3's own label for this id. Native names verbatim, never re-translated.
+        /// Unknown ids (AO3 adds a language this build predates) show the raw id
+        /// rather than nothing.
+        var title: String {
+            if id.isEmpty { return "Any language" }
+            return Self.titlesByID[id] ?? id
+        }
 
         /// The `work_search[language_id]` query value, or nil to leave it unset.
         var code: String? {
             id.isEmpty ? nil : id
         }
 
-        static let allCases: [Language] = [.any] + rawList.map { Language(id: $0.0, title: $0.1) }
+        static let allCases: [Language] = [.any] + rawList.map { Language(id: $0.0) }
+
+        private static let titlesByID: [String: String] =
+            Dictionary(rawList, uniquingKeysWith: { first, _ in first })
 
         private static let rawList: [(String, String)] = [
             ("so", "af Soomaali"), ("afr", "Afrikaans"), ("ain", "Aynu itak | アイヌ イタㇰ"), ("akk", "𒀝𒅗𒁺𒌑"),
@@ -705,42 +731,33 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             ("yue", "中文-广东话 粵語"), ("zh", "中文-普通话 國語")
         ]
 
+        // Only `id`: it is the only stored property, and a case without one would
+        // stop `encode(to:)` synthesizing. A `title` in an older payload is simply
+        // an unread key.
         enum CodingKeys: String, CodingKey {
-            case id, title
+            case id
         }
 
-        /// Decodes **both** shapes, and the reason is not backwards compatibility
-        /// alone — it is that `encode(to:)` must stay synthesized.
+        /// Accepts all three shapes this type has ever been written in, because
+        /// `SavedSearch` records survive across every one of them:
+        ///   1. `{"id": "fr"}` — today, and what the synthesized encoder emits.
+        ///   2. `{"id": "fr", "title": "Français"}` — written while `title` was a
+        ///      stored property. The title is read but ignored; `rawList` is the
+        ///      source of truth, so a label AO3 has since re-spelled self-heals.
+        ///   3. `"fr"` — a bare string, from the original `enum Language: String`.
         ///
-        /// This used to encode as a bare `id` string via a `singleValueContainer`,
-        /// matching the old raw-value-enum wire format. That silently destroyed
-        /// every saved search. `SavedSearch.filters` is a SwiftData composite
-        /// attribute: SwiftData reflects over stored properties and makes one
-        /// column per property — `ZID` *and* `ZTITLE1` — but fills them from the
-        /// `Encodable` conformance. A single-value encoder supplies one value for
-        /// two columns, so `title` was written `NULL`, and on read CoreData
-        /// rejected the row ("missing mandatory text data for property 'title'")
-        /// and dropped it from every fetch. Saving a search appeared to work and
-        /// the search was simply gone.
-        ///
-        /// So the encoder is now the synthesized keyed one, and this decoder
-        /// absorbs the difference: keyed for anything written since, bare string
-        /// for `SavedSearch` JSON that predates the struct.
+        /// `encode(to:)` is deliberately **not** implemented. A custom one is what
+        /// broke persistence in the first place (see `id`), and the synthesized
+        /// keyed encoder is the only shape that stays in step with the stored
+        /// properties SwiftData built its columns from.
         init(from decoder: Decoder) throws {
             if let keyed = try? decoder.container(keyedBy: CodingKeys.self),
                let code = try? keyed.decode(String.self, forKey: .id) {
-                let title = try? keyed.decode(String.self, forKey: .title)
-                self = Self.resolved(code, fallbackTitle: title)
+                self = Language(id: code)
                 return
             }
             let container = try decoder.singleValueContainer()
-            self = Self.resolved(try container.decode(String.self), fallbackTitle: nil)
-        }
-
-        /// Prefers AO3's current label for a known id, so a stored title that has
-        /// since been re-spelled upstream self-heals instead of persisting forever.
-        private static func resolved(_ code: String, fallbackTitle: String?) -> Language {
-            allCases.first { $0.id == code } ?? Language(id: code, title: fallbackTitle ?? code)
+            self = Language(id: try container.decode(String.self))
         }
     }
 

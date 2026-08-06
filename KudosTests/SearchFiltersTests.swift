@@ -66,6 +66,36 @@ struct SearchFiltersTests {
         #expect(decoded.chapterCount == .any)
     }
 
+    @Test func languageDecodesEveryShapeItHasEverBeenWrittenIn() throws {
+        // Three generations of on-disk `SavedSearch` records exist and all three
+        // must load, because a user upgrading skips no step:
+        //   1. bare string   — the original `enum Language: String`
+        //   2. {id, title}   — while `title` was a stored property
+        //   3. {id}          — today, `title` derived from `id`
+        // Shape 2 is the one that broke persistence outright, so it is not
+        // hypothetical: real stores carry it.
+        func language(_ json: String) throws -> AO3SearchFilters.Language {
+            try JSONDecoder().decode(AO3SearchFilters.Language.self, from: Data(json.utf8))
+        }
+        #expect(try language(#""fr""#).id == "fr")
+        #expect(try language(#"{"id":"fr","title":"Français"}"#).id == "fr")
+        #expect(try language(#"{"id":"fr"}"#).id == "fr")
+        // All three resolve the label from `rawList`, so a title AO3 has since
+        // re-spelled does not persist in a saved search forever.
+        #expect(try language(#"{"id":"fr","title":"Stale Name"}"#).title == "Français")
+        // An id this build predates keeps working, showing the raw id.
+        #expect(try language(#"{"id":"zzz"}"#).title == "zzz")
+        #expect(try language(#""""#) == .any)
+
+        // And the encoder stays synthesized — a single-value encoder here is what
+        // wrote NULL into the second SQLite column and destroyed every saved search.
+        let encoded = try JSONEncoder().encode(AO3SearchFilters.Language.allCases[1])
+        let object = try #require(
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        #expect(object["id"] != nil)
+    }
+
     @Test func exactRatingUsesStructuredField() {
         var filters = AO3SearchFilters()
         filters.query = "slow burn"

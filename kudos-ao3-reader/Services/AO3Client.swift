@@ -1151,14 +1151,39 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Live tag search via AO3's autocomplete endpoints (returns canonical tag
     /// names for the given kind). Used by the filter tag pickers.
+    ///
+    /// This is what keeps tag *case* correct, and the case matters more than it
+    /// looks: otwarchive resolves a tag name in the DB case-insensitively but
+    /// computes its "missing" set with a case-*sensitive* array difference, so a
+    /// wrongly-cased name is treated as both found and missing and gets two
+    /// filters instead of one (see `AO3SearchFilters.excludedTagNames`). Because
+    /// every tag in the filter panel arrives from here — `TagSelectField` offers
+    /// no free-text entry — the app never sends a name AO3 did not spell itself.
     func autocompleteTags(kind: AO3TagKind, term: String) async throws -> [String] {
+        guard let url = Self.autocompleteURL(kind: kind, term: term) else { return [] }
+        return try Self.parseAutocomplete(try await fetchData(from: url))
+    }
+
+    /// Pure (unit-tested): AO3's autocomplete URL for a tag kind. The five path
+    /// segments are load-bearing constants — a wrong one 404s into an empty
+    /// suggestion list, which reads as "AO3 has no such tag" rather than as an
+    /// error. Verified live 2026-08-06. nil for a blank term, so no request is made.
+    static func autocompleteURL(kind: AO3TagKind, term: String) -> URL? {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        var components = URLComponents(string: "\(base)/autocomplete/\(kind.rawValue)")!
-        components.queryItems = [URLQueryItem(name: "term", value: trimmed)]
-        guard let url = components.url else { return [] }
-        let data = try await fetchData(from: url)
-        return try (JSONDecoder().decode([AutocompleteItem].self, from: data)).map(\.name)
+        guard !trimmed.isEmpty else { return nil }
+        // Host spelled out, like `searchURL` and `commentsPageURL` — the instance
+        // `base` isn't reachable from a static, and these builders are static so
+        // they stay testable without a client.
+        var components = URLComponents(string: "https://archiveofourown.org/autocomplete/\(kind.rawValue)")
+        components?.queryItems = [URLQueryItem(name: "term", value: trimmed)]
+        return components?.url
+    }
+
+    /// Pure (unit-tested): AO3 answers with `[{"id": …, "name": …}]` where both
+    /// fields carry the same canonical tag name. `name` is the one taken — `id`
+    /// happens to match today, but it is the identifier, not the label.
+    static func parseAutocomplete(_ data: Data) throws -> [String] {
+        try JSONDecoder().decode([AutocompleteItem].self, from: data).map(\.name)
     }
 
     private struct AutocompleteItem: Decodable { let id: String; let name: String }
