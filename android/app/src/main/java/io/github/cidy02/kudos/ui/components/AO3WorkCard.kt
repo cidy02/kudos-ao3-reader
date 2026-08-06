@@ -116,6 +116,20 @@ fun AO3WorkCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                // The last-updated date earns the prime top-right corner: it
+                // answers "is this still being written" at a glance (iOS
+                // `WorkUpdatedDateBadge` parity). The published date stays with
+                // the other stats below the divider.
+                work.updatedDate.takeIf { it.isNotBlank() }?.let { updated ->
+                    val display = displayDate(updated)
+                    WorkStatLabel(
+                        item = WorkStatItem(
+                            text = display,
+                            accessibilityLabel = "Updated $display",
+                            icon = WorkStatIcons.dateUpdated
+                        )
+                    )
+                }
                 if (expandable) {
                     TextButton(onClick = { expanded = !expanded }) {
                         Text(if (expanded) "Less" else "More")
@@ -132,12 +146,15 @@ fun AO3WorkCard(
                 )
             }
 
-            // Rating lives in stats; keep warnings/categories as chips when present.
-            val safetyTags = (work.warnings + work.categories).filter { it.isNotBlank() }
-            if (safetyTags.isNotEmpty()) {
+            // Rating, category, warnings and status all live in the top stats
+            // row below as color-coded badges. The specific warning names stay
+            // available as chips, but only once expanded — the badge already
+            // says how many apply.
+            val warningTags = realWarnings(work.warnings).filter { it.isNotBlank() }
+            if (expanded && warningTags.isNotEmpty()) {
                 MetadataChipRow(
-                    labels = safetyTags,
-                    maxItems = if (expanded) 12 else 4,
+                    labels = warningTags,
+                    maxItems = 12,
                     onLabelClick = onTagClick
                 )
             }
@@ -165,14 +182,25 @@ fun AO3WorkCard(
                 color = MaterialTheme.colorScheme.outlineVariant
             )
 
+            WorkTopStatsRow(
+                stats = topRowStats(
+                    rating = work.rating,
+                    categories = work.categories,
+                    warnings = work.warnings,
+                    isComplete = work.isComplete
+                )
+            )
+
             WorkListStatsRow(
                 stats = listRowStats(
-                    rating = work.rating,
+                    language = work.language,
                     wordCount = work.wordCount,
                     chapters = work.chapters,
+                    comments = work.comments,
                     kudos = work.kudos,
-                    datePublished = work.publishedDate,
-                    dateUpdated = work.updatedDate
+                    bookmarks = work.bookmarks,
+                    hits = work.hits,
+                    datePublished = work.publishedDate
                 )
             )
         }

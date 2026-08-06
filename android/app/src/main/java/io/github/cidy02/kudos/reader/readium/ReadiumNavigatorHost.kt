@@ -171,13 +171,32 @@ fun ReadiumNavigatorHost(
  * [WebView] works without needing one. Horizontal stays untouched (Readium
  * leaves it off too): paged mode's horizontal scroll is page-snapped, not a
  * continuous scroll a horizontal bar would meaningfully represent.
+ *
+ * Also attaches [ViewGroup.OnHierarchyChangeListener] to every container found,
+ * so a *brand-new* page's `WebView` — created when Readium swaps chapters,
+ * something the locator-change call site alone only catches after the fact —
+ * gets fixed the instant it's added, not on the next locator emission. Tracked
+ * in a [WeakHashMap] so a container isn't re-listened every call (which would
+ * otherwise silently replace its own previous listener — a `ViewGroup` has only
+ * one hierarchy-listener slot) and so dead containers don't accumulate forever.
  */
+private val hierarchyListenedGroups = java.util.WeakHashMap<ViewGroup, Boolean>()
+
 private fun restoreNativeScrollIndicators(root: View?) {
     if (root == null) return
     if (root is WebView) {
         root.isVerticalScrollBarEnabled = true
     }
     if (root is ViewGroup) {
+        if (hierarchyListenedGroups.put(root, true) == null) {
+            root.setOnHierarchyChangeListener(object : ViewGroup.OnHierarchyChangeListener {
+                override fun onChildViewAdded(parent: View, child: View) {
+                    restoreNativeScrollIndicators(child)
+                }
+
+                override fun onChildViewRemoved(parent: View, child: View) = Unit
+            })
+        }
         for (i in 0 until root.childCount) {
             restoreNativeScrollIndicators(root.getChildAt(i))
         }
