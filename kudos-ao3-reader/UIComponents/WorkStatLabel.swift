@@ -63,8 +63,7 @@ struct WorkListStatsRow: View {
 
     /// Published shows whenever known. Updated only shows when it actually differs
     /// from published (a never-updated oneshot has nothing new to say twice) —
-    /// distinct icons so which is which is never a guess. AO3's blurb date text is
-    /// already display-ready, so this passes it through unformatted.
+    /// distinct icons so which is which is never a guess.
     private var showsPublished: Bool {
         guard let datePublished else { return false }
         return !datePublished.isEmpty
@@ -75,39 +74,42 @@ struct WorkListStatsRow: View {
         return dateUpdated != datePublished
     }
 
+    /// Every visible stat as (text, symbol, accessibilityLabel) — built as data
+    /// first so a "·" separator can be interleaved between only the items that
+    /// actually show, never a dangling one next to a nil stat.
+    private var items: [(text: String, symbol: String, accessibilityLabel: String)] {
+        var result: [(text: String, symbol: String, accessibilityLabel: String)] = []
+        if let rating {
+            result.append((WorkStat.ratingName(rating) ?? rating, "checkmark.shield", rating))
+        }
+        if let wordCount {
+            result.append((wordCount.formatted(), "textformat.size", "\(wordCount.formatted()) words"))
+        }
+        if let chapters {
+            result.append((chapters, "book", "Chapters \(chapters)"))
+        }
+        if let kudos {
+            result.append((kudos.formatted(), "heart", "\(kudos.formatted()) kudos"))
+        }
+        if showsPublished, let datePublished {
+            let display = WorkStat.displayDate(datePublished)
+            result.append((display, "calendar", "Published \(display)"))
+        }
+        if showsUpdated, let dateUpdated {
+            let display = WorkStat.displayDate(dateUpdated)
+            result.append((display, "calendar.badge.clock", "Updated \(display)"))
+        }
+        return result
+    }
+
     var body: some View {
-        FlowLayout(spacing: 18, rowSpacing: 5) {
-            if let rating { WorkStatLabel(text: rating, symbol: "checkmark.shield") }
-            if let wordCount {
-                WorkStatLabel(
-                    text: wordCount.formatted(),
-                    symbol: "textformat.size",
-                    accessibilityLabel: "\(wordCount.formatted()) words"
-                )
-            }
-            if let chapters {
-                WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
-            }
-            if let kudos {
-                WorkStatLabel(
-                    text: kudos.formatted(),
-                    symbol: "heart",
-                    accessibilityLabel: "\(kudos.formatted()) kudos"
-                )
-            }
-            if showsPublished, let datePublished {
-                WorkStatLabel(
-                    text: datePublished,
-                    symbol: "calendar",
-                    accessibilityLabel: "Published \(datePublished)"
-                )
-            }
-            if showsUpdated, let dateUpdated {
-                WorkStatLabel(
-                    text: dateUpdated,
-                    symbol: "calendar.badge.clock",
-                    accessibilityLabel: "Updated \(dateUpdated)"
-                )
+        FlowLayout(spacing: 8, rowSpacing: 5) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                if index > 0 {
+                    Text("•")
+                        .accessibilityHidden(true)
+                }
+                WorkStatLabel(text: item.text, symbol: item.symbol, accessibilityLabel: item.accessibilityLabel)
             }
         }
         .font(.caption2)
@@ -117,13 +119,9 @@ struct WorkListStatsRow: View {
 }
 
 enum WorkStat {
-    /// AO3 rating → a short but readable name for cover cards.
-    ///
-    /// These were single letters ("M", "E") while the cards packed several stats onto
-    /// one wrapped row and had no width to spare. Now that each stat gets its own row
-    /// there is room to say what the letter meant — "M" told a reader nothing unless
-    /// they already knew AO3's scheme. The wide list rows keep the full AO3 name
-    /// ("Teen And Up Audiences"); this is the middle length, chosen to fit a 164pt card.
+    /// AO3 rating → a short, glanceable name. Originally scoped to compact cover
+    /// cards only (no width for "Teen And Up Audiences" there); list rows and
+    /// search-result cards now use the same short form for a consistent stat row.
     static func ratingName(_ rating: String) -> String? {
         switch rating {
         case "General Audiences": "General"
@@ -133,5 +131,41 @@ enum WorkStat {
         case "Not Rated": "Not Rated"
         default: rating.isEmpty ? nil : rating
         }
+    }
+
+    /// AO3 renders `Published`/`Updated` in two different formats depending on
+    /// which page it was scraped from — "2025-11-01" (ISO) on a work's own detail
+    /// page (`dd.published`/`dd.status`), "01 Nov 2025" on search/listing blurbs
+    /// (`p.datetime`) — both confirmed live against archiveofourown.org. Tries
+    /// both, normalizes to MM/DD/YYYY; falls back to the raw string unparsed
+    /// rather than showing nothing if AO3 ever changes either format.
+    private static let parseFormats = ["yyyy-MM-dd", "dd MMM yyyy"]
+
+    private static let parseFormatters: [DateFormatter] = parseFormats.map { format in
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = format
+        formatter.isLenient = false
+        return formatter
+    }
+
+    private static let displayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "MM/dd/yyyy"
+        return formatter
+    }()
+
+    static func displayDate(_ rawText: String) -> String {
+        for formatter in parseFormatters {
+            if let date = formatter.date(from: rawText) {
+                return displayFormatter.string(from: date)
+            }
+        }
+        return rawText
     }
 }

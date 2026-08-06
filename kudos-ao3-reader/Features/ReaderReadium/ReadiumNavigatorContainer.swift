@@ -124,6 +124,15 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
 
         func install(on controller: EPUBNavigatorViewController) {
             guard let view = controller.view else { return }
+            // Readium's own EPUBSpreadView.setupWebView() unconditionally sets
+            // showsVerticalScrollIndicator = false on every spread's WKWebView, with
+            // no configuration flag to opt back in (swift-toolkit/Sources/Navigator/
+            // EPUB/EPUBSpreadView.swift) — and it recreates spread views (re-applying
+            // that) on every chapter/page change. Run unconditionally, not gated by
+            // the `installedView` early-return below, so a freshly created spread's
+            // scroll view gets caught the next time SwiftUI re-renders this
+            // representable (which locator/chrome-state changes already do often).
+            restoreNativeScrollIndicators(in: view)
             guard installedView !== view else { return }
 
             if let dismissPan {
@@ -399,6 +408,16 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
                 result.append(contentsOf: collectScrollViews(in: subview))
             }
             return result
+        }
+
+        /// A2: the system scrollbar Readium suppresses (see `install(on:)`'s
+        /// comment). Only the vertical indicator — horizontal stays off, since
+        /// paged mode's horizontal scroll view is page-snapped, not a continuous
+        /// scroll a horizontal bar would meaningfully represent.
+        private func restoreNativeScrollIndicators(in root: UIView) {
+            for scrollView in collectScrollViews(in: root) {
+                scrollView.showsVerticalScrollIndicator = true
+            }
         }
     }
 

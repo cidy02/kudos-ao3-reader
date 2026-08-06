@@ -942,7 +942,6 @@ struct ReadiumReaderView: View {
                 .overlay(alignment: .bottom) { bottomChromeLayer }
                 .overlay { fanDismissBackdropLayer }
                 .overlay(alignment: .topTrailing) { fanMenuLayer }
-                .overlay(alignment: .trailing) { scrollIndicatorLayer }
                 .background(readerTheme.backgroundColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1384,29 +1383,6 @@ struct ReadiumReaderView: View {
         )
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
                         fallbackSpineIndex: fallbackSpineIndex, config: config)
-    }
-}
-
-// Split out to keep `ReadiumReaderView`'s own body under SwiftLint's
-// type_body_length gate — `private` state is still reachable from an extension
-// in the same file, just not from the primary type declaration SwiftLint measures.
-extension ReadiumReaderView {
-    /// Only while chrome is hidden — the position card's own scrub slider already
-    /// covers this when chrome is visible, so showing both would be redundant.
-    @ViewBuilder
-    private var scrollIndicatorLayer: some View {
-        let pos = book.readingPosition
-        if !chromeVisible, pos?.pageBarReady == true, let pageCount = pos?.pageCount, pageCount > 1 {
-            ReaderScrollIndicator(
-                page: min(pageCount, max(1, pos?.page ?? 1)),
-                pageCount: pageCount,
-                tint: themeManager.effectiveTint
-            )
-            .padding(.trailing, 3)
-            .padding(.vertical, book.pageBoxChromeSafeTop + 24)
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.2), value: chromeVisible)
-        }
     }
 }
 
