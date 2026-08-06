@@ -19,12 +19,23 @@ import Foundation
 actor RequestCoalescer<Key: Hashable & Sendable, Value: Sendable> {
     private struct Entry {
         let task: Task<Value, Error>
-        /// Waiter *identities*, not a count. A cancelled waiter reaches
-        /// `release` twice — once from `onCancel`, once from its own `defer` as
-        /// the await unwinds — and a plain counter would therefore drop by two,
-        /// evicting the entry while another waiter was still registered and
-        /// silently letting the next caller start a duplicate fetch. Removing
-        /// from a set is idempotent, so the second release is a no-op.
+        /// Waiter *identities*, not a count. A cancelled waiter reaches `release`
+        /// twice — once from `onCancel`, once from its own `defer` as the await
+        /// unwinds — so a plain counter would drop by two for one waiter.
+        ///
+        /// That double-decrement is in fact harmless, and it's worth writing down
+        /// why rather than implying a bug that can't happen: the `defer` fires
+        /// only after `try await task.value` returns, i.e. only once the shared
+        /// task has already finished, and `Task.value` is not resumed by the
+        /// *waiter's* cancellation. So the second release can never evict an
+        /// entry whose work is still in flight — by then the entry is spent, and
+        /// a new caller starting a fresh fetch is the correct outcome anyway
+        /// (this is a de-duplicator, not a cache).
+        ///
+        /// The set is kept because it is correct *by construction* — removing
+        /// from a set is idempotent — rather than correct-given-that-argument.
+        /// On the one piece of concurrency in this file, not having to make the
+        /// argument is worth the extra few lines.
         var waiters: Set<UUID>
     }
 

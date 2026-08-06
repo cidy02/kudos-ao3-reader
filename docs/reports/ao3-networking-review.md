@@ -11,7 +11,10 @@ determinism, ephemeral-session disk behaviour); otwarchive source cross-check
 bookmark blurb templates); a full `Scripts/verify.sh` run; and hand
 mutation-testing of the new test suite, one full 911-test run per mutation.
 
-**No code was changed by this review.** Everything below is reported, not fixed.
+**The review itself changed no code.** The findings were then fixed in separate
+follow-up commits at the maintainer's request — see
+[Remediation status](#remediation-status) at the end for what landed, what
+changed on contact with a compiler, and the two items deliberately left alone.
 
 ---
 
@@ -272,9 +275,15 @@ answers are not all the obvious ones:
   `.ephemeral` does *not* veto an explicitly-assigned disk cache. So
   `diskCapacity: 0` is **load-bearing**, not decorative, and the reasoning
   behind it is correct. This is the single best-judged line in the caching change.
-- *Was there a pre-existing default cache the audit missed?* **Yes, and the
-  report already self-corrects it.** Measured: `.ephemeral`'s default is
-  `memory = 512 000, disk = 0`. So the change is 500 KB → 8 MB, not 0 → 8 MB.
+- *Was there a pre-existing default cache the audit missed?* **Nominally yes,
+  functionally no — and this corrects both the audit and my own first answer
+  here.** `.ephemeral` does report a default `urlCache` of
+  `memory = 512 000, disk = 0`, which is what the audit's self-correction rests
+  on. But it is inert: measured, a repeat GET through a stock ephemeral session
+  is a full network load and `currentMemoryUsage` stays **0**. Assigning a cache
+  is what switches caching *on*, so the change really is 0 → 8 MB. This matters
+  practically — it means reverting F8 would genuinely eliminate R2 and R12,
+  rather than merely shrinking them.
 - *Is 8 MB sensible?* **Yes.** AO3 listing pages measure 33–90 KB, so 8 MB holds
   roughly 90–240 pages — comfortably more than a session's working set, and
   trivial against an iOS app's memory budget.
@@ -1243,8 +1252,12 @@ Listed so the maintainer knows what was actually examined, not only what broke.
   undo the app's own mature-content gating — is sound, and the line is doing real
   work.
 - **8 MB is a sensible size** for 33–90 KB pages (~90–240 of them).
-- The audit's self-correction about `.ephemeral`'s pre-existing cache is right:
-  measured default is `memory = 512 000, disk = 0`, so the change is 500 KB → 8 MB.
+- **`.ephemeral`'s nominal 512 KB default cache is inert** — measured, a repeat
+  GET through a stock ephemeral session is a full network load and
+  `currentMemoryUsage` stays 0. So assigning the cache is what turned caching on
+  (0 → 8 MB), and R2/R12 are genuinely introduced by this change rather than
+  pre-existing. This corrects the audit's self-correction, and my own first
+  reading of it.
 
 **Other**
 - `verify.sh` genuinely green: 911/911, 82 suites, **0 skipped, 0 quarantined, 0
@@ -1358,3 +1371,49 @@ cache in a worse state than either endpoint. The test hardening is genuinely
 independent and can proceed in parallel. The documentation items are last but
 should not be dropped: on a scraping client with no API contract, the comments
 are the specification, and four of them currently say things that are not true.
+
+---
+
+## Remediation status
+
+Twelve of the fourteen findings were fixed in follow-up commits. Two were
+deliberately left alone. One fix changed shape once a test was written against
+it — recorded below, because the discarded version looked better on paper.
+
+| # | Finding | Status | What landed |
+|---|---|---|---|
+| R1 | `view_adult` defeats the cache | ✅ Fixed | `searchURL` no longer sends `view_adult`. Three comments that asserted the opposite were rewritten against measurements, including the `worksPage(at:)` one the audit originally wanted corrected. |
+| R2 | Pull-to-refresh serves a cached page | ✅ Fixed | `AO3Client.invalidateCachedResponses()`, called from the anonymous refresh paths (search, browse ×2, series detail). Authenticated surfaces need no call — R12 takes them out of the cache entirely. |
+| R3 | Parse throw breaks bookmarks pages | ✅ Fixed | `parseWorksList(requireParseableBlurbs:)`, false from `parseBookmarksPage`. + 1 regression test. |
+| R4 | Ten facet ids asserted nowhere | ✅ Fixed | `everyFacetIDMatchesAO3sOwnForm` pins all 17 ids in one table. |
+| R5 | Coalescer comment describes an impossible bug | ✅ Fixed (comment) | Code kept — it is correct by construction, which is worth the few extra lines. The `Entry.waiters` doc now explains why the counter would *also* have been safe instead of implying it wasn't. |
+| R6 | Search URL not stable for a fixed filter set | ✅ Fixed | Warnings/categories emitted in sorted id order. + `equalFilterSetsAlwaysProduceTheSameURL`, which builds the same filter three ways. |
+| R7 | F3's 1.8 s latency claim is unachievable | ✅ Fixed (doc) | The audit's F3 impact paragraph now carries the correction and the measurement. `pace()` untouched — releasing a claimed slot correctly is real complexity for a benefit nobody has measured wanting. |
+| R8 | `bookmarks` had no parsing or round-trip test | ✅ Fixed | Blurb fixture gained `dd.bookmarks` (in AO3's real position, `<a>`-wrapped); present, absent, round-trip and pre-`bookmarks`-archive cases all asserted. |
+| R9 | Weak-to-strong `NSMapTable` retains dead tokens | ⏭️ **Not changed, as recommended** | Lookups are correct and the table self-drains. Switching to weak-to-weak would silently stop observation — the exact bug the map table exists to prevent. |
+| R10 | `refreshCurrentResults` cancels but isn't cancellable | ✅ Fixed | It now reuses `load(page:)` rather than repeating it, so the refresh lives in the same `loadTask` slot. Net −16 lines. |
+| R11 | Four factual errors | ✅ Fixed | 168 → 162 languages; 885 → 907 → the real 910/911; the `sort_direction`-on-`_score` rationale replaced with the measured behaviour; the cache-header comment rewritten (R1). |
+| R12 | `URLCache` not partitioned by identity | ✅ Fixed | `authenticatedRequest` sets `.reloadIgnoringLocalCacheData`. + assertion in the existing `authenticatedRequest` test. |
+| R13 | `verify.sh` can't run in a clean worktree | ✅ Fixed | Preflight check for `Vendor/MuPDF.xcframework` that names `Scripts/build-mupdf.sh`, instead of dying four minutes later at the test build. |
+| R14 | `excluded_tag_names`, `date_from`/`date_to` unused | ⏭️ **Not changed — maintainer's call** | Both verified to work, but neither is a defect. Moving exclusions to `excluded_tag_names` changes what users get back (canonical-tag exclusion resolves synonyms; the current `-"phrase"` match does not — that is the 89,853 vs 89,676 gap), so it is a product decision, not a repair. `date_from`/`date_to` are a new feature. Left for you. |
+
+### One fix that changed shape
+
+R3's first implementation was the "better, larger" option this report recommends
+in that finding: extract the id resolution into a shared `blurbWorkID`, then gate
+the throw on *blurbs that name a work* rather than on the caller. It reads
+better, keeps the health signal on both pages, and is **wrong** —
+`blurbWorkID` returns nil in exactly the cases `parseBlurb` throws, so the
+"identifiable" set is always equal to the parsed set and the guard becomes
+unsatisfiable. It would have silently deleted F9 outright.
+
+That only surfaced when the existing test was run against it. Worth recording
+for whoever picks up the larger version later: making the signal sound for
+bookmarks needs *positive* recognition of series/external/deleted blurbs, not a
+smarter negative.
+
+### Verification
+
+`Scripts/verify.sh` — invariants, lint, full iOS suite, macOS build, whitespace.
+Test count **911 → 915** (+4). The live measurements these fixes rest on are in
+the finding bodies above, each with the date it was taken.

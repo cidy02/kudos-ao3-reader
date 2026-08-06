@@ -8,6 +8,19 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="${1:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
 
+# Vendor/ is gitignored (~48 MB of built binaries), so a fresh clone or a new
+# git worktree has none — and without it the run dies four minutes in, at the
+# test build, with "There is no XCFramework found at ...", which reads like a
+# project misconfiguration rather than a missing prerequisite. Fail up front
+# with the command that fixes it instead.
+if [ ! -d "$ROOT/Vendor/MuPDF.xcframework" ]; then
+    echo "verify: missing Vendor/MuPDF.xcframework (gitignored — it is built, not cloned)." >&2
+    echo "        Build it once with:  Scripts/build-mupdf.sh" >&2
+    echo "        Or, if another worktree already has one, symlink it:" >&2
+    echo "        mkdir -p '$ROOT/Vendor' && ln -s /path/to/other/Vendor/MuPDF.xcframework '$ROOT/Vendor/'" >&2
+    exit 1
+fi
+
 echo "== 1/5 invariants =="
 "$ROOT/Scripts/check-invariants.sh"
 

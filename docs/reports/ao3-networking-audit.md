@@ -225,7 +225,7 @@ Ground truth: the live `/works/search` form, enumerated in-browser (38 input ele
 | `work_search[single_chapter]` | ✅ | `:294` | |
 | `work_search[word_count]` | ✅ | `:295` | Expression form; see F4 |
 | `work_search[revised_at]` | ✅ | `:296` | |
-| `work_search[language_id]` | ✅ | `:297` | Full 168-entry list |
+| `work_search[language_id]` | ✅ | `:297` | Full 162-entry list (163 options incl. "Any", matching AO3's form exactly — the "168" this table originally claimed was a miscount) |
 | `work_search[hits]` | ❌ | — | **Missing** (F1) |
 | `work_search[kudos_count]` | ❌ | — | **Missing** (F1) |
 | `work_search[comments_count]` | ❌ | — | **Missing** (F1) |
@@ -308,7 +308,8 @@ All verified against the live form's option values today.
           guard token == loadToken else { return }   // ← result discarded, work already done
   ```
   No `Task` handle is stored anywhere in `SearchView` (`grep` for `searchTask` returns nothing).
-- **Impact**: Compounded by the 0.6 s pacer, this directly delays the user. Tapping through pages 2→3→4→5 issues four real requests; because `pace()` serializes *starts*, the page-5 request the user is actually waiting for must wait out the pacing slots of three requests whose results will be thrown away — roughly 1.8 s of avoidable latency. It also spends AO3 request budget on work that is discarded, which is contrary to the politeness posture the rest of the layer maintains so carefully.
+- **Impact**: It spends AO3 request budget on work that is discarded, which is contrary to the politeness posture the rest of the layer maintains so carefully.
+  - **Correction (added by the follow-up review).** This paragraph originally also claimed ~1.8 s of avoidable latency when tapping through pages 2→3→4→5, and used that figure to justify the P1 priority. **That saving is not achievable and cancellation does not deliver it.** `pace()` claims its slot *synchronously, before* it sleeps (`AO3Client.swift:127`), and nothing rolls `nextAllowedRequestAt` back when the request is cancelled — measured, three claims with one cancelled mid-sleep still leave the next free slot 1.10 s away. So the page-5 request waits exactly as long either way. The fix's real benefit is the round trips AO3 no longer serves, not the user's latency.
 - **Root Cause**: Token-based staleness is a correctness mechanism; it was not paired with a lifecycle mechanism.
 - **Recommended Fix**: Store the in-flight `Task` in `@State` and `cancel()` it at the top of `load(page:)`/`refreshCurrentResults()`. Keep the token check as a second line of defence (cancellation is cooperative and can lose a race). Add a `catch is CancellationError { return }` arm so a cancelled load does not render an error phase.
   - *Note*: this fix is only fully effective together with Finding 4 — `RequestCoalescer` currently will not propagate the cancellation into the actual fetch.
@@ -591,8 +592,8 @@ changed on contact with evidence, and one was deliberately left alone.
 | F4 | Coalescer swallows cancellation | ✅ Fixed | Reference-counted waiters; shared task cancelled only when the *last* waiter leaves cancelled. Release is guarded on task identity so a late release can't evict a newer entry. |
 | F5 | No search-URL test coverage | ✅ Fixed | `searchURL(filters:page:)` extracted as pure/static; **14 new tests** in `SearchURLTests.swift` pin every parameter name, id and multi-value convention. |
 | F6 | Unescaped query interpolation | ✅ Fixed | `quotedPhrase(_:)` escapes backslash then quote. **The audit flagged Medium confidence here pending live validation of AO3's escaping grammar — that validation is still outstanding**, so the escape sequence remains the one open assumption in this batch. |
-| F7 | `view_adult` inconsistency | ✅ Fixed | `search()` now sends it, matching every other listing path. |
-| F8 | No response caching | ✅ Fixed — **after measuring** | The audit gated this on measuring AO3's headers first. Measured: `Cache-Control: max-age=600, public`. The win is real, so it was implemented — but **memory-only, `diskCapacity: 0`**. A disk cache would write fetched AO3 HTML out in the clear, quietly undoing the app's own mature-content gating; that constraint was not visible until the fix was designed. |
+| F7 | `view_adult` inconsistency | ↩️ **Reverted** by the follow-up review | `search()` briefly sent `view_adult=true` for parity. That was the wrong half of the audit's own either/or: measured, it changes nothing on a listing page (identical results, Explicit works included) *and* flips AO3's response from `max-age=600, public` to `no-store`, so it silently disabled F8. The comment in `worksPage(at:)` was corrected instead, as the audit's alternative proposed. |
+| F8 | No response caching | ✅ Fixed — **after measuring**, then corrected | The audit gated this on measuring AO3's headers first. Measured: `Cache-Control: max-age=600, public` — but on a URL the app did not then send (see F7). Three follow-ups were needed before the cache was actually safe: search stopped sending `view_adult` so responses are cacheable at all; authenticated requests opt out (`URLCache` keys on URL only, so it is not partitioned by identity); and pull-to-refresh drops the cache first, or the gesture returns the same bytes for ten minutes. **Memory-only, `diskCapacity: 0`** — and that line is load-bearing, not defensive: measured, `.ephemeral` *does* honour an explicitly-assigned disk cache. Also note `.ephemeral`'s own 512 KB `urlCache` is inert, so this is 0 → 8 MB. |
 | F9 | Parse failure looks like empty results | ✅ Fixed | Blurbs present but none parsed now logs and throws `AO3Error.parse`. |
 | F10 | `word_count` expression vs native bounds | ⏭️ **Not changed, as recommended** | The audit recommended against changing this. The expression form is verified working, and the shared `rangeExpression` helper now makes all five numeric fields consistent — which is worth more than the marginal robustness of the native pair. |
 | F11 | Per-call `DateFormatter` | ✅ Fixed | Hoisted to a `static let`. |
@@ -614,7 +615,7 @@ Two claims in the body above deserve amendment now that the fixes are in:
 ### Verification
 
 `Scripts/verify.sh` — invariants, lint, full iOS suite, macOS build, whitespace.
-Test count **885 → 907** (+22). The four live-verified behaviours the fixes
+Test count **885 → 910** (+25) at `5f071776`, then **911** at `b9d70515`. (This originally read "885 → 907 (+22)"; corrected after a recount.) The four live-verified behaviours the fixes
 depend on (field-scoped query syntax, negation syntax, the range grammar, and
 the cache headers) are recorded in the appendix above with the date they were
 checked.
