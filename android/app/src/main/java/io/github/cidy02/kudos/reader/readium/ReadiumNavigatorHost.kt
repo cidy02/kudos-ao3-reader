@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.reader.readium
 import android.content.Context
 import android.content.ContextWrapper
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -125,6 +127,7 @@ fun ReadiumNavigatorHost(
         currentController?.attach(navigator)
         navigator.submitPreferences(preferences)
         currentOnNavigatorReady?.invoke()
+        restoreNativeScrollIndicators(navigator.view)
 
         val tapListener = object : InputListener {
             override fun onTap(event: TapEvent): Boolean {
@@ -137,7 +140,16 @@ fun ReadiumNavigatorHost(
         }
         navigator.addInputListener(tapListener)
         try {
-            navigator.currentLocator.collect { currentOnLocatorChanged(it) }
+            navigator.currentLocator.collect {
+                currentOnLocatorChanged(it)
+                // R2EpubPageFragment.setupWebView() (internal to Readium, not ours to
+                // patch or even reference — it's `internal class`) unconditionally
+                // disables the WebView's own scrollbar on every page it creates, with
+                // no configuration flag to opt back in. Re-applied on every locator
+                // change since Readium recreates the page fragment (and re-disables
+                // this) on chapter/page transitions.
+                restoreNativeScrollIndicators(navigator.view)
+            }
         } finally {
             navigator.removeInputListener(tapListener)
             currentController?.attach(null)
@@ -148,6 +160,27 @@ fun ReadiumNavigatorHost(
     LaunchedEffect(preferences) {
         (activity.supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? EpubNavigatorFragment)
             ?.submitPreferences(preferences)
+    }
+}
+
+/**
+ * A2: undoes `R2EpubPageFragment`'s `isVerticalScrollBarEnabled = false` from the
+ * outside using only public `WebView`/`View` API — that class is Kotlin `internal`
+ * to Readium's own module, so there's no typed reference to it (or to its
+ * `R2WebView`) available here; walking the fragment's view tree for any
+ * [WebView] works without needing one. Horizontal stays untouched (Readium
+ * leaves it off too): paged mode's horizontal scroll is page-snapped, not a
+ * continuous scroll a horizontal bar would meaningfully represent.
+ */
+private fun restoreNativeScrollIndicators(root: View?) {
+    if (root == null) return
+    if (root is WebView) {
+        root.isVerticalScrollBarEnabled = true
+    }
+    if (root is ViewGroup) {
+        for (i in 0 until root.childCount) {
+            restoreNativeScrollIndicators(root.getChildAt(i))
+        }
     }
 }
 

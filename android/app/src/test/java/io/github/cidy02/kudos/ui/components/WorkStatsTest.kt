@@ -40,26 +40,41 @@ class WorkStatsTest {
     }
 
     @Test
-    fun listRowStats_prefersUpdatedDateOverPublished() {
+    fun listRowStats_showsBothPublishedAndUpdatedWhenTheyDiffer() {
         val stats = listRowStats(
             rating = "", wordCount = null, chapters = "", kudos = null,
             datePublished = "2024-01-15", dateUpdated = "2024-03-02"
         )
-        assertEquals("2024-03-02", stats.single().text)
+        assertEquals(listOf("01/15/2024", "03/02/2024"), stats.map { it.text })
     }
 
     @Test
-    fun listRowStats_fallsBackToPublishedWhenNeverUpdated() {
+    fun listRowStats_omitsUpdatedWhenNeverUpdated() {
         val stats = listRowStats(
             rating = "", wordCount = null, chapters = "", kudos = null,
             datePublished = "2024-01-15", dateUpdated = ""
         )
-        assertEquals("2024-01-15", stats.single().text)
+        assertEquals("01/15/2024", stats.single().text)
     }
 
     @Test
-    fun listRowStats_omitsDateStatWhenNeitherIsKnown() {
+    fun listRowStats_omitsDateStatsWhenNeitherIsKnown() {
         val stats = listRowStats(rating = "", wordCount = null, chapters = "", kudos = null)
         assertEquals(emptyList<WorkStatItem>(), stats)
+    }
+
+    @Test
+    fun displayDate_parsesTheWorkDetailPageISOFormat() {
+        assertEquals("11/01/2025", displayDate("2025-11-01"))
+    }
+
+    @Test
+    fun displayDate_parsesTheSearchBlurbFormat() {
+        assertEquals("11/01/2025", displayDate("01 Nov 2025"))
+    }
+
+    @Test
+    fun displayDate_fallsBackToTheRawStringWhenUnrecognized() {
+        assertEquals("not a date", displayDate("not a date"))
     }
 }

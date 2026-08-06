@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,10 +68,18 @@ fun WorkListStatsRow(
     if (stats.isEmpty()) return
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        stats.forEach { stat ->
+        stats.forEachIndexed { index, stat ->
+            if (index > 0) {
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { invisibleToUser() }
+                )
+            }
             WorkStatLabel(item = stat)
         }
     }
@@ -118,7 +128,8 @@ object WorkStatIcons {
     val inProgress: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val words: ImageVector get() = Icons.Outlined.TextFields
     val kudos: ImageVector get() = Icons.Outlined.FavoriteBorder
-    val date: ImageVector get() = Icons.Outlined.CalendarToday
+    val datePublished: ImageVector get() = Icons.Outlined.CalendarToday
+    val dateUpdated: ImageVector get() = Icons.Outlined.Update
 }
 
 /** AO3 rating → short readable name for cover-card density (not single letters). */
@@ -211,7 +222,27 @@ fun coverCardStats(
     )
 }
 
-/** List-row stats: full rating name, compact numbers (Apple WorkListStatsRow fields). */
+/**
+ * AO3 renders Published/Updated in two different formats depending on which page
+ * it was scraped from — "2025-11-01" (ISO) on a work's own detail page
+ * (`dd.published`/`dd.status`), "01 Nov 2025" on search/listing blurbs
+ * (`p.datetime`) — both confirmed live against archiveofourown.org. Tries both,
+ * normalizes to MM/DD/YYYY; falls back to the raw string unparsed rather than
+ * showing nothing if AO3 ever changes either format.
+ */
+fun displayDate(rawText: String): String {
+    val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    val blurbFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US)
+    val outputFormat = java.text.SimpleDateFormat("MM/dd/yyyy", java.util.Locale.US)
+    for (format in listOf(isoFormat, blurbFormat)) {
+        format.isLenient = false
+        val parsed = runCatching { format.parse(rawText) }.getOrNull()
+        if (parsed != null) return outputFormat.format(parsed)
+    }
+    return rawText
+}
+
+/** List-row stats: short rating name, compact numbers (Apple WorkListStatsRow parity). */
 fun listRowStats(
     rating: String,
     wordCount: Int?,
@@ -220,18 +251,12 @@ fun listRowStats(
     datePublished: String? = null,
     dateUpdated: String? = null
 ): List<WorkStatItem> {
-    // Prefers the updated date (more relevant — it's what changed most recently);
-    // falls back to published. AO3's blurb date text is already display-ready.
-    val displayDate = when {
-        !dateUpdated.isNullOrBlank() && dateUpdated != datePublished ->
-            dateUpdated to "Updated $dateUpdated"
-        !datePublished.isNullOrBlank() -> datePublished to "Published $datePublished"
-        !dateUpdated.isNullOrBlank() -> dateUpdated to "Updated $dateUpdated"
-        else -> null
-    }
+    // Updated only shows when it actually differs from published — a
+    // never-updated oneshot has nothing new to say twice.
+    val showsUpdated = !dateUpdated.isNullOrBlank() && dateUpdated != datePublished
     return listOfNotNull(
-        rating.takeIf { it.isNotBlank() }?.let {
-            WorkStatItem(text = it, icon = WorkStatIcons.rating)
+        ratingDisplayName(rating)?.let {
+            WorkStatItem(text = it, accessibilityLabel = rating, icon = WorkStatIcons.rating)
         },
         wordCount?.takeIf { it > 0 }?.let {
             WorkStatItem(
@@ -254,8 +279,13 @@ fun listRowStats(
                 icon = WorkStatIcons.kudos
             )
         },
-        displayDate?.let { (text, accessibilityLabel) ->
-            WorkStatItem(text = text, accessibilityLabel = accessibilityLabel, icon = WorkStatIcons.date)
+        datePublished?.takeIf { it.isNotBlank() }?.let {
+            val display = displayDate(it)
+            WorkStatItem(text = display, accessibilityLabel = "Published $display", icon = WorkStatIcons.datePublished)
+        },
+        dateUpdated?.takeIf { showsUpdated }?.let {
+            val display = displayDate(it)
+            WorkStatItem(text = display, accessibilityLabel = "Updated $display", icon = WorkStatIcons.dateUpdated)
         }
     )
 }
