@@ -21,6 +21,8 @@ struct KudosBackupTests {
         work.wordCount = 42_000
         work.workFandoms = ["Archive Test"]
         work.tags = [Tag(name: "Comfort Read")]
+        work.kudos = 890
+        work.bookmarks = 56
         let epub = Data("epub-data".utf8)
         try epub.write(to: work.fileURL)
 
@@ -60,6 +62,12 @@ struct KudosBackupTests {
         #expect(decoded.manifest.version == KudosBackupManifest.currentVersion)
         #expect(decoded.manifest.works.first?.title == "Backup Work")
         #expect(decoded.manifest.works.first?.userTags == ["Comfort Read"])
+        // AO3 stat counts survive the archive. `bookmarks` was added to
+        // `KudosBackupWork` without a manifest version bump, on the basis that
+        // `decodeIfPresent` keeps it compatible both ways — so it needs to
+        // actually round-trip, not just decode.
+        #expect(decoded.manifest.works.first?.kudos == 890)
+        #expect(decoded.manifest.works.first?.bookmarks == 56)
         #expect(decoded.manifest.bookmarks.first?.urlString == bookmark.urlString)
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
         #expect(decoded.manifest.settings.appTheme == "sepia")
@@ -454,7 +462,9 @@ struct KudosBackupTests {
         {
           "version": 1,
           "exportedAt": "2026-06-30T00:00:00Z",
-          "works": [],
+          "works": [
+            { "id": "\(UUID().uuidString)", "title": "Old Work", "author": "Someone", "kudos": 890 }
+          ],
           "bookmarks": [],
           "fonts": [],
           "settings": {}
@@ -471,6 +481,12 @@ struct KudosBackupTests {
         #expect(contents.manifest.readingQueueMemberships.isEmpty)
         #expect(contents.manifest.settings.autoPreserveSmallSeriesOnSaveForLater == false)
         #expect(contents.manifest.settings.autoPreserveSeriesWorkThreshold == 5)
+        // An archive written before `bookmarks` existed must still decode, with
+        // the field absent rather than defaulted-over-a-real-value. This is the
+        // half of the no-version-bump argument that the round-trip test can't
+        // reach, since the current writer always emits the key.
+        #expect(contents.manifest.works.first?.kudos == 890)
+        #expect(contents.manifest.works.first?.bookmarks == 0)
     }
 
     @Test func unsupportedBackupVersionIsRejected() throws {

@@ -47,6 +47,7 @@ struct AO3ClientTests {
           <dd class="chapters">5/10</dd>
           <dd class="comments">7</dd>
           <dd class="kudos">890</dd>
+          <dd class="bookmarks"><a href="#">56</a></dd>
           <dd class="hits">10,111</dd>
         </dl>
       </li>
@@ -80,6 +81,8 @@ struct AO3ClientTests {
         #expect(work.chapters == "5/10")
         #expect(work.comments == 7)
         #expect(work.kudos == 890)
+        // AO3 wraps comments/kudos/bookmarks counts in an <a>; `.text()` unwraps it.
+        #expect(work.bookmarks == 56)
         #expect(work.hits == 10111)
         #expect(work.seriesTitle == "My Series")
         #expect(work.seriesPosition == 2)
@@ -284,6 +287,12 @@ struct AO3ClientTests {
         #expect(work.authors == ["carol"])
         #expect(work.rating == "Teen And Up Audiences")
         #expect(work.kudos == 42)
+        // AO3 omits the whole `<dd>` when a count is zero (confirmed live: only 5
+        // of 20 blurbs on a sample page carry `dd.bookmarks`), so absence has to
+        // read as nil. A wrong class name would look exactly like this, which is
+        // why `parsesSearchBlurbFields` pins the present case too.
+        #expect(work.bookmarks == nil)
+        #expect(work.hits == nil)
     }
 
     // MARK: Work page tag groups
