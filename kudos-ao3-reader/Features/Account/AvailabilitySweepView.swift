@@ -17,6 +17,7 @@ struct AvailabilitySweepView: View {
     @State private var total = 0
     @State private var summary: WorkAvailabilitySweep.Summary?
     @State private var task: Task<Void, Never>?
+    @State private var unavailableWorks: [SavedWork] = []
 
     private var isRunning: Bool { task != nil }
 
@@ -29,11 +30,15 @@ struct AvailabilitySweepView: View {
                 } else if let summary {
                     resultSection(summary)
                 }
+                if !unavailableWorks.isEmpty {
+                    unavailableWorksSection
+                }
                 actionSection
             }
             .formStyle(.grouped)
             .appThemedScroll()
             .navigationTitle("Check Availability")
+            .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(isRunning ? "Stop" : "Done") {
@@ -49,6 +54,30 @@ struct AvailabilitySweepView: View {
             .onDisappear { task?.cancel() }
         }
         .tint(theme.effectiveTint)
+    }
+
+    /// Every work currently marked unavailable, not just the ones this run found —
+    /// the count alone (existing `resultSection`) doesn't say *which* works, and
+    /// that persists across runs since `ao3Unavailable` is a durable flag.
+    private var unavailableWorksSection: some View {
+        Section {
+            ForEach(unavailableWorks) { work in
+                NavigationLink(value: work) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(work.title)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Text(work.author)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .cardRow()
+                }
+            }
+        } header: {
+            Text("No longer on AO3 (\(unavailableWorks.count.formatted()))")
+        }
     }
 
     private var explanationSection: some View {
@@ -156,6 +185,9 @@ struct AvailabilitySweepView: View {
         pendingCount = WorkAvailabilitySweep.pending(in: context).count
         let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
         unverifiableCount = works.filter { !$0.isPendingDeletion && !$0.origin.supportsLiveLookup }.count
+        unavailableWorks = works
+            .filter { $0.ao3Unavailable && !$0.isPendingDeletion }
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
     private func start() {

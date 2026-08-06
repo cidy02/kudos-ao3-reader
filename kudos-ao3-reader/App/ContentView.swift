@@ -45,6 +45,10 @@ struct ContentView: View {
     @State private var dismissedSyncFolderOnboardingThisSession = false
     /// Shake-to-report bug reporter (also reachable from Settings → About).
     @State private var showingBugReport = false
+    /// Changelog entries this device hasn't seen yet — empty means no "What's New"
+    /// sheet. Populated once onboarding is done (a fresh install has nothing to
+    /// show; the welcome flow covers that case instead).
+    @State private var whatsNewEntries: [ChangelogEntry] = []
     #if os(iOS)
     /// The screen snapshot grabbed at shake time, offered for attaching to the report.
     @State private var bugReportScreenshot: UIImage?
@@ -195,6 +199,22 @@ struct ContentView: View {
                     .environment(theme)
                     .tint(theme.effectiveTint)
                 #endif
+            }
+            .onAppear {
+                if hasCompletedOnboarding {
+                    whatsNewEntries = Changelog.unseenEntries()
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { !whatsNewEntries.isEmpty },
+                set: { if !$0 { whatsNewEntries = [] } }
+            )) {
+                WhatsNewView(entries: whatsNewEntries) {
+                    Changelog.markSeen()
+                    whatsNewEntries = []
+                }
+                .environment(theme)
+                .tint(theme.effectiveTint)
             }
         // First-launch welcome, then (once that's done) sync-folder onboarding — never
         // both at once, never sync-onboarding in place of welcome. The theme is

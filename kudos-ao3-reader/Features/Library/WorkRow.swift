@@ -149,7 +149,9 @@ struct WorkRow: View {
                 rating: work.rating.isEmpty ? nil : work.rating,
                 wordCount: work.wordCount > 0 ? work.wordCount : nil,
                 chapters: work.chapters.isEmpty ? nil : work.chapters,
-                kudos: work.kudos > 0 ? work.kudos : nil
+                kudos: work.kudos > 0 ? work.kudos : nil,
+                datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
+                dateUpdated: work.dateUpdated.isEmpty ? nil : work.dateUpdated
             )
         }
         .padding(.vertical, 6)

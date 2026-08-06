@@ -291,6 +291,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
         add("work_search[crossover]", filters.crossover.value)
         add("work_search[complete]", filters.completion.value)
+        add("work_search[single_chapter]", filters.chapterCount.value)
         add("work_search[word_count]", wordCountExpression(filters))
         add("work_search[revised_at]", filters.updated.value)
         add("work_search[language_id]", filters.language.code)

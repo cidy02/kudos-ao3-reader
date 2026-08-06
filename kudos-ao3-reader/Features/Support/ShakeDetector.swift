@@ -9,8 +9,21 @@ extension Notification.Name {
     static let deviceDidShake = Notification.Name("KudosDeviceDidShake")
 }
 
+/// True when two consecutive acceleration samples point in substantially opposite
+/// directions (dot product < 0) and both clear the noise floor — the back-and-forth
+/// pattern of a real shake, as opposed to a single sustained jolt (a bump, being
+/// picked up or set down) that a naive one-sample threshold can't tell apart from one.
+func shakeSamplesReversed(_ sample: CMAcceleration, _ previous: CMAcceleration, magnitudeFloor: Double) -> Bool {
+    let magSample = sqrt(sample.x * sample.x + sample.y * sample.y + sample.z * sample.z)
+    let magPrevious = sqrt(previous.x * previous.x + previous.y * previous.y + previous.z * previous.z)
+    guard magSample >= magnitudeFloor, magPrevious >= magnitudeFloor else { return false }
+    return sample.x * previous.x + sample.y * previous.y + sample.z * previous.z < 0
+}
+
 /// Samples user-acceleration during a system shake so we can require a slightly
-/// stronger jolt than the OS default (cuts accidental walking/grip triggers).
+/// stronger jolt than the OS default (cuts accidental walking/grip triggers), plus
+/// multiple direction reversals within the gesture (cuts single-jolt false positives
+/// like being bumped or set down — the OS's own shake gesture doesn't check for this).
 private final class ShakeIntensityMonitor {
     static let shared = ShakeIntensityMonitor()
 
@@ -19,24 +32,42 @@ private final class ShakeIntensityMonitor {
     /// A little above soft jostles; a deliberate shake still clears this easily.
     static let acceptThresholdG: Double = 1.65
     private static let cooldown: TimeInterval = 1.0
+    /// Below this, a sample is noise floor, not a real swing — ignored for reversals.
+    private static let reversalMagnitudeFloor: Double = 0.3
+    /// How far back a reversal still counts toward the current gesture.
+    private static let reversalWindow: TimeInterval = 0.6
+    /// A single hard jolt has one spike and no back-and-forth; a deliberate shake
+    /// oscillates. Required on top of the acceleration threshold.
+    private static let requiredReversals = 2
 
     private let motion = CMMotionManager()
     private var lastAcceptedAt: Date?
+    private var lastSample: CMAcceleration?
+    private var reversalTimestamps: [Date] = []
 
     private init() {}
 
     func beginTracking() {
         peakUserAcceleration = 0
+        lastSample = nil
+        reversalTimestamps.removeAll()
         guard motion.isDeviceMotionAvailable else { return }
         guard !motion.isDeviceMotionActive else { return }
         motion.deviceMotionUpdateInterval = 1.0 / 60.0
         motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
             guard let self, let data else { return }
-            let a = data.userAcceleration
-            let mag = sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+            let sample = data.userAcceleration
+            let mag = sqrt(sample.x * sample.x + sample.y * sample.y + sample.z * sample.z)
             if mag > self.peakUserAcceleration {
                 self.peakUserAcceleration = mag
             }
+            if let last = self.lastSample,
+                shakeSamplesReversed(sample, last, magnitudeFloor: Self.reversalMagnitudeFloor) {
+                let now = Date()
+                self.reversalTimestamps.append(now)
+                self.reversalTimestamps.removeAll { now.timeIntervalSince($0) > Self.reversalWindow }
+            }
+            self.lastSample = sample
         }
     }
 
@@ -46,7 +77,8 @@ private final class ShakeIntensityMonitor {
         }
     }
 
-    /// Whether this shake is strong enough and outside the post-accept cooldown.
+    /// Whether this shake is strong enough, oscillating (not a single jolt), and
+    /// outside the post-accept cooldown.
     func shouldAcceptShake() -> Bool {
         let now = Date()
         if let last = lastAcceptedAt, now.timeIntervalSince(last) < Self.cooldown {
@@ -58,6 +90,7 @@ private final class ShakeIntensityMonitor {
             return true
         }
         let ok = peakUserAcceleration >= Self.acceptThresholdG
+            && reversalTimestamps.count >= Self.requiredReversals
         if ok {
             lastAcceptedAt = now
         }

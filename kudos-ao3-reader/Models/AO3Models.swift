@@ -126,11 +126,89 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     var excludedCategories: Set<Category> = []
     var crossover: Crossover = .any
     var completion: Completion = .any
+    var chapterCount: ChapterCount = .any
     var wordsFrom: String = ""
     var wordsTo: String = ""
     var updated: Updated = .any
     var language: Language = .any
     var sort: Sort = .relevance
+
+    // `SavedSearch` persists this struct via Codable (SwiftData). Synthesized
+    // `Decodable` requires every key to be present, so a plain new stored property
+    // would fail to decode every `SavedSearch` a user already saved before this
+    // field existed — decode it leniently instead, defaulting to `.any` when absent.
+    // (`Language`'s own Codable is customized separately, for the same reason.)
+    private enum CodingKeys: CodingKey {
+        case query, fandom, characters, relationships, additionalTags, excludedFandoms,
+            excludedCharacters, excludedRelationships, excludedAdditionalTags,
+            rating, ratingMatch, includeNotRated, warnings, excludedWarnings,
+            categories, excludedCategories, crossover, completion, chapterCount,
+            wordsFrom, wordsTo, updated, language, sort
+    }
+
+    init(
+        query: String = "", fandom: String = "", characters: String = "", relationships: String = "",
+        additionalTags: String = "", excludedFandoms: String = "", excludedCharacters: String = "",
+        excludedRelationships: String = "", excludedAdditionalTags: String = "", rating: Rating = .any,
+        ratingMatch: RatingMatch = .exact, includeNotRated: Bool = true, warnings: Set<Warning> = [],
+        excludedWarnings: Set<Warning> = [], categories: Set<Category> = [],
+        excludedCategories: Set<Category> = [], crossover: Crossover = .any, completion: Completion = .any,
+        chapterCount: ChapterCount = .any, wordsFrom: String = "", wordsTo: String = "",
+        updated: Updated = .any, language: Language = .any, sort: Sort = .relevance
+    ) {
+        self.query = query
+        self.fandom = fandom
+        self.characters = characters
+        self.relationships = relationships
+        self.additionalTags = additionalTags
+        self.excludedFandoms = excludedFandoms
+        self.excludedCharacters = excludedCharacters
+        self.excludedRelationships = excludedRelationships
+        self.excludedAdditionalTags = excludedAdditionalTags
+        self.rating = rating
+        self.ratingMatch = ratingMatch
+        self.includeNotRated = includeNotRated
+        self.warnings = warnings
+        self.excludedWarnings = excludedWarnings
+        self.categories = categories
+        self.excludedCategories = excludedCategories
+        self.crossover = crossover
+        self.completion = completion
+        self.chapterCount = chapterCount
+        self.wordsFrom = wordsFrom
+        self.wordsTo = wordsTo
+        self.updated = updated
+        self.language = language
+        self.sort = sort
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        query = try container.decode(String.self, forKey: .query)
+        fandom = try container.decode(String.self, forKey: .fandom)
+        characters = try container.decode(String.self, forKey: .characters)
+        relationships = try container.decode(String.self, forKey: .relationships)
+        additionalTags = try container.decode(String.self, forKey: .additionalTags)
+        excludedFandoms = try container.decode(String.self, forKey: .excludedFandoms)
+        excludedCharacters = try container.decode(String.self, forKey: .excludedCharacters)
+        excludedRelationships = try container.decode(String.self, forKey: .excludedRelationships)
+        excludedAdditionalTags = try container.decode(String.self, forKey: .excludedAdditionalTags)
+        rating = try container.decode(Rating.self, forKey: .rating)
+        ratingMatch = try container.decode(RatingMatch.self, forKey: .ratingMatch)
+        includeNotRated = try container.decode(Bool.self, forKey: .includeNotRated)
+        warnings = try container.decode(Set<Warning>.self, forKey: .warnings)
+        excludedWarnings = try container.decode(Set<Warning>.self, forKey: .excludedWarnings)
+        categories = try container.decode(Set<Category>.self, forKey: .categories)
+        excludedCategories = try container.decode(Set<Category>.self, forKey: .excludedCategories)
+        crossover = try container.decode(Crossover.self, forKey: .crossover)
+        completion = try container.decode(Completion.self, forKey: .completion)
+        chapterCount = try container.decodeIfPresent(ChapterCount.self, forKey: .chapterCount) ?? .any
+        wordsFrom = try container.decode(String.self, forKey: .wordsFrom)
+        wordsTo = try container.decode(String.self, forKey: .wordsTo)
+        updated = try container.decode(Updated.self, forKey: .updated)
+        language = try container.decode(Language.self, forKey: .language)
+        sort = try container.decode(Sort.self, forKey: .sort)
+    }
 
     /// True when any filter beyond the plain query is set (drives the filter
     /// button's "active" icon and the Reset action).
@@ -142,7 +220,7 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             || rating != .any || !includeNotRated
             || !warnings.isEmpty || !excludedWarnings.isEmpty
             || !categories.isEmpty || !excludedCategories.isEmpty
-            || crossover != .any || completion != .any
+            || crossover != .any || completion != .any || chapterCount != .any
             || !wordsFrom.isBlank || !wordsTo.isBlank
             || updated != .any || language != .any || sort != .relevance
     }
@@ -364,6 +442,27 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         }
     }
 
+    /// AO3's "Single Chapter?" search checkbox — the only chapter-count filter the
+    /// site's search form offers (no "multi-chapter only" counterpart exists).
+    nonisolated enum ChapterCount: String, CaseIterable, Identifiable, Codable {
+        case any, singleChapter
+        var id: String {
+            rawValue
+        }
+
+        var title: String {
+            switch self {
+            case .any: "Any"
+            case .singleChapter: "Single Chapter Only"
+            }
+        }
+
+        /// AO3's `single_chapter` value, or nil for no filter.
+        var value: String? {
+            self == .singleChapter ? "1" : nil
+        }
+    }
+
     /// "Updated within" — maps to AO3's `revised_at` (age-based: "< 1 week ago"
     /// means updated in the last week, verified against live AO3).
     nonisolated enum Updated: String, CaseIterable, Identifiable, Codable {
@@ -393,59 +492,91 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         }
     }
 
-    /// A curated set of common AO3 languages (codes are AO3 `language_id` values).
-    nonisolated enum Language: String, CaseIterable, Identifiable, Codable {
-        case any = ""
-        case english = "en"
-        case spanish = "es"
-        case french = "fr"
-        case german = "de"
-        case chinese = "zh"
-        case japanese = "ja"
-        case korean = "ko"
-        case russian = "ru"
-        case portuguese = "ptBR"
-        case italian = "it"
-        case arabic = "ar"
-        case indonesian = "id"
-        case dutch = "nl"
-        case polish = "pl"
-        case filipino = "fil"
-        case hindi = "hi"
-        case thai = "th"
-        case vietnamese = "vi"
-        case turkish = "tr"
-        var id: String {
-            rawValue
+    /// Every language AO3's own search form offers (`work_search[language_id]`
+    /// values and labels), live-verified against archiveofourown.org/works/search —
+    /// not a curated subset, since a curated list is exactly the parity gap this
+    /// closes. Labels are AO3's own text verbatim (native names, dual-script
+    /// entries like "中文-普通话 國語") rather than re-translated, so there's one
+    /// source of truth for what each id means.
+    nonisolated struct Language: Identifiable, Equatable, Hashable, Codable, Sendable {
+        /// AO3's `language_id` value; "" for the "Any language" placeholder.
+        let id: String
+        let title: String
+
+        // The custom `init(from:)` below suppresses Swift's synthesized memberwise
+        // init, so it's spelled out explicitly here.
+        init(id: String, title: String) {
+            self.id = id
+            self.title = title
         }
 
+        static let any = Language(id: "", title: "Any language")
+
+        /// The `work_search[language_id]` query value, or nil to leave it unset.
         var code: String? {
-            self == .any ? nil : rawValue
+            id.isEmpty ? nil : id
         }
 
-        var title: String {
-            switch self {
-            case .any: "Any language"
-            case .english: "English"
-            case .spanish: "Spanish"
-            case .french: "French"
-            case .german: "German"
-            case .chinese: "Chinese"
-            case .japanese: "Japanese"
-            case .korean: "Korean"
-            case .russian: "Russian"
-            case .portuguese: "Portuguese (BR)"
-            case .italian: "Italian"
-            case .arabic: "Arabic"
-            case .indonesian: "Indonesian"
-            case .dutch: "Dutch"
-            case .polish: "Polish"
-            case .filipino: "Filipino"
-            case .hindi: "Hindi"
-            case .thai: "Thai"
-            case .vietnamese: "Vietnamese"
-            case .turkish: "Turkish"
-            }
+        static let allCases: [Language] = [.any] + rawList.map { Language(id: $0.0, title: $0.1) }
+
+        private static let rawList: [(String, String)] = [
+            ("so", "af Soomaali"), ("afr", "Afrikaans"), ("ain", "Aynu itak | アイヌ イタㇰ"), ("akk", "𒀝𒅗𒁺𒌑"),
+            ("ar", "العربية"), ("amh", "አማርኛ"), ("egy", "𓂋𓏺𓈖 𓆎𓅓𓏏𓊖"), ("oji", "Anishinaabemowin"),
+            ("arc", "ܐܪܡܝܐ | ארמיא"), ("hy", "հայերեն"), ("ase", "American Sign Language"), ("ast", "asturianu"),
+            ("azj", "Azərbaycan dili | آذربایجان دیلی"), ("id", "Bahasa Indonesia"), ("ms", "Bahasa Malaysia"),
+            ("bg", "Български"), ("bn", "বাংলা"), ("jv", "Basa Jawa"), ("sun", "ᮘᮞ ᮞᮥᮔ᮪ᮓ | Basa Sunda"),
+            ("ba", "Башҡорт теле"), ("be", "беларуская"), ("bar", "Boarisch"), ("bos", "Bosanski"),
+            ("br", "Brezhoneg"), ("bfi", "British Sign Language"),
+            ("bua", "Буряад хэлэн | ᠪᠤᠷᠢᠶᠠᠳ ᠮᠣᠩᠭᠣᠯ ᠬᠡᠯᠡ"), ("ca", "Català"), ("ceb", "Cebuano"), ("cs", "Čeština"),
+            ("chn", "Chinuk Wawa"), ("crh", "къырымтатар тили | qırımtatar tili"), ("cy", "Cymraeg"),
+            ("da", "Dansk"), ("de", "Deutsch"), ("div", "ދިވެހި,"), ("et", "eesti keel"), ("el", "Ελληνικά"),
+            ("sux", "𒅴𒂠"), ("en", "English"), ("ang", "Eald Englisċ"), ("es", "Español"), ("eo", "Esperanto"),
+            ("eu", "Euskara"), ("fa", "فارسی"), ("fil", "Filipino"), ("cha", "Finuʼ Chamorro"),
+            ("fr", "Français"), ("frr", "Friisk"), ("fry", "Frysk"), ("fur", "Furlan"), ("ga", "Gaeilge"),
+            ("gd", "Gàidhlig"), ("gl", "Galego"), ("got", "𐌲𐌿𐍄𐌹𐍃𐌺𐌰"), ("gyn", "Creolese"),
+            ("hak", "中文-客家话"), ("ko", "한국어"), ("hau", "Hausa | هَرْشَن هَوْسَ"), ("hi", "हिन्दी"),
+            ("mww", "Hmoob dawb"), ("hr", "Hrvatski"), ("haw", "ʻŌlelo Hawaiʻi"), ("ia", "Interlingua"),
+            ("zu", "isiZulu"), ("is", "Íslenska"), ("it", "Italiano"), ("he", "עברית"), ("kal", "Kalaallisut"),
+            ("xal", "Хальмг Өөрдин келн"), ("moh", "Kanienʼkéha"), ("kan", "ಕನ್ನಡ"), ("kat", "ქართული"),
+            ("cor", "Kernewek"), ("khm", "ភាសាខ្មែរ"), ("qkz", "Khuzdul"), ("sw", "Kiswahili"),
+            ("ht", "kreyòl ayisyen"), ("ku", "Kurdî | کوردی"), ("kir", "Кыргызча"), ("lad", "Ladino / לאדינו"),
+            ("fcs", "Langue des signes québécoise"), ("lv", "Latviešu valoda"), ("lb", "Lëtzebuergesch"),
+            ("lt", "Lietuvių kalba"), ("la", "Lingua latina"), ("hu", "Magyar"), ("mk", "македонски"),
+            ("ml", "മലയാളം"), ("mt", "Malti"), ("mnc", "ᠮᠠᠨᠵᡠ ᡤᡳᠰᡠᠨ"), ("qmd", "Mando'a"), ("mr", "मराठी"),
+            ("mic", "Mi'kmaq"), ("enm", "Middel Englisch"), ("mik", "Mikisúkî"), ("hnj", "Moob leeg"),
+            ("mon", "ᠮᠣᠩᠭᠣᠯ ᠪᠢᠴᠢᠭ᠌ | Монгол Кирилл үсэг"), ("my", "မြန်မာဘာသာ"), ("myv", "Эрзянь кель"),
+            ("qnv", "Lìʼfya leNaʼvi"), ("nah", "Nāhuatl"), ("nan", "中文-闽南话 臺語"), ("ppl", "Nawat"),
+            ("nl", "Nederlands"), ("ja", "日本語"), ("no", "Norsk"), ("ce", "Нохчийн мотт"),
+            ("ood", "O'odham Ñiok"), ("ota", "لسان عثمانى"), ("ps", "پښتو"),
+            ("pdc", "Pennsilfaanisch Deitsch"), ("nds", "Plattdüütsch"), ("pl", "Polski"),
+            ("ptBR", "Português brasileiro"), ("ptPT", "Português europeu"), ("fuc", "Pulaar"),
+            ("pa", "ਪੰਜਾਬੀ"), ("kaz", "qazaqşa | қазақша"), ("qlq", "Uncategorized Constructed Languages"),
+            ("qya", "Quenya"), ("ro", "Română"), ("rom", "RRomani Ćhib"), ("ru", "Русский"), ("smi", "Sámi"),
+            ("sah", "саха тыла"), ("sco", "Scots"), ("sq", "Shqip"), ("sjn", "Sindarin"), ("si", "සිංහල"),
+            ("sk", "Slovenčina"), ("slv", "Slovenščina"), ("sla", "Slověnьskъ Językъ"),
+            ("gem", "Sprēkō Þiudiskō"), ("sr", "Српски"), ("fi", "suomi"), ("sv", "Svenska"),
+            ("ta", "தமிழ்"), ("tat", "татар теле"), ("mri", "te reo Māori"), ("tel", "తెలుగు"),
+            ("tir", "ትግርኛ"), ("th", "ไทย"), ("tqx", "Thermian"), ("bod", "བོད་སྐད་"), ("vi", "Tiếng Việt"),
+            ("cop", "ϯⲙⲉⲧⲣⲉⲙⲛ̀ⲭⲏⲙⲓ"), ("tlh", "tlhIngan-Hol"), ("tok", "toki pona"),
+            ("trf", "Trinidadian Creole"), ("tsd", "τσακώνικα"), ("chr", "ᏣᎳᎩ ᎦᏬᏂᎯᏍᏗ"), ("tr", "Türkçe"),
+            ("uk", "Українська"), ("ale", "Unangam Tunuu"), ("urd", "اُردُو"), ("uig", "ئۇيغۇر تىلى"),
+            ("vol", "Volapük"), ("wuu", "中文-吴语"), ("yi", "יידיש"), ("yua", "maayaʼ tʼàan"),
+            ("yue", "中文-广东话 粵語"), ("zh", "中文-普通话 國語")
+        ]
+
+        // Custom Codable: encode/decode as the bare `id` string, matching the old
+        // raw-value-enum wire format exactly. `SavedSearch` persists `AO3SearchFilters`
+        // (and therefore `Language`) via this Codable conformance — a keyed struct
+        // encoding would fail to decode every `SavedSearch` a user already has saved.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let code = try container.decode(String.self)
+            self = Self.allCases.first(where: { $0.id == code }) ?? Language(id: code, title: code)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(id)
         }
     }
 

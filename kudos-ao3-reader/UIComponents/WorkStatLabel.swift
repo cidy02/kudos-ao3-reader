@@ -58,6 +58,22 @@ struct WorkListStatsRow: View {
     var wordCount: Int?
     var chapters: String?
     var kudos: Int?
+    var datePublished: String?
+    var dateUpdated: String?
+
+    /// Published shows whenever known. Updated only shows when it actually differs
+    /// from published (a never-updated oneshot has nothing new to say twice) —
+    /// distinct icons so which is which is never a guess. AO3's blurb date text is
+    /// already display-ready, so this passes it through unformatted.
+    private var showsPublished: Bool {
+        guard let datePublished else { return false }
+        return !datePublished.isEmpty
+    }
+
+    private var showsUpdated: Bool {
+        guard let dateUpdated, !dateUpdated.isEmpty else { return false }
+        return dateUpdated != datePublished
+    }
 
     var body: some View {
         FlowLayout(spacing: 18, rowSpacing: 5) {
@@ -77,6 +93,20 @@ struct WorkListStatsRow: View {
                     text: kudos.formatted(),
                     symbol: "heart",
                     accessibilityLabel: "\(kudos.formatted()) kudos"
+                )
+            }
+            if showsPublished, let datePublished {
+                WorkStatLabel(
+                    text: datePublished,
+                    symbol: "calendar",
+                    accessibilityLabel: "Published \(datePublished)"
+                )
+            }
+            if showsUpdated, let dateUpdated {
+                WorkStatLabel(
+                    text: dateUpdated,
+                    symbol: "calendar.badge.clock",
+                    accessibilityLabel: "Updated \(dateUpdated)"
                 )
             }
         }

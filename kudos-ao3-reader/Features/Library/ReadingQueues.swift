@@ -146,6 +146,8 @@ struct ReadingQueueDetailView: View {
     /// `WorkReorderDropDelegate.dropEntered` and committed to `ReadingQueueService`
     /// only in `performDrop` — see that type's doc comment for why (A6-F1).
     @State private var pendingCompactOrder: [UUID]?
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
     /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
     /// tracks a card that's grown wider with Dynamic Type instead of assuming the
@@ -257,6 +259,31 @@ struct ReadingQueueDetailView: View {
                         ToolbarItem(placement: .primaryAction) {
                             Button("Done") { setReordering(false) }
                         }
+                    } else if isSelecting {
+                        ToolbarItem(placement: .confirmationAction) {
+                            SelectAllButton(allSelected: allSelected, action: toggleSelectAll)
+                        }
+                        #if os(iOS)
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            ScopedRemovalBulkActionBar(
+                                selectedWorks: selectedWorks,
+                                removeLabel: "Remove from Queue",
+                                scopeName: "queue",
+                                onRemove: bulkRemove,
+                                onDone: exitSelectMode
+                            )
+                        }
+                        #else
+                        ToolbarItemGroup(placement: .primaryAction) {
+                            ScopedRemovalBulkActionBar(
+                                selectedWorks: selectedWorks,
+                                removeLabel: "Remove from Queue",
+                                scopeName: "queue",
+                                onRemove: bulkRemove,
+                                onDone: exitSelectMode
+                            )
+                        }
+                        #endif
                     } else {
                         ActionToolbar {
                             FilterButton(filtersActive: filters.hasActiveFilters,
@@ -273,6 +300,11 @@ struct ReadingQueueDetailView: View {
                                 .help(filters.hasActiveFilters
                                     ? "Clear filters to reorder"
                                     : "Reorder works in this queue")
+                                Button {
+                                    isSelecting = true
+                                } label: {
+                                    Label("Select", systemImage: "checklist")
+                                }
                                 DisplayModeMenuPicker(mode: $displayMode)
                                 // Compact cards don't expand/collapse — only detailed rows do.
                                 if displayMode == .detailed {
@@ -297,6 +329,11 @@ struct ReadingQueueDetailView: View {
                     }
                 }
             }
+            #if os(iOS)
+                // Select mode owns the bottom edge with its bulk-action bar (matches
+                // LibraryView's own selection-mode tab-bar hide).
+                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+            #endif
             .alert("Rename Queue", isPresented: $showingRename) {
                 TextField("Name", text: $renameText)
                 Button("Save") {
@@ -329,19 +366,28 @@ struct ReadingQueueDetailView: View {
     private var detailedList: some View {
         List {
             ForEach(displayedWorks) { work in
-                SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
-                    .swipeActions(edge: .trailing) {
+                SensitiveWorkRow(
+                    work: work,
+                    expandAll: expandAll,
+                    openMode: .reader,
+                    isSelecting: isSelecting,
+                    isSelected: selection.contains(work.id),
+                    onToggleSelection: { toggleSelection(work) }
+                )
+                .swipeActions(edge: .trailing) {
+                    if !isSelecting {
                         Button(role: .destructive) {
                             ReadingQueueService.removeFromQueue(work, from: queue, in: context)
                         } label: {
                             Label("Remove from Queue", systemImage: "minus.circle")
                         }
                     }
-                    // moveDisabled removes the drag affordance itself outside reorder
-                    // mode — on macOS, .onMove has no EditMode gate the way iOS does,
-                    // so a List with an unconditional .onMove is draggable at all
-                    // times regardless of the Reorder toggle otherwise.
-                    .moveDisabled(!isReordering)
+                }
+                // moveDisabled removes the drag affordance itself outside reorder
+                // mode — on macOS, .onMove has no EditMode gate the way iOS does,
+                // so a List with an unconditional .onMove is draggable at all
+                // times regardless of the Reorder toggle otherwise.
+                .moveDisabled(!isReordering)
             }
             .onMove(perform: moveWorks)
             .cardRow()
@@ -376,7 +422,14 @@ struct ReadingQueueDetailView: View {
 
     @ViewBuilder
     private func compactCard(_ work: SavedWork) -> some View {
-        if isReordering {
+        if isSelecting {
+            SensitiveWorkCoverCard(
+                work: work,
+                isSelecting: true,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) }
+            )
+        } else if isReordering {
             // onDrop is attached to the ZStack container, not the card itself — the
             // card's own allowsHitTesting(false) (which suppresses a blurred work's
             // reveal-tap so it can't fire underneath a drag) would otherwise also
@@ -468,6 +521,40 @@ struct ReadingQueueDetailView: View {
     private func deleteQueue() {
         PreservedWorkService.softDelete(queue, in: context)
         dismiss()
+    }
+
+    // MARK: Multi-select / bulk actions
+
+    private var selectedWorks: [SavedWork] {
+        works.filter { selection.contains($0.id) }
+    }
+
+    private var allSelected: Bool {
+        let ids = Set(works.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    private func toggleSelectAll() {
+        selection = allSelected ? [] : Set(works.map(\.id))
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func bulkRemove() {
+        for work in selectedWorks {
+            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+        }
     }
 }
 

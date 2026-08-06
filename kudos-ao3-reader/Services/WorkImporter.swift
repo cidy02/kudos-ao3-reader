@@ -325,7 +325,7 @@ private func displayLanguage(_ code: String?) -> String {
     guard let code, !code.isEmpty else { return "" }
     let normalized = code.replacingOccurrences(of: "-", with: "").lowercased()
     if let match = AO3SearchFilters.Language.allCases.first(where: {
-        $0.rawValue.lowercased() == normalized
+        $0.id.lowercased() == normalized
     }) {
         return match.title
     }

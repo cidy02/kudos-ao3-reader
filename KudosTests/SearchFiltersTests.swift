@@ -35,12 +35,32 @@ struct SearchFiltersTests {
         filters.wordsFrom = "1000"
         filters.wordsTo = "50000"
         filters.updated = .week
-        filters.language = .english
+        filters.language = AO3SearchFilters.Language.allCases.first { $0.id == "en" }!
+        filters.chapterCount = .singleChapter
         filters.sort = .kudos
 
         let data = try JSONEncoder().encode(filters)
         let decoded = try JSONDecoder().decode(AO3SearchFilters.self, from: data)
         #expect(decoded == filters)
+    }
+
+    /// A `SavedSearch` encoded before `chapterCount`/`Language` existed in their
+    /// current shape must still decode — old records have no `chapterCount` key at
+    /// all, and `language` was a bare raw-value string ("en"), not `{"id","title"}`.
+    @Test func preExistingSavedSearchJSONStillDecodes() throws {
+        let legacyJSON = """
+        {"query":"time travel","fandom":"","characters":"","relationships":"",
+        "additionalTags":"","excludedFandoms":"","excludedCharacters":"",
+        "excludedRelationships":"","excludedAdditionalTags":"","rating":"teen",
+        "ratingMatch":"exact","includeNotRated":true,"warnings":[],"excludedWarnings":[],
+        "categories":[],"excludedCategories":[],"crossover":"any","completion":"any",
+        "wordsFrom":"","wordsTo":"","updated":"any","language":"en","sort":"relevance"}
+        """
+        let decoded = try JSONDecoder().decode(AO3SearchFilters.self, from: Data(legacyJSON.utf8))
+        #expect(decoded.query == "time travel")
+        #expect(decoded.language.id == "en")
+        #expect(decoded.language.title == "English")
+        #expect(decoded.chapterCount == .any)
     }
 
     @Test func exactRatingUsesStructuredField() {

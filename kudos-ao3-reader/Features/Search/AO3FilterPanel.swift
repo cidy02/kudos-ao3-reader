@@ -93,6 +93,9 @@ struct AO3FilterPanel: View {
                     Picker("Completion", selection: $filters.completion) {
                         ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
                     }
+                    Picker("Chapters", selection: $filters.chapterCount) {
+                        ForEach(AO3SearchFilters.ChapterCount.allCases) { Text($0.title).tag($0) }
+                    }
                 }
 
                 Section("Word count") {

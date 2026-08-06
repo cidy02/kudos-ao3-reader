@@ -118,6 +118,8 @@ struct CollectionDetailView: View {
     /// Filters scoped to this one collection, applied live to its works.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — a collection can hold a large number of works.
     @State private var refreshTask: Task<Void, Never>?
@@ -152,8 +154,16 @@ struct CollectionDetailView: View {
             } else {
                 List {
                     ForEach(visibleWorks) { work in
-                        SensitiveWorkRow(work: work, expandAll: expandAll, openMode: .reader)
-                            .swipeActions(edge: .trailing) {
+                        SensitiveWorkRow(
+                            work: work,
+                            expandAll: expandAll,
+                            openMode: .reader,
+                            isSelecting: isSelecting,
+                            isSelected: selection.contains(work.id),
+                            onToggleSelection: { toggleSelection(work) }
+                        )
+                        .swipeActions(edge: .trailing) {
+                            if !isSelecting {
                                 Button(role: .destructive) {
                                     if confirmBeforeDelete {
                                         pendingRemoval = work
@@ -164,6 +174,7 @@ struct CollectionDetailView: View {
                                     Label("Remove", systemImage: "minus.circle")
                                 }
                             }
+                        }
                     }
                     .cardRow()
                 }
@@ -201,35 +212,72 @@ struct CollectionDetailView: View {
                 #endif
             }
             .toolbar {
-                ActionToolbar {
-                    ToolbarIconButton(title: "Add Works", systemImage: "plus") {
-                        showingAddWorks = true
+                if isSelecting {
+                    ToolbarItem(placement: .confirmationAction) {
+                        SelectAllButton(allSelected: allSelected, action: toggleSelectAll)
                     }
-                    if !works.isEmpty {
-                        FilterButton(filtersActive: filters.hasActiveFilters,
-                                     showingFilters: $showingFilters,
-                                     filterHelp: "Filter the works in this collection",
-                                     onClearFilters: { filters = LibraryFilters() })
+                    #if os(iOS)
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        ScopedRemovalBulkActionBar(
+                            selectedWorks: selectedWorks,
+                            removeLabel: "Remove from Collection",
+                            scopeName: "collection",
+                            onRemove: bulkRemove,
+                            onDone: exitSelectMode
+                        )
                     }
-                    WorkListMoreMenu {
+                    #else
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        ScopedRemovalBulkActionBar(
+                            selectedWorks: selectedWorks,
+                            removeLabel: "Remove from Collection",
+                            scopeName: "collection",
+                            onRemove: bulkRemove,
+                            onDone: exitSelectMode
+                        )
+                    }
+                    #endif
+                } else {
+                    ActionToolbar {
+                        ToolbarIconButton(title: "Add Works", systemImage: "plus") {
+                            showingAddWorks = true
+                        }
                         if !works.isEmpty {
-                            ExpandAllMenuItem(expandAll: $expandAll)
-                            Divider()
+                            FilterButton(filtersActive: filters.hasActiveFilters,
+                                         showingFilters: $showingFilters,
+                                         filterHelp: "Filter the works in this collection",
+                                         onClearFilters: { filters = LibraryFilters() })
                         }
-                        Button {
-                            renameText = collection.name
-                            showingRename = true
-                        } label: {
-                            Label("Rename", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
-                            confirmDelete = true
-                        } label: {
-                            Label("Delete Collection", systemImage: "trash")
+                        WorkListMoreMenu {
+                            if !works.isEmpty {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                                Button {
+                                    isSelecting = true
+                                } label: {
+                                    Label("Select", systemImage: "checklist")
+                                }
+                                Divider()
+                            }
+                            Button {
+                                renameText = collection.name
+                                showingRename = true
+                            } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                confirmDelete = true
+                            } label: {
+                                Label("Delete Collection", systemImage: "trash")
+                            }
                         }
                     }
                 }
             }
+            #if os(iOS)
+                // Select mode owns the bottom edge with its bulk-action bar (matches
+                // LibraryView's own selection-mode tab-bar hide).
+                .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+            #endif
             .sheet(isPresented: $showingAddWorks) {
                 AddWorksToCollectionView(collection: collection)
             }
@@ -279,6 +327,40 @@ struct CollectionDetailView: View {
         work.markModified()
         collection.markModified()
         try? context.save()
+    }
+
+    // MARK: Multi-select / bulk actions
+
+    private var selectedWorks: [SavedWork] {
+        works.filter { selection.contains($0.id) }
+    }
+
+    private var allSelected: Bool {
+        let ids = Set(works.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    private func toggleSelectAll() {
+        selection = allSelected ? [] : Set(works.map(\.id))
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func bulkRemove() {
+        for work in selectedWorks {
+            remove(work)
+        }
     }
 }
 
