@@ -133,4 +133,60 @@ struct SearchFiltersTests {
 
         #expect(filters.searchQuery == "-category_ids:23 -category_ids:24")
     }
+
+    @Test func quotedPhraseEscapesCharactersThatWouldEndThePhrase() {
+        // A tag containing a double quote is legal on AO3. Interpolated raw it
+        // closed the phrase early and injected stray tokens into the query.
+        #expect(AO3SearchFilters.quotedPhrase("plain") == "\"plain\"")
+        #expect(AO3SearchFilters.quotedPhrase("He said \"hi\"") == "\"He said \\\"hi\\\"\"")
+        // Backslash is escaped first, so escaping it can't double-escape a quote.
+        #expect(AO3SearchFilters.quotedPhrase("back\\slash") == "\"back\\\\slash\"")
+    }
+
+    @Test func excludedTagWithAQuoteStaysASingleWellFormedClause() {
+        var filters = AO3SearchFilters()
+        filters.excludedFandoms = "He said \"hi\""
+        // One clause, fully quoted, with the inner quotes neutralised.
+        #expect(filters.searchQuery == "-\"He said \\\"hi\\\"\"")
+    }
+
+    @Test func rangeExpressionCoversBothBoundsAndNeither() {
+        #expect(AO3SearchFilters.rangeExpression(from: "10", to: "20") == "10-20")
+        #expect(AO3SearchFilters.rangeExpression(from: "10", to: "") == "> 10")
+        #expect(AO3SearchFilters.rangeExpression(from: "", to: "20") == "< 20")
+        #expect(AO3SearchFilters.rangeExpression(from: "", to: "") == nil)
+        #expect(AO3SearchFilters.rangeExpression(from: "  ", to: "  ") == nil)
+    }
+
+    @Test func sortColumnsCarryTheDirectionAReaderExpects() {
+        // Names read forwards; counts and dates read biggest/newest first.
+        #expect(AO3SearchFilters.Sort.workTitle.naturalDirection == .ascending)
+        #expect(AO3SearchFilters.Sort.creator.naturalDirection == .ascending)
+        #expect(AO3SearchFilters.Sort.kudos.naturalDirection == .descending)
+        #expect(AO3SearchFilters.Sort.dateUpdated.naturalDirection == .descending)
+    }
+
+    @Test func savedSearchJSONPredatingTheNewFieldsStillDecodes() throws {
+        // Regression guard for the whole F1/F2 batch: Swift's synthesized
+        // Decodable treats a missing key as an error even when the property has
+        // a default, so every field added here has to decode leniently or every
+        // previously saved search breaks.
+        let legacy = """
+        {"query":"naruto","fandom":"","characters":"","relationships":"","additionalTags":"",
+         "excludedFandoms":"","excludedCharacters":"","excludedRelationships":"",
+         "excludedAdditionalTags":"","rating":"any","ratingMatch":"exact","includeNotRated":true,
+         "warnings":[],"excludedWarnings":[],"categories":[],"excludedCategories":[],
+         "crossover":"any","completion":"any","wordsFrom":"","wordsTo":"","updated":"any",
+         "language":"","sort":"relevance"}
+        """
+        let filters = try JSONDecoder().decode(AO3SearchFilters.self, from: Data(legacy.utf8))
+        #expect(filters.query == "naruto")
+        #expect(filters.title.isEmpty)
+        #expect(filters.creators.isEmpty)
+        #expect(filters.hitsFrom.isEmpty)
+        #expect(filters.kudosTo.isEmpty)
+        #expect(filters.bookmarksFrom.isEmpty)
+        #expect(filters.sortDirection == .descending)
+        #expect(filters.chapterCount == .any)
+    }
 }

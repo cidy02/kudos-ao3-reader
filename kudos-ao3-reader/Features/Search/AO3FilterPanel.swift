@@ -43,6 +43,19 @@ struct AO3FilterPanel: View {
                         Picker("Sort by", selection: $filters.sort) {
                             ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
                         }
+                        .onChange(of: filters.sort) { _, newValue in
+                            // Picking a column re-seeds the direction to the one a
+                            // reader expects from it (A-Z for names, most-first for
+                            // counts). Still overridable right below.
+                            filters.sortDirection = newValue.naturalDirection
+                        }
+                        // Relevance has no meaningful direction — AO3 orders by score.
+                        if filters.sort != .relevance {
+                            Picker("Order", selection: $filters.sortDirection) {
+                                ForEach(AO3SearchFilters.SortDirection.allCases) { Text($0.title).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                        }
                     }
                     Picker("Rating", selection: $filters.rating) {
                         ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
@@ -98,15 +111,42 @@ struct AO3FilterPanel: View {
                     }
                 }
 
+                // Title/creator are AO3's own fields, distinct from the free-text
+                // query — which also matches summaries and tags, so an author
+                // searched through it comes back far noisier.
+                if mode == .search {
+                    Section("Title & creator") {
+                        // AO3 pseuds are case-sensitive-looking and rarely start
+                        // capitalized, so autocapitalization gets in the way —
+                        // but the modifier is iOS-only, like the keyboard types
+                        // used elsewhere in this panel.
+                        TextField("Title", text: $filters.title)
+                        TextField("Creator", text: $filters.creators)
+                        #if !os(macOS)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        #endif
+                    }
+                }
+
                 Section("Word count") {
-                    TextField("From", text: $filters.wordsFrom)
-                    #if !os(macOS)
-                        .keyboardType(.numberPad)
-                    #endif
-                    TextField("To", text: $filters.wordsTo)
-                    #if !os(macOS)
-                        .keyboardType(.numberPad)
-                    #endif
+                    numberRange(from: $filters.wordsFrom, to: $filters.wordsTo)
+                }
+
+                // AO3 accepts the same range grammar on each of these.
+                if mode == .search {
+                    Section("Hits") {
+                        numberRange(from: $filters.hitsFrom, to: $filters.hitsTo)
+                    }
+                    Section("Kudos") {
+                        numberRange(from: $filters.kudosFrom, to: $filters.kudosTo)
+                    }
+                    Section("Comments") {
+                        numberRange(from: $filters.commentsFrom, to: $filters.commentsTo)
+                    }
+                    Section("Bookmarks") {
+                        numberRange(from: $filters.bookmarksFrom, to: $filters.bookmarksTo)
+                    }
                 }
 
                 Section {
@@ -185,6 +225,21 @@ struct AO3FilterPanel: View {
     // MARK: - Facet rows (warnings / categories)
 
     /// A tappable multi-select facet row matching the tag pickers' three states.
+    /// A From/To pair for one of AO3's numeric range fields. Five sections need
+    /// the identical shape, so they share one builder rather than repeating the
+    /// platform-conditional keyboard type five times.
+    @ViewBuilder
+    private func numberRange(from: Binding<String>, to: Binding<String>) -> some View {
+        TextField("From", text: from)
+        #if !os(macOS)
+            .keyboardType(.numberPad)
+        #endif
+        TextField("To", text: to)
+        #if !os(macOS)
+            .keyboardType(.numberPad)
+        #endif
+    }
+
     private func cyclingFacetRow(_ title: String, state: FilterSelectionState,
                                  toggle: @escaping () -> Void) -> some View {
         Button(action: toggle) {

@@ -99,6 +99,22 @@ struct AO3ClientTests {
         #expect(page.totalPages == 2)
     }
 
+    @Test func blurbsPresentButNoneParseableThrowsInsteadOfLookingEmpty() throws {
+        // Blurb elements present but not one parsed can only mean the parser
+        // broke — a genuinely empty page has no blurb elements at all. Without
+        // this, an AO3 markup change would surface as "no results", which reads
+        // as a normal outcome and hides the breakage.
+        let html = """
+        <html><body>
+          <li class="work blurb"><p>markup AO3 no longer uses</p></li>
+          <li class="work blurb"><p>markup AO3 no longer uses</p></li>
+        </body></html>
+        """
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseSearchPage(html, page: 1)
+        }
+    }
+
     // MARK: Marked for Later (reading list)
 
     @Test func buildsMarkedForLaterURL() {

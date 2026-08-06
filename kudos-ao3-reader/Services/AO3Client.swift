@@ -57,6 +57,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         config.timeoutIntervalForRequest = 30
         config.httpShouldSetCookies = true
         config.httpCookieAcceptPolicy = .always
+        // AO3 serves listing pages with `Cache-Control: max-age=600, public`
+        // (measured 2026-08-06), so honouring it turns paging back and forth —
+        // 1 → 2 → 1 — into one round trip instead of three, each of which
+        // otherwise costs a full `pace()` slot. `RequestCoalescer` only helps
+        // callers that overlap in time; this is what helps sequential repeats.
+        //
+        // **Memory only, no disk directory.** This app deliberately keeps mature
+        // works behind an obscure/biometric gate, so writing fetched AO3 HTML to
+        // an unencrypted on-disk cache would quietly undo that; and the session
+        // is `.ephemeral` precisely so nothing outlives the process. A 10-minute
+        // freshness window is short enough that memory is where the hits are
+        // anyway.
+        config.urlCache = URLCache(memoryCapacity: 8 * 1024 * 1024, diskCapacity: 0, diskPath: nil)
+        config.requestCachePolicy = .useProtocolCachePolicy
         return config
     }
 
@@ -206,13 +220,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let value = http.value(forHTTPHeaderField: "Retry-After")?
             .trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
         if let seconds = TimeInterval(value) { return seconds }
+        if let date = retryAfterDateFormatter.date(from: value) { return max(0, date.timeIntervalSinceNow) }
+        return nil
+    }
+
+    /// HTTP-date parser for `Retry-After`. Hoisted out of `retryAfter(from:)`:
+    /// `DateFormatter` construction is expensive and the format is fixed.
+    private static let retryAfterDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "GMT")
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-        if let date = formatter.date(from: value) { return max(0, date.timeIntervalSinceNow) }
-        return nil
-    }
+        return formatter
+    }()
 
     // MARK: Retry
 
@@ -226,6 +246,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             do {
                 return try await operation()
             } catch is CancellationError {
+                throw CancellationError()
+            } catch let urlError as URLError where urlError.code == .cancelled && Task.isCancelled {
+                // URLSession reports a cancelled load as `URLError.cancelled`, not
+                // `CancellationError`, so callers that (reasonably) catch the
+                // latter would otherwise treat a deliberate cancel as a failure
+                // and show an error. Normalize it here, once, rather than making
+                // every call site know this. Gated on `Task.isCancelled` so a
+                // genuine server-side cancellation still surfaces as itself.
                 throw CancellationError()
             } catch {
                 attempt += 1
@@ -265,7 +293,22 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Runs a works search for the given filters. `page` is 1-based.
     func search(filters: AO3SearchFilters, page: Int = 1) async throws -> AO3SearchPage {
-        var components = URLComponents(string: "\(base)/works/search")!
+        guard let url = Self.searchURL(filters: filters, page: page) else {
+            throw AO3Error.network("Bad search URL.")
+        }
+        let html = try await getHTML(url)
+        return try Self.parseSearchPage(html, page: page)
+    }
+
+    /// The `/works/search` URL for a filter set. Pure and static so every
+    /// `work_search[...]` parameter name, id, and multi-value convention is
+    /// unit-testable without a network call — these are load-bearing constants
+    /// copied from AO3's own form, and a typo in one would degrade to an empty
+    /// result page rather than an error.
+    static func searchURL(filters: AO3SearchFilters, page: Int) -> URL? {
+        guard var components = URLComponents(string: "https://archiveofourown.org/works/search") else {
+            return nil
+        }
         var items: [URLQueryItem] = []
 
         func add(_ name: String, _ value: String?) {
@@ -276,6 +319,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // AO3's structured search has no multi-rating or exclusion fields.
         // `searchQuery` folds those into AO3's documented text-search syntax.
         add("work_search[query]", filters.searchQuery)
+
+        add("work_search[title]", filters.title)
+        add("work_search[creators]", filters.creators)
 
         add("work_search[fandom_names]", filters.fandom)
         add("work_search[character_names]", filters.characters)
@@ -292,17 +338,37 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         add("work_search[crossover]", filters.crossover.value)
         add("work_search[complete]", filters.completion.value)
         add("work_search[single_chapter]", filters.chapterCount.value)
-        add("work_search[word_count]", wordCountExpression(filters))
+        // AO3 parses the same range grammar (">100", "100-200", "<50") for every
+        // one of these five numeric fields — see otwarchive's SearchRange.
+        add("work_search[word_count]", AO3SearchFilters.rangeExpression(from: filters.wordsFrom, to: filters.wordsTo))
+        add("work_search[hits]", AO3SearchFilters.rangeExpression(from: filters.hitsFrom, to: filters.hitsTo))
+        add("work_search[kudos_count]", AO3SearchFilters.rangeExpression(from: filters.kudosFrom, to: filters.kudosTo))
+        add(
+            "work_search[comments_count]",
+            AO3SearchFilters.rangeExpression(from: filters.commentsFrom, to: filters.commentsTo)
+        )
+        add(
+            "work_search[bookmarks_count]",
+            AO3SearchFilters.rangeExpression(from: filters.bookmarksFrom, to: filters.bookmarksTo)
+        )
         add("work_search[revised_at]", filters.updated.value)
         add("work_search[language_id]", filters.language.code)
         add("work_search[sort_column]", filters.sort.column)
+        // Only sent alongside an explicit column: on AO3's default relevance sort
+        // a direction is meaningless, and sending one would pin `_score` ascending
+        // (worst match first) for anyone who had picked ascending earlier.
+        if filters.sort.column != nil {
+            add("work_search[sort_direction]", filters.sortDirection.value)
+        }
 
+        // Matches every other listing path (`worksPage(at:)`, work/chapter fetches):
+        // clears AO3's adult-content interstitial rather than relying on search
+        // listings happening not to gate on it.
+        items.append(URLQueryItem(name: "view_adult", value: "true"))
         items.append(URLQueryItem(name: "page", value: String(page)))
         components.queryItems = items
 
-        guard let url = components.url else { throw AO3Error.network("Bad search URL.") }
-        let html = try await getHTML(url)
-        return try Self.parseSearchPage(html, page: page)
+        return components.url
     }
 
     /// The URL of a user's "Marked for Later" reading list. AO3 renders it at
@@ -693,18 +759,6 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
     func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
         try await Self.parseSubscriptionsPage(authenticatedHTML(for: request), page: page)
-    }
-
-    /// Builds AO3's `word_count` expression from the from/to fields.
-    private func wordCountExpression(_ filters: AO3SearchFilters) -> String? {
-        let from = filters.wordsFrom.trimmingCharacters(in: .whitespacesAndNewlines)
-        let to = filters.wordsTo.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch (from.isEmpty, to.isEmpty) {
-        case (false, false): return "\(from)-\(to)"
-        case (false, true): return "> \(from)"
-        case (true, false): return "< \(to)"
-        case (true, true): return nil
-        }
     }
 
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so
@@ -1188,6 +1242,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let blurbs = try doc.select(blurbSelector).array()
         // Skip any single malformed / non-work blurb rather than failing the page.
         let works = blurbs.compactMap { try? Self.parseBlurb($0) }
+        // Blurb elements present but not one parsed is unambiguously a broken
+        // parser, never a legitimately empty page — an empty page has no blurb
+        // elements at all. Surfacing it stops an AO3 markup change from
+        // degrading into a silent "no results" the user can't act on.
+        if !blurbs.isEmpty, works.isEmpty {
+            Log.network.error(
+                "Parsed 0 of \(blurbs.count, privacy: .public) '\(blurbSelector, privacy: .public)' blurbs — markup changed?"
+            )
+            throw AO3Error.parse
+        }
         let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }

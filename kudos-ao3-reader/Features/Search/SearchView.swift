@@ -35,6 +35,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
+    /// The in-flight search, so a superseded one is actually cancelled rather
+    /// than left to finish and have its result thrown away. Without this the
+    /// pacer serializes the doomed request's start slot ahead of the one the
+    /// user is waiting for.
+    @State private var loadTask: Task<Void, Never>?
     /// One entry per tag-tap drill-down (tag A → tag B → …), so Back can restore the
     /// previous filter level instead of losing it to applyTagSearch's overwrite.
     /// Manual typed searches don't push here — only the tag-tap chain does.
@@ -715,16 +720,22 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         loadToken += 1
         let token = loadToken
         let current = filters
-        Task {
+        loadTask?.cancel()
+        loadTask = Task {
             do {
                 let result = try await AO3Client.shared.search(filters: current, page: page)
                 // Backed out to Browse (or a newer search started) while this was in
                 // flight — drop the result so it can't yank the user back to results.
+                // Cancellation is cooperative, so this token check still matters as a
+                // second line of defence when a cancel loses the race.
                 guard token == loadToken else { return }
                 results = result.works
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 phase = .loaded
+            } catch is CancellationError {
+                // Superseded on purpose — the newer load owns the UI now.
+                return
             } catch let error as AO3Error {
                 guard token == loadToken else { return }
                 phase = .failed(error.errorDescription ?? "Something went wrong.")
@@ -737,6 +748,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private func refreshCurrentResults() async {
         guard filters.isSearchable, phase != .idle else { return }
+        loadTask?.cancel()
         loadToken += 1
         let token = loadToken
         let current = filters
@@ -749,6 +761,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             currentPage = result.currentPage
             totalPages = result.totalPages
             phase = .loaded
+        } catch is CancellationError {
+            return
         } catch let error as AO3Error {
             guard token == loadToken else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")

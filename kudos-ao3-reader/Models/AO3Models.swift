@@ -110,6 +110,11 @@ nonisolated enum FilterTextMatching {
 
 nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     var query: String = ""
+    /// AO3's own `title` / `creators` fields. Distinct from `query`, which also
+    /// matches summaries and tags — searching an author through `query` returns
+    /// materially noisier results than the dedicated field does.
+    var title: String = ""
+    var creators: String = ""
     // Tag fields (comma-separated names).
     var fandom: String = ""
     var characters: String = ""
@@ -130,11 +135,21 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     var crossover: Crossover = .any
     var completion: Completion = .any
     var chapterCount: ChapterCount = .any
+    // AO3 parses the same range grammar for all five numeric fields.
     var wordsFrom: String = ""
     var wordsTo: String = ""
+    var hitsFrom: String = ""
+    var hitsTo: String = ""
+    var kudosFrom: String = ""
+    var kudosTo: String = ""
+    var commentsFrom: String = ""
+    var commentsTo: String = ""
+    var bookmarksFrom: String = ""
+    var bookmarksTo: String = ""
     var updated: Updated = .any
     var language: Language = .any
     var sort: Sort = .relevance
+    var sortDirection: SortDirection = .descending
 
     // `SavedSearch` persists this struct via Codable (SwiftData). Synthesized
     // `Decodable` requires every key to be present, so a plain new stored property
@@ -142,24 +157,33 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     // field existed — decode it leniently instead, defaulting to `.any` when absent.
     // (`Language`'s own Codable is customized separately, for the same reason.)
     private enum CodingKeys: CodingKey {
-        case query, fandom, characters, relationships, additionalTags, excludedFandoms,
-            excludedCharacters, excludedRelationships, excludedAdditionalTags,
+        case query, title, creators, fandom, characters, relationships, additionalTags,
+            excludedFandoms, excludedCharacters, excludedRelationships, excludedAdditionalTags,
             rating, ratingMatch, includeNotRated, warnings, excludedWarnings,
             categories, excludedCategories, crossover, completion, chapterCount,
-            wordsFrom, wordsTo, updated, language, sort
+            wordsFrom, wordsTo, hitsFrom, hitsTo, kudosFrom, kudosTo,
+            commentsFrom, commentsTo, bookmarksFrom, bookmarksTo,
+            updated, language, sort, sortDirection
     }
 
     init(
-        query: String = "", fandom: String = "", characters: String = "", relationships: String = "",
+        query: String = "", title: String = "", creators: String = "",
+        fandom: String = "", characters: String = "", relationships: String = "",
         additionalTags: String = "", excludedFandoms: String = "", excludedCharacters: String = "",
         excludedRelationships: String = "", excludedAdditionalTags: String = "", rating: Rating = .any,
         ratingMatch: RatingMatch = .exact, includeNotRated: Bool = true, warnings: Set<Warning> = [],
         excludedWarnings: Set<Warning> = [], categories: Set<Category> = [],
         excludedCategories: Set<Category> = [], crossover: Crossover = .any, completion: Completion = .any,
         chapterCount: ChapterCount = .any, wordsFrom: String = "", wordsTo: String = "",
-        updated: Updated = .any, language: Language = .any, sort: Sort = .relevance
+        hitsFrom: String = "", hitsTo: String = "", kudosFrom: String = "", kudosTo: String = "",
+        commentsFrom: String = "", commentsTo: String = "",
+        bookmarksFrom: String = "", bookmarksTo: String = "",
+        updated: Updated = .any, language: Language = .any, sort: Sort = .relevance,
+        sortDirection: SortDirection = .descending
     ) {
         self.query = query
+        self.title = title
+        self.creators = creators
         self.fandom = fandom
         self.characters = characters
         self.relationships = relationships
@@ -180,14 +204,25 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         self.chapterCount = chapterCount
         self.wordsFrom = wordsFrom
         self.wordsTo = wordsTo
+        self.hitsFrom = hitsFrom
+        self.hitsTo = hitsTo
+        self.kudosFrom = kudosFrom
+        self.kudosTo = kudosTo
+        self.commentsFrom = commentsFrom
+        self.commentsTo = commentsTo
+        self.bookmarksFrom = bookmarksFrom
+        self.bookmarksTo = bookmarksTo
         self.updated = updated
         self.language = language
         self.sort = sort
+        self.sortDirection = sortDirection
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         query = try container.decode(String.self, forKey: .query)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        creators = try container.decodeIfPresent(String.self, forKey: .creators) ?? ""
         fandom = try container.decode(String.self, forKey: .fandom)
         characters = try container.decode(String.self, forKey: .characters)
         relationships = try container.decode(String.self, forKey: .relationships)
@@ -208,15 +243,25 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         chapterCount = try container.decodeIfPresent(ChapterCount.self, forKey: .chapterCount) ?? .any
         wordsFrom = try container.decode(String.self, forKey: .wordsFrom)
         wordsTo = try container.decode(String.self, forKey: .wordsTo)
+        hitsFrom = try container.decodeIfPresent(String.self, forKey: .hitsFrom) ?? ""
+        hitsTo = try container.decodeIfPresent(String.self, forKey: .hitsTo) ?? ""
+        kudosFrom = try container.decodeIfPresent(String.self, forKey: .kudosFrom) ?? ""
+        kudosTo = try container.decodeIfPresent(String.self, forKey: .kudosTo) ?? ""
+        commentsFrom = try container.decodeIfPresent(String.self, forKey: .commentsFrom) ?? ""
+        commentsTo = try container.decodeIfPresent(String.self, forKey: .commentsTo) ?? ""
+        bookmarksFrom = try container.decodeIfPresent(String.self, forKey: .bookmarksFrom) ?? ""
+        bookmarksTo = try container.decodeIfPresent(String.self, forKey: .bookmarksTo) ?? ""
         updated = try container.decode(Updated.self, forKey: .updated)
         language = try container.decode(Language.self, forKey: .language)
         sort = try container.decode(Sort.self, forKey: .sort)
+        sortDirection = try container.decodeIfPresent(SortDirection.self, forKey: .sortDirection) ?? .descending
     }
 
     /// True when any filter beyond the plain query is set (drives the filter
     /// button's "active" icon and the Reset action).
     var hasActiveFilters: Bool {
-        !fandom.isBlank || !characters.isBlank || !relationships.isBlank
+        !title.isBlank || !creators.isBlank
+            || !fandom.isBlank || !characters.isBlank || !relationships.isBlank
             || !additionalTags.isBlank || !excludedFandoms.isBlank
             || !excludedCharacters.isBlank || !excludedRelationships.isBlank
             || !excludedAdditionalTags.isBlank
@@ -225,7 +270,12 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             || !categories.isEmpty || !excludedCategories.isEmpty
             || crossover != .any || completion != .any || chapterCount != .any
             || !wordsFrom.isBlank || !wordsTo.isBlank
-            || updated != .any || language != .any || sort != .relevance
+            || !hitsFrom.isBlank || !hitsTo.isBlank
+            || !kudosFrom.isBlank || !kudosTo.isBlank
+            || !commentsFrom.isBlank || !commentsTo.isBlank
+            || !bookmarksFrom.isBlank || !bookmarksTo.isBlank
+            || updated != .any || language != .any
+            || sort != .relevance || sortDirection != .descending
     }
 
     /// True when there's enough to run a search (free text or any filter).
@@ -239,7 +289,7 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         var clauses: [String] = []
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedQuery.isEmpty { clauses.append(trimmedQuery) }
-        clauses += excludedTags.map { "-\"\($0)\"" }
+        clauses += excludedTags.map { "-\(Self.quotedPhrase($0))" }
         clauses += Warning.allCases
             .filter(excludedWarnings.contains)
             .map { "-archive_warning_ids:\($0.ao3ID)" }
@@ -287,6 +337,32 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         }
         if includeNotRated { result.append(.notRated) }
         return result
+    }
+
+    /// A tag wrapped as a quoted phrase for AO3's query syntax, with the
+    /// characters that would otherwise terminate the phrase escaped. Tag names
+    /// containing a double quote are legal on AO3, and interpolating one raw
+    /// used to close the phrase early and inject stray tokens into the query.
+    /// Backslash first, so escaping it can't double-escape the quotes.
+    nonisolated static func quotedPhrase(_ text: String) -> String {
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    /// AO3's numeric range grammar, shared by `word_count`, `hits`,
+    /// `kudos_count`, `comments_count` and `bookmarks_count` — all five parse
+    /// identically server-side (otwarchive `SearchRange`). nil when unbounded.
+    nonisolated static func rangeExpression(from: String, to: String) -> String? {
+        let lower = from.trimmingCharacters(in: .whitespacesAndNewlines)
+        let upper = to.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch (lower.isEmpty, upper.isEmpty) {
+        case (false, false): return "\(lower)-\(upper)"
+        case (false, true): return "> \(lower)"
+        case (true, false): return "< \(upper)"
+        case (true, true): return nil
+        }
     }
 
     private nonisolated static func commaSeparatedValues(_ field: String) -> [String] {
@@ -584,7 +660,7 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     }
 
     nonisolated enum Sort: String, CaseIterable, Identifiable, Codable {
-        case relevance, dateUpdated, datePosted, words, kudos, hits, comments, bookmarks
+        case relevance, creator, workTitle, dateUpdated, datePosted, words, kudos, hits, comments, bookmarks
         var id: String {
             rawValue
         }
@@ -592,6 +668,8 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         var title: String {
             switch self {
             case .relevance: "Best Match"
+            case .creator: "Creator"
+            case .workTitle: "Title"
             case .dateUpdated: "Date Updated"
             case .datePosted: "Date Posted"
             case .words: "Word Count"
@@ -606,6 +684,8 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         var column: String? {
             switch self {
             case .relevance: nil
+            case .creator: "authors_to_sort_on"
+            case .workTitle: "title_to_sort_on"
             case .dateUpdated: "revised_at"
             case .datePosted: "created_at"
             case .words: "word_count"
@@ -613,6 +693,40 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             case .hits: "hits"
             case .comments: "comments_count"
             case .bookmarks: "bookmarks_count"
+            }
+        }
+
+        /// The direction a reader expects when they first pick this column.
+        /// Alphabetical sorts read forwards; counts and dates read biggest/newest
+        /// first. Only a starting point — `sortDirection` remains user-settable.
+        var naturalDirection: SortDirection {
+            switch self {
+            case .creator, .workTitle: .ascending
+            default: .descending
+            }
+        }
+    }
+
+    /// AO3's `sort_direction`. AO3 itself defaults to `desc` when the parameter
+    /// is absent (otwarchive `WorkQuery`), so `.descending` preserves the
+    /// behaviour this app had before the field was sent at all.
+    nonisolated enum SortDirection: String, CaseIterable, Identifiable, Codable {
+        case descending, ascending
+        var id: String {
+            rawValue
+        }
+
+        var title: String {
+            switch self {
+            case .descending: "Descending"
+            case .ascending: "Ascending"
+            }
+        }
+
+        var value: String {
+            switch self {
+            case .descending: "desc"
+            case .ascending: "asc"
             }
         }
     }

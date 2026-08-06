@@ -170,4 +170,28 @@ struct AO3ClientPolicyTests {
                 != AO3Client.authCoalescingKey(url: bookmarksURL, cookieHeader: cookieHeader)
         )
     }
+
+    @Test func anonymousSessionCachesInMemoryButNeverToDisk() {
+        // AO3 serves listing pages `Cache-Control: max-age=600, public`, so the
+        // cache earns its keep. It must stay memory-only: this app gates mature
+        // works behind an obscure/biometric setting, and an on-disk cache of
+        // fetched AO3 HTML would quietly write that content out in the clear.
+        let cache = AO3Client.makeAnonymousSessionConfiguration().urlCache
+        let resolved = try? #require(cache)
+        #expect(resolved?.diskCapacity == 0)
+        #expect((resolved?.memoryCapacity ?? 0) > 0)
+    }
+
+    @Test func anonymousSessionHonorsAO3sOwnCacheHeaders() {
+        // Not `.reloadIgnoringLocalCacheData`: the whole point is to respect the
+        // freshness window AO3 publishes rather than re-fetching regardless.
+        #expect(AO3Client.makeAnonymousSessionConfiguration().requestCachePolicy == .useProtocolCachePolicy)
+    }
+
+    @Test func aCancelledLoadIsNeverRetried() {
+        // URLSession reports a cancelled load as URLError.cancelled. It must not
+        // be in the transient set, or cancelling a search would spend two extra
+        // paced request slots retrying work nobody is waiting for.
+        #expect(AO3Client.retryDelay(for: URLError(.cancelled), attempt: 1) == nil)
+    }
 }

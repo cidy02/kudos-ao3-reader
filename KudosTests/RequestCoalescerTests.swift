@@ -56,4 +56,35 @@ struct RequestCoalescerTests {
 
         #expect(await counter.count == 2)   // sequential (non-overlapping) calls each run
     }
+
+    @Test func cancellingOneCallerLeavesTheOtherWaitersResultIntact() async throws {
+        // Cancellation is reference-counted. The shared work has to outlive any
+        // single caller, so cancelling it on the *first* caller's cancellation
+        // would let one screen going away break every other screen waiting on
+        // the same page — this pins the behaviour that prevents that.
+        let coalescer = RequestCoalescer<String, Int>()
+        let counter = Counter()
+
+        let survivor = Task {
+            try await coalescer.shared("page-1") {
+                await counter.increment()
+                try await Task.sleep(nanoseconds: 120_000_000)
+                return 42
+            }
+        }
+        // Let the survivor register as the first waiter and start the work.
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        let doomed = Task {
+            try await coalescer.shared("page-1") {
+                await counter.increment()
+                return -1
+            }
+        }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        doomed.cancel()
+
+        #expect(try await survivor.value == 42)
+        #expect(await counter.count == 1)
+    }
 }

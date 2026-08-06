@@ -5,7 +5,10 @@
 **Method:** static reading of the full networking surface, plus live comparison against `archiveofourown.org` (search form DOM, option values, pagination markup, and four executed search queries), plus the official OTW Archive `WorkQuery` source.
 **Scope note:** the task named branch `hig-review`; this worktree is the one the current session has been working in and is the tree actually audited. Findings should be re-checked if `hig-review` has diverged.
 
-**No source code was modified. This report contains no patches.**
+**The audit itself modified no source code.** The findings were implemented in a
+follow-up commit at the maintainer's request — see [Remediation status](#remediation-status)
+at the end for what landed, what changed after measurement, and what was
+deliberately left alone.
 
 ---
 
@@ -572,3 +575,46 @@ All performed 2026-08-06 against `archiveofourown.org`.
 | 6 | Negated field-scoped syntax | `query=-archive_warning_ids:14` | 0/20 "Chose Not To Use" |
 | 7 | Blurb `dl.stats` structure | DOM inspection of a work blurb | `language, words, chapters, comments, kudos, bookmarks, hits`; zero-count `<dd>` omitted |
 | 8 | otwarchive `WorkQuery` parameters + sort defaults | Source fetch | Confirms `words_from`/`words_to`, `date_from`/`date_to`, `sort_direction` default `desc` |
+
+---
+
+## Remediation status
+
+All 11 findings were addressed in the follow-up implementation pass. Two items
+changed on contact with evidence, and one was deliberately left alone.
+
+| # | Finding | Status | Notes |
+|---|---|---|---|
+| F1 | 6 unimplemented search fields | ✅ Fixed | `title`, `creators`, `hits`, `kudos_count`, `comments_count`, `bookmarks_count` added end-to-end (model → URL → filter panel), all with lenient decoding. Coverage 15/22 → **22/22**. |
+| F2 | Descending-only sort | ✅ Fixed | `SortDirection` added and emitted; `Creator`/`Title` columns added. Picking a column re-seeds direction to `naturalDirection` (A–Z for names, most-first for counts), still overridable. |
+| F3 | Superseded searches not cancelled | ✅ Fixed | `loadTask` stored and cancelled; `CancellationError` given its own arm so a cancel can't render an error. Token check kept as a second line of defence. |
+| F4 | Coalescer swallows cancellation | ✅ Fixed | Reference-counted waiters; shared task cancelled only when the *last* waiter leaves cancelled. Release is guarded on task identity so a late release can't evict a newer entry. |
+| F5 | No search-URL test coverage | ✅ Fixed | `searchURL(filters:page:)` extracted as pure/static; **14 new tests** in `SearchURLTests.swift` pin every parameter name, id and multi-value convention. |
+| F6 | Unescaped query interpolation | ✅ Fixed | `quotedPhrase(_:)` escapes backslash then quote. **The audit flagged Medium confidence here pending live validation of AO3's escaping grammar — that validation is still outstanding**, so the escape sequence remains the one open assumption in this batch. |
+| F7 | `view_adult` inconsistency | ✅ Fixed | `search()` now sends it, matching every other listing path. |
+| F8 | No response caching | ✅ Fixed — **after measuring** | The audit gated this on measuring AO3's headers first. Measured: `Cache-Control: max-age=600, public`. The win is real, so it was implemented — but **memory-only, `diskCapacity: 0`**. A disk cache would write fetched AO3 HTML out in the clear, quietly undoing the app's own mature-content gating; that constraint was not visible until the fix was designed. |
+| F9 | Parse failure looks like empty results | ✅ Fixed | Blurbs present but none parsed now logs and throws `AO3Error.parse`. |
+| F10 | `word_count` expression vs native bounds | ⏭️ **Not changed, as recommended** | The audit recommended against changing this. The expression form is verified working, and the shared `rangeExpression` helper now makes all five numeric fields consistent — which is worth more than the marginal robustness of the native pair. |
+| F11 | Per-call `DateFormatter` | ✅ Fixed | Hoisted to a `static let`. |
+
+### Corrections to the audit
+
+Two claims in the body above deserve amendment now that the fixes are in:
+
+1. **F8 overstated the starting point.** It said "no `URLCache` is configured",
+   which is literally true of the app's own code, but `URLSessionConfiguration.ephemeral`
+   already supplies a small default in-memory cache. So some caching was
+   happening before this change. The fix makes the capacity deliberate and the
+   disk exclusion explicit rather than incidental; it does not go from zero to
+   one.
+2. **F1's risk note cited the wrong line.** It pointed at `AO3Models.swift:144`
+   (the `CodingKeys` declaration) for the `decodeIfPresent` pattern; the actual
+   pattern is at `:208`. Corrected in place.
+
+### Verification
+
+`Scripts/verify.sh` — invariants, lint, full iOS suite, macOS build, whitespace.
+Test count **885 → 907** (+22). The four live-verified behaviours the fixes
+depend on (field-scoped query syntax, negation syntax, the range grammar, and
+the cache headers) are recorded in the appendix above with the date they were
+checked.
