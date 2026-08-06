@@ -321,8 +321,16 @@ GET /works/<id>?view_adult=true        → max-age=0, private, must-revalidate
 GET /works/<id>                        → max-age=600, public
 GET /series/<id>                       → max-age=600, public
 GET /users/<name>/works                → max-age=600, public
+GET /users/<name>/works?view_adult=true→ max-age=600, public   ← unaffected
 GET /tags/<tag>/works                  → no-cache, public      (never cacheable, either way)
+GET /tags/<tag>/works?view_adult=true  → no-cache, public      ← unaffected
 ```
+
+**The `view_adult` penalty does not generalize.** It applies to `/works/search`
+and `/works/<id>`, and *not* to `/users/<n>/works` or `/tags/<t>/works` — so
+`worksPage(at:)` can keep sending it for free, and only `searchURL` needed the
+change. This was measured after the fix landed, because the first version of
+that comment speculated the opposite.
 
 ---
 

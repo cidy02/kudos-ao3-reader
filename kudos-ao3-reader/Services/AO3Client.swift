@@ -784,12 +784,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// number, and keeps `view_adult=true` because the caller may hand us any AO3
     /// listing URL, including ones this app can't vouch for.
     ///
-    /// `search()` deliberately does *not* send it (see `searchURL`): on a listing
-    /// page it changes nothing and costs the response cache, since AO3 answers a
-    /// `view_adult` request `no-store`. The same is very likely true here, so
-    /// dropping it would probably be a free caching win for tag listings too —
-    /// but unlike `searchURL` this takes a URL from outside, so that needs its own
-    /// measurement first rather than an assumption.
+    /// `search()` deliberately does *not* send it (see `searchURL`), because on
+    /// `/works/search` it costs the response cache. **That does not generalize,
+    /// and it was measured here rather than assumed:** `/users/<n>/works` answers
+    /// `max-age=600, public` with *or* without `view_adult`, and `/tags/<t>/works`
+    /// answers `no-cache, public` either way. So the interaction is specific to
+    /// `/works/search` and `/works/<id>`; keeping it on this path is free.
     func worksPage(at url: URL, page: Int) async throws -> AO3SearchPage {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var items = (components?.queryItems ?? []).filter { $0.name != "page" && $0.name != "view_adult" }
