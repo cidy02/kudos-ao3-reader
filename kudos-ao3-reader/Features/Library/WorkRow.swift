@@ -33,15 +33,6 @@ struct WorkRow: View {
         externalExpanded ?? $internalExpanded
     }
 
-    /// Real content warnings only — AO3's "No Archive Warnings Apply" / "Creator
-    /// Chose Not To Use Archive Warnings" aren't warnings worth flagging.
-    private var warnings: [String] {
-        work.workWarnings.filter {
-            !$0.localizedCaseInsensitiveContains("No Archive Warnings")
-                && !$0.localizedCaseInsensitiveContains("Chose Not To Use")
-        }
-    }
-
     /// Worth an expand toggle only when there's more to reveal than the clamped view:
     /// a long summary or any categorized tags. Exposed statically so SensitiveWorkRow
     /// can decide whether to render an external expand button without building a row.
@@ -74,6 +65,10 @@ struct WorkRow: View {
                             .font(.caption)
                             .foregroundStyle(theme.appTheme.favoriteColor)
                     }
+                    WorkUpdatedDateBadge(
+                        dateUpdated: work.dateUpdated,
+                        datePublished: work.datePublished
+                    )
                     if isExpandable && showsExpandButton { expandButton }
                     if isSelecting {
                         WorkSelectionBubble(isSelected: isSelected)
@@ -118,17 +113,6 @@ struct WorkRow: View {
                     .animation(nil, value: expandedBinding.wrappedValue)
             }
 
-            if !warnings.isEmpty {
-                Label(warnings.joined(separator: ", "), systemImage: "exclamationmark.triangle")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-                    .lineLimit(expandedBinding.wrappedValue ? nil : 1)
-                    // Snap the reflow — see AO3WorkRow: guards against an
-                    // ancestor animation cross-fading two text layouts.
-                    .animation(nil, value: expandedBinding.wrappedValue)
-            }
-
             // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
             if expandedBinding.wrappedValue {
                 if work.hasCategorizedWorkTags {
@@ -147,11 +131,17 @@ struct WorkRow: View {
             // Stats wrap rather than truncate (matches AO3WorkRow).
             WorkListStatsRow(
                 rating: work.rating.isEmpty ? nil : work.rating,
-                wordCount: work.wordCount > 0 ? work.wordCount : nil,
-                chapters: work.chapters.isEmpty ? nil : work.chapters,
-                kudos: work.kudos > 0 ? work.kudos : nil,
-                datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
-                dateUpdated: work.dateUpdated.isEmpty ? nil : work.dateUpdated
+                categories: work.workCategories,
+                warnings: work.workWarnings,
+                completion: work.completionStatus,
+                language: work.language,
+                wordCount: work.wordCount,
+                chapters: work.chapters,
+                comments: work.comments,
+                kudos: work.kudos,
+                bookmarks: work.bookmarks,
+                hits: work.hits,
+                datePublished: work.datePublished.isEmpty ? nil : work.datePublished
             )
         }
         .padding(.vertical, 6)

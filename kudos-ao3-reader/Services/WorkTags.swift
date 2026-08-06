@@ -59,6 +59,7 @@ enum WorkTags {
             work.chapters = groups.chapters
             if let kudos = groups.kudos { work.kudos = kudos }
             if let comments = groups.comments { work.comments = comments }
+            if let bookmarks = groups.bookmarks { work.bookmarks = bookmarks }
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
             work.markModified()

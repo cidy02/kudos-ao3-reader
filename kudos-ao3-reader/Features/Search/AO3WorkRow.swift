@@ -54,6 +54,7 @@ struct AO3WorkRow: View {
                     )
                 }
                 Spacer(minLength: 0)
+                WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
                 if isExpandable { expandButton }
                 if isSelecting {
                     WorkSelectionBubble(isSelected: isSelected)
@@ -111,12 +112,19 @@ struct AO3WorkRow: View {
             // (long ratings like "Teen And Up Audiences" no longer clip the row).
             WorkListStatsRow(
                 rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.categories,
+                warnings: work.warnings,
+                completion: WorkCompletionStatus(isComplete: work.isComplete),
+                language: work.language,
                 wordCount: work.words,
-                chapters: work.chapters.isEmpty ? nil : work.chapters,
+                chapters: work.chapters,
+                comments: work.comments,
                 kudos: work.kudos,
+                bookmarks: work.bookmarks,
+                hits: work.hits
                 // AO3WorkSummary (the Search-result blurb model) only carries a single
                 // "revised_at" date, unlike SavedWork which tracks both — see WorkRow.
-                dateUpdated: work.dateUpdated.isEmpty ? nil : work.dateUpdated
+                // It shows in the card's top-right corner, not here.
             )
         }
         .padding(.vertical, 6)

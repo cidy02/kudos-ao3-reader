@@ -31,6 +31,9 @@ nonisolated struct AO3WorkSummary: Identifiable, Hashable, Sendable {
     var chapters: String
     var comments: Int?
     var kudos: Int?
+    /// Defaulted so the existing `AO3WorkSummary(...)` call sites that predate
+    /// this stat keep compiling — AO3 omits `dd.bookmarks` when the count is 0.
+    var bookmarks: Int?
     var hits: Int?
     /// Series info when the work is part of one (first series only, for v1).
     var seriesTitle: String?
@@ -705,6 +708,7 @@ nonisolated struct AO3WorkTagGroups {
     var chapters: String = ""
     var kudos: Int?
     var comments: Int?
+    var bookmarks: Int?
     var hits: Int?
 
     /// Whether the page yielded no *tags* — the signal for a locked/empty work
@@ -743,6 +747,7 @@ nonisolated struct AO3WorkMetadata {
     var chapters: String = ""
     var kudos: Int?
     var comments: Int?
+    var bookmarks: Int?
     var hits: Int?
     var datePublished: String = ""
     var dateUpdated: String = ""
@@ -768,6 +773,7 @@ nonisolated struct AO3WorkMetadata {
             chapters: chapters,
             kudos: kudos,
             comments: comments,
+            bookmarks: bookmarks,
             hits: hits
         )
     }
@@ -793,6 +799,7 @@ nonisolated struct AO3WorkMetadata {
             chapters: chapters,
             comments: comments,
             kudos: kudos,
+            bookmarks: bookmarks,
             hits: hits,
             seriesTitle: seriesTitle,
             seriesURL: seriesURL,

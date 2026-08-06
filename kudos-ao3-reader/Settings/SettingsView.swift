@@ -33,6 +33,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
+    @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage("hideMatureContent") private var hideMatureContent = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("requireBiometricToReveal") private var requireBiometric = false
@@ -271,10 +272,17 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 if includeAppSettings {
                     Section {
                         Toggle("Confirm before deleting", isOn: $confirmBeforeDelete)
+                        Toggle("Show zero counts", isOn: $showsZeroStats)
                     } header: {
                         Text("Library")
                     } footer: {
-                        Text("Ask before a swipe-to-delete removes a work from your Library.")
+                        Text(
+                            """
+                            Ask before a swipe-to-delete removes a work from your Library. \
+                            Show zero counts keeps every stat on a work card in place when \
+                            it is zero — turn it off to hide empty stats instead.
+                            """
+                        )
                     }
 
                     BackupSettingsSection(

@@ -650,6 +650,7 @@ enum ReadingQueueService {
         )
         if work.kudos == 0, let kudos = summary.kudos { work.kudos = kudos }
         if work.comments == 0, let comments = summary.comments { work.comments = comments }
+        if work.bookmarks == 0, let bookmarks = summary.bookmarks { work.bookmarks = bookmarks }
         if work.hits == 0, let hits = summary.hits { work.hits = hits }
         if work.wordCount == 0, let words = summary.words { work.wordCount = words }
         if work.chapters.isEmpty { work.chapters = summary.chapters }

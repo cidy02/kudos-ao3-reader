@@ -19,7 +19,7 @@ struct CoverCardStatsRow: View {
     /// shortened name.
     var ratingFull: String?
     var chapters: String?
-    var completion: (text: String, symbol: String)?
+    var completion: WorkCompletionStatus?
     var wordCount: Int?
 
     var body: some View {
@@ -28,7 +28,8 @@ struct CoverCardStatsRow: View {
                 WorkStatLabel(
                     text: ratingName,
                     symbol: "checkmark.shield",
-                    accessibilityLabel: ratingFull ?? ratingName
+                    accessibilityLabel: ratingFull ?? ratingName,
+                    iconColor: ratingFull.flatMap(WorkStat.ratingColor)
                 )
             }
             if let chapters {
@@ -39,7 +40,12 @@ struct CoverCardStatsRow: View {
                 )
             }
             if let completion {
-                WorkStatLabel(text: completion.text, symbol: completion.symbol)
+                WorkStatLabel(
+                    text: completion.text,
+                    symbol: completion.symbol,
+                    accessibilityLabel: "Status: \(completion.text)",
+                    iconColor: completion.color
+                )
             }
             if let wordCount {
                 WorkStatLabel(
@@ -163,7 +169,7 @@ struct WorkCoverCard: View {
             ratingName: WorkStat.ratingName(work.rating),
             ratingFull: work.rating.isEmpty ? nil : work.rating,
             chapters: work.chapters.isEmpty ? nil : work.chapters,
-            completion: completionStatus.map { ($0, work.isComplete ? "checkmark.seal" : "circle.dashed") },
+            completion: work.completionStatus,
             wordCount: work.wordCount > 0 ? work.wordCount : nil
         )
     }
@@ -181,17 +187,6 @@ struct WorkCoverCard: View {
         if let footer, !footer.hasSuffix("%") { return footer }
         guard let progressValue else { return "Progress" }
         return progressValue >= 1 ? "Finished" : "Reading"
-    }
-
-    private var completionStatus: String? {
-        // An AO3 work always has a known status. A converted import only has one when
-        // its source stated it, which the metadata page now carries through — so
-        // "Complete" is shown when we actually know, and nothing is shown when we do
-        // not, rather than defaulting a non-AO3 work to In Progress and being wrong about it.
-        if work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil {
-            return work.isComplete ? "Complete" : "In Progress"
-        }
-        return work.isComplete ? "Complete" : nil
     }
 
     /// ⓘ in the card's top-right corner: pushes Work Details.
@@ -339,9 +334,7 @@ struct AO3WorkCoverCard: View {
             ratingName: WorkStat.ratingName(work.rating),
             ratingFull: work.rating.isEmpty ? nil : work.rating,
             chapters: work.chapters.isEmpty ? nil : work.chapters,
-            completion: work.isComplete.map {
-                ($0 ? "Complete" : "In Progress", $0 ? "checkmark.seal" : "circle.dashed")
-            },
+            completion: WorkCompletionStatus(isComplete: work.isComplete),
             wordCount: work.words
         )
     }

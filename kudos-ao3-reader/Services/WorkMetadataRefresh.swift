@@ -137,6 +137,7 @@ enum WorkMetadataRefresh {
         if !metadata.chapters.isEmpty { work.chapters = metadata.chapters }
         if let kudos = metadata.kudos { work.kudos = kudos }
         if let comments = metadata.comments { work.comments = comments }
+        if let bookmarks = metadata.bookmarks { work.bookmarks = bookmarks }
         if let hits = metadata.hits { work.hits = hits }
         if !metadata.datePublished.isEmpty { work.datePublished = metadata.datePublished }
         if !metadata.dateUpdated.isEmpty { work.dateUpdated = metadata.dateUpdated }

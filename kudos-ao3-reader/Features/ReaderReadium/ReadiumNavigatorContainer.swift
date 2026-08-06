@@ -410,13 +410,45 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
             return result
         }
 
+        /// KVO tokens keeping `scrollIndicatorObservations` alive, one per distinct
+        /// scroll view already seen — without a retained token, observation stops
+        /// the moment it would go out of scope. Keyed so `install(on:)` (called
+        /// often) doesn't stack a second observer on a scroll view it already
+        /// found, and so a deallocated spread's scroll view's dead entry can be
+        /// dropped instead of growing unboundedly over a long reading session.
+        private var scrollIndicatorObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
+
         /// A2: the system scrollbar Readium suppresses (see `install(on:)`'s
         /// comment). Only the vertical indicator — horizontal stays off, since
         /// paged mode's horizontal scroll view is page-snapped, not a continuous
         /// scroll a horizontal bar would meaningfully represent.
+        ///
+        /// A plain re-apply here only fixes what's already suppressed *right now*;
+        /// it still depends on SwiftUI re-rendering this representable again
+        /// before the user notices a freshly created spread's bar is off. KVO on
+        /// `showsVerticalScrollIndicator` closes that gap for any scroll view
+        /// already found: if Readium (or anything else) flips it back to `false`
+        /// later, the observer flips it back to `true` immediately, no next
+        /// render needed. Setting it back to `true` from inside the observer
+        /// re-triggers the same observation with `newValue == true`, which the
+        /// `== false` guard below ignores — self-limiting, not an infinite loop.
+        /// What this still can't do: catch a *brand-new* scroll view the instant
+        /// it's added, since UIView has no public "subview added" notification —
+        /// only Readium's own (unowned, un-forkable-without-a-fork) container
+        /// could offer that. In practice `install(on:)` already runs on every
+        /// locator change, which fires promptly enough after a new spread loads.
         private func restoreNativeScrollIndicators(in root: UIView) {
             for scrollView in collectScrollViews(in: root) {
                 scrollView.showsVerticalScrollIndicator = true
+                let id = ObjectIdentifier(scrollView)
+                guard scrollIndicatorObservations[id] == nil else { continue }
+                scrollIndicatorObservations[id] = scrollView.observe(
+                    \.showsVerticalScrollIndicator, options: [.new]
+                ) { observedScrollView, change in
+                    if change.newValue == false {
+                        observedScrollView.showsVerticalScrollIndicator = true
+                    }
+                }
             }
         }
     }

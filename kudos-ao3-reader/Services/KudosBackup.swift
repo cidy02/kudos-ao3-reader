@@ -362,6 +362,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let chapters: String
     let kudos: Int
     let comments: Int
+    let bookmarks: Int
     let hits: Int
     let workWarnings: [String]
     let workCategories: [String]
@@ -417,6 +418,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         chapters = work.chapters
         kudos = work.kudos
         comments = work.comments
+        bookmarks = work.bookmarks
         hits = work.hits
         workWarnings = work.workWarnings
         workCategories = work.workCategories
@@ -476,6 +478,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case chapters
         case kudos
         case comments
+        case bookmarks
         case hits
         case workWarnings
         case workCategories
@@ -535,6 +538,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         chapters = try container.decodeIfPresent(String.self, forKey: .chapters) ?? ""
         kudos = try container.decodeIfPresent(Int.self, forKey: .kudos) ?? 0
         comments = try container.decodeIfPresent(Int.self, forKey: .comments) ?? 0
+        bookmarks = try container.decodeIfPresent(Int.self, forKey: .bookmarks) ?? 0
         hits = try container.decodeIfPresent(Int.self, forKey: .hits) ?? 0
         workWarnings = try container.decodeIfPresent([String].self, forKey: .workWarnings) ?? []
         workCategories = try container.decodeIfPresent([String].self, forKey: .workCategories) ?? []
@@ -1943,6 +1947,11 @@ enum KudosBackupService {
         )
         work.kudos = mergedPositive(current: work.kudos, incoming: archived.kudos, incomingWins: incomingWins)
         work.comments = mergedPositive(current: work.comments, incoming: archived.comments, incomingWins: incomingWins)
+        work.bookmarks = mergedPositive(
+            current: work.bookmarks,
+            incoming: archived.bookmarks,
+            incomingWins: incomingWins
+        )
         work.hits = mergedPositive(current: work.hits, incoming: archived.hits, incomingWins: incomingWins)
         if incomingWins || work.seriesPosition == 0 {
             work.seriesPosition = max(work.seriesPosition, archived.seriesPosition)
