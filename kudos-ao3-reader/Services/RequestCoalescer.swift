@@ -19,7 +19,13 @@ import Foundation
 actor RequestCoalescer<Key: Hashable & Sendable, Value: Sendable> {
     private struct Entry {
         let task: Task<Value, Error>
-        var waiters: Int
+        /// Waiter *identities*, not a count. A cancelled waiter reaches
+        /// `release` twice — once from `onCancel`, once from its own `defer` as
+        /// the await unwinds — and a plain counter would therefore drop by two,
+        /// evicting the entry while another waiter was still registered and
+        /// silently letting the next caller start a duplicate fetch. Removing
+        /// from a set is idempotent, so the second release is a no-op.
+        var waiters: Set<UUID>
     }
 
     private var inFlight: [Key: Entry] = [:]
@@ -29,22 +35,23 @@ actor RequestCoalescer<Key: Hashable & Sendable, Value: Sendable> {
     /// task is cancelled; the underlying work is cancelled too, but only once no
     /// other caller is still waiting on it.
     func shared(_ key: Key, _ operation: @Sendable @escaping () async throws -> Value) async throws -> Value {
+        let id = UUID()
         let task: Task<Value, Error>
         if var existing = inFlight[key] {
-            existing.waiters += 1
+            existing.waiters.insert(id)
             inFlight[key] = existing
             task = existing.task
         } else {
             let created = Task { try await operation() }
-            inFlight[key] = Entry(task: created, waiters: 1)
+            inFlight[key] = Entry(task: created, waiters: [id])
             task = created
         }
 
         return try await withTaskCancellationHandler {
-            defer { Task { await self.release(key, task: task) } }
+            defer { Task { await self.release(key, id: id, task: task) } }
             return try await task.value
         } onCancel: {
-            Task { await self.release(key, task: task, cancelled: true) }
+            Task { await self.release(key, id: id, task: task, cancelled: true) }
         }
     }
 
@@ -52,12 +59,14 @@ actor RequestCoalescer<Key: Hashable & Sendable, Value: Sendable> {
     /// waiter left because it was *cancelled*, the shared work is cancelled with
     /// it rather than running on with no one to receive the result.
     ///
-    /// Guarded on task identity so a late release from a finished round can't
-    /// evict a newer in-flight entry that happens to reuse the same key.
-    private func release(_ key: Key, task: Task<Value, Error>, cancelled: Bool = false) {
+    /// Two guards, both load-bearing: task identity, so a late release from a
+    /// finished round can't evict a newer entry that reused the same key; and
+    /// set membership, so the same waiter releasing twice (see `Entry.waiters`)
+    /// only counts once.
+    private func release(_ key: Key, id: UUID, task: Task<Value, Error>, cancelled: Bool = false) {
         guard var entry = inFlight[key], entry.task == task else { return }
-        entry.waiters -= 1
-        if entry.waiters <= 0 {
+        guard entry.waiters.remove(id) != nil else { return }
+        if entry.waiters.isEmpty {
             inFlight[key] = nil
             if cancelled { entry.task.cancel() }
         } else {

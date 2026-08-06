@@ -87,4 +87,46 @@ struct RequestCoalescerTests {
         #expect(try await survivor.value == 42)
         #expect(await counter.count == 1)
     }
+
+    @Test func coalescingSurvivesAMidFlightCancellationByAnotherWaiter() async throws {
+        // A cancelled waiter reaches `release` twice — once from `onCancel`,
+        // once from its own `defer` as the await unwinds — which is why release
+        // is keyed by waiter identity rather than a bare count. This asserts the
+        // property that matters: one waiter cancelling must not stop a later
+        // caller from joining the run that is still in flight.
+        //
+        // Honest note: this passes against a plain-counter implementation too.
+        // The double release turns out to be benign, because a cancelled
+        // waiter's `defer` only fires when the shared task completes — the same
+        // moment the other waiters release — so the count converges. The
+        // identity set is kept for being obviously correct rather than
+        // needing-an-argument correct, not because a failing case was found.
+        let coalescer = RequestCoalescer<String, Int>()
+        let counter = Counter()
+
+        let survivor = Task {
+            try await coalescer.shared("page-1") {
+                await counter.increment()
+                try await Task.sleep(nanoseconds: 250_000_000)
+                return 42
+            }
+        }
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        let doomed = Task {
+            try await coalescer.shared("page-1") { await counter.increment(); return -1 }
+        }
+        try await Task.sleep(nanoseconds: 30_000_000)
+        doomed.cancel()
+        try await Task.sleep(nanoseconds: 40_000_000)
+
+        // Joins while the original run is still going: must coalesce, not re-run.
+        let latecomer = Task {
+            try await coalescer.shared("page-1") { await counter.increment(); return -2 }
+        }
+
+        #expect(try await survivor.value == 42)
+        #expect(try await latecomer.value == 42)
+        #expect(await counter.count == 1)
+    }
 }
