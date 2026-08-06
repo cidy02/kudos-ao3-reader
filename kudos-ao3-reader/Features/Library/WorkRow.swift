@@ -115,6 +115,11 @@ struct WorkRow: View {
 
             // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
             if expandedBinding.wrappedValue {
+                // The stats row's badge only says how many warnings apply, so
+                // without this the names would be unreachable on a saved work.
+                // Sentinels are filtered out: a "No Archive Warnings Apply"
+                // chip next to a "No Warnings" badge just says it twice.
+                chipGroup("Archive Warnings", WorkStat.realWarnings(work.workWarnings), field: .warning)
                 if work.hasCategorizedWorkTags {
                     chipGroup("Relationships", work.workRelationships, field: .relationship)
                     chipGroup("Characters", work.workCharacters, field: .character)

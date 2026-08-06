@@ -410,13 +410,25 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
             return result
         }
 
-        /// KVO tokens keeping `scrollIndicatorObservations` alive, one per distinct
-        /// scroll view already seen — without a retained token, observation stops
-        /// the moment it would go out of scope. Keyed so `install(on:)` (called
-        /// often) doesn't stack a second observer on a scroll view it already
-        /// found, and so a deallocated spread's scroll view's dead entry can be
-        /// dropped instead of growing unboundedly over a long reading session.
-        private var scrollIndicatorObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
+        /// KVO tokens, one per distinct scroll view already seen — without a
+        /// retained token, observation stops the moment it would go out of
+        /// scope. Keyed by the scroll view so `install(on:)` (called often)
+        /// doesn't stack a second observer on one it already found.
+        ///
+        /// Weak keys, deliberately. Keying by `ObjectIdentifier` instead looks
+        /// equivalent and isn't: that value is the object's *address*, and
+        /// nothing would ever remove an entry whose scroll view had died. A
+        /// freshly created spread's scroll view landing on a recently-freed
+        /// address — routine, since malloc reuses same-size blocks — would then
+        /// match a dead entry and be skipped, leaving it with exactly the
+        /// suppressed scrollbar this code exists to undo. It would also grow
+        /// without bound over a long reading session. `NSMapTable` with weak
+        /// keys drops each entry when its scroll view deallocates, which fixes
+        /// both; `NSKeyValueObservation` holds its object weakly, so nothing
+        /// here keeps a dead spread alive. (Android solves the same problem the
+        /// same way — see `ReadiumNavigatorHost.hierarchyListenedGroups`.)
+        private let scrollIndicatorObservations =
+            NSMapTable<UIScrollView, NSKeyValueObservation>.weakToStrongObjects()
 
         /// A2: the system scrollbar Readium suppresses (see `install(on:)`'s
         /// comment). Only the vertical indicator — horizontal stays off, since
@@ -440,15 +452,15 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
         private func restoreNativeScrollIndicators(in root: UIView) {
             for scrollView in collectScrollViews(in: root) {
                 scrollView.showsVerticalScrollIndicator = true
-                let id = ObjectIdentifier(scrollView)
-                guard scrollIndicatorObservations[id] == nil else { continue }
-                scrollIndicatorObservations[id] = scrollView.observe(
+                guard scrollIndicatorObservations.object(forKey: scrollView) == nil else { continue }
+                let observation = scrollView.observe(
                     \.showsVerticalScrollIndicator, options: [.new]
                 ) { observedScrollView, change in
                     if change.newValue == false {
                         observedScrollView.showsVerticalScrollIndicator = true
                     }
                 }
+                scrollIndicatorObservations.setObject(observation, forKey: scrollView)
             }
         }
     }

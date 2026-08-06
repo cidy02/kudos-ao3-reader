@@ -98,7 +98,9 @@ struct AO3WorkRow: View {
 
             // Categorized tags appear when expanded — they can be numerous on AO3.
             if expanded {
-                chipGroup("Archive Warnings", work.warnings, field: .warning)
+                // Sentinels filtered: a "No Archive Warnings Apply" chip next to
+                // the stats row's "No Warnings" badge just says it twice.
+                chipGroup("Archive Warnings", WorkStat.realWarnings(work.warnings), field: .warning)
                 chipGroup("Relationships", work.relationships, field: .relationship)
                 chipGroup("Characters", work.characters, field: .character)
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
