@@ -1201,7 +1201,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// the `/works/<id>` title link. Series and external-work bookmarks have no such
     /// link and are skipped — only bookmarked works are surfaced.
     static func parseBookmarksPage(_ html: String, page: Int) throws -> AO3SearchPage {
-        try parseWorksList(html, page: page, blurbSelector: "li.bookmark.blurb")
+        // `requireParseableBlurbs: false` — see `parseWorksList`. A bookmarks page
+        // holding only series/external/deleted bookmarks parses zero works and is
+        // still a perfectly ordinary page, so the parser-health check that search
+        // gets cannot be applied here.
+        try parseWorksList(html, page: page, blurbSelector: "li.bookmark.blurb", requireParseableBlurbs: false)
     }
 
     /// Parses a user's AO3 subscriptions page. Unlike search/readings, it's a
@@ -1235,8 +1239,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
     }
 
+    /// `requireParseableBlurbs` is the caller's assertion that every blurb its
+    /// selector matches *is* a work. True for `li.work.blurb`, where AO3 always
+    /// emits `id="work_<n>"`. **False for `li.bookmark.blurb`**: otwarchive's
+    /// `bookmarks/_bookmark_item_module` branches four ways, so the same selector
+    /// also matches bookmarks of series, external works and deleted items, none
+    /// of which name a work. A user whose bookmarks page happens to hold only
+    /// those parses zero works and is not broken — checked against live AO3,
+    /// which will happily serve 20 such blurbs on one page.
     private static func parseWorksList(
-        _ html: String, page: Int, blurbSelector: String
+        _ html: String, page: Int, blurbSelector: String, requireParseableBlurbs: Bool = true
     ) throws -> AO3SearchPage {
         let doc = try SwiftSoup.parse(html)
         let blurbs = try doc.select(blurbSelector).array()
@@ -1246,7 +1258,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // parser, never a legitimately empty page — an empty page has no blurb
         // elements at all. Surfacing it stops an AO3 markup change from
         // degrading into a silent "no results" the user can't act on.
-        if !blurbs.isEmpty, works.isEmpty {
+        if requireParseableBlurbs, !blurbs.isEmpty, works.isEmpty {
             Log.network.error(
                 "Parsed 0 of \(blurbs.count, privacy: .public) '\(blurbSelector, privacy: .public)' blurbs — markup changed?"
             )

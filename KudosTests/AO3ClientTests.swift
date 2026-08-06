@@ -101,9 +101,9 @@ struct AO3ClientTests {
 
     @Test func blurbsPresentButNoneParseableThrowsInsteadOfLookingEmpty() throws {
         // Blurb elements present but not one parsed can only mean the parser
-        // broke — a genuinely empty page has no blurb elements at all. Without
-        // this, an AO3 markup change would surface as "no results", which reads
-        // as a normal outcome and hides the breakage.
+        // broke — a genuinely empty *search* page has no blurb elements at all.
+        // Without this, an AO3 markup change would surface as "no results",
+        // which reads as a normal outcome and hides the breakage.
         let html = """
         <html><body>
           <li class="work blurb"><p>markup AO3 no longer uses</p></li>
@@ -113,6 +113,38 @@ struct AO3ClientTests {
         #expect(throws: AO3Error.self) {
             try AO3Client.parseSearchPage(html, page: 1)
         }
+    }
+
+    @Test func aBookmarksPageOfOnlySeriesIsEmptyRatherThanAParseError() throws {
+        // Regression guard. AO3 renders bookmarks of series, external works and
+        // deleted items in the same `li.bookmark.blurb` as bookmarked works
+        // (otwarchive's bookmarks/_bookmark_item_module branches four ways), so a
+        // page holding only those parses zero works and is still an ordinary
+        // page — live AO3 will serve 20 such blurbs at once. Applying search's
+        // "nothing parsed ⇒ parser broke" rule here turned that into a hard
+        // error that also stopped pagination.
+        let html = """
+        <html><body>
+        <ol class="bookmark index group">
+          <li id="bookmark_1" class="bookmark blurb group">
+            <div class="header module">
+              <h4 class="heading"><a href="/series/55">A Series</a> by <a rel="author" href="/users/dave">dave</a></h4>
+            </div>
+          </li>
+          <li id="bookmark_2" class="bookmark blurb group">
+            <div class="header module">
+              <h4 class="heading"><a href="/external_works/9">An External Work</a></h4>
+            </div>
+          </li>
+          <li id="bookmark_3" class="bookmark blurb group">
+            <p class="message">Deleted work</p>
+          </li>
+        </ol>
+        </body></html>
+        """
+        let page = try AO3Client.parseBookmarksPage(html, page: 1)
+        #expect(page.works.isEmpty)
+        #expect(page.totalPages == 1)
     }
 
     // MARK: Marked for Later (reading list)
