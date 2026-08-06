@@ -628,6 +628,17 @@ final class AO3AuthService {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
+        // Never serve an authenticated page from (or into) the shared response
+        // cache. `AO3Client` runs one `URLSession` for anonymous and
+        // authenticated traffic alike, and `URLCache` keys on URL + method only —
+        // it cannot see the Cookie header, so nothing else stops one account's
+        // page being handed to another, or to a signed-out read. AO3 marks most
+        // personalized pages `private, max-age=0`, but not all: `/users/<n>/bookmarks`
+        // measures `max-age=600, public`, and that is a URL this app fetches
+        // authenticated. Opt out here rather than depend on AO3's headers for an
+        // invariant that is ours. (`authCoalescingKey` keys the layer above by
+        // URL *and* cookie for exactly the same reason.)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue(
             Self.mergedCookieHeader(auth: cookieHeader, for: url),
             forHTTPHeaderField: "Cookie"

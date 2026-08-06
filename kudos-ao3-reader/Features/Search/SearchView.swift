@@ -748,27 +748,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private func refreshCurrentResults() async {
         guard filters.isSearchable, phase != .idle else { return }
-        loadTask?.cancel()
-        loadToken += 1
-        let token = loadToken
-        let current = filters
-        let page = currentPage
+        // AO3 serves search results `max-age=600, public`, so without this the
+        // pull would re-render the cached page and visibly do nothing.
+        await AO3Client.shared.invalidateCachedResponses()
         if results.isEmpty { phase = .loading }
-        do {
-            let result = try await AO3Client.shared.search(filters: current, page: page)
-            guard token == loadToken else { return }
-            results = result.works
-            currentPage = result.currentPage
-            totalPages = result.totalPages
-            phase = .loaded
-        } catch is CancellationError {
-            return
-        } catch let error as AO3Error {
-            guard token == loadToken else { return }
-            phase = .failed(error.errorDescription ?? "Something went wrong.")
-        } catch {
-            guard token == loadToken else { return }
-            phase = .failed(error.localizedDescription)
-        }
+        // Reuses `load(page:)` rather than repeating it: that keeps the refresh in
+        // the *same* `loadTask` slot, so tapping a page mid-refresh cancels the
+        // refresh instead of leaving it to finish and spend a paced request slot
+        // ahead of the page the user is actually waiting for. Awaiting the task
+        // holds the pull-to-refresh spinner until the load it started is done.
+        load(page: currentPage)
+        await loadTask?.value
     }
 }

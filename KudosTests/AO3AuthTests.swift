@@ -310,6 +310,12 @@ struct AO3AuthServiceTests {
         let url = try #require(URL(string: "https://archiveofourown.org/users/reader/bookmarks"))
         let request = try service.authenticatedRequest(for: url)
         #expect(request.value(forHTTPHeaderField: "Cookie")?.contains("_otwarchive_session=") == true)
+        // Never from (or into) the shared response cache: `AO3Client` runs one
+        // URLSession for anonymous and authenticated traffic, and `URLCache` keys
+        // on URL + method only — it cannot see the Cookie header, so nothing else
+        // stops one account's page being served to another. AO3's own headers are
+        // not a sufficient guard: this very URL measures `max-age=600, public`.
+        #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
 
         let insecureURL = try #require(URL(string: "http://archiveofourown.org/users/reader"))
         #expect(throws: AO3AuthenticatedRequestError.self) {

@@ -18,12 +18,24 @@ struct SearchURLTests {
         }
     }
 
-    @Test func defaultFiltersSendOnlyPagingAndAdultGate() throws {
+    @Test func defaultFiltersSendOnlyPaging() throws {
         let values = try params(AO3SearchFilters())
         #expect(values["page"] == ["1"])
-        #expect(values["view_adult"] == ["true"])
         // Nothing else: an untouched filter must not narrow the search.
         #expect(values.keys.filter { $0.hasPrefix("work_search") }.isEmpty)
+    }
+
+    @Test func searchNeverSendsViewAdult() throws {
+        // `view_adult` is a work-page parameter — it clears AO3's adult-content
+        // interstitial, which listing pages don't have. Measured: an identical
+        // search with and without it returns the same works, Explicit included.
+        // Sending it is not free, though: it flips AO3's response from
+        // `max-age=600, public` to `no-store`, so the response cache in
+        // `makeAnonymousSessionConfiguration` can never fire on a search.
+        var filters = AO3SearchFilters()
+        filters.rating = .explicit
+        #expect(try params(filters)["view_adult"] == nil)
+        #expect(try params(AO3SearchFilters(), page: 3)["view_adult"] == nil)
     }
 
     @Test func searchURLPointsAtAO3sWorksSearchEndpoint() throws {
@@ -164,6 +176,71 @@ struct SearchURLTests {
         let values = try params(filters)
         #expect(values["work_search[language_id]"] == ["en"])
         #expect(values["work_search[revised_at]"] == ["< 1 week ago"])
+    }
+
+    /// Every AO3 facet id, not just the handful the behavioural tests happen to
+    /// exercise. Before this, 10 of the 17 were asserted nowhere — changing
+    /// `Category.multi` from `2246` to a typo left the whole suite green, and
+    /// because these raw values are also what `SavedSearch` persists, the error
+    /// would have been written into every saved search using that facet.
+    ///
+    /// Verified against the live `/works/search` form on 2026-08-06.
+    @Test func everyFacetIDMatchesAO3sOwnForm() {
+        #expect(AO3SearchFilters.Rating.allCases.map(\.ao3ID) == [
+            nil,    // .any — no rating filter
+            "10",   // General Audiences
+            "11",   // Teen And Up Audiences
+            "12",   // Mature
+            "13",   // Explicit
+            "9"     // Not Rated
+        ])
+        #expect(AO3SearchFilters.Warning.allCases.map(\.ao3ID) == [
+            "16",   // No Archive Warnings Apply
+            "14",   // Creator Chose Not To Use Archive Warnings
+            "17",   // Graphic Depictions Of Violence
+            "18",   // Major Character Death
+            "19",   // Rape/Non-Con
+            "20"    // Underage Sex
+        ])
+        #expect(AO3SearchFilters.Category.allCases.map(\.ao3ID) == [
+            "116",  // F/F
+            "22",   // F/M
+            "21",   // Gen
+            "23",   // M/M
+            "2246", // Multi
+            "24"    // Other
+        ])
+    }
+
+    @Test func equalFilterSetsAlwaysProduceTheSameURL() throws {
+        // `Set` iteration order isn't stable across equal sets, so emitting
+        // warnings/categories in iteration order made the URL depend on how the
+        // filter was built. Both `RequestCoalescer` and the response cache key on
+        // the URL, so that silently cost de-duplication and cache hits.
+        var viaLiteral = AO3SearchFilters()
+        viaLiteral.warnings = [.violence, .death, .nonCon]
+        viaLiteral.categories = [.mm, .gen, .multi]
+
+        var viaInsertion = AO3SearchFilters()
+        for warning in [AO3SearchFilters.Warning.nonCon, .death, .violence] {
+            viaInsertion.warnings.insert(warning)
+        }
+        for category in [AO3SearchFilters.Category.multi, .gen, .mm] {
+            viaInsertion.categories.insert(category)
+        }
+
+        var viaRemoval = AO3SearchFilters()
+        viaRemoval.warnings = Set(AO3SearchFilters.Warning.allCases)
+        viaRemoval.warnings.subtract([.noWarnings, .chooseNotTo, .underage])
+        viaRemoval.categories = Set(AO3SearchFilters.Category.allCases)
+        viaRemoval.categories.subtract([.ff, .fm, .other])
+
+        #expect(viaLiteral == viaInsertion)
+        #expect(viaLiteral == viaRemoval)
+        let urls = try [viaLiteral, viaInsertion, viaRemoval].map {
+            try #require(AO3Client.searchURL(filters: $0, page: 1)).absoluteString
+        }
+        #expect(Set(urls).count == 1)
     }
 
     @Test func blankFieldsAreOmittedRatherThanSentEmpty() throws {

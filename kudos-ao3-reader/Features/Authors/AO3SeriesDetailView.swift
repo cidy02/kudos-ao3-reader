@@ -71,7 +71,12 @@ struct AO3SeriesDetailView: View {
                     }
                 }
             }
-            .refreshable { await load(page: 1, replace: true, bypassCache: true) }
+            .refreshable {
+                // bypassCache clears the app-level AO3AuthorPageCache; this clears the
+                // HTTP one underneath it, which would otherwise serve the same page back.
+                await AO3Client.shared.invalidateCachedResponses()
+                await load(page: 1, replace: true, bypassCache: true)
+            }
             .task(id: authenticationScope) {
                 loadTask?.cancel()
                 loadTask = nil

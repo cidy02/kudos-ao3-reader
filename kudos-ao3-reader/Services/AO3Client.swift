@@ -63,15 +63,41 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // otherwise costs a full `pace()` slot. `RequestCoalescer` only helps
         // callers that overlap in time; this is what helps sequential repeats.
         //
+        // Assigning a cache is what switches caching *on*. `.ephemeral` reports a
+        // 512 KB `urlCache` of its own, but it is inert — measured, a repeat GET
+        // through a stock ephemeral session is a full network load and
+        // `currentMemoryUsage` stays 0. So this is 0 → 8 MB, not 512 KB → 8 MB.
+        //
+        // Two rules follow from switching it on, both enforced elsewhere because
+        // `URLCache` keys on the URL alone and knows nothing about either:
+        //   - Authenticated requests opt out (`AO3AuthService.authenticatedRequest`)
+        //     — the cache is not partitioned by identity, and one account must
+        //     never be served another's page.
+        //   - Pull-to-refresh drops the cache first (`invalidateCachedResponses`)
+        //     — otherwise the gesture returns the same bytes for ten minutes.
+        //
         // **Memory only, no disk directory.** This app deliberately keeps mature
         // works behind an obscure/biometric gate, so writing fetched AO3 HTML to
-        // an unencrypted on-disk cache would quietly undo that; and the session
-        // is `.ephemeral` precisely so nothing outlives the process. A 10-minute
-        // freshness window is short enough that memory is where the hits are
-        // anyway.
+        // an unencrypted on-disk cache would quietly undo that. `.ephemeral` does
+        // *not* save us here — measured, it honours an explicitly-assigned disk
+        // cache and wrote 168 KB of AO3 HTML to disk on a single page fetch — so
+        // `diskCapacity: 0` is load-bearing, not belt-and-braces.
         config.urlCache = URLCache(memoryCapacity: 8 * 1024 * 1024, diskCapacity: 0, diskPath: nil)
         config.requestCachePolicy = .useProtocolCachePolicy
         return config
+    }
+
+    /// Drops every cached AO3 response. Call this when the user explicitly asks
+    /// for fresh data — pull-to-refresh — because the session honours AO3's
+    /// `max-age=600`, so without it the gesture would re-render the same bytes
+    /// for ten minutes and visibly do nothing.
+    ///
+    /// Deliberately all-or-nothing rather than per-URL: the caller is a view that
+    /// knows it wants fresh data, not which URLs its loader is about to build,
+    /// and the cache is 8 MB of memory-only HTML with a ten-minute life — so
+    /// throwing it away on an explicit user gesture costs nothing worth keeping.
+    func invalidateCachedResponses() {
+        session.configuration.urlCache?.removeAllCachedResponses()
     }
 
     /// Cloudflare's own bot-management cookies currently held for `url`, joined
@@ -329,11 +355,17 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         add("work_search[freeform_names]", filters.additionalTags)
 
         add("work_search[rating_ids]", filters.structuredRatingID)
-        for warning in filters.warnings {
-            items.append(URLQueryItem(name: "work_search[archive_warning_ids][]", value: warning.ao3ID))
+        // Sorted, not just iterated. `Set` iteration order isn't stable across
+        // equal sets — two filter sets holding the same warnings emit their query
+        // items in different orders depending on how each was built — and both
+        // `RequestCoalescer` and the response cache key on the whole URL. AO3
+        // doesn't care about the order; those two do, so an unsorted emission
+        // silently loses de-duplication and cache hits.
+        for warning in filters.warnings.map(\.ao3ID).sorted() {
+            items.append(URLQueryItem(name: "work_search[archive_warning_ids][]", value: warning))
         }
-        for category in filters.categories {
-            items.append(URLQueryItem(name: "work_search[category_ids][]", value: category.ao3ID))
+        for category in filters.categories.map(\.ao3ID).sorted() {
+            items.append(URLQueryItem(name: "work_search[category_ids][]", value: category))
         }
         add("work_search[crossover]", filters.crossover.value)
         add("work_search[complete]", filters.completion.value)
@@ -354,17 +386,26 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         add("work_search[revised_at]", filters.updated.value)
         add("work_search[language_id]", filters.language.code)
         add("work_search[sort_column]", filters.sort.column)
-        // Only sent alongside an explicit column: on AO3's default relevance sort
-        // a direction is meaningless, and sending one would pin `_score` ascending
-        // (worst match first) for anyone who had picked ascending earlier.
+        // Only sent alongside an explicit column. Not because a direction is
+        // meaningless on relevance — AO3 honours it, and applies it to the `id`
+        // tiebreaker too (otwarchive `WorkQuery.sort`) — but precisely *because*
+        // it works: `sort_direction=asc` with no column reorders the whole result
+        // set worst-match-first. Measured, it turns the top hit from work
+        // 89979316 into 7499. Nobody who last picked "ascending" on a Title sort
+        // means that when they go back to Best Match.
         if filters.sort.column != nil {
             add("work_search[sort_direction]", filters.sortDirection.value)
         }
 
-        // Matches every other listing path (`worksPage(at:)`, work/chapter fetches):
-        // clears AO3's adult-content interstitial rather than relying on search
-        // listings happening not to gate on it.
-        items.append(URLQueryItem(name: "view_adult", value: "true"))
+        // Deliberately *no* `view_adult`. It is a work-page parameter: it clears
+        // AO3's adult-content interstitial, and listing pages don't have one —
+        // measured, an identical search with and without it returns the same 20
+        // works in the same order, Explicit ones included. Sending it is not
+        // merely redundant, it is costly: AO3 answers `/works/search` with
+        // `Cache-Control: max-age=600, public`, but adding `view_adult=true`
+        // flips that to `private, max-age=0, no-store, no-cache, must-revalidate`
+        // and the response cache in `makeAnonymousSessionConfiguration` can never
+        // fire. (Both measured 2026-08-06 — see docs/reports/ao3-networking-review.md.)
         items.append(URLQueryItem(name: "page", value: String(page)))
         components.queryItems = items
 
@@ -740,7 +781,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Loads an arbitrary AO3 works listing URL (e.g. a tag's `/tags/<name>/works`
     /// page, tapped in a work's preface) and parses its work blurbs. Adds the page
-    /// number + `view_adult=true` so paging and adult works resolve like search.
+    /// number, and keeps `view_adult=true` because the caller may hand us any AO3
+    /// listing URL, including ones this app can't vouch for.
+    ///
+    /// `search()` deliberately does *not* send it (see `searchURL`): on a listing
+    /// page it changes nothing and costs the response cache, since AO3 answers a
+    /// `view_adult` request `no-store`. The same is very likely true here, so
+    /// dropping it would probably be a free caching win for tag listings too —
+    /// but unlike `searchURL` this takes a URL from outside, so that needs its own
+    /// measurement first rather than an assumption.
     func worksPage(at url: URL, page: Int) async throws -> AO3SearchPage {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var items = (components?.queryItems ?? []).filter { $0.name != "page" && $0.name != "view_adult" }
