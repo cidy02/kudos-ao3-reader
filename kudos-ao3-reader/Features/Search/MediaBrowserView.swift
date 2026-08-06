@@ -100,7 +100,12 @@ struct MediaBrowserView: View {
                 .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
         }
         .cardList()
-        .refreshable { await refresh() }
+        // `/media` is `max-age=600, public`, so without the invalidation the
+        // gesture re-renders the same bytes for ten minutes.
+        .refreshable {
+            await AO3Client.shared.invalidateCachedResponses()
+            await refresh()
+        }
     }
 
     /// Instructional caption shown under the category list.

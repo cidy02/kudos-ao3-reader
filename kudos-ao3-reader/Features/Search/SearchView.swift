@@ -241,6 +241,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // spacing, over the themed backdrop (replaces the grouped style).
                 .cardList()
                 .refreshable { await refreshCurrentResults() }
+                // The other half of the cancellation story: `TabView` keeps this
+                // tab's hierarchy — and its `.refreshable` task — alive when the
+                // user switches away, so SwiftUI never cancels it and the handler
+                // in `refreshCurrentResults` never fires. Search is a tab root, so
+                // this is the likeliest way a refresh gets abandoned.
+                .cancelRefreshOnTabChange($loadTask)
                 .overlay { statusOverlay }
                 .onChange(of: currentPage) { _, _ in
                     withAnimation {
@@ -758,6 +764,21 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // ahead of the page the user is actually waiting for. Awaiting the task
         // holds the pull-to-refresh spinner until the load it started is done.
         load(page: currentPage)
-        await loadTask?.value
+        // `loadTask` is unstructured, so awaiting it plainly would drop the
+        // cancellation edge this function used to get for free when it awaited the
+        // AO3 request directly: SwiftUI cancels the `.refreshable` task when the
+        // gesture is abandoned, and without this that cancellation stops reaching
+        // the request — leaving the refresh to run to completion and spend a
+        // `pace()` slot ahead of whatever the user is actually waiting for. This
+        // restores that edge without giving up the shared-slot behaviour above; the
+        // two are not exclusive, and the task body already treats `CancellationError`
+        // as a clean return. Bound to a local because `onCancel` runs off the main
+        // actor — `Task` is `Sendable`, the view is not.
+        let task = loadTask
+        await withTaskCancellationHandler {
+            await task?.value
+        } onCancel: {
+            task?.cancel()
+        }
     }
 }

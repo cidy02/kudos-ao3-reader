@@ -809,6 +809,16 @@ final class CommentsModel {
             if phase != .loaded { phase = .loaded }
             return cached
         }
+        if forceRefresh {
+            // Skipping `cache` above is not enough. Signed out,
+            // `authenticatedRequest` returns nil and the fetch goes through the
+            // anonymous session, whose `URLCache` honours the
+            // `max-age=600, public` AO3 serves on the comments page. Unconditional
+            // rather than gated on `auth.isLoggedIn`: on the authenticated path it
+            // is a no-op the request policy already covers, and one line beats a
+            // branch that has to stay in step with `authenticatedRequest`.
+            await AO3Client.shared.invalidateCachedResponses()
+        }
 
         phase = page == nil ? .loading : phase
         do {

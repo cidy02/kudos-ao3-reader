@@ -188,6 +188,30 @@ struct AO3ClientPolicyTests {
         #expect(AO3Client.makeAnonymousSessionConfiguration().requestCachePolicy == .useProtocolCachePolicy)
     }
 
+    @Test func invalidatingDropsWhatTheClientHasActuallyCached() async throws {
+        // Pull-to-refresh on every anonymous surface rests on this one call, and
+        // until this test existed the body could be deleted outright with all 917
+        // tests still green. It asserts against the *live* client's cache, not a
+        // fresh configuration, because the failure mode worth catching is
+        // `URLSession.configuration` handing back a copy whose `urlCache` is a
+        // different object — which would make the call clear a cache nothing reads.
+        let cache = try #require(AO3Client.shared.responseCache)
+        let url = try #require(URL(string: "https://archiveofourown.org/works/search?page=1"))
+        let request = URLRequest(url: url)
+        let response = try #require(HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Cache-Control": "max-age=600, public"]
+        ))
+        cache.storeCachedResponse(
+            CachedURLResponse(response: response, data: Data("<html></html>".utf8)),
+            for: request
+        )
+        #expect(cache.cachedResponse(for: request) != nil)
+
+        await AO3Client.shared.invalidateCachedResponses()
+        #expect(cache.cachedResponse(for: request) == nil)
+    }
+
     @Test func aCancelledLoadIsNeverRetried() {
         // URLSession reports a cancelled load as URLError.cancelled. It must not
         // be in the transient set, or cancelling a search would spend two extra

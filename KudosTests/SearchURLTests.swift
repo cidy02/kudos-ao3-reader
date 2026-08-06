@@ -120,14 +120,26 @@ struct SearchURLTests {
     }
 
     @Test func absoluteDateBoundsUseAO3sISOFormat() throws {
+        // The contract is "the calendar day the user picked", so the input is built
+        // in the *user's* calendar — the one `DatePicker` presented — not in UTC.
+        // Building it in UTC and asserting UTC output is a tautology that passes
+        // whatever zone the formatter is pinned to, which is how a real off-by-one
+        // day shipped.
+        //
+        // The two times of day are load-bearing, not decoration. `DatePicker(.date)`
+        // preserves the bound's time-of-day, so a UTC-pinned formatter is only wrong
+        // at hours that cross the UTC boundary — and which side it falls on depends
+        // on the sign of the offset. 00:30 catches every UTC+ zone (it formats as the
+        // previous day) and 23:30 catches every UTC− zone (the next day), so together
+        // they fail on any machine whose zone is not UTC itself.
+        let calendar = Calendar.current
         var filters = AO3SearchFilters()
-        var components = DateComponents()
-        components.year = 2024; components.month = 1; components.day = 31
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
-        filters.dateFrom = try #require(calendar.date(from: components))
-        components.year = 2025; components.month = 12; components.day = 25
-        filters.dateTo = try #require(calendar.date(from: components))
+        filters.dateFrom = try #require(calendar.date(
+            from: DateComponents(year: 2024, month: 1, day: 31, hour: 0, minute: 30)
+        ))
+        filters.dateTo = try #require(calendar.date(
+            from: DateComponents(year: 2025, month: 12, day: 25, hour: 23, minute: 30)
+        ))
 
         let values = try params(filters)
         #expect(values["work_search[date_from]"] == ["2024-01-31"])

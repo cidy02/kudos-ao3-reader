@@ -49,7 +49,16 @@ struct FandomListView: View {
                 }
                 // Card-based list, matching the Media Browser it's pushed from.
                 .cardList()
-                .refreshable { await refresh() }
+                // Here rather than inside `refresh()`, which `load()` also calls:
+                // the initial load has nothing to invalidate and would only evict
+                // other screens' entries. `/media/<x>/fandoms` is
+                // `max-age=600, public`; it escapes the cache today only because
+                // the index is megabytes and overflows `URLCache`'s per-entry
+                // ceiling, which is a fact about AO3's page size, not about us.
+                .refreshable {
+                    await AO3Client.shared.invalidateCachedResponses()
+                    await refresh()
+                }
                 .searchable(text: $query, prompt: "Filter \(category.name)")
                 .task(id: query) { await applyFilter() }
             }

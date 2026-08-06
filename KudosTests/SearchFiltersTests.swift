@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -17,8 +18,10 @@ struct SearchFiltersTests {
         #expect(filters.structuredRatingID == nil)
     }
 
-    /// Saved Searches persist the whole filter set via Codable, so a round-trip must
-    /// reproduce every facet exactly.
+    /// `Codable` is what SwiftData *requires* of a composite attribute, not what it
+    /// stores with — that is `aSavedSearchSurvivesARealSwiftDataRoundTrip` below.
+    /// This still earns its place: the conformance has to be lossless for the
+    /// requirement to be met at all, and it is hand-written enough to break.
     @Test func filtersCodableRoundTripIsLossless() throws {
         var filters = AO3SearchFilters()
         filters.query = "found family"
@@ -190,5 +193,65 @@ struct SearchFiltersTests {
         #expect(filters.chapterCount == .any)
         #expect(filters.dateFrom == nil)
         #expect(filters.dateTo == nil)
+    }
+
+    @Test func aSavedSearchSurvivesARealSwiftDataRoundTrip() throws {
+        // The tests above exercise `Codable`, and SwiftData does not use it.
+        // `filters` is a composite attribute, stored as one SQLite column per
+        // stored property — `Language`'s custom `encode(to:)` emits a single bare
+        // string, yet a real store carries `ZID` *and* `ZTITLE1`, its two stored
+        // properties. So `Codable` has no production consumer at all here, and
+        // until this test the mechanism that is actually used had no coverage.
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+
+        var filters = AO3SearchFilters()
+        filters.query = "naruto"
+        filters.title = "A Title"
+        filters.creators = "someone"
+        filters.fandom = "Naruto"
+        filters.excludedAdditionalTags = "Time Travel,Fluff"
+        filters.rating = .teen
+        filters.ratingMatch = .orHigher
+        filters.includeNotRated = false
+        filters.warnings = [.noWarnings]
+        filters.excludedCategories = [.multi]
+        filters.crossover = .exclude
+        filters.completion = .complete
+        filters.chapterCount = .singleChapter
+        filters.wordsFrom = "1000"
+        filters.kudosTo = "500"
+        filters.updated = .month
+        filters.dateFrom = Date(timeIntervalSince1970: 1_700_000_000)
+        filters.dateTo = Date(timeIntervalSince1970: 1_760_000_000)
+        filters.language = try #require(AO3SearchFilters.Language.allCases.first { $0.id == "fr" })
+        filters.sort = .kudos
+        filters.sortDirection = .ascending
+
+        let writeContext = ModelContext(container)
+        writeContext.insert(SavedSearch(name: "Everything", filters: filters))
+        try writeContext.save()
+
+        // A *fresh* context, so this is a read back out of the store rather than a
+        // read of the object still sitting in the first context's cache.
+        let readContext = ModelContext(container)
+        let saved = try readContext.fetch(FetchDescriptor<SavedSearch>())
+        #expect(saved.count == 1)
+        let reloaded = try #require(saved.first)
+        #expect(reloaded.name == "Everything")
+        // Equatable over the whole struct: every field at once, so a property added
+        // later is covered without anyone remembering to extend this list.
+        #expect(reloaded.filters == filters)
+        // Named individually anyway, because these are the ones with a history: the
+        // two new date columns, and the language that stopped being a bare enum.
+        #expect(reloaded.filters.dateFrom == filters.dateFrom)
+        #expect(reloaded.filters.dateTo == filters.dateTo)
+        #expect(reloaded.filters.language.id == "fr")
+        #expect(reloaded.filters.warnings == [.noWarnings])
     }
 }

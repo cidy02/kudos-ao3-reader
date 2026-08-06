@@ -294,6 +294,12 @@ final class AO3AuthorProfileModel {
     }
 
     func refresh(auth: AO3AuthService) async {
+        // `bypassCache: true` below skips `AO3AuthorPageCache` only. Signed out,
+        // the fetch beneath it lands in the session's `URLCache`, and AO3 serves
+        // `/users/<n>/works` and `/users/<n>/bookmarks` as `max-age=600, public`
+        // — so without this the gesture re-renders the same bytes for ten minutes
+        // on exactly the screen where "has this author posted since?" is the point.
+        await AO3Client.shared.invalidateCachedResponses()
         let task = launch {
             await self.loadHeader(auth: auth, bypassCache: true)
             guard self.headerPhase == .loaded else { return }

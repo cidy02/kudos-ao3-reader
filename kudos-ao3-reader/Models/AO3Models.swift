@@ -326,12 +326,32 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     /// This used to be synthesized into `work_search[query]` as `-"tag"`, because
     /// AO3's *form* has no exclusion inputs. The endpoint does
     /// (`WorkSearchForm::ATTRIBUTES`), and it is the better channel on both counts:
-    /// it excludes by tag rather than by phrase — otwarchive turns each name into
-    /// its own `match` filter on the `tag` field — where a quoted phrase also hit
+    /// it excludes by tag rather than by phrase, where a quoted phrase also hit
     /// summary and title text, and it removes the need to escape user text into
     /// query syntax at all. Measured on one corpus (92,493 works): excluding
     /// "Time Travel" + "Fluff" leaves 74,261 here vs 73,419 through query syntax,
     /// the difference being works that merely *mention* those words.
+    ///
+    /// otwarchive splits each name down one of **two** routes, and which one it
+    /// takes decides how well the exclusion works:
+    ///   - **Recognised names** are looked up in the tag DB and their ids go into
+    ///     `exclusion_ids` → `term_filter(:filter_ids, id)`. `filter_ids` are a
+    ///     work's *canonical* filter tags, so this also removes synonyms and
+    ///     sub-tags of the excluded tag. This is the common case and the point.
+    ///   - **Unrecognised names** fall through to `named_tag_exclusion_filter` →
+    ///     `match_filter(:tag, name)`, an AND over the name's tokens. A typo
+    ///     therefore excludes *nothing*, silently — correct (no work carries that
+    ///     tag) but invisible.
+    ///
+    /// Case is worth knowing about and is not ours to fix. `taggable_query.rb`
+    /// computes missing names as `names - found.map(&:second)`, a case-*sensitive*
+    /// Ruby array difference, while the DB lookup that produced `found` is
+    /// case-*insensitive*. A wrongly-cased name is therefore both found and
+    /// missing, and gets both filters — so it excludes slightly *more*, never less.
+    /// Measured on the same corpus: `Time Travel` → 89,855, `time travel` →
+    /// 89,741. Harmless direction, but two users typing the same tag differently
+    /// get different counts. The real fix is input quality (AO3 has a tag
+    /// autocomplete endpoint), not normalising the wire format on a guess.
     nonisolated var excludedTagNames: String? {
         let tags = [excludedFandoms, excludedCharacters, excludedRelationships, excludedAdditionalTags]
             .flatMap(Self.commaSeparatedValues)
@@ -373,10 +393,22 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
 
     /// The `yyyy-MM-dd` AO3 wants for `date_from`/`date_to`. Fixed format, so a
     /// POSIX locale and a static instance — same reason as `retryAfterDateFormatter`.
+    ///
+    /// **Local time zone, unlike `retryAfterDateFormatter`'s GMT.** That one parses
+    /// an HTTP-date, which really is an instant in GMT. This one formats a *calendar
+    /// day the user picked off a `DatePicker`*, and AO3's `date_from`/`date_to` are
+    /// calendar days too — so there is no instant to convert and pinning to UTC only
+    /// shifts the day. It shifted it in both directions: `DatePicker(.date)` keeps
+    /// the bound's time-of-day, which `AO3FilterPanel.dateBound` seeds with the local
+    /// wall-clock moment the toggle was switched on, so a UTC+ user who toggled in
+    /// the morning emitted the *previous* day and a UTC− user who toggled in the
+    /// evening emitted the *next* one (4 of 9 realistic zone/hour pairs were wrong).
+    /// `.autoupdatingCurrent`, not `.current`, because this instance outlives any
+    /// time-zone change the user makes while the app is running.
     nonisolated static let dateBoundFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.timeZone = .autoupdatingCurrent
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -673,19 +705,42 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             ("yue", "中文-广东话 粵語"), ("zh", "中文-普通话 國語")
         ]
 
-        // Custom Codable: encode/decode as the bare `id` string, matching the old
-        // raw-value-enum wire format exactly. `SavedSearch` persists `AO3SearchFilters`
-        // (and therefore `Language`) via this Codable conformance — a keyed struct
-        // encoding would fail to decode every `SavedSearch` a user already has saved.
-        init(from decoder: Decoder) throws {
-            let container = try decoder.singleValueContainer()
-            let code = try container.decode(String.self)
-            self = Self.allCases.first(where: { $0.id == code }) ?? Language(id: code, title: code)
+        enum CodingKeys: String, CodingKey {
+            case id, title
         }
 
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.singleValueContainer()
-            try container.encode(id)
+        /// Decodes **both** shapes, and the reason is not backwards compatibility
+        /// alone — it is that `encode(to:)` must stay synthesized.
+        ///
+        /// This used to encode as a bare `id` string via a `singleValueContainer`,
+        /// matching the old raw-value-enum wire format. That silently destroyed
+        /// every saved search. `SavedSearch.filters` is a SwiftData composite
+        /// attribute: SwiftData reflects over stored properties and makes one
+        /// column per property — `ZID` *and* `ZTITLE1` — but fills them from the
+        /// `Encodable` conformance. A single-value encoder supplies one value for
+        /// two columns, so `title` was written `NULL`, and on read CoreData
+        /// rejected the row ("missing mandatory text data for property 'title'")
+        /// and dropped it from every fetch. Saving a search appeared to work and
+        /// the search was simply gone.
+        ///
+        /// So the encoder is now the synthesized keyed one, and this decoder
+        /// absorbs the difference: keyed for anything written since, bare string
+        /// for `SavedSearch` JSON that predates the struct.
+        init(from decoder: Decoder) throws {
+            if let keyed = try? decoder.container(keyedBy: CodingKeys.self),
+               let code = try? keyed.decode(String.self, forKey: .id) {
+                let title = try? keyed.decode(String.self, forKey: .title)
+                self = Self.resolved(code, fallbackTitle: title)
+                return
+            }
+            let container = try decoder.singleValueContainer()
+            self = Self.resolved(try container.decode(String.self), fallbackTitle: nil)
+        }
+
+        /// Prefers AO3's current label for a known id, so a stored title that has
+        /// since been re-spelled upstream self-heals instead of persisting forever.
+        private static func resolved(_ code: String, fallbackTitle: String?) -> Language {
+            allCases.first { $0.id == code } ?? Language(id: code, title: fallbackTitle ?? code)
         }
     }
 

@@ -1425,3 +1425,117 @@ ones resting on a claim about a system the app does not own — AO3's headers,
 `URLSession`'s caching contract, SwiftData's storage model, the user's calendar.
 Those are the four places to spend verification effort, and in each case the
 verification is cheap: measure it, twice.
+
+---
+
+## Remediation (applied 2026-08-06, after the review above)
+
+The review changed no code. This section did. Every item in the action plan was
+worked in the order it recommended, `Scripts/verify.sh` is green
+(**919 tests, 82 suites, exit 0**), and both of the review's surviving mutations
+now die in the right test.
+
+### The review's own biggest miss, found by following its advice
+
+S5's recommendation #2 was "add one round-trip test that opens a real
+`ModelContainer`". That test **failed on the first run, for default filters**,
+and the cause is a shipped defect neither pass found:
+
+**`SavedSearch` did not persist at all.** Saving a search wrote a row and the
+search was then simply gone — from the list, from every fetch, permanently.
+
+`Language`'s custom `encode(to:)` wrote a `singleValueContainer` (the bare `id`
+string, matching the old raw-value-enum wire format). SwiftData makes one column
+per stored property for a composite attribute — `ZID` *and* `ZTITLE1` — but fills
+them from the `Encodable` conformance. One value for two columns means `title`
+was written `NULL`, and on read CoreData rejected the row:
+
+```
+CoreData: error: Row (pk = 1) for entity 'SavedSearch' is missing mandatory
+                 text data for property 'title'
+```
+
+Dumped from a real (non-in-memory) store written by the app's own schema:
+
+```
+before: ZID: ''   ZTITLE1: NULL          ← typeof() = null, not empty string
+after : ZID: ''   ZTITLE1: 'Any language'
+```
+
+This refines S5 rather than contradicting it. S5 was right that SwiftData
+flattens and right that the `Codable` tests certified the wrong mechanism. It was
+wrong about one detail, and the detail mattered: SwiftData does **not** ignore the
+custom coder — it reflects over stored properties for the *schema* and uses
+`Encodable` for the *values*, which is exactly why two columns coexisted with a
+one-value encoder. The predicted risk ("saved searches lose their language
+selection on upgrade") understated it; nothing survived, language or otherwise.
+
+**Fix**: `Language.encode(to:)` deleted so the synthesized keyed encoder writes
+both properties; `init(from:)` now accepts the keyed shape *and* the legacy bare
+string, so pre-struct `SavedSearch` JSON still decodes.
+`preExistingSavedSearchJSONStillDecodes` and `filtersCodableRoundTripIsLossless`
+both still pass.
+
+**Scope**: `5f071776` and `0c71a730` are **not on `main`** (checked with
+`git merge-base --is-ancestor`), so no released build is affected and no user
+data was lost. Any `SavedSearch` written by a dev build of this branch is already
+unreadable and stays that way — the rows are dropped by CoreData, not recoverable
+by this fix. Nothing was written to migrate an unreleased branch's broken rows.
+
+### One correction to the review
+
+**S3's recommended fix #2 does not work as described.** "Add a
+`URLSessionDataDelegate` … returning `nil` from `willCacheResponse`" cannot be
+done on this code path: measured against a local server, `willCacheResponse` is
+**never delivered** under `await session.data(for:delegate:)` — not to a task
+delegate, not to a session delegate, in either the `async` or the
+completion-handler spelling. It fires only on the classic `dataTask` +
+session-delegate path:
+
+```
+async data(for:delegate:)  + task delegate     : called=false  stored=true
+async data(for:delegate:)  + session delegate  : called=false  stored=true
+dataTask(with:)            + session delegate  : called=true   stored=false
+```
+
+So the choice was not "comment vs. delegate" but "comment vs. rewriting the
+authenticated fetch path out of async/await *and* attaching a session-wide
+delegate to a session whose anonymous traffic we want cached". Neither was taken.
+Instead `AO3Client.evictFromSharedCache` removes the entry immediately after each
+authenticated fetch (also under `defer`, so a non-2xx body is evicted too, and
+covering the redirect's final URL). That is an eviction, not a veto, and the
+residual window is documented at the call site rather than papered over.
+
+### What was done, by finding
+
+| # | Action | Where |
+|---|---|---|
+| **S1** | Invalidation added to all four missed surfaces. `AuthorProfileService.refresh` and `CommentsModel`'s `forceRefresh` path take it at the shared fetch point; `MediaBrowserView` and `FandomListView` take it at the `.refreshable` closure, because their `refresh()` doubles as the initial loader and would otherwise evict on first load. | 4 files |
+| **S2** | `dateBoundFormatter` → `.autoupdatingCurrent` (not `.current`: the instance is `static let` and outlives a time-zone change). Test rebuilt to assert the contract — input in the user's calendar, and bounds at **00:30 and 23:30** so it fails on any non-UTC machine in either offset direction. | `AO3Models`, `SearchURLTests` |
+| **S3** | Comment corrected to claim only reads, plus `evictFromSharedCache` for the write half. See correction above. | `AO3AuthService`, `AO3Client` |
+| **S4** | `withTaskCancellationHandler` around the final await (bound to a local — `Task` is `Sendable`, the view is not), **plus** `.cancelRefreshOnTabChange($loadTask)`. These cover different cases: SwiftUI cancels an abandoned gesture but not a tab switch, and Search is a tab root. | `SearchView` |
+| **S5** | Real `ModelContainer` round-trip test; `SavedSearch`'s doc corrected; the `Language` defect above fixed. | `SearchFiltersTests`, `SavedSearch`, `AO3Models` |
+| **S6, S7** | `excludedTagNames` doc now describes both otwarchive routes (`exclusion_ids` → `term_filter(:filter_ids)` for recognised names, `match_filter(:tag)` for unrecognised) and records the case-sensitivity asymmetry with its measured counts. | `AO3Models` |
+| **S8** | Decision recorded in `invalidateCachedResponses`' doc: blunt invalidation for anonymous refreshes, per-request policy for authenticated. The transport-parameter alternative is noted **and rejected on its own stated merit** — it does not remove the call-site census, since every `.refreshable` must still opt in; only what you write at each site changes. | `AO3Client` |
+| **S9** | Documented in the same doc-comment, not fixed, as recommended. | `AO3Client` |
+| **S10** | `worksPage(at:)`'s header claims marked as samples, with the three-run variance and `x-ao3-caching-backend` named. | `AO3Client` |
+| **item 6** | `invalidatingDropsWhatTheClientHasActuallyCached`, asserting against the *live* client's cache via a new internal `responseCache` seam. | `AO3ClientPolicyTests` |
+
+### Mutation results after the fixes
+
+| Mutation | Before | After |
+|---|---|---|
+| Empty the body of `invalidateCachedResponses()` | 🔴 suite green | ✅ caught by `invalidatingDropsWhatTheClientHasActuallyCached` |
+| Re-pin `dateBoundFormatter` to UTC | 🔴 suite red *for the fix* | ✅ caught by `absoluteDateBoundsUseAO3sISOFormat` (`2025-12-26` ≠ `2025-12-25`) |
+| Restore `Language`'s single-value `encode(to:)` | 🔴 no test existed | ✅ caught by `aSavedSearchSurvivesARealSwiftDataRoundTrip` |
+
+### Still open
+
+1. **The live-signed-in header check.** Unchanged: nobody has fetched
+   `/users/<n>/bookmarks` while genuinely signed in. If it stays `public` there,
+   S3's residual window is worth closing properly.
+2. **Nothing was run in the app.** Same limitation the review had — the four S1
+   call sites are correct by construction and by the transport measurements, but
+   no pull-to-refresh was watched on screen.
+3. **The exclusion *semantics*** still have no test (only that the parameter is
+   emitted), so a refactor back to phrase exclusion would stay green.

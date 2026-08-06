@@ -92,13 +92,42 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// `max-age=600`, so without it the gesture would re-render the same bytes
     /// for ten minutes and visibly do nothing.
     ///
+    /// **This is the house style for anonymous refreshes; the per-request
+    /// `.reloadIgnoringLocalCacheData` in `AO3AuthService.authenticatedRequest` is
+    /// the house style for authenticated ones.** Two mechanisms, deliberately, and
+    /// the reason they don't collapse into one is that they answer different
+    /// questions: the auth policy is a property of *every* request on that path,
+    /// so it belongs on the request; a refresh is a property of one *gesture*, so
+    /// it belongs at the gesture.
+    ///
+    /// Threading a `bypassCache:` flag down through `getHTML` was the alternative,
+    /// and it looks like it removes the need to keep a call-site list correct. It
+    /// doesn't — every `.refreshable` still has to opt in, so the list is the same
+    /// length; only the thing you write at each site changes. What it does buy is
+    /// not evicting other screens' entries, which against an 8 MB memory-only cache
+    /// with a ten-minute life is not worth a parameter on four client methods plus
+    /// a coalescer key that has to distinguish the two.
+    ///
     /// Deliberately all-or-nothing rather than per-URL: the caller is a view that
-    /// knows it wants fresh data, not which URLs its loader is about to build,
-    /// and the cache is 8 MB of memory-only HTML with a ten-minute life — so
-    /// throwing it away on an explicit user gesture costs nothing worth keeping.
+    /// knows it wants fresh data, and while the largest one (`SearchView`) could
+    /// rebuild its exact URL via `searchURL(filters:page:)`, most callers can't
+    /// without duplicating their loader's URL construction.
+    ///
+    /// Not atomic with the fetch that follows it: a response already in flight when
+    /// this runs repopulates the cache afterwards, and the next fetch can read it.
+    /// Reproduced, and left alone — the trigger is refreshing during a slow initial
+    /// load, where `RequestCoalescer` usually hands over the same pre-gesture body
+    /// anyway, and closing it means holding this actor across the fetch.
     func invalidateCachedResponses() {
         session.configuration.urlCache?.removeAllCachedResponses()
     }
+
+    /// The live session's response cache. Internal purely as a test seam: without
+    /// it `invalidateCachedResponses()` can be emptied out and the whole suite
+    /// still passes, which is exactly what a mutation run found. `nonisolated` for
+    /// the same reason as `challengeCookieHeader` — `session` is an immutable
+    /// `Sendable` value once constructed and `URLCache` is thread-safe.
+    nonisolated var responseCache: URLCache? { session.configuration.urlCache }
 
     /// Cloudflare's own bot-management cookies currently held for `url`, joined
     /// as a `Cookie` header fragment — never the AO3 auth cookie, filtered out
@@ -580,8 +609,40 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await withRetry {
             try await pace()
             let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
+            // `defer`, not after `check`: a non-2xx authenticated response still has
+            // a body `URLCache` may have stored, so the eviction runs regardless of
+            // status — same reasoning as `purgeSessionCookie` on the anonymous path.
+            defer { evictFromSharedCache(request, responseURL: response.url) }
             try Self.check(response)
             return (data, response.url?.path)
+        }
+    }
+
+    /// Removes an authenticated response from the shared `URLCache`.
+    ///
+    /// `authenticatedRequest`'s `.reloadIgnoringLocalCacheData` only stops the
+    /// *read* — measured, an authenticated-shaped request still stores its response,
+    /// where an anonymous request for the same URL can retrieve it. This is the
+    /// write half.
+    ///
+    /// **It evicts rather than prevents, and the difference is a real (if tiny)
+    /// window**: the entry exists between the response landing and this running, so
+    /// a concurrent anonymous request for the same URL could in principle read it.
+    /// Prevention is `willCacheResponse` returning nil, and that is not available
+    /// here: measured, it is never delivered under `await session.data(for:delegate:)`
+    /// — not to a task delegate, not to a session delegate, in either spelling. It
+    /// fires only on the classic `dataTask` + session-delegate path, which would
+    /// mean unpicking this whole function from async/await *and* attaching a
+    /// session-wide delegate to a session whose anonymous traffic we deliberately
+    /// do want cached. Not worth it for a hazard AO3's own
+    /// `private, max-age=0` on cookie-bearing responses already covers; this line
+    /// exists so the app is not relying on that alone.
+    private func evictFromSharedCache(_ request: URLRequest, responseURL: URL?) {
+        guard let cache = session.configuration.urlCache else { return }
+        cache.removeCachedResponse(for: request)
+        // A redirect caches under the *final* URL, which is not `request`'s.
+        if let responseURL, responseURL != request.url {
+            cache.removeCachedResponse(for: URLRequest(url: responseURL))
         }
     }
 
@@ -792,10 +853,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     ///
     /// `search()` deliberately does *not* send it (see `searchURL`), because on
     /// `/works/search` it costs the response cache. **That does not generalize,
-    /// and it was measured here rather than assumed:** `/users/<n>/works` answers
+    /// and it was measured here rather than assumed:** `/users/<n>/works` answered
     /// `max-age=600, public` with *or* without `view_adult`, and `/tags/<t>/works`
-    /// answers `no-cache, public` either way. So the interaction is specific to
-    /// `/works/search` and `/works/<id>`; keeping it on this path is free.
+    /// answered `no-cache, public` either way. So the interaction is specific to
+    /// `/works/search`; keeping `view_adult` on this path is free.
+    ///
+    /// **These are samples, not contracts.** Re-measured on 2026-08-06, AO3 varies
+    /// `Cache-Control` by which of its caching backends serves the request
+    /// (`x-ao3-caching-backend` is present on some responses and absent on others):
+    /// `/tags/<t>/works` returned `no-cache, public` twice and
+    /// `private, max-age=0, no-store` once in three consecutive requests, and
+    /// `/works/<id>` — recorded elsewhere in this range as `max-age=600, public` —
+    /// answered `no-cache, public` on all three. `/works/search` was the one value
+    /// stable across every run, which is fortunate, because it is the one every
+    /// caching decision in this file rests on. Treat any single reading here as
+    /// evidence, and re-measure before building something new on it.
     func worksPage(at url: URL, page: Int) async throws -> AO3SearchPage {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var items = (components?.queryItems ?? []).filter { $0.name != "page" && $0.name != "view_adult" }
