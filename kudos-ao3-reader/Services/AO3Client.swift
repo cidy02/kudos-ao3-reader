@@ -1461,6 +1461,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let digits = matched.prefix { $0.isNumber || $0 == "," }.filter(\.isNumber)
         guard let total = Int(digits) else { return nil }
 
+        // "1 - 20 of " immediately before the total — which works this page shows.
+        // Anchored to the end of the prefix (`$`) so it can only be the range that
+        // belongs to this count, never a stray pair of numbers from elsewhere in
+        // the heading. Absent on `/works/search`, which states no range.
+        let prefix = collapsed[collapsed.startIndex ..< nounRange.lowerBound]
+        var range: ClosedRange<Int>?
+        if let rangeMatch = prefix.range(
+            of: #"([\d,]+)\s*-\s*([\d,]+)\s+of\s+$"#, options: .regularExpression
+        ) {
+            let bounds = prefix[rangeMatch]
+                .split(whereSeparator: { !$0.isNumber && $0 != "," })
+                .compactMap { Int($0.filter(\.isNumber)) }
+            if bounds.count == 2, bounds[0] <= bounds[1] { range = bounds[0] ... bounds[1] }
+        }
+
         // What follows the noun is AO3's qualifier, kept verbatim (preposition
         // included) so the UI reads the way the site does instead of re-phrasing it.
         // It is always "in <tag>" or "by <user>", and requiring that is not
@@ -1469,7 +1484,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // the noun" would make the scope "?".
         let rest = collapsed[nounRange.upperBound...].trimmingCharacters(in: .whitespaces)
         let scope = ["in ", "by "].contains(where: rest.hasPrefix) ? rest : nil
-        return AO3ResultSummary(total: total, scope: scope)
+        return AO3ResultSummary(total: total, scope: scope, range: range)
     }
 
     /// Extracts the numeric work id from a `/works/<id>[/...]` path.

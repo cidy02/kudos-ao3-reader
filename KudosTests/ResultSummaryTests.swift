@@ -18,6 +18,10 @@ struct ResultSummaryTests {
         // the entire reason the leading range can't be mistaken for it.
         #expect(summary.total == 142_322)
         #expect(summary.scope == "in Naruto (Anime & Manga)")
+        // The heading names the subject with a preposition; the card uses it as a
+        // title, where "in Naruto" would read oddly.
+        #expect(summary.subject == "Naruto (Anime & Manga)")
+        #expect(summary.range == 1 ... 20)
     }
 
     @Test func aUserListReportsItsTotalAndItsAuthor() throws {
@@ -25,6 +29,8 @@ struct ResultSummaryTests {
         let summary = try #require(AO3Client.parseResultSummary("1 - 20 of 535 Works by astolat"))
         #expect(summary.total == 535)
         #expect(summary.scope == "by astolat")
+        #expect(summary.subject == "astolat")
+        #expect(summary.range == 1 ... 20)
     }
 
     @Test func aSearchReportsItsTotalWithNoScope() throws {
@@ -32,6 +38,9 @@ struct ResultSummaryTests {
         let summary = try #require(AO3Client.parseResultSummary("92,495 Found"))
         #expect(summary.total == 92495)
         #expect(summary.scope == nil)
+        #expect(summary.subject == nil)
+        // No range at all on a search heading, so the card shows the count alone.
+        #expect(summary.range == nil)
     }
 
     @Test func theSearchHelpLinkIsNotMistakenForAScope() throws {
@@ -57,6 +66,7 @@ struct ResultSummaryTests {
         let summary = try #require(AO3Client.parseResultSummary("1 - 1 of 1 Work in Some Tiny Tag"))
         #expect(summary.total == 1)
         #expect(summary.scope == "in Some Tiny Tag")
+        #expect(summary.range == 1 ... 1)
     }
 
     @Test func aHeadingWithoutARangeStillParses() throws {
@@ -65,6 +75,8 @@ struct ResultSummaryTests {
         let summary = try #require(AO3Client.parseResultSummary("7 Works in Tiny Fandom"))
         #expect(summary.total == 7)
         #expect(summary.scope == "in Tiny Fandom")
+        // No range in the heading means none on the card — never a guessed one.
+        #expect(summary.range == nil)
     }
 
     @Test func lineBreaksInTheHeadingAreCollapsed() throws {
@@ -75,6 +87,7 @@ struct ResultSummaryTests {
         )
         #expect(summary.total == 142_322)
         #expect(summary.scope == "in Naruto (Anime & Manga)")
+        #expect(summary.range == 1 ... 20)
     }
 
     @Test func anUnfamiliarQualifierIsDroppedRatherThanShown() throws {
@@ -87,5 +100,29 @@ struct ResultSummaryTests {
 
     @Test func aCountWithNoSeparatorsParses() throws {
         #expect(AO3Client.parseResultSummary("842 Found")?.total == 842)
+    }
+
+    @Test func aLaterPagesRangeIsReadNotAssumedToStartAtOne() throws {
+        // Page 50 of a big tag. The range is the only place AO3 says which works
+        // this page holds, and it is what the card's right-hand figure shows.
+        let summary = try #require(
+            AO3Client.parseResultSummary("981 - 1,000 of 142,322 Works in Naruto (Anime & Manga)")
+        )
+        #expect(summary.range == 981 ... 1000)
+        #expect(summary.total == 142_322)
+    }
+
+    @Test func aThousandsSeparatorInsideTheRangeIsParsed() throws {
+        #expect(AO3Client.parseResultSummary("1,001 - 1,020 of 5,000 Works in X")?.range == 1001 ... 1020)
+    }
+
+    @Test func numbersElsewhereInTheHeadingAreNotReadAsARange() throws {
+        // The range regex is anchored to the end of the text preceding the total,
+        // so only a "<a> - <b> of" sitting immediately before the count can match.
+        // A fandom name full of numbers must not produce one.
+        let summary = try #require(AO3Client.parseResultSummary("12 Works in 5 - 10 Years Later"))
+        #expect(summary.total == 12)
+        #expect(summary.range == nil)
+        #expect(summary.subject == "5 - 10 Years Later")
     }
 }

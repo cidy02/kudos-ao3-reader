@@ -87,8 +87,22 @@ nonisolated struct AO3ResultSummary: Equatable, Sendable {
     let total: Int
     /// AO3's own qualifier, verbatim and including its preposition — "in Naruto
     /// (Anime & Manga)", "by astolat". nil on `/works/search`, whose heading is
-    /// just "<n> Found" and names no subject.
+    /// just "<n> Found" and names no subject. Kept whole because it is what the
+    /// spoken label reads out; the card shows `subject` instead.
     let scope: String?
+    /// Which works this page is showing — `1...20` from AO3's "1 - 20 of …".
+    /// nil on `/works/search`, which states a total and no range.
+    let range: ClosedRange<Int>?
+
+    /// The subject with AO3's preposition removed — "Naruto (Anime & Manga)",
+    /// "astolat" — for use as a heading, where "in Naruto" would read oddly.
+    var subject: String? {
+        guard let scope else { return nil }
+        for preposition in ["in ", "by "] where scope.hasPrefix(preposition) {
+            return String(scope.dropFirst(preposition.count))
+        }
+        return scope
+    }
 }
 
 /// A bounded look at a series page. Used before automatic series preservation so
