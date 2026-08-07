@@ -84,27 +84,6 @@ extension ReaderTheme {
         #endif
     }
 
-    /// A band behind a carousel section, so adjacent shelves read as separate
-    /// trays rather than one long scroll of cards — the Apple Books shelf effect.
-    ///
-    /// Tuned to be *barely* visible: this sits behind cards that already carry a
-    /// surface, a border and (on Light/Sepia) a shadow, so anything stronger turns
-    /// a shelf into a competing box. Expressed as a translucent overlay rather than
-    /// an opaque colour so it composes over whatever the theme's base background
-    /// is, including Light's system-provided one where there is no token to derive
-    /// from.
-    var carouselBackdrop: Color {
-        switch self {
-        // Warm, matching the paper backdrop rather than greying it.
-        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.05)
-        case .light: Color.black.opacity(0.035)
-        // Lighten rather than darken: on a near-black backdrop a darker band is
-        // invisible, and on OLED it would fight the true-black the theme exists for.
-        case .dark: Color.white.opacity(0.045)
-        case .oled: Color.white.opacity(0.06)
-        }
-    }
-
     /// Soft elevation under each card. Light/Sepia get a subtle shadow for depth so
     /// cards lift off the flatter backdrops; Dark and OLED stay flat (a shadow can't
     /// read against a near-black or true-black backdrop — the high card↔backdrop
