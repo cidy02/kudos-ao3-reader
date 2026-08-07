@@ -353,6 +353,83 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         !query.isBlank || hasActiveFilters
     }
 
+    /// Short labels for everything currently narrowing or ordering these results —
+    /// what the results card shows so the user can see the filters without
+    /// reopening the panel.
+    ///
+    /// Only *non-default* settings appear. "Any rating" and "All" are the absence
+    /// of a filter, and listing them would spend the card's height saying nothing,
+    /// loudest in the common case where nothing is set.
+    ///
+    /// Order and wording follow the Android port's `activeFilterChips` so the two
+    /// apps describe the same filter set the same way, and every label is an
+    /// existing `title` rather than new prose. `excluding` names the one thing this
+    /// list would otherwise repeat: on a fandom's page the card's own heading is
+    /// already the fandom.
+    func summaryLabels(excluding subject: String? = nil) -> [String] {
+        var labels: [String] = []
+
+        func addTags(_ prefix: String, included: String, excluded: String) {
+            for tag in Self.commaSeparatedValues(included) where tag != subject {
+                labels.append("\(prefix): \(tag)")
+            }
+            for tag in Self.commaSeparatedValues(excluded) {
+                labels.append("−\(prefix): \(tag)")
+            }
+        }
+        addTags("Fandom", included: fandom, excluded: excludedFandoms)
+        addTags("Character", included: characters, excluded: excludedCharacters)
+        addTags("Relationship", included: relationships, excluded: excludedRelationships)
+        addTags("Tag", included: additionalTags, excluded: excludedAdditionalTags)
+
+        if !title.isBlank { labels.append("Title: \(title)") }
+        if !creators.isBlank { labels.append("By: \(creators)") }
+
+        if rating != .any {
+            switch ratingMatch {
+            case .exact: labels.append(rating.title)
+            case .orHigher: labels.append("\(rating.title)+")
+            case .orLower: labels.append("\(rating.title)−")
+            }
+        }
+        if !includeNotRated { labels.append("No Not Rated") }
+
+        labels += Warning.allCases.filter(warnings.contains).map(\.title)
+        labels += Warning.allCases.filter(excludedWarnings.contains).map { "−\($0.title)" }
+        labels += Category.allCases.filter(categories.contains).map(\.title)
+        labels += Category.allCases.filter(excludedCategories.contains).map { "−\($0.title)" }
+
+        if crossover != .any { labels.append("Crossover: \(crossover.title)") }
+        if completion != .any { labels.append(completion.title) }
+        if chapterCount != .any { labels.append(chapterCount.title) }
+
+        for (name, from, to) in [
+            ("Words", wordsFrom, wordsTo), ("Hits", hitsFrom, hitsTo),
+            ("Kudos", kudosFrom, kudosTo), ("Comments", commentsFrom, commentsTo),
+            ("Bookmarks", bookmarksFrom, bookmarksTo)
+        ] {
+            let lower = from.trimmingCharacters(in: .whitespaces)
+            let upper = to.trimmingCharacters(in: .whitespaces)
+            switch (lower.isEmpty, upper.isEmpty) {
+            case (false, false): labels.append("\(name) \(lower)–\(upper)")
+            case (false, true): labels.append("\(name) ≥ \(lower)")
+            case (true, false): labels.append("\(name) ≤ \(upper)")
+            case (true, true): break
+            }
+        }
+
+        if updated != .any { labels.append(updated.title) }
+        if let dateFrom { labels.append("After \(Self.dateBoundFormatter.string(from: dateFrom))") }
+        if let dateTo { labels.append("Before \(Self.dateBoundFormatter.string(from: dateTo))") }
+        if language != .any { labels.append(language.title) }
+
+        // Sort last, and unconditionally: unlike every entry above there is always
+        // an order in effect, so this is the one label that is never noise — and it
+        // is the setting users most often forget they changed.
+        labels.append("Sort: \(sort.title)")
+        return labels
+    }
+
     /// The free-text query AO3 receives, augmented with exclusions and any
     /// multi-rating expression that the single-value rating field can't express.
     nonisolated var searchQuery: String {

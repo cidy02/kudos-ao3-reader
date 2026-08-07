@@ -81,6 +81,13 @@ struct FandomWorksView: View {
     private static func baseline(for fandom: String) -> AO3SearchFilters {
         var filters = AO3SearchFilters()
         filters.fandom = fandom
+        // Date Updated, not the app-wide `.relevance` default: this screen reads
+        // AO3's tag listing, which has no relevance ordering and sorts by
+        // `revised_at` unless told otherwise (verified live). Seeding it here means
+        // the sort is sent explicitly and the panel shows the order actually in
+        // effect, rather than "Best Match" over date-ordered results.
+        filters.sort = .dateUpdated
+        filters.sortDirection = AO3SearchFilters.Sort.dateUpdated.naturalDirection
         return filters
     }
 
@@ -99,7 +106,14 @@ struct FandomWorksView: View {
                     // Above pagination: the total describes the whole list, not
                     // the page you happen to be on.
                     if let heroSummary {
-                        Section { SearchResultsHero(summary: heroSummary).cardRow() }
+                        Section {
+                            SearchResultsHero(
+                                summary: heroSummary,
+                                filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
+                                onEditFilters: { showingFilters = true }
+                            )
+                            .cardRow()
+                        }
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
@@ -127,6 +141,7 @@ struct FandomWorksView: View {
             .inspector(isPresented: $showingFilters) {
                 AO3FilterPanel(
                     filters: $filters,
+                    allowsRelevanceSort: false,
                     showFandomPicker: false,
                     canReset: hasExtraFilters,
                     onApply: applyFilters,
@@ -300,7 +315,14 @@ struct TagWorksView: View {
                     // Above pagination: the total describes the whole list, not
                     // the page you happen to be on.
                     if let heroSummary {
-                        Section { SearchResultsHero(summary: heroSummary).cardRow() }
+                        Section {
+                            SearchResultsHero(
+                                summary: heroSummary,
+                                filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
+                                onEditFilters: { showingFilters = true }
+                            )
+                            .cardRow()
+                        }
                     }
                     if showPagination { Section { paginationRow } }
                     Section {

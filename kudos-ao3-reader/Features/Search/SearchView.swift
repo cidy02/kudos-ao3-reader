@@ -231,7 +231,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // Above the pagination row: it answers "how big is this search",
                     // which is context for the whole list rather than for a page.
                     if let heroSummary {
-                        Section { SearchResultsHero(summary: heroSummary).cardRow() }
+                        Section {
+                            SearchResultsHero(
+                                summary: heroSummary,
+                                filterLabels: filters.summaryLabels(),
+                                // Search's panel is router-owned (it's an inspector
+                                // shared with the toolbar's Filter button), so open
+                                // it the same way that button does.
+                                onEditFilters: { router.panel = .searchFilters }
+                            )
+                            .cardRow()
+                        }
                     }
 
                     if showPagination {

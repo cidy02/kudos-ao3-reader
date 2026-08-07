@@ -18,6 +18,12 @@ struct AO3FilterPanel: View {
 
     @Binding var filters: AO3SearchFilters
     var mode: Mode = .search
+    /// Whether "Best Match" is an option. AO3's tag listing — Browse's endpoint —
+    /// has no relevance ordering at all: its sort menu runs Creator … Bookmarks and
+    /// it defaults to Date Updated. Offering Best Match there would send no
+    /// `sort_column`, AO3 would order by Date Updated anyway, and the panel would
+    /// sit there claiming a sort that isn't happening.
+    var allowsRelevanceSort: Bool = true
     /// Show the Fandoms include/exclude picker. Hidden in Browse, where the page's
     /// fandom is fixed and shouldn't be edited away.
     var showFandomPicker: Bool = true
@@ -41,7 +47,7 @@ struct AO3FilterPanel: View {
                     // actually issues a query.
                     if mode == .search {
                         Picker("Sort by", selection: $filters.sort) {
-                            ForEach(AO3SearchFilters.Sort.allCases) { Text($0.title).tag($0) }
+                            ForEach(sortOptions) { Text($0.title).tag($0) }
                         }
                         .onChange(of: filters.sort) { _, newValue in
                             // Picking a column re-seeds the direction to the one a
@@ -222,6 +228,12 @@ struct AO3FilterPanel: View {
 
     /// The fandoms currently chosen in the filters, used to seed the other tag pickers
     /// with that fandom's popular tags.
+    private var sortOptions: [AO3SearchFilters.Sort] {
+        allowsRelevanceSort
+            ? AO3SearchFilters.Sort.allCases
+            : AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
+    }
+
     private var selectedFandoms: [String] {
         filters.fandom.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
