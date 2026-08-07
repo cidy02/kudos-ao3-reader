@@ -1647,7 +1647,7 @@ private fun AccountListContent(
                     )
                 )
             } else {
-                AO3WorkCard(work = work.remote, onOpenWork = onOpenWork)
+                EnrichingAO3WorkCard(work = work.remote, onOpenWork = onOpenWork)
             }
         }
         item {
@@ -1687,3 +1687,36 @@ private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> 
 }
 
 // endregion
+
+/**
+ * An AO3 work card that fills itself in when the listing it came from was sparse.
+ *
+ * AO3's subscriptions page lists only title, id and author, so those cards would
+ * otherwise show no tags, no stats and no summary. The fetch happens per card as it
+ * appears rather than for the whole page up front: 20 works would be 20 politeness
+ * slots before anything could render, and scrolling past a work you didn't care
+ * about would still have cost one.
+ *
+ * A card that is already complete — every other list — does no work at all;
+ * `enrich` returns null immediately and this stays exactly [AO3WorkCard].
+ */
+@Composable
+private fun EnrichingAO3WorkCard(
+    work: AO3WorkSummary,
+    onOpenWork: (AO3WorkSummary) -> Unit
+) {
+    val context = LocalContext.current
+    val enricher = remember {
+        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+            ?.container?.sparseWorkEnricher
+    }
+    var enriched by remember(work.id) { mutableStateOf<AO3WorkSummary?>(null) }
+
+    // Keyed on the id so recycling this slot onto a different work restarts the
+    // effect instead of showing the previous work's metadata.
+    LaunchedEffect(work.id) {
+        enriched = enricher?.enrich(work)
+    }
+
+    AO3WorkCard(work = enriched ?: work, onOpenWork = onOpenWork)
+}

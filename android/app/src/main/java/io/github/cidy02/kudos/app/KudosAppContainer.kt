@@ -179,6 +179,16 @@ class KudosAppContainer(context: Context) {
         AO3WorkMetadataRepository(ao3Client)
     }
 
+    /** Fills in subscription cards, which AO3's own listing leaves bare. */
+    val sparseWorkEnricher: io.github.cidy02.kudos.network.ao3.work.AO3SparseWorkEnricher by lazy {
+        io.github.cidy02.kudos.network.ao3.work.AO3SparseWorkEnricher(
+            metadataRepository,
+            kotlinx.coroutines.CoroutineScope(
+                kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+            )
+        )
+    }
+
     val tagsRepository: io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository by lazy {
         io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository(ao3Client)
     }
