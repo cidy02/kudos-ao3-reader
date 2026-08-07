@@ -37,41 +37,54 @@ struct AO3FilterPanel: View {
     /// Clear filters back to the host's baseline.
     var onReset: () -> Void
 
+    /// The panel owns its own `NavigationStack`.
+    ///
+    /// It is presented as an `.inspector`, which on iPhone collapses into a sheet —
+    /// and a sheet has no navigation container of its own, so a bare `.toolbar` (or
+    /// the `.navigationTitle` the callers used to set) rendered nothing at all. Same
+    /// arrangement `CommentsView` uses for exactly the same reason, which is also
+    /// what gets the two actions drawn as the system's circular toolbar buttons
+    /// rather than a hand-rolled row.
     var body: some View {
-        VStack(spacing: 0) {
-            actionHeader
+        NavigationStack {
             form
+                .navigationTitle(mode == .refine ? "Refine" : "Filters")
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar { actionButtons }
         }
     }
 
-    /// Reset left, Apply right, and — on iPhone, where the inspector collapses into
-    /// a sheet — the system's own drag indicator between them as the dismiss
-    /// handle. The two actions used to be rows at the *bottom* of the form, which
-    /// meant scrolling past every facet to run the search you had just configured.
+    /// Reset top-left, Apply top-right — the ends of the bar, where a sheet's
+    /// dismiss and confirm live everywhere else in the app. Both used to be rows at
+    /// the *bottom* of the form, which meant scrolling past every facet to run the
+    /// search you had just configured.
+    ///
+    /// Icons rather than words so they read as chrome, and because the system draws
+    /// a toolbar item's own circular background on iOS 26 — matching the Comments
+    /// sheet without reimplementing it.
     ///
     /// Reset is disabled rather than hidden: a control that appears and disappears
-    /// as filters change shifts Apply sideways under the user's thumb.
-    private var actionHeader: some View {
-        HStack {
+    /// as filters change makes the bar's contents move under the user's thumb.
+    @ToolbarContentBuilder
+    private var actionButtons: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
             Button(role: .destructive, action: onReset) {
-                Text("Reset")
+                Image(systemName: "arrow.counterclockwise")
             }
             .disabled(!canReset)
-
-            Spacer(minLength: 12)
-
+            .accessibilityLabel("Reset filters")
+        }
+        ToolbarItem(placement: .confirmationAction) {
             Button(action: onApply) {
                 // Refine narrows live as facets change, so its button just confirms;
                 // search needs a query/filter before it can run.
-                Text(mode == .refine ? "Done" : "Apply")
-                    .fontWeight(.semibold)
+                Image(systemName: mode == .refine ? "checkmark" : "magnifyingglass")
             }
-            .buttonStyle(.borderedProminent)
             .disabled(mode == .search && !filters.isSearchable)
+            .accessibilityLabel(mode == .refine ? "Done" : "Apply filters")
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
     }
 
     private var form: some View {
