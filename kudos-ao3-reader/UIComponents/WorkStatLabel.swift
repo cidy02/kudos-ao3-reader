@@ -230,49 +230,64 @@ struct WorkListStatsRow: View {
         return result
     }
 
-    /// Justified: the first badge hugs the leading edge, the last hugs the
-    /// trailing edge, and the slack is split evenly across every gap rather
-    /// than dumped into a single one (which read as a hole in the row).
+    /// Centred, with the bullets kept as separators. Justification stretched the
+    /// gaps to square the row's edges with the counts underneath, which only
+    /// works while both rows are full — a two-chip work got two capsules pinned to
+    /// opposite edges of the card with a canyon between them. Centring keeps the
+    /// natural gaps at any chip count and still reads as a deliberate row.
     ///
-    /// `FlowLayout` rather than an `HStack` of `Spacer`s inside a
-    /// `ViewThatFits`: that sizes its chosen candidate to the candidate's
-    /// *ideal* width, never the width on offer, so the spacers had nothing to
-    /// expand into and the row rendered short with a ragged trailing edge.
-    /// FlowLayout also still wraps when the badges genuinely don't fit — they
-    /// are all `fixedSize`, so a too-long single row would otherwise overflow
-    /// and stretch the card past its own padding.
+    /// `FlowLayout` rather than an `HStack` inside a `ViewThatFits`: that sizes its
+    /// chosen candidate to the candidate's *ideal* width, never the width on offer,
+    /// so there was nothing to centre within. FlowLayout also still wraps when the
+    /// chips genuinely don't fit — they are all `fixedSize`, so a too-long single
+    /// row would otherwise stretch the card past its own padding.
     private var topRow: some View {
-        // Chips, not bullet-separated labels. These four are *states* — what the
-        // work is — where the row below is counts, and giving them an enclosing
-        // shape is what separates the two at a glance. It also drops the bullets:
-        // a capsule is its own separator, so the row reads as four things rather
-        // than one run-on line.
-        //
-        // Not `justifiesRows`: stretched gaps between capsules read as broken
-        // spacing, where between bare labels they read as alignment.
-        FlowLayout(spacing: 6, rowSpacing: 5) {
-            ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
+        FlowLayout(spacing: 6, rowSpacing: 5, rowAlignment: .center) {
+            ForEach(Array(topItems.enumerated()), id: \.offset) { index, item in
+                if index > 0 { bullet }
                 statusChip(item)
             }
         }
     }
 
-    /// One AO3 status as a capsule. The glyph keeps its own colour — AO3's rating
-    /// and category colour-coding is the point of it — while the capsule stays
-    /// neutral, so a card with four chips doesn't turn into four coloured blocks.
+    /// `.fixedSize()` matters here: every chip beside it already refuses to
+    /// compress, so a bare `Text` is the only flexible child left when the row runs
+    /// long (e.g. "Uncategorized" next to "Not Disclosed") — the layout squeezes all
+    /// the slack onto it first, sometimes down to invisible.
+    private var bullet: some View {
+        Text("•")
+            .fixedSize()
+            .accessibilityHidden(true)
+    }
+
+    /// One AO3 status as a capsule. The *capsule* carries AO3's rating/category
+    /// colour coding now, not the glyph — a chip is a block of colour, so painting
+    /// it is what the colour coding is for. The glyph and text stay on the row's
+    /// inherited `.secondary`, which is legible on every tint and in every theme;
+    /// a saturated glyph on a tinted capsule of the same hue just goes muddy.
+    ///
+    /// Tinted, not filled: `.explicit` is red and `.mature` orange, and four
+    /// solid blocks of those beside the cover art would read as an error state.
+    /// The alpha is low enough that secondary text keeps its contrast in both
+    /// appearances, and an uncoloured item (nothing AO3 colour-codes) falls back
+    /// to the neutral `.quaternary` the whole row used to use.
     private func statusChip(_ item: Item) -> some View {
         HStack(spacing: 3) {
             Image(systemName: item.symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(item.iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.tint))
             Text(item.text)
         }
         .lineLimit(1)
         .fixedSize()
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(.quaternary, in: Capsule())
+        .background(chipFill(item), in: Capsule())
         .combinedAccessibilityRow(item.accessibilityLabel)
+    }
+
+    private func chipFill(_ item: Item) -> AnyShapeStyle {
+        guard let color = item.iconColor else { return AnyShapeStyle(.quaternary) }
+        return AnyShapeStyle(color.opacity(0.22))
     }
 
     var body: some View {

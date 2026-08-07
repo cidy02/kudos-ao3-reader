@@ -6,25 +6,37 @@ import SwiftUI
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var rowSpacing: CGFloat = 8
-    /// Stretches each row to the full available width by splitting its leftover
-    /// space evenly across that row's gaps, so the first subview sits on the
-    /// leading edge and the last on the trailing edge. Off by default: the tag
-    /// chips and secondary stat rows want their natural left-to-right packing.
-    ///
-    /// A wrapped final row stays ragged (standard typographic justification) —
-    /// spreading two leftovers across a whole line reads as a mistake. A single
-    /// row is always justified, since it is both the first row and the last.
-    var justifiesRows = false
+    /// Where a row sits in the width it was offered. `.leading` by default: the
+    /// tag chips and secondary stat rows want their natural left-to-right packing.
+    enum RowAlignment {
+        /// Natural packing against the leading edge.
+        case leading
+        /// The row keeps its natural gaps and the leftover splits either side of
+        /// it. Every row centres, wrapped ones included — unlike justification,
+        /// a centred short row reads as deliberate.
+        case center
+        /// Stretched to the full width by splitting the leftover evenly across
+        /// that row's gaps, so the first subview sits on the leading edge and the
+        /// last on the trailing edge.
+        ///
+        /// A wrapped final row stays ragged (standard typographic justification) —
+        /// spreading two leftovers across a whole line reads as a mistake. A
+        /// single row is always justified, since it is both first and last.
+        case justified
+    }
+
+    var rowAlignment: RowAlignment = .leading
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
         let rows = rows(maxWidth: maxWidth, subviews: subviews)
         let naturalWidth = rows.map(\.width).max() ?? 0
         let height = rows.map(\.height).reduce(0, +) + rowSpacing * CGFloat(max(0, rows.count - 1))
-        // Justification only means something if the layout actually claims the
-        // width it was offered — otherwise it reports its natural size, gets
-        // placed at that size, and has no leftover space to distribute.
-        let width = justifiesRows && maxWidth.isFinite ? maxWidth : min(naturalWidth, maxWidth)
+        // Justifying and centring only mean something if the layout actually
+        // claims the width it was offered — otherwise it reports its natural
+        // size, gets placed at that size, and has no leftover to distribute.
+        let claimsFullWidth = rowAlignment != .leading && maxWidth.isFinite
+        let width = claimsFullWidth ? maxWidth : min(naturalWidth, maxWidth)
         return CGSize(width: width, height: height)
     }
 
@@ -33,11 +45,14 @@ struct FlowLayout: Layout {
         let rows = rows(maxWidth: bounds.width, subviews: subviews)
         for (rowIndex, row) in rows.enumerated() {
             let isLastRow = rowIndex == rows.count - 1
-            let justifies = justifiesRows && row.indices.count > 1 && (!isLastRow || rows.count == 1)
+            let leftover = max(0, bounds.width - row.width)
+            let justifies = rowAlignment == .justified
+                && row.indices.count > 1
+                && (!isLastRow || rows.count == 1)
             let gapSpacing = justifies
-                ? spacing + max(0, bounds.width - row.width) / CGFloat(row.indices.count - 1)
+                ? spacing + leftover / CGFloat(row.indices.count - 1)
                 : spacing
-            var x = bounds.minX
+            var x = rowAlignment == .center ? bounds.minX + leftover / 2 : bounds.minX
             for index in row.indices {
                 let size = clampedSize(subviews[index], maxWidth: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))

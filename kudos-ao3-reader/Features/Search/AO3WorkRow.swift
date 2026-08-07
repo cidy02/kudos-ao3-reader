@@ -17,10 +17,23 @@ struct AO3WorkRow: View {
     @State private var expanded = false
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
-    /// a long summary or any categorized tags.
+    /// a long summary, any categorized tags — or fandoms the collapsed card folds
+    /// into "+N others". Without that last clause a crossover with a short summary
+    /// and no tags would hide its extra fandoms behind no control at all.
     private var isExpandable: Bool {
-        work.summary.count > 120 || !additionalTags.isEmpty || !work.relationships.isEmpty
-            || !work.characters.isEmpty || !work.warnings.isEmpty
+        work.summary.count > 120 || work.fandoms.count > 1 || !additionalTags.isEmpty
+            || !work.relationships.isEmpty || !work.characters.isEmpty || !work.warnings.isEmpty
+    }
+
+    /// Collapsed, a card names the work's main fandom and counts the rest. AO3
+    /// blurbs for a crossover can carry a dozen, each of them long — unfolded they
+    /// pushed the summary off the card and made every result the same height.
+    private var visibleFandoms: [String] {
+        expanded ? work.fandoms : Array(work.fandoms.prefix(1))
+    }
+
+    private var hiddenFandomCount: Int {
+        max(0, work.fandoms.count - visibleFandoms.count)
     }
 
     var body: some View {
@@ -38,9 +51,19 @@ struct AO3WorkRow: View {
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Title + author share a tight block so the hierarchy reads as one unit;
-            // the expand control sits at the card's top-right corner.
+            // Title + author share a tight block so the hierarchy reads as one unit.
+            // The expand control leads the row, which leaves the trailing corner to
+            // the updated-date badge alone — the two were crowding each other, and
+            // the date is the longer of the pair.
             HStack(alignment: .top, spacing: 8) {
+                // Always occupies its slot, hidden when there's nothing to expand:
+                // otherwise titles would start at two different x positions down a
+                // list of results, which reads as broken alignment rather than as
+                // an absent control.
+                expandButton
+                    .opacity(isExpandable ? 1 : 0)
+                    .accessibilityHidden(!isExpandable)
+                    .allowsHitTesting(isExpandable)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(work.title)
                         .font(.headline)
@@ -55,7 +78,6 @@ struct AO3WorkRow: View {
                 }
                 Spacer(minLength: 0)
                 WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
-                if isExpandable { expandButton }
                 if isSelecting {
                     WorkSelectionBubble(isSelected: isSelected)
                 }
@@ -71,10 +93,24 @@ struct AO3WorkRow: View {
                         .fontWeight(.bold)
                         .foregroundStyle(.tint)
                     FlowLayout(spacing: 4, rowSpacing: 2) {
-                        ForEach(work.fandoms, id: \.self) { fandom in
-                            Button { router.searchAO3(.fandom, fandom) } label: { Text(fandom) }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(.secondary)
+                        ForEach(visibleFandoms, id: \.self) { fandom in
+                            Button { router.searchAO3(.fandom, fandom) } label: {
+                                // A canonical AO3 fandom is long enough to wrap on
+                                // its own ("僕のヒーローアカデミア | Boku no Hero
+                                // Academia | My Hero Academia (Anime & Manga)"), and
+                                // a Button centres its label by default — the second
+                                // line drifted to the middle of the card.
+                                Text(fandom).multilineTextAlignment(.leading)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                        }
+                        // Plain text, not a button: the card already has one expand
+                        // control, and a second one that only opens the same card
+                        // would be two affordances for one action.
+                        if hiddenFandomCount > 0 {
+                            Text("+\(hiddenFandomCount) other\(hiddenFandomCount == 1 ? "" : "s")")
+                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
@@ -133,7 +169,7 @@ struct AO3WorkRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Top-right expand/collapse control. A bordered circular button (not plain
+    /// Leading expand/collapse control. A bordered circular button (not plain
     /// text) so it reads as a tappable affordance; borderless interaction would
     /// blend into the title. Captures its own tap so it never triggers the row's
     /// navigation link.
