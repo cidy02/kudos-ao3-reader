@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -16,7 +18,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +41,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
  * Dense AO3 work summary for Search / Browse / Account lists.
  *
  * Material 3 [Card] expressing Apple `AO3WorkRow` hierarchy:
- * title → author → fandom → summary → divider → list stats.
+ * title → author → fandom → summary → status chips → list stats.
  * Tags use progressive disclosure (expand) so the default row stays scannable.
  *
  * [expandAll] is a batch seed from the parent (Search "Expand all" / "Collapse
@@ -186,8 +187,10 @@ fun AO3WorkCard(
                 )
             }
 
-            // The four AO3 states, as capsules above the divider — what the work
-            // *is*, separated from the counts below it.
+            // The four AO3 states, as capsules — what the work *is*, separated
+            // from the counts below by space rather than by a rule. The chip row
+            // is already a band with its own edges; a hairline against it drew a
+            // second boundary a few dp from the first.
             WorkStatusChipRow(
                 stats = statusChips(
                     rating = work.rating,
@@ -197,10 +200,7 @@ fun AO3WorkCard(
                 )
             )
 
-            HorizontalDivider(
-                modifier = Modifier.padding(top = 4.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
+            Spacer(modifier = Modifier.height(2.dp))
 
             WorkListStatsRow(
                 stats = listRowStats(

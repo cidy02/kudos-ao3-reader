@@ -71,8 +71,12 @@ class AO3SearchParser {
         val authors = element.select("h4.heading a[rel=author]").normalizedTexts()
         val fandoms = element.select("h5.fandoms a.tag").normalizedTexts()
         val rating = element.selectFirst("ul.required-tags .rating .text")?.normalizedText().orEmpty()
-        val warnings = element.select("ul.required-tags .warnings .text").normalizedTexts()
-        val categories = element.select("ul.required-tags .category .text").normalizedTexts()
+        // `.category` is a *summary icon*, not a list: one `<span class="text">`
+        // holding every value comma-joined ("F/F, M/M"). Read literally it is one
+        // unrecognized category, which is why a multi-category work showed "N/A".
+        val categories = splitRequiredTag(
+            element.selectFirst("ul.required-tags .category .text")?.normalizedText()
+        )
         val wipText = element.selectFirst("ul.required-tags .iswip .text")?.normalizedText().orEmpty()
         val isComplete = wipText.takeIf { it.isNotBlank() }
             ?.lowercase()
@@ -85,6 +89,16 @@ class AO3SearchParser {
         val warningTags = element.select("ul.tags li.warnings a.tag").normalizedTexts()
         val categorized = (relationships + characters + warningTags).toSet()
         val freeforms = allTags.filterNot(categorized::contains).dedupeFirstSeen()
+
+        // Warnings come from `ul.tags`, where AO3 repeats them one `<li>` each —
+        // the same icon-summary problem as categories, and here it undercounted:
+        // a work warned for three things reported "1 Warning Applies". The icon
+        // text is the fallback for markup that omits the repeat, split the same
+        // way. Both AO3 vocabularies are closed sets with no comma in any member,
+        // so splitting on ", " cannot cut a name in half.
+        val warnings = warningTags.ifEmpty {
+            splitRequiredTag(element.selectFirst("ul.required-tags .warnings .text")?.normalizedText())
+        }
 
         val seriesLink = element.selectFirst("ul.series li a[href*=/series/]")
         val seriesHref = seriesLink?.attr("href")
@@ -210,6 +224,18 @@ fun parseResultSummary(text: String): AO3ResultSummary? {
     val scope = if (rest.startsWith("in ") || rest.startsWith("by ")) rest else null
 
     return AO3ResultSummary(total = total, scope = scope, range = range)
+}
+
+/**
+ * Splits one `ul.required-tags` icon label into its values.
+ *
+ * That row is a *summary*: AO3 draws one symbol per facet and puts every value in
+ * its single label, comma-joined — `"F/F, M/M"`, `"Graphic Depictions Of Violence,
+ * Rape/Non-Con, Underage Sex"`. Verified against live `/tags/<t>/works` markup.
+ */
+internal fun splitRequiredTag(label: String?): List<String> {
+    if (label.isNullOrBlank()) return emptyList()
+    return label.split(",").map(String::trim).filter(String::isNotEmpty)
 }
 
 private fun Iterable<Element>.normalizedTexts(): List<String> {

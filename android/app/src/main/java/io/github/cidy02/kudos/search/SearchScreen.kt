@@ -578,6 +578,14 @@ private fun SearchResultsList(
                 title = "Results",
                 subtitle = "Page $page of $totalPages"
             )
+            // Above the results as well as below, matching Apple: the pager was
+            // reachable only after scrolling the whole page, so changing page
+            // meant reading to the bottom of one you had already decided to leave.
+            KudosPaginationBar(
+                currentPage = page,
+                totalPages = totalPages,
+                onPageChange = onPage
+            )
         }
         items(works, key = { it.id }) { work ->
             if (selectionMode) {
