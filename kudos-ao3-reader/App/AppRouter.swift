@@ -45,7 +45,38 @@ struct LibraryTagFilter: Equatable {
 /// A request to run an AO3 search for a single tag, handed to the Search tab (e.g.
 /// from a tapped fandom/character/relationship/freeform chip).
 struct AO3TagSearch: Equatable {
-    enum Field { case warning, fandom, character, relationship, freeform }
+    enum Field {
+        case warning, fandom, character, relationship, freeform
+
+        /// The glyph for this tag category. AO3 groups tags by category in its own
+        /// markup (`h5.fandoms`, `ul.tags li.characters`, …) and `parseBlurb` already
+        /// reads that, so every chip knows which of these it is without asking.
+        ///
+        /// Chosen to avoid the stat row's vocabulary, which shares the same screen:
+        /// `heart` is kudos and `person.2.fill` is the AO3 category (Gen, M/M …),
+        /// so relationships take `figure.2` rather than either.
+        var symbol: String {
+            switch self {
+            case .warning: "exclamationmark.triangle"
+            case .fandom: "books.vertical"
+            case .character: "person"
+            case .relationship: "figure.2"
+            case .freeform: "tag"
+            }
+        }
+
+        /// Spoken before the tag, so VoiceOver says "Character, Uzumaki Naruto"
+        /// rather than reading a glyph name or nothing at all.
+        var accessibilityName: String {
+            switch self {
+            case .warning: "Warning"
+            case .fandom: "Fandom"
+            case .character: "Character"
+            case .relationship: "Relationship"
+            case .freeform: "Tag"
+            }
+        }
+    }
     let field: Field
     let value: String
     /// True when this request switched the user into the Search tab (they were on a

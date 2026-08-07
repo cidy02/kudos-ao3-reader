@@ -8,13 +8,30 @@ struct TagChip: View {
     let text: String
     var tinted: Bool = false
     var multiline: Bool = false
+    /// An optional leading glyph naming the tag's category (see
+    /// `AO3TagSearch.Field.symbol`). Tags arrive already categorised from AO3's own
+    /// markup, so a fandom, a character and a ship are distinguishable at a glance
+    /// instead of being one undifferentiated wall of capsules.
+    var symbol: String?
 
     var body: some View {
-        Text(text)
-            .font(.caption)
-            .lineLimit(multiline ? nil : 1)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 4) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.caption2.weight(.bold))
+                    // Untinted when the chip is: a filled capsule already carries
+                    // the accent, and a tinted glyph on it would vanish.
+                    .foregroundStyle(tinted ? AnyShapeStyle(.white) : AnyShapeStyle(.tint))
+                    // The glyph is decorative — the category is announced by the
+                    // caller's accessibility label, not by SF Symbol name.
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+                .font(.caption)
+                .lineLimit(multiline ? nil : 1)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .foregroundStyle(tinted ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))

@@ -353,6 +353,15 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         !query.isBlank || hasActiveFilters
     }
 
+    /// One chip on the results card.
+    struct SummaryLabel: Equatable, Hashable, Sendable {
+        let text: String
+        /// The tag category's glyph, for the entries that *are* tags. nil for
+        /// facets like a rating or the sort, which are not tag categories and
+        /// would be given a misleading one.
+        let symbol: String?
+    }
+
     /// Short labels for everything currently narrowing or ordering these results —
     /// what the results card shows so the user can see the filters without
     /// reopening the panel.
@@ -366,42 +375,45 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     /// existing `title` rather than new prose. `excluding` names the one thing this
     /// list would otherwise repeat: on a fandom's page the card's own heading is
     /// already the fandom.
-    func summaryLabels(excluding subject: String? = nil) -> [String] {
-        var labels: [String] = []
+    func summaryLabels(excluding subject: String? = nil) -> [SummaryLabel] {
+        var labels: [SummaryLabel] = []
 
-        func addTags(_ prefix: String, included: String, excluded: String) {
+        func add(_ text: String, _ symbol: String? = nil) {
+            labels.append(SummaryLabel(text: text, symbol: symbol))
+        }
+        func addTags(_ field: AO3TagSearch.Field, included: String, excluded: String) {
             for tag in Self.commaSeparatedValues(included) where tag != subject {
-                labels.append("\(prefix): \(tag)")
+                add(tag, field.symbol)
             }
             for tag in Self.commaSeparatedValues(excluded) {
-                labels.append("−\(prefix): \(tag)")
+                add("−\(tag)", field.symbol)
             }
         }
-        addTags("Fandom", included: fandom, excluded: excludedFandoms)
-        addTags("Character", included: characters, excluded: excludedCharacters)
-        addTags("Relationship", included: relationships, excluded: excludedRelationships)
-        addTags("Tag", included: additionalTags, excluded: excludedAdditionalTags)
+        addTags(.fandom, included: fandom, excluded: excludedFandoms)
+        addTags(.character, included: characters, excluded: excludedCharacters)
+        addTags(.relationship, included: relationships, excluded: excludedRelationships)
+        addTags(.freeform, included: additionalTags, excluded: excludedAdditionalTags)
 
-        if !title.isBlank { labels.append("Title: \(title)") }
-        if !creators.isBlank { labels.append("By: \(creators)") }
+        if !title.isBlank { add("Title: \(title)") }
+        if !creators.isBlank { add("By: \(creators)") }
 
         if rating != .any {
             switch ratingMatch {
-            case .exact: labels.append(rating.title)
-            case .orHigher: labels.append("\(rating.title)+")
-            case .orLower: labels.append("\(rating.title)−")
+            case .exact: add(rating.title)
+            case .orHigher: add("\(rating.title)+")
+            case .orLower: add("\(rating.title)−")
             }
         }
-        if !includeNotRated { labels.append("No Not Rated") }
+        if !includeNotRated { add("No Not Rated") }
 
-        labels += Warning.allCases.filter(warnings.contains).map(\.title)
-        labels += Warning.allCases.filter(excludedWarnings.contains).map { "−\($0.title)" }
-        labels += Category.allCases.filter(categories.contains).map(\.title)
-        labels += Category.allCases.filter(excludedCategories.contains).map { "−\($0.title)" }
+        for warning in Warning.allCases.filter(warnings.contains) { add(warning.title, AO3TagSearch.Field.warning.symbol) }
+        for warning in Warning.allCases.filter(excludedWarnings.contains) { add("−\(warning.title)", AO3TagSearch.Field.warning.symbol) }
+        for category in Category.allCases.filter(categories.contains) { add(category.title) }
+        for category in Category.allCases.filter(excludedCategories.contains) { add("−\(category.title)") }
 
-        if crossover != .any { labels.append("Crossover: \(crossover.title)") }
-        if completion != .any { labels.append(completion.title) }
-        if chapterCount != .any { labels.append(chapterCount.title) }
+        if crossover != .any { add("Crossover: \(crossover.title)") }
+        if completion != .any { add(completion.title) }
+        if chapterCount != .any { add(chapterCount.title) }
 
         for (name, from, to) in [
             ("Words", wordsFrom, wordsTo), ("Hits", hitsFrom, hitsTo),
@@ -411,22 +423,22 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             let lower = from.trimmingCharacters(in: .whitespaces)
             let upper = to.trimmingCharacters(in: .whitespaces)
             switch (lower.isEmpty, upper.isEmpty) {
-            case (false, false): labels.append("\(name) \(lower)–\(upper)")
-            case (false, true): labels.append("\(name) ≥ \(lower)")
-            case (true, false): labels.append("\(name) ≤ \(upper)")
+            case (false, false): add("\(name) \(lower)–\(upper)")
+            case (false, true): add("\(name) ≥ \(lower)")
+            case (true, false): add("\(name) ≤ \(upper)")
             case (true, true): break
             }
         }
 
-        if updated != .any { labels.append(updated.title) }
-        if let dateFrom { labels.append("After \(Self.dateBoundFormatter.string(from: dateFrom))") }
-        if let dateTo { labels.append("Before \(Self.dateBoundFormatter.string(from: dateTo))") }
-        if language != .any { labels.append(language.title) }
+        if updated != .any { add(updated.title) }
+        if let dateFrom { add("After \(Self.dateBoundFormatter.string(from: dateFrom))") }
+        if let dateTo { add("Before \(Self.dateBoundFormatter.string(from: dateTo))") }
+        if language != .any { add(language.title) }
 
         // Sort last, and unconditionally: unlike every entry above there is always
         // an order in effect, so this is the one label that is never noise — and it
         // is the setting users most often forget they changed.
-        labels.append("Sort: \(sort.title)")
+        add("Sort: \(sort.title)")
         return labels
     }
 

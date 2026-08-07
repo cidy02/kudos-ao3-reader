@@ -18,7 +18,7 @@ struct SearchResultsHero: View {
     let summary: AO3ResultSummary
     /// From `AO3SearchFilters.summaryLabels(excluding:)` — non-default settings
     /// only, always ending with the sort.
-    var filterLabels: [String] = []
+    var filterLabels: [AO3SearchFilters.SummaryLabel] = []
     var onEditFilters: (() -> Void)?
 
     /// Beyond this the chips would crowd out the works. The overflow is *counted*
@@ -74,7 +74,13 @@ struct SearchResultsHero: View {
                 // Icon tinted by `WorkStatLabel`'s `.tint`, so it tracks the app
                 // theme like every other stat glyph; the text inherits the
                 // secondary style set here.
-                WorkStatLabel(text: countText, symbol: "books.vertical")
+                //
+                // `square.stack` because the author profile already labels its own
+                // "N works" with it — and because `books.vertical` is the *fandom*
+                // glyph, which on the Search card can appear as a chip one line
+                // below. Two different things must not share an icon in the same
+                // card.
+                WorkStatLabel(text: countText, symbol: "square.stack")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
@@ -82,7 +88,7 @@ struct SearchResultsHero: View {
 
             if !filterLabels.isEmpty {
                 FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(visibleChips, id: \.self) { TagChip(text: $0) }
+                    ForEach(visibleChips, id: \.self) { TagChip(text: $0.text, symbol: $0.symbol) }
                     if overflowCount > 0 { TagChip(text: "+\(overflowCount) more") }
                 }
             }
@@ -92,7 +98,7 @@ struct SearchResultsHero: View {
         .contentShape(Rectangle())
     }
 
-    private var visibleChips: [String] {
+    private var visibleChips: [AO3SearchFilters.SummaryLabel] {
         Array(filterLabels.prefix(Self.visibleChipLimit))
     }
 
@@ -104,6 +110,11 @@ struct SearchResultsHero: View {
         "\(summary.total.formatted()) \(summary.total == 1 ? "work" : "works")"
     }
 
+    /// Preview-only: wraps plain strings so the previews stay readable.
+    fileprivate static func previewLabels(_ texts: [String]) -> [AO3SearchFilters.SummaryLabel] {
+        texts.map { AO3SearchFilters.SummaryLabel(text: $0, symbol: nil) }
+    }
+
     private var spokenLabel: String {
         var parts = [countText]
         // The verbatim scope, preposition included — "in Naruto (Anime & Manga)"
@@ -113,7 +124,7 @@ struct SearchResultsHero: View {
             parts.append("showing \(range.lowerBound) to \(range.upperBound)")
         }
         // Every filter, not just the six on screen — the visual cap is about space.
-        parts += filterLabels
+        parts += filterLabels.map(\.text)
         return parts.joined(separator: ", ")
     }
 }
@@ -121,7 +132,7 @@ struct SearchResultsHero: View {
 #Preview("Browse — fandom with filters") {
     SearchResultsHero(
         summary: AO3ResultSummary(total: 142_327, scope: "in Naruto (Anime & Manga)", range: 1 ... 20),
-        filterLabels: ["English", "Complete", "Teen And Up+", "Sort: Date Updated"],
+        filterLabels: SearchResultsHero.previewLabels(["English", "Complete", "Teen And Up+", "Sort: Date Updated"]),
         onEditFilters: {}
     )
     .padding()
@@ -130,7 +141,7 @@ struct SearchResultsHero: View {
 #Preview("Browse — nothing set") {
     SearchResultsHero(
         summary: AO3ResultSummary(total: 142_327, scope: "in Naruto (Anime & Manga)", range: 1 ... 20),
-        filterLabels: ["Sort: Date Updated"],
+        filterLabels: SearchResultsHero.previewLabels(["Sort: Date Updated"]),
         onEditFilters: {}
     )
     .padding()
@@ -139,10 +150,10 @@ struct SearchResultsHero: View {
 #Preview("Overflow") {
     SearchResultsHero(
         summary: AO3ResultSummary(total: 812, scope: "in Naruto (Anime & Manga)", range: 21 ... 40),
-        filterLabels: [
-            "Character: Sasuke Uchiha", "−Tag: Time Travel", "Explicit", "No Not Rated",
+        filterLabels: SearchResultsHero.previewLabels([
+            "Sasuke Uchiha", "−Time Travel", "Explicit", "No Not Rated",
             "Major Character Death", "Complete", "Words ≥ 1000", "Past week", "Sort: Kudos"
-        ],
+        ]),
         onEditFilters: {}
     )
     .padding()
@@ -151,7 +162,7 @@ struct SearchResultsHero: View {
 #Preview("Search — no subject or range") {
     SearchResultsHero(
         summary: AO3ResultSummary(total: 92_495, scope: nil, range: 1 ... 20),
-        filterLabels: ["Sort: Best Match"],
+        filterLabels: SearchResultsHero.previewLabels(["Sort: Best Match"]),
         onEditFilters: {}
     )
     .padding()
