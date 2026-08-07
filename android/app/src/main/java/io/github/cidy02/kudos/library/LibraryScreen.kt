@@ -96,6 +96,7 @@ import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.background
 
 private const val ShelfLimit = 12
 
@@ -1119,7 +1120,15 @@ private fun LibraryCarousel(
     footerFor: ((SavedWork) -> String?)? = null,
     onSeeAll: (() -> Unit)? = null
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Shelf band — see HomeShelf for why every shelf gets one rather than
+            // alternating.
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .padding(vertical = 10.dp)
+    ) {
         CollapsibleSectionHeader(
             title = title,
             collapsed = collapsed,
@@ -1379,7 +1388,15 @@ private fun ReadingQueuesShelf(
     onCreate: () -> Unit,
     onOpenQueue: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Shelf band — see HomeShelf for why every shelf gets one rather than
+            // alternating.
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .padding(vertical = 10.dp)
+    ) {
         CollapsibleSectionHeader(
             title = "Reading Queues",
             collapsed = collapsed,
@@ -1425,7 +1442,15 @@ private fun CollectionsShelf(
     onCreate: () -> Unit,
     onOpenCollection: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Shelf band — see HomeShelf for why every shelf gets one rather than
+            // alternating.
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .padding(vertical = 10.dp)
+    ) {
         CollapsibleSectionHeader(
             title = "Collections",
             collapsed = collapsed,
