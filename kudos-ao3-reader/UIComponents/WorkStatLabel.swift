@@ -242,32 +242,37 @@ struct WorkListStatsRow: View {
     /// are all `fixedSize`, so a too-long single row would otherwise overflow
     /// and stretch the card past its own padding.
     private var topRow: some View {
-        FlowLayout(spacing: 6, rowSpacing: 5, justifiesRows: true) {
-            ForEach(Array(topItems.enumerated()), id: \.offset) { index, item in
-                if index > 0 { bullet }
-                badge(item)
+        // Chips, not bullet-separated labels. These four are *states* — what the
+        // work is — where the row below is counts, and giving them an enclosing
+        // shape is what separates the two at a glance. It also drops the bullets:
+        // a capsule is its own separator, so the row reads as four things rather
+        // than one run-on line.
+        //
+        // Not `justifiesRows`: stretched gaps between capsules read as broken
+        // spacing, where between bare labels they read as alignment.
+        FlowLayout(spacing: 6, rowSpacing: 5) {
+            ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
+                statusChip(item)
             }
         }
     }
 
-    private func badge(_ item: Item) -> some View {
-        WorkStatLabel(
-            text: item.text,
-            symbol: item.symbol,
-            accessibilityLabel: item.accessibilityLabel,
-            iconColor: item.iconColor
-        )
-    }
-
-    /// `.fixedSize()` matters here: every other child in this row is a
-    /// `WorkStatLabel`, which already refuses to compress. Without it too, a
-    /// bare `Text` is the only flexible child left when the row runs long
-    /// (e.g. "Uncategorized" next to "Not Disclosed") — the HStack squeezes
-    /// all the slack onto it first, sometimes down to invisible.
-    private var bullet: some View {
-        Text("•")
-            .fixedSize()
-            .accessibilityHidden(true)
+    /// One AO3 status as a capsule. The glyph keeps its own colour — AO3's rating
+    /// and category colour-coding is the point of it — while the capsule stays
+    /// neutral, so a card with four chips doesn't turn into four coloured blocks.
+    private func statusChip(_ item: Item) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: item.symbol)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(item.iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.tint))
+            Text(item.text)
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(.quaternary, in: Capsule())
+        .combinedAccessibilityRow(item.accessibilityLabel)
     }
 
     var body: some View {
