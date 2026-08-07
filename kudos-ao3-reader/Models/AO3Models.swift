@@ -103,6 +103,36 @@ nonisolated struct AO3ResultSummary: Equatable, Sendable {
         }
         return scope
     }
+
+    /// AO3 serves 20 works per page. Verified live 2026-08-06 on `/works/search`,
+    /// and it is what AO3 itself prints on a tag list ("1 - 20 of …").
+    static let worksPerPage = 20
+
+    /// Fills in what a `/works/search` heading leaves out.
+    ///
+    /// A tag or user list heading states its subject and its range; a search states
+    /// only "142,327 Found". But a screen scoped to one fandom *knows* it is that
+    /// fandom's works list, and knows which page it asked for — so it can complete
+    /// its own card rather than showing a bare number. Anything AO3 actually said
+    /// wins: this only ever fills a nil.
+    ///
+    /// `onPageCount` is how many works came back, which is what makes the last
+    /// (short) page come out right. Only the *start* of the range depends on
+    /// `worksPerPage`, so if AO3 ever changed its page size, page 1 would still be
+    /// correct and later pages would drift — a visible, bounded wrongness rather
+    /// than a silent one.
+    func completing(subject: String?, page: Int, onPageCount: Int) -> AO3ResultSummary {
+        var derived: ClosedRange<Int>?
+        if range == nil, onPageCount > 0, page > 0 {
+            let first = (page - 1) * Self.worksPerPage + 1
+            derived = first ... max(first, min(first + onPageCount - 1, total))
+        }
+        return AO3ResultSummary(
+            total: total,
+            scope: scope ?? subject.map { "in \($0)" },
+            range: range ?? derived
+        )
+    }
 }
 
 /// A bounded look at a series page. Used before automatic series preservation so

@@ -98,8 +98,8 @@ struct FandomWorksView: View {
                 List {
                     // Above pagination: the total describes the whole list, not
                     // the page you happen to be on.
-                    if let resultSummary {
-                        Section { SearchResultsHero(summary: resultSummary).cardRow() }
+                    if let heroSummary {
+                        Section { SearchResultsHero(summary: heroSummary).cardRow() }
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
@@ -185,6 +185,13 @@ struct FandomWorksView: View {
         default:
             EmptyView()
         }
+    }
+
+    /// `FandomWorksView` runs a `/works/search`, whose heading is a bare count —
+    /// but this screen *is* this fandom's works list, so it can name its own
+    /// subject and work out which slice of the total is on screen.
+    private var heroSummary: AO3ResultSummary? {
+        resultSummary?.completing(subject: fandom, page: currentPage, onPageCount: results.count)
     }
 
     private func load(page: Int) async {
@@ -286,8 +293,8 @@ struct TagWorksView: View {
                 List {
                     // Above pagination: the total describes the whole list, not
                     // the page you happen to be on.
-                    if let resultSummary {
-                        Section { SearchResultsHero(summary: resultSummary).cardRow() }
+                    if let heroSummary {
+                        Section { SearchResultsHero(summary: heroSummary).cardRow() }
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
@@ -391,6 +398,15 @@ struct TagWorksView: View {
         default:
             EmptyView()
         }
+    }
+
+    /// A `/tags/<t>/works` heading already names its tag and its range, so
+    /// `completing` normally changes nothing here — it matters when this request
+    /// resolves to a URL whose heading is a bare count.
+    private var heroSummary: AO3ResultSummary? {
+        resultSummary?.completing(
+            subject: request.title, page: currentPage, onPageCount: results.count
+        )
     }
 
     private func load(page: Int) async {

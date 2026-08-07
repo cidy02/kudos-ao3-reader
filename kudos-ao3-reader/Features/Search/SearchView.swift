@@ -230,8 +230,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 List {
                     // Above the pagination row: it answers "how big is this search",
                     // which is context for the whole list rather than for a page.
-                    if let resultSummary {
-                        Section { SearchResultsHero(summary: resultSummary).cardRow() }
+                    if let heroSummary {
+                        Section { SearchResultsHero(summary: heroSummary).cardRow() }
                     }
 
                     if showPagination {
@@ -767,6 +767,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 phase = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// No subject: unlike a fandom or tag list, a Search can have several fandoms
+    /// and tags active at once, so there is no one thing these results are "in" —
+    /// naming any single filter would be a lie. The range is safe though, and AO3's
+    /// search heading never states it.
+    private var heroSummary: AO3ResultSummary? {
+        resultSummary?.completing(subject: nil, page: currentPage, onPageCount: results.count)
     }
 
     private func refreshCurrentResults() async {

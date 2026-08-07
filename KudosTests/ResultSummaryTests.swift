@@ -125,4 +125,71 @@ struct ResultSummaryTests {
         #expect(summary.range == nil)
         #expect(summary.subject == "5 - 10 Years Later")
     }
+
+    // MARK: Completing a search heading from what the screen already knows
+
+    @Test func aFandomScreenNamesItselfWhenTheSearchHeadingDoesNot() throws {
+        // What the screenshot showed: FandomWorksView runs a /works/search, whose
+        // heading is a bare "142,327 Found" — so the card had a count and nothing
+        // else. The screen *is* that fandom's works list, so it supplies both.
+        let bare = try #require(AO3Client.parseResultSummary("142,327 Found  ?"))
+        #expect(bare.subject == nil)
+        #expect(bare.range == nil)
+
+        let completed = bare.completing(subject: "Naruto (Anime & Manga)", page: 1, onPageCount: 20)
+        #expect(completed.total == 142_327)
+        #expect(completed.subject == "Naruto (Anime & Manga)")
+        #expect(completed.scope == "in Naruto (Anime & Manga)")
+        #expect(completed.range == 1 ... 20)
+    }
+
+    @Test func whatAO3ActuallySaidAlwaysWins() throws {
+        // A tag heading already names its tag and range. Completing must never
+        // overwrite either — the screen's own idea of its title can be a display
+        // string ("Naruto") where AO3's is canonical ("Naruto (Anime & Manga)").
+        let stated = try #require(
+            AO3Client.parseResultSummary("41 - 60 of 142,322 Works in Naruto (Anime & Manga)")
+        )
+        let completed = stated.completing(subject: "Something Else", page: 99, onPageCount: 3)
+        #expect(completed.subject == "Naruto (Anime & Manga)")
+        #expect(completed.range == 41 ... 60)
+    }
+
+    @Test func aDerivedRangeFollowsThePageYouAreOn() throws {
+        let bare = try #require(AO3Client.parseResultSummary("142,327 Found"))
+        #expect(bare.completing(subject: nil, page: 1, onPageCount: 20).range == 1 ... 20)
+        #expect(bare.completing(subject: nil, page: 2, onPageCount: 20).range == 21 ... 40)
+        #expect(bare.completing(subject: nil, page: 50, onPageCount: 20).range == 981 ... 1000)
+    }
+
+    @Test func aShortLastPageEndsWhereItActuallyEnds() throws {
+        // 3 works came back, so the range is 3 long — this is why the count of works
+        // on the page is passed in rather than assuming a full page.
+        let bare = try #require(AO3Client.parseResultSummary("43 Found"))
+        #expect(bare.completing(subject: nil, page: 3, onPageCount: 3).range == 41 ... 43)
+    }
+
+    @Test func anEmptyPageDerivesNoRange() throws {
+        // Zero works on screen is not "1–0".
+        let bare = try #require(AO3Client.parseResultSummary("0 Found"))
+        #expect(bare.completing(subject: nil, page: 1, onPageCount: 0).range == nil)
+    }
+
+    @Test func aDerivedRangeNeverRunsPastTheTotal() throws {
+        // Belt and braces: if AO3's total and its paging ever disagree, the card
+        // must not claim to be showing works 21-40 of a 25-work list.
+        let bare = try #require(AO3Client.parseResultSummary("25 Found"))
+        let completed = bare.completing(subject: nil, page: 2, onPageCount: 20)
+        #expect(completed.range == 21 ... 25)
+    }
+
+    @Test func searchKeepsNoSubjectBecauseItCanHaveMany() throws {
+        // The Search tab passes nil: several fandoms and tags can be active at once,
+        // so there is no single thing the results are "in".
+        let bare = try #require(AO3Client.parseResultSummary("92,495 Found"))
+        let completed = bare.completing(subject: nil, page: 1, onPageCount: 20)
+        #expect(completed.subject == nil)
+        #expect(completed.scope == nil)
+        #expect(completed.range == 1 ... 20)
+    }
 }
