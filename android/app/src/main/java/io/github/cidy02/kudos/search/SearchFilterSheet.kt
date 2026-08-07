@@ -40,6 +40,12 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3Updated
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
 
 /**
  * Full advanced-search filter sheet over [AO3SearchFilters].
@@ -92,12 +98,15 @@ fun SearchFilterSheet(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onClear, enabled = filters.hasActiveFilters) {
-                    Text("Reset")
+                // Icon buttons at the two ends, matching the app's sheet chrome
+                // elsewhere — they read as chrome rather than as another form
+                // control competing with the facets below.
+                FilledTonalIconButton(onClick = onClear, enabled = filters.hasActiveFilters) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "Reset filters")
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Button(enabled = filters.isSearchable, onClick = onApply) {
-                    Text("Apply")
+                FilledIconButton(onClick = onApply, enabled = filters.isSearchable) {
+                    Icon(Icons.Outlined.Search, contentDescription = "Apply filters")
                 }
             }
             Text(
