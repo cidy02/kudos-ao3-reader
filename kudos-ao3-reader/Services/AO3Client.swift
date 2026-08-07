@@ -355,15 +355,33 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return try Self.parseSearchPage(html, page: page)
     }
 
+    /// One page of a fandom's works, from AO3's own tag listing — Browse's
+    /// endpoint. Takes the same filters as `search`; see `fandomWorksURL` for why
+    /// Browse asks the tag page rather than `/works/search`.
+    func fandomWorksPage(
+        fandom: String, filters: AO3SearchFilters, page: Int = 1
+    ) async throws -> AO3SearchPage {
+        guard let url = Self.fandomWorksURL(fandom: fandom, filters: filters, page: page) else {
+            throw AO3Error.network("Bad fandom URL.")
+        }
+        return try Self.parseSearchPage(try await getHTML(url), page: page)
+    }
+
     /// The `/works/search` URL for a filter set. Pure and static so every
     /// `work_search[...]` parameter name, id, and multi-value convention is
     /// unit-testable without a network call — these are load-bearing constants
     /// copied from AO3's own form, and a typo in one would degrade to an empty
     /// result page rather than an error.
-    static func searchURL(filters: AO3SearchFilters, page: Int) -> URL? {
-        guard var components = URLComponents(string: "https://archiveofourown.org/works/search") else {
-            return nil
-        }
+    /// Every `work_search[...]` query item for a filter set, plus `page`.
+    ///
+    /// Shared by both listing endpoints, because they are the same
+    /// `WorkSearchForm` server-side: `/works/search` backs the Search tab, and
+    /// `/tags/<tag>/works` backs Browse. The tag page's *visible* sidebar offers
+    /// fewer fields than this emits, but the endpoint honours all of them —
+    /// verified live 2026-08-06 for title, creators, rating_ids, word_count,
+    /// single_chapter, revised_at, hits, character_names, sort_column and
+    /// excluded_tag_names, each of which measurably changed the result count.
+    static func workSearchQueryItems(filters: AO3SearchFilters, page: Int) -> [URLQueryItem] {
         var items: [URLQueryItem] = []
 
         func add(_ name: String, _ value: String?) {
@@ -442,9 +460,56 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // and the response cache in `makeAnonymousSessionConfiguration` can never
         // fire. (Both measured 2026-08-06 — see docs/reports/ao3-networking-review.md.)
         items.append(URLQueryItem(name: "page", value: String(page)))
-        components.queryItems = items
+        return items
+    }
 
+    /// The `/works/search` URL for a filter set — the **Search tab's** endpoint.
+    /// Pure and static so every parameter name, id, and multi-value convention is
+    /// unit-testable without a network call.
+    static func searchURL(filters: AO3SearchFilters, page: Int) -> URL? {
+        guard var components = URLComponents(string: "https://archiveofourown.org/works/search") else {
+            return nil
+        }
+        components.queryItems = workSearchQueryItems(filters: filters, page: page)
         return components.url
+    }
+
+    /// The `/tags/<fandom>/works` URL for a filter set — **Browse's** endpoint.
+    ///
+    /// Browse asks AO3 for a tag's own works list rather than a search scoped to
+    /// that tag. Same works (142,327 both ways, measured) and the same filters,
+    /// but the tag page states its own heading — "1 - 20 of 142,327 Works in
+    /// Naruto (Anime & Manga)" — where `/works/search` answers only "142,327
+    /// Found". So the subject and range on the results card come from AO3
+    /// instead of being derived here.
+    ///
+    /// The trade-off is deliberate: AO3 serves tag lists `no-cache` where it
+    /// serves `/works/search` `max-age=600`, so paging back and forth on Browse
+    /// re-fetches instead of replaying a cached page. `pace()` still bounds the
+    /// request rate; the cache only ever saved a repeat.
+    ///
+    /// `filters.fandom` is left in rather than stripped as redundant: the path
+    /// already scopes to this tag, so `fandom_names` can only ever re-select the
+    /// same works (verified — the count is unchanged with it present), whereas
+    /// removing it would *widen* the results if that field ever held more than
+    /// the one fandom the screen was opened for.
+    static func fandomWorksURL(fandom: String, filters: AO3SearchFilters, page: Int) -> URL? {
+        guard let segment = tagPathSegment(fandom),
+              var components = URLComponents(string: "https://archiveofourown.org/tags/\(segment)/works")
+        else { return nil }
+        components.queryItems = workSearchQueryItems(filters: filters, page: page)
+        return components.url
+    }
+
+    /// AO3 writes a handful of characters as `*x*` escapes inside a tag's URL
+    /// path rather than percent-encoding them — `&` becomes `*a*`, so
+    /// "Naruto (Anime & Manga)" is `/tags/Naruto%20(Anime%20*a*%20Manga)/works`.
+    static func tagPathSegment(_ tag: String) -> String? {
+        var escaped = tag
+        for (from, to) in [("/", "*s*"), ("&", "*a*"), (".", "*d*"), ("?", "*q*"), ("#", "*h*")] {
+            escaped = escaped.replacingOccurrences(of: from, with: to)
+        }
+        return escaped.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
     }
 
     /// The URL of a user's "Marked for Later" reading list. AO3 renders it at
@@ -1220,11 +1285,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// Builds a fandom's `/tags/<escaped>/works` URL, applying AO3's tag escaping
     /// (`&`→`*a*`, `/`→`*s*`, `.`→`*d*`, `?`→`*q*`, `#`→`*h*`) before percent-encoding.
     private func fandomWorksURL(_ fandom: String) -> URL? {
-        var escaped = fandom
-        for (from, to) in [("/", "*s*"), ("&", "*a*"), (".", "*d*"), ("?", "*q*"), ("#", "*h*")] {
-            escaped = escaped.replacingOccurrences(of: from, with: to)
-        }
-        guard let encoded = escaped.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
+        guard let encoded = Self.tagPathSegment(fandom) else { return nil }
         return URL(string: "\(base)/tags/\(encoded)/works")
     }
 
@@ -1482,7 +1543,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // pedantry: `/works/search` appends a help link inside the same heading, so
         // the heading's *text* is "92,495 Found  ?" and a naive "everything after
         // the noun" would make the scope "?".
-        let rest = collapsed[nounRange.upperBound...].trimmingCharacters(in: .whitespaces)
+        var rest = collapsed[nounRange.upperBound...].trimmingCharacters(in: .whitespaces)
+        // A tag list says "N Works in <tag>" — but the moment a `work_search[query]`
+        // is active it says "N Works **found** in <tag>" instead. Browse sends a
+        // query for excluded warnings and categories, so this is the common case
+        // there, not an oddity. Measured live.
+        if rest.hasPrefix("found ") { rest = String(rest.dropFirst("found ".count)) }
         let scope = ["in ", "by "].contains(where: rest.hasPrefix) ? rest : nil
         return AO3ResultSummary(total: total, scope: scope, range: range)
     }

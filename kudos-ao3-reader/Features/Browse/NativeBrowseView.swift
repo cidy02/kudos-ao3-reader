@@ -197,7 +197,13 @@ struct FandomWorksView: View {
     private func load(page: Int) async {
         if results.isEmpty { phase = .loading }
         do {
-            let result = try await AO3Client.shared.search(filters: filters, page: page)
+            // Browse reads AO3's tag listing, not /works/search: same works and
+            // same filters, but the page states its own "1 - 20 of N Works in
+            // <fandom>" heading, so the results card shows AO3's figures rather
+            // than ones derived here.
+            let result = try await AO3Client.shared.fandomWorksPage(
+                fandom: fandom, filters: filters, page: page
+            )
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages

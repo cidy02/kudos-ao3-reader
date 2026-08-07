@@ -126,6 +126,22 @@ struct ResultSummaryTests {
         #expect(summary.subject == "5 - 10 Years Later")
     }
 
+    @Test func aFilteredTagListSaysWorksFoundIn() throws {
+        // Verbatim from /tags/Naruto (Anime *a* Manga)/works with a query applied.
+        // The moment `work_search[query]` is set, AO3 changes the wording from
+        // "Works in <tag>" to "Works **found** in <tag>". Browse sends a query for
+        // every excluded warning and category, so on that screen this is the normal
+        // heading, not an edge case — and without handling it the card silently
+        // loses its title exactly when a filter is active.
+        let summary = try #require(
+            AO3Client.parseResultSummary("1 - 20 of 88,698 Works found in Naruto (Anime & Manga)")
+        )
+        #expect(summary.total == 88698)
+        #expect(summary.subject == "Naruto (Anime & Manga)")
+        #expect(summary.scope == "in Naruto (Anime & Manga)")
+        #expect(summary.range == 1 ... 20)
+    }
+
     // MARK: Completing a search heading from what the screen already knows
 
     @Test func aFandomScreenNamesItselfWhenTheSearchHeadingDoesNot() throws {
