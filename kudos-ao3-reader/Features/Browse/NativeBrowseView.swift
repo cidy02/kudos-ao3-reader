@@ -60,6 +60,8 @@ struct FandomWorksView: View {
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
+    /// AO3's own result-count heading for these results, when it sent one.
+    @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
     @State private var expandAll = false
     /// The active filters for this fandom's works — seeded to just the fandom, then
@@ -94,6 +96,11 @@ struct FandomWorksView: View {
                 AO3WorkRowSkeletonList(count: 6)
             } else {
                 List {
+                    // Above pagination: the total describes the whole list, not
+                    // the page you happen to be on.
+                    if let resultSummary {
+                        Section { SearchResultsHero(summary: resultSummary).cardRow() }
+                    }
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(results) { work in
@@ -187,6 +194,7 @@ struct FandomWorksView: View {
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
+            resultSummary = result.summary
             phase = .loaded
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
@@ -203,6 +211,7 @@ struct FandomWorksView: View {
         results = []
         currentPage = 1
         totalPages = 1
+        resultSummary = nil
         Task { await load(page: 1) }
     }
 
@@ -252,6 +261,8 @@ struct TagWorksView: View {
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
+    /// AO3's own result-count heading for these results, when it sent one.
+    @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
     @State private var expandAll = false
     /// Client-side refine of this tag's loaded works — narrows what's on screen in
@@ -273,6 +284,11 @@ struct TagWorksView: View {
                 AO3WorkRowSkeletonList(count: 6)
             } else {
                 List {
+                    // Above pagination: the total describes the whole list, not
+                    // the page you happen to be on.
+                    if let resultSummary {
+                        Section { SearchResultsHero(summary: resultSummary).cardRow() }
+                    }
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(visibleResults) { work in
@@ -384,6 +400,7 @@ struct TagWorksView: View {
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
+            resultSummary = result.summary
             phase = .loaded
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")

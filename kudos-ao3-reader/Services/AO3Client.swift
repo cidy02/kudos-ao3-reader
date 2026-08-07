@@ -1417,7 +1417,59 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             throw AO3Error.parse
         }
         let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
-        return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
+        return AO3SearchPage(
+            works: works,
+            currentPage: page,
+            totalPages: totalPages,
+            summary: try? Self.resultSummary(in: doc)
+        )
+    }
+
+    /// AO3's result-count heading. `/works/search` puts it in an `h3.heading`
+    /// ("92,495 Found"); tag and user works lists use an `h2.heading`
+    /// ("1 - 20 of 142,322 Works in <tag>"). Both live under `#main`, so this takes
+    /// the first heading there that parses rather than guessing per endpoint.
+    ///
+    /// nil is a normal outcome, not a failure: a search with no matches omits the
+    /// heading entirely (measured — a zero-result `/works/search` renders only
+    /// "Search Results"), and the count is decoration, so it must never fail a page
+    /// that parsed its works fine.
+    private static func resultSummary(in doc: Document) throws -> AO3ResultSummary? {
+        for heading in try doc.select("#main h2.heading, #main h3.heading").array() {
+            if let summary = Self.parseResultSummary(try heading.text()) { return summary }
+        }
+        return nil
+    }
+
+    /// Pure (unit-tested): AO3's heading text → total + scope.
+    ///
+    /// Handles the three live shapes with one pass, because they differ only in
+    /// which noun follows the number and whether a "1 - 20 of" range precedes it:
+    ///   - `92,495 Found`
+    ///   - `1 - 20 of 142,322 Works in Naruto (Anime & Manga)`
+    ///   - `1 - 20 of 535 Works by astolat`
+    /// The number taken is always the one immediately before `Works`/`Found`, so a
+    /// leading range can never be mistaken for the total — that is the whole reason
+    /// this is anchored on the noun rather than on "the first number".
+    static func parseResultSummary(_ text: String) -> AO3ResultSummary? {
+        let collapsed = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard let nounRange = collapsed.range(
+            of: #"([\d,]+)\s+(Works|Work|Found)\b"#, options: .regularExpression
+        ) else { return nil }
+
+        let matched = collapsed[nounRange]
+        let digits = matched.prefix { $0.isNumber || $0 == "," }.filter(\.isNumber)
+        guard let total = Int(digits) else { return nil }
+
+        // What follows the noun is AO3's qualifier, kept verbatim (preposition
+        // included) so the UI reads the way the site does instead of re-phrasing it.
+        // It is always "in <tag>" or "by <user>", and requiring that is not
+        // pedantry: `/works/search` appends a help link inside the same heading, so
+        // the heading's *text* is "92,495 Found  ?" and a naive "everything after
+        // the noun" would make the scope "?".
+        let rest = collapsed[nounRange.upperBound...].trimmingCharacters(in: .whitespaces)
+        let scope = ["in ", "by "].contains(where: rest.hasPrefix) ? rest : nil
+        return AO3ResultSummary(total: total, scope: scope)
     }
 
     /// Extracts the numeric work id from a `/works/<id>[/...]` path.

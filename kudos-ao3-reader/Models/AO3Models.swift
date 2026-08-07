@@ -74,6 +74,21 @@ nonisolated struct AO3SearchPage: Sendable {
     var works: [AO3WorkSummary]
     var currentPage: Int
     var totalPages: Int
+    /// AO3's own result-count heading, when the page carries one.
+    var summary: AO3ResultSummary?
+}
+
+/// The count line AO3 prints above a works list — "92,495 Found",
+/// "1 - 20 of 142,322 Works in Naruto (Anime & Manga)", "1 - 20 of 535 Works by
+/// astolat". The *total* is the part worth having: it is the only place AO3
+/// states how many works match, and it is not derivable from a page of 20 blurbs.
+nonisolated struct AO3ResultSummary: Equatable, Sendable {
+    /// Total matching works across every page.
+    let total: Int
+    /// AO3's own qualifier, verbatim and including its preposition — "in Naruto
+    /// (Anime & Manga)", "by astolat". nil on `/works/search`, whose heading is
+    /// just "<n> Found" and names no subject.
+    let scope: String?
 }
 
 /// A bounded look at a series page. Used before automatic series preservation so

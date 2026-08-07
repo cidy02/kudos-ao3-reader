@@ -27,6 +27,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
+    /// AO3's own result-count heading for the current results, when it sent one.
+    @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .idle
     @State private var path = NavigationPath()
     /// Drives the toolbar "expand/collapse all" toggle for the result cards.
@@ -93,6 +95,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         /// and strand the user on a blank "no results" page for a level that had works.
         let results: [AO3WorkSummary]
         let totalPages: Int
+        /// Captured with the results for the same reason: Back restores this level
+        /// verbatim, and a hero card left over from the level we're leaving would
+        /// state a total that belongs to a different search.
+        let summary: AO3ResultSummary?
     }
 
     // Multi-select / bulk actions over AO3 search results — the same shared
@@ -222,6 +228,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         } else {
             ScrollViewReader { proxy in
                 List {
+                    // Above the pagination row: it answers "how big is this search",
+                    // which is context for the whole list rather than for a page.
+                    if let resultSummary {
+                        Section { SearchResultsHero(summary: resultSummary).cardRow() }
+                    }
+
                     if showPagination {
                         Section { paginationRow.id(paginationTopID) }
                     }
@@ -576,6 +588,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             results = previous.results
             currentPage = previous.page
             totalPages = previous.totalPages
+            resultSummary = previous.summary
             phase = .loaded
         } else if phase == .idle {
             router.exitSearch()
@@ -593,6 +606,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         results = []
         currentPage = 1
         totalPages = 1
+        resultSummary = nil
         expandAllCards = false
         phase = .idle
     }
@@ -613,6 +627,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         results = []
         currentPage = 1
         totalPages = 1
+        resultSummary = nil
         load(page: 1)
     }
 
@@ -657,7 +672,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 filters: filters,
                 page: currentPage,
                 results: results,
-                totalPages: totalPages
+                totalPages: totalPages,
+                summary: resultSummary
             ))
         }
         filters = new
@@ -738,6 +754,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 results = result.works
                 currentPage = result.currentPage
                 totalPages = result.totalPages
+                resultSummary = result.summary
                 phase = .loaded
             } catch is CancellationError {
                 // Superseded on purpose — the newer load owns the UI now.
