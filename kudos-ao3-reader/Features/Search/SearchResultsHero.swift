@@ -43,7 +43,7 @@ struct SearchResultsHero: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 // Only tag and user lists name a subject or state a range; a plain
                 // search has neither, so its card starts at the count rather than
                 // padding out a title row with something invented.
@@ -57,21 +57,26 @@ struct SearchResultsHero: View {
                         }
                         Spacer(minLength: 0)
                         if let range = summary.range {
-                            Text("\(range.lowerBound)–\(range.upperBound)")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                // Fixed-width digits so paging doesn't jiggle the
-                                // row, and priority so a long fandom name shrinks
-                                // before the range is squeezed out.
+                            // Tinted rather than the neutral capsule the filter
+                            // chips use: it is a status, not another filter, and
+                            // side by side they would otherwise read as the same
+                            // kind of thing.
+                            TagChip(text: "\(range.lowerBound)–\(range.upperBound)", tinted: true)
+                                // Fixed-width digits so paging doesn't resize the
+                                // badge, and priority so a long fandom name shrinks
+                                // before the badge is squeezed out.
                                 .monospacedDigit()
                                 .layoutPriority(1)
                         }
                     }
                 }
 
-                Text(countText)
-                    .font(.title3.weight(.semibold))
-                    .monospacedDigit()
+                // Icon tinted by `WorkStatLabel`'s `.tint`, so it tracks the app
+                // theme like every other stat glyph; the text inherits the
+                // secondary style set here.
+                WorkStatLabel(text: countText, symbol: "books.vertical")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             }
 
