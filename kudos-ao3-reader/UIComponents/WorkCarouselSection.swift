@@ -17,6 +17,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
 
     @AppStorage private var collapsed: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(ThemeManager.self) private var theme
 
     init(
         title: String,
@@ -35,6 +36,15 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     }
 
     var body: some View {
+        shelf
+            // Full-bleed: the section's own children carry the horizontal padding,
+            // so the band runs edge to edge the way a shelf does, and the VStack's
+            // spacing between sections becomes the gap between trays.
+            .padding(.vertical, 10)
+            .background(theme.appTheme.carouselBackdrop)
+    }
+
+    private var shelf: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             if !collapsed {
