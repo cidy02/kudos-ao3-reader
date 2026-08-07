@@ -57,8 +57,6 @@ import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
 import kotlin.math.roundToInt
 
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.fillMaxWidth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -347,23 +345,7 @@ private fun HomeShelf(
     selection: Set<String> = emptySet(),
     onToggleSelection: ((String) -> Unit)? = null
 ) {
-    // A shelf band, so adjacent carousels read as separate trays rather than one
-    // long scroll of cards — the Apple Books shelf effect. Full-bleed: the header
-    // and the row carry their own horizontal padding, so the band runs edge to edge
-    // and the gap between sections becomes the gutter between trays.
-    //
-    // Banding every shelf rather than alternating: alternation needs each section's
-    // ordinal, which breaks the moment one is conditional, and the rhythm would
-    // silently double up. Kept barely visible — these sections sit behind cards that
-    // already carry their own surface, so anything stronger turns a shelf into a
-    // competing box.
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .padding(vertical = 10.dp)
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         KudosSectionHeader(
             title = title,
             subtitle = if (items.isEmpty()) null else "${items.size} shown",
