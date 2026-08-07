@@ -25,6 +25,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.padding
 
 /**
  * Compact work metadata expressed with Material 3 color/type roles.
@@ -242,4 +247,136 @@ fun listRowStats(
             )
         }
     )
+}
+
+/**
+ * The four states AO3 itself surfaces up front on a work: rating, category,
+ * warnings and completion. These are *what the work is*, where [listRowStats] is
+ * counts — which is why they render as capsules and the counts don't.
+ *
+ * Every slot always says something, "N/A" and "No Warnings" included: a blank
+ * reads as a layout gap rather than a real state. AO3's own legend never lists the
+ * specific warnings either, just how many apply, so the visible text stays short
+ * and the full list reaches TalkBack through the accessibility label.
+ */
+fun statusChips(
+    rating: String,
+    categories: List<String>,
+    warnings: List<String>,
+    isComplete: Boolean?
+): List<WorkStatItem> {
+    val chips = mutableListOf<WorkStatItem>()
+
+    rating.takeIf { it.isNotBlank() }?.let {
+        chips += WorkStatItem(
+            text = ratingDisplayName(it) ?: it,
+            accessibilityLabel = it,
+            icon = WorkStatIcons.rating
+        )
+    }
+
+    val named = categories.filter { it.isNotBlank() }
+    if (named.isEmpty()) {
+        chips += WorkStatItem(
+            text = "N/A",
+            accessibilityLabel = "Category: not categorized",
+            icon = Icons.Outlined.People
+        )
+    } else {
+        named.forEach {
+            chips += WorkStatItem(
+                text = it,
+                accessibilityLabel = "Category: $it",
+                icon = Icons.Outlined.People
+            )
+        }
+    }
+
+    // "No Archive Warnings Apply" and "Creator Chose Not To Use Archive Warnings"
+    // are AO3's two ways of saying "nothing to flag"; anything else is a real
+    // warning and gets counted rather than spelled out.
+    val real = warnings.filter { warning ->
+        val text = warning.trim()
+        text.isNotBlank() &&
+            !text.equals("No Archive Warnings Apply", ignoreCase = true) &&
+            !text.startsWith("Creator Chose Not To Use", ignoreCase = true)
+    }
+    val chooseNotTo = warnings.any { it.trim().startsWith("Creator Chose Not To Use", ignoreCase = true) }
+    chips += when {
+        real.isNotEmpty() -> WorkStatItem(
+            text = if (real.size == 1) "1 Warning Applies" else "${real.size} Warnings Apply",
+            accessibilityLabel = "Warnings: ${real.joinToString(", ")}",
+            icon = Icons.Outlined.WarningAmber
+        )
+        chooseNotTo -> WorkStatItem(
+            text = "Not Disclosed",
+            accessibilityLabel = "Creator chose not to use archive warnings",
+            icon = Icons.Outlined.WarningAmber
+        )
+        else -> WorkStatItem(
+            text = "No Warnings",
+            accessibilityLabel = "No archive warnings apply",
+            icon = Icons.Outlined.CheckCircle
+        )
+    }
+
+    chips += when (isComplete) {
+        true -> WorkStatItem(
+            text = "Complete",
+            accessibilityLabel = "Status: complete",
+            icon = Icons.Outlined.CheckCircle
+        )
+        false -> WorkStatItem(
+            text = "WIP",
+            accessibilityLabel = "Status: work in progress",
+            icon = Icons.Outlined.Schedule
+        )
+        // AO3 omits the marker rather than saying "unknown", so neither do we.
+        null -> WorkStatItem(
+            text = "Unknown",
+            accessibilityLabel = "Status: unknown",
+            icon = Icons.Outlined.Schedule
+        )
+    }
+
+    return chips
+}
+
+/** [statusChips] as capsules — a capsule is its own separator, so no bullets. */
+@Composable
+fun WorkStatusChipRow(
+    stats: List<WorkStatItem>,
+    modifier: Modifier = Modifier
+) {
+    if (stats.isEmpty()) return
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        stats.forEach { stat ->
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = MaterialTheme.shapes.small
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .semantics { contentDescription = stat.accessibilityLabel ?: stat.text }
+                ) {
+                    stat.icon?.let {
+                        Icon(
+                            imageVector = it,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    Text(text = stat.text, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
 }

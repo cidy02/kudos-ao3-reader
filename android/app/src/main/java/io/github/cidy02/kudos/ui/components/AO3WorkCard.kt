@@ -160,6 +160,17 @@ fun AO3WorkCard(
                 )
             }
 
+            // The four AO3 states, as capsules above the divider — what the work
+            // *is*, separated from the counts below it.
+            WorkStatusChipRow(
+                stats = statusChips(
+                    rating = work.rating,
+                    categories = work.categories,
+                    warnings = work.warnings,
+                    isComplete = work.isComplete
+                )
+            )
+
             HorizontalDivider(
                 modifier = Modifier.padding(top = 4.dp),
                 color = MaterialTheme.colorScheme.outlineVariant
