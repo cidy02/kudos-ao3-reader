@@ -3,10 +3,69 @@ package io.github.cidy02.kudos.network.ao3.search
 import io.github.cidy02.kudos.network.ao3.AO3Constants
 
 class AO3SearchUrlBuilder {
+    /** The Search tab's endpoint: AO3's `/works/search`. */
     fun buildSearchUrl(filters: AO3SearchFilters, page: Int = 1): String {
-        val builder = AO3Constants.baseHttpUrl.newBuilder()
+        return AO3Constants.baseHttpUrl.newBuilder()
             .encodedPath(AO3Constants.SEARCH_PATH)
+            .also { appendWorkSearchParams(it, filters, page) }
+            .build()
+            .toString()
+    }
 
+    /**
+     * Browse's endpoint: AO3's own works list for a tag.
+     *
+     * Same works as searching `work_search[fandom_names]` (142,327 both ways,
+     * measured) and the same filters — the tag page's *visible* sidebar offers
+     * fewer fields, but it is the same `WorkSearchForm` server-side and honours
+     * everything this emits (verified live 2026-08-06: rating_ids, word_count,
+     * single_chapter, revised_at, hits, character_names, title, creators,
+     * sort_column, complete and excluded_tag_names each measurably changed the
+     * count, and `work_search[query]` negation works too).
+     *
+     * What it buys is the heading: "1 - 20 of 142,327 Works in Naruto (Anime &
+     * Manga)" where `/works/search` answers only "142,327 Found", so the results
+     * card's subject and range come from AO3 instead of being derived.
+     *
+     * Returns null when the fandom is blank.
+     */
+    fun buildFandomWorksUrl(fandom: String, filters: AO3SearchFilters, page: Int = 1): String? {
+        val segment = tagPathSegment(fandom) ?: return null
+        return AO3Constants.baseHttpUrl.newBuilder()
+            .addPathSegment("tags")
+            .addPathSegment(segment)
+            .addPathSegment("works")
+            .also { appendWorkSearchParams(it, filters, page) }
+            .build()
+            .toString()
+    }
+
+    /**
+     * AO3 writes a handful of characters as `*x*` escapes inside a tag's URL path
+     * rather than percent-encoding them — `&` becomes `*a*`, so
+     * "Naruto (Anime & Manga)" is `/tags/Naruto%20(Anime%20*a*%20Manga)/works`.
+     * Percent-encoding of the rest is left to OkHttp's `addPathSegment`.
+     */
+    fun tagPathSegment(tag: String): String? {
+        val trimmed = tag.trim()
+        if (trimmed.isEmpty()) return null
+        var escaped = trimmed
+        for ((from, to) in listOf("/" to "*s*", "&" to "*a*", "." to "*d*", "?" to "*q*", "#" to "*h*")) {
+            escaped = escaped.replace(from, to)
+        }
+        return escaped
+    }
+
+    /**
+     * Every `work_search[...]` query item for a filter set, plus `page`. Shared by
+     * both endpoints so the two screens cannot drift into answering different
+     * questions about the same fandom.
+     */
+    private fun appendWorkSearchParams(
+        builder: okhttp3.HttpUrl.Builder,
+        filters: AO3SearchFilters,
+        page: Int
+    ) {
         fun add(name: String, value: String?) {
             val trimmed = value?.trim()
             if (!trimmed.isNullOrEmpty()) {
@@ -40,8 +99,6 @@ class AO3SearchUrlBuilder {
         add("work_search[language_id]", filters.language.code)
         add("work_search[sort_column]", filters.sort.sortColumn)
         builder.addQueryParameter("page", page.coerceAtLeast(1).toString())
-
-        return builder.build().toString()
     }
 
     fun wordCountExpression(filters: AO3SearchFilters): String? {

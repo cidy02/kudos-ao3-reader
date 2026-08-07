@@ -35,8 +35,25 @@ class AO3SearchParser {
         return AO3SearchPage(
             works = works,
             currentPage = currentPage,
-            totalPages = parseTotalPages(document, currentPage)
+            totalPages = parseTotalPages(document, currentPage),
+            summary = parseResultSummary(document)
         )
+    }
+
+    /**
+     * AO3's result-count heading. `/works/search` puts it in an `h3.heading`
+     * ("92,495 Found"); tag and user works lists use an `h2.heading`
+     * ("1 - 20 of 142,322 Works in <tag>"). Both live under `#main`, so this takes
+     * the first heading there that parses rather than guessing per endpoint.
+     *
+     * Null is a normal outcome, not a failure: a search with no matches omits the
+     * heading entirely (measured — a zero-result `/works/search` renders only
+     * "Search Results"), and the count is decoration, so it must never fail a page
+     * whose works parsed fine.
+     */
+    private fun parseResultSummary(document: Document): AO3ResultSummary? {
+        return document.select("#main h2.heading, #main h3.heading")
+            .firstNotNullOfOrNull { parseResultSummary(it.text()) }
     }
 
     fun parseWorkSummary(element: Element): AO3WorkSummary {
@@ -148,6 +165,51 @@ class AO3SearchParser {
             else -> "${AO3Constants.BASE_URL}/$href"
         }
     }
+}
+
+/**
+ * Pure (unit-tested): AO3's heading text -> total + scope + range.
+ *
+ * Handles the live shapes with one pass, because they differ only in which noun
+ * follows the number and whether a "1 - 20 of" range precedes it:
+ *   - `92,495 Found`
+ *   - `1 - 20 of 142,322 Works in Naruto (Anime & Manga)`
+ *   - `1 - 20 of 535 Works by astolat`
+ *   - `1 - 20 of 88,698 Works **found** in <tag>`, the moment a query is applied
+ *
+ * The number taken is always the one immediately before `Works`/`Found`, so a
+ * leading range can never be mistaken for the total — that is the whole reason
+ * this anchors on the noun rather than on "the first number".
+ */
+fun parseResultSummary(text: String): AO3ResultSummary? {
+    val collapsed = text.replace(Regex("\\s+"), " ").trim()
+    val noun = Regex("([\\d,]+)\\s+(Works|Work|Found)\\b").find(collapsed) ?: return null
+    val total = noun.groupValues[1].filter { it.isDigit() }.toIntOrNull() ?: return null
+
+    // "1 - 20 of " immediately before the total — which works this page shows.
+    // Anchored to the end of the prefix so it can only be the range belonging to
+    // this count, never a stray pair of numbers elsewhere in the heading (a fandom
+    // named "5 - 10 Years Later" must not produce one).
+    val prefix = collapsed.substring(0, noun.range.first)
+    val range = Regex("([\\d,]+)\\s*-\\s*([\\d,]+)\\s+of\\s+$").find(prefix)?.let { match ->
+        val from = match.groupValues[1].filter { it.isDigit() }.toIntOrNull()
+        val to = match.groupValues[2].filter { it.isDigit() }.toIntOrNull()
+        if (from != null && to != null && from <= to) from..to else null
+    }
+
+    // What follows the noun is AO3's qualifier, kept verbatim (preposition
+    // included). It is always "in <tag>" or "by <user>", and requiring that is not
+    // pedantry: `/works/search` appends a help link inside the same heading, so the
+    // heading's *text* is "92,495 Found  ?" and a naive "everything after the noun"
+    // would make the scope "?".
+    var rest = collapsed.substring(noun.range.last + 1).trim()
+    // A tag list says "N Works in <tag>" — but with a `work_search[query]` active it
+    // says "N Works **found** in <tag>". Browse sends a query for excluded warnings
+    // and categories, so that is its common case, not an oddity. Measured live.
+    if (rest.startsWith("found ")) rest = rest.removePrefix("found ")
+    val scope = if (rest.startsWith("in ") || rest.startsWith("by ")) rest else null
+
+    return AO3ResultSummary(total = total, scope = scope, range = range)
 }
 
 private fun Iterable<Element>.normalizedTexts(): List<String> {

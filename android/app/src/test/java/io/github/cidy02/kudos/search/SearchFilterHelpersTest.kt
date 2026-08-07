@@ -111,11 +111,41 @@ class SearchFilterHelpersTest {
 
 
     @Test
-    fun activeFilterChipsSummarizesFacets() {
-        assertTrue(activeFilterChips(AO3SearchFilters()).isEmpty())
-        assertTrue(activeFilterChips(AO3SearchFilters(query = "only query")).isEmpty())
+    fun activeFilterCountReportsWhatTheUserChanged() {
+        // The badge means "you have narrowed this". `summaryLabels` always ends with
+        // the sort so the results card is never empty — counting its rows here would
+        // light the badge on a screen with no filters at all.
+        assertEquals(0, activeFilterCount(AO3SearchFilters()))
+        assertEquals(0, activeFilterCount(AO3SearchFilters(query = "only query")))
 
-        val chips = activeFilterChips(
+        val filters = AO3SearchFilters(
+            fandom = "Naruto",
+            excludedCharacters = "Sasuke",
+            rating = AO3Rating.MATURE,
+            ratingMatch = AO3RatingMatch.OR_HIGHER,
+            includeNotRated = false,
+            warnings = setOf(AO3Warning.NO_WARNINGS),
+            excludedCategories = setOf(AO3Category.OTHER),
+            crossover = AO3Crossover.EXCLUDE,
+            completion = AO3Completion.COMPLETE,
+            wordsFrom = "1000",
+            wordsTo = "5000",
+            updated = AO3Updated.WEEK,
+            language = AO3Language.ENGLISH,
+            sort = AO3SearchSort.KUDOS
+        )
+        // Every label counts here because the sort is non-default too.
+        assertEquals(summaryLabels(filters).size, activeFilterCount(filters))
+
+        // With a default sort the card still shows "Sort: Best Match", but the badge
+        // must not count it.
+        val defaultSort = filters.copy(sort = AO3SearchSort.RELEVANCE)
+        assertEquals(summaryLabels(defaultSort).size - 1, activeFilterCount(defaultSort))
+    }
+
+    @Test
+    fun summaryLabelsDescribeEveryActiveFacet() {
+        val labels = summaryLabels(
             AO3SearchFilters(
                 fandom = "Naruto",
                 excludedCharacters = "Sasuke",
@@ -133,21 +163,43 @@ class SearchFilterHelpersTest {
                 sort = AO3SearchSort.KUDOS
             )
         )
+        val texts = labels.map { it.text }
+        // Tag chips carry their category as a glyph now, so the text is the tag
+        // itself rather than a "Fandom: " prefix.
+        assertTrue(texts.contains("Naruto"))
+        assertTrue(texts.contains("−Sasuke"))
+        assertTrue(texts.contains("Mature+"))
+        assertTrue(texts.contains("No Not Rated"))
+        assertTrue(texts.contains(AO3Warning.NO_WARNINGS.title))
+        assertTrue(texts.contains("−${AO3Category.OTHER.title}"))
+        assertTrue(texts.contains("Crossover: Exclude"))
+        assertTrue(texts.contains("Complete"))
+        assertTrue(texts.contains("Words 1000–5000"))
+        assertTrue(texts.contains(AO3Updated.WEEK.title))
+        assertTrue(texts.contains(AO3Language.ENGLISH.title))
+        assertEquals("Sort: ${AO3SearchSort.KUDOS.title}", texts.last())
 
-        assertTrue(chips.contains("Fandom: Naruto"))
-        assertTrue(chips.contains("−Character: Sasuke"))
-        assertTrue(chips.contains("Mature+"))
-        assertTrue(chips.contains("No Not Rated"))
-        assertTrue(chips.contains(AO3Warning.NO_WARNINGS.title))
-        assertTrue(chips.contains("−${AO3Category.OTHER.title}"))
-        assertTrue(chips.contains("Crossover: Exclude"))
-        assertTrue(chips.contains("Complete"))
-        assertTrue(chips.contains("Words 1000–5000"))
-        assertTrue(chips.contains(AO3Updated.WEEK.title))
-        assertTrue(chips.contains(AO3Language.ENGLISH.title))
-        assertTrue(chips.contains("Sort: Kudos"))
+        assertEquals(SummaryLabel.fandomIcon, labels.first { it.text == "Naruto" }.icon)
+        assertEquals(SummaryLabel.characterIcon, labels.first { it.text == "−Sasuke" }.icon)
+        // Facets are not tag categories, so they get no glyph rather than a
+        // misleading one.
+        assertEquals(null, labels.last().icon)
     }
 
+    @Test
+    fun anUntouchedFilterSetStillNamesItsSort() {
+        // The card must never be empty, and there is always an order in effect.
+        assertEquals(listOf("Sort: Best Match"), summaryLabels(AO3SearchFilters()).map { it.text })
+    }
+
+    @Test
+    fun theCardsOwnSubjectIsNotRepeatedAsAChip() {
+        // On a fandom's page the heading already says it.
+        val filters = AO3SearchFilters(fandom = "Naruto, Bleach")
+        val texts = summaryLabels(filters, excluding = "Naruto").map { it.text }
+        assertTrue(!texts.contains("Naruto"))
+        assertTrue(texts.contains("Bleach"))
+    }
 
     @Test
     fun collectLocalTagSuggestionsDedupesAndSortsByKind() {

@@ -23,6 +23,24 @@ class AO3SearchRepository(
         }
     }
 
+    /**
+     * One page of a tag's own works list — Browse's endpoint. Takes the same filters
+     * as [search]; see [AO3SearchUrlBuilder.buildFandomWorksUrl] for why Browse asks
+     * the tag page rather than `/works/search`.
+     */
+    suspend fun searchTagWorks(
+        tag: String,
+        filters: AO3SearchFilters,
+        page: Int = 1
+    ): AO3Result<AO3SearchPage> {
+        val url = urlBuilder.buildFandomWorksUrl(tag, filters, page)
+            ?: return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
+        return when (val result = client.get(url)) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> parse(result.value.body, result.value.statusCode, page)
+        }
+    }
+
     private suspend fun parse(
         html: String,
         statusCode: Int,

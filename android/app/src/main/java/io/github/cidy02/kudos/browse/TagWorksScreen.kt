@@ -40,7 +40,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.search.SearchFilterSheet
-import io.github.cidy02.kudos.search.activeFilterChips
+import io.github.cidy02.kudos.search.activeFilterCount
 import io.github.cidy02.kudos.search.collectLocalTagSuggestions
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
@@ -56,6 +56,8 @@ import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
 import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.search.summaryLabels
+import io.github.cidy02.kudos.search.SearchResultsHero
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +89,7 @@ fun TagWorksScreen(
         collectLocalTagSuggestions(savedWorks, userTagNames)
     }
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
-    val activeChips = remember(filters) { activeFilterChips(filters) }
+    val activeFilters = remember(filters) { activeFilterCount(filters) }
 
     fun load(page: Int = 1) {
         state = TagWorksState.Loading
@@ -121,9 +123,9 @@ fun TagWorksScreen(
                     IconButton(onClick = { showFilterSheet = true }) {
                         BadgedBox(
                             badge = {
-                                if (activeChips.isNotEmpty()) {
+                                if (activeFilters > 0) {
                                     androidx.compose.material3.Badge {
-                                        Text(activeChips.size.toString())
+                                        Text(activeFilters.toString())
                                     }
                                 }
                             }
@@ -202,6 +204,15 @@ fun TagWorksScreen(
                             .weight(1f, fill = false)
                     ) {
                         item {
+                            current.page.summary?.let { summary ->
+                                SearchResultsHero(
+                                    summary = summary,
+                                    filterLabels = summaryLabels(filters, excluding = summary.subject),
+                                    subjectCategory = summary.subjectCategory(current.page.works),
+                                    onEditFilters = { showFilterSheet = true },
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
                             KudosSectionHeader(
                                 title = "Works",
                                 subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"

@@ -63,7 +63,18 @@ class AO3BrowseRepository(
         }
     }
 
-    /** A fandom's works, via the Phase 5 search path (`work_search[fandom_names]`). */
+    /**
+     * A fandom's works, from AO3's own tag listing rather than `/works/search`.
+     *
+     * Same works and the same filters (see [AO3SearchUrlBuilder.buildFandomWorksUrl]),
+     * but the tag page states its own "1 - 20 of N Works in <fandom>" heading, so the
+     * results card shows AO3's figures instead of ones derived here.
+     *
+     * `filters.fandom` is left set rather than cleared as redundant: the path already
+     * scopes to this tag, so `fandom_names` can only re-select the same works
+     * (verified — the count is unchanged with it present), whereas clearing it would
+     * *widen* the results if that field ever held more than this one fandom.
+     */
     suspend fun worksForFandom(
         fandomName: String,
         page: Int = 1,
@@ -73,8 +84,20 @@ class AO3BrowseRepository(
         if (trimmed.isEmpty()) {
             return AO3Result.Failure(AO3Error.Validation("No fandom selected."))
         }
-        val searchFilters = (filters ?: AO3SearchFilters()).copy(fandom = trimmed)
-        return searchRepository.search(searchFilters, page)
+        val searchFilters = (filters ?: browseBaseline()).copy(fandom = trimmed)
+        return searchRepository.searchTagWorks(trimmed, searchFilters, page)
+    }
+
+    companion object {
+        /**
+         * Browse's starting filters. Date Updated, not the app-wide RELEVANCE
+         * default: AO3's tag listing has no relevance ordering at all — its sort menu
+         * runs Creator … Bookmarks and it sorts by `revised_at` unless told otherwise
+         * (verified live). RELEVANCE sends no `sort_column`, so the screen would show
+         * date-ordered results while claiming "Best Match".
+         */
+        fun browseBaseline(): AO3SearchFilters =
+            AO3SearchFilters(sort = AO3SearchSort.DATE_UPDATED)
     }
 
     private suspend fun <T> runParse(statusCode: Int, block: () -> T): AO3Result<T> {

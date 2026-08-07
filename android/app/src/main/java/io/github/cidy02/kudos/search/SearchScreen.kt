@@ -114,7 +114,7 @@ fun SearchScreen(
     // keep their own local expand state after the seed — matching iOS.
     var expandAllCards by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val activeChips = remember(filters) { activeFilterChips(filters) }
+    val activeFilters = remember(filters) { activeFilterCount(filters) }
 
     fun commitSavedSearch() {
         val name = saveName.trim()
@@ -183,7 +183,7 @@ fun SearchScreen(
 
         SearchControlsRow(
             filters = filters,
-            activeChipCount = activeChips.size,
+            activeChipCount = activeFilters,
             expandAllCards = expandAllCards,
             selectionMode = selectionMode,
             onToggleExpandAll = { expandAllCards = !expandAllCards },
@@ -198,12 +198,9 @@ fun SearchScreen(
             onClearFilters = { viewModel.clearFilters() }
         )
 
-        if (activeChips.isNotEmpty()) {
-            ActiveFilterChipRow(
-                chips = activeChips,
-                onClear = { viewModel.clearFilters() }
-            )
-        }
+        // The standalone chip row is gone: `SearchResultsHero` carries the same
+        // chips at the top of the results, where they sit next to the count they
+        // explain instead of in a second, separate strip.
 
         if (state is SearchUiState.Idle && filters.query.trim().length >= 2) {
             LocalFirstResultsList(
@@ -265,6 +262,9 @@ fun SearchScreen(
                         onOpenWork = onOpenWork,
                         onPage = { viewModel.runSearch(it) },
                         onTagClick = { viewModel.searchTag(it) },
+                        summary = current.page.summary,
+                        filterLabels = summaryLabels(filters),
+                        onEditFilters = { showFilterSheet = true },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -539,33 +539,6 @@ private fun SearchControlsRow(
 }
 
 @Composable
-private fun ActiveFilterChipRow(
-    chips: List<String>,
-    onClear: () -> Unit
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-    ) {
-        chips.forEach { label ->
-            InputChip(
-                selected = true,
-                onClick = { /* summary only; edit via Filters sheet */ },
-                label = { Text(label, maxLines = 1) }
-            )
-        }
-        FilterChip(
-            selected = false,
-            onClick = onClear,
-            label = { Text("Clear all") }
-        )
-    }
-}
-
-@Composable
 private fun SearchResultsList(
     works: List<io.github.cidy02.kudos.works.CanonicalWork>,
     page: Int,
@@ -578,6 +551,12 @@ private fun SearchResultsList(
     onPage: (Int) -> Unit,
     onTagClick: (String) -> Unit,
     onRefresh: suspend () -> Unit,
+    /** AO3's own result-count heading for this page, when it sent one. */
+    summary: io.github.cidy02.kudos.network.ao3.search.AO3ResultSummary? = null,
+    /** No subject: a Search can have several fandoms and tags active at once, so
+     *  there is no single thing these results are "in". */
+    filterLabels: List<SummaryLabel> = emptyList(),
+    onEditFilters: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxWidth()) {
@@ -586,6 +565,15 @@ private fun SearchResultsList(
         modifier = modifier.fillMaxWidth()
     ) {
         item {
+            summary?.let {
+                SearchResultsHero(
+                    summary = it.completing(subject = null, page = page, onPageCount = works.size),
+                    filterLabels = filterLabels,
+                    subjectCategory = it.subjectCategory(works.map { w -> w.remote }),
+                    onEditFilters = onEditFilters,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
             KudosSectionHeader(
                 title = "Results",
                 subtitle = "Page $page of $totalPages"

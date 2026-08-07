@@ -74,12 +74,31 @@ fun SearchFilterSheet(
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Reset left, Apply right, with `ModalBottomSheet`'s own drag handle
+            // between them as the dismiss affordance. Both actions used to sit at the
+            // *bottom*, which meant scrolling past every facet to run the search you
+            // had just configured.
+            //
+            // Reset is disabled rather than hidden: a control that appears and
+            // disappears as filters change shifts Apply sideways under the thumb.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onClear, enabled = filters.hasActiveFilters) {
+                    Text("Reset")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Button(enabled = filters.isSearchable, onClick = onApply) {
+                    Text("Apply")
+                }
+            }
             Text(
                 text = "Search filters",
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Narrow AO3 works. Apply runs the search; Clear keeps your query.",
+                text = "Narrow AO3 works. Apply runs the search; Reset keeps your query.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -342,11 +361,8 @@ fun SearchFilterSheet(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (filters.hasActiveFilters) {
-                    TextButton(onClick = onClear) {
-                        Text("Clear")
-                    }
-                }
+                // Apply and Reset live in the header now; Close and Save stay here,
+                // because both are rarer and more deliberate than either.
                 Spacer(modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = onDismiss) {
                     Text("Close")
@@ -355,12 +371,6 @@ fun SearchFilterSheet(
                     OutlinedButton(onClick = onSave) {
                         Text("Save")
                     }
-                }
-                Button(
-                    enabled = filters.isSearchable,
-                    onClick = onApply
-                ) {
-                    Text("Apply filters")
                 }
             }
         }

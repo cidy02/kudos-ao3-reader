@@ -11,6 +11,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3Updated
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
+import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * Three-state selection for warnings/categories, matching Apple's
@@ -117,20 +118,48 @@ fun clearedFiltersPreservingQuery(filters: AO3SearchFilters): AO3SearchFilters {
  * Compact chip labels for the Search screen summary row. Order mirrors the
  * filter sheet sections. Empty when [AO3SearchFilters.hasActiveFilters] is false.
  */
-fun activeFilterChips(filters: AO3SearchFilters): List<String> {
-    if (!filters.hasActiveFilters) return emptyList()
+/**
+ * How many settings the filter button's badge should report.
+ *
+ * Not `summaryLabels().size`: that list always ends with the sort so the results
+ * card is never empty, whereas the badge must mean "you have narrowed this" — and a
+ * default sort has narrowed nothing. Counting the card's rows here would light the
+ * badge on a screen with no filters at all.
+ */
+fun activeFilterCount(filters: AO3SearchFilters): Int {
+    if (!filters.hasActiveFilters) return 0
+    val labels = summaryLabels(filters)
+    return if (filters.sort == AO3SearchSort.RELEVANCE) labels.size - 1 else labels.size
+}
 
-    val chips = mutableListOf<String>()
-
-    fun addTagField(label: String, included: String, excluded: String) {
-        AO3SearchFilters.commaSeparatedValues(included).forEach { chips += "$label: $it" }
-        AO3SearchFilters.commaSeparatedValues(excluded).forEach { chips += "−$label: $it" }
+/**
+ * The results card's chips: everything currently narrowing or ordering the list.
+ *
+ * Only *non-default* settings appear. "Any rating" and "All" are the absence of a
+ * filter, and listing them would spend the card's height saying nothing, loudest in
+ * the commonest state. Sort is the exception and is always shown: unlike every other
+ * entry there is always an order in effect, so it is never noise.
+ *
+ * [excluding] names the one thing this would otherwise repeat: on a fandom's page the
+ * card's own heading is already the fandom.
+ */
+fun summaryLabels(filters: AO3SearchFilters, excluding: String? = null): List<SummaryLabel> {
+    val chips = mutableListOf<SummaryLabel>()
+    fun add(text: String, icon: ImageVector? = null) {
+        chips += SummaryLabel(text, icon)
     }
 
-    addTagField("Fandom", filters.fandom, filters.excludedFandoms)
-    addTagField("Character", filters.characters, filters.excludedCharacters)
-    addTagField("Relationship", filters.relationships, filters.excludedRelationships)
-    addTagField("Tag", filters.additionalTags, filters.excludedAdditionalTags)
+    fun addTagField(icon: ImageVector, included: String, excluded: String) {
+        AO3SearchFilters.commaSeparatedValues(included)
+            .filter { it != excluding }
+            .forEach { add(it, icon) }
+        AO3SearchFilters.commaSeparatedValues(excluded).forEach { add("−$it", icon) }
+    }
+
+    addTagField(SummaryLabel.fandomIcon, filters.fandom, filters.excludedFandoms)
+    addTagField(SummaryLabel.characterIcon, filters.characters, filters.excludedCharacters)
+    addTagField(SummaryLabel.relationshipIcon, filters.relationships, filters.excludedRelationships)
+    addTagField(SummaryLabel.freeformIcon, filters.additionalTags, filters.excludedAdditionalTags)
 
     if (filters.rating != AO3Rating.ANY) {
         val match = when (filters.ratingMatch) {
@@ -138,50 +167,48 @@ fun activeFilterChips(filters: AO3SearchFilters): List<String> {
             AO3RatingMatch.OR_HIGHER -> "${filters.rating.title}+"
             AO3RatingMatch.OR_LOWER -> "${filters.rating.title}−"
         }
-        chips += match
+        add(match)
     }
     if (!filters.includeNotRated) {
-        chips += "No Not Rated"
+        add("No Not Rated")
     }
 
     AO3Warning.entries.filter { it in filters.warnings }.forEach {
-        chips += it.title
+        add(it.title, SummaryLabel.warningIcon)
     }
     AO3Warning.entries.filter { it in filters.excludedWarnings }.forEach {
-        chips += "−${it.title}"
+        add("−${it.title}", SummaryLabel.warningIcon)
     }
 
-    AO3Category.entries.filter { it in filters.categories }.forEach {
-        chips += it.title
-    }
-    AO3Category.entries.filter { it in filters.excludedCategories }.forEach {
-        chips += "−${it.title}"
-    }
+    // AO3 categories (Gen, M/M …) are a facet, not a tag category, so no glyph.
+    AO3Category.entries.filter { it in filters.categories }.forEach { add(it.title) }
+    AO3Category.entries.filter { it in filters.excludedCategories }.forEach { add("−${it.title}") }
 
     if (filters.crossover != AO3Crossover.ANY) {
-        chips += "Crossover: ${filters.crossover.title}"
+        add("Crossover: ${filters.crossover.title}")
     }
     if (filters.completion != AO3Completion.ANY) {
-        chips += filters.completion.title
+        add(filters.completion.title)
     }
 
     val from = filters.wordsFrom.trim()
     val to = filters.wordsTo.trim()
     when {
-        from.isNotEmpty() && to.isNotEmpty() -> chips += "Words $from–$to"
-        from.isNotEmpty() -> chips += "Words ≥ $from"
-        to.isNotEmpty() -> chips += "Words ≤ $to"
+        from.isNotEmpty() && to.isNotEmpty() -> add("Words $from–$to")
+        from.isNotEmpty() -> add("Words ≥ $from")
+        to.isNotEmpty() -> add("Words ≤ $to")
     }
 
     if (filters.updated != AO3Updated.ANY) {
-        chips += filters.updated.title
+        add(filters.updated.title)
     }
     if (filters.language != AO3Language.ANY) {
-        chips += filters.language.title
+        add(filters.language.title)
     }
-    if (filters.sort != AO3SearchSort.RELEVANCE) {
-        chips += "Sort: ${filters.sort.title}"
-    }
+    // Sort last, and unconditionally: unlike every entry above there is always an
+    // order in effect, so this is the one label that is never noise — and it is the
+    // setting users most often forget they changed.
+    add("Sort: ${filters.sort.title}")
 
     return chips
 }
