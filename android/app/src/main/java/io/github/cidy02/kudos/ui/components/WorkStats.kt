@@ -20,7 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -112,8 +114,53 @@ fun WorkStatLabel(
 data class WorkStatItem(
     val text: String,
     val accessibilityLabel: String? = null,
-    val icon: ImageVector? = null
+    val icon: ImageVector? = null,
+    /** AO3's own colour coding for this value, if it has one — see [AO3StatusTint].
+     *  Only [WorkStatusChipRow] paints it; the plain count labels ignore it. */
+    val tint: Color? = null
 )
+
+/**
+ * AO3's rating and category colour coding, as the site itself uses it, so a rating
+ * or a ship category is identifiable before the text is read.
+ *
+ * Apple's system palette rather than Material's, deliberately: this is product
+ * data shared with the iOS client (`WorkStat.ratingColor` / `categoryColor`), not
+ * platform styling, and the two apps should agree on what "Explicit" looks like.
+ * Every one of these is only ever drawn at low alpha behind [MaterialTheme]'s own
+ * `onSurfaceVariant` text, so none of them has to satisfy MD3 contrast on its own.
+ */
+object AO3StatusTint {
+    val green = Color(0xFF34C759)
+    val yellow = Color(0xFFFFCC00)
+    val orange = Color(0xFFFF9500)
+    val red = Color(0xFFFF3B30)
+    val pink = Color(0xFFFF2D55)
+    val blue = Color(0xFF007AFF)
+    val purple = Color(0xFFAF52DE)
+    val gray = Color(0xFF8E8E93)
+
+    /** Grey rather than null for "Not Rated": falling through to the theme accent
+     *  painted it the app's red, which reads as the *most* severe rating. */
+    fun rating(rating: String): Color? = when (rating.trim()) {
+        "General Audiences" -> green
+        "Teen And Up Audiences" -> yellow
+        "Mature" -> orange
+        "Explicit" -> red
+        "Not Rated" -> gray
+        else -> null
+    }
+
+    fun category(category: String): Color? = when (category.trim()) {
+        "F/F" -> red
+        "F/M" -> pink
+        "Gen" -> green
+        "M/M" -> blue
+        "Multi" -> purple
+        "Other" -> gray
+        else -> null
+    }
+}
 
 object WorkStatIcons {
     val rating: ImageVector get() = Icons.Outlined.Shield
@@ -271,7 +318,8 @@ fun statusChips(
         chips += WorkStatItem(
             text = ratingDisplayName(it) ?: it,
             accessibilityLabel = it,
-            icon = WorkStatIcons.rating
+            icon = WorkStatIcons.rating,
+            tint = AO3StatusTint.rating(it)
         )
     }
 
@@ -280,14 +328,16 @@ fun statusChips(
         chips += WorkStatItem(
             text = "N/A",
             accessibilityLabel = "Category: not categorized",
-            icon = Icons.Outlined.People
+            icon = Icons.Outlined.People,
+            tint = AO3StatusTint.gray
         )
     } else {
         named.forEach {
             chips += WorkStatItem(
                 text = it,
                 accessibilityLabel = "Category: $it",
-                icon = Icons.Outlined.People
+                icon = Icons.Outlined.People,
+                tint = AO3StatusTint.category(it)
             )
         }
     }
@@ -306,17 +356,20 @@ fun statusChips(
         real.isNotEmpty() -> WorkStatItem(
             text = if (real.size == 1) "1 Warning Applies" else "${real.size} Warnings Apply",
             accessibilityLabel = "Warnings: ${real.joinToString(", ")}",
-            icon = Icons.Outlined.WarningAmber
+            icon = Icons.Outlined.WarningAmber,
+            tint = AO3StatusTint.red
         )
         chooseNotTo -> WorkStatItem(
             text = "Not Disclosed",
             accessibilityLabel = "Creator chose not to use archive warnings",
-            icon = Icons.Outlined.WarningAmber
+            icon = Icons.Outlined.WarningAmber,
+            tint = AO3StatusTint.orange
         )
         else -> WorkStatItem(
             text = "No Warnings",
             accessibilityLabel = "No archive warnings apply",
-            icon = Icons.Outlined.CheckCircle
+            icon = Icons.Outlined.CheckCircle,
+            tint = AO3StatusTint.gray
         )
     }
 
@@ -324,25 +377,34 @@ fun statusChips(
         true -> WorkStatItem(
             text = "Complete",
             accessibilityLabel = "Status: complete",
-            icon = Icons.Outlined.CheckCircle
+            icon = Icons.Outlined.CheckCircle,
+            tint = AO3StatusTint.green
         )
         false -> WorkStatItem(
             text = "WIP",
             accessibilityLabel = "Status: work in progress",
-            icon = Icons.Outlined.Schedule
+            icon = Icons.Outlined.Schedule,
+            tint = AO3StatusTint.orange
         )
         // AO3 omits the marker rather than saying "unknown", so neither do we.
         null -> WorkStatItem(
             text = "Unknown",
             accessibilityLabel = "Status: unknown",
-            icon = Icons.Outlined.Schedule
+            icon = Icons.Outlined.Schedule,
+            tint = AO3StatusTint.gray
         )
     }
 
     return chips
 }
 
-/** [statusChips] as capsules — a capsule is its own separator, so no bullets. */
+/**
+ * [statusChips] as capsules, bullet-separated and centred — matching Apple
+ * `WorkListStatsRow`. Centred rather than stretched edge-to-edge: stretching only
+ * squares this row with the counts row under it while both are full, and a
+ * two-chip work would get two capsules pinned to opposite edges with a canyon
+ * between them.
+ */
 @Composable
 fun WorkStatusChipRow(
     stats: List<WorkStatItem>,
@@ -351,12 +413,29 @@ fun WorkStatusChipRow(
     if (stats.isEmpty()) return
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        stats.forEach { stat ->
+        stats.forEachIndexed { index, stat ->
+            if (index > 0) {
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .clearAndSetSemantics {}
+                )
+            }
+            // The capsule carries AO3's colour coding, not the glyph — a chip is a
+            // block of colour, so painting it is what the coding is for. Icon and
+            // text stay on the theme's own onSurfaceVariant: legible on every tint
+            // in both appearances, where a saturated glyph on a capsule of the same
+            // hue just goes muddy. Tinted, not filled — "Explicit" is red and four
+            // solid blocks of that beside the cover art would read as an error.
             Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                color = stat.tint?.copy(alpha = 0.22f)
+                    ?: MaterialTheme.colorScheme.surfaceContainerHighest,
                 shape = MaterialTheme.shapes.small
             ) {
                 Row(
@@ -370,7 +449,7 @@ fun WorkStatusChipRow(
                         Icon(
                             imageVector = it,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(13.dp)
                         )
                     }

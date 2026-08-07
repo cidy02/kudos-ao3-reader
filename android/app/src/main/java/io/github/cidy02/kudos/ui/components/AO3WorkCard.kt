@@ -10,14 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,8 +69,12 @@ fun AO3WorkCard(
     }
     val discoveryTags = (work.relationships + work.characters + work.freeforms)
         .filter { it.isNotBlank() }
-    val expandable = work.summary.length > 120 || discoveryTags.isNotEmpty() ||
-        work.warnings.any { it.isNotBlank() }
+    val fandoms = work.fandoms.filter { it.isNotBlank() }
+    // `fandoms.size > 1` matters: the collapsed card folds the rest into
+    // "+N others", so without it a crossover with a short summary and no tags
+    // would hide its extra fandoms behind no control at all.
+    val expandable = work.summary.length > 120 || fandoms.size > 1 ||
+        discoveryTags.isNotEmpty() || work.warnings.any { it.isNotBlank() }
 
     var showMenu by remember { mutableStateOf(false) }
 
@@ -97,6 +105,21 @@ fun AO3WorkCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.Top
             ) {
+                // The expand control leads the row, leaving the trailing corner to
+                // the details button alone. It always occupies its slot, invisible
+                // when there is nothing to expand: otherwise titles would start at
+                // two different x positions down a list, which reads as broken
+                // alignment rather than as an absent control.
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    enabled = expandable,
+                    modifier = Modifier.alpha(if (expandable) 1f else 0f)
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (expanded) "Show less" else "Show more"
+                    )
+                }
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -116,19 +139,22 @@ fun AO3WorkCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (expandable) {
-                    TextButton(onClick = { expanded = !expanded }) {
-                        Text(if (expanded) "Less" else "More")
-                    }
-                }
                 WorkDetailsIconButton(onClick = { onOpenWork(work) })
             }
 
-            if (work.fandoms.isNotEmpty()) {
+            // Collapsed, the card names the work's main fandom and counts the rest:
+            // an AO3 crossover blurb can carry a dozen, each of them long, and
+            // spelling them all out pushed the summary off the card.
+            if (fandoms.isNotEmpty()) {
+                val hidden = if (expanded) 0 else fandoms.size - 1
                 CardMetaLine(
-                    text = work.fandoms.take(3).joinToString(", "),
+                    text = if (hidden > 0) {
+                        "${fandoms.first()}  +$hidden other${if (hidden == 1) "" else "s"}"
+                    } else {
+                        fandoms.joinToString(", ")
+                    },
                     icon = Icons.AutoMirrored.Outlined.MenuBook,
-                    accessibilityLabel = "Fandom: ${work.fandoms.joinToString()}"
+                    accessibilityLabel = "Fandom: ${fandoms.joinToString()}"
                 )
             }
 
