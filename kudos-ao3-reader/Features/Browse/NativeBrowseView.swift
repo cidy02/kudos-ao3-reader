@@ -319,7 +319,9 @@ struct TagWorksView: View {
                         Section {
                             SearchResultsHero(
                                 summary: heroSummary,
-                                filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
+                                filterLabels: filters.summaryLabels(
+                                    excluding: heroSummary.subject, includesSort: false
+                                ),
                                 subjectField: heroSummary.subjectField(inAnyOf: results),
                                 onEditFilters: { showingFilters = true }
                             )

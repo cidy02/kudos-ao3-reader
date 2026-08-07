@@ -223,8 +223,12 @@ private struct PageScrubberSheet: View {
                 readout
 
                 Slider(
+                    // `max(…, 2)`: a Slider traps when its bounds are equal, and a
+                    // one-page range would be 1...1. The sheet can only be opened
+                    // from a control that is disabled at one page, so this is a
+                    // guard against a future caller rather than a live path.
                     value: $draft,
-                    in: 1 ... Double(max(totalPages, 1)),
+                    in: 1 ... Double(max(totalPages, 2)),
                     step: 1
                 ) {
                     Text("Page")

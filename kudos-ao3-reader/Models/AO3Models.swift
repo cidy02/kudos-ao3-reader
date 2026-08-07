@@ -404,7 +404,12 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     /// existing `title` rather than new prose. `excluding` names the one thing this
     /// list would otherwise repeat: on a fandom's page the card's own heading is
     /// already the fandom.
-    func summaryLabels(excluding subject: String? = nil) -> [SummaryLabel] {
+    /// `includesSort: false` for a screen whose filters only narrow what is already
+    /// on the page (`AO3FilterPanel.Mode.refine`). That panel deliberately hides
+    /// Sort — re-ordering needs a fresh AO3 query — so advertising a sort on the
+    /// card would name a control the user cannot reach and an order that is not
+    /// being applied.
+    func summaryLabels(excluding subject: String? = nil, includesSort: Bool = true) -> [SummaryLabel] {
         var labels: [SummaryLabel] = []
 
         func add(_ text: String, _ symbol: String? = nil) {
@@ -464,10 +469,10 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         if let dateTo { add("Before \(Self.dateBoundFormatter.string(from: dateTo))") }
         if language != .any { add(language.title) }
 
-        // Sort last, and unconditionally: unlike every entry above there is always
-        // an order in effect, so this is the one label that is never noise — and it
-        // is the setting users most often forget they changed.
-        add("Sort: \(sort.title)")
+// Sort last, and unconditionally where it applies: unlike every entry
+        // above there is always an order in effect, so this is the one label that
+        // is never noise — and it is the setting users most often forget.
+        if includesSort { add("Sort: \(sort.title)") }
         return labels
     }
 

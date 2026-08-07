@@ -37,7 +37,14 @@ actor AO3SparseWorkEnricher {
         guard Self.isSparse(work) else { return nil }
         if let cached = enriched[work.id] { return cached }
         if failed.contains(work.id) { return nil }
-        if let running = inFlight[work.id] { return await running.value }
+        // Await someone else's fetch, then fall through to the *same* merge and
+        // cache below rather than returning its raw result: the merge restores the
+        // listing's title and author, and two rows showing one work must not
+        // disagree about them.
+        if let running = inFlight[work.id] {
+            _ = await running.value
+            return enriched[work.id]
+        }
 
         let task = Task<AO3WorkSummary?, Never> {
             do {
