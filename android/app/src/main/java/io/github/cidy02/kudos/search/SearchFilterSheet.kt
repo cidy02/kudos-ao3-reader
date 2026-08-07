@@ -251,34 +251,6 @@ fun SearchFilterSheet(
                     }
                 }
 
-                FilterSection(title = "Word count") {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = filters.wordsFrom,
-                            onValueChange = {
-                                onFiltersChange(filters.copy(wordsFrom = it))
-                            },
-                            label = { Text("From") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = filters.wordsTo,
-                            onValueChange = {
-                                onFiltersChange(filters.copy(wordsTo = it))
-                            },
-                            label = { Text("To") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
                 FilterSection(title = "Updated") {
                     ChipRow {
                         AO3Updated.entries.forEach { updated ->
@@ -368,6 +340,36 @@ fun SearchFilterSheet(
                             onFiltersChange(filters.copy(excludedAdditionalTags = it))
                         }
                     )
+                }
+
+                // Last, after the tags: everything above is tappable chips and
+                // pickers, and this is the one control that raises a keyboard.
+                FilterSection(title = "Word count") {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = filters.wordsFrom,
+                            onValueChange = {
+                                onFiltersChange(filters.copy(wordsFrom = digitsOnly(it)))
+                            },
+                            label = { Text("From") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = filters.wordsTo,
+                            onValueChange = {
+                                onFiltersChange(filters.copy(wordsTo = digitsOnly(it)))
+                            },
+                            label = { Text("To") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -490,3 +492,11 @@ private fun TagPairFields(
         )
     }
 }
+
+/**
+ * Digits only — `KeyboardType.Number` picks a keyboard and nothing more: a paste,
+ * a hardware keyboard or dictation all put letters in the field regardless. AO3
+ * answers a malformed range by dropping the filter silently, so "5o0" would come
+ * back as an unfiltered search that looks like a filtered one.
+ */
+internal fun digitsOnly(value: String): String = value.filter { it in '0'..'9' }
