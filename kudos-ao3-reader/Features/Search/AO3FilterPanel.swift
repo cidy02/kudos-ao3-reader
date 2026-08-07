@@ -168,44 +168,6 @@ struct AO3FilterPanel: View {
                     }
                 }
 
-                // Title/creator are AO3's own fields, distinct from the free-text
-                // query — which also matches summaries and tags, so an author
-                // searched through it comes back far noisier.
-                if mode == .search {
-                    Section("Title & creator") {
-                        // AO3 pseuds are case-sensitive-looking and rarely start
-                        // capitalized, so autocapitalization gets in the way —
-                        // but the modifier is iOS-only, like the keyboard types
-                        // used elsewhere in this panel.
-                        TextField("Title", text: $filters.title)
-                        TextField("Creator", text: $filters.creators)
-                        #if !os(macOS)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        #endif
-                    }
-                }
-
-                Section("Word count") {
-                    numberRange(from: $filters.wordsFrom, to: $filters.wordsTo)
-                }
-
-                // AO3 accepts the same range grammar on each of these.
-                if mode == .search {
-                    Section("Hits") {
-                        numberRange(from: $filters.hitsFrom, to: $filters.hitsTo)
-                    }
-                    Section("Kudos") {
-                        numberRange(from: $filters.kudosFrom, to: $filters.kudosTo)
-                    }
-                    Section("Comments") {
-                        numberRange(from: $filters.commentsFrom, to: $filters.commentsTo)
-                    }
-                    Section("Bookmarks") {
-                        numberRange(from: $filters.bookmarksFrom, to: $filters.bookmarksTo)
-                    }
-                }
-
                 Section {
                     // "Updated within" filters on a date AO3 computes; not derivable from a blurb.
                     if mode == .search {
@@ -226,6 +188,8 @@ struct AO3FilterPanel: View {
 
                 tagSection
 
+                typedSections
+
                 // Apply and Reset live in `actionHeader`; only Save is left here,
                 // because it is a rarer, more deliberate action than either.
                 if let onSave {
@@ -241,6 +205,53 @@ struct AO3FilterPanel: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
+    }
+
+    /// Everything you have to *type*, last — after the tag pickers.
+    ///
+    /// The rest of the panel is tappable: pickers, toggles and facet rows you can
+    /// run down with a thumb. These five ask for a keyboard, and sitting them in
+    /// the middle put a keyboard between the reader and the facets below it. They
+    /// are also the least-used controls here, which is the other half of the
+    /// argument for the bottom.
+    @ViewBuilder
+    private var typedSections: some View {
+        // Title/creator are AO3's own fields, distinct from the free-text query —
+        // which also matches summaries and tags, so an author searched through it
+        // comes back far noisier. The only *text* fields in this group.
+        if mode == .search {
+            Section("Title & creator") {
+                // AO3 pseuds are case-sensitive-looking and rarely start
+                // capitalized, so autocapitalization gets in the way — but the
+                // modifier is iOS-only, like the keyboard types below.
+                TextField("Title", text: $filters.title)
+                TextField("Creator", text: $filters.creators)
+                #if !os(macOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                #endif
+            }
+        }
+
+        Section("Word count") {
+            numberRange(from: $filters.wordsFrom, to: $filters.wordsTo)
+        }
+
+        // AO3 accepts the same range grammar on each of these.
+        if mode == .search {
+            Section("Hits") {
+                numberRange(from: $filters.hitsFrom, to: $filters.hitsTo)
+            }
+            Section("Kudos") {
+                numberRange(from: $filters.kudosFrom, to: $filters.kudosTo)
+            }
+            Section("Comments") {
+                numberRange(from: $filters.commentsFrom, to: $filters.commentsTo)
+            }
+            Section("Bookmarks") {
+                numberRange(from: $filters.bookmarksFrom, to: $filters.bookmarksTo)
+            }
+        }
     }
 
     private var tagSection: some View {
@@ -306,11 +317,24 @@ struct AO3FilterPanel: View {
 
     @ViewBuilder
     private func numberRange(from: Binding<String>, to: Binding<String>) -> some View {
-        TextField("From", text: from)
-        #if !os(macOS)
-            .keyboardType(.numberPad)
-        #endif
-        TextField("To", text: to)
+        numberField("From", text: from)
+        numberField("To", text: to)
+    }
+
+    /// One end of a numeric range. Digits only, enforced on the *binding* — a
+    /// `.numberPad` picks the keyboard and nothing more: a paste, a hardware
+    /// keyboard, dictation or a Mac all put letters in the field regardless, and
+    /// macOS has no keyboard type at all. AO3 answers a malformed range by
+    /// dropping the filter silently, so "5o0" would come back as an unfiltered
+    /// search that looks like a filtered one.
+    private func numberField(_ title: String, text: Binding<String>) -> some View {
+        let digits = Binding(
+            get: { text.wrappedValue },
+            // `isASCII` as well as `isNumber`: the latter alone accepts "٣" and
+            // "½", which AO3 cannot parse either.
+            set: { text.wrappedValue = $0.filter { $0.isASCII && $0.isNumber } }
+        )
+        return TextField(title, text: digits)
         #if !os(macOS)
             .keyboardType(.numberPad)
         #endif
