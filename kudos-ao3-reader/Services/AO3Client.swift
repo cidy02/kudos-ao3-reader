@@ -1559,6 +1559,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return Int(path[range.upperBound...].prefix { $0.isNumber })
     }
 
+    /// Splits one `ul.required-tags` icon label into its values.
+    ///
+    /// That row is a *summary*: AO3 draws one symbol per facet and puts every
+    /// value in its single label, comma-joined — `"F/F, M/M"`,
+    /// `"Graphic Depictions Of Violence, Rape/Non-Con, Underage Sex"`. Verified
+    /// against live `/tags/<t>/works` markup.
+    static func splitRequiredTag(_ label: String?) -> [String] {
+        guard let label, !label.isEmpty else { return [] }
+        return label
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     static func parseBlurb(_ el: Element) throws -> AO3WorkSummary {
         // Search/readings blurbs are `li id="work_<id>"`; bookmark blurbs are
         // `li id="bookmark_<id>"`, so fall back to the work's `/works/<id>` link.
@@ -1584,8 +1598,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let fandoms = try el.select("h5.fandoms a.tag").array().map { try $0.text() }
 
         let rating = try el.select("ul.required-tags .rating .text").first()?.text() ?? ""
-        let warnings = try el.select("ul.required-tags .warnings .text").array().map { try $0.text() }
-        let categories = try el.select("ul.required-tags .category .text").array().map { try $0.text() }
+        // `.category` is a *summary icon*, not a list: one `<span class="text">`
+        // holding every value comma-joined ("F/F, M/M"). Read literally it is one
+        // unrecognized category, which is why a multi-category work showed "N/A".
+        let categories = Self.splitRequiredTag(try el.select("ul.required-tags .category .text").first()?.text())
         let wipText = try el.select("ul.required-tags .iswip .text").first()?.text() ?? ""
         let isComplete: Bool? = wipText.isEmpty ? nil : wipText.lowercased().contains("complete")
 
@@ -1599,6 +1615,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let warningTags = try el.select("ul.tags li.warnings a.tag").array().map { try $0.text() }
         let categorized = Set(relationships + characters + warningTags)
         let freeforms = allTagTexts.filter { !categorized.contains($0) }
+
+        // Warnings come from `ul.tags`, where AO3 repeats them one `<li>` each —
+        // the same icon-summary problem as categories, and here it undercounted:
+        // a work warned for three things reported "1 Warning Applies". The icon
+        // text is the fallback for markup that omits the repeat, split the same
+        // way. Both AO3 vocabularies are closed sets with no comma in any member,
+        // so splitting on ", " cannot cut a name in half.
+        let warnings = warningTags.isEmpty
+            ? Self.splitRequiredTag(try el.select("ul.required-tags .warnings .text").first()?.text())
+            : warningTags
         let summary = try el.select("blockquote.userstuff.summary").first()?.text() ?? ""
 
         func stat(_ cls: String) -> String {
