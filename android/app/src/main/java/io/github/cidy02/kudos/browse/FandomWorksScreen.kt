@@ -71,7 +71,10 @@ fun FandomWorksScreen(
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
 ) {
     var state by remember(fandomName) { mutableStateOf<FandomWorksState>(FandomWorksState.Loading) }
-    var filters by remember { mutableStateOf(AO3SearchFilters()) }
+    // The *browse* baseline, not a bare AO3SearchFilters(): AO3's tag listing has no
+    // relevance ordering, so RELEVANCE would send no sort_column, AO3 would sort by
+    // revised_at, and the sheet would sit there claiming "Best Match".
+    var filters by remember { mutableStateOf(AO3BrowseRepository.browseBaseline()) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var expandAllCards by remember { mutableStateOf(false) }
     val selection = rememberRemoteWorkSelection()
@@ -265,9 +268,10 @@ fun FandomWorksScreen(
     if (showFilterSheet) {
         SearchFilterSheet(
             filters = filters,
+            allowsRelevanceSort = false,
             onFiltersChange = { filters = it },
             onApply = { showFilterSheet = false },
-            onClear = { filters = AO3SearchFilters() },
+            onClear = { filters = AO3BrowseRepository.browseBaseline() },
             onDismiss = { showFilterSheet = false },
             localTagSuggestions = localTagSuggestions,
             autocompleteRepository = autocompleteRepository

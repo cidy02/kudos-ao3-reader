@@ -154,10 +154,12 @@ private fun PageScrubberSheet(
             Slider(
                 value = draft,
                 onValueChange = { draft = it },
-                valueRange = 1f..maxOf(totalPages, 1).toFloat(),
-                // One step per page, so the thumb lands on a page rather than
-                // between two.
-                steps = (maxOf(totalPages, 2) - 2).coerceAtLeast(0),
+                valueRange = 1f..maxOf(totalPages, 2).toFloat(),
+                // Continuous, *not* `steps = totalPages - 2`. A stepped Material
+                // slider draws a tick per step, and AO3 lists run to 5,000 pages —
+                // that is 4,998 ticks smeared into a solid bar, and a lot of them to
+                // lay out. The readout rounds instead, so the thumb still resolves to
+                // a whole page.
                 modifier = Modifier.fillMaxWidth()
             )
 

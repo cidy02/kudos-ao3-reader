@@ -58,6 +58,13 @@ fun SearchFilterSheet(
     onClear: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (() -> Unit)? = null,
+    /**
+     * Whether "Best Match" is offered. AO3's tag listing — Browse's endpoint — has no
+     * relevance ordering at all: its sort menu runs Creator … Bookmarks and defaults
+     * to Date Updated. Offering Best Match there sends no sort_column, AO3 orders by
+     * revised_at anyway, and the sheet claims a sort that isn't happening.
+     */
+    allowsRelevanceSort: Boolean = true,
     localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions(),
     autocompleteRepository: io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository? = null
 ) {
@@ -112,7 +119,9 @@ fun SearchFilterSheet(
             ) {
                 FilterSection(title = "Sort by") {
                     ChipRow {
-                        AO3SearchSort.entries.forEach { sort ->
+                        AO3SearchSort.entries
+                            .filter { allowsRelevanceSort || it != AO3SearchSort.RELEVANCE }
+                            .forEach { sort ->
                             FilterChip(
                                 selected = filters.sort == sort,
                                 onClick = { onFiltersChange(filters.copy(sort = sort)) },
