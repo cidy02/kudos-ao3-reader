@@ -282,6 +282,25 @@ extension View {
         ))
     }
 
+    /// A list row that keeps `cardRow`'s metrics — the same side margins and the
+    /// same gap to its neighbours — but draws **no card**: no fill, no border, no
+    /// shadow. For chrome that is a control rather than content, where a card
+    /// around it is one empty rectangle of noise between two real cards.
+    func bareListRow(
+        verticalPadding: CGFloat = CardListMetrics.innerVertical,
+        interCardSpacing: CGFloat = CardListMetrics.interCardSpacing
+    ) -> some View {
+        let half = interCardSpacing / 2
+        return listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(
+                top: half + verticalPadding,
+                leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
+                bottom: half + verticalPadding,
+                trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
+            ))
+            .listRowBackground(Color.clear)
+    }
+
     /// Value-based row navigation **without** the trailing disclosure chevron — the
     /// `>` clutters the rounded work cards. The List still makes the whole card
     /// tappable, and inner controls (tag / fandom / expand buttons) keep their own

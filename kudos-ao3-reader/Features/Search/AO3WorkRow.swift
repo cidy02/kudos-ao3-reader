@@ -142,9 +142,11 @@ struct AO3WorkRow: View {
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
 
-            // Thin divider separates the textual content from the metadata stats,
-            // matching the Browse-by-fandom cards.
-            Divider().padding(.top, 1)
+            // Space, not a rule. The stats row is already a band of capsules with
+            // its own edges — a hairline above it drew a second boundary in the
+            // same place, and one card ended up with two horizontal lines through
+            // it. Whitespace separates the content from the metadata on its own.
+            Spacer(minLength: 0).frame(height: 4)
 
             // Stats wrap to a second line rather than truncating when they don't fit
             // (long ratings like "Teen And Up Audiences" no longer clip the row).

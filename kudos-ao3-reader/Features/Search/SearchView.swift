@@ -231,8 +231,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         Section {
                             SearchResultsHero(
                                 summary: heroSummary,
-                                filterLabels: filters.summaryLabels(),
-                                subjectField: heroSummary.subjectField(inAnyOf: results),
+                                // The heading already names the subject; the chips
+                                // must not say it a second time.
+                                filterLabels: filters.summaryLabels(
+                                    excluding: filters.searchSubject.text
+                                ),
+                                // The field the user actually searched, when there
+                                // is one — exact, where matching the subject back
+                                // against the results is a guess that a free-text
+                                // query would get wrong.
+                                subjectField: filters.searchSubject.field
+                                    ?? heroSummary.subjectField(inAnyOf: results),
                                 // Search's panel is router-owned (it's an inspector
                                 // shared with the toolbar's Filter button), so open
                                 // it the same way that button does.
@@ -488,10 +497,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private let paginationTopID = "pagination-top"
 
     private var paginationRow: some View {
-        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading
+        ) { page in
             loadPage(page)
         }
-        .cardRow()
+        .bareListRow()
     }
 
     // MARK: Search bar + filter button
@@ -782,7 +795,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// naming any single filter would be a lie. The range is safe though, and AO3's
     /// search heading never states it.
     private var heroSummary: AO3ResultSummary? {
-        resultSummary?.completing(subject: nil, page: currentPage, onPageCount: results.count)
+        // `/works/search` sends no scope clause at all — the card was a bare
+        // "202,439 works" with nothing saying what of. The screen knows.
+        resultSummary?.completing(
+            subject: filters.searchSubject.text,
+            page: currentPage,
+            onPageCount: results.count
+        )
     }
 
     private func refreshCurrentResults() async {
@@ -790,7 +809,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // AO3 serves search results `max-age=600, public`, so without this the
         // pull would re-render the cached page and visibly do nothing.
         await AO3Client.shared.invalidateCachedResponses()
-        if results.isEmpty { phase = .loading }
+        // Always, not only on a first load: with results already on screen this
+        // is what tells the pagination bar a fetch is running. The list itself
+        // still shows the results (the skeleton branch is gated on `results`
+        // being empty), so nothing flashes — the pager just stops pretending
+        // the tap did nothing.
+        phase = .loading
         // Reuses `load(page:)` rather than repeating it: that keeps the refresh in
         // the *same* `loadTask` slot, so tapping a page mid-refresh cancels the
         // refresh instead of leaving it to finish and spend a paced request slot

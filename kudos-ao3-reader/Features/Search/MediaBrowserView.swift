@@ -120,7 +120,7 @@ struct MediaBrowserView: View {
     // MARK: - Card
 
     /// The enriched category card: an emphasized icon + regular-weight name, a stats
-    /// line, and (when present) a divider + recently-read chips. Reads precomputed
+    /// line, and (when present) recently-read chips. Reads precomputed
     /// stats (`statsByCategory`) instead of computing them inline — the derivation
     /// scans the category's full fandom list (tens of thousands for the big media
     /// categories) plus the whole library, which must never run per-card during a
@@ -141,7 +141,11 @@ struct MediaBrowserView: View {
             statsLine(stats)
 
             if let stats, !stats.recentFandoms.isEmpty {
-                Divider()
+                // Space, not a rule: the card's own edge is already the boundary in
+                // view here, and a hairline inside it drew a second one a few points
+                // away. "Recently read" is its own labelled block — it does not need
+                // a line to say it starts.
+                Spacer(minLength: 0).frame(height: 2)
                 recentlyRead(stats.recentFandoms)
             }
         }

@@ -242,6 +242,7 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     var dateTo: Date?
     var language: Language = .any
     var sort: Sort = .relevance
+
     var sortDirection: SortDirection = .descending
 
     // `SavedSearch` persists this struct via Codable (SwiftData). Synthesized
@@ -391,7 +392,45 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         let symbol: String?
     }
 
-    /// Short labels for everything currently narrowing or ordering these results —
+    /// What this search is *of*, for the results card's heading.
+    ///
+    /// `/works/search` answers with a bare `"202,439 Found"` — no scope clause at
+    /// all, where a tag or user list says "… in Naruto" — so the card had a count
+    /// and nothing above it. The screen knows what was asked for even though the
+    /// response doesn't restate it.
+    ///
+    /// A tag field wins over the free-text query and brings its own category with
+    /// it, so a search for the *fandom* Naruto is titled like a fandom rather than
+    /// guessed at from the results. Exactly one field, holding exactly one name:
+    /// with two set, no single one of them is what the list is "of", and a heading
+    /// naming one would misdescribe the other.
+    ///
+    /// Never nil: a search run on facets alone (a rating, a language, a word
+    /// count) has no name of its own, and `searchResultsFallback` titles it rather
+    /// than leaving the card as a floating number.
+    var searchSubject: (text: String, field: AO3TagSearch.Field?) {
+        let tagFields: [(String, AO3TagSearch.Field)] = [
+            (fandom, .fandom),
+            (characters, .character),
+            (relationships, .relationship),
+            (additionalTags, .freeform),
+        ]
+        let filled = tagFields.filter { !$0.0.trimmingCharacters(in: .whitespaces).isEmpty }
+        if filled.count == 1, let only = filled.first {
+            let names = only.0
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            if names.count == 1, let name = names.first { return (name, only.1) }
+        }
+        let text = query.trimmingCharacters(in: .whitespaces)
+        return (text.isEmpty ? Self.searchResultsFallback : text, nil)
+    }
+
+    /// AO3's own wording for a results page with nothing to name — it is what the
+    /// site prints as the `<h3>` on `/works/search` before the count line.
+    static let searchResultsFallback = "Search Results"
+
     /// what the results card shows so the user can see the filters without
     /// reopening the panel.
     ///

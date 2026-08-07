@@ -9,21 +9,10 @@ struct SearchPaginationTests {
         #expect(SearchPaginationBar.abbreviate(1_500_000) == "1.5m")
     }
 
-    @Test func compactWindowKeepsCurrentPageAndNeighbors() {
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 5, totalPages: 10) == 4 ... 6)
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 1, totalPages: 10) == 1 ... 2)
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 10, totalPages: 10) == 9 ... 10)
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 1, totalPages: 1) == 1 ... 1)
-    }
-
-    @Test func compactWindowClampsOutOfRangeStateInsteadOfTrapping() {
-        // A stale currentPage past a shrunken totalPages built the invalid
-        // range 6...5 before the clamp existed.
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 7, totalPages: 5) == 4 ... 5)
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 6, totalPages: 5) == 4 ... 5)
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 0, totalPages: 5) == 1 ... 2)
-        #expect(SearchPaginationBar.compactPageWindow(currentPage: 1, totalPages: 0) == 1 ... 1)
-    }
+    // `compactPageWindow` and its two tests went with the scrubber's three
+    // numbered circles: the readout above them already stated the page, so the
+    // middle circle was the same number a third time. A −/+ pair replaced them
+    // and needs no window.
 
     @Test func arrowsUseTapForAdjacentAndLongPressForEnds() {
         #expect(SearchPaginationBar.navigationPage(

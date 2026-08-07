@@ -299,7 +299,11 @@ struct AO3AccountWorksList: View {
     }
 
     private var paginationBar: some View {
-        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading
+        ) { page in
             Task { await load(page: page) }
         }
         .padding(.horizontal, CardListMetrics.sideMargin)
@@ -310,10 +314,14 @@ struct AO3AccountWorksList: View {
     }
 
     private var paginationRow: some View {
-        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading
+        ) { page in
             Task { await load(page: page) }
         }
-        .cardRow()
+        .bareListRow()
     }
 
     // MARK: Signed out

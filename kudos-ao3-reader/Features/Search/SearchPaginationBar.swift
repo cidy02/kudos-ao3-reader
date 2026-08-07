@@ -23,12 +23,17 @@ import SwiftUI
 /// So the bar shows your position, always, in words — which the numbered version
 /// never actually did — and holds no chrome for a jump you make once a session.
 ///
-/// The pagination *logic* is untouched: `navigationPage`, `compactPageWindow` and
-/// `abbreviate` are the same functions, still unit-tested, now feeding a different
-/// presentation.
+/// The pagination *logic* is untouched: `navigationPage` and `abbreviate` are the
+/// same functions, still unit-tested, now feeding a different presentation.
 struct SearchPaginationBar: View {
     let currentPage: Int
     let totalPages: Int
+    /// A page fetch is in flight. Paging is a network round trip behind a 0.6s
+    /// politeness pacer, and until now *nothing* moved when you tapped an arrow:
+    /// the previous page stayed on screen, unchanged, for the whole wait, so the
+    /// tap read as ignored and the app as slow. It also let a second tap queue a
+    /// second fetch a slot behind the first, which genuinely made it slower.
+    var isLoading: Bool = false
     let onSelect: (Int) -> Void
 
     @State private var showingScrubber = false
@@ -42,7 +47,7 @@ struct SearchPaginationBar: View {
                 positionLabel
             }
             .buttonStyle(.plain)
-            .disabled(totalPages <= 1)
+            .disabled(totalPages <= 1 || isLoading)
             .accessibilityLabel("Page \(currentPage) of \(totalPages)")
             .accessibilityHint(totalPages > 1 ? "Opens the page scrubber." : "")
             // An adjustable element so VoiceOver users can page with a swipe up or
@@ -84,7 +89,12 @@ struct SearchPaginationBar: View {
                 + Text(" of \(Self.abbreviate(totalPages))")
                 .foregroundStyle(.secondary)
 
-            if totalPages > 1 {
+            if isLoading {
+                // Same slot as the disclosure arrows, so the pill doesn't resize
+                // and the row doesn't shift under the thumb that just tapped it.
+                ProgressView()
+                    .controlSize(.mini)
+            } else if totalPages > 1 {
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -105,7 +115,10 @@ struct SearchPaginationBar: View {
 
     private func navButton(_ direction: Direction) -> some View {
         let isBackward = direction == .backward
-        let enabled = isBackward ? currentPage > 1 : currentPage < totalPages
+        let atEdge = isBackward ? currentPage <= 1 : currentPage >= totalPages
+        // Disabled while a fetch is running: a second tap used to queue a second
+        // request one pacer slot behind the first, so impatience made it slower.
+        let enabled = !atEdge && !isLoading
         let page = Self.navigationPage(
             direction, longPress: false, currentPage: currentPage, totalPages: totalPages
         )
@@ -175,17 +188,6 @@ struct SearchPaginationBar: View {
             : String(format: "%.1f", rounded)
     }
 
-    /// Page window around the current page, valid for ANY input pair. Pagination
-    /// state is remote-derived, and `currentPage ≤ totalPages` currently holds only
-    /// because `AO3Client.paginationTotal(in:currentPage:)` happens to seed its
-    /// max-scan with the requested page — an accident of the parser, not a
-    /// contract. Unclamped, a stale `currentPage` past a shrunken `totalPages`
-    /// (e.g. 7 of 5) would build `6...5` and trap at render time.
-    static func compactPageWindow(currentPage: Int, totalPages: Int) -> ClosedRange<Int> {
-        let last = max(totalPages, 1)
-        let anchor = min(max(currentPage, 1), last)
-        return max(1, anchor - 1) ... min(last, anchor + 1)
-    }
 }
 
 /// The long jump. A slider, because that is how iOS addresses a long ordered set —
@@ -228,8 +230,14 @@ private struct PageScrubberSheet: View {
                     // from a control that is disabled at one page, so this is a
                     // guard against a future caller rather than a live path.
                     value: $draft,
-                    in: 1 ... Double(max(totalPages, 2)),
-                    step: 1
+                    in: 1 ... Double(max(totalPages, 2))
+                    // **No `step:`.** A stepped Slider draws a tick per step, and a
+                    // 5,000-page list is 5,000 ticks — they merge into a solid
+                    // accent-coloured bar under the track (which is what the red
+                    // line was), and laying them all out is what made the sheet
+                    // take a visible beat to appear. `draftPage` rounds, so the
+                    // value is whole either way; the ticks were never load-bearing.
+                    // Android's slider was made continuous for this reason already.
                 ) {
                     Text("Page")
                 } minimumValueLabel: {
@@ -289,45 +297,47 @@ private struct PageScrubberSheet: View {
         .accessibilityLabel("Page \(draftPage) of \(totalPages)")
     }
 
-    /// The pages either side of where the thumb currently sits — fine adjustment
-    /// after a coarse drag, which a slider alone is bad at on a 5,000-page range.
-    /// Reuses the same window helper the old bar used for its narrow fallback.
+    /// Fine adjustment after a coarse drag, which a slider alone is bad at on a
+    /// 5,000-page range: one thumb pixel is several pages, so the thumb cannot
+    /// land on a chosen one.
+    ///
+    /// A −/+ pair, not the three numbered circles this used to be. Those spelled
+    /// out the current page a third time — the readout above already says 4,017 in
+    /// 48pt, and the middle circle said it again. What was actually wanted from
+    /// them was ±1, so that is all that is left.
     private var nearbyPages: some View {
-        let window = SearchPaginationBar.compactPageWindow(
-            currentPage: draftPage, totalPages: totalPages
-        )
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
             Button("First") { draft = 1 }
-                .disabled(draftPage == 1)
+                .disabled(draftPage <= 1)
 
             Spacer(minLength: 8)
 
-            ForEach(Array(window), id: \.self) { page in
-                Button {
-                    draft = Double(page)
-                } label: {
-                    Text("\(page)")
-                        .font(.footnote.weight(page == draftPage ? .bold : .regular))
-                        .monospacedDigit()
-                        .frame(minWidth: 32, minHeight: 32)
-                        .background(
-                            Circle().fill(page == draftPage
-                                ? AnyShapeStyle(.tint.opacity(0.18))
-                                : AnyShapeStyle(.quaternary))
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Page \(page)")
-                .accessibilityAddTraits(page == draftPage ? [.isSelected] : [])
-            }
+            nudge(by: -1, symbol: "minus", label: "Previous page")
+            nudge(by: 1, symbol: "plus", label: "Next page")
 
             Spacer(minLength: 8)
 
             Button("Last") { draft = Double(max(totalPages, 1)) }
-                .disabled(draftPage == totalPages)
+                .disabled(draftPage >= totalPages)
         }
         .font(.footnote)
         .buttonStyle(.borderless)
+    }
+
+    private func nudge(by delta: Int, symbol: String, label: String) -> some View {
+        let target = draftPage + delta
+        return Button {
+            draft = Double(target)
+        } label: {
+            Image(systemName: symbol)
+                .font(.footnote.weight(.semibold))
+                .frame(minWidth: 36, minHeight: 36)
+                .background(Circle().fill(.quaternary))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(target < 1 || target > max(totalPages, 1))
+        .accessibilityLabel(label)
     }
 }
 

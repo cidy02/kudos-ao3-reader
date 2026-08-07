@@ -159,13 +159,17 @@ struct FandomWorksView: View {
     }
 
     private var paginationRow: some View {
-        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading
+        ) { page in
             // A different page replaces `results` with different works entirely —
             // a stale selection would otherwise reference IDs that no longer exist.
             bulkSelection.selection.removeAll()
             Task { await load(page: page) }
         }
-        .cardRow()
+        .bareListRow()
     }
 
     @ViewBuilder
@@ -210,7 +214,12 @@ struct FandomWorksView: View {
     }
 
     private func load(page: Int) async {
-        if results.isEmpty { phase = .loading }
+        // Always, not only on a first load: with results already on screen this
+        // is what tells the pagination bar a fetch is running. The list itself
+        // still shows the results (the skeleton branch is gated on `results`
+        // being empty), so nothing flashes — the pager just stops pretending
+        // the tap did nothing.
+        phase = .loading
         do {
             // Browse reads AO3's tag listing, not /works/search: same works and
             // same filters, but the page states its own "1 - 20 of N Works in
@@ -390,13 +399,17 @@ struct TagWorksView: View {
     }
 
     private var paginationRow: some View {
-        SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading
+        ) { page in
             // A different page replaces `results` with different works entirely —
             // a stale selection would otherwise reference IDs that no longer exist.
             bulkSelection.selection.removeAll()
             Task { await load(page: page) }
         }
-        .cardRow()
+        .bareListRow()
     }
 
     @ViewBuilder
@@ -440,7 +453,12 @@ struct TagWorksView: View {
     }
 
     private func load(page: Int) async {
-        if results.isEmpty { phase = .loading }
+        // Always, not only on a first load: with results already on screen this
+        // is what tells the pagination bar a fetch is running. The list itself
+        // still shows the results (the skeleton branch is gated on `results`
+        // being empty), so nothing flashes — the pager just stops pretending
+        // the tap did nothing.
+        phase = .loading
         do {
             let result = try await AO3Client.shared.worksPage(at: request.url, page: page)
             results = result.works
