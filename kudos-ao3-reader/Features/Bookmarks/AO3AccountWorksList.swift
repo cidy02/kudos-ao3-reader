@@ -190,7 +190,7 @@ struct AO3AccountWorksList: View {
                     }
                 }
             }
-            .inspector(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters) {
                 AO3FilterPanel(
                     filters: $filters,
                     mode: .refine,

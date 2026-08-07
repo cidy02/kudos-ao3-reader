@@ -188,14 +188,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Only at the root — pushed detail pages use the normal swipe-to-pop.
                 .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
             #endif
-                .inspector(isPresented: router.isShowing(.searchFilters)) {
+                .filterPanelPresentation(isPresented: router.isShowing(.searchFilters)) {
+                    // Width applies on iPad/macOS, where this is a real inspector;
+                    // iPhone gets a sheet, and its grabber, from the modifier.
                     filterPanel
                         .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                    // On iPhone the inspector collapses into a bottom sheet; show the
-                    // standard grabber so it reads as swipe-to-dismiss.
-                    #if os(iOS)
-                        .presentationDragIndicator(.visible)
-                    #endif
                 }
                 .alert("Save Search", isPresented: $showingSaveDialog) {
                     TextField("Name", text: $saveName)

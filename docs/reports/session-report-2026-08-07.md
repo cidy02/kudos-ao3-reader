@@ -296,10 +296,63 @@ code. Flagged as a possible flake, not investigated.
 2. **The signed-in header check** — nobody has fetched `/users/<n>/bookmarks` while
    genuinely signed in. If it stays `public` there, S3's residual eviction window is
    worth closing properly.
-3. **No UI was driven.** Everything visual is verified by build, tests and live
-   transport measurements; the iOS build is installed on the paired iPhone but no
-   screen was watched. Android is **not** installed anywhere.
+3. ~~**No UI was driven.**~~ Resolved for iOS — see §6, which was found precisely
+   because nothing had been watched on screen. Android is still **not** installed
+   anywhere.
 4. **Android's `AO3WorkMetadata` has no `isComplete`**, so an enriched subscription
    card shows "Unknown" completion where iOS shows the real state.
 5. **The exclusion *semantics*** still have no test on either platform — only that the
    parameter is emitted.
+
+---
+
+## 6. Post-report regression: the filter panel's navigation stack
+
+Reported by the owner after the report above was written: **Browse → any category no
+longer opened the fandom list.** The tap did nothing at all.
+
+### What caused it
+The filter panel needed a navigation bar to host the Apply/Reset buttons the owner
+asked for, so `AO3FilterPanel` was wrapped in its own `NavigationStack` (`edcdd03c`).
+The panel is presented with `.inspector`. An inspector's content is part of the **same
+view tree** as the screen it is attached to — it is not a separate presentation
+context. On iPhone there is no room for a side panel, so it collapses into something
+that *looks* like a sheet while still living in the tab's own stack. That nested stack
+shadowed the tab's `navigationDestination` declarations:
+
+    A NavigationLink is presenting a value of type "AO3MediaCategory" but there is
+    no matching navigationDestination declaration visible from the location of the
+    link. The link cannot be activated.
+
+Note the blast radius: the panel that broke the link is attached to `FandomWorksView`
+and `TagWorksView` — screens the category list is not even on. One nested stack
+anywhere in the tab was enough.
+
+`CommentsView` has wrapped itself in a `NavigationStack` since forever with no such
+effect because it is presented with `.sheet`/`.fullScreenCover`, which **are** separate
+presentation contexts.
+
+### How it was established
+Not reasoned about — bisected across three simulator builds, then confirmed in both
+directions with the same panel and the same navigation stack: inspector breaks the
+category link, sheet does not.
+
+### The fix
+[`FilterPanelPresentation.swift`](../../kudos-ao3-reader/UIComponents/FilterPanelPresentation.swift)
+— one modifier, four call sites (`SearchView`, `AO3AccountWorksList`, and both panels in
+`NativeBrowseView`). iPhone gets `.sheet` with `.presentationDragIndicator(.visible)`;
+iPad and macOS keep `.inspector`, where it is a real side panel the user can widen.
+
+Split **per platform, not per size class**: an iPad in a narrow split view reports a
+compact size class but can still show the sidebar, which is the whole point of an
+inspector. Only iPhone, which never can, takes the sheet.
+
+### Verified on the simulator
+- Browse → Anime & Manga opens the fandom list.
+- Fandom → Haikyuu!! loads, hero card reads "Sort: Date Updated" (the seeded baseline,
+  with Best Match correctly absent).
+- The filter sheet shows the grabber, the circular Reset (top-left) and Apply
+  (top-right); Apply dismisses and the list reloads.
+
+An earlier iteration of this same fix keyed off `horizontalSizeClass`; that is what the
+owner corrected to a per-OS split.

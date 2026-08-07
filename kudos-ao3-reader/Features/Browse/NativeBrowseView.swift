@@ -139,7 +139,7 @@ struct FandomWorksView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
-            .inspector(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters) {
                 AO3FilterPanel(
                     filters: $filters,
                     allowsRelevanceSort: false,
@@ -149,7 +149,6 @@ struct FandomWorksView: View {
                     onReset: resetFilters
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                .navigationTitle("Filter Works")
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
@@ -351,7 +350,7 @@ struct TagWorksView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
-            .inspector(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters) {
                 AO3FilterPanel(
                     filters: $filters,
                     mode: .refine,
@@ -360,7 +359,6 @@ struct TagWorksView: View {
                     onReset: { filters = AO3SearchFilters() }
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                .navigationTitle("Filter Works")
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
