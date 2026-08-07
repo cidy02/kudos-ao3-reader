@@ -149,6 +149,7 @@ struct FandomWorksView: View {
                     onReset: resetFilters
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationTitle("Filter Works")
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
@@ -359,6 +360,7 @@ struct TagWorksView: View {
                     onReset: { filters = AO3SearchFilters() }
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationTitle("Filter Works")
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
