@@ -19,6 +19,11 @@ struct SearchResultsHero: View {
     /// From `AO3SearchFilters.summaryLabels(excluding:)` — non-default settings
     /// only, always ending with the sort.
     var filterLabels: [AO3SearchFilters.SummaryLabel] = []
+    /// The subject's own tag category, so the heading is labelled the way its chips
+    /// are — a fandom, a character and a ship should not all look alike. From
+    /// `AO3ResultSummary.subjectField(inAnyOf:)`; nil leaves the heading unlabelled
+    /// rather than guessing.
+    var subjectField: AO3TagSearch.Field?
     var onEditFilters: (() -> Void)?
 
     /// Beyond this the chips would crowd out the works. The overflow is *counted*
@@ -50,10 +55,18 @@ struct SearchResultsHero: View {
                 if summary.subject != nil || summary.range != nil {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if let subject = summary.subject {
-                            Text(subject)
-                                .font(.headline)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.85)
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                if let subjectField {
+                                    Image(systemName: subjectField.symbol)
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(.tint)
+                                        .accessibilityHidden(true)
+                                }
+                                Text(subject)
+                                    .font(.title3.weight(.semibold))
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.85)
+                            }
                         }
                         Spacer(minLength: 0)
                         if let range = summary.range {
@@ -75,12 +88,12 @@ struct SearchResultsHero: View {
                 // theme like every other stat glyph; the text inherits the
                 // secondary style set here.
                 //
-                // `square.stack` because the author profile already labels its own
-                // "N works" with it — and because `books.vertical` is the *fandom*
-                // glyph, which on the Search card can appear as a chip one line
-                // below. Two different things must not share an icon in the same
-                // card.
-                WorkStatLabel(text: countText, symbol: "square.stack")
+                // `doc.text` is the app's established Works glyph — the Works tab on
+                // both `AccountView` and `AuthorProfileView` uses it. Not
+                // `books.vertical`, which is the *fandom* glyph and can appear as a
+                // chip one line below on the Search card: two different things must
+                // not share an icon inside one card.
+                WorkStatLabel(text: countText, symbol: "doc.text")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
@@ -116,7 +129,11 @@ struct SearchResultsHero: View {
     }
 
     private var spokenLabel: String {
-        var parts = [countText]
+        // The category leads, so VoiceOver says "Fandom, 142,327 works in Naruto …"
+        // rather than dropping the glyph's meaning entirely.
+        var parts: [String] = []
+        if let subjectField { parts.append(subjectField.accessibilityName) }
+        parts.append(countText)
         // The verbatim scope, preposition included — "in Naruto (Anime & Manga)"
         // reads correctly aloud where the bare subject used as a heading does not.
         if let scope = summary.scope { parts.append(scope) }

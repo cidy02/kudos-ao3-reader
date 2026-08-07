@@ -38,6 +38,43 @@ struct AO3FilterPanel: View {
     var onReset: () -> Void
 
     var body: some View {
+        VStack(spacing: 0) {
+            actionHeader
+            form
+        }
+    }
+
+    /// Reset left, Apply right, and — on iPhone, where the inspector collapses into
+    /// a sheet — the system's own drag indicator between them as the dismiss
+    /// handle. The two actions used to be rows at the *bottom* of the form, which
+    /// meant scrolling past every facet to run the search you had just configured.
+    ///
+    /// Reset is disabled rather than hidden: a control that appears and disappears
+    /// as filters change shifts Apply sideways under the user's thumb.
+    private var actionHeader: some View {
+        HStack {
+            Button(role: .destructive, action: onReset) {
+                Text("Reset")
+            }
+            .disabled(!canReset)
+
+            Spacer(minLength: 12)
+
+            Button(action: onApply) {
+                // Refine narrows live as facets change, so its button just confirms;
+                // search needs a query/filter before it can run.
+                Text(mode == .refine ? "Done" : "Apply")
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(mode == .search && !filters.isSearchable)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var form: some View {
         Form {
             // Group so .appThemedRows() reaches every section's rows (it doesn't
             // propagate from the Form container, only from a Group/Section/ForEach).
@@ -175,26 +212,14 @@ struct AO3FilterPanel: View {
 
                 tagSection
 
-                Section {
-                    Button(action: onApply) {
-                        // Refine narrows live as facets change, so its button just confirms;
-                        // search needs a query/filter before it can run.
-                        Label(mode == .refine ? "Done" : "Apply Filters",
-                              systemImage: mode == .refine ? "checkmark" : "magnifyingglass")
-                    }
-                    .disabled(mode == .search && !filters.isSearchable)
-
-                    if let onSave {
+                // Apply and Reset live in `actionHeader`; only Save is left here,
+                // because it is a rarer, more deliberate action than either.
+                if let onSave {
+                    Section {
                         Button(action: onSave) {
                             Label("Save Search…", systemImage: "bookmark")
                         }
                         .disabled(!filters.isSearchable)
-                    }
-
-                    if canReset {
-                        Button(role: .destructive, action: onReset) {
-                            Label("Reset Filters", systemImage: "arrow.counterclockwise")
-                        }
                     }
                 }
             }

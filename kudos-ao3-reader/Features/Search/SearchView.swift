@@ -235,6 +235,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             SearchResultsHero(
                                 summary: heroSummary,
                                 filterLabels: filters.summaryLabels(),
+                                subjectField: heroSummary.subjectField(inAnyOf: results),
                                 // Search's panel is router-owned (it's an inspector
                                 // shared with the toolbar's Filter button), so open
                                 // it the same way that button does.

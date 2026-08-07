@@ -110,6 +110,7 @@ struct FandomWorksView: View {
                             SearchResultsHero(
                                 summary: heroSummary,
                                 filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
+                                subjectField: heroSummary.subjectField(inAnyOf: results),
                                 onEditFilters: { showingFilters = true }
                             )
                             .cardRow()
@@ -319,6 +320,7 @@ struct TagWorksView: View {
                             SearchResultsHero(
                                 summary: heroSummary,
                                 filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
+                                subjectField: heroSummary.subjectField(inAnyOf: results),
                                 onEditFilters: { showingFilters = true }
                             )
                             .cardRow()

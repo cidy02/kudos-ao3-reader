@@ -108,6 +108,35 @@ nonisolated struct AO3ResultSummary: Equatable, Sendable {
     /// and it is what AO3 itself prints on a tag list ("1 - 20 of …").
     static let worksPerPage = 20
 
+    /// Which tag category this list's subject is, for the heading's glyph.
+    ///
+    /// Read off the works already on screen rather than asked of AO3: every work
+    /// here carries the subject tag by definition, and `parseBlurb` has already
+    /// sorted each work's tags into fandoms / relationships / characters /
+    /// freeforms using AO3's own markup classes. So the answer is sitting in the
+    /// page that was just parsed — no `/tags/<name>` round-trip, no guessing from
+    /// the name.
+    ///
+    /// A user list ("by astolat") is not a tag at all, hence the `by` short-circuit.
+    /// nil when nothing matches — a work tagged with a *synonym* displays the
+    /// synonym while the heading shows the canonical name, and no icon is better
+    /// than a wrong one.
+    func subjectField(inAnyOf works: [AO3WorkSummary]) -> AO3TagSearch.Field? {
+        guard let subject else { return nil }
+        if scope?.hasPrefix("by ") == true { return .character }
+        let needle = subject.lowercased()
+        func matches(_ values: [String]) -> Bool {
+            values.contains { $0.lowercased() == needle }
+        }
+        for work in works {
+            if matches(work.fandoms) { return .fandom }
+            if matches(work.relationships) { return .relationship }
+            if matches(work.characters) { return .character }
+            if matches(work.tags) { return .freeform }
+        }
+        return nil
+    }
+
     /// Fills in what a `/works/search` heading leaves out.
     ///
     /// A tag or user list heading states its subject and its range; a search states
