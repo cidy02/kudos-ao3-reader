@@ -1153,6 +1153,41 @@ nonisolated struct AO3WorkMetadata {
         authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ")
     }
 
+    /// The same work as a list blurb, so a screen that only had a sparse summary
+    /// can show a full card once the work page has been read.
+    ///
+    /// AO3's subscriptions page is the case this exists for: it lists nothing but
+    /// each work's title, id and author, so those cards render blank where every
+    /// other list shows tags, stats and a summary.
+    var asWorkSummary: AO3WorkSummary {
+        AO3WorkSummary(
+            id: id,
+            title: title,
+            authors: authors,
+            authorIdentities: authorIdentities,
+            fandoms: fandoms,
+            rating: rating,
+            warnings: warnings,
+            categories: categories,
+            relationships: relationships,
+            characters: characters,
+            isComplete: isComplete,
+            dateUpdated: dateUpdated,
+            tags: freeforms,
+            summary: summary,
+            language: language,
+            words: words,
+            chapters: chapters,
+            comments: comments,
+            kudos: kudos,
+            bookmarks: bookmarks,
+            hits: hits,
+            seriesTitle: seriesTitle,
+            seriesURL: seriesURL,
+            seriesPosition: seriesPosition
+        )
+    }
+
     var tagGroups: AO3WorkTagGroups {
         AO3WorkTagGroups(
             fandoms: fandoms,

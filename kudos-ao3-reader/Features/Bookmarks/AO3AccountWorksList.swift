@@ -269,8 +269,7 @@ struct AO3AccountWorksList: View {
                                 // branch's reveal gate.
                                 SensitiveWorkRow(work: work, expandAll: expandAll)
                             } else if let remote = entry.remote {
-                                AO3WorkRow(work: remote, expandAll: expandAll)
-                                    .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                                EnrichingAO3WorkRow(work: remote, expandAll: expandAll)
                             }
                         }
                         .cardRow()
@@ -366,5 +365,34 @@ struct AO3AccountWorksList: View {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
+    }
+}
+
+/// An AO3 work row that fills itself in when the listing it came from was sparse.
+///
+/// AO3's subscriptions page lists only title, id and author, so those cards would
+/// otherwise show no tags, no stats and no summary. The fetch happens per row as it
+/// appears rather than for the whole page up front: 20 works would be 20 paced
+/// requests before anything could render, and scrolling past a work you didn't care
+/// about would still have cost one.
+///
+/// A row that is already complete — every other list in the app — does no work at
+/// all; `enrich` returns nil immediately and this stays exactly `AO3WorkRow`.
+private struct EnrichingAO3WorkRow: View {
+    let work: AO3WorkSummary
+    let expandAll: Bool
+
+    @State private var enriched: AO3WorkSummary?
+
+    private var displayed: AO3WorkSummary { enriched ?? work }
+
+    var body: some View {
+        AO3WorkRow(work: displayed, expandAll: expandAll)
+            .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
+            .task(id: work.id) {
+                // `.task(id:)` so recycling this row onto a different work cancels
+                // the previous fetch instead of writing its result into the new row.
+                enriched = await AO3SparseWorkEnricher.shared.enrich(work)
+            }
     }
 }
