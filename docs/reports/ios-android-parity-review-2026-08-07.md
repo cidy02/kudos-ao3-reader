@@ -57,7 +57,7 @@ that fan-out shape; work areas serially and commit each one.
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 4 (8, 9, 20, 21) | Progress locator + fallback (V-6, 8); settings field set/defaults/clamps (V-7, 9); colour themes → findings 20 and 21. **Not done:** TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
-| 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
+| 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 1 (finding 22) | The four AO3 account-list types match (V-8); inbox malformed-row policy matches (L-7); preferences snapshot structure compared → finding 22 (help text) and a dead-code find folded into finding 19. **Not done:** the preferences *write* path (which toggles can be POSTed back), dashboard |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
@@ -258,6 +258,48 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 22. AO3's per-preference help text is shown on iOS and unreachable on Android — `gap` · Account / AO3 preferences
+
+AO3's preference names are terse and often non-obvious ("Turn off page caching", "Hide
+warnings", "Show me adult content without warning me"). AO3 ships help for them; iOS surfaces
+it, Android parses a pointer to it and drops it.
+
+- **iOS:** help is modelled structurally and rendered inline. `Models/AO3PreferencesModels.swift`
+  defines `AO3PreferenceHelpRef`, `AO3PreferenceHelpEntry` and `AO3PreferenceHelpContent`
+  (title, entries, footer, sourceURL), and `help` hangs off every control type —
+  `AO3PreferenceToggle`, `AO3PreferenceSelect`, `AO3PreferenceTextField`,
+  `AO3PreferenceSection`. `Services/AO3Client+Preferences.swift:107` parses "an AO3 `/help/…`
+  page into structured topics", and `Features/Account/AO3PreferencesView.swift` renders it —
+  attached to toggles (`:110`), section headers (`:114`), selects (`:130`), text fields
+  (`:142`), and expanded through `helpContentList(content)` at `:217`.
+- **Android:** `network/ao3/preferences/AO3PreferencesModels.kt:7` carries a single
+  `val helpUrl: String? = null` on `AO3PreferenceToggle` — no help on sections, selects or
+  text fields, and no structured content type at all. And it is never used:
+  `grep -rn "helpUrl"` across the whole Android source root returns **exactly one line**, the
+  declaration itself. `account/AO3PreferencesScreen.kt` does not reference it.
+- **Divergence:** on iOS every preference can explain itself in place; on Android the user
+  gets the label alone, with no affordance to find out more — not even a link, since the
+  parsed URL is discarded.
+- **Scenario:** a user opens Account → AO3 Preferences and sees "Turn off page caching". On
+  iPhone, tapping the help control explains what AO3 means by it. On Android there is nothing
+  to tap; the user either guesses, leaves it alone, or goes to AO3 in a browser to find out.
+  These are settings that change what content AO3 shows them, so guessing has consequences.
+- **Evidence:** enumerated both model files structurally, then traced rendering on both
+  sides. Ruled out: (a) that Android renders help through a different name — the whole tree
+  has one `helpUrl` reference and no `help`-typed field on any other preference control;
+  (b) that Android deliberately links out instead of inlining, which would be a legitimate
+  platform choice — it does not, the URL is parsed and never surfaced; (c) that iOS's help is
+  itself dead code, which is what I found for `webLinks` in the same file (see finding 19) —
+  it is not, it has five distinct render sites.
+- **History:** not recorded on either side.
+- **Recommendation:** Android moves, and the cheap version is genuinely cheap: `helpUrl` is
+  already parsed, so rendering an info affordance that opens it in the existing WebView
+  fallback closes most of the gap for one small composable. Porting iOS's structured
+  `/help/` parser to show the text inline is the fuller fix and is worth it only if the
+  in-app modal is wanted; the link restores the *capability*, which is what is missing today.
+  Whichever is chosen, `help` should also be carried on sections, selects and text fields
+  rather than toggles alone, since AO3 attaches it to all four.
 
 ### 21. Restoring a backup silently drops the OLED theme and lands the user in light mode — `real-bug` · Backup / settings
 
@@ -1214,6 +1256,15 @@ each half individually is too small to file and together they explain several of
   **`Models/Models.swift` only** — no feature writes them, no view reads them, and
   `lastSyncError = ` has zero assignment sites anywhere. Four models carry three columns each
   that nothing populates or consumes.
+- **iOS also parses preference web-links it never shows.**
+  `Services/AO3Client+Preferences.swift:315-333` implements `parsePreferenceWebLinks`, which
+  reads AO3's `ul.navigation.actions` nav, de-duplicates, and filters out `/preferences` and
+  `/help/` targets — leaving exactly the account-management actions ("Change Username" and
+  friends). The result is stored on `AO3PreferencesSnapshot.webLinks`
+  (`Models/AO3PreferencesModels.swift:134`) and **rendered nowhere**: every one of the seven
+  hits for `webLinks` / `AO3PreferenceWebLink` across the iOS tree is in the model or the
+  parser. This one is worth flagging because it is the reason Android's snapshot having 7
+  fields to iOS's 8 is *not* a gap — Android correctly declined to port dead code.
 - **Android carries two unreachable collection columns.** `CollectionEntity` declares
   `description` and `sortOrder`, `BackupCollection` serialises both
   (`backup/BackupManifest.kt`), and `library/CollectionsScreen.kt:243-245` renders the
