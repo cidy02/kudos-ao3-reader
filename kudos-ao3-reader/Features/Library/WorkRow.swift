@@ -117,9 +117,9 @@ struct WorkRow: View {
             if expandedBinding.wrappedValue {
                 // The stats row's badge only says how many warnings apply, so
                 // without this the names would be unreachable on a saved work.
-                // Sentinels are filtered out: a "No Archive Warnings Apply"
-                // chip next to a "No Warnings" badge just says it twice.
-                chipGroup("Archive Warnings", WorkStat.realWarnings(work.workWarnings), field: .warning)
+                // No "Archive Warnings" group: expanding turns the stats row's
+                // count chip into the warnings themselves, so a labelled section
+                // right above was the same list twice. Matches AO3WorkRow.
                 if work.hasCategorizedWorkTags {
                     chipGroup("Relationships", work.workRelationships, field: .relationship)
                     chipGroup("Characters", work.workCharacters, field: .character)
@@ -129,9 +129,10 @@ struct WorkRow: View {
                 }
             }
 
-            // Thin divider separates the textual content from the metadata stats,
-            // matching the Search and Browse-by-fandom cards.
-            Divider().padding(.top, 1)
+            // Space, not a rule — matching AO3WorkRow. The stats row below is
+            // already a band of capsules with its own edges, so a hairline against
+            // it drew a second boundary in the same place.
+            Spacer(minLength: 0).frame(height: 4)
 
             // Stats wrap rather than truncate (matches AO3WorkRow).
             WorkListStatsRow(
@@ -146,7 +147,8 @@ struct WorkRow: View {
                 kudos: work.kudos,
                 bookmarks: work.bookmarks,
                 hits: work.hits,
-                datePublished: work.datePublished.isEmpty ? nil : work.datePublished
+                datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
+                isExpanded: expandedBinding.wrappedValue
             )
         }
         .padding(.vertical, 6)

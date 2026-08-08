@@ -760,6 +760,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     private func load(page: Int) {
+        // Here rather than in the callers: `runSearch` and `refreshCurrentResults`
+        // each set it themselves, but a page tap goes straight to `load` — so the
+        // Search tab's pager had no spinner and kept both arrows live while a
+        // fetch ran, which is the very thing Browse's copy of this was fixed for.
+        // The skeleton branch is gated on `results` being empty, so paging still
+        // keeps the current page on screen.
+        phase = .loading
         loadToken += 1
         let token = loadToken
         let current = filters
