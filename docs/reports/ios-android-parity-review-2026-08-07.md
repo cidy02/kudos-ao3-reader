@@ -17,14 +17,18 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 12's inbox half — compare `Services/AO3Client+Inbox.swift`'s
-`parseInboxPage` against `network/ao3/inbox/AO3InboxParser.kt`, specifically the
-**malformed-row policy**. `TASKS.md` row 64 records an iOS finding (F7) that `parseInboxPage`
-"only fails closed when *every* row" fails; establish whether Android fails the same way,
-because a parser that fails open on a partially-broken page silently drops the user's
-notifications.
+**Resume here:** Area 10, the Library **statistics formulas** — read
+`Features/Library/ReadingStatistics.swift` against `library/ReadingStatistics.kt` and compare
+every statistic's formula, not its name: what counts as "read", which denominator each
+average uses, how time estimates are derived. This is the highest-value untouched item in the
+review, because a statistic computed differently on each platform is invisible to every check
+except this one. Then the Recently Deleted **retention window** in the same area (a shorter
+window on one platform is silent data loss; note `PARITY_SWEEP2_A:20` already records a
+rounding divergence in the days-remaining caption, but not the window length).
 
-**Then:** areas 1, 5, 7, 8, 10, 18–20 are untouched; 6, 9, 11, 12, 13, 16, 21 are partial. Read *Not covered* before planning —
+**Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
+See *Not covered* for the full breakdown and for the standing warning about the Android
+branch's audit corpus. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -67,8 +71,8 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-Eleven confirmed findings across seven areas read closely, eight verified "no divergence"
-results, and ten of twenty-one areas still untouched. The honest headline is that **the two
+Eleven confirmed findings, eight verified "no divergence" results, and seven open leads.
+Of twenty-one areas: **four closed, eleven partial, six never opened.** The honest headline is that **the two
 apps agree far more than they differ, and where they differ it is almost never in the
 business rules** — it is in the layer around them.
 
@@ -101,8 +105,9 @@ And **the standing "iOS is the source of truth" convention was right in nine cas
 in one** — finding 8, where Android's reader model is better and iOS discards a reading
 position it was handed. The convention is a good default, not a rule.
 
-What is *not* established: ten areas were never opened, including the whole Library
-statistics surface, comments, browse, author profiles and onboarding. No test suite was run
+What is *not* established: six areas were never opened — onboarding, browse, comments,
+author profiles and series, the whole Library surface (including its statistics), and error
+handling as a sweep — and eleven more were only partly read. No test suite was run
 on either platform. Nothing here is runtime-verified — this is static reading, and the two
 places it most needs runtime confirmation (L-2, and the touch-target measurement behind
 finding 11) are marked as such.
@@ -1191,51 +1196,61 @@ timestamps. **Verified compatible.** One residual is carved out as lead L-2 belo
 
 ## Not covered
 
-This is the honest majority of the review. **17 of 21 areas were not read at all.**
+**Of twenty-one areas: four closed, eleven partial, six never opened.** "Closed" means the
+area's central question was answered, not that every file in it was read — each closed row in
+the ledger names what was deliberately left.
 
-**Read closely (the only code this report's claims rest on):**
-`Services/FolderSyncService.swift` (the sync write/commit path, ~lines 560–760),
-`Services/KudosBackup.swift` (manifest struct, version constants, the encoder/decoder
-date strategy), `Services/KudosBackupExport.swift` (skimmed);
-`backup/SyncRepository.kt` in full, `backup/BackupManifest.kt` in full,
-`backup/BackupVersion.kt`, `backup/BackupJson.kt`, `backup/BackupValidator.kt` (the
-instant helpers and the manifest validation pass), `backup/BackupMappers.kt` (date call
-sites only), `files/WorkFileStore.kt` (the atomic-write helpers),
-`data/local/converters/KudosTypeConverters.kt`, and the `SyncMerge` object plus
-`TombstoneResolution` at `backup/BackupMergeService.kt:718-753` against
-`Services/PersistenceSync.swift:379-431`.
+**Read closely** (findings rest on these): folder sync and backup on both sides
+(`FolderSyncService.swift`, `KudosBackup.swift` manifest/encoder/merge regions;
+`SyncRepository.kt`, `BackupManifest.kt`, `BackupVersion.kt`, `BackupJson.kt`,
+`BackupValidator.kt`, `BackupMergeService.kt` merge core + `mergeWork`, `BackupMappers.kt`
+export path, `BackupRepository.kt` apply path); the session/cookie stores and logout paths
+(`AO3SessionVault.swift`, `AO3AuthService.logout`; `AO3SessionStore.kt`, `AO3CookieStore.kt`,
+`AO3AuthRepository.kt`); the networking constants (`AO3Client.swift` pacing/retry,
+`AO3RequestCoordinator.swift`; `AO3NetworkConfig.kt`, `AO3RetryPolicy.kt`, `AO3UserAgent.kt`);
+the search parameter builders on both sides; the reader locator and settings paths
+(`ReadiumReaderView.swift` open path, `ReadiumNavigatorContainer.swift` codec,
+`ReaderStyle.swift`; `ReaderLocatorCodec.kt`, `ReaderRestoreTarget.kt`,
+`ReaderSettingsMapper.kt`, `ReaderPreferences.kt`); the write endpoints and duplicate paths;
+`HTMLWorkSanitizer.swift` against `HTMLWorkConverter.kt`; the schema diff
+(`Models.swift` `SavedWork` against `WorkEntity.kt`, mechanically); `KudosDatabase.kt` +
+`KudosDatabaseMigrations.kt`.
 
-**Skimmed, conclusions not load-bearing:** the package/folder inventory of both trees
-(used only to build the area map); `Features/Support/WhatsNew.swift` (line count only).
+**Partial** — area 6 (write actions done, the Work Detail *screen* not), area 9 (position and
+settings done; themes, TOC, in-reader search, annotations and TTS not), area 12 (list types
+only), area 16 (backup payload only, not the Settings screens), area 20 (touch targets and
+density only), area 21 (suite shape and one per-rule instance only).
 
-**Not reached at all:** areas 1–13, 15, 16, 18, 19, 20 — onboarding, auth/session,
-networking core, search/filters, browse, work detail + writes, comments, authors/series,
-the readers, library/queues/statistics, home, account/inbox, import/conversion,
-persistence schema + migrations, settings/theming, support, error handling/empty states,
-accessibility. Within area 14 itself, `BackupMergeService.kt` (866 lines) and
-`PersistenceSync.swift` were **not** read, so nothing in this report says anything about
-merge/conflict semantics.
+**Never opened:** areas 1 (onboarding), 5 (browse), 7 (comments), 8 (author profiles and
+series), 10 (library, collections, queues, **statistics**, recently deleted), 19 (error
+handling and empty states as a sweep). Within opened areas, notable omissions: the
+collection/queue/annotation merge bodies, ZIP container internals, PDF and plain-text
+converters, the EPUB builder's output, text-encoding detection, the download queue, tag
+autocomplete, and the `SavedSearch` round trip.
 
-**Where a follow-up should start, and a warning about it.** The Android branch carries its
-own audit corpus that this review did not verify:
-`docs/audits/PARITY_SWEEP2_A…D`, `ANDROID_PARITY_FINDINGS_VERIFIED.md`,
-`ANDROID_PARITY_INDEPENDENT_REVIEW.md`, `IOS_ANDROID_DOMAIN_AUDIT.md`,
-`REMAINING_PARITY_AND_UI_GAPS.md`, and `docs/Android_Parity_Review_2026-08-04.md`
-(461 lines). Those cover much of areas 1–13 already. **They are claims, not evidence** —
-the review prompt's first rule — and at least one of their sibling documents is now
-provably wrong about the code (`docs/contracts/BACKUP_FORMAT.md:83` asserts atomic EPUB
-writes that finding 1 shows the sync path does not perform). So the efficient next pass is
-to treat them as a *lead list to re-verify against the trees*, not as coverage already
-banked. That is also why they were not folded into this report wholesale — and finding 3
-is that warning cashed in: the one cluster I spot-checked from those documents turned out
-to be substantially implemented while still listed there as a "highest-priority CONFIRMED
-major (still open)".
+**Where a follow-up should start, highest value first:**
+1. **Library statistics formulas** (area 10). Untouched, and the single most likely place for
+   a silent numeric divergence — a statistic computed from a different denominator on each
+   platform is invisible until someone compares two phones.
+2. **Recently Deleted retention window** (area 10). A shorter window on one platform is
+   silent data loss. Note `PARITY_SWEEP2_A:20` already records a *rounding* divergence in the
+   days-remaining caption (Android floors, iOS rounds up) — the window length itself was not
+   checked here.
+3. **Comments** (area 7) and **error/empty states** (area 19), where divergence is cheap to
+   introduce and nothing pins it.
 
-**Not run:** neither `Scripts/verify.sh` (iOS) nor `android/Scripts/verify.sh`. No build,
-no test suite, no simulator or emulator run. Every claim here is static reading of source.
-Lead L-2 in particular **cannot** be closed without running code.
+**A standing warning about the Android branch's own audit corpus.** `docs/audits/`
+(`PARITY_SWEEP2_A`–`D`, `ANDROID_PARITY_REPORT.md`, `ANDROID_PARITY_FINDINGS_VERIFIED.md`,
+`REMAINING_PARITY_AND_UI_GAPS.md`) and `docs/Android_Parity_Review_2026-08-04.md` cover much
+of areas 1–13 and were **not** verified here beyond one spot-check. That spot-check found the
+cluster substantially implemented while still listed as a confirmed-open major (finding 3),
+and a sibling contract doc asserting behaviour the code does not perform (finding 1). Treat
+that corpus as a lead list to re-verify against the trees, never as coverage already banked.
 
----
+**Not run:** neither `Scripts/verify.sh` nor `android/Scripts/verify.sh`. No build, no test
+suite, no simulator or emulator. Every claim here is static reading of source at
+`e9ed0c6a` / `a5a46116`. Two items explicitly cannot be closed without running code: lead
+L-2 (`Instant.now()` precision) and the rendered-height half of finding 11.
 
 ## Method log
 
