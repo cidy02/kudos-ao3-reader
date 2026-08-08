@@ -54,14 +54,14 @@ that fan-out shape; work areas serially and commit each one.
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
-| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
+| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 4 (8, 9, 20, 21) | Progress locator + fallback (V-6, 8); settings field set/defaults/clamps (V-7, 9); colour themes → findings 20 and 21. **Not done:** TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
-| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 1 (finding 9) | Backup settings payload verified 21/21 (V-7). **Not done:** the Settings *screens* themselves, theme colour values, per-setting UI wording |
+| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload verified 21/21 (V-7); theme enums and restore validation compared → findings 20, 21. **Not done:** the Settings *screens* themselves, per-setting UI wording, light/sepia token tones (see note under finding 20) |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | 🔄 in progress | 0 (+1 lead) | Inventory compared. `WhatsNew` is iOS-only **by design** — `TASKS.md` row 26 says it exists precisely because iOS has no update system, and Android surfaces GitHub release notes instead (`GitHubReleaseModels.kt:21`). Not a gap. Screenshot attachment is lead L-6 |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | 🔄 in progress | 2 (findings 16, 17) | Error *copy* swept: 6 sites render `AO3Error.toString()` raw (16), offline is not a distinct state (17), and Android's four duplicated `displayMessage()` mappers are otherwise well-written and consistent. **Not done:** empty-state copy per screen, loading/skeleton states, signed-out states outside comments |
@@ -258,6 +258,111 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 21. Restoring a backup silently drops the OLED theme and lands the user in light mode — `real-bug` · Backup / settings
+
+Found while checking a loose end in finding 20's recommendation, and it turned out to be
+worse than the thing I was checking. **This one does not need iOS at all — an
+Android→Android backup round trip loses the setting.**
+
+- **Android writes `"oled"`.** `core/model/SettingsModels.kt:26-31` declares
+  `AppThemeSetting` with `Oled("oled")`, and `core/model/BackupSettings.kt:72` exports
+  `appTheme = settings.app.appTheme.storageValue` — so a user on the OLED app theme produces
+  an archive containing `"appTheme": "oled"`.
+- **Android's own validator rejects it.** `backup/BackupValidator.kt:12` defines
+  `private val appThemes = setOf("light", "sepia", "dark", "system")` — **`"oled"` is not in
+  the allowlist**, despite being a value the same codebase emits. `:181` then does
+  `settings.appTheme.takeIf { it in appThemes } ?: defaults.appTheme`, and the default is
+  `BackupSettingsPayload.appTheme = "light"`.
+- **The reader half fails the same way, and fails to `Light` rather than `Dark`.**
+  `BackupValidator.kt:11` has `readerThemes = setOf("light", "sepia", "dark")`, so `:182`
+  substitutes the default for `"oled"`. Independently,
+  `core/model/SettingsModels.kt:19-22`'s `ReaderThemeSetting.fromStorage` is
+  `entries.firstOrNull { it.storageValue == value } ?: Light` — an unknown value falls back
+  to **Light**, not to the nearest dark theme.
+- **iOS emits the same string.** `Features/Reader/ReaderStyle.swift:27-28` is
+  `enum ReaderTheme: String { case light, sepia, dark, oled }`, so its raw value is `"oled"`,
+  and `KudosBackup.swift:758-759` carries `appTheme`/`readerTheme` as plain `String`s.
+- **Scenario, in the order a user hits it:**
+  1. *Android only.* A user picks the OLED app theme, backs up, reinstalls, restores. Their
+     app comes back in **light mode**. Nothing reports a problem; the theme setting simply
+     reads "Light". They chose true-black and got white.
+  2. *Cross-platform.* An iPhone user on the OLED reader theme restores on Android and gets
+     a **white reader** — not the dark one, because `fromStorage` falls back to `Light`.
+  This is the worst kind of settings bug: silent, total (both app and reader), and it inverts
+  the user's choice rather than approximating it.
+- **Evidence:** traced the value end to end in both directions — emit
+  (`BackupSettings.kt:72`), validate (`BackupValidator.kt:11-12, 181-182`), and parse
+  (`SettingsModels.kt:19-22`). Ruled out: (a) that `AppThemeSetting.fromStorage` rescues it —
+  it cannot, the validator has already replaced `"oled"` with `"light"` before
+  `BackupSettings.kt:43` calls `fromStorage`; (b) that the allowlist is deliberately
+  conservative because Android lacks an OLED app theme — it has one, fully implemented
+  (`ui/theme/Theme.kt:15` exposes it, `:60-64` builds `oledScheme` from `SurfaceOled`);
+  (c) that `"system"` in the app allowlist means the sets were copied from iOS and iOS lacks
+  OLED — iOS has `.oled` and Android's list contains `"system"`, which *iOS's* `ReaderTheme`
+  does not, so neither list is a copy of the other. Both are hand-maintained and one is
+  simply missing a case.
+- **History:** not recorded. This is the same species as finding 6 (a hand-maintained
+  constant that fell out of step with the enum beside it) and finding 9 (a clamp range that
+  was never updated), which is now three instances of the same underlying habit.
+- **Recommendation:** Android moves, and the immediate fix is two strings: add `"oled"` to
+  both sets at `BackupValidator.kt:11-12`. But the durable fix is to stop hand-maintaining
+  them — derive both from the enums that already exist
+  (`AppThemeSetting.entries.map { it.storageValue }`,
+  `ReaderThemeSetting.entries.map { it.storageValue }`), which makes this class of bug
+  structurally impossible and would have prevented it. Separately, `fromStorage`'s
+  fallback to `Light` is the wrong default for an unrecognised *dark* theme; falling back to
+  `Dark` would at least preserve intent. Note finding 20 must land too, or `"oled"` will
+  validate and then still be collapsed to `Dark` by `ReaderSettingsMapper.kt:50`.
+
+### 20. The OLED theme applies to Android's app shell but not to its reader — `real-bug` · Reader / theming
+
+The reader is the screen a user looks at longest and the one where a true-black theme
+actually matters. It is the single place on Android where the OLED theme is dropped.
+
+- **iOS:** `ReaderTheme` has four cases — `Features/Reader/ReaderStyle.swift:28`,
+  `case light, sepia, dark, oled` — and `.oled`'s reader background is literally
+  `.black` (`:87`). `.dark` is a distinct, lighter `Color(red: 0.086, green: 0.086,
+  blue: 0.105)` (`:86`). The two are deliberately different, and the comment at `:79-81`
+  notes the app shell reuses the same token "so the app and the reader can never drift apart
+  into two different 'dark backgrounds'."
+- **Android:** `reader/settings/ReaderColorTheme.kt:9` declares
+  `enum class ReaderColorTheme { Light, Sepia, Dark }` — **three** cases, no OLED — and
+  `backgroundColor()` (`:12-16`) maps `Dark` to `SurfaceDark`, which is
+  `0xFF191817` (`ui/theme/Color.kt:14`), a dark grey. `core/model/SettingsModels.kt:14-17`
+  confirms the reader-theme setting itself only offers `Light`, `Sepia`, `Dark`.
+- **Divergence:** Android *has* OLED everywhere else.
+  `ui/theme/Color.kt:16-17` defines `SurfaceOled = 0xFF000000` and `SurfaceOledElevated`;
+  `ui/theme/Theme.kt:60-64` builds a real `oledScheme` using them as `background` and
+  `surface`; `Theme.kt:15` exposes `Oled("OLED")` as a user-selectable app theme. Only the
+  reader collapses it — `reader/settings/ReaderSettingsMapper.kt:50` reads
+  `AppThemeSetting.Dark, AppThemeSetting.Oled -> ReaderColorTheme.Dark`, folding OLED into
+  Dark before the reader ever sees it.
+- **Scenario:** a user on an OLED phone picks the OLED app theme, precisely to get true black
+  at night and to save battery. Every screen obliges — Library, Home, Account are `#000000`.
+  They open a work to read, which is the whole reason the setting exists, and the page
+  background is `#191817` grey. Because "match app reader theme" defaults to true
+  (`BackupSettingsPayload.matchAppReaderTheme = true`), this is what happens without the user
+  touching any reader setting. The contrast against the surrounding true-black chrome makes
+  the reader look like a lighter panel floating on the app.
+- **Evidence:** read all four iOS cases and both Android enums, then traced the collapse to
+  the single line that causes it. Ruled out: (a) that Android's `Dark` token *is* black —
+  it is `0xFF191817`, and `SurfaceOled = 0xFF000000` exists separately in the same file;
+  (b) that the reader picks up the app scheme elsewhere and the mapper is vestigial —
+  `ReaderColorTheme` has no OLED case to map *to*, so the enum itself is the ceiling;
+  (c) that this is a Readium constraint — Readium's EPUB themes are configured from the
+  adapter, and Android already passes three distinct backgrounds through it, so a fourth is
+  the same mechanism.
+- **History:** not recorded. No `TASKS.md` row and nothing in the Android branch's `docs/`
+  mentions an OLED reader theme or its omission.
+- **Recommendation:** Android moves. Add `Oled` to `ReaderColorTheme`, map it to
+  `SurfaceOled` in `backgroundColor()`, stop collapsing it at `ReaderSettingsMapper.kt:50`,
+  and add the case to `ReaderThemeSetting` so it is selectable independently as well as via
+  "match app theme". Note for whoever does it: `BackupSettingsPayload.readerTheme` is a
+  `String` (`backup/BackupManifest.kt`) and iOS already writes `"oled"`, so an iOS archive
+  restored on Android **today** carries a reader theme Android cannot represent — worth
+  checking what `ReaderThemeSetting.fromStorage` does with it (`SettingsModels.kt:19-20`)
+  while making this change.
 
 ### 18. A work whose EPUB file has vanished still restores as "downloaded" on Android — `minor` · Backup / restore
 
