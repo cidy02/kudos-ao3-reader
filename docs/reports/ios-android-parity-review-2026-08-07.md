@@ -2594,6 +2594,85 @@ re-verify against the trees, never as coverage already banked.
 suite, no simulator or emulator. Every claim here is static reading of source at
 `e9ed0c6a` / `a5a46116`.
 
+## Verification runs
+
+Added after the review was otherwise complete, to close the "nothing here is runtime-verified"
+caveat. This section is the only part of the report backed by execution rather than reading.
+
+### Android — `android/Scripts/verify.sh`: **ALL GREEN**
+
+Run on 2026-08-08 with the project's own toolchain (Android Studio JBR 25, SDK at
+`~/Library/Android/sdk`). All five stages passed: invariants → unit tests → `assembleDebug` →
+the persistence/reader/network subset → whitespace.
+
+**Caveat worth stating, because the first run was misleading.** The initial `verify.sh`
+finished in under a second with `Task :app:testDebugUnitTest FROM-CACHE` — a cached pass, not
+an execution. Re-running with `--rerun-tasks` gave a genuine result:
+
+| | |
+|---|---|
+| Suites | **199** |
+| Tests | **660** |
+| Failures | **0** |
+| Skipped | **0** |
+| Wall clock | 1 m 12 s |
+
+Counts parsed from `app/build/test-results/testDebugUnitTest/*.xml`, not from console output.
+Note this is 660 test *cases* across 199 suite classes — a larger suite than the 93 test
+*files* counted in *Asymmetric test coverage*, which counted files.
+
+**None of the 28 findings in this report is contradicted by a passing suite**, which is
+consistent with the analysis in *Asymmetric test coverage*: the defects sit in branches the
+suite does not reach (findings 4, 5, 18), in a file with no tests at all (1, 2), or in UI
+wiring and copy that unit tests do not exercise (12, 13, 15, 16, 17, 20, 21, 22, 23, 25, 26,
+27, 28).
+
+### iOS — `Scripts/verify.sh`
+
+Required one setup step the script itself documents: `Vendor/MuPDF.xcframework` is gitignored
+("built, not cloned") and absent from the `hig-review` worktree, so the run aborts up front.
+Symlinked from another worktree exactly as the script's own error message instructs; `Vendor/`
+is in `.gitignore:48`, so `hig-review` remains clean.
+
+Result recorded in the *Method log* below once the run completed. Environment note for anyone
+repeating it: `docs/AGENT_ONBOARDING.md:21` states Xcode-beta is the active toolchain, but
+this machine's `xcode-select -p` is `/Applications/Xcode.app` (Xcode 26.6). The canonical
+destination the script defaults to — `iPhone 17, OS=26.5` — is available.
+
+### Lead L-2 — probed directly, and the safe assumption no longer holds
+
+L-2 asked whether Android's `Instant.now()` can emit sub-millisecond nanos, which
+`BackupValidator.formatInstant` (`instant.toString()`) would render as 6 or 9 fractional
+digits — a string iOS's `ISO8601DateFormatter` pair rejects, aborting the **entire** import of
+an Android-written archive. I could not settle it by reading. Three things are now established:
+
+1. **On the JVM the project's own tests run, the hazard reproduces.** A 200,000-sample probe
+   on the Android Studio JBR (JDK 25) returned **199,778 samples with sub-millisecond nanos**,
+   and `Instant.toString()` emitted six fractional digits — e.g.
+   `2026-08-08T21:45:03.017239Z`. iOS accepts exactly three fractional digits or none, so that
+   literal string is rejected by both of its formatters.
+2. **Android does not use libcore's millisecond clock.** `app/build.gradle.kts:60-61` and
+   `:106` enable core-library desugaring (`isCoreLibraryDesugaringEnabled = true`,
+   `coreLibraryDesugaring(libs.desugar.jdk.libs)`, version 2.1.5), and the desugar artefact
+   ships its **own** `java/time/Clock$SystemClock` — confirmed by unzipping
+   `desugar_jdk_libs-2.1.5.jar`. So the millisecond-precision assumption that would have made
+   L-2 harmless — "Android's `Clock.systemUTC()` is backed by `System.currentTimeMillis()`" —
+   does not apply on its face.
+3. **The jar still cannot give the final answer.** Disassembling
+   `Clock$SystemClock.instant()` shows it calling a static `currentInstant()` that `javap -p`
+   does not list among the class's methods: D8/R8 injects the implementation at dex time for
+   the target API level. Its precision is therefore a property of the *build*, not of the jar.
+
+**Status: upgraded from "unverified suspicion" to "the assumption of safety is disproven; the
+defect itself is unconfirmed."** The one remaining step is a device or emulator at `minSdk`
+26 logging `Instant.now().nano % 1_000_000`. Given (1) and (2), the defensive fix —
+`.truncatedTo(ChronoUnit.MILLIS)` in `BackupValidator.formatInstant` — is now clearly worth
+making unconditionally rather than pending that check: it costs one call, it makes Android's
+output byte-shaped like iOS's for every field, and the downside it guards against is a total
+import failure.
+
+---
+
 ## Method log
 
 Chronological record of what was actually done, so a cold reader can judge the
