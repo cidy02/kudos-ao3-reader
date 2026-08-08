@@ -52,7 +52,7 @@ that fan-out shape; work areas serially and commit each one.
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | ⬜ not started | – | iOS has two readers (Readium iOS / legacy macOS); Android one |
-| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here |
+| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. **Partial input:** finding 3 closes the model half of the `isQueuedForLater` cluster; leads L-3/L-4 are open here |
 | 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ⬜ not started | – | |
@@ -102,6 +102,13 @@ few files away. It was lost only on the path where the destination is shared and
 irreplaceable. Underneath it sits the same subsystem's *shared* bug — sync skipping any
 file whose length happens to be unchanged — which is already documented on both platforms
 and fixed on neither.
+
+Separately, and cheaply: the one gap I spot-checked from the Android branch's own audit
+corpus — the `isQueuedForLater` / queue-only concept, listed there as a highest-priority
+confirmed-and-open major — is substantially implemented (finding 3). Combined with the
+contract doc in finding 1 that asserts an atomicity guarantee the code does not provide,
+two of the three Android-branch documents this review cross-checked misdescribe the code,
+in opposite directions. Treat that corpus as leads, not coverage.
 
 If one hypothesis is worth carrying into the remaining twenty areas, it is this: the
 divergences here are not in what the two apps *know*, they are in what got *verified*.
@@ -188,6 +195,61 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 3. The Android branch's own audit corpus is stale: the `isQueuedForLater` / queue-only gap it reports as open is implemented — `real-bug` (in the documentation) · Cross-cutting
+
+This is a finding about the *record*, not the code, and it is reported because acting on
+that record would waste a work cycle re-building something that exists.
+
+- **Claimed, in three places on the Android branch:**
+  `docs/audits/ANDROID_PARITY_REPORT.md:231` — "On Android there is no
+  `isQueuedForLater`/queue-only concept at all in `SavedWork` (`core/model/SavedWork.kt`)
+  or `LibraryQuery`." `docs/audits/ANDROID_PARITY_FINDINGS_VERIFIED.md:59` lists it as
+  **CONFIRMED**, and `:23` names it among the "Highest-priority CONFIRMED majors (still
+  open)". `docs/audits/PARITY_SWEEP2_A_home-library-queues-stats.md:6,24` then excludes
+  the whole cluster from re-review on the grounds that it is already covered as a known
+  open gap.
+- **Actually, at `a5a46116`:** it is implemented, and implemented as a deliberate mirror of
+  iOS.
+  - `core/model/SavedWork.kt:21` — `val isQueuedForLater: Boolean = false`, with the
+    comment at `:17-20` explicitly citing iOS's `SavedWork.isQueuedForLater` and noting it
+    is "Kept distinct from `isSaved`".
+  - `core/model/SavedWork.kt:80-82` — `val isQueueOnlyWork get() = isQueuedForLater &&
+    !isSaved && !isFavorite`, documented as "iOS `SavedWork.isQueueOnlyWork`". That is
+    character-for-character the iOS predicate the audit quotes from `Models.swift:376-378`.
+  - `data/local/entity/WorkEntity.kt:59` — the backing Room column exists.
+  - `home/HomeSectionKind.kt:50`, `:59`, `:64` — queue-only works are filtered out of
+    exactly three sections, which are the same three (Reading Now / Recently Updated /
+    Recently Opened) the audit says iOS excludes them from at `HomeSections.swift:57,66,71`.
+  - `library/LibraryQuery.kt:14` carries a comment stating a queue-only work is
+    "intentionally not on the main saved" shelf, and
+    `core/model/SavedWork.kt:69-75` folds `isQueuedForLater` into the deletion-protection
+    predicate with the note "queue-add now preserves the EPUB".
+- **Divergence:** between the Android branch's documentation and the Android branch's code.
+- **Scenario:** a planner reads `ANDROID_PARITY_FINDINGS_VERIFIED.md`, sees a
+  highest-priority confirmed-open major, and schedules "add `isQueuedForLater` to Android".
+  The work is already done. Worse, `PARITY_SWEEP2_A:6` uses the same belief to *exclude*
+  the area from a later sweep, so the cluster is simultaneously "known open" and "not
+  re-checked" — the state in which a stale claim survives indefinitely.
+- **Evidence:** greps run against `a5a46116` — `grep -n "isQueuedForLater|isQueueOnly"
+  core/model/SavedWork.kt data/local/entity/WorkEntity.kt` and
+  `grep -rn "isQueueOnly" --include="*.kt" .`, which returns hits in `SavedWork.kt`,
+  `settings/QueueStorageScreen.kt` (`:119`, `:244`, `:281`, `:316`),
+  `home/HomeSectionKind.kt` and `library/LibraryQuery.kt`. I did **not** verify the
+  *whole* cluster: specifically, whether `WorkImporter.saveMetadataOnly` still hard-codes
+  `markSaved = true` (the audit's other half) is **unchecked** — see lead L-3. So the
+  correct statement is "the model/query half of this cluster is closed", not "the cluster
+  is closed".
+- **History:** the audit documents carry no revision date tying them to a SHA, which is why
+  the staleness is invisible from inside them. Note the same pattern as finding 1's
+  `BACKUP_FORMAT.md:83`: an Android-branch document asserting something the code
+  contradicts. In finding 1 the doc over-claims completion; here it under-claims it. Both
+  directions cost real work.
+- **Recommendation:** neither platform's code moves. The Android audit documents should
+  gain a "verified at `<sha>`" line and have this cluster's status corrected. More
+  generally: the review prompt's first rule — "review the trees, not the reports" — is
+  earning its place. Two of the three documents this review cross-checked turned out to
+  misdescribe the code.
 
 ---
 
@@ -339,6 +401,40 @@ task cites iOS behaviour that `hig-review` has since changed. This is a process
 finding, not a user-visible one — it is recorded here because it predicts *where*
 user-visible drift will be found.
 
+**L-3 — backup restore may not propagate an *un-save* to Android.** Suspicion: in the
+work-merge body, iOS assigns the flag outright —
+`work.isSaved = incomingWins ? archived.isSaved : work.isSaved`
+(`Services/KudosBackup.swift:1931`) — while Android ORs it and additionally forces it true
+whenever an EPUB exists on either side:
+`isSaved = restored.isSaved || existing.isSaved || (existing.hasEpub || restored.hasEpub)`
+(`backup/BackupMergeService.kt:193`), inside the `incomingWins` branch. If that reading is
+right, a user who un-saves a work on iOS and syncs will see it un-saved on iOS and still
+saved on Android, permanently, because no archive value can ever drive the flag back to
+false. Note the two apps agree on the neighbouring rules — `isQueuedForLater` is OR'd on
+both (iOS `:1971`, Android `:194`), `dateAdded` is `min` on both (iOS `:1901`, Android
+`:195`), `lastModifiedAt` is `max` on both (iOS `:1996`, Android `:196`) — which is what
+makes `isSaved` stand out. **Why this is a lead and not a finding:** (a) the `hasEpub` half
+may be a deliberate mirror of iOS's *separate* rule that restore derives `hasEPUB` from
+whether a valid EPUB actually landed (`KudosBackup.swift:1220`, `:1229`) rather than from
+the archive flag, and I have not traced whether iOS's restore path re-derives `isSaved`
+elsewhere too; (b) this sits inside the broader `isSaved` semantics cluster that the
+Android branch already documents (see finding 3), so it may be a known consequence rather
+than a new defect. The check that settles it: write the round-trip test neither platform
+has — save a work, un-save it, export, restore onto the other platform, assert `isSaved`
+is false — and read `KudosBackup.swift:1890-2000` against
+`BackupMergeService.kt:176-284` line by line, which is the "Resume here" action.
+
+**L-4 — the other half of the `isQueuedForLater` cluster is unverified.** Finding 3
+establishes that the model/query half is implemented. `docs/audits/ANDROID_PARITY_REPORT.md:292`
+also claims `WorkImporter.saveMetadataOnly` hard-codes `markSaved = true`
+(`WorkImporter.kt:25-36`, specifically `:32`) so every queue-add still becomes a full
+library item, and that `ReadingQueueRepository.removeWork` never cleans up a queue-only
+work the way iOS's `removeFromQueueAndDeleteIfQueueOnly` does. I did not open either file.
+The check that settles it: read `works/WorkImporter.kt:25-36` and
+`library/ReadingQueueRepository.kt:75-79,132-135` against
+`Services/ReadingQueueService.swift:242,270-300,550,575-600`. Until that is done, finding 3
+should be read as narrowly as it is written.
+
 **L-2 — `exportedAt` is the one manifest date that bypasses Room, and its precision is
 unverified.** Suspicion: R-1 below proves the date round trip is safe *because* every
 `Instant` is milli-precision after a Room round trip. `exportedAt` is the exception — it
@@ -470,7 +566,10 @@ the review prompt's first rule — and at least one of their sibling documents i
 provably wrong about the code (`docs/contracts/BACKUP_FORMAT.md:83` asserts atomic EPUB
 writes that finding 1 shows the sync path does not perform). So the efficient next pass is
 to treat them as a *lead list to re-verify against the trees*, not as coverage already
-banked. That is also why they were not folded into this report wholesale.
+banked. That is also why they were not folded into this report wholesale — and finding 3
+is that warning cashed in: the one cluster I spot-checked from those documents turned out
+to be substantially implemented while still listed there as a "highest-priority CONFIRMED
+major (still open)".
 
 **Not run:** neither `Scripts/verify.sh` (iOS) nor `android/Scripts/verify.sh`. No build,
 no test suite, no simulator or emulator run. Every claim here is static reading of source.
@@ -515,6 +614,15 @@ zero `{"type":"result"}` lines, so nothing was recoverable — 1.29 M sub-agent 
 for no output. Recorded because it is a real cost already paid and the next session should
 not repeat the shape. Everything in this report was produced afterwards by direct inline
 reading.
+
+### 2026-08-07/08 — cross-check of the Android branch's audit corpus
+
+Spot-checked one cluster (`isQueuedForLater` / queue-only) that
+`docs/audits/ANDROID_PARITY_FINDINGS_VERIFIED.md:23,59` lists as a highest-priority
+CONFIRMED-and-open major, and that `PARITY_SWEEP2_A:6,24` therefore excludes from
+re-review. Found it substantially implemented at `a5a46116` → **finding 3**. Opened
+L-3 (an `isSaved` merge-rule divergence noticed while reading the work-merge bodies) and
+L-4 (the unchecked half of the same cluster). No other audit document was verified.
 
 ### 2026-08-07/08 — area 14 (backup / folder sync), partial
 
