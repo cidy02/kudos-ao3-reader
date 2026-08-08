@@ -64,7 +64,7 @@ that fan-out shape; work areas serially and commit each one.
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 1 (finding 9) | Backup settings payload verified 21/21 (V-7). **Not done:** the Settings *screens* themselves, theme colour values, per-setting UI wording |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | 🔄 in progress | 0 (+1 lead) | Inventory compared. `WhatsNew` is iOS-only **by design** — `TASKS.md` row 26 says it exists precisely because iOS has no update system, and Android surfaces GitHub release notes instead (`GitHubReleaseModels.kt:21`). Not a gap. Screenshot attachment is lead L-6 |
-| 19 | Error handling & empty states | cross-cutting | cross-cutting | ⬜ not started | – | Untouched as a sweep. Adjacent evidence gathered: error *classification* matches (V-4), duplicate-write messages match verbatim (V-8), inbox failure policy matches (L-7). The empty-state and offline copy comparison is the real work and was not done |
+| 19 | Error handling & empty states | cross-cutting | cross-cutting | 🔄 in progress | 2 (findings 16, 17) | Error *copy* swept: 6 sites render `AO3Error.toString()` raw (16), offline is not a distinct state (17), and Android's four duplicated `displayMessage()` mappers are otherwise well-written and consistent. **Not done:** empty-state copy per screen, loading/skeleton states, signed-out states outside comments |
 | 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement compared → finding 11; annotation density measured (274/51 files vs 202/34). **Not done:** per-control label audit, Dynamic Type vs `sp` scaling, focus order, TalkBack traversal |
 | 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | 🔄 in progress | 1 minor | Suite shape done + the folder-sync asymmetry established. The per-rule sweep across all other areas is not done |
 
@@ -75,8 +75,8 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 ## Summary
 
 Fourteen confirmed findings, nine verified "no divergence" results, seven open leads. Of
-twenty-one areas: **four closed, sixteen partial, one — error handling and empty states —
-never given a pass of its own.** No area has been exhausted.
+twenty-one areas: **four closed, seventeen partial, none untouched.** Every area has now had
+at least one question answered; none has been exhausted.
 
 The honest headline has not changed since the first pass: **the two apps agree far more than
 they differ, and where they differ it is almost never in the business rules.** Every constant
@@ -119,8 +119,10 @@ whose code comment quotes the audit's own worked example (finding 3). The fixes 
 scheduling anything from them.
 
 What is *not* established: no test suite was run on either platform, and nothing here is
-runtime-verified. Sixteen areas are partial and one was never swept — the ledger's Notes
-column names what was left in each, and *Not covered* ranks where a follow-up should start.
+runtime-verified. Seventeen areas are partial — the ledger's Notes column names what was left
+in each, and *Not covered* ranks where a follow-up should start. The empty-state half of area
+19 in particular is still open: findings 16 and 17 cover error *copy*, not what each screen
+shows when a list is legitimately empty.
 
 ## Findings
 
@@ -199,6 +201,93 @@ column names what was left in each, and *Not covered* ranks where a follow-up sh
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 16. Android renders raw Kotlin error objects as user-facing error text — `real-bug` · Error handling
+
+The sharpest detail: the comments feature *has* a correct error-copy mapper, 850 lines from
+the code that needs it, `private` to the wrong file, and never called.
+
+- **iOS:** `Features/Comments/CommentsErrorMessages.swift:40-54` maps each error case to
+  human copy — `AO3Error.rateLimited` → "AO3 is asking for a pause. Please try again in a
+  moment.", `authenticationRequired` → "Log in to AO3 to do that.", `notFound` → "AO3
+  couldn't find these comments — the work may be hidden or deleted.", `forbidden` → "AO3
+  declined the request. The work may be restricted to logged-in users." — with a final
+  fallback at `:53-54` to `(error as? LocalizedError)?.errorDescription ?? "Something went
+  wrong talking to AO3."` So no code path can reach the UI with a debug string.
+- **Android:** `comments/CommentsViewModel.kt:107`, `:179` and `:232` all publish
+  `result.error.toString()` straight into the UI state
+  (`CommentsUiState.Error(result.error.toString())` and `_message.value = …`).
+  `AO3Error` (`network/ao3/AO3Error.kt:3-16`) is a **sealed interface of `data object`s and
+  `data class`es**, so `.toString()` is Kotlin's auto-generated debug representation. The
+  user sees literally `RateLimited(retryAfterMillis=30000)`, `Server(statusCode=503)`, or
+  `Http(statusCode=418)`.
+- **Divergence:** the same rate-limit produces "AO3 is asking for a pause. Please try again
+  in a moment." on iPhone and `RateLimited(retryAfterMillis=30000)` on Android.
+- **Scenario:** a user opens a busy work's comments while AO3 is under load. iOS explains
+  what happened and what to do. Android displays a Kotlin constructor call. There is no
+  recovery hint, and the string is not localisable.
+- **Evidence:** read `AO3Error.kt` in full to confirm every case is a `data object`/`data
+  class` with compiler-generated `toString()`. Traced all three comments call sites. Then
+  swept the tree: **six** sites publish `error.toString()` to UI state —
+  `comments/CommentsViewModel.kt:107,179,232`, `browse/TagWorksScreen.kt:104`,
+  `account/AO3PreferencesScreen.kt:70`, and `settings/SettingsScreen.kt:283` (as the `else`
+  branch of an otherwise-mapped `when`).
+  **Ruled out that Android simply lacks a mapper — it has four.**
+  `AO3Error.displayMessage()` is defined at `comments/CommentsScreen.kt:856`,
+  `search/SearchScreen.kt:707`, `works/WorkDetailScreen.kt:2569` and
+  `account/AccountViewModel.kt:223`. Their copy is well-written and near-identical, varying
+  only the context noun ("that search" / "this work" / "this account page"), which is good
+  practice rather than drift. `search/` and `works/` call theirs. **`comments/` does not** —
+  `grep -n displayMessage comments/CommentsScreen.kt` returns exactly one line, the
+  definition at `:856`, with no call site. Because it is `private` to the Screen file, the
+  ViewModel that needs it cannot see it.
+- **History:** not recorded anywhere. Greps of `TASKS.md` and the Android branch's `docs/`
+  for error-copy handling return nothing.
+- **Recommendation:** Android moves. Promote one `displayMessage()` to a shared location
+  (`network/ao3/`, beside `AO3Error` itself), delete the four copies, and replace all six
+  `error.toString()` sites with it. That is a mechanical change with an obvious test: assert
+  that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
+  `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
+  User-Agent and would catch the next recurrence.
+
+### 17. Offline is not a distinct state on Android — `gap` · Error handling / empty states
+
+- **iOS:** `Features/Comments/CommentsErrorMessages.swift:50-51` matches
+  `URLError where error.code == .notConnectedToInternet` and returns "You're offline.
+  Comments will load when you're back online." — a message that names the cause and tells
+  the user it will resolve itself. `:19-21` additionally treats `.timedOut` and
+  `.networkConnectionLost` as a distinct retryable class.
+- **Android:** there is no offline concept.
+  `grep -rniE "offline|isConnected|NetworkCapabilities|ConnectivityManager|UnknownHostException"`
+  across the whole Android source root returns only two unrelated things: the reader's
+  `onRemoveOfflineCopy` action for a missing local file (`reader/ReaderScreen.kt:149`,
+  `:249`, `:1319`, `:1341`) and comments in `auth/AO3SessionValidator.kt:15,33,55` noting
+  that network failures must not log the user out. Nothing inspects connectivity, and all
+  four `displayMessage()` mappers pass the transport failure straight through —
+  `is AO3Error.Network -> message` — where `message` is whatever OkHttp produced.
+- **Divergence:** offline on iOS is a named, reassuring state; on Android it is an
+  underlying library's exception text.
+- **Scenario:** a user on the Underground opens a work's comments. iPhone: "You're offline.
+  Comments will load when you're back online." Android: `Unable to resolve host
+  "archiveofourown.org": No address associated with hostname` — or, via finding 16's path,
+  the whole `Network(message=…, cause=…)` wrapper. The user cannot tell a connectivity
+  problem from an app failure, and may conclude the app is broken.
+- **Evidence:** the grep above, plus reading all four `displayMessage()` bodies to confirm
+  every one delegates the `Network` case to the raw message. Ruled out: (a) that Compose or
+  Material surfaces an offline banner automatically — nothing does; (b) that this is
+  platform idiom — Android has first-class connectivity APIs (`ConnectivityManager`,
+  `NetworkCapabilities`) and Material guidance calls for an explicit offline state, so this
+  is again Android diverging from its own platform rather than expressing it; (c) that it is
+  covered by finding 16 — it is not: fixing `toString()` still leaves
+  `is AO3Error.Network -> message` leaking transport text.
+- **History:** not recorded. The `AO3SessionValidator` comments show the team has reasoned
+  carefully about offline in the *auth* path ("offline must not log out"), which makes the
+  absence of user-facing offline handling look like an oversight rather than a decision.
+- **Recommendation:** Android moves. Classify the transport failure once — in `AO3Client`,
+  where `network/ao3/AO3Client.kt:185,228` already wraps `error.message` into
+  `AO3Error.Network` — by distinguishing `UnknownHostException`/`ConnectException` from other
+  `IOException`s, then give that case its own copy in the shared `displayMessage()` from
+  finding 16. The two findings share one fix site, so they should be done together.
 
 ### 15. You cannot open a commenter's profile from an Android comment — `gap` · Comments
 
@@ -1517,13 +1606,9 @@ timestamps. **Verified compatible.** One residual is carved out as lead L-2 belo
 
 ## Not covered
 
-**Of twenty-one areas: four closed, sixteen partial, one never swept.** "Closed" means the
+**Of twenty-one areas: four closed, seventeen partial, none untouched.** "Closed" means the
 area's central question was answered, not that every file was read — each ledger row names
-what was deliberately left. The one area with no pass of its own is **19, error handling and
-empty states**: it has only adjacent evidence (error *classification* matches per V-4,
-duplicate-write copy matches verbatim per V-8, inbox failure policy matches per L-7), and the
-actual work — comparing what each app shows on network failure, empty results, signed-out and
-rate-limited states — was not done.
+what was deliberately left.
 
 **Read closely** (findings rest on these): folder sync and backup on both sides
 (`FolderSyncService.swift`, `KudosBackup.swift` manifest/encoder/merge regions;
@@ -1546,9 +1631,7 @@ settings done; themes, TOC, in-reader search, annotations and TTS not), area 12 
 only), area 16 (backup payload only, not the Settings screens), area 20 (touch targets and
 density only), area 21 (suite shape and one per-rule instance only).
 
-**Thinnest coverage:** area 19 (error handling and empty states) had no dedicated sweep at
-all — only adjacent evidence from V-4, V-8 and L-7. Then, opened but with only one question
-each answered: area 1 (onboarding) has its gating verified but none of its copy; area 5 (browse) resolved only
+**Thinnest coverage** (opened, but only one question each answered): area 1 (onboarding) has its gating verified but none of its copy; area 5 (browse) resolved only
 the local-indicator question. Within better-covered areas, notable omissions: the
 collection/queue/annotation merge bodies, ZIP container internals, PDF and plain-text
 converters, the EPUB builder's output, text-encoding detection, the download queue, tag
