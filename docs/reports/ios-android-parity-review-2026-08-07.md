@@ -17,11 +17,11 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 4 (search + filters) — compare the filter field set and the generated
-query string between `Features/Search/AO3FilterPanel.swift` and
-`network/ao3/search/AO3SearchUrlBuilder.kt` + `AO3SearchFilters.kt`.
-`docs/reports/filter-parity-2026-08-07.md` covers endpoints only, so defaults, ordering and
-serialisation are open ground.
+**Resume here:** Area 4's remainder, then area 6. For area 4: compare the **result parser**
+selectors — `Services/AO3Client.swift` blurb parsing vs
+`network/ao3/search/AO3SearchParser.kt` — watching for the `required-tags` trap
+(`docs/reports/filter-parity-2026-08-07.md`: that row is a *summary icon* whose label is
+comma-joined, not a list). Then the `SavedSearch` backup round trip.
 
 **Then:** areas 1, 5–13, 16, 18–20 are untouched. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
@@ -41,7 +41,7 @@ that fan-out shape; work areas serially and commit each one.
 | 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ⬜ not started | – | |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
-| 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | ⬜ not started | – | `filter-parity-2026-08-07.md` covers endpoints only |
+| 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ⬜ not started | – | |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | |
@@ -190,6 +190,53 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 7. Android's work search cannot express ten of AO3's search parameters, including sort direction — `gap` · Search + filters
+
+- **iOS:** `Models/AO3Models.swift` `AO3SearchFilters` carries **37** stored fields, and the
+  query builder emits **25** distinct `work_search[...]` parameters.
+- **Android:** `network/ao3/search/AO3SearchFilters.kt` carries **23** fields, and
+  `network/ao3/search/AO3SearchUrlBuilder.kt` emits **15** parameters.
+- **Divergence:** ten parameters iOS sends have no Android equivalent at all —
+  `work_search[title]`, `[creators]`, `[single_chapter]`, `[hits]`, `[kudos_count]`,
+  `[comments_count]`, `[bookmarks_count]`, `[date_from]`, `[date_to]`, and
+  `[sort_direction]`. The other fifteen match exactly, name for name. Android has no
+  Android-only parameter, so this is a strict subset, not a different design.
+- **Scenario:** two concrete ones, the second worse than the first.
+  1. A user wants "Naruto works with over 1,000 kudos, posted this year". On iPhone that is
+     two filter fields. On Android neither field exists, so the search cannot be expressed —
+     the user scrolls 142,000 results instead.
+  2. **Sort direction is the sharp one.** Android exposes `sort` (the column) but not
+     `sort_direction`, so every sort is stuck on AO3's default, descending. "Fewest kudos
+     first", "oldest first", "shortest first" are all unreachable on Android and one tap on
+     iOS. This is not a filter the user might not miss; it is half of a control that is
+     visibly present.
+- **Evidence:** extracted both parameter sets mechanically rather than by reading the UI —
+  `grep -rhoE 'work_search\[[a-z_]+\]' … | sort -u` over each tree, giving 25 vs 15, then
+  set-differenced. Field counts came from brace-matched extraction of the two filter types
+  (37 iOS stored `var`s excluding computed properties, 23 Android `val`s). Ruled out:
+  (a) that Android emits these under different parameter names — the grep is over the raw
+  `work_search[...]` literals, so a rename would still show up, and nothing unmatched
+  appears on the Android side; (b) that these are AO3 parameters that do not actually work,
+  making the gap theoretical — the opposite is proven,
+  `docs/reports/filter-parity-2026-08-07.md:42-58` measured each one **live against AO3 on
+  2026-08-07** and records real result-count movement for `hits` (142,362 → 78,570),
+  `kudos_count` (→ 55,392), `title` (→ 23,291), `creators` (→ 83), and confirms both
+  `sort_column` and `sort_direction` reorder results; (c) that iOS hides them anyway — it
+  hides them only in `AO3FilterPanel.Mode.refine`, on two screens
+  (`filter-parity-2026-08-07.md:76-77`), which means they are available in the primary
+  search panel.
+- **History:** not recorded as a decision. `docs/android/ANDROID_PORT_PLAN.md:1297` contains
+  the line "Validate numeric ranges", which suggests the numeric-range filters were planned
+  and not built, but no task ID owns it and no `TASKS.md` row or `docs/audits/` entry names
+  any of these ten parameters. Greps for `kudosFrom`, `hitsFrom`, `commentsFrom`,
+  `bookmarksFrom`, `sort_direction` across the Android branch's `docs/` return nothing.
+- **Recommendation:** Android moves, per the standing convention, and the cost is low
+  because the plumbing already exists — `AO3SearchUrlBuilder` already emits `word_count` as
+  a range and `revised_at` as a date-ish parameter, so the four count ranges and the date
+  pair are the same shape as code already written. Sort direction should go first regardless
+  of the rest: it is one boolean, it completes a control the UI already shows, and it is the
+  only item on this list a user can *see* is missing.
 
 ### 6. Android's User-Agent reports version 0.1.0; the app is 0.2.0 — `real-bug` · Networking
 
