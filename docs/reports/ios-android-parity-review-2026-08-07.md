@@ -39,16 +39,16 @@ that fan-out shape; work areas serially and commit each one.
 
 | # | Area | iOS roots | Android roots | Status | Findings | Notes |
 |---|---|---|---|---|---|---|
-| 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ⬜ not started | – | |
+| 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ⬜ not started | – | Only the file inventory established: both have a Welcome + a sync-folder step (`WelcomeView`/`SyncFolderOnboardingView` vs `WelcomeScreen.kt`/`SyncFolderOnboardingScreen.kt`). No content compared |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
-| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | |
+| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | Untouched. Note Android has `BrowseLocalIndicators.kt` and `CategoryStats.kt` with no obvious iOS counterpart — establish the real mapping before calling either a gap |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
-| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | |
-| 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | |
+| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | Only the draft-store identity keying checked, as part of V-3. `PARITY_SWEEP2_D:7` lists several comment gaps as already covered — re-verify rather than re-derive |
+| 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | Only the shared `required-tags` selectors touched (V-5). iOS has `AO3SeriesDetailView.swift`; Android has `AO3SeriesRepository`/`Urls` but no obvious series *screen* — grep hard before calling it a gap |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
-| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. **Partial input:** finding 3 closes the model half of the `isQueuedForLater` cluster; leads L-3/L-4 are open here |
+| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. Finding 3 closes the model half of the `isQueuedForLater` cluster; L-4 is the unchecked half. Statistics formulas and the Recently-Deleted retention window are the highest-value untouched items |
 | 11 | Home | `Features/Home/` | `home/` | 🔄 in progress | 0 | Section enums match: 4 cases, same names, same order (V-8). **Not done:** per-section query/cap/empty-state, "see all" destinations, pull-to-refresh |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
@@ -56,9 +56,9 @@ that fan-out shape; work areas serially and commit each one.
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | 🔄 in progress | 1 (finding 5) | `SavedWork` (64 stored) vs `WorkEntity` (46 cols) diffed mechanically → finding 5. Migration safety verified (V-2). **Not done:** the other 8 entities, type-converter round trips, DAO query semantics |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 1 (finding 9) | Backup settings payload verified 21/21 (V-7). **Not done:** the Settings *screens* themselves, theme colour values, per-setting UI wording |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
-| 18 | Support / bug report / shake | `Features/Support/` | `support/` | ⬜ not started | – | |
-| 19 | Error handling & empty states | cross-cutting | cross-cutting | ⬜ not started | – | |
-| 20 | Accessibility | cross-cutting | cross-cutting | ⬜ not started | – | |
+| 18 | Support / bug report / shake | `Features/Support/` | `support/` | 🔄 in progress | 0 (+1 lead) | Inventory compared. `WhatsNew` is iOS-only **by design** — `TASKS.md` row 26 says it exists precisely because iOS has no update system, and Android surfaces GitHub release notes instead (`GitHubReleaseModels.kt:21`). Not a gap. Screenshot attachment is lead L-6 |
+| 19 | Error handling & empty states | cross-cutting | cross-cutting | ⬜ not started | – | Untouched as a sweep. Adjacent evidence gathered: error *classification* matches (V-4), duplicate-write messages match verbatim (V-8), inbox failure policy matches (L-7). The empty-state and offline copy comparison is the real work and was not done |
+| 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement compared → finding 11; annotation density measured (274/51 files vs 202/34). **Not done:** per-control label audit, Dynamic Type vs `sp` scaling, focus order, TalkBack traversal |
 | 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | 🔄 in progress | 1 minor | Suite shape done + the folder-sync asymmetry established. The per-rule sweep across all other areas is not done |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reason in Notes)
@@ -67,52 +67,45 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-*Partial — this covers one area of twenty-one. It is written as what can honestly be said
-now, not as the shape of the whole divergence.*
+Eleven confirmed findings across seven areas read closely, eight verified "no divergence"
+results, and ten of twenty-one areas still untouched. The honest headline is that **the two
+apps agree far more than they differ, and where they differ it is almost never in the
+business rules** — it is in the layer around them.
 
-The one area read closely, backup and folder sync, was chosen because it is the only
-subsystem whose artefact crosses between the two apps, so a divergence there means silent
-data loss rather than inconsistency. Two things came out of it, and they point in opposite
-directions.
+The rules themselves are ported with unusual care. Every constant in the binding networking
+policy matches to the digit (V-4). The backup merge core — which record wins a conflict,
+whether a deletion may be revived — is semantically identical function for function,
+including the deliberate asymmetry where a tie applies an incoming edit but a tie does *not*
+revive a deleted record (V-1). Write endpoints match, down to the verbatim sentence shown
+when you kudos something twice (V-8). The settings payload matches 21 fields for 21 (V-7).
+The AO3 markup trap the prompt warned about is defused identically on both sides, comment
+text included (V-5). Where someone sat down and ported a rule, they ported it correctly.
 
-The **format** layer is in good shape and better than expected. Manifest versions match
-exactly, the field sets match collection for collection, unknown fields are deliberately
-preserved on re-export, and the date-encoding hazard the project's own onboarding doc warns
-about — the one that would corrupt merge ordering — turns out to be closed by an
-unrelated mechanism (Room storing instants as epoch millis) rather than by design. That is
-worth knowing precisely because it is *accidental*: lead L-2 identifies the single field
-that escapes it.
+**The divergences cluster in three places instead.** First, *what happens around the edges
+of a correct rule*: the sync write is atomic on iOS and truncating on Android (finding 1),
+the merge is faithful but one flag in it is OR'd rather than assigned (finding 4), the
+archive is well-specified but nine fields silently do not survive a round trip (finding 5).
+Second, *breadth* — Android implements a strict subset of iOS's surface: ten missing search
+parameters including sort direction (finding 7), no author's-note handling at all
+(finding 10), no touch-target floor on custom controls (finding 11). Third, *staleness in
+the record rather than the code*: a hardcoded version string that has already drifted
+(finding 6), a contract doc asserting an atomicity guarantee the code does not provide
+(finding 1), and an audit corpus still listing as open a gap that has been closed
+(finding 3).
 
-The **merge** layer — the code that decides which record survives a conflict and whether a
-deleted record may be revived — is a faithful port, verified function by function including
-both null branches and the deliberate strict/non-strict asymmetry between "apply incoming"
-and "revive over a tombstone" (V-1). That is the subsystem with the worst failure mode in
-the app, and it is the most carefully ported thing found so far.
+Two observations worth carrying forward. **The most reliable predictor of a defect was
+absent test coverage, not absent care.** `SyncRepository.kt` holds two of the four
+backup findings and has no test of any kind; the iOS file it was ported from has a 796-line
+suite. That pattern held on the first area examined and is the cheapest thing to act on.
+And **the standing "iOS is the source of truth" convention was right in nine cases and wrong
+in one** — finding 8, where Android's reader model is better and iOS discards a reading
+position it was handed. The convention is a good default, not a rule.
 
-The **write** layer is where the divergence is, and it has a recognisable shape. Android's
-sync path truncates the user's backup before rewriting it, where iOS writes atomically —
-and this is not a case of nobody knowing better. The rule is a named binding invariant on
-iOS, the Android port plan specified it, an Android contract doc already asserts it is
-done, and Android implements the exact pattern correctly in its app-private file store a
-few files away. It was lost only on the path where the destination is shared and
-irreplaceable. Underneath it sits the same subsystem's *shared* bug — sync skipping any
-file whose length happens to be unchanged — which is already documented on both platforms
-and fixed on neither.
-
-Separately, and cheaply: the one gap I spot-checked from the Android branch's own audit
-corpus — the `isQueuedForLater` / queue-only concept, listed there as a highest-priority
-confirmed-and-open major — is substantially implemented (finding 3). Combined with the
-contract doc in finding 1 that asserts an atomicity guarantee the code does not provide,
-two of the three Android-branch documents this review cross-checked misdescribe the code,
-in opposite directions. Treat that corpus as leads, not coverage.
-
-If one hypothesis is worth carrying into the remaining twenty areas, it is this: the
-divergences here are not in what the two apps *know*, they are in what got *verified*.
-`SyncRepository.kt` holds both defects and has no test; the iOS file it was ported from has
-a 796-line suite. Where a rule is pinned on one platform and unpinned on the other is where
-this review found its defect, on the first area it looked at.
-
----
+What is *not* established: ten areas were never opened, including the whole Library
+statistics surface, comments, browse, author profiles and onboarding. No test suite was run
+on either platform. Nothing here is runtime-verified — this is static reading, and the two
+places it most needs runtime confirmation (L-2, and the touch-target measurement behind
+finding 11) are marked as such.
 
 ## Findings
 
@@ -191,6 +184,63 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 11. Android's custom clickable surfaces have no minimum touch-target floor — `gap` · Accessibility
+
+Material 3 specifies a 48 dp minimum touch target just as firmly as HIG specifies 44 pt, so
+this is not an iOS convention being imposed on Android — it is Android missing its own
+platform's requirement on the controls it hand-builds.
+
+- **iOS:** `UIComponents/MinimumHitTarget.swift:31` provides
+  `func minimumHitTarget(_ size: CGFloat = 44) -> some View`, documented at `:27-30` as
+  "44pt, Apple's HIG" minimum, expanding the hit region "leaving its rendered appearance
+  untouched". It is applied deliberately, including at a lowered floor where dense layouts
+  demand it — `Features/Library/LibraryView.swift:456` uses `.minimumHitTarget(28)` on a
+  chip, an owner-chosen floor recorded in `TASKS.md` row 87 as covering six controls that
+  "render back-to-back in dense `FlowLayout`/horizontal-scroll groups".
+- **Android:** no equivalent exists.
+  `grep -rniE "minimumInteractiveComponentSize|sizeIn\(min"` across the whole Android source
+  root returns **zero** relevant hits (the three `48.dp` matches are
+  `WorkCoverCardMetrics.height - 48.dp` arithmetic in `library/LibraryScreen.kt:1487,1532`,
+  unrelated to touch targets). The equivalent chip is made tappable by a bare
+  `Modifier.clickable` — `ui/components/KudosUi.kt:153`,
+  `modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)` —
+  with no size floor.
+- **Divergence:** iOS guarantees a floor on custom controls; Android guarantees one only
+  where it happens to use a Material component.
+- **Scenario:** a user with limited motor control, or anyone on a bus, tries to tap a tag
+  chip in the Library. On iPhone the chip's touch region is padded to at least 28 pt (44 pt
+  elsewhere) regardless of how small the text renders. On Android a short chip — "F/F", or a
+  one-character rating — is tappable only across its literal rendered bounds, which at
+  default text size is well under 48 dp tall, and misses land on the chip behind it or on
+  nothing.
+- **Evidence:** counted the 27 `Modifier.clickable` uses across the Android tree and read the
+  shared chip component. Ruled out the strongest counter-argument explicitly: **Compose
+  Material 3 does apply `minimumInteractiveComponentSize()` automatically**, which would make
+  this a non-issue — but it does so only for Material components (`IconButton`, `Checkbox`,
+  `Switch`, and friends), **not** for a `Row`/`Box` carrying `Modifier.clickable`, which is
+  what `KudosUi.kt:153` is. So the automatic floor does not reach the hand-built controls,
+  which are exactly the ones iOS bothered to pad. I did **not** measure rendered heights on a
+  device, so the specific claim "under 48 dp" is inferred from the absence of any minimum
+  rather than observed — the *absence of enforcement* is what is verified.
+- **History:** not recorded anywhere. iOS's side is recorded (`TASKS.md` row 87, part of the
+  HIG pass); the Android branch's `docs/audits/` contains no touch-target entry.
+- **Recommendation:** Android moves. The fix is one modifier at the shared component —
+  `Modifier.minimumInteractiveComponentSize()` on the clickable branch in `KudosUi.kt:153`,
+  or `.sizeIn(minWidth = 48.dp, minHeight = 48.dp)` where the visual must stay small and only
+  the touch region should grow. Applying it at the shared component covers every chip at
+  once, which is the same leverage iOS got from one modifier.
+
+**Supporting measurement, for context rather than as a finding.** Accessibility annotation
+density differs roughly two-to-one per file: iOS carries **274** `accessibilityLabel` /
+`Hint` / `Value` / `AddTraits` / `Element` calls across **51** of 214 source files (24%);
+Android carries **202** `contentDescription` / `semantics` / `stateDescription` calls across
+**34** of 281 files (12%). I am deliberately not filing that ratio as a finding — the two
+APIs are not one-to-one (a single Compose `semantics { }` block can carry what several
+SwiftUI modifiers express, and Compose derives labels from `Text` content automatically where
+SwiftUI often needs them stated), so the numbers cannot bear a per-control conclusion. They
+are recorded because the direction is consistent with finding 11 and because a follow-up that
+wants to audit accessibility properly now knows the shape of the gap it is looking for.
 
 ### 10. Author's notes are detected and set apart on iOS and rendered as ordinary prose on Android — `gap` · Import / reader
 
@@ -724,6 +774,30 @@ user-visible drift will be found.
 confirmed: iOS assigns the flag outright (`KudosBackup.swift:1931`), Android ORs it with
 EPUB presence (`BackupMergeService.kt:193`), so an iOS queue-only work becomes a saved
 Library item on restore. See finding 4 for the full write-up and the ruled-out alternatives.
+
+**L-6 — the bug report may not carry a screenshot on Android.** Suspicion: iOS ships
+`Features/Support/ScreenshotCapture.swift` alongside `BugReportView.swift` and
+`ShakeDetector.swift`; Android's `support/` contains only `BugReport.kt` and
+`ShakeDetector.kt`, and `account/BugReportScreen.kt:73` tells the user "Only these app and
+system details are attached" with no image. A shake-to-report that captures the screen on
+one platform and not the other is a real difference in what a maintainer receives. Why it is
+a lead and not a finding: I did not open `BugReportView.swift` to confirm iOS actually
+attaches the capture to the outgoing report rather than using it for something else, and
+attaching screenshots is a place where the platforms' share sheets genuinely differ. The
+check that settles it: read `Features/Support/BugReportView.swift` for its use of
+`ScreenshotCapture`, then `support/BugReport.kt` for the Android payload.
+
+**L-7 — Android's inbox parser mirrors iOS's fail-open-on-partial-failure policy, so the
+known iOS weakness is present on both.** iOS `Services/AO3Client+Inbox.swift:50-51` throws
+`AO3Error.parse` only when `parsedItems.allSatisfy({ $0 == nil })`; Android
+`network/ao3/inbox/AO3InboxParser.kt:47-50` does the same — `runCatching { parseInboxItem }
+.getOrNull()` per row, then throw only if all are null. `TASKS.md` row 64 already records
+this on iOS as F7 ("low severity, requires unusual AO3 markup to trigger"). Recorded as a
+lead rather than a both-platforms finding because F7's severity assessment was made for iOS
+and I have not re-derived whether it holds identically on Android — Android's parser has two
+guards iOS's lacks (`AO3OverloadDetector.isOverloadPage` at `:29` and a `LoginRequired`
+check at `:31`), which may change the reachable failure modes. The check that settles it:
+feed both parsers a fixture where half the rows are malformed and compare what each returns.
 
 **L-5 — Android may not downgrade a stale `hasEpub` when the file is gone.** Suspicion:
 iOS actively clears the flag — `KudosBackup.swift:1229`, `work.hasEPUB = false` in the
