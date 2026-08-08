@@ -196,6 +196,63 @@ this review found its defect, on the first area it looked at.
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
 
+### 4. Restoring an iOS backup on Android converts every queue-only work into a saved library item — `real-bug` · Backup / restore
+
+This was lead L-3; it is now confirmed, and it turns out to defeat the exact feature
+finding 3 shows Android has just implemented.
+
+- **iOS:** `Services/KudosBackup.swift:1931` merges the flag by last-writer-wins and
+  nothing else — `work.isSaved = incomingWins ? archived.isSaved : work.isSaved`. iOS
+  *deliberately produces* works with `isSaved == false` and an EPUB present:
+  `Services/ReadingQueueService.swift:300` and `:550` both run
+  `if createdNewWork { saved.isSaved = false }` and then immediately
+  `try await preserve(saved, in: context, downloadEPUB:)`, which downloads and stores the
+  EPUB. That is the queue-only-with-preserved-EPUB state, and
+  `Models/Models.swift:378-380` defines `isQueueOnlyWork` as
+  `isQueuedForLater && !isSaved && !isFavorite`.
+- **Android:** `backup/BackupMergeService.kt:193`, inside the `incomingWins` branch —
+  `isSaved = restored.isSaved || existing.isSaved || (existing.hasEpub || restored.hasEpub)`.
+  The presence of an EPUB on *either* side forces `isSaved` true regardless of what the
+  archive says. `core/model/SavedWork.kt:81-82` defines `isQueueOnlyWork` identically to
+  iOS, so forcing `isSaved` true also forces `isQueueOnlyWork` false.
+- **Divergence:** iOS treats "saved to Library" and "has a local EPUB" as independent;
+  Android's restore treats an EPUB as proof of saved-ness. `isSaved` can therefore only ever
+  travel false→true across a restore on Android, never true→false.
+- **Scenario:** on iPhone, add a work to a reading queue without saving it. iOS creates it
+  with `isSaved = false` and preserves the EPUB, so it stays out of the Library shelves and
+  out of Reading Now / Recently Updated / Recently Opened — that is the whole point of the
+  queue-only concept. Back up, restore on Android. `restored.isSaved` is false and
+  `existing` is absent, but `restoredHasEpub` is true because the archive carried the EPUB,
+  so `:193` evaluates to true. The work lands as a full Library item, is counted in the
+  saved totals, and appears in the Home sections `home/HomeSectionKind.kt:50,59,64`
+  explicitly filters queue-only works out of. A second, subtler case: un-save a work on
+  iOS that has a downloaded EPUB, sync, and the un-save never reaches Android.
+- **Evidence:** read `mergeWork` in full, both branches (`BackupMergeService.kt:176-284`).
+  Ruled out: (a) that the `else` branch compensates — it does not touch `isSaved` at all
+  (`:205-229`), which correctly mirrors iOS's `: work.isSaved`, so the divergence is
+  confined to the `incomingWins` branch; (b) that the neighbouring rules diverge too, which
+  would suggest a generally sloppy port — they do not: `isQueuedForLater` is OR'd on both
+  (iOS `:1971`, Android `:194`), `dateAdded` is `min` on both (iOS `:1901`, Android `:195`),
+  `lastModifiedAt` is `max` on both (iOS `:1996`, Android `:196`). `isSaved` is the one
+  field that departs, which is why it reads as an oversight rather than a design;
+  (c) that Android's `hasEpub` derivation is itself wrong — it is not,
+  `BackupMergeService.kt:63-67` grounds it in real file presence
+  (`incomingEpub != null || id in currentEpubIds || existing?.hasEpub == true`).
+- **History:** not recorded. The `isSaved` semantics *cluster* is documented on the Android
+  branch (`docs/audits/ANDROID_PARITY_REPORT.md:231,247,292`), but every instance there is
+  in the import/library-query paths — `WorkImporter.saveMetadataOnly`,
+  `WorkMetadataMerger.merge`, `WorkRepository.observeSavedWorks`. No document mentions
+  `BackupMergeService`, and greps for `isSaved` across `docs/` return no hit in a backup
+  context. This is a new instance of a known root divergence, in a file nobody has looked at.
+- **Recommendation:** Android moves, and the fix is to delete the clause:
+  `isSaved = restored.isSaved` in the `incomingWins` branch, matching iOS exactly. The
+  `hasEpub` guard is protecting the wrong invariant — Android already preserves the EPUB
+  itself via `hasEpub = existing.hasEpub || restored.hasEpub` on the next line, and
+  `SavedWork.kt:69-75` already folds `isQueuedForLater` into deletion protection, so
+  nothing needs `isSaved` forced true to keep the file safe. Worth pairing with the
+  round-trip test neither platform has: save → un-save → export → restore → assert
+  `isSaved` is still false.
+
 ### 3. The Android branch's own audit corpus is stale: the `isQueuedForLater` / queue-only gap it reports as open is implemented — `real-bug` (in the documentation) · Cross-cutting
 
 This is a finding about the *record*, not the code, and it is reported because acting on
@@ -401,28 +458,25 @@ task cites iOS behaviour that `hig-review` has since changed. This is a process
 finding, not a user-visible one — it is recorded here because it predicts *where*
 user-visible drift will be found.
 
-**L-3 — backup restore may not propagate an *un-save* to Android.** Suspicion: in the
-work-merge body, iOS assigns the flag outright —
-`work.isSaved = incomingWins ? archived.isSaved : work.isSaved`
-(`Services/KudosBackup.swift:1931`) — while Android ORs it and additionally forces it true
-whenever an EPUB exists on either side:
-`isSaved = restored.isSaved || existing.isSaved || (existing.hasEpub || restored.hasEpub)`
-(`backup/BackupMergeService.kt:193`), inside the `incomingWins` branch. If that reading is
-right, a user who un-saves a work on iOS and syncs will see it un-saved on iOS and still
-saved on Android, permanently, because no archive value can ever drive the flag back to
-false. Note the two apps agree on the neighbouring rules — `isQueuedForLater` is OR'd on
-both (iOS `:1971`, Android `:194`), `dateAdded` is `min` on both (iOS `:1901`, Android
-`:195`), `lastModifiedAt` is `max` on both (iOS `:1996`, Android `:196`) — which is what
-makes `isSaved` stand out. **Why this is a lead and not a finding:** (a) the `hasEpub` half
-may be a deliberate mirror of iOS's *separate* rule that restore derives `hasEPUB` from
-whether a valid EPUB actually landed (`KudosBackup.swift:1220`, `:1229`) rather than from
-the archive flag, and I have not traced whether iOS's restore path re-derives `isSaved`
-elsewhere too; (b) this sits inside the broader `isSaved` semantics cluster that the
-Android branch already documents (see finding 3), so it may be a known consequence rather
-than a new defect. The check that settles it: write the round-trip test neither platform
-has — save a work, un-save it, export, restore onto the other platform, assert `isSaved`
-is false — and read `KudosBackup.swift:1890-2000` against
-`BackupMergeService.kt:176-284` line by line, which is the "Resume here" action.
+**L-3 — RESOLVED → promoted to finding 4.** The `isSaved` merge-rule divergence is
+confirmed: iOS assigns the flag outright (`KudosBackup.swift:1931`), Android ORs it with
+EPUB presence (`BackupMergeService.kt:193`), so an iOS queue-only work becomes a saved
+Library item on restore. See finding 4 for the full write-up and the ruled-out alternatives.
+
+**L-5 — Android may not downgrade a stale `hasEpub` when the file is gone.** Suspicion:
+iOS actively clears the flag — `KudosBackup.swift:1229`, `work.hasEPUB = false` in the
+`else if !FileManager.default.fileExists(...)` branch, which also demotes
+`epubPreservationStatus` to `.missingFile`. Android's equivalent
+(`BackupMergeService.kt:64-67`) computes
+`existingHasEpub = id in currentEpubIds || existing?.hasEpub == true` — the trailing OR
+means a DB flag that is already true survives even when the work has no file on disk and
+none in the archive. A user whose EPUB was removed out from under the app (storage
+cleaner, restored-from-a-thinner-backup) would keep seeing the work as downloaded on
+Android and would see it correctly marked missing on iOS. The check that settles it: read
+what populates `currentEpubIds` in `BackupMergeService`, then test a restore where the DB
+says `hasEpub = true`, no file exists locally, and the archive carries no EPUB for that id.
+Low severity — cosmetic until the user taps Read — but it is the same class as finding 4:
+a flag Android can raise and never lower.
 
 **L-4 — the other half of the `isQueuedForLater` cluster is unverified.** Finding 3
 establishes that the model/query half is implemented. `docs/audits/ANDROID_PARITY_REPORT.md:292`
