@@ -17,13 +17,13 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 3 (networking core) — compare the politeness pace, retry/backoff
-numbers and the User-Agent literal between `Services/AO3Client.swift` +
-`AO3RequestCoordinator.swift` and `network/ao3/` (`AO3NetworkConfig`, `AO3RetryPolicy`,
-`AO3RequestCoordinator`, `AO3UserAgent`). `docs/AO3_NETWORKING_POLICY.md` is binding here
-and its "must not implement" list applies to both platforms.
+**Resume here:** Area 4 (search + filters) — compare the filter field set and the generated
+query string between `Features/Search/AO3FilterPanel.swift` and
+`network/ao3/search/AO3SearchUrlBuilder.kt` + `AO3SearchFilters.kt`.
+`docs/reports/filter-parity-2026-08-07.md` covers endpoints only, so defaults, ordering and
+serialisation are open ground.
 
-**Then:** areas 1, 4–13, 16, 18–20 are untouched. Read *Not covered* before planning —
+**Then:** areas 1, 5–13, 16, 18–20 are untouched. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -40,7 +40,7 @@ that fan-out shape; work areas serially and commit each one.
 |---|---|---|---|---|---|---|
 | 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ⬜ not started | – | |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
-| 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ⬜ not started | – | prior art: `docs/reports/ao3-networking-review*.md` (iOS-only) |
+| 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | ⬜ not started | – | `filter-parity-2026-08-07.md` covers endpoints only |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ⬜ not started | – | |
@@ -190,6 +190,50 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 6. Android's User-Agent reports version 0.1.0; the app is 0.2.0 — `real-bug` · Networking
+
+`docs/AO3_NETWORKING_POLICY.md` makes "One identifiable User-Agent, with contact" the first
+of its hard rules, and frames the whole policy as "Respectful access is a hard product
+requirement — community trust is the whole ballgame." Android currently misidentifies its
+version to AO3 on every single request.
+
+- **iOS:** `Services/AO3AuthService.swift:202-207` builds the UA at runtime —
+  `Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"`
+  interpolated into `KudosReader/\(version) (+https://github.com/cidy02/kudos-ao3-reader)`.
+  It cannot drift: the string is derived from the shipped bundle.
+- **Android:** `network/ao3/AO3UserAgent.kt:14` — `const val APP_VERSION: String = "0.1.0"`,
+  a compile-time literal, interpolated at `:19`. The actual app version is
+  `android/app/build.gradle.kts:27-28` — `versionCode = 8`, `versionName = "0.2.0"`.
+- **Divergence:** the two UA strings are otherwise byte-identical (I compared them
+  character by character — same Safari-shaped base, same token order, same contact URL). The
+  only difference is that iOS's version tracks the build and Android's is a hand-maintained
+  constant that **has already fallen out of date by a minor version**.
+- **Scenario:** an AO3 sysadmin sees traffic from `KudosReader/0.1.0`, correlates it with a
+  behaviour they want to discuss or block, and reaches for the version. Every Android
+  install — including the eight `versionCode`s shipped since — reports `0.1.0`. The
+  identifiable-UA rule exists precisely so operators can distinguish releases; a frozen
+  version silently removes that. It also means a future "0.1.0 has a bug, please upgrade"
+  conversation cannot be acted on, because 0.1.0 is indistinguishable from current.
+- **Evidence:** read both UA definitions. Confirmed `APP_VERSION` has exactly two references
+  in the whole Android tree (`grep -rn "APP_VERSION" app/src/main/java/` → its own
+  declaration and its own interpolation), so nothing else keeps it honest. Confirmed the
+  invariant script does not catch it: `android/Scripts/check-invariants.sh:14-21` checks only
+  that `Mozilla/5.0` appears nowhere outside `AO3UserAgent.kt` and that a `KudosReader/`
+  token is present — never that the version matches `versionName`. Ruled out: (a) that
+  `APP_VERSION` is generated or substituted at build time — it is a plain `const val` with a
+  literal, and `build.gradle.kts` has no `buildConfigField` or token-replacement writing it;
+  (b) that Android has no runtime alternative — `BuildConfig.VERSION_NAME` is available to
+  any Android module and is exactly the `CFBundleShortVersionString` analogue.
+- **History:** not recorded anywhere. Notable in context: the memory of this project records
+  that Android has a GitHub self-update system where "every future fix/feature now needs a
+  build+publish", so `versionName` moves regularly while this constant does not — the drift
+  will keep widening on its own.
+- **Recommendation:** Android moves, one line: `const val APP_VERSION = BuildConfig.VERSION_NAME`
+  (adding `buildConfig = true` to the `buildFeatures` block if it is not already on). Worth
+  pairing with one more line in `android/Scripts/check-invariants.sh` asserting that the UA's
+  version token equals `versionName`, since the existing invariant already guards this file
+  and clearly intends to keep it single-sourced — it just guards the wrong property.
 
 ### 5. A backup that round-trips through Android comes back to iOS with EPUB preservation state erased — `real-bug` · Persistence + backup
 
@@ -610,6 +654,36 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-4 — every AO3 politeness constant matches, and Android enforces the no-retry-on-writes rule more strongly than iOS
+
+`docs/AO3_NETWORKING_POLICY.md` is binding on both platforms and specifies exact numbers.
+They agree, and one of them says so in a comment.
+
+| Rule (policy doc) | iOS | Android | |
+|---|---|---|---|
+| Pacing ≥ 0.6 s between request **starts** | `AO3Client.swift:180` — `minRequestInterval: TimeInterval = 0.6` | `AO3NetworkConfig.kt:6` — `minDelayBetweenRequestsMillis = 600`, with the comment "Apple paces at 0.6s between starts (AO3RequestDefaults). Keep parity." | ✅ |
+| Concurrency cap of 3 | `AO3RequestCoordinator.swift:28` — `init(limit: Int = 3)`, with `:16` noting it "matches the polite '2–3 concurrent metadata requests'" | `AO3NetworkConfig.kt:4` — `maxConcurrentRequests: Int = 3` | ✅ |
+| Max 2 retries | `AO3Client.swift:298` — `withRetry<T>(maxRetries: Int = 2, …)` | `AO3NetworkConfig.kt:7` — `maxRetries: Int = 2` | ✅ |
+| Backoff 0.5 s → 1 s → 2 s | `AO3Client.swift:330` — `0.5 * pow(2, Double(attempt - 1))` | `AO3RetryPolicy.kt:36` — `500L * (1L shl (retryNumber - 1).coerceAtLeast(0))` | ✅ identical curve |
+| `Retry-After` honoured, floored by backoff | `:332-333` — `max(retryAfter ?? 0, backoff)` | `:38-39` — `maxOf(error.retryAfterMillis ?: 0L, backoff)` | ✅ |
+| Retry only transient (5xx / 429 / transport) | `:331-340` — `rateLimited`, `server`, transient `URLError`; everything else returns `nil` | `:22-33` — `Network`, `Overloaded`, `RateLimited`, `Server` true; `BadRequest`, `AuthenticationRequired`, `Forbidden`, `NotFound`, `Http`, `Parse`, `Validation` false | ✅ |
+| Identifiable UA, single-sourced | `AO3AuthService.swift:202-207` | `AO3UserAgent.kt:16-20` | ⚠️ same string, stale version — **finding 6** |
+
+Two asymmetries that are *not* defects and are worth recording so nobody "fixes" them:
+
+1. **Android enforces the write rule structurally; iOS enforces it by construction.** The
+   policy says writes are "single-shot: never retried, never coalesced". Android's
+   `AO3RetryPolicy.shouldRetry` opens with `if (method != AO3HttpMethod.GET) return false`
+   (`:19`) — no non-GET can be retried, whatever the error. iOS achieves the same by having
+   `submitWrite` simply not call `withRetry`. Android's is the more robust expression of the
+   rule, because a future caller cannot accidentally opt a POST into retries. If anything,
+   iOS could adopt it.
+2. **Android has an `Overloaded` error class iOS does not** (`AO3OverloadDetector.kt`,
+   handled at `AO3RetryPolicy.kt:24` and `:39`). It is treated exactly like `RateLimited` —
+   retried, `Retry-After` honoured. That is an addition in the politeness direction, so it
+   does not violate the policy's "no removal/weakening" clause. I did **not** read
+   `AO3OverloadDetector.kt` to see what it detects; noted rather than assessed.
 
 ### V-3 — session storage, cookie handling and logout are at parity; no privacy divergence
 
