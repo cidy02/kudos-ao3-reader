@@ -50,7 +50,7 @@ that fan-out shape; work areas serially and commit each one.
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 4 (8, 9, 20, 21) | Progress locator + fallback (V-6, 8); settings field set/defaults/clamps (V-7, 9); colour themes → findings 20 and 21. **Not done:** TOC building, in-reader search, annotations/highlights, TTS |
-| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
+| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9, V-14) | Statistics verified identical formula-for-formula (V-9); Recently Deleted retention window verified 90 days on both (V-14); queue-only cleanup verified via L-4. **Not done:** shelf predicates (which work appears on which shelf), collections, queue ordering/reorder |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 1 (finding 22) | The four AO3 account-list types match (V-8); inbox malformed-row policy matches (L-7); preferences snapshot structure compared → finding 22 (help text) and a dead-code find folded into finding 19. **Not done:** the preferences *write* path (which toggles can be POSTed back), dashboard |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation (V-8), author notes → finding 10, text-encoding chain verified identical incl. the BOM-gate trap (V-14). **Not done:** PDF/TXT converter output, EPUB builder OPF/NCX, download queue |
@@ -1568,6 +1568,20 @@ almost any even-length byte sequence and returns CJK-looking mojibake", and Andr
 "That ordering is the whole point of this function; don't 'simplify' it into a plain
 try-list." This is the exact defect the review prompt predicts for imports (a file that
 "imports as mojibake on one platform") and neither platform has it.
+
+**Recently Deleted retention window (area 10).** Identical, and Android names its source.
+iOS `Services/PreservedWorkService.swift:12` — `static let recoveryWindow: TimeInterval =
+90 * 24 * 60 * 60`, applied at `:35` (`work.permanentDeletionScheduledAt =
+now.addingTimeInterval(recoveryWindow)`) and backfilled for pre-v7 archives at
+`Services/PersistenceSync.swift:270, 276, 282`. Android
+`works/WorkRepository.kt:589-590` — `/** Apple PreservedWorkService.recoveryWindow — 90
+days. */ val RECOVERY_WINDOW: Duration = Duration.ofDays(90)`, applied at `:211` and `:527`
+and enforced by `sweepExpiredSoftDeletes()` (`:265`). Both are exactly 90 × 86,400 seconds —
+`Duration.ofDays` is exact rather than calendar-based, so neither drifts across a DST
+boundary. This was the "a shorter window on one platform is silent data loss" risk; it is not
+present. Note `docs/audits/PARITY_SWEEP2_A:20` separately records a *rounding* divergence in
+the days-remaining **caption** (Android floors, iOS rounds up) — that is about the label, not
+the window, and was not re-verified here.
 
 **Type scaling (area 20).** Both respect the user's system font size, and Android is the
 cleaner of the two. Android uses `MaterialTheme.typography.*` at **332** sites and has
