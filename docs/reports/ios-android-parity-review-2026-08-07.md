@@ -66,7 +66,7 @@ that fan-out shape; work areas serially and commit each one.
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | 🔄 in progress | 0 (+1 lead) | Inventory compared. `WhatsNew` is iOS-only **by design** — `TASKS.md` row 26 says it exists precisely because iOS has no update system, and Android surfaces GitHub release notes instead (`GitHubReleaseModels.kt:21`). Not a gap. Screenshot attachment is lead L-6 |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | 🔄 in progress | 2 (findings 16, 17) | Error *copy* swept: 6 sites render `AO3Error.toString()` raw (16), offline is not a distinct state (17), and Android's four duplicated `displayMessage()` mappers are otherwise well-written and consistent. **Not done:** empty-state copy per screen, loading/skeleton states, signed-out states outside comments |
 | 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement compared → finding 11; annotation density measured (274/51 files vs 202/34). **Not done:** per-control label audit, Dynamic Type vs `sp` scaling, focus order, TalkBack traversal |
-| 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | 🔄 in progress | 1 minor | Suite shape done + the folder-sync asymmetry established. The per-rule sweep across all other areas is not done |
+| 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | ✅ done | 1 minor | Suite shapes compared; per-finding branch analysis done for all five backup findings; three genuinely-absent iOS-side suites identified. Corrected my own earlier over-claim that absent files predict defects — the defects are in untested *branches* of tested files |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reason in Notes)
 
@@ -109,10 +109,15 @@ one-line wiring fixes in `AppNavHost` and one shared `displayMessage()`.
 
 Three things are worth carrying forward.
 
-**The most reliable predictor of a defect was absent test coverage, not absent care.**
-`SyncRepository.kt` holds two of the four backup findings and has no test of any kind; the iOS
-file it was ported from has a 796-line suite. Conversely the statistics code, which *is*
-tested on both sides, came through a formula-by-formula comparison clean.
+**Defects clustered in untested *branches*, not untested files.** The tempting version of
+this — "Android is under-tested" — does not survive checking: Android's
+`BackupCompatibilityTest` is 1,327 lines and 41 tests covering merge precedence, tombstones
+and hostile input. Yet findings 4, 5 and 18 all live in files that suite exercises. Each sits
+in a corner it never reaches: `isSaved` is only ever seeded `true`, there is no
+export→import→export equality assertion, and `hasEpub` is tested for new works but not
+existing ones. The one clean case of the simple story is `SyncRepository.kt` (findings 1 and
+2), which has no test at all against iOS's 796-line folder-sync suite. See *Asymmetric test
+coverage* for the per-finding breakdown.
 
 **The "iOS is the source of truth" convention was right in sixteen cases and wrong in two.**
 Finding 8 (iOS discards a reading position it was handed) and finding 14 (Android marks
@@ -1318,23 +1323,57 @@ Two observations follow, and they point in opposite directions:
    build for a source set that does not exist. That is dead build configuration —
    `minor`, and worth deleting or filling.
 
-### One per-rule asymmetry, established
+### The per-rule picture: it is not "Android is untested"
 
-The full per-rule comparison is **not done** — it is the substance of this section and
-belongs to area 21, which was never dispatched. But the backup/sync area produced one
-instance directly, and it is the one that matters most, because it sits under finding 1:
+My first pass through this section said `SyncRepository.kt` has no test while the iOS file it
+was ported from has a 796-line suite, and drew the conclusion that absent coverage predicts
+defects. That is true for findings 1 and 2 and **too glib for everything else**, so it is
+corrected here.
 
-| | iOS | Android |
+**Android's backup suite is substantial and good.**
+`android/app/src/test/…/backup/BackupCompatibilityTest.kt` is **1,327 lines and 41 tests**,
+exercising `BackupMergeService` (26 references), `BackupImporter` (20) and `BackupExporter`
+(8). It covers merge precedence (`keepsLocalRenameWhenLocalLastModifiedIsNewer`,
+`appliesArchiveRenameWhenArchiveLastModifiedIsNewer`), tombstone semantics
+(`suppressesResurrectionOfDeletedCollection`, `revivesCollectionWhenArchiveIsNewerThanTombstone`),
+font collisions, name collisions, and hostile input (`rejectsTraversalEntry`,
+`rejectsAbsoluteEntry`, `rejectsZipWithoutManifest`, `rejectsInvalidManifestJson`,
+`rejectsUnsupportedManifestVersion`). This is not a neglected area.
+
+**The findings landed in untested corners of tested files — which is a different and more
+useful claim.** For each backup finding, the specific gap:
+
+| Finding | Where it lives | Why the existing suite misses it |
 |---|---|---|
-| Folder-sync tests | `KudosTests/FolderSyncTests.swift`, **796 lines**, plus `FolderSyncBackgroundTaskTests.swift` | **none** — `android/app/src/test/…/backup/` contains only `BackupCompatibilityTest.kt` and `DatabaseChangeTrackerTest.kt` |
+| 4 — `isSaved` OR'd with EPUB presence | `BackupMergeService.mergeWork` | `isSaved` appears in the suite **only as fixture input, always `true`** (`:906`, `:1096`). No test asserts that an archive saying `isSaved = false` survives the merge, so the one direction the flag cannot travel is the one never checked. |
+| 5 — nine fields dropped on export | `BackupMappers.toBackupWork` | There is no export→import→export **equality** test. `exportsImportsAndMergesBasicLibrary` round-trips a *basic* library, and the v5–v8 optional work fields never appear on a work fixture — `createdAt` occurs in the suite only on `SyncTombstoneEntity` constructions (`:280`, `:315`, `:346`, `:657`), never on a work. |
+| 18 — stale `hasEpub` not downgraded | `BackupMergeService` | The suite *does* have `newWorkMarkedHasEpubFalseWhenBackupFileIsMissing` — the **new-work** case. The finding is the **existing-work** case, where `\|\| existing?.hasEpub == true` re-admits the flag. One branch tested, its sibling not. |
+| 1, 2 — sync write atomicity and size-only skip | `SyncRepository.kt` | Genuinely untested: **zero** tests reference `SyncRepository`, against iOS's `FolderSyncTests.swift` (796 lines) plus `FolderSyncBackgroundTaskTests.swift`. This is the one place the original claim holds cleanly. |
 
-`SyncRepository.kt` — the file holding both findings above — has no test of any kind.
-That is precisely the prediction the review prompt makes about asymmetric coverage: *where
-one platform pins a rule and the other does not is where the divergence appears next*.
-Here it already has. The write-atomicity rule is pinned on iOS by a 796-line suite and is
-unpinned on Android, and Android is the platform that lost it.
+**Totals, for calibration.** iOS's backup/sync test surface is 2,987 lines across six files
+(`KudosBackupTests` 925, `FolderSyncTests` 796, `PersistenceSyncTests` 627, `MiniZipHostileTests`
+277, `MiniZipZip64Tests` 229, `HostileZipFixture` 133). Android's is 1,345 across two
+(`BackupCompatibilityTest` 1,327, `DatabaseChangeTrackerTest` 18). The ratio is real, but the
+shape matters more than the size: Android concentrates its coverage in one broad
+compatibility suite and has **no** folder-sync suite and **no** ZIP-container hardening suite
+of its own.
 
----
+**Suite-level comparison, and why it is not itself a finding.** iOS has 82 `*Tests.swift`
+subjects, Android 93 `*Test.kt`. A name-based diff produces a long list in both directions,
+but it is mostly noise: the two suites are organised differently — iOS tests services and
+parsers, Android tests repositories, view models and codecs — so `LibraryRepositoryTest` and
+`LibraryFiltersTests` cover overlapping rules under names that never match. I ran that
+comparison and am deliberately **not** reporting its output as findings, because attributing
+a coverage gap from filenames alone would fail the same evidence rule that caught my
+Subscribe false positive (V-12). The four rows above are the asymmetries I verified
+individually.
+
+**The three genuinely-missing iOS-side suites**, stated narrowly because I checked each:
+Android has no counterpart to `FolderSyncTests` / `FolderSyncBackgroundTaskTests` (nothing
+references `SyncRepository`), none to `MiniZipHostileTests` / `MiniZipZip64Tests` (its
+container hardening is exercised only through `BackupCompatibilityTest`'s five reject-cases,
+not against crafted ZIP64 or zip-bomb fixtures), and none to `AuthorNoteDetectorTests` —
+which is expected, since finding 10 shows the feature does not exist on Android.
 
 ## Already-known divergences, re-checked
 
