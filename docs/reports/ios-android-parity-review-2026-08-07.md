@@ -17,10 +17,12 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Batch A (AO3 network surface) not yet dispatched. Next action:
-run the area reviewers for Auth/session, Networking core, Search+filters, Browse,
-Work detail + writes, Comments, Author/series — reading both trees per the area
-map below.
+**Resume here:** Batches A (areas 2–8, AO3 network surface) and B (areas 9–15, app data
+surface) are dispatched and running as multi-agent reviews; their findings are not yet
+merged into this file. Batch C (areas 1, 16–21) is **not yet dispatched** — that is the
+next action if picking this up cold, followed by merging whatever A and B produced.
+Areas 17 and 21 already have verified material in this file (see the re-check table and
+the Asymmetric test coverage section); do not redo those two checks.
 
 | # | Area | iOS roots | Android roots | Status | Findings | Notes |
 |---|---|---|---|---|---|---|
@@ -70,7 +72,30 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Asymmetric test coverage
 
-*Not yet assessed.*
+Partially assessed. The shape of the two suites, established by direct enumeration:
+
+| | iOS | Android |
+|---|---|---|
+| Test files | 85 under `KudosTests/` | 93 under `android/app/src/test/` |
+| Test targets / source sets | one target, `KudosTests` (only `name = KudosTests;` appears in `AO3_App_OpenSource.xcodeproj/project.pbxproj`) | one source set, `src/test` (JVM) |
+| UI / instrumented tests | **none** — no UI-test target, and `grep -rl XCUIApplication KudosTests` → zero hits | **none** — `android/app/src/androidTest/` does not exist |
+| UI-test dependency declared | n/a | yes — `androidTestImplementation(libs.androidx.compose.ui.test.junit4)` at `android/app/build.gradle.kts:110`, plus the Compose BOM at `:77` |
+| Android-framework simulation in unit tests | n/a | Robolectric (`android/app/build.gradle.kts:117`), used by ≥10 unit tests incl. `ReaderViewModelPreferencesTest.kt`, `CommentsViewModelDraftTest.kt`, `RoutesNavigationTest.kt`, `ThemeTest.kt` |
+
+Two observations follow, and they point in opposite directions:
+
+1. **Neither app has a single UI-level test.** This is a *shared* gap, not an asymmetry —
+   every screen on both platforms is verified only by the human screenshot gate that
+   `AGENTS.md` mandates. It is recorded here rather than in Findings because it is a
+   property of the project's testing strategy, not a divergence between the two apps.
+2. **Android declares an instrumented-test dependency it never uses.**
+   `androidTestImplementation(libs.androidx.compose.ui.test.junit4)` is resolved on every
+   build for a source set that does not exist. That is dead build configuration —
+   `minor`, and worth deleting or filling.
+
+The per-rule comparison (which behavioural rules are pinned by a test on one platform and
+left unpinned on the other) is **not yet done** — it is the substance of this section and
+belongs to area 21, which has not been dispatched.
 
 ---
 
@@ -84,7 +109,7 @@ The calibration list from the review prompt. Status filled in as each area is re
 | Android's `SavedWork` has no `bookmarks` column | `TASKS.md` T-193 | ⬜ | |
 | Compose `FlowRow` applies `SpaceBetween` to a wrapped last row; iOS leaves it ragged | `TASKS.md` T-193 | ⬜ | |
 | iOS ships two readers (Readium iOS / legacy macOS); Android has one | prompt | ⬜ | |
-| Android has a GitHub-backed self-update system; iOS has none | prompt | ⬜ | |
+| Android has a GitHub-backed self-update system; iOS has none | prompt | ✅ | **Still true.** `grep -rniE "appUpdate\|checkForUpdate\|releases/latest\|api\.github\.com\|installUpdate\|AppUpdateRepository" kudos-ao3-reader --include="*.swift"` returns exactly two hits, both `WorkUpdateChecker` — which checks *AO3 works* for new chapters (`Services/WorkUpdateChecker.swift:17`, called from `Features/Home/HomeView.swift:134`), not the app. iOS has no app-update path of any kind. Android's lives in `update/` + `network/github/`. |
 
 ---
 
