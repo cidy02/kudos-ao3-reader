@@ -17,13 +17,13 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 2 (auth / session / cookies) — start with where each platform stores
-the AO3 session cookie (iOS `Services/AO3SessionVault.swift` vs Android
-`auth/AO3SessionStore.kt` / `AO3CookieStore.kt`), since a weaker store on one side is a
-privacy finding, then compare logout (what each actually clears) and session-expiry
-detection.
+**Resume here:** Area 3 (networking core) — compare the politeness pace, retry/backoff
+numbers and the User-Agent literal between `Services/AO3Client.swift` +
+`AO3RequestCoordinator.swift` and `network/ao3/` (`AO3NetworkConfig`, `AO3RetryPolicy`,
+`AO3RequestCoordinator`, `AO3UserAgent`). `docs/AO3_NETWORKING_POLICY.md` is binding here
+and its "must not implement" list applies to both platforms.
 
-**Then:** areas 1, 3–13, 16, 18–20 are untouched. Read *Not covered* before planning —
+**Then:** areas 1, 4–13, 16, 18–20 are untouched. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -39,7 +39,7 @@ that fan-out shape; work areas serially and commit each one.
 | # | Area | iOS roots | Android roots | Status | Findings | Notes |
 |---|---|---|---|---|---|---|
 | 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ⬜ not started | – | |
-| 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ⬜ not started | – | |
+| 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ⬜ not started | – | prior art: `docs/reports/ao3-networking-review*.md` (iOS-only) |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | ⬜ not started | – | `filter-parity-2026-08-07.md` covers endpoints only |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | |
@@ -610,6 +610,52 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-3 — session storage, cookie handling and logout are at parity; no privacy divergence
+
+The review prompt calls out weaker credential storage on one platform as a blocker-severity
+privacy finding. I went looking for it and it is not there.
+
+| | iOS | Android |
+|---|---|---|
+| Session store | Keychain, one item — `Services/AO3SessionVault.swift:96` `KeychainAO3SessionVault`, written with `SecItemAdd`/`SecItemUpdate` (`:127`, `:130`) | `auth/AO3SessionStore.kt:26` `EncryptedFileAO3SessionStore`, AES-256-GCM via `MasterKey.Builder(...).setKeyScheme(AES256_GCM)` (`:35-37`), i.e. hardware-backed Android Keystore |
+| Device-only / no cloud escape | `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (`:125`) — never syncs to iCloud Keychain, never restored to another device | file lives under `context.noBackupFilesDir` (`:116`), so it is excluded from Android auto-backup and device transfer |
+| What is in plaintext | a bare "removal pending" flag and a username *hint* in `UserDefaults` (`:49`, `:68`), documented at `:40` and `:67` as "Non-secret — a bare flag, never session data" | nothing; the legacy plaintext store is discussed below |
+| WebView cookie jar | `WKWebsiteDataStore.default().httpCookieStore` (`AO3SessionVault.swift:312`, `:317`, `:342`) | `android.webkit.CookieManager` (`auth/AO3CookieStore.kt:15`) |
+| Logout clears the web cookie jar | yes | yes — `clear()` (`:41-51`) re-sets every AO3 cookie expired, for both `BASE_URL` and `WORKS_HOST`, then `flush()` |
+
+Both scope the cookie wipe to AO3's hosts rather than nuking the whole jar, which is the
+correct choice on both platforms.
+
+**Ruled out — Android's plaintext session store is not reachable in production.**
+`auth/AO3SessionStore.kt:111` defines `FileAO3SessionStore`, which writes the session as
+unencrypted JSON. Its own KDoc at `:107-110` says it is "retained only for unit tests that
+don't need Android Keystore". I did not take that on trust: `grep -rn` for its constructor
+across the whole Android source root returns exactly one production wiring site,
+`app/KudosAppContainer.kt:103`, and it passes `EncryptedFileAO3SessionStore`. Further, the
+encrypted store actively migrates and deletes any legacy plain file (`:100`). Not a finding.
+
+**One real asymmetry, reported as a note rather than a finding.** iOS's `logout()`
+(`Services/AO3AuthService.swift:504-533`) does five things Android's
+(`auth/AO3AuthRepository.kt:170-174` → `clearSession()` at `:184-188`) does not: it advances
+a session generation to invalidate in-flight requests (`:505`), cancels the in-progress
+login (`:506`), deletes the username hint (`:515`), clears the logged-out identity's
+unresolved comment-submission guards (`:522-524`, annotated T91-RF2 — "must not survive the
+account they were made under"), and refuses to report success if the durable delete threw
+(`:526-533`, annotated A5-F4). Android's is four lines and reports no error.
+
+I am not filing this as a finding for two reasons, and both are worth stating so a later
+session does not re-open it. First, the leak iOS's comment-store clearing prevents does not
+exist on Android: `network/ao3/comments/CommentDraftStore.kt:20-22` keys every draft by
+`"draft:$workId:$chapterId:$parentId:${username ?: "guest"}"`, so account A's text can never
+surface for account B — the same partitioning iOS achieves with `entriesByIdentity`
+(`Services/CommentSubmission.swift:119-151`). The residual behaviour difference is only that
+a draft survives on Android if the *same* user logs back in, which is arguably the better
+product behaviour. Second, the *idempotency* half — Android lacking iOS's unresolved-submission
+guard — is already documented on the Android branch
+(`docs/audits/PARITY_SWEEP2_D_workdetail-reader-comments-infra.md:7`, "incomplete idempotency
+guard", listed as already covered). What is genuinely unrecorded is the missing
+delete-failure reporting, which is a one-line honesty gap rather than a user-visible defect.
 
 ### V-2 — Android's Room migration story is safe, and no destructive fallback exists
 
