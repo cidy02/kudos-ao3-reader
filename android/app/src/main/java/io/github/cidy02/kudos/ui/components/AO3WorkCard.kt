@@ -159,15 +159,12 @@ fun AO3WorkCard(
                 )
             }
 
-            // Rating lives in stats; keep warnings/categories as chips when present.
-            val safetyTags = (work.warnings + work.categories).filter { it.isNotBlank() }
-            if (safetyTags.isNotEmpty()) {
-                MetadataChipRow(
-                    labels = safetyTags,
-                    maxItems = if (expanded) 12 else 4,
-                    onLabelClick = onTagClick
-                )
-            }
+            // No raw warnings/categories row here. It listed them verbatim on a
+            // *collapsed* card — "No Archive Warnings Apply", "F/F", "M/M" — right
+            // above the status chips that deliberately fold the same values into
+            // "Multi" and "2 Warnings Apply", so the collapse it was supposed to
+            // be doing was undone one line earlier. The status row below carries
+            // both, colour-coded, and expands them on demand.
 
             if (work.summary.isNotBlank()) {
                 Text(
