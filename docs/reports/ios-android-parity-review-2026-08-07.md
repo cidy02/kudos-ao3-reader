@@ -59,7 +59,7 @@ that fan-out shape; work areas serially and commit each one.
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload verified 21/21 (V-7); theme enums and restore validation compared → findings 20, 21. **Not done:** the Settings *screens* themselves, per-setting UI wording, light/sepia token tones (see note under finding 20) |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ✅ done | 0 (+1 minor) | `WhatsNew` is iOS-only **by design** (`TASKS.md` row 26 — it exists because iOS has no update system; Android surfaces GitHub release notes). Screenshot capture resolved as L-6: a convenience gap only, since neither platform attaches an image to the submitted report |
-| 19 | Error handling & empty states | cross-cutting | cross-cutting | 🔄 in progress | 2 (findings 16, 17) | Error *copy* swept: 6 sites render `AO3Error.toString()` raw (16), offline is not a distinct state (17), and Android's four duplicated `displayMessage()` mappers are otherwise well-written and consistent. **Not done:** empty-state copy per screen, loading/skeleton states, signed-out states outside comments |
+| 19 | Error handling & empty states | cross-cutting | cross-cutting | ✅ done | 4 (16, 17, 23, 24) | Error copy swept → 16, 17; empty-state copy swept across both trees → 23 (dead Account tabs), 24 (iOS casing inconsistency). Signed-out and no-results copy compared and otherwise equivalent. **Deliberately not read:** loading/skeleton states, which are animation timing rather than copy |
 | 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement → finding 11; annotation density measured; type scaling verified — Android 332 typography tokens and **zero** `.sp` literals vs iOS 268 semantic styles and 18 fixed sizes (V-14). **Not done:** per-control label audit, focus order, TalkBack traversal |
 | 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | ✅ done | 1 minor | Suite shapes compared; per-finding branch analysis done for all five backup findings; three genuinely-absent iOS-side suites identified. Corrected my own earlier over-claim that absent files predict defects — the defects are in untested *branches* of tested files |
 
@@ -259,6 +259,51 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 24. iOS's empty-state titles use two capitalisation conventions at once — `minor` · Error handling / empty states · **iOS-side**
+
+A parity review surfaces this the way nothing else does: Android's copy is consistent, iOS's
+is not, so there was no single convention for Android to mirror.
+
+- **iOS:** 28 distinct `ContentUnavailableView` titles, split **11 Title Case / 17 sentence
+  case**. The split runs through identical constructions:
+  | Title Case | sentence case |
+  |---|---|
+  | "Couldn't Load Comments" | "Couldn't load collections" |
+  | "Couldn't Load Chapters" | "Couldn't load chapters"-shaped siblings: "Couldn't load author", "…fandoms", "…help", "…preferences", "…works", "…your list" |
+  | "Couldn't Open Work" | "Couldn't open this EPUB" |
+  | "No Comments Yet" | "No collections", "No works found", "No matching works", "No works to add" |
+  | "Couldn't Search" | "Search failed" |
+  Also Title Case: "Find in Work", "My Collections", "Recently Deleted", "Search Kudos",
+  "Thread Unavailable". Also sentence case: "Author unavailable", "Not signed in",
+  "Nothing here yet", "No fandom insights yet".
+- **Android:** consistently sentence case — "No comments yet", "No collections yet",
+  "No fandoms match", "No works found", "No series", "No bookmarks", "AO3 session required".
+- **Why this is a finding and not a style nit:** `AGENTS.md:143-145` makes UI consistency a
+  project rule ("New UI elements should be consistent with existing elements"), and the
+  standing convention makes iOS the reference Android ports from. When the reference
+  contradicts itself, "match iOS" is unanswerable — an Android contributor adding an empty
+  state has an 11-to-17 coin flip. It is `minor` because no user is harmed by either casing;
+  what costs time is the ambiguity.
+- **Evidence:** extracted every `ContentUnavailableView` title across the iOS tree and
+  classified each by whether any non-minor word after the first is capitalised (minor words —
+  a, an, the, of, in, on, to, for, and, or, this, yet, your — excluded, so "No works found"
+  is correctly read as sentence case and "Find in Work" as Title Case). Counts are from that
+  script, not estimation. Ruled out: (a) that the two groups are different *kinds* of
+  surface, e.g. Title Case for navigation titles and sentence case for messages — they are
+  not, both groups contain error titles and both contain empty-list titles, and
+  "Couldn't Load Comments" / "Couldn't load collections" are the same surface in the same
+  feature area; (b) that Android is the inconsistent one — its titles are uniformly sentence
+  case, which is also what Material 3 specifies, so Android is right by its own platform's
+  rule regardless of what iOS settles on.
+- **History:** not recorded. The `TASKS.md` HIG pass (T-115, row 87 and neighbours) covered
+  radii, hit targets and chevrons but no copy-casing audit.
+- **Recommendation:** **iOS moves, and this is a decision before it is an edit.** Apple's HIG
+  favours sentence case for most interface text, and it is already the majority here (17 of
+  28) — so standardising on sentence case is both the smaller diff and the platform-correct
+  answer, and it happens to converge with Android's existing copy. Eleven strings to change.
+  Worth doing as its own commit so the diff reads as a copy pass rather than hiding inside a
+  feature change.
 
 ### 23. Android's Account → Writing has two dead tabs that tell the user the feature is missing — `gap` · Account
 
