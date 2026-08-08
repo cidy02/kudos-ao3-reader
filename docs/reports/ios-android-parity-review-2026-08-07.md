@@ -17,14 +17,14 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 10, the Library **statistics formulas** — read
-`Features/Library/ReadingStatistics.swift` against `library/ReadingStatistics.kt` and compare
-every statistic's formula, not its name: what counts as "read", which denominator each
-average uses, how time estimates are derived. This is the highest-value untouched item in the
-review, because a statistic computed differently on each platform is invisible to every check
-except this one. Then the Recently Deleted **retention window** in the same area (a shorter
-window on one platform is silent data loss; note `PARITY_SWEEP2_A:20` already records a
-rounding divergence in the days-remaining caption, but not the window length).
+**Resume here:** Area 10's **Recently Deleted retention window** — compare the purge
+threshold and the sweep that enforces it: iOS `Services/WorkLifecycle.swift` /
+`PreservedWorkService.swift` (grep `permanentDeletionScheduledAt`) against Android
+`library/RecentlyDeletedScreen.kt` + `works/WorkRepository.sweepExpiredSoftDeletes`. A
+shorter window on one platform is silent data loss. `PARITY_SWEEP2_A:20` records a *rounding*
+divergence in the days-remaining caption (Android floors, iOS rounds up) but not the window
+length itself — and note that two of two audit clusters spot-checked so far turned out to be
+already fixed, so verify before treating that row as live.
 
 **Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
 See *Not covered* for the full breakdown and for the standing warning about the Android
@@ -52,7 +52,7 @@ that fan-out shape; work areas serially and commit each one.
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | Only the draft-store identity keying checked, as part of V-3. `PARITY_SWEEP2_D:7` lists several comment gaps as already covered — re-verify rather than re-derive |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | Only the shared `required-tags` selectors touched (V-5). iOS has `AO3SeriesDetailView.swift`; Android has `AO3SeriesRepository`/`Urls` but no obvious series *screen* — grep hard before calling it a gap |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
-| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. Finding 3 closes the model half of the `isQueuedForLater` cluster; L-4 is the unchecked half. Statistics formulas and the Recently-Deleted retention window are the highest-value untouched items |
+| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
 | 11 | Home | `Features/Home/` | `home/` | 🔄 in progress | 0 | Section enums match: 4 cases, same names, same order (V-8). **Not done:** per-section query/cap/empty-state, "see all" destinations, pull-to-refresh |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
@@ -605,15 +605,41 @@ that record would waste a work cycle re-building something that exists.
   The work is already done. Worse, `PARITY_SWEEP2_A:6` uses the same belief to *exclude*
   the area from a later sweep, so the cluster is simultaneously "known open" and "not
   re-checked" — the state in which a stale claim survives indefinitely.
+- **A second cluster, checked independently, is stale in every one of its three claims.**
+  `ANDROID_PARITY_FINDINGS_VERIFIED.md:79-81` records three CONFIRMED Reading-statistics
+  defects. All three are fixed at `a5a46116`:
+  1. *"`ReadingStatistics.hasStarted` omits `readiumLocator`"* (`:79`, elaborated at
+     `ANDROID_PARITY_REPORT.md:306` quoting the field list). **Fixed** —
+     `library/ReadingStatistics.kt:84-90` reads
+     `work.isFinished || work.lastReadDate != null || !work.readiumLocator.isNullOrBlank()
+     || work.lastSpineIndex > 0 || work.lastScrollFraction > 0.0`. The locator check is
+     `:87`, at the exact lines the audit cites as lacking it.
+  2. *"`formatCompactNumber` can emit '1000.0K' near 999950 due to round-then-suffix"*
+     (`:80`). **Fixed** — `library/ReadingStatisticsScreen.kt:490-500` now rounds first and
+     then picks the unit, and its comment names the audit's own example: "rounding a tier's
+     scaled value to 1 decimal can itself reach 1000 (e.g. 999,950 / 1000 = 999.95, which
+     rounds to '1000.0'), which belongs in the next unit up".
+  3. *"Missing `readiumOnlyWorkCountsAsStarted` regression test"* (`:81`). **Fixed** —
+     `ReadingStatisticsTest.kt:128` is `readiumLocatorOnlyStillCountsAsStarted()`, seeded
+     with a locator-only work and commented "A backup restore can land a work with only a
+     Readium locator and no…", i.e. it tests the precise state the audit said was untested.
 - **Evidence:** greps run against `a5a46116` — `grep -n "isQueuedForLater|isQueueOnly"
   core/model/SavedWork.kt data/local/entity/WorkEntity.kt` and
   `grep -rn "isQueueOnly" --include="*.kt" .`, which returns hits in `SavedWork.kt`,
   `settings/QueueStorageScreen.kt` (`:119`, `:244`, `:281`, `:316`),
-  `home/HomeSectionKind.kt` and `library/LibraryQuery.kt`. I did **not** verify the
-  *whole* cluster: specifically, whether `WorkImporter.saveMetadataOnly` still hard-codes
-  `markSaved = true` (the audit's other half) is **unchecked** — see lead L-3. So the
-  correct statement is "the model/query half of this cluster is closed", not "the cluster
-  is closed".
+  `home/HomeSectionKind.kt` and `library/LibraryQuery.kt`; then direct reads of
+  `ReadingStatistics.kt`, `ReadingStatisticsScreen.kt` and `ReadingStatisticsTest.kt` for the
+  second cluster. I did **not** verify the *whole* first cluster: whether
+  `WorkImporter.saveMetadataOnly` still hard-codes `markSaved = true` (the audit's other
+  half) is **unchecked** — see lead L-4. So the correct statement is "the model/query half
+  of the queue cluster is closed, and the Reading-statistics cluster is closed entirely",
+  not "the corpus is wrong everywhere".
+- **Why the second cluster changes the conclusion:** one stale entry is bookkeeping. **Two
+  clusters out of two spot-checked, the second stale in all three of its claims — including
+  a fix whose code comment quotes the audit's own worked example — means the corpus is not
+  drifting, it is systematically behind the code.** The fixes were evidently made *from*
+  these reports and the reports were never marked resolved. Anyone planning from
+  `ANDROID_PARITY_FINDINGS_VERIFIED.md` today will schedule work that is already done.
 - **History:** the audit documents carry no revision date tying them to a SHA, which is why
   the staleness is invisible from inside them. Note the same pattern as finding 1's
   `BACKUP_FORMAT.md:83`: an Android-branch document asserting something the code
@@ -892,6 +918,48 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-9 — every reading statistic is computed identically, formula for formula
+
+This was the highest-value untouched item on the ledger, on the theory that a statistic
+computed from a different denominator on each platform is invisible until someone compares
+two phones. I compared all nine statistics plus the derived rate. They agree.
+
+| Statistic | iOS (`Features/Library/ReadingStatistics.swift`) | Android (`library/ReadingStatistics.kt`) | |
+|---|---|---|---|
+| `totalWorks` | `works.count` (`:41`) | `works.size` (`:67`) | ✅ |
+| `startedWorks` | count where `isFinished \|\| hasStartedReading` (`:37-39`, `:68`) | count where `hasStarted` (`:54`, `:84-90`) | ✅ same predicate — see below |
+| `finishedWorks` | `works.filter(\.isFinished)` (`:40`) | `works.filter { it.isFinished }` (`:55`) | ✅ |
+| `inProgressWorks` | `started.filter { !$0.isFinished }` (`:41`) | same (`:56`) | ✅ |
+| `wordsRead` | `finished.reduce(0) { $0 + max(0, $1.wordCount) }` (`:47-49`) | `finished.sumOf { maxOf(0, it.wordCount) }` (`:58`) | ✅ **over finished only**, on both |
+| `latestReadDate` | `works.compactMap(\.lastReadDate).max()` (`:50`) | `works.mapNotNull { it.lastReadDate }.maxOrNull()` (`:59`) | ✅ over *all* works on both |
+| `openedLast7Days` | window `startOfDay(now) - 6 days` (`:53-54`) | `startOfToday.minusDays(6)` (`:64`) | ✅ |
+| `openedLast30Days` | `- 29 days` (`:55-56`) | `.minusDays(29)` (`:65`) | ✅ |
+| window bounds | `date >= start, date <= end` (`:75`) | `!date.isBefore(since) && !date.isAfter(through)` (`:97`) | ✅ inclusive both ends, both |
+| `topFandoms` | dedupe per work, count over **started** (`:58`, `:82-90`) | same, over **started** (`:75`, `:106-115`) | ✅ |
+| `completionRate` | `finished / started`, 0 when `started == 0` (`:26-29`) | same (`:34-38`) | ✅ |
+
+The `hasStarted` predicate is the one worth spelling out, because it is where iOS was bitten
+before. iOS defers to the model — `Models.swift:421-424`,
+`lastReadDate != nil || !readiumLocator.isEmpty || lastSpineIndex > 0 || lastScrollFraction > 0`
+— with a comment at `ReadingStatistics.swift:63-67` recording *why*: "a private re-listing of
+its fields here once drifted (it missed the Readium reader's locator, undercounting works
+read only on iOS)". Android re-lists the fields inline at `ReadingStatistics.kt:84-90`
+rather than deferring to its own `SavedWork.hasStartedReading`. **The re-listing is currently
+correct** — all five terms match, in the same order — and both platforms now carry a
+regression test for the locator-only case (iOS `KudosTests/ReadingStatisticsTests.swift:67`
+`readiumOnlyWorkCountsAsStarted`, Android `ReadingStatisticsTest.kt:128`
+`readiumLocatorOnlyStillCountsAsStarted`). So this is a **structural risk, not a defect**:
+the duplication that caused iOS's past bug still exists on Android, but the values agree and
+a test now pins the case that would catch drift. It is not filed as a finding because there
+is no wrong behaviour to report; it is noted here so that a future change to
+`SavedWork.hasStartedReading` on Android is known to need a second edit.
+
+One genuinely trivial difference, recorded for completeness rather than action: the
+fandom tie-break sorts by count descending then name ascending on both, but iOS uses
+`localizedCaseInsensitiveCompare` (`:96`) and Android `String.CASE_INSENSITIVE_ORDER`
+(`:118`). These agree for ASCII and can differ for names with diacritics or non-Latin
+scripts, and only when two fandoms have exactly equal counts. Not worth a code change.
 
 ### V-8 — write actions, Home sections, account lists and HTML sanitisation all agree
 
