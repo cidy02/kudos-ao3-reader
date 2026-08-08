@@ -250,6 +250,46 @@ the code that needs it, `private` to the wrong file, and never called.
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
 
+### 18. A work whose EPUB file has vanished still restores as "downloaded" on Android — `minor` · Backup / restore
+
+Promoted from lead L-5 after tracing both sides. Small impact, but it is the same shape as
+finding 4 — a flag Android can raise and never lower.
+
+- **iOS:** `Services/KudosBackup.swift:1228-1231` — when the archive carries no EPUB for a
+  work *and* no local file exists, iOS clears the flag and demotes the preservation state:
+  `work.hasEPUB = false`, and `if work.epubPreservationStatus == .preserved {
+  work.epubPreservationStatus = .missingFile }`.
+- **Android:** `backup/BackupMergeService.kt:64` —
+  `val existingHasEpub = id in currentEpubIds || existing?.hasEpub == true`. The first clause
+  is sound: `currentEpubIds` comes from `backup/BackupRepository.kt:112-118`, which filters
+  the DB's `hasEpub` works down to those where
+  `Files.isRegularFile(workFileStore.workEpubPath(id))` actually holds — a real filesystem
+  check. But the trailing `|| existing?.hasEpub == true` re-admits the stale database flag,
+  so a work with no file on disk and none in the archive still comes out `hasEpub = true`.
+- **Divergence:** iOS treats absence-of-file as authoritative and downgrades; Android treats
+  the DB flag as sufficient and never downgrades.
+- **Scenario:** a user's EPUB is removed out from under the app — an aggressive storage
+  cleaner, a restore from a thinner backup, a failed file write. On iPhone the work is
+  correctly shown as not downloaded (and, if it had been preserved, as `missingFile`, which
+  is what drives re-preservation). On Android it still displays as downloaded; the user taps
+  Read and gets an error instead of a book. The state is self-correcting only if something
+  else rewrites the flag.
+- **Evidence:** read the merge derivation and traced `currentEpubIds` to its filesystem
+  filter. Ruled out: (a) that Android downgrades elsewhere on restore — `grep -rn "hasEpub"`
+  across `backup/` shows the only writes are `BackupMergeService.kt:64,67,192,206` (all
+  raising) and `BackupRepository.kt:151-152` (also raising, after a successful file write);
+  nothing clears it; (b) that the reader repairs it on failure — `reader/ReaderError.kt`
+  has a `FileMissing` case surfaced at `reader/ReaderScreen.kt:149` with a "Remove offline
+  copy" action, but that requires the user to act, where iOS corrects the record silently at
+  restore time.
+- **History:** not recorded. Note this is the mirror image of finding 4: there Android forces
+  `isSaved` up and never down; here it leaves `hasEpub` up and never brings it down. Both sit
+  in the same 30 lines of `mergeWork`.
+- **Recommendation:** Android moves, and it is a one-clause change: drop
+  `|| existing?.hasEpub == true` so `existingHasEpub` reflects only the filesystem check
+  Android already performs, then mirror iOS's preservation demotion. Worth doing in the same
+  pass as finding 4 — same function, same class of bug.
+
 ### 17. Offline is not a distinct state on Android — `gap` · Error handling / empty states
 
 - **iOS:** `Features/Comments/CommentsErrorMessages.swift:50-51` matches
@@ -945,10 +985,11 @@ that record would waste a work cycle re-building something that exists.
   half) is **unchecked** — see lead L-4. So the correct statement is "the model/query half
   of the queue cluster is closed, and the Reading-statistics cluster is closed entirely",
   not "the corpus is wrong everywhere".
-- **Why the second cluster changes the conclusion:** one stale entry is bookkeeping. **Two
-  clusters out of two spot-checked, the second stale in all three of its claims — including
-  a fix whose code comment quotes the audit's own worked example — means the corpus is not
-  drifting, it is systematically behind the code.** The fixes were evidently made *from*
+- **Why this changes the conclusion:** one stale entry is bookkeeping. **Three clusters
+  spot-checked, three stale — one of them in all three of its claims, including a fix whose
+  code comment quotes the audit's own worked example, and another whose fix comment names the
+  iOS function the audit said was missing. The corpus is not drifting; it is systematically
+  behind the code.** The fixes were evidently made *from*
   these reports and the reports were never marked resolved. Anyone planning from
   `ANDROID_PARITY_FINDINGS_VERIFIED.md` today will schedule work that is already done.
 - **History:** the audit documents carry no revision date tying them to a SHA, which is why
@@ -1141,7 +1182,13 @@ guards iOS's lacks (`AO3OverloadDetector.isOverloadPage` at `:29` and a `LoginRe
 check at `:31`), which may change the reachable failure modes. The check that settles it:
 feed both parsers a fixture where half the rows are malformed and compare what each returns.
 
-**L-5 — Android may not downgrade a stale `hasEpub` when the file is gone.** Suspicion:
+**L-5 — RESOLVED → finding 18.** Confirmed: Android's own EPUB inventory *is*
+filesystem-verified (`backup/BackupRepository.kt:112-118` filters on
+`Files.isRegularFile(workFileStore.workEpubPath(id))`), but the trailing
+`|| existing?.hasEpub == true` at `backup/BackupMergeService.kt:64` still lets a stale
+database flag win. See finding 18. Original text follows.
+
+**L-5 (original) — Android may not downgrade a stale `hasEpub` when the file is gone.** Suspicion:
 iOS actively clears the flag — `KudosBackup.swift:1229`, `work.hasEPUB = false` in the
 `else if !FileManager.default.fileExists(...)` branch, which also demotes
 `epubPreservationStatus` to `.missingFile`. Android's equivalent
@@ -1156,16 +1203,21 @@ says `hasEpub = true`, no file exists locally, and the archive carries no EPUB f
 Low severity — cosmetic until the user taps Read — but it is the same class as finding 4:
 a flag Android can raise and never lower.
 
-**L-4 — the other half of the `isQueuedForLater` cluster is unverified.** Finding 3
-establishes that the model/query half is implemented. `docs/audits/ANDROID_PARITY_REPORT.md:292`
-also claims `WorkImporter.saveMetadataOnly` hard-codes `markSaved = true`
-(`WorkImporter.kt:25-36`, specifically `:32`) so every queue-add still becomes a full
-library item, and that `ReadingQueueRepository.removeWork` never cleans up a queue-only
-work the way iOS's `removeFromQueueAndDeleteIfQueueOnly` does. I did not open either file.
-The check that settles it: read `works/WorkImporter.kt:25-36` and
-`library/ReadingQueueRepository.kt:75-79,132-135` against
-`Services/ReadingQueueService.swift:242,270-300,550,575-600`. Until that is done, finding 3
-should be read as narrowly as it is written.
+**L-4 — RESOLVED: the other half of the `isQueuedForLater` cluster is also fixed.** Both
+claims in `docs/audits/ANDROID_PARITY_REPORT.md:292` are stale at `a5a46116`:
+(1) `WorkImporter.saveMetadataOnly` no longer hard-codes `markSaved = true` — its KDoc
+(`works/WorkImporter.kt:30-37`) now states that "Queue-add (see
+`WorkDetailScreen.ensureLocalThen`) passes `markSaved = false, isQueuedForLater = true` so a
+not-yet-saved work stays queue-only (`SavedWork.isQueueOnlyWork`) instead of becoming a full
+Library item", with the parameter merely *defaulting* true for ordinary save/download callers,
+which is iOS's behaviour too. (2) `ReadingQueueRepository.removeWork` does perform the
+queue-only cleanup — `library/ReadingQueueRepository.kt:130-150` is commented "iOS parity:
+removeFromQueueAndDeleteIfQueueOnly" and soft-deletes a work that has lost its last membership
+and was never explicitly saved or favourited. It is in one respect *more* careful than iOS:
+it re-reads the row after the intervening writes (`:145`, `val freshEntity = workDao.getById`)
+rather than deciding from a snapshot taken before the suspension points, with a comment
+explaining the race. **This closes finding 3's caveat: the queue cluster is fully closed, not
+half.** It also makes three of three spot-checked audit clusters stale.
 
 **L-2 — `exportedAt` is the one manifest date that bypasses Room, and its precision is
 unverified.** Suspicion: R-1 below proves the date round trip is safe *because* every
