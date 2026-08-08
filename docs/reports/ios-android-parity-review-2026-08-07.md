@@ -49,7 +49,7 @@ that fan-out shape; work areas serially and commit each one.
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | Untouched. Note Android has `BrowseLocalIndicators.kt` and `CategoryStats.kt` with no obvious iOS counterpart — establish the real mapping before calling either a gap |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
-| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | Only the draft-store identity keying checked, as part of V-3. `PARITY_SWEEP2_D:7` lists several comment gaps as already covered — re-verify rather than re-derive |
+| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 1 (finding 13) | Timestamp handling traced selector-to-pixel on both → finding 13; draft-store identity keying done in V-3. **Not done:** comment model field set (role/badge, edited, deleted, depth), posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
@@ -189,6 +189,55 @@ finding 11) are marked as such.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 13. Comment timestamps are relative and localised on iOS, raw AO3 text on Android — `drift` · Comments
+
+- **iOS:** `Models/AO3CommentTimestamp.swift` is a dedicated 116-line type. It parses through
+  **nine** accepted formats (`:8-16` — `"EEE dd MMM yyyy hh:mma zzz"`,
+  `"EEE dd MMM yyyy HH:mm XXXXX"`, `"dd MMM yyyy hh:mma zzz"` and six more), each with a
+  formatter pinned to `en_US_POSIX` and GMT (`:26-32`), and normalises non-breaking spaces
+  first (`:39`). `displayText` (`:52-80+`) then renders **relatively**:
+  `RelativeDateTimeFormatter` with `.unitsStyle = .full` for anything under 24 hours old,
+  a "Yesterday" branch for the previous calendar day, and an absolute format beyond that —
+  all computed in the device's calendar, time zone and locale.
+- **Android:** `network/ao3/comments/AO3CommentParser.kt:178` scrapes
+  `.datetime, p.datetime, .posted`, takes its text, and stores it as
+  `val date: String` (`AO3CommentModels.kt:194`). `comments/CommentsScreen.kt:611-613`
+  renders that string **verbatim**. There is no parsing step and no formatting step.
+- **Divergence:** the same comment reads "3 hours ago" on iPhone and, on Android, whatever
+  literal string AO3's HTML contained — e.g. "Sat 02 Aug 2026 08:15PM UTC".
+- **Scenario:** a user reads a fic's comments on both devices. On iPhone the thread is
+  scannable — "12 minutes ago", "Yesterday", "2 Aug 2026" — so recency is obvious at a
+  glance, which is the entire point of a comment timestamp. On Android every line carries a
+  full absolute datetime in AO3's rendering, including its time-zone suffix. Two consequences:
+  the thread is much harder to skim, and **the time shown is not converted to the user's own
+  zone**, so a reader in UTC−7 seeing "08:15PM UTC" has to do the arithmetic themselves. That
+  second part is what makes this more than cosmetic; I have still filed it as `drift` rather
+  than `real-bug` because the displayed value is not *wrong*, merely unconverted and
+  unfriendly.
+- **Evidence:** read the iOS type end to end and traced Android from selector to pixel —
+  parser `:178` → model field `:194` → `Text(comment.date, …)` at `CommentsScreen.kt:611-613`,
+  with no transform anywhere between. Ruled out: (a) that Android formats it elsewhere —
+  `grep -rn "getRelativeTimeSpanString\|DateUtils"` across the whole Android source root
+  returns **zero hits**, so no relative-time formatting exists in the app at all;
+  (b) that this is platform idiom — it is the opposite: `DateUtils.getRelativeTimeSpanString`
+  is the standard Android API for exactly this and Material's guidance favours relative
+  recency in feeds, so Android is diverging from *its own* platform convention, not
+  expressing it; (c) that the raw string might already be device-local — it is whatever AO3
+  served, and AO3 renders timestamps in the account's configured zone, which is not the
+  device's.
+- **History:** not recorded. `docs/audits/PARITY_SWEEP2_D:7` lists several comment gaps as
+  already covered — "no work header / no reply / no pagination / incomplete idempotency
+  guard" — but timestamp presentation is not among them, and greps of the Android branch's
+  `docs/` for timestamp/datetime handling return nothing.
+- **Recommendation:** Android moves. The parsing half is the real work and should be ported
+  from `AO3CommentTimestamp.parseFormats` rather than re-derived — that nine-format list is
+  accumulated knowledge about AO3's actual output, including the non-breaking-space quirk,
+  and a fresh `DateTimeFormatter.ofPattern` guess will parse fewer of them. Once parsed,
+  rendering is idiomatic and cheap: `DateUtils.getRelativeTimeSpanString` for the recent
+  case, a `DateTimeFormatter` in the device zone beyond it. Note the failure mode to preserve:
+  iOS's `displayText` returns `rawText` unchanged when parsing fails (`:60`), so an
+  unrecognised format degrades to today's Android behaviour rather than to a blank.
 
 ### 12. Tapping a series in an Android author profile does nothing at all — `real-bug` · Author profile / series
 
