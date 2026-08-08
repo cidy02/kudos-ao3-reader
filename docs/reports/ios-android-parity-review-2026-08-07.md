@@ -2634,10 +2634,31 @@ Required one setup step the script itself documents: `Vendor/MuPDF.xcframework` 
 Symlinked from another worktree exactly as the script's own error message instructs; `Vendor/`
 is in `.gitignore:48`, so `hig-review` remains clean.
 
-Result recorded in the *Method log* below once the run completed. Environment note for anyone
-repeating it: `docs/AGENT_ONBOARDING.md:21` states Xcode-beta is the active toolchain, but
-this machine's `xcode-select -p` is `/Applications/Xcode.app` (Xcode 26.6). The canonical
-destination the script defaults to — `iPhone 17, OS=26.5` — is available.
+**Result: ALL GREEN.** All five stages passed — invariants → lint → iOS test suite → macOS
+build → whitespace.
+
+| | |
+|---|---|
+| Tests | **993** |
+| Suites | **91** |
+| Failures | **0** (`** TEST SUCCEEDED **`) |
+| macOS build | `** BUILD SUCCEEDED **` |
+| Test wall clock | 18.7 s |
+
+Environment note for anyone repeating it: `docs/AGENT_ONBOARDING.md:21` states Xcode-beta is
+the active toolchain, but this machine's `xcode-select -p` is `/Applications/Xcode.app`
+(Xcode 26.6). The canonical destination the script defaults to — `iPhone 17, OS=26.5` — is
+available, and the suite passes on it.
+
+Incidental confirmation worth noting: the run logs
+`[auth] Could not delete the saved AO3 session: Keychain error: User interaction is not
+allowed.` followed by `[auth] AO3 session removal is still pending: …`. That is the
+A5-F4 path described in V-3 — iOS refusing to report a clean logout when the durable delete
+failed — firing under simulator conditions. The behaviour V-3 credits iOS for is exercised,
+not just declared.
+
+**Both suites therefore pass on both platforms, and neither contradicts any finding here** —
+993 iOS tests and 660 Android tests, 0 failures between them.
 
 ### Lead L-2 — probed directly, and the safe assumption no longer holds
 
