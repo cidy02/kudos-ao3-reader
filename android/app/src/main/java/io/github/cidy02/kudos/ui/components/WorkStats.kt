@@ -366,8 +366,20 @@ fun statusChips(
             !text.startsWith("Creator Chose Not To Use", ignoreCase = true)
     }
     val chooseNotTo = warnings.any { it.trim().startsWith("Creator Chose Not To Use", ignoreCase = true) }
-    chips += when {
-        real.isNotEmpty() -> WorkStatItem(
+    if (real.isNotEmpty() && !chooseNotTo && expanded) {
+        // Expanded, the count becomes the warnings themselves — the same split the
+        // categories take. Only this branch has anything to expand: "No Warnings"
+        // and "Not Disclosed" are single states, not folded lists.
+        real.forEach { warning ->
+            chips += WorkStatItem(
+                text = warning,
+                accessibilityLabel = "Warning: $warning",
+                icon = Icons.Outlined.WarningAmber,
+                tint = AO3StatusTint.red
+            )
+        }
+    } else chips += when {
+        real.isNotEmpty() && !chooseNotTo -> WorkStatItem(
             text = if (real.size == 1) "1 Warning Applies" else "${real.size} Warnings Apply",
             accessibilityLabel = "Warnings: ${real.joinToString(", ")}",
             icon = Icons.Outlined.WarningAmber,
