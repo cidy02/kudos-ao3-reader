@@ -75,8 +75,8 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 ## Summary
 
 Fourteen confirmed findings, nine verified "no divergence" results, seven open leads. Of
-twenty-one areas: **four closed, seventeen partial, none untouched.** Every area has now been
-opened; none has been exhausted.
+twenty-one areas: **four closed, sixteen partial, one — error handling and empty states —
+never given a pass of its own.** No area has been exhausted.
 
 The honest headline has not changed since the first pass: **the two apps agree far more than
 they differ, and where they differ it is almost never in the business rules.** Every constant
@@ -119,8 +119,8 @@ whose code comment quotes the audit's own worked example (finding 3). The fixes 
 scheduling anything from them.
 
 What is *not* established: no test suite was run on either platform, and nothing here is
-runtime-verified. Seventeen areas are partial — the ledger's Notes column names what was left
-in each, and *Not covered* ranks where a follow-up should start.
+runtime-verified. Sixteen areas are partial and one was never swept — the ledger's Notes
+column names what was left in each, and *Not covered* ranks where a follow-up should start.
 
 ## Findings
 
@@ -1436,9 +1436,13 @@ timestamps. **Verified compatible.** One residual is carved out as lead L-2 belo
 
 ## Not covered
 
-**Of twenty-one areas: four closed, seventeen partial, none untouched.** Every area has been
-opened; none has been exhausted. "Closed" means the area's central question was answered, not
-that every file was read — each ledger row names what was deliberately left.
+**Of twenty-one areas: four closed, sixteen partial, one never swept.** "Closed" means the
+area's central question was answered, not that every file was read — each ledger row names
+what was deliberately left. The one area with no pass of its own is **19, error handling and
+empty states**: it has only adjacent evidence (error *classification* matches per V-4,
+duplicate-write copy matches verbatim per V-8, inbox failure policy matches per L-7), and the
+actual work — comparing what each app shows on network failure, empty results, signed-out and
+rate-limited states — was not done.
 
 **Read closely** (findings rest on these): folder sync and backup on both sides
 (`FolderSyncService.swift`, `KudosBackup.swift` manifest/encoder/merge regions;
@@ -1461,9 +1465,9 @@ settings done; themes, TOC, in-reader search, annotations and TTS not), area 12 
 only), area 16 (backup payload only, not the Settings screens), area 20 (touch targets and
 density only), area 21 (suite shape and one per-rule instance only).
 
-**Thinnest coverage** (opened, but only one question each answered): area 19 (error handling
-and empty states) has had *no* dedicated sweep — only adjacent evidence from V-4, V-8 and L-7;
-area 1 (onboarding) has its gating verified but none of its copy; area 5 (browse) resolved only
+**Thinnest coverage:** area 19 (error handling and empty states) had no dedicated sweep at
+all — only adjacent evidence from V-4, V-8 and L-7. Then, opened but with only one question
+each answered: area 1 (onboarding) has its gating verified but none of its copy; area 5 (browse) resolved only
 the local-indicator question. Within better-covered areas, notable omissions: the
 collection/queue/annotation merge bodies, ZIP container internals, PDF and plain-text
 converters, the EPUB builder's output, text-encoding detection, the download queue, tag
