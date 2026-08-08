@@ -404,22 +404,32 @@ hard-coded placeholder.
   **is** dead: `:1144-1146`'s "Inbox not available yet" only renders when
   `inboxRepository == null || commentRepository == null`, and `app/KudosAppContainer.kt:162`
   provides `inboxRepository` via a non-null `by lazy`, so Android's Inbox is genuinely native
-  and that string is unreachable. (b) that Android lacks the plumbing for series — it has
-  `network/ao3/series/AO3SeriesRepository.kt` and `AO3SeriesUrls.kt`, already wired into
-  `KudosAppContainer`, `ReadingQueueRepository`, `DownloadQueue` and `WorkDetailScreen`
-  (established under finding 12). What is missing is narrow and specific: `AO3SeriesUrls`
-  builds `/series/<id>` page URLs only, and `grep -rn "users/.*series"` across the tree
-  returns nothing, so there is no `/users/<name>/series` URL to list *an account's* series.
+  and that string is unreachable. (b) that Android lacks the plumbing for series — it does not.
+
+  > **Correction (made while reviewing area 8).** I first wrote here that Android has no
+  > `/users/<name>/series` URL, citing `grep -rn "users/.*series"` returning nothing. **That
+  > was wrong** — the grep only matched literal path strings, and Android builds the URL from
+  > path segments. `network/ao3/author/AO3AuthorUrls.kt:66-78` is
+  > `userSeriesUrl(username, page, pseud)`, which composes
+  > `/users/<name>[/pseuds/<p>]/series?page=N` — exactly the URL I said was absent. It is
+  > already used: `AO3AuthorModels.kt:25` exposes it as a route property, and
+  > `AO3AuthorRepository.loadSeries` drives the author profile's Series tab (finding 12).
+  >
+  > This makes the finding **stronger**, not weaker. Every piece exists — URL builder,
+  > repository, parser (`AO3AuthorSeriesPage`), and a working list UI on another screen. The
+  > Account → Writing → Series tab is a pure wiring gap, not missing capability.
 - **History:** not recorded. Neither placeholder has a `TASKS.md` ID; both are "later"
   promises with no owner.
 - **Recommendation:** Android moves on both, and the second is nearly free. **Drafts first:**
   replace the dead card with the same web-fallback pattern the app already uses elsewhere —
   `navController.navigate(Routes.webFallback(...))` to `works/drafts`, matching iOS's
   `AccountExternalNavCard` exactly. That is one composable and restores the capability.
-  **Series** needs a `/users/<name>/series` URL plus a parser, but `AO3AuthorParser` already
-  parses series *summaries* from an author profile (`AO3AuthorSeriesPage`, seen under finding
-  12), so the list shape exists — this is closer to wiring than to new work. Pair it with
-  finding 12, which is the other half of Android's series story.
+  **Series** needs no new network code at all: `AO3AuthorUrls.userSeriesUrl`
+  (`:66-78`) already builds the account-series URL including the pseud variant, and
+  `AO3AuthorRepository.loadSeries` already renders that exact list on the author-profile
+  screen. The Account tab needs to call the code that is already running one screen away.
+  Pair it with finding 12, which is the other half of Android's series story — together they
+  are one afternoon's wiring, not a feature build.
 
 ### 22. AO3's per-preference help text is shown on iOS and unreachable on Android — `gap` · Account / AO3 preferences
 
