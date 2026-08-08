@@ -310,7 +310,9 @@ fun statusChips(
     rating: String,
     categories: List<String>,
     warnings: List<String>,
-    isComplete: Boolean?
+    isComplete: Boolean?,
+    /** The host card is showing its full detail. Only the category chip changes. */
+    expanded: Boolean = false
 ): List<WorkStatItem> {
     val chips = mutableListOf<WorkStatItem>()
 
@@ -323,8 +325,20 @@ fun statusChips(
         )
     }
 
-    val named = categories.filter { it.isNotBlank() }
-    if (named.isEmpty()) {
+    val named = categories.filter { it.isNotBlank() && AO3StatusTint.category(it) != null }
+    if (named.size > 1 && !expanded) {
+        // AO3's own rule, verified live on 2026-08-07: its blurb draws
+        // `category-multi` for *any* work with more than one category, whether or
+        // not the literal "Multi" tag is among them — `F/F, M/M` and `Gen, M/M`
+        // both get it. One chip keeps a collapsed card glanceable; expanding
+        // spells them out, which is what AO3's own work page does.
+        chips += WorkStatItem(
+            text = "Multi",
+            accessibilityLabel = "Categories: ${named.joinToString(", ")}",
+            icon = Icons.Outlined.People,
+            tint = AO3StatusTint.category("Multi")
+        )
+    } else if (named.isEmpty()) {
         chips += WorkStatItem(
             text = "N/A",
             accessibilityLabel = "Category: not categorized",

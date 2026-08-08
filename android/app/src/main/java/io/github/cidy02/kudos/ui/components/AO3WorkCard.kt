@@ -196,7 +196,8 @@ fun AO3WorkCard(
                     rating = work.rating,
                     categories = work.categories,
                     warnings = work.warnings,
-                    isComplete = work.isComplete
+                    isComplete = work.isComplete,
+                    expanded = expanded
                 )
             )
 

@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.ui.components
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,10 +68,17 @@ class WorkStatusChipsTest {
         assertTrue(texts(isComplete = null).contains("Unknown"))
     }
 
+    /**
+     * Was `aMultiCategoryWorkGetsAChipEach`, asserting a chip per category. A
+     * collapsed card now folds them into one "Multi", matching what AO3's own
+     * blurb does — see [CategoryChipTest] for the live measurements behind the
+     * rule and for the expanded case.
+     */
     @Test
-    fun aMultiCategoryWorkGetsAChipEach() {
+    fun aMultiCategoryWorkGetsOneChipOnACollapsedCard() {
         val chips = texts(categories = listOf("F/F", "M/M"))
-        assertTrue(chips.contains("F/F"))
-        assertTrue(chips.contains("M/M"))
+        assertTrue(chips.contains("Multi"))
+        assertFalse(chips.contains("F/F"))
+        assertFalse(chips.contains("M/M"))
     }
 }
