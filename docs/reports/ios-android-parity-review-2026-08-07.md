@@ -17,18 +17,13 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Finish area 14. The `SyncMerge` decision core is done and verified
-identical (V-1); what remains is the *per-entity merge bodies* that call it. The specific
-next action: read `backup/BackupMergeService.kt:176-284` (`mergeWork`) against the
-corresponding iOS work-merge in `Services/KudosBackup.swift` (the `SyncMerge.shouldApplyIncoming`
-call sites are at `:1276`, `:1397`, `:1471`, `:1622`) and compare the *field-level* rules
-the two apply once a winner is chosen — specifically Android's
-`hasEpub = existing.hasEpub || restored.hasEpub`, `isSaved = … || (existing.hasEpub || restored.hasEpub)`,
-`dateAdded = minInstant(…)` and `lastModifiedAt = maxInstant(…)` at `:190-197`. Those OR/min/max
-rules are where a faithful-looking port can still diverge, and they decide whether a
-restore can lose a local EPUB.
+**Resume here:** Area 2 (auth / session / cookies) — start with where each platform stores
+the AO3 session cookie (iOS `Services/AO3SessionVault.swift` vs Android
+`auth/AO3SessionStore.kt` / `AO3CookieStore.kt`), since a weaker store on one side is a
+privacy finding, then compare logout (what each actually clears) and session-expiry
+detection.
 
-**Then:** areas 2–13, 15, 16, 18–20 are untouched. Read *Not covered* before planning —
+**Then:** areas 1, 3–13, 16, 18–20 are untouched. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -56,8 +51,8 @@ that fan-out shape; work areas serially and commit each one.
 | 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ⬜ not started | – | |
-| 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | 🔄 in progress | 2 + 1 minor (+1 ruled out, +1 verified, +1 lead) | **Done:** manifest version range, manifest field set, date encoding (R-1), folder-sync write path (findings 1 & 2), `SyncMerge` conflict/tombstone rules (V-1). **Not done:** the rest of `BackupMergeService.kt` (the per-entity merge bodies — works `:176-284`, collections, queues, annotations), ZIP container details, `BackupImporter`/`BackupExporter` restore path |
-| 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ⬜ not started | – | |
+| 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
+| 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | 🔄 in progress | 1 (finding 5) | `SavedWork` (64 stored) vs `WorkEntity` (46 cols) diffed mechanically → finding 5. Migration safety verified (V-2). **Not done:** the other 8 entities, type-converter round trips, DAO query semantics |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | ⬜ not started | – | |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ⬜ not started | – | |
@@ -195,6 +190,70 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 5. A backup that round-trips through Android comes back to iOS with EPUB preservation state erased — `real-bug` · Persistence + backup
+
+Android decodes nine optional iOS work fields, has no Room column for any of them, and does
+not re-emit them on export. The archive is therefore lossy in one direction, and the loss is
+silent because `explicitNulls = false` removes the keys rather than writing nulls.
+
+- **iOS:** `Models/Models.swift` `SavedWork` stores all of them. On import,
+  `Services/KudosBackup.swift:561-564` decodes a **missing** `epubPreservationStatusRaw` as
+  `EPUBPreservationStatus.notPreserved.rawValue`, and `:565-568` decodes a missing
+  `metadataSyncStatusRaw` as `MetadataSyncStatus.unknown.rawValue`. The merge at `:1973-1975`
+  then applies it: `if incomingWins || work.epubPreservationStatus == .notPreserved {
+  work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw }`. On a fresh restore
+  `incomingWins` is forced true (`:1895`, `isNewRecord ||…`), so the substituted default wins.
+- **Android:** `data/local/entity/WorkEntity.kt` has 46 columns and none of these. The export
+  mapper `backup/BackupMappers.kt:72-121` (`toBackupWork`) never mentions them, so each falls
+  back to its `BackupWork` default — `null` — and `backup/BackupJson.kt`'s
+  `explicitNulls = false` drops the key from the JSON entirely.
+- **Divergence:** iOS→Android→iOS is not identity. Fields lost outright:
+  `epubPreservationStatusRaw`, `metadataSyncStatusRaw`, `preservedAt`,
+  `lastPreservationAttemptAt`, `assetIdentifier`, `datePublished`, `dateUpdated`,
+  `ao3SeriesID`. (`bookmarks` is also absent but is the known T-193 divergence, not counted
+  here.) **Two degrade rather than vanish, and it is only fair to say so:** `createdAt`
+  falls back to `dateAdded` at `:1900`, and `ao3WorkID` self-heals because
+  `:1966` re-derives it — `work.ao3WorkID ?? archived.ao3WorkID ?? WorkTags.ao3WorkID(from:
+  archived.sourceURL)`.
+- **Scenario:** an iPhone user has preserved 200 works — `epubPreservationStatus == .preserved`,
+  which is the whole point of the preservation feature. They back up, restore on a new
+  Android phone, use it for a month, then move back to iOS and restore Android's backup onto
+  a clean install. Every work returns with `epubPreservationStatus == .notPreserved` and
+  `metadataSyncStatus == .unknown`, despite the EPUBs themselves being present in the archive
+  and restored correctly. AO3 publication and update dates are blank, series IDs are gone.
+  Nothing warns the user, and there is no way to tell the restored state from a library that
+  was never preserved. The clean-install case is the one that matters: with an existing local
+  record, `newest(work.preservedAt, archived.preservedAt)` at `:1978-1982` keeps the local
+  value, so the loss only bites in exactly the disaster-recovery scenario backups exist for.
+- **Evidence:** derived the column/field diff mechanically rather than by eye — extracted
+  stored (not computed) `var`s from `SavedWork` and `val`s from `WorkEntity` and set-differenced
+  them: 64 stored iOS properties against 46 Room columns. Then read `toBackupWork`
+  (`BackupMappers.kt:72-121`) in full to confirm the export omission, and the iOS decode
+  defaults at `KudosBackup.swift:555-575` to confirm what a missing key becomes.
+  Ruled out: (a) that `BackupValidator` carries unknown work fields through — its
+  carry-through comment and `manifest.copy(...)` cover *queues, annotations and tombstones*
+  only, and in any case that path runs during **import**, so it cannot survive a trip through
+  a Room database that has no column; (b) that the fields are recovered by a later AO3 refresh
+  — `epubPreservationStatusRaw` and `preservedAt` describe local file state, which no network
+  refresh restores; (c) that iOS ignores a missing key instead of substituting — it does not,
+  the `?? …notPreserved.rawValue` is explicit.
+- **History:** partially acknowledged, in a way that makes the gap sharper.
+  `backup/BackupManifest.kt:97` labels this exact block "Apple v5–v8 optional work fields
+  (ignored for local model until ported)" — so the *decode* side is a conscious deferral. But
+  `backup/BackupValidator.kt:130-131` shows the team already understands the round-trip
+  hazard and solved it elsewhere: "Queues/annotations/tombstones are applied by
+  BackupMergeService; carry them through here unchanged **so re-export doesn't drop
+  anything**." Work fields never got that treatment. No `TASKS.md` ID covers it.
+- **Recommendation:** Android moves, and it does not need 9 new columns to do it. The cheap
+  fix matching the pattern the codebase already uses: add one `unmappedFieldsJson` TEXT column
+  to `WorkEntity`, stash the undecoded remainder on import, and splice it back in
+  `toBackupWork` — preserving every present and future iOS field for the cost of one column
+  and one migration. Porting the fields properly is the better long-term answer for the two
+  that drive UI (`datePublished`, `dateUpdated`) and the preservation trio, but the
+  pass-through is what stops the bleeding now. Either way this wants the round-trip test that
+  does not exist on either platform: export → import → export → assert the two manifests are
+  equal.
 
 ### 4. Restoring an iOS backup on Android converts every queue-only work into a saved library item — `real-bug` · Backup / restore
 
@@ -549,6 +608,29 @@ backup restore." Nothing is wrong today. The risk is that a future change to the
 side that adds an export-time parameter looks like a reasonable improvement and silently
 reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being one
 comment, not one line of code.
+
+---
+
+### V-2 — Android's Room migration story is safe, and no destructive fallback exists
+
+The review prompt flags `fallbackToDestructiveMigration` as a data-loss blocker if reachable
+in a release build. It is not present:
+`grep -rn "fallbackToDestructiveMigration|allowMainThreadQueries"` across the whole Android
+source root returns **zero hits**. `data/local/KudosDatabase.kt:44-45` declares
+`version = 7, exportSchema = true`, and `data/local/KudosDatabaseMigrations.kt` provides an
+explicit, hand-written `Migration` object for every step — `MIGRATION_1_2` (`:20`),
+`2_3` (`:159`), `3_4` (`:173`), `4_5` (`:181`), `5_6` (`:192`), `6_7` (`:199`). Six
+migrations covering versions 1→7 with no gaps, so an existing user's database is carried
+forward rather than recreated.
+
+The comparison to iOS is not symmetric and should not be forced: SwiftData performs
+lightweight migration implicitly from the model definitions, so there is no iOS artefact to
+diff against these. The correct parity statement is that both platforms preserve an
+upgrading user's data, by different mechanisms — which is a platform-idiom difference, not
+drift. Note also `data/local/converters/KudosTypeConverters.kt:31-38`, which degrades a
+corrupt JSON list column to `emptyList()` rather than throwing, with a comment explaining
+that one bad row must not take down every query touching the column. That is defensive
+behaviour iOS has no equivalent of, and it is a point in Android's favour rather than a gap.
 
 ---
 
