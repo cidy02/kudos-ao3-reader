@@ -50,7 +50,7 @@ that fan-out shape; work areas serially and commit each one.
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 4 (8, 9, 20, 21) | Progress locator + fallback (V-6, 8); settings field set/defaults/clamps (V-7, 9); colour themes → findings 20 and 21. **Not done:** TOC building, in-reader search, annotations/highlights, TTS |
-| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9, V-14) | Statistics verified identical formula-for-formula (V-9); Recently Deleted retention window verified 90 days on both (V-14); queue-only cleanup verified via L-4. **Not done:** shelf predicates (which work appears on which shelf), collections, queue ordering/reorder |
+| 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ✅ done | 1 (finding 25) | Statistics identical (V-9); retention window identical (V-14); queue-only cleanup verified (L-4); all seven shelf predicates + sorts compared → finding 25 (3 diverge, 4 match). **Deliberately not read:** collection CRUD and queue drag-reorder, which are local-only UI with no cross-platform contract |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 1 (finding 22) | The four AO3 account-list types match (V-8); inbox malformed-row policy matches (L-7); preferences snapshot structure compared → finding 22 (help text) and a dead-code find folded into finding 19. **Not done:** the preferences *write* path (which toggles can be POSTed back), dashboard |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation (V-8), author notes → finding 10, text-encoding chain verified identical incl. the BOM-gate trap (V-14). **Not done:** PDF/TXT converter output, EPUB builder OPF/NCX, download queue |
@@ -259,6 +259,72 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 25. Three Library shelves select or order different works on each platform — `real-bug` · Library
+
+Four of the seven shelves match exactly. Three do not, and the History divergence is not a
+near-miss — the two platforms show **disjoint sets of works** under the same name.
+
+iOS `Features/Library/LibrarySectionKind.swift:77-114` against Android
+`library/LibraryQuery.kt:110-144`:
+
+| Shelf | iOS predicate / sort | Android predicate / sort | |
+|---|---|---|---|
+| Reading Now | `readingState == .inProgress` | `isInProgress` | ✅ identical — iOS's `readingState` resolves `.inProgress` to `!isFinished && hasEPUB && hasStartedReading` (`Models.swift:448-458`), Android's is `hasEpub && !isFinished && hasStartedReading` (`SavedWork.kt:90-91`) |
+| Finished | `readingState == .finished` / `lastReadDate` desc | `isFinished` / `lastReadComparator` | ✅ identical |
+| Downloaded | `hasEPUB` / `dateAdded` desc | `hasEpub` / `dateAdded` desc, then title | ✅ same set; Android adds a title tie-break iOS lacks, which is a stability improvement, not drift |
+| Collections | `[]` (rendered separately) | separate list, name-sorted | ✅ equivalent |
+| **History** | `!hasEPUB && !isQueuedForLater` | `lastReadDate != null` | ❌ **different sets** |
+| **Saved for Later** | `isInSavedForLaterQueue \|\| (isSaved && !isQueuedForLater)` | `isSaved` | ❌ |
+| **Favorites** | `isFavorite` / **`dateAdded` desc** | `isFavorite` / **`LastRead`** | ❌ same set, different order |
+
+**History is the serious one.** iOS's shelf is the *freed-EPUB* shelf — its comment
+(`:104-108`) says "Works whose EPUB was freed after finishing (revisitable by
+re-downloading)", and it deliberately excludes queued works whose preservation is pending so
+the partition matches "the old Account-tab Local Reading History list". Android's is an
+*opened-ever* shelf. Concretely: a work you are reading right now, with its EPUB on disk,
+appears in Android's History and **cannot** appear in iOS's; a finished work whose file you
+freed appears in iOS's History and appears in Android's **only if** it was ever opened.
+Under one label, two different concepts.
+
+**Saved for Later** is the queue-only question again. iOS deliberately routes queue-only
+works here — `:86-88` says "Queue-only works intentionally live here, not in the normal
+downloaded/finished shelves". Android cannot: `library/LibraryQuery.kt:22` strips them from
+the entire library up front (`savedItems.filter { !it.work.isQueueOnlyWork }`), so a
+queue-only work appears on **no Android shelf at all**. This is the display-side counterpart
+to finding 4, which is the restore-side one.
+
+**Favorites** differ only in order, but visibly: iOS shows most-recently-added first, Android
+most-recently-read first. A user who favourites something and does not open it sees it at the
+top on iPhone and buried on Android.
+
+- **Scenario:** a user with 40 finished works, 12 of whose EPUBs they have freed, opens
+  Library → History. iPhone: 12 works, the ones they could re-download. Android: every work
+  they have ever opened, ~35 of them, including the one currently open in the reader. Neither
+  is wrong as a feature; they are different features wearing one name, so the same user's two
+  devices disagree about what History means.
+- **Evidence:** read both shelf definitions in full and resolved every predicate to its
+  underlying fields, including `readingState` (`Models.swift:448-452`) and both
+  `isInProgress` definitions, which is what let me confirm the four matching rows rather than
+  assuming them. Ruled out: (a) that Android's global queue-only pre-filter also explains the
+  History difference — it does not, the predicates differ independently
+  (`lastReadDate != null` vs `!hasEPUB`); (b) that the favorites sort is the user's chosen
+  sort rather than a shelf default — it is a hard-coded `LibrarySort.LastRead` argument at
+  `LibraryQuery.kt:46-49`; (c) that iOS's History is the odd one out and Android matches the
+  old Account list — iOS's comment claims that lineage explicitly and Android's has no such
+  note.
+- **History:** not recorded. The `isSaved`-gates-the-Library cluster in
+  `docs/audits/ANDROID_PARITY_REPORT.md:247` is adjacent but distinct — it is about
+  `observeSavedWorks` filtering, not about these predicates, and no document mentions History
+  or the favorites sort.
+- **Recommendation:** Android moves on History and Favorites; **Saved for Later needs a
+  product decision first.** History and Favorites are direct ports — change
+  `readingHistory` to `!hasEpub && !isQueuedForLater` and the favorites sort to
+  `RecentlyAdded`. Saved for Later is entangled with `LibraryQuery.kt:22`: Android's
+  pre-filter is defensible on its own terms (its comment at `:16-21` explains it is enforcing
+  a precondition rather than trusting callers), but it makes iOS's "queue-only works live in
+  Saved for Later" rule unimplementable. Deciding whether Android adopts that rule is the
+  same decision as finding 4's, and the two should be resolved together.
 
 ### 24. iOS's empty-state titles use two capitalisation conventions at once — `minor` · Error handling / empty states · **iOS-side**
 
