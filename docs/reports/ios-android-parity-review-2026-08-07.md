@@ -49,7 +49,7 @@ that fan-out shape; work areas serially and commit each one.
 | 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | 🔄 in progress | 0 | Gating + state model match: both gate on `hasCompletedOnboarding`, both run Welcome → sync-folder, both keep a separate permanent-dismissal flag for the second step (iOS `ContentView.swift:35-41`, Android `KudosApp.kt:101-175`). **Not done:** the screens' copy, illustrations and step content |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
-| 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
+| 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params (7); `required-tags` parser trap (V-5); SavedSearch round trip verified lossless (V-13). **Not done:** tag autocomplete endpoint/debounce, result pagination |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | `BrowseLocalIndicators` mapping question resolved — it genuinely has no iOS counterpart → finding 14. **Not done:** category list/ordering, fandom counts parsing, catalog cache TTL, WebView-fallback policy, `CategoryStats` mapping |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
@@ -968,9 +968,12 @@ silent because `explicitNulls = false` removes the keys rather than writing null
   hazard and solved it elsewhere: "Queues/annotations/tombstones are applied by
   BackupMergeService; carry them through here unchanged **so re-export doesn't drop
   anything**." Work fields never got that treatment. No `TASKS.md` ID covers it.
-- **Recommendation:** Android moves, and it does not need 9 new columns to do it. The cheap
-  fix matching the pattern the codebase already uses: add one `unmappedFieldsJson` TEXT column
-  to `WorkEntity`, stash the undecoded remainder on import, and splice it back in
+- **Recommendation:** Android moves, and it does not need 9 new columns to do it. **The
+  codebase already contains a working precedent for the cheap fix** — see V-13: saved-search
+  filters are stored as an opaque `filtersJson` string and re-emitted verbatim
+  (`backup/BackupMappers.kt:271, 280`), so iOS-only filter keys survive an Android round trip
+  untouched. Apply the same shape here: add one `unmappedFieldsJson` TEXT column to
+  `WorkEntity`, stash the undecoded remainder on import, and splice it back in
   `toBackupWork` — preserving every present and future iOS field for the cost of one column
   and one migration. Porting the fields properly is the better long-term answer for the two
   that drive UI (`datePublished`, `dateUpdated`) and the preservation trio, but the
@@ -1439,6 +1442,37 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-13 — saved searches round-trip losslessly through Android, including filters Android cannot itself use
+
+This is the counter-example to finding 5, in the same codebase, and it is why that finding's
+recommendation is cheap rather than speculative.
+
+`SavedSearch` matches on both sides — iOS `Models/SavedSearch.swift` (`id`, `name`,
+`dateAdded`, `filters`) against Android `data/local/entity/SavedSearchEntity.kt` (`id`,
+`name`, `dateAdded`, `filtersJson`). The interesting part is how Android treats the filter
+payload, which is where finding 7's 37-vs-23 field gap should have caused data loss:
+
+- **Storage is opaque.** Android keeps the filters as an unparsed JSON string. Import does
+  `filtersJson = filters.toString()` (`backup/BackupMappers.kt:280`); export does
+  `filters = filtersJson.toJsonObjectOrEmpty()` (`:271`). Neither goes through a typed model,
+  so **keys Android has no field for are carried through untouched**.
+- **Parsing happens only at point of use.** `search/SearchFiltersCodec.kt:39-46` decodes into
+  a DTO with `ignoreUnknownKeys = true` when Android actually needs to *run* the search.
+- **The codec was written for cross-platform compatibility on purpose.** Its KDoc (`:21-26`)
+  states that "Enum cases use Apple's camelCase raw values (`appleCaseName`) so the JSON is
+  semantically compatible with Swift `AO3SearchFilters` Codable payloads", and iOS's
+  `CodingKeys` (`Models/AO3Models.swift:253-260`) confirm the shared names line up.
+
+So a search saved on iPhone with `kudosFrom: 1000` and `sortDirection: asc`, restored on
+Android and re-exported, arrives back on iOS **with both values intact**.
+
+The honest caveat, which is finding 7's consequence rather than a new defect: while that
+search sits on the Android device, *running* it silently ignores those two filters, because
+`AO3SearchUrlBuilder` has no parameter to emit for them. The stored data is faithful; the
+executed query is narrower than the user saved. A user who saved "1000+ kudos, oldest first"
+on their phone gets an unfiltered, newest-first result set on their tablet, with the saved
+search still displaying its original name.
 
 ### V-12 — Home and Work Detail agree on the things most likely to drift: predicates, caps, order, and labels
 
