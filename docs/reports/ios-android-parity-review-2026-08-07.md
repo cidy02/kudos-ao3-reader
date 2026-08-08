@@ -53,7 +53,7 @@ that fan-out shape; work areas serially and commit each one.
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ✅ done | 1 (finding 25) | Statistics identical (V-9); retention window identical (V-14); queue-only cleanup verified (L-4); all seven shelf predicates + sorts compared → finding 25 (3 diverge, 4 match). **Deliberately not read:** collection CRUD and queue drag-reorder, which are local-only UI with no cross-platform contract |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ✅ done | 2 (22, 23) | Account list types (V-8); inbox policy (L-7); preferences snapshot → 22, write path verified equivalent (V-15); Writing tabs → 23. Inbox confirmed genuinely native on Android |
-| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation (V-8); author notes → 10; text decoding identical incl. the BOM trap (V-14); PDF divergence confirmed known-and-reasoned (V-15). **Not done:** EPUB builder output compared field-by-field, download queue |
+| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ✅ done | 2 (10, 27) | HTML sanitisation (V-8); author notes → 10; text decoding identical incl. the BOM trap (V-14); PDF divergence known-and-reasoned (V-15); EPUB OPF metadata → 27. **Deliberately not read:** the download queue, which is scheduling rather than conversion |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload 21/21 (V-7); theme enums and restore validation → 20, 21; all four `BackupValidator` allowlists audited (2 stale, 2 correct). **Not done:** the Settings *screens* and per-setting wording |
@@ -260,6 +260,72 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 27. Every EPUB Android builds shares one identifier, claims English, and carries no author — `real-bug` · Import / conversion
+
+`works/converters/EpubBuilder.kt` is Android's **only** EPUB writer — used by all four
+converters (`PDFWorkConverter.kt:51`, `HTMLWorkConverter.kt:20`,
+`PlainTextWorkConverter.kt:17`, `ArchiveWorkConverter.kt:40`), so every locally converted
+work goes through it. Its OPF metadata block is three hard-coded-ish lines.
+
+- **Android** (`works/converters/EpubBuilder.kt:62-68`), in full:
+  ```
+  <dc:title>${title…}</dc:title>
+  <dc:language>en</dc:language>
+  <dc:identifier id="pub-id">urn:uuid:12345</dc:identifier>
+  ```
+- **iOS** (`Reading/EPUBBuilder.swift:157-168` and `:154-155`) emits seven Dublin Core
+  elements: `dc:identifier` (from `metadata.identifier`, documented at `:37` as "Injectable so
+  tests can pin it and so a re-conversion" is stable), `dc:title`, `dc:language` (from
+  `metadata.language`, falling back to `"en"` only when empty), `dc:creator` (`:164`, when the
+  author is known), `dc:description` (`:167`, the summary), `dc:source` (`:30-34`, the AO3/FFN
+  story URL), `dc:subject` per tag (`:155`), plus a `dcterms:modified` timestamp.
+
+**Three distinct defects, in descending order of consequence:**
+
+1. **`dc:identifier` is the literal string `urn:uuid:12345` on every book.** EPUB's
+   `unique-identifier` is the publication's identity. Every EPUB Android has ever built
+   declares the same one, so any consumer that keys on it — another reader app, a Calibre
+   library, Readium's own publication identity — sees one book wearing many titles. This is
+   the reverse of iOS, which makes the identifier injectable precisely so a re-conversion of
+   the same work is stable *and* distinct.
+2. **`dc:source` is absent, so an Android-converted file can never resolve back to AO3.**
+   iOS's comment at `:30-33` states the mechanism: `dc:source` is what
+   "`AO3EPUBMetadataScanner` and `WorkTags.ao3WorkID(from:)` both read it back out on import,
+   which is how a converted file can still resolve to an AO3 identity." That read-back is
+   live — `Services/WorkImporter.swift:48` and `:90` both call
+   `WorkTags.ao3WorkID(from: … sourceURL)`. An Android-built EPUB imported on iOS therefore
+   arrives permanently orphaned from its AO3 work: no kudos, no chapter updates, no metadata
+   refresh.
+3. **`dc:language` is hard-coded `en`, and `dc:creator` / `dc:description` / `dc:subject` are
+   never written.** A converted work opens in any third-party reader with no author, no
+   summary, no tags, and mislabelled as English regardless of the actual language — which
+   also affects hyphenation and text-to-speech voice selection in readers that honour it.
+
+- **Scenario:** a user converts three fics from PDF on their Android phone and shares the
+  EPUBs to Apple Books or Calibre. All three show "Unknown author", no description, and —
+  because they share `urn:uuid:12345` — a library that de-duplicates on identifier may treat
+  them as one book with three titles. Re-importing any of them into Kudos on iPhone produces
+  a work with no AO3 link, so the chapter-update checker and metadata refresh never fire for it.
+- **Evidence:** read both OPF generators in full and extracted their emitted elements
+  mechanically (`grep -rhoE "dc:[a-z]+"` over each, giving 7 vs 3). Confirmed Android has no
+  second writer — `grep -rln "content.opf"` across the Android source root returns
+  `EpubBuilder.kt` alone — and enumerated its four call sites. Ruled out: (a) that Android
+  fills the metadata after the build, on the `SavedWork` record instead — that would fix the
+  *library* display but not the file, and the finding is about the artefact the user exports
+  and re-imports; (b) that the container itself diverges — it does not, both write EPUB 3.0
+  under `OEBPS/` with `application/epub+zip` and a `version="1.0"` container, so this is
+  metadata only; (c) that `urn:uuid:12345` is a test fixture leaked into a snippet — it is
+  the production string literal in the only builder, with no parameter to override it.
+- **History:** not recorded anywhere. No `TASKS.md` row and nothing in the Android branch's
+  `docs/` mentions OPF metadata.
+- **Recommendation:** Android moves, and defect 1 is a two-line fix that should not wait —
+  generate a real `UUID.randomUUID()` (or derive one deterministically from the work id, which
+  additionally gives iOS's re-conversion stability). Then thread the metadata that already
+  exists on the `SavedWork` into `buildEpub`: author → `dc:creator`, summary →
+  `dc:description`, `sourceUrl` → `dc:source`, `workTags` → `dc:subject`, `language` →
+  `dc:language`. `dc:source` is the highest-value of those because it is load-bearing for
+  cross-platform identity, not just display.
 
 ### 26. Annotations render as the wrong kind and the wrong colour across platforms — `real-bug` · Reader
 
