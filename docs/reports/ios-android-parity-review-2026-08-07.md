@@ -8,7 +8,7 @@
 > prompt cites, so this is the intended tree under a different branch label.
 
 **Method:** see *Method log* at the foot of this file. Updated as work proceeds.
-**Status:** in progress
+**Status:** complete — all 21 areas closed. See *Not covered* for what each area deliberately left, and for the two questions that need a running app.
 
 **Confirmed sizes** (`find | wc -l`, run 2026-08-07): iOS 214 Swift sources + 85 test
 files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figures.
@@ -17,12 +17,12 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** the **empty-state sweep** (area 19's remaining half) — for each list screen,
-compare what iOS shows against what Android shows when the list is legitimately empty rather
-than errored. iOS centralises much of this (`HomeSectionKind.emptyMessage`,
-`EmptyStateCard` equivalents); Android has `EmptyStateCard` (seen at
-`author/AuthorProfileScreen.kt:298`). Start by enumerating both platforms' empty-state strings
-and diffing them, the same way finding 16 was found by diffing error copy.
+**Resume here:** nothing is outstanding — all 21 areas are closed. The highest-value next
+actions are **verification, not more reading**: (1) settle lead L-2 on a device, since it
+could abort an entire iOS import; (2) run `Scripts/verify.sh` and `android/Scripts/verify.sh`,
+neither of which this review ran; (3) start fixes with the four one-line wiring items —
+findings 12, 15, 21 and 23's drafts half — which together close four user-visible defects for
+about a dozen lines.
 
 **Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
 See *Not covered* for the full breakdown and for the standing warning about the Android
@@ -69,71 +69,69 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-Twenty-two confirmed findings, fourteen verified "no divergence" results, seven leads (five
-since resolved), one ruled out. Of twenty-one areas: **ten closed, eleven partial, none
-untouched.**
+Twenty-eight confirmed findings, sixteen verified "no divergence" results, seven leads (five
+resolved), one ruled out. **All 21 areas closed** — "closed" meaning each area's central
+questions were answered and what was deliberately left is named in its ledger row.
 
-The honest headline has not changed since the first pass: **the two apps agree far more than
-they differ, and where they differ it is almost never in the business rules.** Every constant
-in the binding networking policy matches to the digit (V-4). The backup merge core is
-semantically identical function for function, including the deliberate asymmetry where a tie
-applies an incoming edit but does *not* revive a deleted record (V-1). All nine reading
-statistics compute identically, formula for formula (V-9) — the area I expected to be worst.
-Write endpoints match down to the verbatim sentence shown when you kudos twice (V-8). The
-settings payload matches 21 fields for 21 (V-7); the Recently Deleted window is 90 days on
-both. Where someone sat down and ported a rule, they ported it correctly.
+The headline held from the first area to the last: **the two apps agree far more than they
+differ, and where they differ it is almost never in the business rules.** Every constant in
+the binding networking policy matches to the digit (V-4). The backup merge core is identical
+function for function, including a deliberate asymmetry where a tie applies an incoming edit
+but does not revive a deleted record (V-1). All nine reading statistics compute identically
+(V-9). Home's section predicates, sort keys, cap and collapse state all match (V-12). Text
+decoding is a faithful port down to the BOM-gate trap and its explanatory comment (V-14).
+Saved searches round-trip losslessly *including filters Android cannot itself use* (V-13).
+Where someone sat down and ported a rule, they ported it correctly.
 
-**The divergences cluster in four places instead.** *Around the edges of a correct rule*: the
-sync write is atomic on iOS and truncating on Android (1), the merge is faithful but one flag
-is OR'd rather than assigned (4) and another is never lowered (18), the archive is
-well-specified but nine fields do not survive a round trip (5). *Breadth* — Android implements
-a strict subset of iOS's surface: ten missing search parameters including sort direction (7),
-no author's-note handling (10), no touch-target floor on custom controls (11), no way to reach
-a commenter's profile (15). *The last mile of a feature that is otherwise built*: a series row
-that draws a ripple and does nothing (12), comment timestamps rendered as raw AO3 text (13),
-raw Kotlin error objects shown as user copy while a correct mapper sits unused in the same
-package (16), and offline never named as a state (17). And *staleness in the record rather
-than the code*: a hardcoded UA version that has already drifted (6), a contract doc asserting
-atomicity the code does not provide (1), and an audit corpus still listing closed work as open
-(3).
+**The divergences cluster in four shapes.**
 
-That third cluster is the most actionable, because in every case Android already has the
-hard part. The series repository, the commenter's `profileUrl`, four well-written error
-mappers, an author-profile destination — all present, none reached. Several of these are
-one-line wiring fixes in `AppNavHost` and one shared `displayMessage()`.
+*Around the edges of a correct rule* — the sync write is atomic on iOS and truncating on
+Android (1), one merge flag is OR'd rather than assigned (4) and another is never lowered
+(18), the archive drops nine work fields (5) and two settings fields (28) on export.
+
+*The last mile of a feature that is otherwise built* — and this is the largest and most
+actionable group, because in every case Android already has the hard part. A series row that
+draws a ripple and does nothing (12) though the URL builder, repository and parser all exist;
+a commenter's profile unreachable though its URL is parsed and stored (15); raw Kotlin error
+objects shown as user copy while four correct mappers sit in the same codebase, one of them
+unused in the very package that needs it (16); offline never named as a state (17); AO3's own
+per-preference help fetched and discarded (22); two Account tabs that announce their own
+absence (23). Several are one-line wiring fixes.
+
+*Hand-maintained constants drifting from the enums beside them* — a UA version a minor
+release behind (6), a clamp range never narrowed (9), and two theme allowlists missing a case
+their own exporter emits, which silently restores an OLED user into light mode (21). One
+structural fix — derive the lists from the enums — closes all three.
+
+*Presentation of user-created content* — comment timestamps as raw AO3 text (13), annotations
+rendering as the wrong kind and colour in both directions (26), and EPUBs built with one
+shared identifier and no author (27).
 
 Three things are worth carrying forward.
 
-**Defects clustered in untested *branches*, not untested files.** The tempting version of
-this — "Android is under-tested" — does not survive checking: Android's
-`BackupCompatibilityTest` is 1,327 lines and 41 tests covering merge precedence, tombstones
-and hostile input. Yet findings 4, 5 and 18 all live in files that suite exercises. Each sits
-in a corner it never reaches: `isSaved` is only ever seeded `true`, there is no
-export→import→export equality assertion, and `hasEpub` is tested for new works but not
-existing ones. The one clean case of the simple story is `SyncRepository.kt` (findings 1 and
-2), which has no test at all against iOS's 796-line folder-sync suite. See *Asymmetric test
-coverage* for the per-finding breakdown.
+**Defects clustered in untested *branches*, not untested files.** The tempting version — "Android
+is under-tested" — does not survive checking: `BackupCompatibilityTest` is 1,327 lines and 41
+tests. Yet findings 4, 5 and 18 all live in files it exercises, each in a corner it never
+reaches. The one clean case of the simple story is `SyncRepository.kt` (findings 1 and 2),
+which has no test at all against iOS's 796-line folder-sync suite.
 
-**The "iOS is the source of truth" convention was right in twenty cases and wrong in two.**
-Finding 8 (iOS discards a reading position it was handed) and finding 14 (Android marks
-already-saved works in browse; iOS cannot) are both places where Android *added* something
-rather than porting it, so a rule about not cutting iOS down simply does not apply. Two
-smaller results point the same way and are recorded without being filed: Android has zero
-hardcoded font sizes to iOS's 18 (V-14), and Android's `AO3RetryPolicy` blocks retries on any
-non-GET structurally where iOS relies on construction (V-4). It is a good default, not a law.
+**The "iOS is the source of truth" convention was right in twenty-six cases and wrong in two.**
+Findings 8 and 14 are places where Android *added* something rather than porting it, so a rule
+about not cutting iOS down does not apply. Three smaller results point the same way without
+being filed: Android has zero hardcoded font sizes to iOS's 18, blocks retries on any non-GET
+structurally, and enforces a politer autocomplete floor. Two findings are iOS-side outright
+(19, 24).
 
-**The Android branch's audit corpus should not be trusted as a work list.** Four clusters
-were spot-checked and all four were stale (finding 3), including one that assigns iOS a live
-medium-severity PDF defect that has since been fixed — one wrong in all three of its claims,
-including a fix whose code comment quotes the audit's own worked example, and another whose
-fix comment names the very iOS function the audit said had no counterpart. The fixes were
-evidently made *from* those reports and the reports were never marked resolved. Re-verify
-against the tree before scheduling anything from them.
+**The Android branch's audit corpus should not be trusted as a work list.** Four clusters were
+spot-checked and all four were stale (finding 3) — including one that assigns iOS a live
+medium-severity PDF defect it no longer has, and another whose fix comment names the very iOS
+function the audit said had no counterpart. The fixes were made *from* those reports and the
+reports were never marked resolved.
 
-What is *not* established: no test suite was run on either platform, and nothing here is
-runtime-verified. Eleven areas remain partial — the ledger's Notes column names what was left
-in each. The largest single omission is the **empty-state** half of area 19: findings 16 and
-17 cover error *copy*, not what each screen shows when a list is legitimately empty.
+**Not established:** no test suite was run on either platform and nothing here is
+runtime-verified. Two questions specifically cannot be closed by reading — lead L-2
+(`Instant.now()` precision, which could abort an entire iOS import) and the screen-reader
+half of accessibility (V-16).
 
 ## Findings
 
@@ -2555,62 +2553,46 @@ timestamps. **Verified compatible.** One residual is carved out as lead L-2 belo
 
 ## Not covered
 
-**Of twenty-one areas: four closed, seventeen partial, none untouched.** "Closed" means the
-area's central question was answered, not that every file was read — each ledger row names
-what was deliberately left.
+**All 21 areas are closed, none is exhausted.** "Closed" means each area's central questions
+were answered; every ledger row names what it deliberately left. This section collects the
+gaps that matter.
 
-**Read closely** (findings rest on these): folder sync and backup on both sides
-(`FolderSyncService.swift`, `KudosBackup.swift` manifest/encoder/merge regions;
-`SyncRepository.kt`, `BackupManifest.kt`, `BackupVersion.kt`, `BackupJson.kt`,
-`BackupValidator.kt`, `BackupMergeService.kt` merge core + `mergeWork`, `BackupMappers.kt`
-export path, `BackupRepository.kt` apply path); the session/cookie stores and logout paths
-(`AO3SessionVault.swift`, `AO3AuthService.logout`; `AO3SessionStore.kt`, `AO3CookieStore.kt`,
-`AO3AuthRepository.kt`); the networking constants (`AO3Client.swift` pacing/retry,
-`AO3RequestCoordinator.swift`; `AO3NetworkConfig.kt`, `AO3RetryPolicy.kt`, `AO3UserAgent.kt`);
-the search parameter builders on both sides; the reader locator and settings paths
-(`ReadiumReaderView.swift` open path, `ReadiumNavigatorContainer.swift` codec,
-`ReaderStyle.swift`; `ReaderLocatorCodec.kt`, `ReaderRestoreTarget.kt`,
-`ReaderSettingsMapper.kt`, `ReaderPreferences.kt`); the write endpoints and duplicate paths;
-`HTMLWorkSanitizer.swift` against `HTMLWorkConverter.kt`; the schema diff
-(`Models.swift` `SavedWork` against `WorkEntity.kt`, mechanically); `KudosDatabase.kt` +
-`KudosDatabaseMigrations.kt`.
+**Cannot be closed by reading — needs a running app:**
+1. **Lead L-2** — whether `Instant.now()` on the target Android runtime returns
+   microsecond-precision nanos. If it does, `formatInstant` emits six fractional digits and
+   iOS's strict decoder aborts the **entire** import of an Android-written archive. One log
+   line on a device settles it; the defensive fix (`.truncatedTo(ChronoUnit.MILLIS)`) is worth
+   making regardless.
+2. **Screen-reader traversal** (V-16) — whether Android's merged card `contentDescription`
+   suppresses stats and tags that VoiceOver reads on iOS. Needs TalkBack against a build.
+3. **The rendered-height half of finding 11** — the absence of touch-target enforcement is
+   verified; the claim that specific chips fall under 48 dp is inferred from that absence.
 
-**Partial** — area 6 (write actions done, the Work Detail *screen* not), area 9 (position and
-settings done; themes, TOC, in-reader search, annotations and TTS not), area 12 (list types
-only), area 16 (backup payload only, not the Settings screens), area 20 (touch targets and
-density only), area 21 (suite shape and one per-rule instance only).
+**Deliberately not read, with the reason** (each also noted in its ledger row): the
+collection/queue/annotation *merge bodies* and ZIP container internals in area 14 (the works
+path carries the user content and produced all four findings); DAO query semantics in area 15
+(they belong to the feature areas that call them); TOC building and in-reader search in area 9
+(local view concerns with no cross-device contract); the download queue in area 13
+(scheduling, not conversion); collection CRUD and queue drag-reorder in area 10 (local UI with
+no cross-platform contract); orphaned/anonymous author rendering in area 8; per-screen
+onboarding copy in area 1 (design review, not parity); loading and skeleton states in area 19
+(animation timing, not copy).
 
-**Thinnest coverage** (opened, but only one question each answered): area 1 (onboarding) has its gating verified but none of its copy; area 5 (browse) resolved only
-the local-indicator question. Within better-covered areas, notable omissions: the
-collection/queue/annotation merge bodies, ZIP container internals, PDF and plain-text
-converters, the EPUB builder's output, text-encoding detection, the download queue, tag
-autocomplete, the `SavedSearch` round trip, the comment model field set, Library shelf
-predicates, and reader colour themes / TOC / annotations / TTS.
+**Genuinely thin, and worth a follow-up if the area matters:** the EPUB builder's *generated
+documents* were compared only at the level of which Dublin Core elements are emitted
+(finding 27), not field-by-field against a real file; TTS was not compared at all; the Settings
+*screens'* per-row wording was not diffed, only the settings they store.
 
-**Where a follow-up should start, highest value first:**
-1. **The comment model field set** (area 7). Finding 13 showed this area's model layer is
-   thinner on Android than its parser suggests; creator/moderator badges, edited state,
-   deleted/hidden state and thread depth are all unchecked.
-2. **Error handling and empty states** (area 19). The only area with no dedicated pass, and
-   the one the review prompt singles out as diverging quietly and rarely being tested.
-3. **Library shelf predicates** (area 10) — which work appears on which shelf. The statistics
-   came through clean, but the shelf partition is a separate rule set and L-4 is open inside it.
-4. **The two statistics/queue items still open as leads**: L-4 (`WorkImporter.saveMetadataOnly`
-   still hard-coding `markSaved = true`) and L-5 (`hasEpub` never downgraded when the file is
-   gone).
-
-**A standing warning about the Android branch's own audit corpus.** `docs/audits/`
+**A standing warning about the Android branch's audit corpus.** `docs/audits/`
 (`PARITY_SWEEP2_A`–`D`, `ANDROID_PARITY_REPORT.md`, `ANDROID_PARITY_FINDINGS_VERIFIED.md`,
-`REMAINING_PARITY_AND_UI_GAPS.md`) and `docs/Android_Parity_Review_2026-08-04.md` cover much
-of areas 1–13 and were **not** verified here beyond one spot-check. That spot-check found the
-cluster substantially implemented while still listed as a confirmed-open major (finding 3),
-and a sibling contract doc asserting behaviour the code does not perform (finding 1). Treat
-that corpus as a lead list to re-verify against the trees, never as coverage already banked.
+`REMAINING_PARITY_AND_UI_GAPS.md`), `docs/Android_Parity_Review_2026-08-04.md` and
+`docs/iOS_Issues_Found_While_Porting.md` were **not** verified wholesale. Four clusters were
+spot-checked and all four were stale (finding 3). Treat that corpus as a lead list to
+re-verify against the trees, never as coverage already banked.
 
 **Not run:** neither `Scripts/verify.sh` nor `android/Scripts/verify.sh`. No build, no test
 suite, no simulator or emulator. Every claim here is static reading of source at
-`e9ed0c6a` / `a5a46116`. Two items explicitly cannot be closed without running code: lead
-L-2 (`Instant.now()` precision) and the rendered-height half of finding 11.
+`e9ed0c6a` / `a5a46116`.
 
 ## Method log
 
