@@ -46,11 +46,11 @@ that fan-out shape; work areas serially and commit each one.
 
 | # | Area | iOS roots | Android roots | Status | Findings | Notes |
 |---|---|---|---|---|---|---|
-| 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | 🔄 in progress | 0 | Gating + state model match: both gate on `hasCompletedOnboarding`, both run Welcome → sync-folder, both keep a separate permanent-dismissal flag for the second step (iOS `ContentView.swift:35-41`, Android `KudosApp.kt:101-175`). **Not done:** the screens' copy, illustrations and step content |
+| 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ✅ done | 0 (V-14) | Gate, steps and both persisted flags verified equivalent. **Deliberately not read:** per-screen illustration and body copy, which is design-review territory rather than parity |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params (7); `required-tags` parser trap (V-5); SavedSearch round trip verified lossless (V-13). **Not done:** tag autocomplete endpoint/debounce, result pagination |
-| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | `BrowseLocalIndicators` mapping question resolved — it genuinely has no iOS counterpart → finding 14. **Not done:** category list/ordering, fandom counts parsing, catalog cache TTL, WebView-fallback policy, `CategoryStats` mapping |
+| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | All 11 AO3 categories match string for string (V-14); local-indicator gap → finding 14. **Not done:** fandom work-count parsing, catalog cache TTL, WebView-fallback policy |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
@@ -58,14 +58,14 @@ that fan-out shape; work areas serially and commit each one.
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 1 (finding 22) | The four AO3 account-list types match (V-8); inbox malformed-row policy matches (L-7); preferences snapshot structure compared → finding 22 (help text) and a dead-code find folded into finding 19. **Not done:** the preferences *write* path (which toggles can be POSTed back), dashboard |
-| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
+| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation (V-8), author notes → finding 10, text-encoding chain verified identical incl. the BOM-gate trap (V-14). **Not done:** PDF/TXT converter output, EPUB builder OPF/NCX, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload verified 21/21 (V-7); theme enums and restore validation compared → findings 20, 21. **Not done:** the Settings *screens* themselves, per-setting UI wording, light/sepia token tones (see note under finding 20) |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
-| 18 | Support / bug report / shake | `Features/Support/` | `support/` | 🔄 in progress | 0 (+1 lead) | Inventory compared. `WhatsNew` is iOS-only **by design** — `TASKS.md` row 26 says it exists precisely because iOS has no update system, and Android surfaces GitHub release notes instead (`GitHubReleaseModels.kt:21`). Not a gap. Screenshot attachment is lead L-6 |
+| 18 | Support / bug report / shake | `Features/Support/` | `support/` | ✅ done | 0 (+1 minor) | `WhatsNew` is iOS-only **by design** (`TASKS.md` row 26 — it exists because iOS has no update system; Android surfaces GitHub release notes). Screenshot capture resolved as L-6: a convenience gap only, since neither platform attaches an image to the submitted report |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | 🔄 in progress | 2 (findings 16, 17) | Error *copy* swept: 6 sites render `AO3Error.toString()` raw (16), offline is not a distinct state (17), and Android's four duplicated `displayMessage()` mappers are otherwise well-written and consistent. **Not done:** empty-state copy per screen, loading/skeleton states, signed-out states outside comments |
-| 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement compared → finding 11; annotation density measured (274/51 files vs 202/34). **Not done:** per-control label audit, Dynamic Type vs `sp` scaling, focus order, TalkBack traversal |
+| 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement → finding 11; annotation density measured; type scaling verified — Android 332 typography tokens and **zero** `.sp` literals vs iOS 268 semantic styles and 18 fixed sizes (V-14). **Not done:** per-control label audit, focus order, TalkBack traversal |
 | 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | ✅ done | 1 minor | Suite shapes compared; per-finding branch analysis done for all five backup findings; three genuinely-absent iOS-side suites identified. Corrected my own earlier over-claim that absent files predict defects — the defects are in untested *branches* of tested files |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reason in Notes)
@@ -1409,7 +1409,17 @@ confirmed: iOS assigns the flag outright (`KudosBackup.swift:1931`), Android ORs
 EPUB presence (`BackupMergeService.kt:193`), so an iOS queue-only work becomes a saved
 Library item on restore. See finding 4 for the full write-up and the ruled-out alternatives.
 
-**L-6 — the bug report may not carry a screenshot on Android.** Suspicion: iOS ships
+**L-6 — RESOLVED: smaller than it looked, and iOS does not attach the image either.**
+`Features/Support/BugReportView.swift:96-99` explains why: "Because a prefilled GitHub issue
+URL can't carry an image, the user saves/shares the screenshot and adds it to" the issue by
+hand. So iOS's shake path *offers* a captured screenshot with an "Include a screenshot"
+toggle (`:100-104`) that the user then shares manually; the submitted report is text-only on
+both platforms. The real difference is therefore a convenience — iOS captures the moment of
+the shake for you, Android leaves you to take your own screenshot — not a difference in what
+a maintainer receives. Recorded as a `minor` gap in the ledger rather than promoted to a
+finding. Original text follows.
+
+**L-6 (original) — the bug report may not carry a screenshot on Android.** Suspicion: iOS ships
 `Features/Support/ScreenshotCapture.swift` alongside `BugReportView.swift` and
 `ShakeDetector.swift`; Android's `support/` contains only `BugReport.kt` and
 `ShakeDetector.kt`, and `account/BugReportScreen.kt:73` tells the user "Only these app and
@@ -1532,6 +1542,48 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-14 — onboarding, browse categories, text decoding and type scaling all agree
+
+The remaining partial areas, closed. Each is one focused comparison rather than an exhaustive
+read; the ledger rows say what was left in each.
+
+**Onboarding (area 1).** Same gate, same steps, same persisted flags. Both run
+Welcome → sync-folder and gate on `hasCompletedOnboarding` (iOS
+`App/ContentView.swift:35-41` via `@AppStorage`; Android `app/KudosApp.kt:101-175` via
+DataStore), and both keep a *separate* permanent-dismissal flag for the sync-folder step so
+declining it once does not re-prompt (iOS
+`Features/Onboarding/SyncFolderOnboardingView.swift:134-138`
+`hasPermanentlyDismissedSyncFolderOnboarding`; Android the same key at `KudosApp.kt:109-110`).
+`@AppStorage` vs DataStore is platform idiom.
+
+**Browse categories (area 5).** All eleven AO3 media categories match exactly, string for
+string: Anime & Manga, Books & Literature, Cartoons & Comics & Graphic Novels, Celebrities &
+Real People, Movies, Music & Bands, Other Media, Theater, TV Shows, Uncategorized Fandoms,
+Video Games. No category is present on one platform only, and none is renamed.
+
+**Text-encoding detection (area 13) — a trap both got right.** Android
+`files/TextDecoding.kt:24-34` and iOS
+`Services/ImportedDocumentConverter.swift:267-284` implement the identical chain: UTF-16
+**only behind a byte-order mark**, checked *first*, then UTF-8 → Windows-1252 → ISO-8859-1,
+each gated on a non-empty result. The reasoning is ported verbatim as well — both files carry
+the same explanation that without the BOM gate "`String(data:encoding:.utf16)` succeeds on
+almost any even-length byte sequence and returns CJK-looking mojibake", and Android adds
+"That ordering is the whole point of this function; don't 'simplify' it into a plain
+try-list." This is the exact defect the review prompt predicts for imports (a file that
+"imports as mojibake on one platform") and neither platform has it.
+
+**Type scaling (area 20).** Both respect the user's system font size, and Android is the
+cleaner of the two. Android uses `MaterialTheme.typography.*` at **332** sites and has
+**zero** hardcoded `.sp` literals — so every text style scales with the system font setting.
+iOS uses semantic Dynamic Type styles (`.body`, `.caption`, `.headline`, …) at **268** sites
+against **18** fixed `.font(.system(size:))` uses, concentrated in chrome and controls
+(`Settings/AboutView.swift`, `Features/ReaderReadium/ReaderChromeTopBar.swift`,
+`ReaderFanMenu.swift`, `Features/Search/SearchPaginationBar.swift` and four others) rather
+than in reading content. Those 18 are the only places iOS opts out of Dynamic Type; Android
+has no equivalent opt-out anywhere. Not filed as a finding — 18 deliberate fixed-size chrome
+elements is a normal HIG-compatible choice — but worth recording that the *direction* of this
+one favours Android.
 
 ### V-13 — saved searches round-trip losslessly through Android, including filters Android cannot itself use
 
