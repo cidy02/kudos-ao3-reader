@@ -74,9 +74,9 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-Fourteen confirmed findings, nine verified "no divergence" results, seven open leads. Of
-twenty-one areas: **four closed, seventeen partial, none untouched.** Every area has now had
-at least one question answered; none has been exhausted.
+Eighteen confirmed findings, ten verified "no divergence" results, seven leads (three since
+resolved), one ruled out. Of twenty-one areas: **four closed, seventeen partial, none
+untouched.** Every area has had at least one question answered; none has been exhausted.
 
 The honest headline has not changed since the first pass: **the two apps agree far more than
 they differ, and where they differ it is almost never in the business rules.** Every constant
@@ -90,14 +90,22 @@ both. Where someone sat down and ported a rule, they ported it correctly.
 
 **The divergences cluster in four places instead.** *Around the edges of a correct rule*: the
 sync write is atomic on iOS and truncating on Android (1), the merge is faithful but one flag
-is OR'd rather than assigned (4), the archive is well-specified but nine fields do not survive
-a round trip (5). *Breadth* — Android implements a strict subset of iOS's surface: ten missing
-search parameters including sort direction (7), no author's-note handling (10), no touch-target
-floor on custom controls (11). *Presentation left unfinished*: comment timestamps rendered as
-raw AO3 text (13), and a series row that draws a ripple and does nothing (12). And *staleness
-in the record rather than the code*: a hardcoded UA version that has already drifted (6), a
-contract doc asserting atomicity the code does not provide (1), and an audit corpus still
-listing closed work as open (3).
+is OR'd rather than assigned (4) and another is never lowered (18), the archive is
+well-specified but nine fields do not survive a round trip (5). *Breadth* — Android implements
+a strict subset of iOS's surface: ten missing search parameters including sort direction (7),
+no author's-note handling (10), no touch-target floor on custom controls (11), no way to reach
+a commenter's profile (15). *The last mile of a feature that is otherwise built*: a series row
+that draws a ripple and does nothing (12), comment timestamps rendered as raw AO3 text (13),
+raw Kotlin error objects shown as user copy while a correct mapper sits unused in the same
+package (16), and offline never named as a state (17). And *staleness in the record rather
+than the code*: a hardcoded UA version that has already drifted (6), a contract doc asserting
+atomicity the code does not provide (1), and an audit corpus still listing closed work as open
+(3).
+
+That third cluster is the most actionable, because in every case Android already has the
+hard part. The series repository, the commenter's `profileUrl`, four well-written error
+mappers, an author-profile destination — all present, none reached. Several of these are
+one-line wiring fixes in `AppNavHost` and one shared `displayMessage()`.
 
 Three things are worth carrying forward.
 
@@ -106,17 +114,18 @@ Three things are worth carrying forward.
 file it was ported from has a 796-line suite. Conversely the statistics code, which *is*
 tested on both sides, came through a formula-by-formula comparison clean.
 
-**The "iOS is the source of truth" convention was right in twelve cases and wrong in two.**
+**The "iOS is the source of truth" convention was right in sixteen cases and wrong in two.**
 Finding 8 (iOS discards a reading position it was handed) and finding 14 (Android marks
 already-saved works in browse; iOS cannot) are both places where Android *added* something
 rather than porting it, so a rule about not cutting iOS down simply does not apply. It is a
 good default, not a law.
 
-**The Android branch's audit corpus should not be trusted as a work list.** Two clusters were
-spot-checked and both were stale — the second in all three of its claims, including a fix
-whose code comment quotes the audit's own worked example (finding 3). The fixes were made
-*from* those reports and the reports were never updated. Re-verify against the tree before
-scheduling anything from them.
+**The Android branch's audit corpus should not be trusted as a work list.** Three clusters
+were spot-checked and all three were stale (finding 3) — one wrong in all three of its claims,
+including a fix whose code comment quotes the audit's own worked example, and another whose
+fix comment names the very iOS function the audit said had no counterpart. The fixes were
+evidently made *from* those reports and the reports were never marked resolved. Re-verify
+against the tree before scheduling anything from them.
 
 What is *not* established: no test suite was run on either platform, and nothing here is
 runtime-verified. Seventeen areas are partial — the ledger's Notes column names what was left
