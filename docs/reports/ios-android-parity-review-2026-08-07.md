@@ -17,14 +17,15 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 9's remainder — compare reader *settings*: the field set, and each
-setting's value range and default, between `Features/Reader/ReaderStyle.swift` +
-`ReadiumReaderStyleMapper.swift` and `reader/settings/ReaderPreferences.kt` +
-`ReaderSettingsMapper.kt`. `BackupValidator.kt:171-179` already range-clamps these on
-restore (fontPt 12–34, lineHeight 1.2–2.4, margin 8–64, letterSpacing −0.03–0.12,
-wordSpacing 0–0.6), so those clamps are a ready-made checklist to verify iOS agrees with.
+**Resume here:** Area 6 (work detail + write actions) — compare the write endpoints and
+their form fields: `Services/AO3WriteActions.swift` against
+`network/ao3/writes/AO3WriteUrls.kt` + `AO3WriteRepository.kt` + `AO3WriteFormParser.kt`.
+Check kudos / bookmark / subscribe / collect one by one: POST target, form fields, CSRF
+token source, and the duplicate-kudos error path. Note that
+`docs/AO3_NETWORKING_POLICY.md` records write actions as **never exercised against a live
+AO3 session** on iOS, so neither side's behaviour here is runtime-verified.
 
-**Then:** areas 1, 5–8, 10–13, 16, 18–20 are untouched. Read *Not covered* before planning —
+**Then:** areas 1, 5, 7, 8, 10–13, 18–20 are untouched; 9 and 16 are partially done. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -47,14 +48,14 @@ that fan-out shape; work areas serially and commit each one.
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ⬜ not started | – | |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | |
-| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 1 (finding 8) | Progress locator + cross-platform fallback compared (V-6, finding 8). **Not done:** reader settings ranges/defaults, colour themes, TOC, in-reader search, annotations, TTS |
+| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. **Partial input:** finding 3 closes the model half of the `isQueuedForLater` cluster; leads L-3/L-4 are open here |
 | 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ⬜ not started | – | |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | 🔄 in progress | 1 (finding 5) | `SavedWork` (64 stored) vs `WorkEntity` (46 cols) diffed mechanically → finding 5. Migration safety verified (V-2). **Not done:** the other 8 entities, type-converter round trips, DAO query semantics |
-| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | ⬜ not started | – | |
+| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 1 (finding 9) | Backup settings payload verified 21/21 (V-7). **Not done:** the Settings *screens* themselves, theme colour values, per-setting UI wording |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ⬜ not started | – | |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | ⬜ not started | – | |
@@ -758,6 +759,71 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-7 — reader settings and the backup settings payload match field for field, default for default
+
+The settings payload is the second artefact that crosses platforms, so it carries the same
+data-loss risk as the work records. It is clean.
+
+**Backup payload: 21 fields, 21 matches, same order.** iOS `KudosBackupSettings`
+(`Services/KudosBackup.swift:743-763`) and Android `BackupSettingsPayload`
+(`backup/BackupManifest.kt:200-221`) declare an identical field list —
+`readerFontID, readerMode, readerTwoPage, readerCustomize, readerBoldText, readerFontPt,
+readerLineHeight, readerLetterSpacing, readerWordSpacing, readerMargin, readerJustify,
+confirmBeforeDelete, hideMatureContent, matureContentMode, requireBiometricToReveal,
+appTheme, readerTheme, matchAppReaderTheme, accentColorHex,
+autoPreserveSmallSeriesOnSaveForLater, autoPreserveSeriesWorkThreshold` — with no field
+unique to either side. The seeded defaults agree too: `18` pt, `1.65` line height, `28` pt
+margin, `#990000` accent (iOS `:738-741`, Android `:202-221`).
+
+**Runtime defaults agree.** Android's user-facing `ReaderSettings`
+(`core/model/SettingsModels.kt:53-62`) defaults to `readerFontPt = 18.0`,
+`readerLineHeight = 1.65`, `readerMargin = 28.0`, letter/word spacing `0.0`,
+`readerJustify = false` — matching iOS's `ReaderStyle` constants
+(`Features/Reader/ReaderStyle.swift:236-252`) exactly.
+
+**A trap I nearly reported and should not have.** Android's engine-level
+`ReaderPreferences` (`reader/settings/ReaderPreferences.kt:28`) declares
+`lineHeight: Double = 1.2`, which looks like a visible typography divergence from iOS's
+1.65. It is not: that object is engine-facing, its data-class default is always overwritten
+by `ReaderSettingsMapper.map` (`reader/settings/ReaderSettingsMapper.kt:36`), and the value
+that reaches it comes from `ReaderSettings.readerLineHeight`, which defaults to 1.65. The
+unit differences alongside it — `fontSizePercent` against iOS's absolute points,
+`pageMarginsFactor` against iOS's absolute margin — are likewise a documented adapter to
+Readium-Kotlin's native units (`:12-20`), with `fontSizePercent(pt) = (pt / 18) * 100` and
+`marginsFactor(pt) = pt / 28`, both anchored on the shared defaults. Correct, not drift.
+
+### 9. Android still accepts a negative letter-spacing range that iOS deliberately removed — `minor` · Settings / reader
+
+Recorded because it is a clean instance of the pattern this review was asked to hunt — a fix
+made on one platform and never ported — even though its user-visible impact is nil.
+
+- **iOS:** `Features/Reader/ReaderStyle.swift:246-250` — `letterSpacingRange = 0.0 ... 0.12`,
+  carrying an explicit comment that the range *used to* include negatives and no longer
+  does: "Readium's `letterSpacing` preference rejects negative values
+  (`ReadiumReaderStyleMapper.preferences`), so the negative half this range used to
+  advertise could never render on iOS and is now clamped away".
+- **Android:** `backup/BackupValidator.kt:174-175` — `settings.readerLetterSpacing
+  .takeIfFiniteIn(-0.03, 0.12)`, i.e. still the pre-fix range including the negative tail.
+- **Divergence:** on restore, Android accepts and stores a letter-spacing of, say, −0.02;
+  iOS's range does not include it.
+- **Scenario, honestly bounded:** the user sees nothing. Android's own render path clamps it
+  again at `reader/settings/ReaderSettingsMapper.kt:37` —
+  `letterSpacingEm = reader.readerLetterSpacing.coerceAtLeast(0.0)` — so a stored negative
+  renders as 0, which is what iOS would show too. The only observable consequence is that
+  the stored settings value differs between two devices restored from the same archive, and
+  would differ again if either re-exported. Nothing in the UI surfaces it.
+- **Evidence:** compared all five clamped ranges. Four match exactly — font 12–34
+  (iOS `:243`, Android `:171`), line height 1.2–2.4 (iOS `:245`, Android `:172-173`), word
+  spacing 0.0–0.6 (iOS `:251`, Android `:176-177`), margin 8–64 (iOS `:252`, Android `:178`).
+  Letter spacing is the single mismatch. Ruled out that Android renders the negative — the
+  `coerceAtLeast(0.0)` above is unconditional on the mapping path.
+- **History:** not recorded. The iOS comment describes the change as already made, so the
+  ordering is clear: iOS tightened the range, Android's validator kept the old bounds.
+- **Recommendation:** Android moves; change `-0.03` to `0.0` in `BackupValidator.kt:174`.
+  One character of real content. Worth doing not for the impact but because the two files
+  are meant to encode the same contract, and a reader comparing them will otherwise wonder
+  which is right.
 
 ### V-6 — neither platform will apply the other's Readium locator, so a cross-platform restore cannot land in the wrong place
 
