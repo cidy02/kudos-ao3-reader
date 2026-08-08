@@ -17,12 +17,26 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Batches A (areas 2–8, AO3 network surface) and B (areas 9–15, app data
-surface) are dispatched and running as multi-agent reviews; their findings are not yet
-merged into this file. Batch C (areas 1, 16–21) is **not yet dispatched** — that is the
-next action if picking this up cold, followed by merging whatever A and B produced.
-Areas 17 and 21 already have verified material in this file (see the re-check table and
-the Asymmetric test coverage section); do not redo those two checks.
+**Resume here:** Finish area 14. The specific next action: read
+`android/…/backup/BackupMergeService.kt` (866 lines) against
+`kudos-ao3-reader/Services/PersistenceSync.swift` and `CanonicalWorkMerge.swift`, comparing
+(a) which record wins a conflict and on which timestamp field, (b) the tie-break when
+timestamps are equal, and (c) whether a tombstone deletes on both sides symmetrically.
+That is the last untested assumption in the one area where a divergence means silent data
+loss, and it is the natural continuation of findings 1–2.
+
+**Then:** areas 2–13, 15, 16, 18–20 are untouched. Read *Not covered* before planning —
+it says which of them already have partial coverage from the Android branch's own
+`docs/audits/` and should therefore be re-verified rather than re-derived.
+
+**Do not redo:** area 17 (closed, see the re-check table); the date-encoding question
+(closed as R-1); the suite-shape comparison in *Asymmetric test coverage*.
+
+**Method warning for whoever resumes:** two 7-agent parallel sub-agent reviews were
+dispatched for areas 2–15 and **both died on a session usage limit with zero results
+returned** (1.29 M tokens, nothing recovered — the run journals contain no `result` lines).
+Everything in this report was produced by direct inline reading afterwards. Do not re-try
+that fan-out shape; work areas serially and commit each one.
 
 | # | Area | iOS roots | Android roots | Status | Findings | Notes |
 |---|---|---|---|---|---|---|
@@ -39,14 +53,14 @@ the Asymmetric test coverage section); do not redo those two checks.
 | 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ⬜ not started | – | |
-| 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ⬜ not started | – | contract doc: Android `docs/contracts/BACKUP_FORMAT.md` |
+| 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | 🔄 in progress | 2 (+1 ruled out, +1 lead) | **Done:** manifest version range, manifest field set, date encoding (R-1), folder-sync write path (findings 1 & 2). **Not done:** `BackupMergeService.kt` (866 lines) vs `PersistenceSync.swift` merge/conflict rules, tombstone propagation, ZIP container details, restore path |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ⬜ not started | – | |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | ⬜ not started | – | |
-| 17 | Update system | (none expected) | `update/`, `network/github/` | ⬜ not started | – | Android-only; confirm iOS truly has none |
+| 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ⬜ not started | – | |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | ⬜ not started | – | |
 | 20 | Accessibility | cross-cutting | cross-cutting | ⬜ not started | – | |
-| 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test`, `androidTest` (93) | ⬜ not started | – | |
+| 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | 🔄 in progress | 1 minor | Suite shape done + the folder-sync asymmetry established. The per-rule sweep across all other areas is not done |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reason in Notes)
 
@@ -54,19 +68,195 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-*Stub — written last, once there is enough confirmed material to say something true.*
+*Partial — this covers one area of twenty-one. It is written as what can honestly be said
+now, not as the shape of the whole divergence.*
+
+The one area read closely, backup and folder sync, was chosen because it is the only
+subsystem whose artefact crosses between the two apps, so a divergence there means silent
+data loss rather than inconsistency. Two things came out of it, and they point in opposite
+directions.
+
+The **format** layer is in good shape and better than expected. Manifest versions match
+exactly, the field sets match collection for collection, unknown fields are deliberately
+preserved on re-export, and the date-encoding hazard the project's own onboarding doc warns
+about — the one that would corrupt merge ordering — turns out to be closed by an
+unrelated mechanism (Room storing instants as epoch millis) rather than by design. That is
+worth knowing precisely because it is *accidental*: lead L-2 identifies the single field
+that escapes it.
+
+The **write** layer is where the divergence is, and it has a recognisable shape. Android's
+sync path truncates the user's backup before rewriting it, where iOS writes atomically —
+and this is not a case of nobody knowing better. The rule is a named binding invariant on
+iOS, the Android port plan specified it, an Android contract doc already asserts it is
+done, and Android implements the exact pattern correctly in its app-private file store a
+few files away. It was lost only on the path where the destination is shared and
+irreplaceable. Underneath it sits the same subsystem's *shared* bug — sync skipping any
+file whose length happens to be unchanged — which is already documented on both platforms
+and fixed on neither.
+
+If one hypothesis is worth carrying into the remaining twenty areas, it is this: the
+divergences here are not in what the two apps *know*, they are in what got *verified*.
+`SyncRepository.kt` holds both defects and has no test; the iOS file it was ported from has
+a 796-line suite. Where a rule is pinned on one platform and unpinned on the other is where
+this review found its defect, on the first area it looked at.
 
 ---
 
 ## Findings
 
-*None confirmed yet.*
+### 1. Android's folder sync truncates the destination before writing it — `blocker` · Backup / folder sync
+
+- **iOS:** `kudos-ao3-reader/Services/FolderSyncService.swift:689` writes `manifest.json`
+  with `options: .atomic`, and `:707-709` (`writeIfChanged`) writes every EPUB and font
+  asset the same way. `Data.write(options: .atomic)` writes to an auxiliary file and
+  swaps it into place, so the destination is either the old bytes or the new bytes,
+  never a prefix of the new bytes. The code says so itself, at `:675-679`: *"Assets
+  first, manifest last: the manifest is the commit point … An interruption leaves the
+  previous manifest — and therefore the previous consistent view — in place."*
+- **Android:** `backup/SyncRepository.kt:205` writes `manifest.json` with
+  `context.contentResolver.openOutputStream(manifestDoc.uri, "wt")`, and `:226`
+  (`writeIfChanged`) writes every EPUB and font asset the same way. The `"wt"` mode is
+  *write + truncate*: the SAF provider truncates the existing document to zero length
+  when the stream is opened, before a single new byte is written.
+- **Divergence:** iOS never has a moment where the destination is invalid. Android has a
+  window — the whole duration of the write — during which the destination is truncated or
+  partially written. The *ordering* of the iOS design was ported faithfully (assets first,
+  manifest last, then orphan pruning); the *atomicity* that makes that ordering mean
+  anything was not.
+- **Scenario:** a user with a 400 MB library syncs to a Google Drive / Dropbox / SD-card
+  folder. Mid-sync the process is killed — Android's background-work killer, storage
+  full, the cloud provider dropping the SAF connection, or the user force-quitting.
+  On iOS the folder still holds the complete previous manifest and every previous asset,
+  and the next sync retries cleanly. On Android the folder holds a zero-length or
+  half-written `manifest.json`. That file is the sync folder's index of the entire
+  library. On the next sync-down — and on every *other* device pointed at that folder —
+  `BackupValidator` fails to parse it and the folder is unusable; the orphan-pruning passes
+  at `SyncRepository.kt:176` and `:193` then have no manifest to compute "expected" from.
+  The user's off-device backup is destroyed by an interrupted write.
+- **Evidence:** read both write paths end to end. Grepped the Android backup package for
+  any staging or rename primitive — `grep -rniE "renameTo|atomic|\.part|createNewFile"
+  backup/` over `BackupExporter.kt`, `BackupPaths.kt`, `BackupRepository.kt` returns no
+  staging of any kind; the only `openOutputStream` calls are the two `"wt"` ones plus
+  `BackupScreen.kt:61` (a user-chosen export target, where truncation is correct because
+  the user picked the file). Ruled out: (a) that SAF might make `"wt"` atomic — it does
+  not, `"wt"` maps to `ParcelFileDescriptor.MODE_TRUNCATE` and the truncation is applied
+  on open; (b) that a `.tmp`-and-rename existed elsewhere — no `DocumentsContract.
+  renameDocument` call exists anywhere in the tree; (c) that this is deliberate — see
+  History.
+- **History:** not recorded as a decision anywhere — and the surrounding record makes this
+  a miss rather than a trade-off, in three independent ways:
+  1. **It is a named, binding invariant on the iOS side.**
+     `docs/DATA_AND_PERSISTENCE_INVARIANTS.md:39` — "Writes: stage to
+     `itemReplacementDirectory` (same volume) → `replaceItemAt` — the remote package must
+     survive any failed write. **Never remove-then-write.**" `docs/AGENT_ONBOARDING.md:46`
+     repeats it in the pitfalls table, annotated "(sync package destruction window)" — the
+     pitfalls table is described in that file's own header as scar tissue from real
+     debugging sessions. `AGENTS.md:153` makes the invariants doc binding for any change
+     touching sync.
+  2. **The Android port plan specified it and the contract doc already claims it is done.**
+     `docs/android/ANDROID_PORT_PLAN.md:1005` — "Write EPUB files atomically."
+     `docs/contracts/BACKUP_FORMAT.md:83` states, as settled behaviour, "EPUB files are
+     written atomically when present." That sentence is true of the *restore* path (which
+     lands files in app-private storage) and **false** of the sync-folder write path. A
+     contract document asserting an atomicity guarantee the sync path does not provide is
+     itself worth fixing, because it is what a future agent will trust instead of reading
+     `SyncRepository.kt`.
+  3. **Android already implements exactly this discipline elsewhere.**
+     `files/WorkFileStore.kt:24-39` writes an EPUB by creating
+     `Files.createTempFile(worksDirectory, ".$workId-", ".tmp")`, writing to it, then
+     `Files.move(temp, destination, REPLACE_EXISTING, ATOMIC_MOVE)` with a non-atomic
+     `Files.move` fallback and a `deleteIfExists(temp)` cleanup; `:80-90` does the same for
+     originals. So this is not a team that does not know the pattern, and not a platform
+     that cannot express it. The one path where the destination is a *user-visible,
+     shared, and irreplaceable* folder is the one path that does not use it.
+- **Recommendation:** Android moves. Note honestly that SAF has **no** atomic-replace
+  primitive, so `.atomic` cannot be mirrored exactly — do not write a task that implies it
+  can. The achievable fix is to narrow the window and keep a fallback: write to
+  `manifest.json.tmp`, `flush()` + `fd.sync()`, then `DocumentsContract.renameDocument`
+  over the live name, and retain the previous manifest as `manifest.json.bak` that
+  sync-down falls back to when the primary fails to parse. That reduces an
+  entire-write-duration hole to a rename, and makes the remaining hole recoverable.
+  This is also the single highest-value place to add Android test coverage — see
+  *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
+  unpinned on Android.
 
 ---
 
 ## Bugs present on both platforms
 
-*None confirmed yet.*
+### 2. Sync skips any changed file whose byte length is unchanged — `real-bug` · `DEFERRED` · Backup / folder sync · **both platforms**
+
+> **This is not a new discovery, and this review adds nothing to it.** It is already
+> written up — correctly, in more detail than I would have given it, and on both halves —
+> on the Android branch at `docs/iOS_Issues_Found_While_Porting.md:69-96`, under the
+> heading "Sync skips unchanged files by size alone, so a same-size edit never syncs".
+> That entry cites the same iOS lines (`:707-710`, and `:687` for the unconditional
+> manifest write), makes the same "the index stays correct while the asset is stale —
+> arguably worse than both being stale" argument, proposes the same fix ("A content hash,
+> or size plus modification time, would close it"), **and already records that Android
+> ported it deliberately**: *"ported faithfully (`backup/SyncRepository.kt`
+> `writeIfChanged`), because iOS is the specification for this sweep and diverging
+> unilaterally would make the two platforms disagree about what 'unchanged' means. Fix
+> both together."*
+>
+> It is retained here, tagged `DEFERRED`, for exactly one reason: it is the clearest
+> instance in the codebase of the category this report is asked to surface, it remains
+> unfixed at both review SHAs, and it has no `TASKS.md` ID, so nothing schedules it. The
+> only thing I verified independently is that it is still true at `e9ed0c6a` / `a5a46116`.
+
+- **iOS:** `kudos-ao3-reader/Services/FolderSyncService.swift:707-709` —
+  `writeIfChanged` returns early when `existingSize == data.count`, comparing **only**
+  the file's byte length against the new payload's byte length. No hash, no mtime.
+- **Android:** `backup/SyncRepository.kt:217-221` — `writeIfChanged` returns early when
+  `file.length() == data.size.toLong()`. The same rule, ported faithfully, including the
+  name of the function.
+- **Divergence:** none between the platforms — that is the point. This is one wrong
+  assumption implemented identically twice, so no amount of iOS↔Android comparison
+  surfaces it; only asking what the rule *is* does.
+- **Scenario:** a user has work X synced. AO3's copy is edited by its author — a typo
+  fixed, a word swapped for another of the same length, a punctuation change — and Kudos
+  re-downloads the EPUB. EPUB is a ZIP: a same-length content change very often yields a
+  same-length archive (the compressed streams differ, the central directory and entry
+  sizes do not move). `writeIfChanged` compares 41,932 bytes to 41,932 bytes, returns
+  early, and the sync folder keeps the **old** EPUB forever. Every other device syncing
+  from that folder receives the stale text. The manifest is rewritten (it goes through
+  the unconditional path, not `writeIfChanged`), so the sync *reports success* and the
+  user has no signal at all that one work's content never propagated. The same applies to
+  a custom font replaced by a different font of identical file size.
+- **Evidence:** read both implementations in full. Confirmed that the manifest write does
+  **not** go through `writeIfChanged` on either platform (iOS `FolderSyncService.swift:687-690`;
+  Android `SyncRepository.kt:201-206`), so nothing downstream compensates — the manifest
+  changing does not cause the asset to be re-copied. Ruled out: (a) that EPUBs are
+  content-addressed by name, so a changed file would land under a new name — they are not,
+  the name is `<work-uuid>.epub` on both sides (iOS `:680`, Android `:169`) and is stable
+  across re-downloads; (b) a checksum anywhere in either path —
+  `grep -niE "sha|md5|checksum|digest"` over both files returns zero hits.
+  **Not** ruled out by grep alone, and worth stating precisely: iOS *does* read
+  modification dates in this file — `coordinatedContentModificationDate` at
+  `FolderSyncService.swift:741-748`, called from `:273`, `:338` and `:380`. Reading those
+  three call sites shows they all operate on `manifestURL` (and a legacy URL), to decide
+  sync *direction* and staleness of the folder as a whole. None of them is on the
+  per-asset path, and `writeIfChanged` at `:707-709` consults nothing but size. Android
+  has no modification-date read at all in `SyncRepository.kt` (same grep, zero hits).
+- **Why it is written this way:** deliberately, and for a good reason — the iOS comment at
+  `:677-679` explains that leaving unchanged files untouched (same inode) is what lets
+  iCloud Drive upload only the delta. Hashing every EPUB on every sync would be the
+  obvious fix and would cost a full read of the library each time. So this is a real
+  trade-off that was made consciously on iOS; what is missing is that the *cheap* half of
+  the trade-off was taken without the correctness half.
+- **History:** `docs/iOS_Issues_Found_While_Porting.md:68-90` (Android branch) records the
+  iOS side; nothing records the Android side, and nothing in `TASKS.md` assigns it an ID or
+  a decision. It has therefore been known and unowned for as long as that document has
+  existed.
+- **Recommendation:** both platforms move, and the fix should stay cheap: compare
+  `(size, mtime)` rather than size alone. That keeps the same-inode / delta-upload property
+  the iOS comment is protecting, costs one stat per file instead of a full read, and closes
+  the case above because a re-download updates mtime even when it does not change length.
+  A content hash is the belt-and-braces option and is not worth a full library read on
+  every sync. iOS already has the helper it needs —
+  `FolderSyncService.swift:741-748`'s `coordinatedContentModificationDate` — currently used
+  only against the manifest; Android would use `DocumentFile.lastModified()`, which it does
+  not currently call anywhere in `SyncRepository.kt`.
 
 ---
 
@@ -93,9 +283,21 @@ Two observations follow, and they point in opposite directions:
    build for a source set that does not exist. That is dead build configuration —
    `minor`, and worth deleting or filling.
 
-The per-rule comparison (which behavioural rules are pinned by a test on one platform and
-left unpinned on the other) is **not yet done** — it is the substance of this section and
-belongs to area 21, which has not been dispatched.
+### One per-rule asymmetry, established
+
+The full per-rule comparison is **not done** — it is the substance of this section and
+belongs to area 21, which was never dispatched. But the backup/sync area produced one
+instance directly, and it is the one that matters most, because it sits under finding 1:
+
+| | iOS | Android |
+|---|---|---|
+| Folder-sync tests | `KudosTests/FolderSyncTests.swift`, **796 lines**, plus `FolderSyncBackgroundTaskTests.swift` | **none** — `android/app/src/test/…/backup/` contains only `BackupCompatibilityTest.kt` and `DatabaseChangeTrackerTest.kt` |
+
+`SyncRepository.kt` — the file holding both findings above — has no test of any kind.
+That is precisely the prediction the review prompt makes about asymmetric coverage: *where
+one platform pins a rule and the other does not is where the divergence appears next*.
+Here it already has. The write-atomicity rule is pinned on iOS by a 796-line suite and is
+unpinned on Android, and Android is the platform that lost it.
 
 ---
 
@@ -128,17 +330,97 @@ task cites iOS behaviour that `hig-review` has since changed. This is a process
 finding, not a user-visible one — it is recorded here because it predicts *where*
 user-visible drift will be found.
 
+**L-2 — `exportedAt` is the one manifest date that bypasses Room, and its precision is
+unverified.** Suspicion: R-1 below proves the date round trip is safe *because* every
+`Instant` is milli-precision after a Room round trip. `exportedAt` is the exception — it
+comes straight from an injected clock, `backup/BackupRepository.kt:31`
+(`private val clock: () -> Instant = { Instant.now() }`), and `backup/SyncRepository.kt:31`
+does the same. iOS decodes it as a real `Date` (`KudosBackup.swift:228`) through the strict
+two-formatter strategy. If `Instant.now()` on the target Android runtime returns
+microsecond-precision nanos — as `Clock.systemUTC()` does on OpenJDK 9+, though Android's
+libcore has historically been millisecond-backed — then `formatInstant` emits six fractional
+digits, iOS's fractional formatter rejects it, the whole-second fallback rejects it, and
+`KudosBackup.swift:200-205` throws. That aborts the **entire** import of an Android-written
+archive on iOS. Where seen: `BackupValidator.kt:161` (`instant.toString()`) reached from a
+non-Room source. The check that settles it: on a device/emulator at the project's `minSdk`,
+evaluate `Instant.now().nano % 1_000_000` — non-zero means the hazard is live. The fix is
+one call either way and is worth making unconditionally: `.truncatedTo(ChronoUnit.MILLIS)`
+in `formatInstant`, which also makes Android's output identical in shape to iOS's for every
+field. **I could not settle this from source alone and am not claiming it as a defect.**
+
 ---
 
 ## Ruled out
 
-*None yet.*
+**R-1 — backup date encoding is *not* incompatible between the two apps.** This was the
+most promising lead in the whole backup area and it does not survive contact with the code,
+so it is worth recording in full to stop the next session chasing it.
+
+The suspicion: `docs/AGENT_ONBOARDING.md:43` warns that plain `.iso8601` truncates to whole
+seconds and makes merge decisions unorderable, and that iOS therefore uses "a fractional-seconds
+encoder with whole-second decode fallback. Don't change either direction." iOS does exactly
+that — `KudosBackup.swift:169-179` builds two `ISO8601DateFormatter`s (one with
+`.withFractionalSeconds`, one without); `:181-189` always *writes* the fractional one;
+`:191-206` *reads* fractional first and falls back to whole-second, throwing
+`DecodingError` if neither matches. Android, meanwhile, writes dates via
+`BackupValidator.formatInstant`, which is a bare `instant.toString()`
+(`backup/BackupValidator.kt:161`). `Instant.toString()` emits `DateTimeFormatter.ISO_INSTANT`,
+whose fractional part is *variable width* — 0, 3, 6 or 9 digits depending on the value's
+nanos. `ISO8601DateFormatter` accepts **exactly** 3 fractional digits or none. So a 6- or
+9-digit fraction from Android would fail both iOS formatters and abort the entire import.
+
+Why it does not happen: every `Instant` that reaches the manifest comes back out of Room,
+and Room stores them through `data/local/converters/KudosTypeConverters.kt:13-21`, which is
+`instantToEpochMillis` / `epochMillisToInstant` — `toEpochMilli()` / `Instant.ofEpochMilli()`.
+Millisecond precision in, millisecond precision out. A milli-precision `Instant` renders as
+either 0 fractional digits (nanos == 0) or exactly 3. iOS's whole-second fallback covers the
+first, its fractional formatter covers the second. The round trip is sound in both
+directions, and Android's parser (`BackupValidator.kt:145-155`) accepts iOS's always-fractional
+form via `Instant.parse`, with an `OffsetDateTime.parse` second chance for offset-bearing
+timestamps. **Verified compatible.** One residual is carved out as lead L-2 below.
 
 ---
 
 ## Not covered
 
-*Filled in as areas are closed or skipped. Currently: everything.*
+This is the honest majority of the review. **17 of 21 areas were not read at all.**
+
+**Read closely (the only code this report's claims rest on):**
+`Services/FolderSyncService.swift` (the sync write/commit path, ~lines 560–760),
+`Services/KudosBackup.swift` (manifest struct, version constants, the encoder/decoder
+date strategy), `Services/KudosBackupExport.swift` (skimmed);
+`backup/SyncRepository.kt` in full, `backup/BackupManifest.kt` in full,
+`backup/BackupVersion.kt`, `backup/BackupJson.kt`, `backup/BackupValidator.kt` (the
+instant helpers and the manifest validation pass), `backup/BackupMappers.kt` (date call
+sites only), `files/WorkFileStore.kt` (the atomic-write helpers),
+`data/local/converters/KudosTypeConverters.kt`.
+
+**Skimmed, conclusions not load-bearing:** the package/folder inventory of both trees
+(used only to build the area map); `Features/Support/WhatsNew.swift` (line count only).
+
+**Not reached at all:** areas 1–13, 15, 16, 18, 19, 20 — onboarding, auth/session,
+networking core, search/filters, browse, work detail + writes, comments, authors/series,
+the readers, library/queues/statistics, home, account/inbox, import/conversion,
+persistence schema + migrations, settings/theming, support, error handling/empty states,
+accessibility. Within area 14 itself, `BackupMergeService.kt` (866 lines) and
+`PersistenceSync.swift` were **not** read, so nothing in this report says anything about
+merge/conflict semantics.
+
+**Where a follow-up should start, and a warning about it.** The Android branch carries its
+own audit corpus that this review did not verify:
+`docs/audits/PARITY_SWEEP2_A…D`, `ANDROID_PARITY_FINDINGS_VERIFIED.md`,
+`ANDROID_PARITY_INDEPENDENT_REVIEW.md`, `IOS_ANDROID_DOMAIN_AUDIT.md`,
+`REMAINING_PARITY_AND_UI_GAPS.md`, and `docs/Android_Parity_Review_2026-08-04.md`
+(461 lines). Those cover much of areas 1–13 already. **They are claims, not evidence** —
+the review prompt's first rule — and at least one of their sibling documents is now
+provably wrong about the code (`docs/contracts/BACKUP_FORMAT.md:83` asserts atomic EPUB
+writes that finding 1 shows the sync path does not perform). So the efficient next pass is
+to treat them as a *lead list to re-verify against the trees*, not as coverage already
+banked. That is also why they were not folded into this report wholesale.
+
+**Not run:** neither `Scripts/verify.sh` (iOS) nor `android/Scripts/verify.sh`. No build,
+no test suite, no simulator or emulator run. Every claim here is static reading of source.
+Lead L-2 in particular **cannot** be closed without running code.
 
 ---
 
@@ -168,3 +450,43 @@ evidence rather than trust the conclusions.
   is comparing against a much older iOS. Recorded as Open lead L-1.
 - No source file has been read yet; no suite has been run. Nothing below is claimed
   as verified until it carries file:line evidence on both platforms.
+
+### 2026-08-07/08 — attempted parallel review of areas 2–15, abandoned
+
+Two `Workflow` runs were dispatched, seven area reviewers each (areas 2–8, then 9–15),
+every finding pipelined into an adversarial refutation stage. **Both runs failed
+completely.** All 14 reviewers terminated on a session usage limit; the run journals
+(`…/workflows/wf_63152fd2-03e/journal.jsonl` and `wf_26c5bb5e-db9/journal.jsonl`) contain
+zero `{"type":"result"}` lines, so nothing was recoverable — 1.29 M sub-agent tokens spent
+for no output. Recorded because it is a real cost already paid and the next session should
+not repeat the shape. Everything in this report was produced afterwards by direct inline
+reading.
+
+### 2026-08-07/08 — area 14 (backup / folder sync), partial
+
+- Compared manifest versioning: iOS `KudosBackup.swift:224-225` (`currentVersion = 8`,
+  `supportedVersions = [1…8]`) against Android `backup/BackupVersion.kt:22-25`
+  (`CURRENT = 8`, `supported = 1..8`). They agree, and Android's file documents the Apple
+  version history deliberately. No finding.
+- Compared the manifest field set: iOS `KudosBackupManifest` (`KudosBackup.swift:220-250`)
+  against Android `KudosBackupManifest` (`backup/BackupManifest.kt:9-27`). Same ten
+  collections. Android's `BackupJson` (`backup/BackupJson.kt`) sets `ignoreUnknownKeys`
+  and `explicitNulls = false`, and `BackupValidator` carries queues/annotations/tombstones
+  through unchanged "so re-export doesn't drop anything" — i.e. the unknown-field
+  preservation question the review prompt raises is handled deliberately. No finding.
+- Chased the date-encoding hazard to a conclusion → **ruled out**, recorded as R-1, with
+  the one residual carved out as lead L-2.
+- Read both folder-sync write paths end to end → **findings 1 and 2**.
+- Cross-referenced against the Android branch's own docs, which changed two conclusions:
+  `docs/iOS_Issues_Found_While_Porting.md:69-96` already documents finding 2 on both
+  platforms (so this review claims no credit for it — see the note under that finding),
+  and `docs/contracts/BACKUP_FORMAT.md:83` + `docs/android/ANDROID_PORT_PLAN.md:1005`
+  turned finding 1 from "an oversight" into "a specified requirement, asserted as complete
+  in a contract doc, while the same codebase implements the pattern correctly elsewhere at
+  `files/WorkFileStore.kt:24-39`".
+- Corrections applied to this file after re-checking my own citations: three line numbers
+  (iOS EPUB naming `:680` not `:681`; Android `:169` not `:170`; Android orphan pruning
+  `:176`/`:193` not `:181-186`/`:193-197`), and one over-claimed grep — iOS *does* read
+  modification dates in `FolderSyncService.swift` (`:741-748`, called from `:273`, `:338`,
+  `:380`), just never on the per-asset skip path. The corrected form is what appears under
+  finding 2's evidence.
