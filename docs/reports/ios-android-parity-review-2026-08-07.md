@@ -56,7 +56,7 @@ that fan-out shape; work areas serially and commit each one.
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ✅ done | 2 (10, 27) | HTML sanitisation (V-8); author notes → 10; text decoding identical incl. the BOM trap (V-14); PDF divergence known-and-reasoned (V-15); EPUB OPF metadata → 27. **Deliberately not read:** the download queue, which is scheduling rather than conversion |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
-| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload 21/21 (V-7); theme enums and restore validation → 20, 21; all four `BackupValidator` allowlists audited (2 stale, 2 correct). **Not done:** the Settings *screens* and per-setting wording |
+| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | ✅ done | 4 (9, 20, 21, 28) | Backup payload 21/21 declared, 19/21 populated (V-7 + 28); theme enums and restore validation (20, 21); all four `BackupValidator` allowlists audited; every stored setting checked for an Android control → 28. `readerTwoPage` verified present on Android but surfaced in the reader sheet rather than app Settings — placement, not a gap |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ✅ done | 0 (+1 minor) | `WhatsNew` is iOS-only **by design** (`TASKS.md` row 26 — it exists because iOS has no update system; Android surfaces GitHub release notes). Screenshot capture resolved as L-6: a convenience gap only, since neither platform attaches an image to the submitted report |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | ✅ done | 4 (16, 17, 23, 24) | Error copy swept → 16, 17; empty-state copy swept across both trees → 23 (dead Account tabs), 24 (iOS casing inconsistency). Signed-out and no-results copy compared and otherwise equivalent. **Deliberately not read:** loading/skeleton states, which are animation timing rather than copy |
@@ -260,6 +260,59 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 28. "Auto-preserve small series" exists on iOS only, and the setting is silently reset by an Android round trip — `gap` · Settings / Library
+
+Found by checking which stored settings Android actually exposes a control for. Two of the
+21 payload fields turn out to have no Android implementation at all — and unlike the
+saved-search filters (V-13), they are **not** passed through.
+
+- **iOS:** a real, wired feature. `Settings/SettingsView.swift:338-347` is a
+  `Toggle("Auto-preserve small series", isOn: $autoPreserveSmallSeriesOnSaveForLater)` plus a
+  dependent `Stepper("Series limit: …", value: $autoPreserveSeriesWorkThreshold, in: 2...25)`
+  that is `.disabled` until the toggle is on. It is read where it acts —
+  `Features/WorkDetail/WorkDetailView.swift:90-91` — so saving a work for later
+  automatically preserves the rest of its series when the series is under the threshold.
+- **Android:** the two fields exist in exactly **one** place, the backup transport —
+  `backup/BackupManifest.kt:215-216`
+  (`autoPreserveSmallSeriesOnSaveForLater: Boolean = false`,
+  `autoPreserveSeriesWorkThreshold: Int = 5`). `grep -rn` for either name across the whole
+  Android source root returns those two declaration lines and nothing else: no settings model
+  field, no UI control, no behaviour.
+- **The round trip loses the value, which is the part that bites.** Android's core
+  `CoreBackupSettings` (`core/model/BackupSettings.kt`) has no such fields — grep returns
+  nothing — so `toBackupSettingsPayload` (`backup/BackupMappers.kt:283-305`) cannot populate
+  them; it ends at `accentColorHex`. Both therefore fall back to the `BackupSettingsPayload`
+  defaults on export: `false` and `5`.
+- **Scenario:** an iPhone user turns auto-preserve on with a series limit of 12, so saving one
+  work from a 9-work series quietly downloads the whole series. They back up, restore on
+  Android — where the feature does not exist, which is a defensible gap on its own — and later
+  restore that Android-written archive back onto iOS. The toggle is **off** and the limit is
+  back to **5**. They will not notice until a series stops being preserved, and nothing
+  connects that to the device transfer.
+- **Evidence:** greps as described, plus reading the iOS control and its read site, and the
+  Android export mapper end to end. Ruled out: (a) that Android implements the behaviour
+  without the setting — no code references the concept, and `SeriesPreservation.kt` (Android's
+  series-preservation file) contains neither name; (b) that the fields survive as unknown keys
+  the way saved-search filters do (V-13) — they do not, and the mechanism is exactly why:
+  saved-search filters are stored as an **opaque JSON string** and re-emitted verbatim, whereas
+  settings are decoded into a typed `BackupSettingsPayload` and re-encoded field by field, so
+  anything the typed model omits is regenerated as a default rather than carried.
+- **This qualifies V-7, and I am correcting it rather than leaving it.** V-7 reports the
+  settings payload as matching "21 fields for 21", which is true of the **declared struct** on
+  both sides — and I verified that much correctly. What I did not check then was whether each
+  declared field is *populated* on export. For 19 of 21 it is; for these two Android declares
+  the field, never fills it, and emits the default. V-7 now carries a pointer here.
+- **History:** not recorded. No `TASKS.md` row and nothing in the Android branch's `docs/`
+  mentions auto-preserve.
+- **Recommendation:** two separable pieces, and the cheaper one is the more urgent.
+  **First, stop discarding the value** — add both fields to `CoreBackupSettings` and thread
+  them through `toBackupSettingsPayload`/`toSettings`, so an Android device preserves an
+  iOS user's choice even while it cannot act on it. That is the same pass-through discipline
+  finding 5 recommends and V-13 shows already working elsewhere in this codebase.
+  **Then**, if the feature is wanted on Android, it needs a settings control and a hook in the
+  save-for-later path; Android already has `library/SeriesPreservation.kt` and a series
+  repository, so the machinery exists.
 
 ### 27. Every EPUB Android builds shares one identifier, claims English, and carries no author — `real-bug` · Import / conversion
 
@@ -2204,6 +2257,11 @@ Android as well. The cost of Android's stricter safelist is finding 10.
 
 The settings payload is the second artefact that crosses platforms, so it carries the same
 data-loss risk as the work records. It is clean.
+
+> **Qualified by finding 28.** The field *declarations* match 21 for 21, which is what this
+> section verified. Two of them — `autoPreserveSmallSeriesOnSaveForLater` and
+> `autoPreserveSeriesWorkThreshold` — are declared on Android but never populated on export,
+> so they emit defaults. Structural parity, not round-trip parity, for those two.
 
 **Backup payload: 21 fields, 21 matches, same order.** iOS `KudosBackupSettings`
 (`Services/KudosBackup.swift:743-763`) and Android `BackupSettingsPayload`
