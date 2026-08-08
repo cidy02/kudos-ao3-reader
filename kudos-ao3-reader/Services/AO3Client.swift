@@ -943,6 +943,38 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return try await Self.parseSearchPage(getHTML(resolved), page: page)
     }
 
+    /// The same arbitrary listing URL, but asking AO3 to apply the filter panel's
+    /// settings rather than filtering what comes back.
+    ///
+    /// `/tags/<t>/works` honours every `work_search[...]` parameter `/works/search`
+    /// does — all 23 measured live and identical on both, see
+    /// `docs/reports/filter-parity-2026-08-07.md` — so a tag listing can be a real
+    /// search rather than a page to sift through by hand.
+    func worksPage(at url: URL, filters: AO3SearchFilters, page: Int) async throws -> AO3SearchPage {
+        return try await Self.parseSearchPage(getHTML(Self.filteredWorksURL(url, filters: filters, page: page)), page: page)
+    }
+
+    /// The URL for the call above, split out so the merge is testable without a
+    /// network round trip.
+    ///
+    /// The incoming URL is whatever was tapped, and may already carry query items.
+    /// Its own `work_search[...]`, `page` and `view_adult` are dropped in favour of
+    /// the panel's, so applying a filter twice can't accumulate two conflicting
+    /// values for the same parameter; anything else it carries is preserved.
+    static func filteredWorksURL(_ url: URL, filters: AO3SearchFilters, page: Int) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        var items = (components.queryItems ?? []).filter {
+            !$0.name.hasPrefix("work_search[") && $0.name != "page" && $0.name != "view_adult"
+        }
+        // Kept for the same reason the unfiltered path keeps it: the caller may
+        // hand us any AO3 listing URL, and on `/tags/<t>/works` it is free
+        // (`no-cache, public` with or without it — measured).
+        items.append(URLQueryItem(name: "view_adult", value: "true"))
+        items.append(contentsOf: workSearchQueryItems(filters: filters, page: page))
+        components.queryItems = items
+        return components.url ?? url
+    }
+
     /// An authenticated AO3 bookmarks page (the user's bookmarked works).
     func bookmarksPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
         try await Self.parseBookmarksPage(authenticatedHTML(for: request), page: page)

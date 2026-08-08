@@ -92,6 +92,34 @@ struct AO3TagSearch: Equatable {
 struct AO3TagWorksRequest: Hashable {
     let url: URL
     let title: String
+
+    init(url: URL, title: String) {
+        self.url = Self.worksListing(for: url)
+        self.title = title
+    }
+
+    /// A tag link in AO3's own markup points at `/tags/<name>`, the tag's *info*
+    /// page — an EPUB preface's "Fandom: Frozen (Disney Movies)" is one, and so is
+    /// every tag link on a work page. That page carries no work blurbs at all
+    /// (measured: 0 vs 20 on `/works`), so this screen loaded it, parsed nothing,
+    /// and said "No works found" for tags with hundreds of thousands of works.
+    ///
+    /// The listing is one path component further on, so add it when it's missing.
+    /// Links that already point at `/works` (or at a sub-listing like
+    /// `/bookmarks`) are left alone.
+    private static func worksListing(for url: URL) -> URL {
+        var parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.first == "tags", parts.count == 2 else { return url }
+        parts.append("works")
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        // Rebuilt from the *original* path, not from the decoded components: AO3
+        // writes `&` in a tag path as `*a*` and percent-encodes the rest, and
+        // re-encoding a decoded component would mangle both.
+        components.percentEncodedPath = url.path(percentEncoded: true)
+            .hasSuffix("/") ? "\(url.path(percentEncoded: true))works"
+            : "\(url.path(percentEncoded: true))/works"
+        return components.url ?? url
+    }
 }
 
 /// Shared navigation state so other tabs can hand a URL to the browser and

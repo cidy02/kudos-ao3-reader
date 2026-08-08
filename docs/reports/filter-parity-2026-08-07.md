@@ -94,10 +94,32 @@ The table above proves AO3 would honour every one of those on that very URL if
 that screen re-queried the way `FandomWorksView` does. So this is a capability
 gap with a known fix, not a defect:
 
-> **Open question for the owner:** should the tag drill-down re-query AO3 like
-> Browse does, instead of refining the loaded page? It would cost one request
-> per filter change and gain the full filter set plus real sorting across the
-> whole tag, not just the visible page.
+> ~~**Open question for the owner:** should the tag drill-down re-query AO3 like
+> Browse does, instead of refining the loaded page?~~ **Answered: yes.** Done —
+> `TagWorksView` now sends the filters with the request. Measured on the
+> simulator against `Wednesday (TV 2022)`: adding the F/F category took the card
+> from 19,219 works / 961 pages to **12,292 / 615**, which is AO3's own count for
+> the filtered question. Under the old code the header would have gone on saying
+> 19,219 and 961 while the list showed whichever of the fetched 20 were F/F.
+
+### A pre-existing bug this surfaced
+
+Driving that screen to check the change is what found it: **the tag drill-down
+had never loaded anything at all.** AO3's own markup links a tag as
+`/tags/<name>` — its *info* page — and every route into this screen comes from
+such a link (an EPUB preface's "Fandom:", a tag link on a work page). That page
+carries no work blurbs: measured 0 on `/tags/Frozen (Disney Movies)` against 20
+on the same path plus `/works`. So the screen fetched it, parsed nothing, and
+said "No works found" for tags with hundreds of thousands of works.
+
+`AO3TagWorksRequest` now appends the `/works` segment when it is missing,
+rebuilding from the *original* percent-encoded path so AO3's `*a*`-style escapes
+survive. Pinned by `TagWorksRequestTests`.
+
+Worth noting how close this came to being missed: the unit tests passed, the
+URL builder was correct, and the first live check looked like AO3 rate-limiting
+(a real 525, which it also was). Only re-running curl after a cooldown separated
+"AO3 is throttling me" from "this URL has no works on it, ever".
 
 `AO3AccountWorksList` is a separate case — `/users/<n>/works` and
 `/users/<n>/bookmarks` were not measured here and should not be assumed to

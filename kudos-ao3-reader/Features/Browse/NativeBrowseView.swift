@@ -291,7 +291,18 @@ struct FandomWorksView: View {
 
 /// A tag's works, loaded natively from an AO3 `/tags/<name>/works` URL (e.g. a tag
 /// link tapped in a work's preface). Reuses the search result row, pagination, and
-/// first-load skeleton; read-only (no filter panel).
+/// first-load skeleton, and filters through AO3 exactly as `FandomWorksView` does.
+///
+/// **This screen used to filter the fetched page in memory**, which is why its
+/// panel offered only a third of the controls: you cannot sort 20 works out of
+/// 142,000, and a blurb does not say whether a work is a crossover. Worse, the
+/// header and pager went on reporting AO3's *unfiltered* totals while the list
+/// showed the survivors — "142,362 works, page 1 of 5,000" above three cards.
+///
+/// AO3 honours every `work_search[...]` parameter on a tag listing (23 of 23
+/// measured, `docs/reports/filter-parity-2026-08-07.md`), so the filters are sent
+/// with the request instead. The counts are AO3's answer to the actual question,
+/// the full panel applies, and sorting works across the whole tag.
 struct TagWorksView: View {
     let request: AO3TagWorksRequest
 
@@ -302,17 +313,27 @@ struct TagWorksView: View {
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
     @State private var expandAll = false
-    /// Client-side refine of this tag's loaded works — narrows what's on screen in
-    /// place, contextual to the page (the tag itself stays fixed).
-    @State private var filters = AO3SearchFilters()
+    @State private var filters = Self.baseline
     @State private var showingFilters = false
     @State private var bulkSelection = RemoteWorkSelectionController()
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
-    /// This page's works narrowed by the active refine filters.
-    private var visibleResults: [AO3WorkSummary] {
-        filters.apply(to: results)
+    /// Date Updated, not the app-wide `.relevance` default — same reasoning as
+    /// `FandomWorksView.baseline(for:)`: a tag listing has no relevance ordering
+    /// and sorts by `revised_at` unless told otherwise, so seeding it means the
+    /// panel names the order actually in effect.
+    private static var baseline: AO3SearchFilters {
+        var filters = AO3SearchFilters()
+        filters.sort = .dateUpdated
+        filters.sortDirection = AO3SearchFilters.Sort.dateUpdated.naturalDirection
+        return filters
+    }
+
+    /// Anything set beyond the baseline. Not `hasActiveFilters`, which counts the
+    /// seeded sort and would leave the filter button lit on an untouched screen.
+    private var hasExtraFilters: Bool {
+        filters != Self.baseline
     }
 
     var body: some View {
@@ -327,9 +348,7 @@ struct TagWorksView: View {
                         Section {
                             SearchResultsHero(
                                 summary: heroSummary,
-                                filterLabels: filters.summaryLabels(
-                                    excluding: heroSummary.subject, includesSort: false
-                                ),
+                                filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
                                 subjectField: heroSummary.subjectField(inAnyOf: results),
                                 onEditFilters: { showingFilters = true }
                             )
@@ -338,7 +357,7 @@ struct TagWorksView: View {
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
-                        ForEach(visibleResults) { work in
+                        ForEach(results) { work in
                             SelectableAO3WorkRow(work: work, expandAll: expandAll, controller: bulkSelection)
                                 .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
                         }
@@ -362,10 +381,10 @@ struct TagWorksView: View {
             .filterPanelPresentation(isPresented: $showingFilters) {
                 AO3FilterPanel(
                     filters: $filters,
-                    mode: .refine,
-                    canReset: filters.hasActiveFilters,
-                    onApply: { showingFilters = false },
-                    onReset: { filters = AO3SearchFilters() }
+                    allowsRelevanceSort: false,
+                    canReset: hasExtraFilters,
+                    onApply: applyFilters,
+                    onReset: resetFilters
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
@@ -377,13 +396,13 @@ struct TagWorksView: View {
     private var toolbarContent: some ToolbarContent {
         if bulkSelection.isSelecting {
             RemoteWorkSelectionToolbar(controller: bulkSelection) {
-                bulkSelection.selected(in: visibleResults)
+                bulkSelection.selected(in: results)
             }
         } else if phase == .loaded, !results.isEmpty {
             ActionToolbar {
-                FilterButton(filtersActive: filters.hasActiveFilters,
+                FilterButton(filtersActive: hasExtraFilters,
                              showingFilters: $showingFilters,
-                             onClearFilters: { filters = AO3SearchFilters() })
+                             onClearFilters: resetFilters)
                 WorkListMoreMenu {
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
@@ -415,21 +434,22 @@ struct TagWorksView: View {
     @ViewBuilder
     private var statusOverlay: some View {
         switch phase {
+        case .loaded where results.isEmpty && hasExtraFilters:
+            // Over-filtered to nothing. AO3 searched the whole tag and found none,
+            // so this is the real answer rather than "none on this page".
+            ContentUnavailableView {
+                Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("No works with this tag match the current filters.")
+            } actions: {
+                Button("Clear Filters", action: resetFilters)
+            }
         case .loaded where results.isEmpty:
             ContentUnavailableView(
                 "No works found",
                 systemImage: "tag",
                 description: Text("No works for this tag right now.")
             )
-        case .loaded where visibleResults.isEmpty:
-            // The page loaded works, but the active refine filters hid them all.
-            ContentUnavailableView {
-                Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
-            } description: {
-                Text("No works on this page match the current filters.")
-            } actions: {
-                Button("Clear Filters") { filters = AO3SearchFilters() }
-            }
         case let .failed(message):
             ContentUnavailableView {
                 Label("Couldn't load works", systemImage: "exclamationmark.triangle")
@@ -452,6 +472,31 @@ struct TagWorksView: View {
         )
     }
 
+    /// Apply the chosen filters and close the panel. Back to page 1: page 7 of the
+    /// old result set is not page 7 of the new one, and AO3 would answer a page
+    /// number past the filtered end with nothing at all.
+    private func applyFilters() {
+        showingFilters = false
+        reload()
+    }
+
+    /// Back to the tag's own listing, keeping the panel open.
+    private func resetFilters() {
+        guard hasExtraFilters else { return }
+        filters = Self.baseline
+        reload()
+    }
+
+    private func reload() {
+        phase = .loading
+        results = []
+        currentPage = 1
+        totalPages = 1
+        resultSummary = nil
+        bulkSelection.selection.removeAll()
+        Task { await load(page: 1) }
+    }
+
     private func load(page: Int) async {
         // Always, not only on a first load: with results already on screen this
         // is what tells the pagination bar a fetch is running. The list itself
@@ -460,7 +505,9 @@ struct TagWorksView: View {
         // the tap did nothing.
         phase = .loading
         do {
-            let result = try await AO3Client.shared.worksPage(at: request.url, page: page)
+            let result = try await AO3Client.shared.worksPage(
+                at: request.url, filters: filters, page: page
+            )
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
