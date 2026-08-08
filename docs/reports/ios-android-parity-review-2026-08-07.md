@@ -17,17 +17,12 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** every area has been opened; seventeen are partial. The highest-value
-remaining item is the **comment model field set** (area 7) — compare
-`Models/AO3CommentModels.swift` against `network/ao3/comments/AO3CommentModels.kt` field by
-field for creator/moderator badges, edited state, deleted/hidden state and thread depth, since
-finding 13 showed this area's model layer is thinner on Android than it looks. After that, the
-**Library shelf predicates** (area 10) and the **error/empty-state copy sweep** (area 19),
-which is the only area where nothing beyond adjacent evidence has been gathered.
-
-**Standing caution for whoever resumes:** two of two clusters spot-checked from the Android
-branch's `docs/audits/` turned out to be **already fixed** while still listed as confirmed-open
-(finding 3). Verify any item from that corpus against the tree before scheduling it.
+**Resume here:** the **empty-state sweep** (area 19's remaining half) — for each list screen,
+compare what iOS shows against what Android shows when the list is legitimately empty rather
+than errored. iOS centralises much of this (`HomeSectionKind.emptyMessage`,
+`EmptyStateCard` equivalents); Android has `EmptyStateCard` (seen at
+`author/AuthorProfileScreen.kt:298`). Start by enumerating both platforms' empty-state strings
+and diffing them, the same way finding 16 was found by diffing error copy.
 
 **Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
 See *Not covered* for the full breakdown and for the standing warning about the Android
@@ -74,9 +69,9 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-Eighteen confirmed findings, ten verified "no divergence" results, seven leads (three since
-resolved), one ruled out. Of twenty-one areas: **four closed, seventeen partial, none
-untouched.** Every area has had at least one question answered; none has been exhausted.
+Twenty-two confirmed findings, fourteen verified "no divergence" results, seven leads (five
+since resolved), one ruled out. Of twenty-one areas: **ten closed, eleven partial, none
+untouched.**
 
 The honest headline has not changed since the first pass: **the two apps agree far more than
 they differ, and where they differ it is almost never in the business rules.** Every constant
@@ -119,11 +114,13 @@ existing ones. The one clean case of the simple story is `SyncRepository.kt` (fi
 2), which has no test at all against iOS's 796-line folder-sync suite. See *Asymmetric test
 coverage* for the per-finding breakdown.
 
-**The "iOS is the source of truth" convention was right in sixteen cases and wrong in two.**
+**The "iOS is the source of truth" convention was right in twenty cases and wrong in two.**
 Finding 8 (iOS discards a reading position it was handed) and finding 14 (Android marks
 already-saved works in browse; iOS cannot) are both places where Android *added* something
-rather than porting it, so a rule about not cutting iOS down simply does not apply. It is a
-good default, not a law.
+rather than porting it, so a rule about not cutting iOS down simply does not apply. Two
+smaller results point the same way and are recorded without being filed: Android has zero
+hardcoded font sizes to iOS's 18 (V-14), and Android's `AO3RetryPolicy` blocks retries on any
+non-GET structurally where iOS relies on construction (V-4). It is a good default, not a law.
 
 **The Android branch's audit corpus should not be trusted as a work list.** Three clusters
 were spot-checked and all three were stale (finding 3) — one wrong in all three of its claims,
@@ -133,10 +130,9 @@ evidently made *from* those reports and the reports were never marked resolved. 
 against the tree before scheduling anything from them.
 
 What is *not* established: no test suite was run on either platform, and nothing here is
-runtime-verified. Seventeen areas are partial — the ledger's Notes column names what was left
-in each, and *Not covered* ranks where a follow-up should start. The empty-state half of area
-19 in particular is still open: findings 16 and 17 cover error *copy*, not what each screen
-shows when a list is legitimately empty.
+runtime-verified. Eleven areas remain partial — the ledger's Notes column names what was left
+in each. The largest single omission is the **empty-state** half of area 19: findings 16 and
+17 cover error *copy*, not what each screen shows when a list is legitimately empty.
 
 ## Findings
 
