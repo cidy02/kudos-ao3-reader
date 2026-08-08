@@ -17,14 +17,17 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 7 (comments) — compare `Models/AO3CommentTimestamp.swift`'s accepted
-formats against `network/ao3/comments/AO3CommentParser.kt`'s timestamp parsing. A format that
-parses on one platform and fails on the other is a real bug, and iOS having a *dedicated
-file* for it suggests the format set is non-obvious. Then the comment model field set
-(role/badge, edited, deleted state, thread depth). Note `PARITY_SWEEP2_D:7` lists several
-comment items as already covered — but two of two audit clusters spot-checked in this review
-turned out to be **already fixed**, so verify against the tree before treating any of them as
-live.
+**Resume here:** every area has been opened; seventeen are partial. The highest-value
+remaining item is the **comment model field set** (area 7) — compare
+`Models/AO3CommentModels.swift` against `network/ao3/comments/AO3CommentModels.kt` field by
+field for creator/moderator badges, edited state, deleted/hidden state and thread depth, since
+finding 13 showed this area's model layer is thinner on Android than it looks. After that, the
+**Library shelf predicates** (area 10) and the **error/empty-state copy sweep** (area 19),
+which is the only area where nothing beyond adjacent evidence has been gathered.
+
+**Standing caution for whoever resumes:** two of two clusters spot-checked from the Android
+branch's `docs/audits/` turned out to be **already fixed** while still listed as confirmed-open
+(finding 3). Verify any item from that corpus against the tree before scheduling it.
 
 **Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
 See *Not covered* for the full breakdown and for the standing warning about the Android
@@ -43,11 +46,11 @@ that fan-out shape; work areas serially and commit each one.
 
 | # | Area | iOS roots | Android roots | Status | Findings | Notes |
 |---|---|---|---|---|---|---|
-| 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ⬜ not started | – | Only the file inventory established: both have a Welcome + a sync-folder step (`WelcomeView`/`SyncFolderOnboardingView` vs `WelcomeScreen.kt`/`SyncFolderOnboardingScreen.kt`). No content compared |
+| 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | 🔄 in progress | 0 | Gating + state model match: both gate on `hasCompletedOnboarding`, both run Welcome → sync-folder, both keep a separate permanent-dismissal flag for the second step (iOS `ContentView.swift:35-41`, Android `KudosApp.kt:101-175`). **Not done:** the screens' copy, illustrations and step content |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
-| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | Untouched. Note Android has `BrowseLocalIndicators.kt` and `CategoryStats.kt` with no obvious iOS counterpart — establish the real mapping before calling either a gap |
+| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | `BrowseLocalIndicators` mapping question resolved — it genuinely has no iOS counterpart → finding 14. **Not done:** category list/ordering, fandom counts parsing, catalog cache TTL, WebView-fallback policy, `CategoryStats` mapping |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 1 (finding 13) | Timestamp handling traced selector-to-pixel on both → finding 13; draft-store identity keying done in V-3. **Not done:** comment model field set (role/badge, edited, deleted, depth), posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
@@ -71,46 +74,53 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reaso
 
 ## Summary
 
-Eleven confirmed findings, eight verified "no divergence" results, and seven open leads.
-Of twenty-one areas: **four closed, eleven partial, six never opened.** The honest headline is that **the two
-apps agree far more than they differ, and where they differ it is almost never in the
-business rules** — it is in the layer around them.
+Fourteen confirmed findings, nine verified "no divergence" results, seven open leads. Of
+twenty-one areas: **four closed, seventeen partial, none untouched.** Every area has now been
+opened; none has been exhausted.
 
-The rules themselves are ported with unusual care. Every constant in the binding networking
-policy matches to the digit (V-4). The backup merge core — which record wins a conflict,
-whether a deletion may be revived — is semantically identical function for function,
-including the deliberate asymmetry where a tie applies an incoming edit but a tie does *not*
-revive a deleted record (V-1). Write endpoints match, down to the verbatim sentence shown
-when you kudos something twice (V-8). The settings payload matches 21 fields for 21 (V-7).
-The AO3 markup trap the prompt warned about is defused identically on both sides, comment
-text included (V-5). Where someone sat down and ported a rule, they ported it correctly.
+The honest headline has not changed since the first pass: **the two apps agree far more than
+they differ, and where they differ it is almost never in the business rules.** Every constant
+in the binding networking policy matches to the digit (V-4). The backup merge core is
+semantically identical function for function, including the deliberate asymmetry where a tie
+applies an incoming edit but does *not* revive a deleted record (V-1). All nine reading
+statistics compute identically, formula for formula (V-9) — the area I expected to be worst.
+Write endpoints match down to the verbatim sentence shown when you kudos twice (V-8). The
+settings payload matches 21 fields for 21 (V-7); the Recently Deleted window is 90 days on
+both. Where someone sat down and ported a rule, they ported it correctly.
 
-**The divergences cluster in three places instead.** First, *what happens around the edges
-of a correct rule*: the sync write is atomic on iOS and truncating on Android (finding 1),
-the merge is faithful but one flag in it is OR'd rather than assigned (finding 4), the
-archive is well-specified but nine fields silently do not survive a round trip (finding 5).
-Second, *breadth* — Android implements a strict subset of iOS's surface: ten missing search
-parameters including sort direction (finding 7), no author's-note handling at all
-(finding 10), no touch-target floor on custom controls (finding 11). Third, *staleness in
-the record rather than the code*: a hardcoded version string that has already drifted
-(finding 6), a contract doc asserting an atomicity guarantee the code does not provide
-(finding 1), and an audit corpus still listing as open a gap that has been closed
-(finding 3).
+**The divergences cluster in four places instead.** *Around the edges of a correct rule*: the
+sync write is atomic on iOS and truncating on Android (1), the merge is faithful but one flag
+is OR'd rather than assigned (4), the archive is well-specified but nine fields do not survive
+a round trip (5). *Breadth* — Android implements a strict subset of iOS's surface: ten missing
+search parameters including sort direction (7), no author's-note handling (10), no touch-target
+floor on custom controls (11). *Presentation left unfinished*: comment timestamps rendered as
+raw AO3 text (13), and a series row that draws a ripple and does nothing (12). And *staleness
+in the record rather than the code*: a hardcoded UA version that has already drifted (6), a
+contract doc asserting atomicity the code does not provide (1), and an audit corpus still
+listing closed work as open (3).
 
-Two observations worth carrying forward. **The most reliable predictor of a defect was
-absent test coverage, not absent care.** `SyncRepository.kt` holds two of the four
-backup findings and has no test of any kind; the iOS file it was ported from has a 796-line
-suite. That pattern held on the first area examined and is the cheapest thing to act on.
-And **the standing "iOS is the source of truth" convention was right in nine cases and wrong
-in one** — finding 8, where Android's reader model is better and iOS discards a reading
-position it was handed. The convention is a good default, not a rule.
+Three things are worth carrying forward.
 
-What is *not* established: six areas were never opened — onboarding, browse, comments,
-author profiles and series, the whole Library surface (including its statistics), and error
-handling as a sweep — and eleven more were only partly read. No test suite was run
-on either platform. Nothing here is runtime-verified — this is static reading, and the two
-places it most needs runtime confirmation (L-2, and the touch-target measurement behind
-finding 11) are marked as such.
+**The most reliable predictor of a defect was absent test coverage, not absent care.**
+`SyncRepository.kt` holds two of the four backup findings and has no test of any kind; the iOS
+file it was ported from has a 796-line suite. Conversely the statistics code, which *is*
+tested on both sides, came through a formula-by-formula comparison clean.
+
+**The "iOS is the source of truth" convention was right in twelve cases and wrong in two.**
+Finding 8 (iOS discards a reading position it was handed) and finding 14 (Android marks
+already-saved works in browse; iOS cannot) are both places where Android *added* something
+rather than porting it, so a rule about not cutting iOS down simply does not apply. It is a
+good default, not a law.
+
+**The Android branch's audit corpus should not be trusted as a work list.** Two clusters were
+spot-checked and both were stale — the second in all three of its claims, including a fix
+whose code comment quotes the audit's own worked example (finding 3). The fixes were made
+*from* those reports and the reports were never updated. Re-verify against the tree before
+scheduling anything from them.
+
+What is *not* established: no test suite was run on either platform, and nothing here is
+runtime-verified. Seventeen areas are partial — the ledger's Notes column names what was left
+in each, and *Not covered* ranks where a follow-up should start.
 
 ## Findings
 
@@ -189,6 +199,52 @@ finding 11) are marked as such.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 14. Android marks already-in-your-library works in browse and search results; iOS does not — `gap` · Browse / search · **iOS is the platform behind here**
+
+The second of two cases where the standing convention points the wrong way — Android has the
+feature, and it is a good one.
+
+- **Android:** `browse/BrowseLocalIndicators.kt` defines
+  `BrowseLocalIndicator(isSaved, hasEpub, isFavorite, isFinished)` — four flags, documented
+  at `:6` as "Local Library state for a browsed work, derived without any DB write". It is
+  built once per screen from the saved-works list (`BrowseLocalIndicators.index(savedWorks)`)
+  and applied per row: `browse/FandomWorksScreen.kt:96` for fandom browse results, and
+  `author/AuthorWorksScreen.kt:70` + `:151` (`LocalIndicatorRow(...)`, rendered at `:204`)
+  for an author's works.
+- **iOS:** `Features/Search/AO3WorkRow.swift:6-14` — the remote result row takes
+  `work: AO3WorkSummary`, `expandAll`, `isSelecting`, `isSelected` and nothing else. It has
+  no local-state input, performs no `@Query`, and touches no `modelContext` (grep over the
+  row and `Features/Browse/NativeBrowseView.swift` returns zero hits for either). Broader
+  greps for `isInLibrary`, `alreadySaved`, `localIndicator`, `savedBadge`, `inLibrary`
+  across `Features/Browse/`, `Features/Search/` and `UIComponents/` return **nothing**.
+- **Divergence:** browsing the same fandom on both devices, Android tells you which works you
+  already have; iOS does not.
+- **Scenario:** a user with 300 saved works browses "Naruto (Anime & Manga)", 142,362 works
+  deep. On Android, rows they have already saved, downloaded, favourited or finished carry an
+  indicator, so they scroll past them. On iPhone every row looks identical, so they open works
+  they finished last month to find out — one navigation, one metadata fetch, and a moment of
+  "haven't I read this?" each time. The information is entirely local: iOS already has the
+  `SavedWork` records and even a `WorkIdentityIndex` service for exactly this matching.
+- **Evidence:** read Android's indicator type and both of its call sites; read iOS's row
+  declaration in full and grepped its file and the browse view for any persistence access.
+  Ruled out: (a) that iOS surfaces this somewhere else in the row's body — the row has no
+  local data to surface, since nothing is passed in and nothing is queried; (b) that iOS
+  deliberately avoids the DB read for performance — Android's own comment stresses the
+  derivation is "without any DB write" and it is an in-memory index over an already-loaded
+  list, which is the same cheap approach iOS could take; (c) that this is the known
+  `BrowseLocalIndicators`-has-no-iOS-counterpart mapping question I flagged earlier in this
+  review's own ledger — that is now resolved, and the answer is that it genuinely has none.
+- **History:** not recorded on either side. No `TASKS.md` row and no Android-branch doc
+  mentions local indicators on remote results.
+- **Recommendation:** **iOS moves, against the standing convention.** This is the second case
+  in this review (with finding 8) where Android is ahead, and it is worth naming the pattern:
+  both are places where Android *added* something rather than porting it, so the
+  "iOS is the source of truth" rule — which is about not cutting iOS down to Android's level —
+  simply does not apply. The port is cheap: `Services/WorkIdentityIndex.swift` already exists
+  for matching remote summaries to local records, so `AO3WorkRow` needs an optional indicator
+  parameter and the two list screens need to build the index once per load, exactly as
+  `BrowseLocalIndicators.index` does.
 
 ### 13. Comment timestamps are relative and localised on iOS, raw AO3 text on Android — `drift` · Comments
 
@@ -1380,9 +1436,9 @@ timestamps. **Verified compatible.** One residual is carved out as lead L-2 belo
 
 ## Not covered
 
-**Of twenty-one areas: four closed, eleven partial, six never opened.** "Closed" means the
-area's central question was answered, not that every file in it was read — each closed row in
-the ledger names what was deliberately left.
+**Of twenty-one areas: four closed, seventeen partial, none untouched.** Every area has been
+opened; none has been exhausted. "Closed" means the area's central question was answered, not
+that every file was read — each ledger row names what was deliberately left.
 
 **Read closely** (findings rest on these): folder sync and backup on both sides
 (`FolderSyncService.swift`, `KudosBackup.swift` manifest/encoder/merge regions;
@@ -1405,23 +1461,26 @@ settings done; themes, TOC, in-reader search, annotations and TTS not), area 12 
 only), area 16 (backup payload only, not the Settings screens), area 20 (touch targets and
 density only), area 21 (suite shape and one per-rule instance only).
 
-**Never opened:** areas 1 (onboarding), 5 (browse), 7 (comments), 8 (author profiles and
-series), 10 (library, collections, queues, **statistics**, recently deleted), 19 (error
-handling and empty states as a sweep). Within opened areas, notable omissions: the
+**Thinnest coverage** (opened, but only one question each answered): area 19 (error handling
+and empty states) has had *no* dedicated sweep — only adjacent evidence from V-4, V-8 and L-7;
+area 1 (onboarding) has its gating verified but none of its copy; area 5 (browse) resolved only
+the local-indicator question. Within better-covered areas, notable omissions: the
 collection/queue/annotation merge bodies, ZIP container internals, PDF and plain-text
 converters, the EPUB builder's output, text-encoding detection, the download queue, tag
-autocomplete, and the `SavedSearch` round trip.
+autocomplete, the `SavedSearch` round trip, the comment model field set, Library shelf
+predicates, and reader colour themes / TOC / annotations / TTS.
 
 **Where a follow-up should start, highest value first:**
-1. **Library statistics formulas** (area 10). Untouched, and the single most likely place for
-   a silent numeric divergence — a statistic computed from a different denominator on each
-   platform is invisible until someone compares two phones.
-2. **Recently Deleted retention window** (area 10). A shorter window on one platform is
-   silent data loss. Note `PARITY_SWEEP2_A:20` already records a *rounding* divergence in the
-   days-remaining caption (Android floors, iOS rounds up) — the window length itself was not
-   checked here.
-3. **Comments** (area 7) and **error/empty states** (area 19), where divergence is cheap to
-   introduce and nothing pins it.
+1. **The comment model field set** (area 7). Finding 13 showed this area's model layer is
+   thinner on Android than its parser suggests; creator/moderator badges, edited state,
+   deleted/hidden state and thread depth are all unchecked.
+2. **Error handling and empty states** (area 19). The only area with no dedicated pass, and
+   the one the review prompt singles out as diverging quietly and rarely being tested.
+3. **Library shelf predicates** (area 10) — which work appears on which shelf. The statistics
+   came through clean, but the shelf partition is a separate rule set and L-4 is open inside it.
+4. **The two statistics/queue items still open as leads**: L-4 (`WorkImporter.saveMetadataOnly`
+   still hard-coding `markSaved = true`) and L-5 (`hasEpub` never downgraded when the file is
+   gone).
 
 **A standing warning about the Android branch's own audit corpus.** `docs/audits/`
 (`PARITY_SWEEP2_A`–`D`, `ANDROID_PARITY_REPORT.md`, `ANDROID_PARITY_FINDINGS_VERIFIED.md`,
