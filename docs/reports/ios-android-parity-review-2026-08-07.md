@@ -17,15 +17,14 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 6 (work detail + write actions) — compare the write endpoints and
-their form fields: `Services/AO3WriteActions.swift` against
-`network/ao3/writes/AO3WriteUrls.kt` + `AO3WriteRepository.kt` + `AO3WriteFormParser.kt`.
-Check kudos / bookmark / subscribe / collect one by one: POST target, form fields, CSRF
-token source, and the duplicate-kudos error path. Note that
-`docs/AO3_NETWORKING_POLICY.md` records write actions as **never exercised against a live
-AO3 session** on iOS, so neither side's behaviour here is runtime-verified.
+**Resume here:** Area 12's inbox half — compare `Services/AO3Client+Inbox.swift`'s
+`parseInboxPage` against `network/ao3/inbox/AO3InboxParser.kt`, specifically the
+**malformed-row policy**. `TASKS.md` row 64 records an iOS finding (F7) that `parseInboxPage`
+"only fails closed when *every* row" fails; establish whether Android fails the same way,
+because a parser that fails open on a partially-broken page silently drops the user's
+notifications.
 
-**Then:** areas 1, 5, 7, 8, 10–13, 18–20 are untouched; 9 and 16 are partially done. Read *Not covered* before planning —
+**Then:** areas 1, 5, 7, 8, 10, 18–20 are untouched; 6, 9, 11, 12, 13, 16, 21 are partial. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -45,14 +44,14 @@ that fan-out shape; work areas serially and commit each one.
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | |
-| 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ⬜ not started | – | |
+| 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. **Partial input:** finding 3 closes the model half of the `isQueuedForLater` cluster; leads L-3/L-4 are open here |
-| 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
-| 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
-| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ⬜ not started | – | |
+| 11 | Home | `Features/Home/` | `home/` | 🔄 in progress | 0 | Section enums match: 4 cases, same names, same order (V-8). **Not done:** per-section query/cap/empty-state, "see all" destinations, pull-to-refresh |
+| 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
+| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | 🔄 in progress | 1 (finding 5) | `SavedWork` (64 stored) vs `WorkEntity` (46 cols) diffed mechanically → finding 5. Migration safety verified (V-2). **Not done:** the other 8 entities, type-converter round trips, DAO query semantics |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 1 (finding 9) | Backup settings payload verified 21/21 (V-7). **Not done:** the Settings *screens* themselves, theme colour values, per-setting UI wording |
@@ -192,6 +191,61 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 10. Author's notes are detected and set apart on iOS and rendered as ordinary prose on Android — `gap` · Import / reader
+
+- **iOS:** two mechanisms converging on one output. Structurally,
+  `Services/HTMLWorkSanitizer.swift:33-35` rewrites AO3's own note containers —
+  `div.notes`, `div.end.notes`, `.preface .notes`, `.chapter .notes`, `#notes` — directly.
+  Heuristically, `Services/AuthorNoteDetector.swift` runs a scoped phrase table over
+  extracted blocks for PDF and plain-text sources, consumed at
+  `HTMLWorkSanitizer.swift:72`. Both emit `<aside epub:type="note" class="author-note">`
+  instead of `<p>` (`:67-70`), with adjacent notes merged into one `<aside>` "since a
+  three-paragraph preamble is one note". There is a dedicated `AuthorNoteDetectorTests`
+  suite and a `diagnostics(for:)` entry point for vetting new phrases.
+- **Android:** nothing. `grep -rniE "authorNote|author-note|div\.notes|aside"` across the
+  entire Android source root returns **zero hits**.
+  `works/converters/HTMLWorkConverter.kt:34` is the whole sanitisation step —
+  `Jsoup.clean(region.html(), Safelist.relaxed().removeTags("img"))` — and Jsoup's
+  `relaxed()` safelist permits neither the `aside` element nor the `class` attribute.
+- **Divergence:** two layers, and the second is the one that surprises.
+  1. Android's own imports never *detect* notes, so a converted PDF/TXT/HTML work has its
+     author's notes inline with the fiction.
+  2. Even a work converted **on iOS** and carried to Android by backup or folder sync loses
+     the distinction, because Android injects no CSS for `.author-note` (same zero-hit
+     grep). The markup survives in the EPUB; nothing styles it.
+- **Scenario:** a reader imports a community PDF of a long fic. On iPhone the chapter opens
+  with the author's "A/N: sorry for the wait, this chapter has a major character death, skip
+  to the break if you'd rather not" visually set apart as apparatus — which is the point,
+  because that block is a content warning. On Android the same sentence is typeset as the
+  first paragraph of the chapter, indistinguishable from narration. The user reads a
+  spoiler, or reads an apology as prose.
+- **Evidence:** read the iOS sanitiser and detector; grepped the whole Android tree for four
+  independent spellings of the concept with zero hits. Ruled out: (a) that Android detects
+  notes elsewhere in the import pipeline — the grep covers `works/converters/`, `files/` and
+  everything else under the source root; (b) that Android's reader styles the class without
+  naming it — no CSS asset or injected stylesheet mentions `author-note`, and the same grep
+  would have caught it; (c) that Jsoup's `relaxed()` might pass `aside` through — it does
+  not, the safelist is a fixed tag list that excludes it, so Android could not preserve
+  iOS-style markup on re-import even if a note arrived pre-marked.
+- **History:** **iOS-side, extensively recorded; Android-side, not at all.** `TASKS.md`
+  T-157b is the implementation ("Author's-note detection, built to be extended as new PDF
+  sources arrive", ✅ DONE, 10 new tests), and it states the product rationale plainly:
+  "notes are apparatus, not prose, and a reader that renders them as prose makes every
+  converted work read worse than the file it came from." T-158 (`✋ SPEC READY`) adds
+  user-editable overrides, T-173 and T-175 extend detection. Four task rows, one dedicated
+  doc (`docs/AUTHOR_NOTES.md`), and no Android counterpart anywhere — greps of the Android
+  branch's `docs/` for "author note" return nothing.
+- **Recommendation:** Android moves, but in two separable steps of very different cost, and
+  only the first is worth scheduling now. **Step one is nearly free and should not wait for
+  step two:** add `.author-note` styling to Android's reader CSS and stop stripping `aside`
+  and `class` in the sanitiser (`Safelist.relaxed().removeTags("img").addTags("aside")
+  .addAttributes("aside", "class", "epub:type")`). That alone makes every iOS-converted work
+  render correctly on Android, which is the cross-device case a shared library actually hits.
+  **Step two**, porting `AuthorNoteDetector`'s phrase table, is a larger job and carries the
+  asymmetry iOS's own docs stress — "a missed note is cosmetic, a false positive demotes real
+  prose" — so it should be ported wholesale with its test fixtures rather than
+  re-derived, or it will be less safe than the original.
 
 ### 8. Restoring a cross-platform reading position on iPhone loses the position *within* the chapter — `real-bug` · Reader
 
@@ -759,6 +813,55 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-8 — write actions, Home sections, account lists and HTML sanitisation all agree
+
+Four smaller comparisons, grouped because each came out clean and none needs its own section.
+
+**Write actions (area 6) are at parity down to the user-facing strings.** Every endpoint
+matches: `kudos.js` (iOS `Services/AO3WriteActions.swift:282`, Android
+`network/ao3/writes/AO3WriteUrls.kt:17-21`), `/works/<id>/comments` (iOS `:283-285`,
+Android `:24-32`), `/works/<id>/chapters/<cid>/comments` (Android `:34-46`, iOS via
+`AO3Client+Comments`), `/users/<u>/subscriptions` (iOS `:293-295`, Android `:48-57`),
+`/works/<id>/mark_for_later` (iOS `:297-299`, Android `:59-67`), `/works/<id>/bookmarks`
+(iOS `:301-303`, Android `:69-77`). The duplicate-action paths agree too, including the
+literal text shown to the user: iOS `:32-33` returns "You've already left kudos here." on a
+422 whose body contains "already left kudos"; Android `AO3WriteRepository.kt:41-42` returns
+the same sentence on the same condition (`statusCode == 422 && parser.alreadyKudosed(body)`,
+with the matcher at `AO3WriteFormParser.kt:125`). "You're already subscribed." likewise
+(iOS `:114-115`, Android `:96-97`). Both fetch the work page with `view_adult=true` for the
+CSRF token (iOS `:290`, Android `AO3WriteUrls.kt:12`) and both deliberately omit that
+parameter on listing endpoints — iOS explains why at `AO3Client.swift:453-458` (it defeats
+AO3's public caching). *Caveat, from the project's own docs rather than my testing:*
+`docs/AO3_NETWORKING_POLICY.md` records that iOS write actions "have never been exercised
+against a live AO3 session". Neither platform's write path is runtime-verified; this is
+static agreement only.
+
+**Home sections (area 11).** Four cases each, same names, same order: iOS
+`Features/Home/HomeSections.swift:9-12` (`readingNow`, `recentlyUpdated`, `favorites`,
+`recentlyOpened`) against Android `home/HomeSectionKind.kt:17,23,31,36` (`ReadingNow`,
+`RecentlyUpdated`, `Favorites`, `RecentlyOpened`). Note the known iOS copy bug in
+`recentlyUpdated`'s empty message is already recorded on the Android branch
+(`docs/iOS_Issues_Found_While_Porting.md:12-41`) with Android deliberately keeping the
+accurate wording — not re-reported here.
+
+**Account list types (area 12, partially).** Both expose the same four AO3 account lists:
+iOS `Features/Bookmarks/AO3AccountWorksList.swift:14-17` (`markedForLater`, `bookmarks`,
+`history`, `subscriptions`) and Android `account/AccountListType.kt:81-84`
+(`MarkedForLater`, `Bookmarks`, `History`, `Subscriptions`). iOS additionally routes
+Collections, Works and Series through separate `AccountView` destinations
+(`Features/Account/AccountView.swift:66-100`); whether Android reaches those by another
+route was **not** checked, so area 12 stays open.
+
+**HTML sanitisation is allowlist-based on both (area 13).** iOS `HTMLWorkSanitizer.swift`
+is a hand-rolled allowlist whose header states the reasoning — imported markup "is treated
+as hostile input — allowlist, not denylist, because a denylist is a list of the attacks you
+happened to think of" — dropping images and all styling. Android reaches the same posture
+with `Jsoup.clean(region.html(), Safelist.relaxed().removeTags("img"))`
+(`works/converters/HTMLWorkConverter.kt:34`): Jsoup's `relaxed()` permits no `script`, no
+`style` attribute, and restricts `a[href]` to safe protocols, so the XSS vector is closed on
+both. The two *deliberate omissions* iOS documents — images dropped, no styling — hold on
+Android as well. The cost of Android's stricter safelist is finding 10.
 
 ### V-7 — reader settings and the backup settings payload match field for field, default for default
 
