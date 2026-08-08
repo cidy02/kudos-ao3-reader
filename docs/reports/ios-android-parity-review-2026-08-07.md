@@ -119,8 +119,8 @@ which has no test at all against iOS's 796-line folder-sync suite.
 Findings 8 and 14 are places where Android *added* something rather than porting it, so a rule
 about not cutting iOS down does not apply. Three smaller results point the same way without
 being filed: Android has zero hardcoded font sizes to iOS's 18, blocks retries on any non-GET
-structurally, and enforces a politer autocomplete floor. Two findings are iOS-side outright
-(19, 24).
+structurally, and enforces a politer autocomplete floor. One finding is iOS-side outright (24); finding 19 is a
+**both-platforms** item whose iOS half is the larger of the two.
 
 **The Android branch's audit corpus should not be trusted as a work list.** Four clusters were
 spot-checked and all four were stale (finding 3) — including one that assigns iOS a live
@@ -151,9 +151,17 @@ half of accessibility (V-16).
   when the stream is opened, before a single new byte is written.
 - **Divergence:** iOS never has a moment where the destination is invalid. Android has a
   window — the whole duration of the write — during which the destination is truncated or
-  partially written. The *ordering* of the iOS design was ported faithfully (assets first,
-  manifest last, then orphan pruning); the *atomicity* that makes that ordering mean
-  anything was not.
+  partially written. **Nor was the ordering ported** — see the correction below.
+
+  > **CORRECTION (validation pass).** I originally wrote that "the ordering of the iOS design
+  > was ported faithfully (assets first, manifest last, then orphan pruning)". It was not, and
+  > getting this backwards understated the finding. iOS writes the manifest **first**
+  > (`FolderSyncService.swift:687`) and prunes orphans **after** (`:697`, `:701`), which is
+  > what makes the manifest a commit point. Android prunes **before** the manifest write —
+  > orphan sweeps at `SyncRepository.kt:176` and `:193`, manifest at `:201-205`. So a crash
+  > between the prune and the write leaves assets already deleted while the folder still
+  > carries the *old* manifest referencing them: a second, independent way for the same
+  > sequence to corrupt the folder, on top of the truncation.
 - **Scenario:** a user with a 400 MB library syncs to a Google Drive / Dropbox / SD-card
   folder. Mid-sync the process is killed — Android's background-work killer, storage
   full, the cloud provider dropping the SAF connection, or the user force-quitting.
@@ -161,9 +169,11 @@ half of accessibility (V-16).
   and the next sync retries cleanly. On Android the folder holds a zero-length or
   half-written `manifest.json`. That file is the sync folder's index of the entire
   library. On the next sync-down — and on every *other* device pointed at that folder —
-  `BackupValidator` fails to parse it and the folder is unusable; the orphan-pruning passes
-  at `SyncRepository.kt:176` and `:193` then have no manifest to compute "expected" from.
-  The user's off-device backup is destroyed by an interrupted write.
+  `BackupValidator` fails to parse it and the folder is unusable.
+  (My original text added that the pruning passes "then have no manifest to compute expected
+  from" — that clause was wrong and is withdrawn: `expectedWorks`/`expectedFonts` are built
+  from `snapshot.works` at `SyncRepository.kt:161-170`, not from the manifest.) The user's
+  off-device backup is destroyed by an interrupted write.
 - **Evidence:** read both write paths end to end. Grepped the Android backup package for
   any staging or rename primitive — `grep -rniE "renameTo|atomic|\.part|createNewFile"
   backup/` over `BackupExporter.kt`, `BackupPaths.kt`, `BackupRepository.kt` returns no
@@ -439,8 +449,14 @@ It appears, but not as itself, in both directions.
 
 ### 25. Three Library shelves select or order different works on each platform — `real-bug` · Library
 
-Four of the seven shelves match exactly. Three do not, and the History divergence is not a
-near-miss — the two platforms show **disjoint sets of works** under the same name.
+Four of the seven shelves match exactly. Three do not, and History is the substantial one: the two
+platforms show **overlapping but non-nested sets** under the same name — neither is a subset
+of the other, so each shows works the other hides.
+
+> **CORRECTION (validation pass).** I first wrote "disjoint sets". That is wrong: a work that
+> is finished, had its EPUB freed, and was opened at some point satisfies **both** predicates
+> (`!hasEPUB && !isQueuedForLater` and `lastReadDate != null`) and appears on both. The body
+> below always described the relationship correctly; only that headline word was overstated.
 
 iOS `Features/Library/LibrarySectionKind.swift:77-114` against Android
 `library/LibraryQuery.kt:110-144`:
@@ -451,7 +467,7 @@ iOS `Features/Library/LibrarySectionKind.swift:77-114` against Android
 | Finished | `readingState == .finished` / `lastReadDate` desc | `isFinished` / `lastReadComparator` | ✅ identical |
 | Downloaded | `hasEPUB` / `dateAdded` desc | `hasEpub` / `dateAdded` desc, then title | ✅ same set; Android adds a title tie-break iOS lacks, which is a stability improvement, not drift |
 | Collections | `[]` (rendered separately) | separate list, name-sorted | ✅ equivalent |
-| **History** | `!hasEPUB && !isQueuedForLater` | `lastReadDate != null` | ❌ **different sets** |
+| **History** | `!hasEPUB && !isQueuedForLater` | `lastReadDate != null` | ❌ **overlapping, neither nested** |
 | **Saved for Later** | `isInSavedForLaterQueue \|\| (isSaved && !isQueuedForLater)` | `isSaved` | ❌ |
 | **Favorites** | `isFavorite` / **`dateAdded` desc** | `isFavorite` / **`LastRead`** | ❌ same set, different order |
 
@@ -462,7 +478,8 @@ the partition matches "the old Account-tab Local Reading History list". Android'
 *opened-ever* shelf. Concretely: a work you are reading right now, with its EPUB on disk,
 appears in Android's History and **cannot** appear in iOS's; a finished work whose file you
 freed appears in iOS's History and appears in Android's **only if** it was ever opened.
-Under one label, two different concepts.
+Under one label, two different concepts — overlapping on the freed-and-opened works, and each
+containing works the other excludes.
 
 **Saved for Later** is the queue-only question again. iOS deliberately routes queue-only
 works here — `:86-88` says "Queue-only works intentionally live here, not in the normal
@@ -1328,7 +1345,7 @@ silent because `explicitNulls = false` removes the keys rather than writing null
   `ao3SeriesID`. (`bookmarks` is also absent but is the known T-193 divergence, not counted
   here.) **Two degrade rather than vanish, and it is only fair to say so:** `createdAt`
   falls back to `dateAdded` at `:1900`, and `ao3WorkID` self-heals because
-  `:1966` re-derives it — `work.ao3WorkID ?? archived.ao3WorkID ?? WorkTags.ao3WorkID(from:
+  `:1960` re-derives it — `work.ao3WorkID ?? archived.ao3WorkID ?? WorkTags.ao3WorkID(from:
   archived.sourceURL)`.
 - **Scenario:** an iPhone user has preserved 200 works — `epubPreservationStatus == .preserved`,
   which is the whole point of the preservation feature. They back up, restore on a new
@@ -1394,19 +1411,34 @@ finding 3 shows Android has just implemented.
 - **Divergence:** iOS treats "saved to Library" and "has a local EPUB" as independent;
   Android's restore treats an EPUB as proof of saved-ness. `isSaved` can therefore only ever
   travel false→true across a restore on Android, never true→false.
-- **Scenario:** on iPhone, add a work to a reading queue without saving it. iOS creates it
-  with `isSaved = false` and preserves the EPUB, so it stays out of the Library shelves and
-  out of Reading Now / Recently Updated / Recently Opened — that is the whole point of the
-  queue-only concept. Back up, restore on Android. `restored.isSaved` is false and
-  `existing` is absent, but `restoredHasEpub` is true because the archive carried the EPUB,
-  so `:193` evaluates to true. The work lands as a full Library item, is counted in the
-  saved totals, and appears in the Home sections `home/HomeSectionKind.kt:50,59,64`
-  explicitly filters queue-only works out of. A second, subtler case: un-save a work on
-  iOS that has a downloaded EPUB, sync, and the un-save never reaches Android.
-- **Evidence:** read `mergeWork` in full, both branches (`BackupMergeService.kt:176-284`).
-  Ruled out: (a) that the `else` branch compensates — it does not touch `isSaved` at all
-  (`:205-229`), which correctly mirrors iOS's `: work.isSaved`, so the divergence is
-  confined to the `incomingWins` branch; (b) that the neighbouring rules diverge too, which
+> **CORRECTION (validation pass, 2026-08-08).** The scenario as first written was wrong, and
+> the fix I first recommended would not have fixed it. Both are corrected below; the
+> divergence itself is real and is in fact **broader** than originally reported.
+>
+> The original text claimed the clean-restore case flows through `:193` with `existing`
+> absent. It cannot: `mergeWork` is declared `mergeWork(existing: SavedWork, …)` — non-null
+> (`backup/BackupMergeService.kt:179-183`) — and `:68-70` short-circuits the `existing == null`
+> case to `restored` before `mergeWork` is ever called.
+
+- **Scenario — two distinct paths, and the common one is not the merge.**
+  1. **Fresh install / clean restore (no local record).** The forcing happens in the
+     *mapper*, not the merge: `backup/BackupMappers.kt:143` is
+     `isSaved = isSaved || hasEpub` inside `toSavedWork`, which builds `restored`. So an iOS
+     queue-only work with a preserved EPUB becomes `isSaved = true` before any merge logic
+     runs, and `:68-70` stores that value directly.
+  2. **Restore over an existing record.** Here `mergeWork` does run, and
+     `BackupMergeService.kt:193`'s
+     `isSaved = restored.isSaved || existing.isSaved || (existing.hasEpub || restored.hasEpub)`
+     forces the same result, additionally preventing an *un-save* from ever propagating.
+
+  Either way the work lands as a full Library item, counted in the saved totals and appearing
+  in the Home sections `home/HomeSectionKind.kt:50,59,64` explicitly filters queue-only works
+  out of.
+- **Evidence:** read `mergeWork` in full, both branches (`BackupMergeService.kt:176-284`),
+  **and — added on correction — the mapper that feeds it** (`BackupMappers.kt:138-146`) plus
+  the caller that chooses between them (`:63-70`). Ruled out: (a) that the `else` branch
+  compensates — it does not touch `isSaved` at all (`:205-229`), which correctly mirrors iOS's
+  `: work.isSaved`, so the *merge-path* divergence is confined to the `incomingWins` branch; (b) that the neighbouring rules diverge too, which
   would suggest a generally sloppy port — they do not: `isQueuedForLater` is OR'd on both
   (iOS `:1971`, Android `:194`), `dateAdded` is `min` on both (iOS `:1901`, Android `:195`),
   `lastModifiedAt` is `max` on both (iOS `:1996`, Android `:196`). `isSaved` is the one
@@ -1414,20 +1446,27 @@ finding 3 shows Android has just implemented.
   (c) that Android's `hasEpub` derivation is itself wrong — it is not,
   `BackupMergeService.kt:63-67` grounds it in real file presence
   (`incomingEpub != null || id in currentEpubIds || existing?.hasEpub == true`).
-- **History:** not recorded. The `isSaved` semantics *cluster* is documented on the Android
-  branch (`docs/audits/ANDROID_PARITY_REPORT.md:231,247,292`), but every instance there is
-  in the import/library-query paths — `WorkImporter.saveMetadataOnly`,
-  `WorkMetadataMerger.merge`, `WorkRepository.observeSavedWorks`. No document mentions
-  `BackupMergeService`, and greps for `isSaved` across `docs/` return no hit in a backup
-  context. This is a new instance of a known root divergence, in a file nobody has looked at.
-- **Recommendation:** Android moves, and the fix is to delete the clause:
-  `isSaved = restored.isSaved` in the `incomingWins` branch, matching iOS exactly. The
-  `hasEpub` guard is protecting the wrong invariant — Android already preserves the EPUB
-  itself via `hasEpub = existing.hasEpub || restored.hasEpub` on the next line, and
-  `SavedWork.kt:69-75` already folds `isQueuedForLater` into deletion protection, so
-  nothing needs `isSaved` forced true to keep the file safe. Worth pairing with the
-  round-trip test neither platform has: save → un-save → export → restore → assert
-  `isSaved` is still false.
+- **History — corrected: it *is* recorded, in code.** My original "not recorded anywhere" was
+  false. `BackupMappers.kt:141-142` carries the decision and its rationale directly above the
+  line: *"Prefer archive flag; default to saved when Apple marks hasEPUB so the work appears
+  in the offline Library after import."* That reframes this finding: it is a **deliberate
+  product choice on Android** — make a restored work with a file visible in the offline
+  Library — that predates and conflicts with the queue-only concept Android later adopted
+  (finding 3). It is not an oversight. No *document* covers it: the `isSaved` cluster in
+  `docs/audits/ANDROID_PARITY_REPORT.md:231,247,292` is confined to the import/library-query
+  paths, and nothing mentions the backup path.
+- **Recommendation — corrected; the original would have fixed only half.** Deleting the
+  `:193` clause alone leaves path (1), the fresh-install case, still forcing `isSaved` true
+  via `BackupMappers.kt:143`. **Both** sites must change together:
+  `BackupMergeService.kt:193` → `isSaved = restored.isSaved`, and `BackupMappers.kt:143` →
+  `isSaved = isSaved`. Neither is needed to keep the file safe — Android preserves the EPUB
+  via `hasEpub = existing.hasEpub || restored.hasEpub` on the next line, and
+  `SavedWork.kt:69-75` already folds `isQueuedForLater` into deletion protection.
+  **But because `BackupMappers.kt:141-142` shows this is a deliberate choice, the change is a
+  product decision, not a bug fix** — the same decision as finding 25's Saved-for-Later shelf
+  and finding 3's queue-only concept, and all three should be resolved in one pass. Whichever
+  way it goes, it wants the round-trip test neither platform has: save → un-save → export →
+  restore (both onto a clean install and over an existing record) → assert `isSaved`.
 
 ### 3. The Android branch's own audit corpus is stale: the `isQueuedForLater` / queue-only gap it reports as open is implemented — `real-bug` (in the documentation) · Cross-cutting
 
@@ -1614,10 +1653,16 @@ each half individually is too small to file and together they explain several of
   `ReadingQueue` and `ReadingQueueMembership` each declare `syncStatusRaw`,
   `lastSyncAttemptAt` and `lastSyncError`, with a computed `syncStatus` accessor
   (`Models/Models.swift:147-148,367-369`; `:593-594,607-609`; `:632-633,661-663`; and the
-  membership block). Grepping the whole iOS tree for these names returns hits in
-  **`Models/Models.swift` only** — no feature writes them, no view reads them, and
-  `lastSyncError = ` has zero assignment sites anywhere. Four models carry three columns each
-  that nothing populates or consumes.
+  membership block). No feature writes them and no view reads them: `lastSyncError = ` has zero
+  assignment sites anywhere in the tree.
+  > **CORRECTION (validation pass).** I originally wrote that grepping for these names
+  > "returns hits in `Models/Models.swift` only". That is false. `syncStatusRaw` has three
+  > hits outside it — `Services/KudosBackup.swift:616` (`let syncStatusRaw: String?` on the
+  > backup collection struct), `:629` (written on export) and `:1282` (restored on import).
+  > So the **collection** variant is carried through the archive, even though nothing in the
+  > app produces or consumes a non-default value. The `SavedWork`, `ReadingQueue` and
+  > `ReadingQueueMembership` variants remain confined to `Models.swift`. The finding stands —
+  > the fields are inert — but they are not invisible to the manifest.
 - **iOS also parses preference web-links it never shows.**
   `Services/AO3Client+Preferences.swift:315-333` implements `parsePreferenceWebLinks`, which
   reads AO3's `ul.navigation.actions` nav, de-duplicates, and filters out `/preferences` and
@@ -1652,8 +1697,11 @@ each half individually is too small to file and together they explain several of
   it needs columns; if not, dropping twelve unused properties makes the next
   `SavedWork`-vs-`WorkEntity` diff (the one that produced finding 5) considerably easier to
   read. Android's `description`/`sortOrder` should either get a create/edit path or come out
-  with a Room migration. Deleting on either side is safe *only* after confirming no archive
-  in the wild carries a value — which, per the evidence above, none can.
+  with a Room migration. **Deleting is not simply safe on the iOS side**: because
+  `KudosBackupCollection.syncStatusRaw` is exported and restored
+  (`KudosBackup.swift:616, 629, 1282`), removing it is a **manifest schema change**, not a
+  local cleanup, and Android's `BackupCollection.syncStatusRaw` would have to move with it.
+  The other nine properties have no manifest presence and can go freely.
 
 ---
 
@@ -1738,10 +1786,10 @@ The calibration list from the review prompt. Status filled in as each area is re
 
 | Known divergence | Recorded in | Re-checked? | Status |
 |---|---|---|---|
-| "Show zero counts" (Settings → Library) is iOS-only; Android always shows zeros | `TASKS.md` T-193 | ⬜ | |
-| Android's `SavedWork` has no `bookmarks` column | `TASKS.md` T-193 | ⬜ | |
-| Compose `FlowRow` applies `SpaceBetween` to a wrapped last row; iOS leaves it ragged | `TASKS.md` T-193 | ⬜ | |
-| iOS ships two readers (Readium iOS / legacy macOS); Android has one | prompt | ⬜ | |
+| "Show zero counts" (Settings → Library) is iOS-only; Android always shows zeros | `TASKS.md` T-193 | ⚠️ inconclusive | `grep -rniE "zeroCount\|showZero\|hideZero"` returns **nothing on either platform**, so the setting is not findable under that name on iOS either. Neither confirmed nor refuted — its real identifier was not located. Do not treat this row as verified. |
+| Android's `SavedWork` has no `bookmarks` column | `TASKS.md` T-193 | ✅ | **Still true.** `grep -n "bookmarks" data/local/entity/WorkEntity.kt` → no match; the column is absent, consistent with the field diff in finding 5. |
+| Compose `FlowRow` applies `SpaceBetween` to a wrapped last row; iOS leaves it ragged | `TASKS.md` T-193 | ✅ **now fixed** | Both `FlowRow` call sites now use `Arrangement.spacedBy` rather than `SpaceBetween` — `ui/components/WorkStats.kt:73-75` (`spacedBy(16.dp)`) and `:440-442` (`spacedBy(6.dp, Alignment.CenterHorizontally)`). The `SpaceBetween` uses that remain (`KudosPaginationBar.kt:69`, `:168`, `WorkBulkActionBar.kt:76`) are on plain `Row`s, where it is correct. The recorded divergence no longer applies. |
+| iOS ships two readers (Readium iOS / legacy macOS); Android has one | prompt | ✅ | **Still true.** Both `Features/Reader/ReaderView.swift` and `Features/ReaderReadium/ReadiumReaderView.swift` are present. Findings 8, 9, 20, 21 and 26 all compare against the *shipping iOS* reader (Readium) as the prompt directs. |
 | Android has a GitHub-backed self-update system; iOS has none | prompt | ✅ | **Still true.** `grep -rniE "appUpdate\|checkForUpdate\|releases/latest\|api\.github\.com\|installUpdate\|AppUpdateRepository" kudos-ao3-reader --include="*.swift"` returns exactly two hits, both `WorkUpdateChecker` — which checks *AO3 works* for new chapters (`Services/WorkUpdateChecker.swift:17`, called from `Features/Home/HomeView.swift:134`), not the app. iOS has no app-update path of any kind. Android's lives in `update/` + `network/github/`. |
 
 ---
