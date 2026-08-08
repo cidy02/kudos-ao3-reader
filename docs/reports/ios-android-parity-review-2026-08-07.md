@@ -122,8 +122,9 @@ smaller results point the same way and are recorded without being filed: Android
 hardcoded font sizes to iOS's 18 (V-14), and Android's `AO3RetryPolicy` blocks retries on any
 non-GET structurally where iOS relies on construction (V-4). It is a good default, not a law.
 
-**The Android branch's audit corpus should not be trusted as a work list.** Three clusters
-were spot-checked and all three were stale (finding 3) — one wrong in all three of its claims,
+**The Android branch's audit corpus should not be trusted as a work list.** Four clusters
+were spot-checked and all four were stale (finding 3), including one that assigns iOS a live
+medium-severity PDF defect that has since been fixed — one wrong in all three of its claims,
 including a fix whose code comment quotes the audit's own worked example, and another whose
 fix comment names the very iOS function the audit said had no counterpart. The fixes were
 evidently made *from* those reports and the reports were never marked resolved. Re-verify
@@ -1375,8 +1376,21 @@ that record would waste a work cycle re-building something that exists.
   half) is **unchecked** — see lead L-4. So the correct statement is "the model/query half
   of the queue cluster is closed, and the Reading-statistics cluster is closed entirely",
   not "the corpus is wrong everywhere".
-- **Why this changes the conclusion:** one stale entry is bookkeeping. **Three clusters
-  spot-checked, three stale — one of them in all three of its claims, including a fix whose
+- **A fourth stale entry, in a different document.**
+  `docs/iOS_Issues_Found_While_Porting.md:45-60` reports "MuPDF is built and verified but
+  never wired in", asserting that "`PDFWorkConverter.swift` still imports PDFKit and Vision,
+  so the five layout defects the document exists to solve are, as of this branch, still live
+  in shipping iOS PDF conversion", at **medium** severity. At `e9ed0c6a` MuPDF **is** wired
+  in: `Services/PDFWorkConverter.swift:64` calls
+  `KudosMuPDF.linesPerPage(forPDFAtPath: url.path)` on the live conversion path (with a
+  PDFKit fallback via `?? lines(of: document.page(at: 0)?.string ?? "")`), and `:111`
+  documents the new behaviour — "MuPDF's structured text does the layout analysis: one
+  *block* is one paragraph". The PDFKit/Vision imports the entry cites as evidence are still
+  present at `:4-5`, which is why a grep for them reads as confirmation; the call site is
+  what changed. This one matters more than the others because the entry assigns a live
+  medium-severity defect to iOS that no longer exists.
+- **Why this changes the conclusion:** one stale entry is bookkeeping. **Four clusters
+  spot-checked, four stale — one of them in all three of its claims, including a fix whose
   code comment quotes the audit's own worked example, and another whose fix comment names the
   iOS function the audit said was missing. The corpus is not drifting; it is systematically
   behind the code.** The fixes were evidently made *from*
