@@ -260,6 +260,56 @@ the code that needs it, `private` to the wrong file, and never called.
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
 
+### 23. Android's Account → Writing has two dead tabs that tell the user the feature is missing — `gap` · Account
+
+Found by diffing empty-state copy, which is what the empty-state sweep was for. Android's
+Account has a Writing section with Works / Series / Drafts tabs; two of the three render a
+hard-coded placeholder.
+
+- **Series — iOS has a native list, Android has a placeholder.**
+  iOS `Features/Account/AccountView.swift:85` declares `case series = "Series"`, `:384-385`
+  refreshes it through `syncProfileTab(.series)`, `:434-435` loads it with the works tab
+  (`case .works, .series: … profileModel.refresh(auth:)`), and `:746-747` renders
+  `profileSeriesSections` — a real list, with loading rows at `:910`.
+  Android `account/AccountScreen.kt:1075-1080` renders, unconditionally:
+  `EmptyStateCard(title = "Series not available yet", message = "Your AO3 series will show
+  here once list support lands.")`
+- **Drafts — neither is native, but only iOS gives the user a way through.**
+  iOS `:748-757` shows an `AccountExternalNavCard("Open Drafts on AO3", pathSuffix:
+  "works/drafts")` with the footer "Drafts still open on the Archive until a native editor
+  ships." — an honest placeholder that still *reaches the content*.
+  Android `:1081-1086` renders `EmptyStateCard(title = "Drafts not available yet", message =
+  "AO3 drafts stay on the website until a drafts parser is added.")` — the same admission with
+  no link. The message even tells the user the drafts are on the website, and then does not
+  take them there.
+- **Divergence:** one missing feature (series) and one missing *escape hatch* (drafts).
+- **Scenario:** an author opens Account → Writing to check their series. On iPhone they get
+  their AO3 series list. On Android they get a card saying the feature will arrive later. They
+  switch to Drafts to find the WIP they were editing: iPhone opens it on AO3 in one tap;
+  Android tells them it lives on the website and leaves them to navigate there themselves.
+- **Evidence:** read both switch statements in full. Ruled out: (a) that Android's placeholders
+  are unreachable defensive branches — they are not, both are the unconditional body of their
+  `when` arm. I checked this specifically because the *third* placeholder in the same file
+  **is** dead: `:1144-1146`'s "Inbox not available yet" only renders when
+  `inboxRepository == null || commentRepository == null`, and `app/KudosAppContainer.kt:162`
+  provides `inboxRepository` via a non-null `by lazy`, so Android's Inbox is genuinely native
+  and that string is unreachable. (b) that Android lacks the plumbing for series — it has
+  `network/ao3/series/AO3SeriesRepository.kt` and `AO3SeriesUrls.kt`, already wired into
+  `KudosAppContainer`, `ReadingQueueRepository`, `DownloadQueue` and `WorkDetailScreen`
+  (established under finding 12). What is missing is narrow and specific: `AO3SeriesUrls`
+  builds `/series/<id>` page URLs only, and `grep -rn "users/.*series"` across the tree
+  returns nothing, so there is no `/users/<name>/series` URL to list *an account's* series.
+- **History:** not recorded. Neither placeholder has a `TASKS.md` ID; both are "later"
+  promises with no owner.
+- **Recommendation:** Android moves on both, and the second is nearly free. **Drafts first:**
+  replace the dead card with the same web-fallback pattern the app already uses elsewhere —
+  `navController.navigate(Routes.webFallback(...))` to `works/drafts`, matching iOS's
+  `AccountExternalNavCard` exactly. That is one composable and restores the capability.
+  **Series** needs a `/users/<name>/series` URL plus a parser, but `AO3AuthorParser` already
+  parses series *summaries* from an author profile (`AO3AuthorSeriesPage`, seen under finding
+  12), so the list shape exists — this is closer to wiring than to new work. Pair it with
+  finding 12, which is the other half of Android's series story.
+
 ### 22. AO3's per-preference help text is shown on iOS and unreachable on Android — `gap` · Account / AO3 preferences
 
 AO3's preference names are terse and often non-obvious ("Turn off page caching", "Hide
