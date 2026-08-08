@@ -17,13 +17,14 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 4's remainder, then area 6. For area 4: compare the **result parser**
-selectors — `Services/AO3Client.swift` blurb parsing vs
-`network/ao3/search/AO3SearchParser.kt` — watching for the `required-tags` trap
-(`docs/reports/filter-parity-2026-08-07.md`: that row is a *summary icon* whose label is
-comma-joined, not a list). Then the `SavedSearch` backup round trip.
+**Resume here:** Area 9's remainder — compare reader *settings*: the field set, and each
+setting's value range and default, between `Features/Reader/ReaderStyle.swift` +
+`ReadiumReaderStyleMapper.swift` and `reader/settings/ReaderPreferences.kt` +
+`ReaderSettingsMapper.kt`. `BackupValidator.kt:171-179` already range-clamps these on
+restore (fontPt 12–34, lineHeight 1.2–2.4, margin 8–64, letterSpacing −0.03–0.12,
+wordSpacing 0–0.6), so those clamps are a ready-made checklist to verify iOS agrees with.
 
-**Then:** areas 1, 5–13, 16, 18–20 are untouched. Read *Not covered* before planning —
+**Then:** areas 1, 5–8, 10–13, 16, 18–20 are untouched. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
 `docs/audits/` and should therefore be re-verified rather than re-derived.
 
@@ -46,7 +47,7 @@ that fan-out shape; work areas serially and commit each one.
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ⬜ not started | – | |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | |
-| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | ⬜ not started | – | iOS has two readers (Readium iOS / legacy macOS); Android one |
+| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 1 (finding 8) | Progress locator + cross-platform fallback compared (V-6, finding 8). **Not done:** reader settings ranges/defaults, colour themes, TOC, in-reader search, annotations, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ⬜ not started | – | T-193 known divergences live here. **Partial input:** finding 3 closes the model half of the `isQueuedForLater` cluster; leads L-3/L-4 are open here |
 | 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
@@ -190,6 +191,62 @@ this review found its defect, on the first area it looked at.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 8. Restoring a cross-platform reading position on iPhone loses the position *within* the chapter — `real-bug` · Reader
+
+**This is the one case where iOS is the weaker platform**, so the standing "iOS is the
+source of truth" convention should not be applied here — see the recommendation.
+
+- **iOS:** `Features/ReaderReadium/ReadiumReaderView.swift:1372-1375` — when the stored
+  Readium locator fails to decode, the fallback is chapter-granularity only:
+  `let fallbackSpineIndex = initialLocator == nil && work.lastSpineIndex > 0 ?
+  work.lastSpineIndex : nil`, passed to `book.open(…, fallbackSpineIndex:)` at `:1384-1385`.
+  `work.lastScrollFraction` is never read. Grepping every `.swift` file for
+  `lastScrollFraction` shows the only *reader* that consumes it is
+  `Features/Reader/ReaderView.swift:484` — the legacy WKWebView reader, which is
+  `#if os(macOS)`-guarded and therefore does not run on iPhone or iPad. Every other hit
+  (`KudosBackup.swift:374,430,490,550,1989`, `PersistenceSync.swift:389,439,450`) stores,
+  encodes or merges the value. It is faithfully carried across devices and then ignored on
+  arrival.
+- **Android:** `reader/ReaderRestoreTarget.kt:14` models the cross-platform case as
+  `data class Fallback(val spineIndex: Int, val scrollFraction: Double)` — both components —
+  and `reader/readium/ReadiumProgressAdapter.kt:51` consumes it, with
+  `reader/ReaderProgressMapper.kt:19` building it.
+- **Divergence:** both platforms correctly refuse a foreign locator (see V-6) and fall back
+  to the portable fields. Android's fallback restores chapter **and** offset; iOS's restores
+  chapter only, discarding an offset it received, stored, and merged.
+- **Scenario:** a reader is 70% through chapter 12 of a 40,000-word chapter on their Android
+  phone. They back up and restore on an iPhone. Android→Android would reopen at 70% of that
+  chapter. iOS reopens at the **top** of chapter 12, so they must re-find their place in
+  roughly 28,000 words of text. The data needed to do better is present in the archive and
+  in the SwiftData record; nothing reads it. The same applies to a macOS→iPhone move within
+  one user's own devices, because the macOS reader writes the value and the iOS reader
+  ignores it.
+- **Evidence:** grepped `lastScrollFraction` across the whole iOS tree and classified every
+  hit by whether it reads or writes; confirmed `Features/ReaderReadium/` contains **zero**
+  reads. Confirmed the one reader that does read it is macOS-only by checking
+  `AGENTS.md:40-44`, which states `BookReaderView` routes iOS → Readium and macOS → the
+  legacy reader, and that the legacy files are `#if os(macOS)`-guarded. Ruled out:
+  (a) that Readium's own restore makes the offset redundant — it would, but only when the
+  *locator* decodes; this path is precisely the one where it did not; (b) that
+  `lastSpineIndex > 0` guard means the position is usually recoverable anyway — the guard is
+  about the chapter, not the offset, and it additionally means a work whose fallback is
+  chapter 0 gets no restore at all even when `lastScrollFraction` is 0.9; (c) that Android's
+  scroll fraction is not comparable — both platforms write the same
+  `lastScrollFraction: Double` in the manifest (`KudosBackup.swift:374` /
+  `BackupManifest.kt`), and `BackupValidator.kt:69-71` even range-checks it to `0.0..1.0`.
+- **History:** not recorded. `docs/contracts/READER_STATE_CONTRACT.md` on the Android branch
+  defines the resolution order Android implements ("a same-platform-compatible locator
+  first, then the cross-platform fallback fields, otherwise the beginning"), quoted in
+  `ReaderRestoreTarget.kt:4-6`. iOS has no counterpart document and implements a
+  degraded form of the same order.
+- **Recommendation:** **iOS moves, and the source-of-truth convention should be set aside
+  here.** Android's `ReaderRestoreTarget` is the better model — it is explicit about all
+  three cases and it does not throw away data it was given. The iOS change is small: pass
+  `work.lastScrollFraction` alongside `fallbackSpineIndex` into `book.open` and seek to it
+  after the chapter loads, which is what the macOS reader already does at
+  `ReaderView.swift:484`. iOS should also drop the `> 0` guard on `lastSpineIndex` so a
+  chapter-0 position with a non-zero fraction still restores.
 
 ### 7. Android's work search cannot express ten of AO3's search parameters, including sort direction — `gap` · Search + filters
 
@@ -701,6 +758,63 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-6 — neither platform will apply the other's Readium locator, so a cross-platform restore cannot land in the wrong place
+
+The review prompt flags this as a blocker-severity risk: "a locator saved on one platform
+must survive backup→restore onto the other … a format mismatch here is a BLOCKER because it
+silently loses a user's place." The dangerous outcome would be one platform *accepting* the
+other's locator and resolving it to a wrong position. Neither does.
+
+Android is explicit about it. `reader/ReaderLocatorCodec.kt:28-31` wraps every locator it
+writes in a self-describing envelope — `{"platform":"android","engine":"readium-kotlin",
+"version":1,"locator":{…}}` — and `decodeCompatibleLocator` (`:52-63`) returns the inner
+locator **only** when all three of `platform`, `engine` and `version` match its own
+constants, returning null otherwise. Its KDoc states the intent directly: treat foreign
+locators "as incompatible, falling back to `lastSpineIndex`/`lastScrollFraction`."
+
+iOS reaches the same outcome by different means, and I checked rather than assumed. It
+writes a bare Readium Swift locator with no envelope — grepping the iOS tree for
+`readiumLocatorPlatform`, `readiumLocatorEngine` and `readiumLocatorVersion` returns **zero
+hits**, so the three fields Android reserves in `backup/BackupManifest.kt:70-72` are never
+populated by iOS. On read, `Locator(persistenceString:)`
+(`Features/ReaderReadium/ReadiumNavigatorContainer.swift:503-510`) is a *failable*
+initialiser guarding on UTF-8 decode, `JSONSerialization`, `JSONValue`, and finally
+`try? Locator(json:)`. Android's envelope has no `href`/`type`/`locations` at its top level,
+so the toolkit's own decode fails and the initialiser returns nil — which routes to the
+fallback path rather than to a wrong position.
+
+So the blocker does not exist in either direction: iOS rejects Android's envelope
+structurally, and Android rejects iOS's bare locator by the missing `platform` key. **What
+the two do next differs**, and that is finding 8 — but no user is silently dropped at an
+incorrect location, which was the risk worth chasing.
+
+### V-5 — the `required-tags` markup trap is handled identically on both platforms
+
+The review prompt singles this out as the AO3 trap most likely to produce a silent
+behaviour difference: a `ul.required-tags` row is a *summary icon* whose label holds every
+value comma-joined (`"F/F, M/M"`), not a list of elements. Splitting it wrong yields either
+one mashed-together tag or a dropped one.
+
+Both platforms get it right, and by the same method. iOS
+`Services/AO3Client.swift:1600-1607` and Android
+`network/ao3/search/AO3SearchParser.kt:236-239` implement `splitRequiredTag` as
+split-on-comma → trim → drop empties, and the six-line doc comment above each is the same
+text on both sides, down to the worked examples and the closing "Verified against live
+`/tags/<t>/works` markup."
+
+The selectors that feed it also match one for one:
+`ul.required-tags .rating .text` (iOS `:1632`, Android `:73`),
+`.category .text` (iOS `:1636`, Android `:78`),
+`.iswip .text` (iOS `:1637`, Android `:80`; and in the author parsers, iOS
+`AO3Client+Authors.swift:193`, Android `AO3AuthorParser.kt:147`),
+`.warnings .text` (iOS `:1658`, Android `:100`). Both apply the split to categories and
+warnings and take rating as a scalar, which is correct — rating is single-valued.
+
+The only textual difference is the empty check: iOS guards `!label.isEmpty`, Android
+`label.isNullOrBlank()`. Android therefore also rejects a whitespace-only label up front,
+but since both then trim and filter empties, the returned list is identical for every
+input. Not a divergence.
 
 ### V-4 — every AO3 politeness constant matches, and Android enforces the no-retry-on-writes rule more strongly than iOS
 
