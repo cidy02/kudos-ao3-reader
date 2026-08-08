@@ -48,7 +48,7 @@ that fan-out shape; work areas serially and commit each one.
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ✅ done | 1 (finding 14) | All 11 categories match (V-14); catalog cache TTL identical at 7 days (V-15); local-indicator gap → finding 14. **Deliberately not read:** fandom work-count parsing, which shares the blurb parser already verified in V-5 |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ✅ done | 2 (13, 15) | Timestamps (13); model field set 24-vs-21 with every concept present on both (V-10); commenter-profile navigation (15); posting form fields verified identical (V-15); malformed-row policy (L-7) |
-| 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
+| 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ✅ done | 1 (finding 12) | Series navigation → 12 (dead tap target) + the no-op-callback sweep; profile field sets verified equivalent incl. avatar, and multi-pseud (`/users/X` vs `/users/X/pseuds/Y`) handled on both (V-16). **Deliberately not read:** orphaned/anonymous author rendering |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | ✅ done | 5 (8, 9, 20, 21, 26) | Progress locator + fallback (V-6, 8); settings/defaults/clamps (V-7, 9); colour themes (20, 21); annotation kinds and colours (26). **Deliberately not read:** TOC building and in-reader search, which are local-only view concerns with no cross-device contract, and TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ✅ done | 1 (finding 25) | Statistics identical (V-9); retention window identical (V-14); queue-only cleanup verified (L-4); all seven shelf predicates + sorts compared → finding 25 (3 diverge, 4 match). **Deliberately not read:** collection CRUD and queue drag-reorder, which are local-only UI with no cross-platform contract |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
@@ -60,7 +60,7 @@ that fan-out shape; work areas serially and commit each one.
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ✅ done | 0 (+1 minor) | `WhatsNew` is iOS-only **by design** (`TASKS.md` row 26 — it exists because iOS has no update system; Android surfaces GitHub release notes). Screenshot capture resolved as L-6: a convenience gap only, since neither platform attaches an image to the submitted report |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | ✅ done | 4 (16, 17, 23, 24) | Error copy swept → 16, 17; empty-state copy swept across both trees → 23 (dead Account tabs), 24 (iOS casing inconsistency). Signed-out and no-results copy compared and otherwise equivalent. **Deliberately not read:** loading/skeleton states, which are animation timing rather than copy |
-| 20 | Accessibility | cross-cutting | cross-cutting | 🔄 in progress | 1 (finding 11) | Touch-target enforcement → finding 11; annotation density measured; type scaling verified — Android 332 typography tokens and **zero** `.sp` literals vs iOS 268 semantic styles and 18 fixed sizes (V-14). **Not done:** per-control label audit, focus order, TalkBack traversal |
+| 20 | Accessibility | cross-cutting | cross-cutting | ✅ done | 1 (finding 11) | Touch-target enforcement → 11; annotation density measured; type scaling verified with Android ahead (V-14); shared-component labels compared (V-16). **Explicitly not done and named as such:** TalkBack/VoiceOver traversal and focus order, which need a built app — see V-16 for the specific question to start from |
 | 21 | Test coverage asymmetry | `KudosTests/` (85) | `android/app/src/test` (93); no `androidTest` | ✅ done | 1 minor | Suite shapes compared; per-finding branch analysis done for all five backup findings; three genuinely-absent iOS-side suites identified. Corrected my own earlier over-claim that absent files predict defects — the defects are in untested *branches* of tested files |
 
 Legend: ⬜ not started · 🔄 in progress · ✅ done · ⏭️ skipped (reason in Notes)
@@ -1901,6 +1901,49 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-16 — author profile and the accessibility label strategy
+
+**Author profile (area 8) — same information, different decomposition.**
+`AO3AuthorAbout` matches 6-for-6: iOS (`Models/AO3AuthorModels.swift`) has
+`profileTitle, bio, pseuds, joinedDate, userID, actions`; Android
+(`network/ao3/author/AO3AuthorModels.kt`) has `profileTitle, bioText, pseuds, joinedDate,
+userId, actions`. The headers look mismatched — iOS 5 fields, Android 8 — but only because
+iOS nests identity: its `AO3AuthorHeader` carries an `identity` composite, and
+`AO3AuthorIdentity` holds `username, pseud, displayName, userURL, pseudURL, avatarURL,
+userID, kind`. Android flattens the same values onto the header (`username, displayName,
+avatarUrl, userId`) beside the shared `pseuds, fandoms, subscriptionForm, actions`. Nothing is
+present on one side only, avatar included.
+
+**Multi-pseud is handled on both**, which was the AO3 trap worth checking here — `/users/X`
+and `/users/X/pseuds/Y` are different pages and conflating them shows the wrong works. iOS
+parses the distinction (`AO3AuthorModels.swift:44`, `if parts[2] == "pseuds"`) and builds
+pseud URLs at `:87` and `:101`. Android carries `pseud: String?` on its route with
+`displayName get() = pseud ?: username` and a composite identity key
+`"${username.lowercase()}|${pseud.lowercase()}"`, and every URL builder takes a pseud
+parameter — `userWorksUrl`, `userSeriesUrl`, `userBookmarksUrl`, `userDashboardUrl`
+(`AO3AuthorUrls.kt`, e.g. `:66-78`, which inserts `pseuds/<p>` when present).
+
+**Accessibility labelling (area 20) — both label the shared components; the strategies differ
+idiomatically, and I did not run a screen reader.**
+The expand control matches in both wording and behaviour: iOS
+`Features/Search/AO3WorkRow.swift:198` `.accessibilityLabel(expanded ? "Show less" : "Show
+more")`, Android `ui/components/AO3WorkCard.kt:121`
+`contentDescription = if (expanded) "Show less" else "Show more"`. Decorative glyphs are
+hidden from assistive tech on both (iOS `UIComponents/TagChip.swift:26-27`
+`.accessibilityHidden(true)` with a comment that the caller's label is authoritative;
+Android via `contentDescription = null` on icons). Carousel section controls carry composed
+labels on iOS (`UIComponents/WorkCarouselSection.swift:75`, `:89` — "Expand \(title)",
+"See all \(title)").
+
+Where they differ is strategy: Android sets an explicit merged card label
+(`AO3WorkCard.kt:90-91`, `contentDescription = "${work.title}, by ${work.authorText.ifBlank {
+"Anonymous" }}"`), while iOS leaves the row's children to VoiceOver's own traversal. Both are
+normal for their platform. **I am deliberately not filing a finding either way**: judging
+whether Android's merged label *replaces* the stats and tags a VoiceOver user would hear on
+iOS requires running TalkBack against a built app, which this review did not do. It is
+recorded here as the specific question a real accessibility audit should start from, alongside
+finding 11 (touch targets), which *is* verifiable statically and was filed.
 
 ### V-15 — the last open sub-questions, closed
 
