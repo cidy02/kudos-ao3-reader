@@ -60,7 +60,7 @@ that fan-out shape; work areas serially and commit each one.
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
-| 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | 🔄 in progress | 1 (finding 5) | `SavedWork` (64 stored) vs `WorkEntity` (46 cols) diffed mechanically → finding 5. Migration safety verified (V-2). **Not done:** the other 8 entities, type-converter round trips, DAO query semantics |
+| 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 1 (finding 9) | Backup settings payload verified 21/21 (V-7). **Not done:** the Settings *screens* themselves, theme colour values, per-setting UI wording |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | 🔄 in progress | 0 (+1 lead) | Inventory compared. `WhatsNew` is iOS-only **by design** — `TASKS.md` row 26 says it exists precisely because iOS has no update system, and Android surfaces GitHub release notes instead (`GitHubReleaseModels.kt:21`). Not a gap. Screenshot attachment is lead L-6 |
@@ -1092,6 +1092,50 @@ that record would waste a work cycle re-building something that exists.
 
 ---
 
+### 19. Both platforms carry dead persistence schema, in opposite directions — `minor` · Persistence · **both platforms**
+
+Not a divergence between the apps so much as the same habit expressed twice. Grouped because
+each half individually is too small to file and together they explain several of the
+"field one platform has and the other doesn't" rows in V-11.
+
+- **iOS carries an unused per-record sync-status scaffold.** `SavedWork`, `WorkCollection`,
+  `ReadingQueue` and `ReadingQueueMembership` each declare `syncStatusRaw`,
+  `lastSyncAttemptAt` and `lastSyncError`, with a computed `syncStatus` accessor
+  (`Models/Models.swift:147-148,367-369`; `:593-594,607-609`; `:632-633,661-663`; and the
+  membership block). Grepping the whole iOS tree for these names returns hits in
+  **`Models/Models.swift` only** — no feature writes them, no view reads them, and
+  `lastSyncError = ` has zero assignment sites anywhere. Four models carry three columns each
+  that nothing populates or consumes.
+- **Android carries two unreachable collection columns.** `CollectionEntity` declares
+  `description` and `sortOrder`, `BackupCollection` serialises both
+  (`backup/BackupManifest.kt`), and `library/CollectionsScreen.kt:243-245` renders the
+  description when non-blank. But `grep -rn "description = \|sortOrder = "` filtered to
+  collections returns **zero** write sites, and `WorkRepository.createCollection(name)`
+  (`works/WorkRepository.kt:417`) takes only a name. iOS's `WorkCollection` has neither field
+  at all, so no archive from either platform can ever populate them. The render branch is
+  unreachable.
+- **Why this is `minor` and not a data-loss finding:** I checked the obvious worry first —
+  that an Android-authored collection description would be dropped by an iOS round trip,
+  which would be the mirror of finding 5. It cannot happen, because nothing ever sets the
+  field. Both halves are inert.
+- **Evidence:** the greps above, plus reading `createCollection` and the four iOS model
+  blocks. Ruled out: (a) that iOS's sync fields are written by the folder-sync service under
+  a different spelling — `FolderSyncService.swift` and `PersistenceSync.swift` contain no
+  assignment to any of the three; (b) that Android's `sortOrder` drives collection ordering —
+  `CollectionsScreen` sorts by name, and nothing reads the column.
+- **History:** not recorded on either side. The iOS trio looks like scaffolding for a
+  per-record sync-status UI that was never built; Android's pair looks like a collection
+  description feature that was designed as far as the render and then stopped.
+- **Recommendation:** low priority, and the *decision* matters more than the deletion. Either
+  finish or delete. If per-record sync status is still wanted on iOS, it needs writers before
+  it needs columns; if not, dropping twelve unused properties makes the next
+  `SavedWork`-vs-`WorkEntity` diff (the one that produced finding 5) considerably easier to
+  read. Android's `description`/`sortOrder` should either get a create/edit path or come out
+  with a Room migration. Deleting on either side is safe *only* after confirming no archive
+  in the wild carries a value — which, per the evidence above, none can.
+
+---
+
 ## Asymmetric test coverage
 
 Partially assessed. The shape of the two suites, established by direct enumeration:
@@ -1290,6 +1334,41 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-11 — the remaining seven entities carry the same information; every apparent gap resolves to naming, idiom, or dead schema
+
+Finding 5 covered `SavedWork` ↔ `WorkEntity`. This is the other seven pairs, diffed
+mechanically (brace-matched Swift property extraction against Room `data class` `val`s) and
+then read where the diff was non-empty.
+
+| iOS model | Android entity | Result |
+|---|---|---|
+| `SyncTombstone` (9) | `SyncTombstoneEntity` (9) | **exact match**, field for field |
+| `Bookmark` (3) | `BookmarkEntity` (4) | match + Room's synthetic `id` primary key |
+| `CustomFont` (3) | `CustomFontEntity` (4) | match + Room's synthetic `id` |
+| `Tag` (2) | `TagEntity` (3) | match + `id`; Android adds `dateCreated`, which iOS does not track. Cosmetic — nothing reads it |
+| `WorkCollection` (12) | `CollectionEntity` (9) | see below |
+| `ReadingQueue` (14) | `ReadingQueueEntity` (10) | see below |
+| `ReadingQueueMembership` (12) | `ReadingQueueMembershipEntity` (7) | see below |
+
+Three classes of apparent difference, none of them a data gap:
+
+1. **Relationships vs foreign keys.** iOS's `works`, `memberships`, `queue`, `work` are
+   SwiftData relationship properties; Android expresses the same edges as
+   `queueID`/`workID` columns plus junction tables with `ForeignKey(onDelete = CASCADE)`
+   (`CollectionEntity.kt:29-39`, `ReadingQueueEntity.kt:34-38`, `TagEntity.kt:22-32`). Pure
+   platform idiom.
+2. **`isPendingDeletion` vs `isDeleted`.** The rename is the documented convention —
+   `docs/AGENT_ONBOARDING.md:39` records that iOS *must* avoid `isDeleted` on an `@Model`
+   because it collides with `NSManagedObject.isDeleted` and silently resets on save, while
+   the backup JSON key stays `isDeleted`. Both platforms honour exactly that.
+3. **Membership soft-delete: different mechanism, same outcome.** iOS keeps a soft-deleted
+   membership row (`deletedAt`, `isPendingDeletion`); Android hard-deletes the row and
+   records a tombstone instead (`library/ReadingQueueRepository.kt:114-128`, with the comment
+   "Without a tombstone, restoring a backup that still lists this membership silently
+   resurrects it"). Since merge suppression on both platforms is driven by the tombstone
+   index, not by the row, the two converge — and neither platform's manifest carries
+   membership deletion flags, so nothing is lost across the wire either.
 
 ### V-10 — the comment model carries the same information on both platforms
 
