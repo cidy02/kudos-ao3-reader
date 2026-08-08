@@ -17,13 +17,16 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Finish area 14. The specific next action: read
-`android/…/backup/BackupMergeService.kt` (866 lines) against
-`kudos-ao3-reader/Services/PersistenceSync.swift` and `CanonicalWorkMerge.swift`, comparing
-(a) which record wins a conflict and on which timestamp field, (b) the tie-break when
-timestamps are equal, and (c) whether a tombstone deletes on both sides symmetrically.
-That is the last untested assumption in the one area where a divergence means silent data
-loss, and it is the natural continuation of findings 1–2.
+**Resume here:** Finish area 14. The `SyncMerge` decision core is done and verified
+identical (V-1); what remains is the *per-entity merge bodies* that call it. The specific
+next action: read `backup/BackupMergeService.kt:176-284` (`mergeWork`) against the
+corresponding iOS work-merge in `Services/KudosBackup.swift` (the `SyncMerge.shouldApplyIncoming`
+call sites are at `:1276`, `:1397`, `:1471`, `:1622`) and compare the *field-level* rules
+the two apply once a winner is chosen — specifically Android's
+`hasEpub = existing.hasEpub || restored.hasEpub`, `isSaved = … || (existing.hasEpub || restored.hasEpub)`,
+`dateAdded = minInstant(…)` and `lastModifiedAt = maxInstant(…)` at `:190-197`. Those OR/min/max
+rules are where a faithful-looking port can still diverge, and they decide whether a
+restore can lose a local EPUB.
 
 **Then:** areas 2–13, 15, 16, 18–20 are untouched. Read *Not covered* before planning —
 it says which of them already have partial coverage from the Android branch's own
@@ -53,7 +56,7 @@ that fan-out shape; work areas serially and commit each one.
 | 11 | Home | `Features/Home/` | `home/` | ⬜ not started | – | |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ⬜ not started | – | |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | ⬜ not started | – | |
-| 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | 🔄 in progress | 2 (+1 ruled out, +1 lead) | **Done:** manifest version range, manifest field set, date encoding (R-1), folder-sync write path (findings 1 & 2). **Not done:** `BackupMergeService.kt` (866 lines) vs `PersistenceSync.swift` merge/conflict rules, tombstone propagation, ZIP container details, restore path |
+| 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | 🔄 in progress | 2 + 1 minor (+1 ruled out, +1 verified, +1 lead) | **Done:** manifest version range, manifest field set, date encoding (R-1), folder-sync write path (findings 1 & 2), `SyncMerge` conflict/tombstone rules (V-1). **Not done:** the rest of `BackupMergeService.kt` (the per-entity merge bodies — works `:176-284`, collections, queues, annotations), ZIP container details, `BackupImporter`/`BackupExporter` restore path |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ⬜ not started | – | |
 | 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | ⬜ not started | – | |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
@@ -83,6 +86,12 @@ about — the one that would corrupt merge ordering — turns out to be closed b
 unrelated mechanism (Room storing instants as epoch millis) rather than by design. That is
 worth knowing precisely because it is *accidental*: lead L-2 identifies the single field
 that escapes it.
+
+The **merge** layer — the code that decides which record survives a conflict and whether a
+deleted record may be revived — is a faithful port, verified function by function including
+both null branches and the deliberate strict/non-strict asymmetry between "apply incoming"
+and "revive over a tombstone" (V-1). That is the subsystem with the worst failure mode in
+the app, and it is the most carefully ported thing found so far.
 
 The **write** layer is where the divergence is, and it has a recognisable shape. Android's
 sync path truncates the user's backup before rewriting it, where iOS writes atomically —
@@ -350,6 +359,49 @@ field. **I could not settle this from source alone and am not claiming it as a d
 
 ---
 
+## Verified agreement
+
+A verified "these genuinely agree" is a result, not an absence of one. This section records
+only comparisons where the rule was non-trivial and I read both implementations in full.
+
+### V-1 — the sync merge/conflict rules are semantically identical, including the parts most likely to rot
+
+`SyncMerge` is the decision core of backup restore on both platforms: it decides which
+record survives a conflict, whether a deleted record may be revived, and how a reading
+queue's effective modification time is computed. iOS `Services/PersistenceSync.swift:379-431`
+against Android `backup/BackupMergeService.kt:718-753`, function by function:
+
+| Rule | iOS | Android | |
+|---|---|---|---|
+| `shouldApplyIncoming` — incoming missing | `guard let incomingModifiedAt else { return false }` (`:396`) | `if (incomingModifiedAt == null) return false` (`:720`) | ✅ |
+| — local missing | `guard let localModifiedAt else { return true }` (`:397`) | `if (localModifiedAt == null) return true` (`:721`) | ✅ |
+| — both present | `incomingModifiedAt >= localModifiedAt` (`:398`) | `!incomingModifiedAt.isBefore(localModifiedAt)` (`:722`) | ✅ same relation, **ties go to incoming** on both |
+| `effectiveQueueModifiedAt` | max of the non-nil of (`dateUpdated`, `lastMembershipChangedAt`) plus every membership's `lastModifiedAt` (`:405-412`) | `(listOfNotNull(queueUpdatedAt, lastMembershipChangedAt) + membershipModifiedAts).maxOrNull()` (`:726-733`) | ✅ |
+| `tombstoneResolution` — no tombstone | `.noTombstone` (`:428`) | `NO_TOMBSTONE` (`:739`) | ✅ |
+| — tombstone but no incoming timestamp | `.preserveAmbiguous` (`:429`) | `PRESERVE_AMBIGUOUS` (`:740`) | ✅ |
+| — both present | `incomingModifiedAt > tombstoneDeletedAt` → revive, else suppress (`:430`) | `incomingModifiedAt.isAfter(tombstoneDeletedAt)` → `REVIVE_NEWER`, else `SUPPRESS_STALE` (`:741-745`) | ✅ **strict** `>` on both, so **ties suppress** |
+
+The detail worth dwelling on is the last two rows against the third. `shouldApplyIncoming`
+uses a **non-strict** comparison (a tie applies the incoming record) while
+`tombstoneResolution` uses a **strict** one (a tie suppresses, i.e. a deletion wins a tie
+against a same-instant edit). That asymmetry is deliberate and easy to lose in a port —
+it is the difference between "a tie is harmless" and "a tie must not resurrect something
+the user deleted". Android preserves it exactly. Both enum shapes match too, four cases
+each with the same names.
+
+**One thing was not ported: the reason.** iOS carries a comment at `PersistenceSync.swift:401-405`
+explaining that `effectiveQueueModifiedAt` *deliberately* takes no
+restore/import wall-clock parameter, because doing so "previously let a content-stale backup
+revive an explicitly-deleted queue just because the file itself happened to be newer than
+the tombstone" — i.e. it records a fixed bug. Android's equivalent (`:726-733`) has the
+correct signature but no such note; its KDoc is only "Apple `SyncMerge` helpers used by
+backup restore." Nothing is wrong today. The risk is that a future change to the Android
+side that adds an export-time parameter looks like a reasonable improvement and silently
+reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being one
+comment, not one line of code.
+
+---
+
 ## Ruled out
 
 **R-1 — backup date encoding is *not* incompatible between the two apps.** This was the
@@ -393,7 +445,9 @@ date strategy), `Services/KudosBackupExport.swift` (skimmed);
 `backup/BackupVersion.kt`, `backup/BackupJson.kt`, `backup/BackupValidator.kt` (the
 instant helpers and the manifest validation pass), `backup/BackupMappers.kt` (date call
 sites only), `files/WorkFileStore.kt` (the atomic-write helpers),
-`data/local/converters/KudosTypeConverters.kt`.
+`data/local/converters/KudosTypeConverters.kt`, and the `SyncMerge` object plus
+`TombstoneResolution` at `backup/BackupMergeService.kt:718-753` against
+`Services/PersistenceSync.swift:379-431`.
 
 **Skimmed, conclusions not load-bearing:** the package/folder inventory of both trees
 (used only to build the area map); `Features/Support/WhatsNew.swift` (line count only).
@@ -484,6 +538,9 @@ reading.
   turned finding 1 from "an oversight" into "a specified requirement, asserted as complete
   in a contract doc, while the same codebase implements the pattern correctly elsewhere at
   `files/WorkFileStore.kt:24-39`".
+- Compared the `SyncMerge` decision core in full, both null branches and both comparison
+  strictnesses → **V-1**, verified identical. This is the result I expected least: the
+  subsystem with the worst failure mode has the most faithful port.
 - Corrections applied to this file after re-checking my own citations: three line numbers
   (iOS EPUB naming `:680` not `:681`; Android `:169` not `:170`; Android orphan pruning
   `:176`/`:193` not `:181-186`/`:193-197`), and one over-claimed grep — iOS *does* read
