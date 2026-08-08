@@ -49,7 +49,7 @@ that fan-out shape; work areas serially and commit each one.
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
-| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 4 (8, 9, 20, 21) | Progress locator + fallback (V-6, 8); settings field set/defaults/clamps (V-7, 9); colour themes → findings 20 and 21. **Not done:** TOC building, in-reader search, annotations/highlights, TTS |
+| 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | ✅ done | 5 (8, 9, 20, 21, 26) | Progress locator + fallback (V-6, 8); settings/defaults/clamps (V-7, 9); colour themes (20, 21); annotation kinds and colours (26). **Deliberately not read:** TOC building and in-reader search, which are local-only view concerns with no cross-device contract, and TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ✅ done | 1 (finding 25) | Statistics identical (V-9); retention window identical (V-14); queue-only cleanup verified (L-4); all seven shelf predicates + sorts compared → finding 25 (3 diverge, 4 match). **Deliberately not read:** collection CRUD and queue drag-reorder, which are local-only UI with no cross-platform contract |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 1 (finding 22) | The four AO3 account-list types match (V-8); inbox malformed-row policy matches (L-7); preferences snapshot structure compared → finding 22 (help text) and a dead-code find folded into finding 19. **Not done:** the preferences *write* path (which toggles can be POSTed back), dashboard |
@@ -259,6 +259,65 @@ the code that needs it, `private` to the wrong file, and never called.
   that no user-visible string matches `^[A-Z][A-Za-z]*\(`. Worth adding to
   `android/Scripts/check-invariants.sh`, which already guards single-sourcing for the
   User-Agent and would catch the next recurrence.
+
+### 26. Annotations render as the wrong kind and the wrong colour across platforms — `real-bug` · Reader
+
+Annotations travel between devices — they are manifest **v8** content and round-trip through
+backup and folder sync — so a highlight made on one device is meant to appear on the other.
+It appears, but not as itself, in both directions.
+
+**Kind: an Android note becomes an iOS bookmark.**
+- iOS models two kinds — `Models.swift:729-734`, `ReadingAnnotationKind { bookmark, highlight }`
+  — and treats a note as *text attached to a highlight*, not a kind of its own.
+- Android uses three kind strings: `"bookmark"`, `"highlight"` and `"note"`
+  (`reader/AnnotationRepository.kt:49`, `:90`, `:131-132`), where `:131-132` reveals the
+  intent — it filters `kindRaw == "highlight" || kindRaw == "note"` when collecting
+  highlights, so `"note"` is a highlight variant.
+- iOS resolves an unrecognised kind by falling back: `Models.swift:818-821`,
+  `ReadingAnnotationKind(rawValue: kindRaw) ?? .bookmark`. So Android's `"note"` lands on iOS
+  as a **bookmark** — and iOS's own comment for that case (`:730-731`) is "A place the reader
+  marked to come back to. **No selected text required**", which is exactly what the
+  annotation is not.
+
+**Colour: an iOS underline becomes an Android yellow block.**
+- iOS offers six: `Models.swift:739`, `yellow, green, blue, pink, purple, underline` —
+  `underline` being a style rather than a fill.
+- Android's picker offers five (`reader/ReaderScreen.kt:1268`,
+  `listOf("yellow", "green", "pink", "purple", "blue")`) and its resolver
+  (`reader/readium/ReadiumNavigatorController.kt:81-89`) has no `"underline"` case, so it hits
+  `else -> Color.parseColor("#FFF59D") // yellow default`.
+- **The same resolver carries an `"orange"` case** (`:87`) that neither Android's own picker
+  nor iOS's enum can produce — a third instance of the dead-branch pattern in finding 19.
+
+- **Scenario:** a reader highlights three passages on Android — one plain highlight, one with
+  a note — then opens the same work on their iPad. The noted passage shows as a bookmark: no
+  highlight tint, and iOS renders it as a position marker rather than a marked passage. Going
+  the other way, an iPhone reader who uses underline for quotes and yellow for reactions finds
+  every underline turned into a yellow block on their Android tablet, collapsing a distinction
+  they were relying on. Nothing warns them, and re-syncing does not repair it.
+- **Evidence:** read both kind and colour models, both write paths, and both resolvers.
+  Ruled out: (a) **data loss** — this is *presentation*, not destruction. `kindRaw` and
+  `colorRaw` are plain `String`s in the entity, the manifest (`backup/BackupManifest.kt:167-168`)
+  and iOS's model, so the original values survive a round trip and reappear correctly on the
+  originating platform. The defect is that each platform renders the other's value as
+  something else. (b) that Android's `"note"` is a typo for a kind it never writes — it writes
+  it, at `AnnotationRepository.kt:90`'s `kind: String = "highlight"` parameter overridden by
+  the note path, and reads it at `:131-132` and `ReaderScreen.kt:644`. (c) that iOS's
+  `underline` is vestigial like the fields in finding 19 — it is a full enum case with a
+  `title` ("Underline", `:748`) and appears in the colour picker.
+- **History:** not recorded. `TASKS.md` T-158 is adjacent and instructive: it plans an
+  `authorNote` annotation kind and notes that "`kindRaw` is a **String**, so a new kind needs
+  *no schema migration and no manifest bump* … older builds decode an unknown kind safely."
+  That reasoning is sound about *storage* and is precisely why this defect is invisible —
+  unknown kinds are stored safely and then displayed wrongly.
+- **Recommendation:** agree one vocabulary and make both platforms tolerant of the other's.
+  Given iOS is the reference, Android should write `"highlight"` with a non-empty note rather
+  than a separate `"note"` kind — that alone fixes the more damaging direction, since a noted
+  highlight currently degrades to a bookmark. For colour, Android needs an `"underline"` case
+  in `colorForName` rendering an underline rather than a fill, and its `"orange"` branch
+  should go. Longer term the honest fix is that both fallbacks are wrong: `?? .bookmark` and
+  `else -> yellow` silently substitute rather than preserving intent, and a shared
+  "unknown kind/colour renders as a plain highlight" rule would be better than either.
 
 ### 25. Three Library shelves select or order different works on each platform — `real-bug` · Library
 
