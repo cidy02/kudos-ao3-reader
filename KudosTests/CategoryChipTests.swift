@@ -56,3 +56,46 @@ struct CategoryChipTests {
         #expect(chipTexts(["M/M", "Not A Category"], expanded: false) == ["M/M"])
     }
 }
+
+/// The same collapsed/expanded split for Archive Warnings.
+///
+/// AO3's own blurb legend never names the warnings either — its icon means "some
+/// warning applies" and the specifics live in the title attribute — so a count is
+/// the right collapsed form. Expanding names them, which is what the work page
+/// does.
+struct WarningChipTests {
+    private func chipTexts(_ warnings: [String], expanded: Bool) -> [String] {
+        WorkListStatsRow(warnings: warnings, isExpanded: expanded).warningChipTexts
+    }
+
+    private let three = ["Graphic Depictions Of Violence", "Rape/Non-Con", "Underage Sex"]
+
+    @Test func collapsedCountsThem() {
+        #expect(chipTexts(three, expanded: false) == ["3 Warnings Apply"])
+        #expect(chipTexts(["Major Character Death"], expanded: false) == ["1 Warning Applies"])
+    }
+
+    @Test func expandingNamesThem() {
+        #expect(chipTexts(three, expanded: true) == three)
+    }
+
+    /// The two sentinels are single states, not folded lists — expanding must not
+    /// turn "Not Disclosed" into a chip named after AO3's sentinel tag, and must
+    /// not leave the slot empty (`realWarnings` filters both to nothing).
+    @Test func theSentinelStatesReadTheSameEitherWay() {
+        for expanded in [true, false] {
+            #expect(chipTexts([], expanded: expanded) == ["No Warnings"])
+            #expect(chipTexts(["No Archive Warnings Apply"], expanded: expanded) == ["No Warnings"])
+            #expect(chipTexts(["Creator Chose Not To Use Archive Warnings"], expanded: expanded)
+                == ["Not Disclosed"])
+        }
+    }
+
+    /// A real warning alongside the "chose not to use" sentinel: AO3 treats that
+    /// as undisclosed, and it stays one chip even expanded rather than silently
+    /// revealing a warning the creator declined to state.
+    @Test func undisclosedWinsOverAStrayWarning() {
+        let mixed = ["Creator Chose Not To Use Archive Warnings", "Underage Sex"]
+        #expect(chipTexts(mixed, expanded: true) == ["Not Disclosed"])
+    }
+}

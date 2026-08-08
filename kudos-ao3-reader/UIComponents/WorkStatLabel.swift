@@ -196,6 +196,13 @@ struct WorkListStatsRow: View {
         topItems.filter { $0.symbol == "person.2.fill" }.map(\.text)
     }
 
+    /// The warning chips only — same reason as `categoryChipTexts`. All three
+    /// warning states share one symbol (colour carries the distinction), and no
+    /// other facet uses it, so it identifies the group.
+    var warningChipTexts: [String] {
+        topItems.filter { $0.symbol == "exclamationmark.circle.fill" }.map(\.text)
+    }
+
     private var topItems: [Item] {
         var result: [Item] = []
         if let rating {
@@ -238,12 +245,28 @@ struct WorkListStatsRow: View {
             }
         }
         let status = WorkWarningStatus(rawWarnings: warnings)
-        result.append(Item(
-            text: status.text,
-            symbol: status.symbol,
-            accessibilityLabel: status.accessibilityLabel(rawWarnings: warnings),
-            iconColor: status.color
-        ))
+        let realWarnings = WorkStat.realWarnings(warnings)
+        if isExpanded, case .present = status {
+            // Expanded, the count becomes the warnings themselves — the same
+            // collapsed/expanded split the categories take. Only `.present` has
+            // anything to expand: "No Warnings" and "Not Disclosed" are single
+            // states, not folded lists, and would say the same thing either way.
+            for warning in realWarnings {
+                result.append(Item(
+                    text: warning,
+                    symbol: status.symbol,
+                    accessibilityLabel: "Warning: \(warning)",
+                    iconColor: status.color
+                ))
+            }
+        } else {
+            result.append(Item(
+                text: status.text,
+                symbol: status.symbol,
+                accessibilityLabel: status.accessibilityLabel(rawWarnings: warnings),
+                iconColor: status.color
+            ))
+        }
         result.append(Item(
             text: completion.shortText,
             symbol: completion.symbol,
