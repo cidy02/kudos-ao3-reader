@@ -7,7 +7,8 @@
 > is checked out on `android/exclusion-parity` @ `a5a46116` — which is the exact SHA the
 > prompt cites, so this is the intended tree under a different branch label.
 
-**Method:** see *Method log* at the foot of this file. Updated as work proceeds.
+**Method:** static reading of both trees, plus both platforms' verify suites (see
+*Verification runs*). See *Method log* at the foot of this file.
 **Status:** complete — all 21 areas closed. See *Not covered* for what each area deliberately left, and for the two questions that need a running app.
 
 **Confirmed sizes** (`find | wc -l`, run 2026-08-07): iOS 214 Swift sources + 85 test
@@ -17,18 +18,26 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** nothing is outstanding — all 21 areas are closed. The highest-value next
-actions are **verification, not more reading**: (1) settle lead L-2 on a device, since it
-could abort an entire iOS import; (2) run `Scripts/verify.sh` and `android/Scripts/verify.sh`,
-neither of which this review ran; (3) start fixes with the four one-line wiring items —
-findings 12, 15, 21 and 23's drafts half — which together close four user-visible defects for
-about a dozen lines.
+**Resume here:** the review itself is complete — all 21 areas closed, and a validation pass
+(2026-08-08) has been applied. **Read the corrections first:** findings 1, 4, 19 and 25 carry
+inline `CORRECTION` blocks, and **finding 4's is material — its recommended fix changed**
+(deleting `BackupMergeService.kt:193` alone leaves the fresh-install path broken;
+`BackupMappers.kt:143` must change too, and the code comment there shows it is a product
+decision rather than a bug).
 
-**Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
-See *Not covered* for the full breakdown and for the standing warning about the Android
-branch's audit corpus. Read *Not covered* before planning —
-it says which of them already have partial coverage from the Android branch's own
-`docs/audits/` and should therefore be re-verified rather than re-derived.
+The highest-value next actions are **acting, not reviewing**:
+1. **Settle lead L-2 on a device** — one log line (`Instant.now().nano % 1_000_000`) at
+   `minSdk` 26. The safety assumption is already disproven; if the defect is live it aborts
+   the entire import of any Android-written archive on iOS. The one-call fix is worth making
+   either way.
+2. **Fix the four one-line wiring items** — findings 12, 15, 21 and 23's drafts half. Together
+   they close four user-visible defects for roughly a dozen lines.
+3. **Take the three product decisions as one** — findings 3, 4 and 25's Saved-for-Later shelf
+   are the same question (does Android adopt iOS's queue-only concept?) and should not be
+   decided separately.
+
+Both verify suites were run and both pass — see *Verification runs*; there is no need to
+re-run them to trust this report.
 
 **Do not redo:** area 17 (closed, see the re-check table); the date-encoding question
 (closed as R-1); the suite-shape comparison in *Asymmetric test coverage*.
@@ -128,8 +137,9 @@ medium-severity PDF defect it no longer has, and another whose fix comment names
 function the audit said had no counterpart. The fixes were made *from* those reports and the
 reports were never marked resolved.
 
-**Not established:** no test suite was run on either platform and nothing here is
-runtime-verified. Two questions specifically cannot be closed by reading — lead L-2
+**Not established:** apart from the two suites (see *Verification runs* — both pass, 993 iOS
+and 660 Android tests, zero failures), nothing here is runtime-verified: no finding was
+reproduced on a device. Two questions specifically cannot be closed by reading — lead L-2
 (`Instant.now()` precision, which could abort an entire iOS import) and the screen-reader
 half of accessibility (V-16).
 
@@ -2638,9 +2648,11 @@ documents* were compared only at the level of which Dublin Core elements are emi
 spot-checked and all four were stale (finding 3). Treat that corpus as a lead list to
 re-verify against the trees, never as coverage already banked.
 
-**Not run:** neither `Scripts/verify.sh` nor `android/Scripts/verify.sh`. No build, no test
-suite, no simulator or emulator. Every claim here is static reading of source at
-`e9ed0c6a` / `a5a46116`.
+**Runtime coverage:** both `Scripts/verify.sh` and `android/Scripts/verify.sh` were run and
+both pass (*Verification runs*). What that does **not** establish: no individual finding was
+reproduced on a device or simulator. Every divergence claim here is static reading of source
+at `e9ed0c6a` / `a5a46116`; the suites only show that neither codebase is broken in a way its
+own tests detect.
 
 ## Verification runs
 
@@ -2739,6 +2751,69 @@ defect itself is unconfirmed."** The one remaining step is a device or emulator 
 making unconditionally rather than pending that check: it costs one call, it makes Android's
 output byte-shaped like iOS's for every field, and the downside it guards against is a total
 import failure.
+
+---
+
+## Validation pass
+
+The review was handed to an independent agent with an adversarial prompt
+(`docs/reports/parity-review-VALIDATION_PROMPT.md`, untracked — `.gitignore:38` makes
+`*_prompt*` local-only) instructing it to validate rather than re-review: sample ≥12 of the
+28 findings, attack five named ones hardest, test the coverage claim, and report only what is
+wrong.
+
+**Verdict returned: trustworthy with corrections.** 15 findings and 3 V-sections sampled;
+11 held exactly as written. Both tree SHAs and all four file counts reproduced. Of the five
+hardest targets, findings 1, 5, 21 and V-9 survived intact and precisely cited; finding 25's
+headline word did not.
+
+**Every reported error was independently re-verified against the code before being accepted**
+— none was taken on the agent's word. All were confirmed, and all are now fixed in place with
+visible `CORRECTION` blocks rather than silent edits:
+
+| # | What was wrong | Where fixed |
+|---|---|---|
+| E1 | **Material.** Finding 4's scenario was impossible (`mergeWork` takes a non-null `existing`; `:68-70` short-circuits the null case), the real clean-restore cause is `BackupMappers.kt:143`, the recommended fix would have left that path broken, and "History: not recorded" was false — `BackupMappers.kt:141-142` records the decision | finding 4 |
+| E2 | "Disjoint sets" overstated; the History shelves overlap on freed-and-opened works | finding 25 |
+| E3 | "`Models.swift` only" grep false — `syncStatusRaw` is exported/restored at `KudosBackup.swift:616,629,1282`, so deletion is a manifest change | finding 19 |
+| E5 | Ordering claim backwards — Android prunes orphans *before* the manifest write, iOS after; a second corruption path, strengthening the finding | finding 1 |
+| E6 | Four passages still said the suites were never run | header, Summary, *Not covered* |
+| E7 | Summary called finding 19 "iOS-side"; it is titled both-platforms | Summary |
+| E8 | Area 17 declared closed against a re-check table with four blank rows | table now filled |
+| — | Line drift: finding 5 cited `:1966` for the `ao3WorkID` re-derivation; it is `:1960` | finding 5 |
+
+Filling the blank re-check rows produced a result of its own: **the T-193 `FlowRow`
+`SpaceBetween` divergence is now fixed** (both `FlowRow` sites use `Arrangement.spacedBy`),
+and "Show zero counts" is marked **inconclusive** — the name greps find nothing on either
+platform, so it is neither confirmed nor refuted.
+
+**Coverage gaps the validation identified**, which this review did not reach and which are
+*not* covered by any finding, V-section or ledger row — listed here rather than buried,
+because the ledger's "all 21 areas closed" would otherwise overstate them:
+
+1. **Mature-content privacy gate.** iOS's `PrivacyGate` reaches 11 files including
+   `LibraryView.swift:19,89,482,508`; Android's `app/PrivacyGate.kt` reaches 3, all under
+   `home/`, and `library/LibraryPrivacy.kt` never consults reveal state where iOS's `isHidden`
+   includes `&& !isRevealed(work)`. Likely an unfiled divergence, not merely a gap. **Highest-value
+   follow-up.**
+2. **Background workers** — `Services/FolderSyncBackgroundTask.swift` vs
+   `backup/FolderSyncWorker.kt` and `works/*Worker.kt`.
+3. **Download queue** — excluded by area 13 and picked up by nobody; touches the politeness
+   policy V-4 calls binding.
+4. **WebView trust boundary** — `web/AO3WebUrlPolicy.kt`, while the audit corpus lists a
+   "WebView login host `endsWith` trust boundary" as a top confirmed-open major.
+5. **Work-page metadata and chapter parsers** — `network/ao3/work/` (7 files),
+   `network/ao3/chapters/`. V-5 covered only the search-blurb parser.
+
+Three exclusions were judged unreasonable and are recorded as such: area 14's merge bodies
+(~234 lines in the *same file* as findings 4 and 18), area 13's download queue, and area 9's
+TTS (iOS 1,287 lines across 4 files vs Android 229 across 1). Area 16's ledger phrase "every
+stored setting checked" over-reaches — only the 21 payload fields were.
+
+**What the validation could not check:** the iOS suite was not re-run; 13 findings and 13
+V-sections were not sampled; two of finding 3's four clusters were re-verified (both stale,
+confirmed) and two were not; nothing was checked at runtime. One incidental side effect: an
+untracked `android/.kotlin/` cache directory was created in the Android worktree.
 
 ---
 
