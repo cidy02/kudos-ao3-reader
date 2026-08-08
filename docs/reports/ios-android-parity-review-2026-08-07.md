@@ -17,14 +17,14 @@ files; Android 281 Kotlin sources + 93 test files. Both match the prompt's figur
 
 ## Progress ledger
 
-**Resume here:** Area 10's **Recently Deleted retention window** — compare the purge
-threshold and the sweep that enforces it: iOS `Services/WorkLifecycle.swift` /
-`PreservedWorkService.swift` (grep `permanentDeletionScheduledAt`) against Android
-`library/RecentlyDeletedScreen.kt` + `works/WorkRepository.sweepExpiredSoftDeletes`. A
-shorter window on one platform is silent data loss. `PARITY_SWEEP2_A:20` records a *rounding*
-divergence in the days-remaining caption (Android floors, iOS rounds up) but not the window
-length itself — and note that two of two audit clusters spot-checked so far turned out to be
-already fixed, so verify before treating that row as live.
+**Resume here:** Area 7 (comments) — compare `Models/AO3CommentTimestamp.swift`'s accepted
+formats against `network/ao3/comments/AO3CommentParser.kt`'s timestamp parsing. A format that
+parses on one platform and fails on the other is a real bug, and iOS having a *dedicated
+file* for it suggests the format set is non-obvious. Then the comment model field set
+(role/badge, edited, deleted state, thread depth). Note `PARITY_SWEEP2_D:7` lists several
+comment items as already covered — but two of two audit clusters spot-checked in this review
+turned out to be **already fixed**, so verify against the tree before treating any of them as
+live.
 
 **Then:** areas 1, 5, 7, 8, 19 are untouched; 6, 9, 12, 13, 16, 18, 20, 21 are partial.
 See *Not covered* for the full breakdown and for the standing warning about the Android
@@ -50,7 +50,7 @@ that fan-out shape; work areas serially and commit each one.
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ⬜ not started | – | Untouched. Note Android has `BrowseLocalIndicators.kt` and `CategoryStats.kt` with no obvious iOS counterpart — establish the real mapping before calling either a gap |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ⬜ not started | – | Only the draft-store identity keying checked, as part of V-3. `PARITY_SWEEP2_D:7` lists several comment gaps as already covered — re-verify rather than re-derive |
-| 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | ⬜ not started | – | Only the shared `required-tags` selectors touched (V-5). iOS has `AO3SeriesDetailView.swift`; Android has `AO3SeriesRepository`/`Urls` but no obvious series *screen* — grep hard before calling it a gap |
+| 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
 | 11 | Home | `Features/Home/` | `home/` | 🔄 in progress | 0 | Section enums match: 4 cases, same names, same order (V-8). **Not done:** per-section query/cap/empty-state, "see all" destinations, pull-to-refresh |
@@ -189,6 +189,73 @@ finding 11) are marked as such.
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 12. Tapping a series in an Android author profile does nothing at all — `real-bug` · Author profile / series
+
+A control that renders as interactive, gives tap feedback, and has no effect. This is worse
+than the feature simply being absent, because the affordance tells the user it works.
+
+- **iOS:** `UIComponents/AO3AuthorNavigation.swift:244` pushes
+  `AO3SeriesDetailView(series: series)` — a real destination,
+  `Features/Authors/AO3SeriesDetailView.swift:4`.
+- **Android:** `author/AuthorProfileScreen.kt` has a full Series tab: the enum case at
+  `:63` (`Series("Series")`), a loader at `:126-127`
+  (`authorRepository.loadSeries(route, pageNum)`), an empty state at `:298`, and each row
+  wrapped in `.clickable { onOpenSeries(item.url) }` at `:308`. But `onOpenSeries` is
+  declared with a **no-op default** — `onOpenSeries: (String) -> Unit = {}` at `:79` — and
+  nothing overrides it. `AppNavHost.kt:674-683`, the sole construction site, passes
+  `username`, `authorRepository`, `onOpenWork` and `onOpenWeb`, and **omits `onOpenSeries`**.
+- **Divergence:** the data layer, the tab, the list, the pagination and the tap target all
+  exist on Android; only the navigation callback is unwired, so the tap resolves to `{}`.
+- **Scenario:** a user opens an author they like, taps the Series tab — which populates
+  correctly, so nothing looks broken — and taps "The Long Way Round, 12 works". Compose
+  draws the ripple because the row is `clickable`. Nothing else happens. Tapping again does
+  nothing again. On iPhone the same tap opens the series detail. The user's reasonable
+  conclusion is that the app is frozen or the series is broken.
+- **Evidence:** `grep -rn "onOpenSeries"` across the entire Android source root returns
+  exactly **two** hits — the parameter declaration at `AuthorProfileScreen.kt:79` and the
+  `clickable` at `:308`. There is no third hit, so no caller supplies an implementation.
+  Confirmed by reading the only invocation (`AppNavHost.kt:674-683`) argument by argument.
+  Ruled out: (a) that a series route exists and is reached another way — `Routes.kt` defines
+  `home`, `library`, `browse`, `account`, `search`, `settings`, `backup`, `queue_storage`,
+  `collections`, `about`, `url`, and nothing series-shaped; (b) that Android deliberately has
+  no series concept — it does, `network/ao3/series/AO3SeriesRepository.kt` is real and *is*
+  wired into `KudosAppContainer`, `ReadingQueueRepository`, `DownloadQueue` and
+  `WorkDetailScreen`, so series data drives preservation and queue downloads; only the
+  browsable destination is missing; (c) that the row is non-interactive so the user gets no
+  false signal — it is `Modifier.clickable`, which applies the standard Material ripple.
+- **History:** not recorded anywhere. Greps of the Android branch's `docs/` and of
+  `TASKS.md` for a series-screen gap return nothing. Note that `AppNavHost` is named in
+  `docs/audits/PARITY_SWEEP2_D:7` for a *different* defect ("AppNavHost shared selection
+  state"), so the file has been reviewed before without this being caught — which is what an
+  unwired optional parameter does: it compiles, it renders, and it reads as complete.
+- **Recommendation:** Android moves, and there is a one-line stopgap worth taking
+  immediately even if the native screen is deferred. `onOpenWeb` is already wired at
+  `AppNavHost.kt:680-682` to `navController.navigate(Routes.webFallback(url))`; passing
+  `onOpenSeries = { url -> navController.navigate(Routes.webFallback(url)) }` makes the tap
+  open the series on AO3 in the app's existing WebView fallback — the same demotion pattern
+  the app already uses elsewhere, and strictly better than silence. The full fix is a native
+  series screen mirroring `AO3SeriesDetailView`, for which the repository and models
+  (`AO3AuthorSeriesSummary`, `AO3AuthorSeriesPage`) already exist. Either way, a
+  `clickable` whose handler defaults to `{}` is a pattern worth sweeping for — which I did,
+  below.
+
+**Swept for the general pattern, and it is not systemic.** A no-op-defaulted callback that
+no caller supplies is invisible to the compiler, so I checked all of them rather than
+assuming this was the only one. Android declares **50** parameters matching
+`on[A-Z]…: (…) -> Unit = {}`; for each, I searched the whole tree for any caller supplying
+it as a named argument. **Four are never supplied, and only this one loses user-facing
+behaviour:**
+
+| Never supplied | Verdict |
+|---|---|
+| `author/AuthorProfileScreen.kt:79` `onOpenSeries` | **finding 12** — a visible, rippling tap target that does nothing |
+| `library/LibraryViewModel.kt:304` `onCreated` (`createCollection`) | benign — an optional "here is the new id" convenience; `workRepository.createCollection(name)` still runs at `:306` |
+| `library/LibraryViewModel.kt:311` `onCreated` (`createQueue`) | benign — same shape; `queues.createQueue(name)` still runs at `:314` and the refresh tick still fires at `:315` |
+| `update/AppUpdateInstaller.kt:54` `onProgress` | benign-ish — the download completes regardless; the only cost is that no progress UI is driven during an APK download. Worth wiring, not a defect |
+
+That 46 of 50 are correctly wired is the reason finding 12 reads as an oversight in one
+screen rather than a habit worth a broader remediation.
 
 ### 11. Android's custom clickable surfaces have no minimum touch-target floor — `gap` · Accessibility
 
