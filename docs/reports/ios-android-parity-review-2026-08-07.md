@@ -51,12 +51,12 @@ that fan-out shape; work areas serially and commit each one.
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | `BrowseLocalIndicators` mapping question resolved — it genuinely has no iOS counterpart → finding 14. **Not done:** category list/ordering, fandom counts parsing, catalog cache TTL, WebView-fallback policy, `CategoryStats` mapping |
-| 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
+| 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
 | 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
-| 11 | Home | `Features/Home/` | `home/` | 🔄 in progress | 0 | Section enums match: 4 cases, same names, same order (V-8). **Not done:** per-section query/cap/empty-state, "see all" destinations, pull-to-refresh |
+| 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
 | 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 0 | The four AO3 account-list types match (V-8). **Not done:** inbox parser + malformed-row handling, AO3 preferences read/write field set, dashboard, whether Android reaches Collections/Works/Series |
 | 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation compared (both allowlist-based, V-8); author-note handling absent on Android. **Not done:** PDF/TXT converters, EPUB builder output, text-encoding detection, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
@@ -1334,6 +1334,59 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-12 — Home and Work Detail agree on the things most likely to drift: predicates, caps, order, and labels
+
+Both areas were opened expecting drift — Home because section queries are easy to get subtly
+wrong, Work Detail because the review prompt uses its stat row as *the* example of drift
+("a field that says 'Word count' on one and 'Words' on the other"). Neither delivered.
+
+**Home (area 11).** Five shelves on both, in the same order — Reading Now, Recently Updated,
+Subscriptions, Favorites, Recently Opened (iOS `Features/Home/HomeView.swift:9` documents the
+order; Android renders it at `home/HomeScreen.kt:172, 196, 218, 230, 253`). The four *local*
+sections live in a shared enum on each side; Subscriptions is a network section handled
+separately on both, which resolves the "4 sections each" note from my earlier pass.
+
+Predicates and ordering are identical clause for clause
+(iOS `Features/Home/HomeSections.swift:52-73`, Android `home/HomeSectionKind.kt:45-64`):
+
+| Section | filter | sort |
+|---|---|---|
+| Reading Now | `isInProgress && !isQueueOnlyWork && visible` | `recency` desc |
+| Favorites | `isFavorite && visible` | `recency` desc |
+| Recently Updated | `hasUpdate && !isQueueOnlyWork && visible` | `lastUpdateCheck` desc |
+| Recently Opened | `lastReadDate != nil && !isQueueOnlyWork && visible` | `lastReadDate` desc |
+
+…including the `recency` helper itself (`lastReadDate ?? dateAdded` on both), the shelf cap
+(iOS `.prefix(12)` at `HomeView.swift:196`; Android `HomeShelfLimit = 12` at
+`HomeScreen.kt:595`), and persisted per-section collapse state (iOS `collapseKey:
+"home.\(kind.rawValue)"` at `HomeView.swift:192`; Android `CollapsedSections` /
+`collapsedShelves` at `HomeScreen.kt:221-222`). Three of four empty-state strings are
+character-identical; the fourth is the **deliberate, documented** divergence from
+`docs/iOS_Issues_Found_While_Porting.md:12-41`, which Android annotates in place at
+`HomeSectionKind.kt:24-27` — iOS's copy names subscriptions for a section that filters on
+`hasUpdate`, and Android kept the accurate wording rather than porting a known-wrong string.
+
+**Work Detail (area 6).** The stat row matches in label *and* order:
+`Words`, `Chapters`, `Hits`, `Kudos`, `Comments` (iOS
+`Features/WorkDetail/WorkDetailOverviewSections.swift:251, 254, 270, 273, 298`; Android
+`works/WorkDetailScreen.kt:1735-1745`). The prompt's example drift does not occur — neither
+platform says "Word count". Both format with grouping separators from the active locale
+(iOS `.formatted()`, Android `"%,d".format(...)`).
+
+Every AO3 action is present on both: Give Kudos, Comments, Bookmark on AO3,
+Subscribe/Unsubscribe, Mark for Later, Open on AO3. **I nearly filed Subscribe as an
+Android gap and was wrong** — a literal-string grep missed it because the label is built
+dynamically at `works/WorkDetailScreen.kt:1327`
+(`if (state.isSubscribed == true) "Unsubscribe" else "Subscribe"`), and `:272-283` prefetches
+the live subscription state so the menu matches AO3 before the user taps. Recorded because it
+is exactly the false positive rule 4 of the review method exists to prevent.
+
+One label differs and it is defensible: iOS says "Mark for Later"
+(`AO3WorkActionsMenu.swift:41`), Android "Mark for Later (AO3)"
+(`WorkDetailScreen.kt`). Android carries a *local* "Saved for Later" queue alongside the AO3
+server action, so the suffix disambiguates two things that would otherwise read identically
+in one menu. Not filed as drift — it is a local disambiguation iOS does not need.
 
 ### V-11 — the remaining seven entities carry the same information; every apparent gap resolves to naming, idiom, or dead schema
 
