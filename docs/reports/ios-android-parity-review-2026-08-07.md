@@ -52,7 +52,7 @@ that fan-out shape; work areas serially and commit each one.
 | 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params compared (25 vs 15). **Not done:** tag autocomplete, SavedSearch round-trip, result parser selectors, pagination |
 | 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | `BrowseLocalIndicators` mapping question resolved — it genuinely has no iOS counterpart → finding 14. **Not done:** category list/ordering, fandom counts parsing, catalog cache TTL, WebView-fallback policy, `CategoryStats` mapping |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | 🔄 in progress | 0 (V-8) | Write endpoints + duplicate-action handling verified identical. **Not done:** the Work Detail *screen* — stat row labels/order, actions-menu contents, metadata field set |
-| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 1 (finding 13) | Timestamp handling traced selector-to-pixel on both → finding 13; draft-store identity keying done in V-3. **Not done:** comment model field set (role/badge, edited, deleted, depth), posting form fields, pagination, error copy |
+| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | 🔄 in progress | 2 (findings 8, 9) | Progress locator + fallback (V-6, finding 8); settings field set, defaults and clamp ranges (V-7, finding 9). **Not done:** colour theme values, TOC building, in-reader search, annotations/highlights, TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | 🔄 in progress | 0 (V-9) | **Statistics done** — all 9 statistics + completion rate verified identical (V-9), and the audit's 3 stats defects are all fixed (folded into finding 3). **Not done:** Recently-Deleted retention window, collections, queue ordering/reorder, shelf predicates |
@@ -199,6 +199,56 @@ column names what was left in each, and *Not covered* ranks where a follow-up sh
   This is also the single highest-value place to add Android test coverage — see
   *Asymmetric test coverage*, where this exact rule turns out to be pinned on iOS and
   unpinned on Android.
+
+### 15. You cannot open a commenter's profile from an Android comment — `gap` · Comments
+
+Android parses and stores everything required and then never offers the tap. Unlike finding
+12 this is not a dead control — the byline is plain text, so nothing lies to the user — which
+makes it a clean feature gap rather than a bug.
+
+- **iOS:** `Models/AO3CommentModels.swift:224-231` exposes
+  `var profileRoute: AO3AuthorRoute?`, documented at `:221-223` as the "Single source of
+  truth for avatar + byline entry points", and correctly returning `nil` for a guest, a
+  deleted tombstone, or an unresolvable path. It is consumed in three places:
+  `Features/Comments/CommentThreadRow.swift:1627` (`if let route = comment.profileRoute,
+  let open = onOpenAuthor`) behind a "Tappable author avatar for comments" component
+  declared at `:1595`, `Features/Comments/CommentsView.swift:1203` for the parent comment,
+  and `Services/AO3CommentActions.swift:278` to resolve a commenter's username for actions.
+- **Android:** the data is all there. `network/ao3/comments/AO3CommentModels.kt:246-251`
+  defines `AO3CommentAuthor(name, profileUrl, username)`, with `username` documented as the
+  "Canonical AO3 account username from the profile path, when resolvable"; the parser fills
+  both — `AO3CommentParser.kt:76`, `:175`, `:326`, `:334-336`. But the byline is rendered as
+  a plain, non-interactive `Text` at `comments/CommentsScreen.kt:590-596`, and `username` is
+  consumed only at `:546` to resolve the participant *badge* (Me / Author / User / Guest).
+  `profileUrl` has **no UI consumer at all**.
+- **Divergence:** on iOS, tapping a commenter's name or avatar opens their author profile. On
+  Android there is no way to get from a comment to the person who wrote it.
+- **Scenario:** a reader finds a thoughtful comment on a fic and wants to see what else that
+  person has written or recommended — a completely ordinary move on AO3, where commenters are
+  frequently authors themselves. On iPhone: tap the avatar, land on their profile. On
+  Android: no affordance exists, so the only route is to memorise the username, back out to
+  Search, and look them up by hand.
+- **Evidence:** traced both directions. On Android, `grep -rn "profileUrl"` across the source
+  root returns only parser writes and model declarations — no screen reads it. Read the byline
+  composable in full to confirm it is a bare `Text` with no `Modifier.clickable` and no
+  `onClick` parameter threaded in. On iOS, read all three `profileRoute` call sites. Ruled
+  out: (a) that Android offers the navigation elsewhere in the comment row — the row's other
+  interactive elements are reply/edit/delete, and no author-navigation callback is declared on
+  the screen (unlike finding 12, there is not even an unwired parameter); (b) that Android
+  deliberately omits it because it lacks an author-profile destination — it has one,
+  `author/AuthorProfileScreen.kt`, reached from work bylines; (c) that iOS's route is
+  vestigial — it is used in three places including a component whose doc comment describes it
+  as tappable.
+- **History:** not recorded. `docs/audits/PARITY_SWEEP2_D:7` lists several comment gaps as
+  already covered ("no work header / no reply / no pagination / incomplete idempotency
+  guard"); commenter-profile navigation is not among them, and greps of the Android branch's
+  `docs/` return nothing.
+- **Recommendation:** Android moves, and it is one of the cheapest items in this report. The
+  screen already knows the username and profile URL, and `AuthorProfileScreen` already takes a
+  username. Thread an `onOpenAuthor: (String) -> Unit` from `AppNavHost` to the byline and
+  avatar, gated exactly as iOS gates it — not a guest, not a deleted tombstone, resolvable
+  username — so the affordance appears only where it will work. Pair it with finding 12: both
+  are author-navigation wiring in `AppNavHost`, and fixing them together is one change.
 
 ### 14. Android marks already-in-your-library works in browse and search results; iOS does not — `gap` · Browse / search · **iOS is the platform behind here**
 
@@ -1090,6 +1140,37 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-10 — the comment model carries the same information on both platforms
+
+Ordered by the review prompt's own checklist for this area — "author, pseud, avatar,
+role/badge, timestamp, chapter, edited-state, deleted/hidden state, thread depth". iOS
+`AO3Comment` (`Models/AO3CommentModels.swift`) declares **24** stored properties, Android
+`AO3Comment` (`network/ao3/comments/AO3CommentModels.kt:191-245`) **21**. The difference is
+naming and convenience, not information:
+
+| Concept | iOS | Android | |
+|---|---|---|---|
+| identity, byline, guest flag | `id`, `author`, `isGuest` | same names | ✅ |
+| anonymous creator | `isAnonymousCreator` | `isAnonymousCreator` | ✅ |
+| avatar | `avatarURL` | `avatarUrl` | ✅ |
+| body | `bodyText` | `body` | ✅ |
+| chapter | `chapterID`, `chapterLabel` | `chapterId`, `chapterLabel` | ✅ |
+| **deleted / hidden** | `isDeleted` (`:199`, with a comment explaining AO3's "(Previous comment deleted.)" placeholder `li`) | `isDeletedOrHidden` (`:197`) | ✅ both, both rendered (iOS `:225`, Android `CommentsScreen.kt:623`) |
+| thread cutoff | `isThreadCutoff`, `cutoffCount`, `cutoffThreadPath` | same three | ✅ |
+| reply affordance + actions | `canReply`, `editPath`, `deletePath` | same three | ✅ |
+| threading | `threadPath`, `parentThreadPath`, nested `replies` | same, plus `depth` and `parentCommentId` | ✅ Android carries the depth explicitly where iOS derives it from nesting |
+| **role / badge** | `AO3CommentParticipantRole` — `me`, `author`, `user`, `guest` (`:6-10`) with a `resolve(...)` taking commenter/current username and work authors | `AO3CommentParticipantRole` (`:99`) resolved at `CommentsScreen.kt:541-550` with the same inputs | ✅ same four roles |
+| timestamp | `postedText` **and** `postedAt` (raw + parsed) | `date` (raw only) | ⚠️ **finding 13** |
+| commenter profile link | `userPath` → `profileRoute` (`:224-231`) | `AO3CommentAuthor.profileUrl` + `username` — parsed and stored, never used for navigation | ⚠️ **finding 15** |
+
+iOS's three remaining extras — `threadActionURL`, `parentThreadURL`, `cutoffThreadURL` — are
+resolved-`URL` conveniences over the `*Path` strings both platforms already store (`:232`
+onward), not additional data.
+
+So the model layer is sound on both, and the two comment findings are about what the *UI*
+does with fields Android has already parsed, not about missing information. Worth stating
+plainly because the opposite would have been a much larger problem.
 
 ### V-9 — every reading statistic is computed identically, formula for formula
 
