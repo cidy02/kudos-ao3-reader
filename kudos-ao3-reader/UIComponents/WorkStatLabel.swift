@@ -99,6 +99,11 @@ struct WorkListStatsRow: View {
     /// Published only — the updated date lives in the card's top-right corner
     /// (`WorkUpdatedDateBadge`), not down here with the rest of the stats.
     var datePublished: String?
+    /// The host card is showing its full detail. Only the category chip changes:
+    /// collapsed it folds several categories into "Multi" the way AO3's own blurb
+    /// does, expanded it names each one. Defaults to compact, which is what every
+    /// list wants.
+    var isExpanded: Bool = false
 
     /// Settings → Library → "Show zero counts". On (the default) every stat
     /// keeps its place even at zero, so a card's stat row has the same shape
@@ -179,13 +184,18 @@ struct WorkListStatsRow: View {
     /// layout gap rather than a real state on device.
     ///
     /// Checking `categories` for emptiness isn't enough: an unrecognized
-    /// category string (or a comma-joined blob AO3 sometimes hands back for a
-    /// multi-category work) would pass `!isEmpty` but still render nothing,
-    /// leaving the slot silently blank. Filter to recognized values first.
+    /// category string would pass `!isEmpty` but still render nothing, leaving
+    /// the slot silently blank. Filter to recognized values first.
     ///
     /// AO3's own legend never lists the specific warnings in its badge either —
     /// just how many apply — so the visible warning text stays short; the full
     /// list still reaches VoiceOver through the accessibility label.
+    /// The category chips only, for tests: the collapse rule is the thing worth
+    /// pinning and `topItems` is private (and mixes in three other facets).
+    var categoryChipTexts: [String] {
+        topItems.filter { $0.symbol == "person.2.fill" }.map(\.text)
+    }
+
     private var topItems: [Item] {
         var result: [Item] = []
         if let rating {
@@ -197,7 +207,20 @@ struct WorkListStatsRow: View {
             ))
         }
         let recognized = categories.filter { WorkStat.categoryColor($0) != nil }
-        if recognized.isEmpty {
+        if recognized.count > 1, !isExpanded {
+            // AO3's own rule, verified live on 2026-08-07: its blurb draws
+            // `category-multi` for *any* work with more than one category, whether
+            // or not the literal "Multi" tag is among them — `F/F, M/M` and
+            // `Gen, M/M` both get it, with the real list only in the title
+            // attribute. One chip keeps a collapsed card glanceable; expanding
+            // spells them out, which is what AO3's own work page does too.
+            result.append(Item(
+                text: "Multi",
+                symbol: "person.2.fill",
+                accessibilityLabel: "Categories: \(recognized.joined(separator: ", "))",
+                iconColor: WorkStat.categoryColor("Multi")
+            ))
+        } else if recognized.isEmpty {
             result.append(Item(
                 text: "N/A",
                 symbol: "person.2.fill",

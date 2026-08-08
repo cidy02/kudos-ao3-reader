@@ -161,10 +161,11 @@ struct AO3WorkRow: View {
                 comments: work.comments,
                 kudos: work.kudos,
                 bookmarks: work.bookmarks,
-                hits: work.hits
+                hits: work.hits,
                 // AO3WorkSummary (the Search-result blurb model) only carries a single
                 // "revised_at" date, unlike SavedWork which tracks both — see WorkRow.
                 // It shows in the card's top-right corner, not here.
+                isExpanded: expanded
             )
         }
         .padding(.vertical, 6)
