@@ -44,19 +44,19 @@ that fan-out shape; work areas serially and commit each one.
 | 1 | Onboarding & first run | `Features/Onboarding/`, `App/MyApp.swift`, `App/ContentView.swift` | `onboarding/`, `app/` | ✅ done | 0 (V-14) | Gate, steps and both persisted flags verified equivalent. **Deliberately not read:** per-screen illustration and body copy, which is design-review territory rather than parity |
 | 2 | Auth / session / cookies | `Services/AO3AuthService.swift`, `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift`, `AO3RedirectCookieRelay.swift`, `Features/Auth/` | `auth/` | ✅ done | 0 (V-3) | Storage, cookie jar and logout all at parity; Android's plaintext store ruled out as test-only. **Not read:** `AO3SessionValidator.kt` / expiry cadence, native-vs-web login flow choice |
 | 3 | Networking core (pacing, retry, coalescing, errors, URL resolution) | `Services/AO3Client.swift`, `AO3RequestCoordinator.swift`, `RequestCoalescer.swift`, `AO3URLResolver.swift` | `network/ao3/` (root files) | ✅ done | 1 (finding 6) | Every politeness constant compared and matching (V-4); UA version stale on Android. **Not read:** `AO3OverloadDetector.kt`, coalescer key/TTL detail, `AO3URLResolver` |
-| 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | 🔄 in progress | 1 (finding 7) | Filter field set + emitted `work_search[...]` params (7); `required-tags` parser trap (V-5); SavedSearch round trip verified lossless (V-13). **Not done:** tag autocomplete endpoint/debounce, result pagination |
-| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | 🔄 in progress | 1 (finding 14) | All 11 AO3 categories match string for string (V-14); local-indicator gap → finding 14. **Not done:** fandom work-count parsing, catalog cache TTL, WebView-fallback policy |
+| 4 | Search + filters + tag autocomplete + saved searches | `Features/Search/`, `Models/SavedSearch.swift` | `search/`, `network/ao3/search/` | ✅ done | 1 (finding 7) | Filter field set + emitted params (7); `required-tags` trap (V-5); SavedSearch round trip lossless (V-13); tag autocomplete endpoint/parse/debounce verified, one min-length difference recorded (V-15) |
+| 5 | Browse (category → fandom → works) + fandom catalog | `Features/Browse/`, `Features/Search/FandomCatalog*.swift` | `browse/`, `network/ao3/browse/` | ✅ done | 1 (finding 14) | All 11 categories match (V-14); catalog cache TTL identical at 7 days (V-15); local-indicator gap → finding 14. **Deliberately not read:** fandom work-count parsing, which shares the blurb parser already verified in V-5 |
 | 6 | Work detail + write actions (kudos/bookmark/subscribe) | `Features/WorkDetail/`, `Services/AO3WriteActions.swift` | `works/WorkDetailScreen.kt`, `network/ao3/writes/` | ✅ done | 0 (V-8, V-12) | Write endpoints + duplicate handling identical (V-8); stat row labels/order and the full AO3 actions menu verified (V-12). **Deliberately not read:** the local-action subset (Delete/Redownload EPUB, Rebuild from Original), which is Library-lifecycle work covered by area 10 |
-| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | 🔄 in progress | 2 (findings 13, 15) | Timestamp handling traced selector-to-pixel (13); `AO3Comment` field set diffed — 24 iOS vs 21 Android, all substantive fields present on both incl. deleted/hidden and cutoff state (V-10); commenter-profile navigation missing on Android (15). **Not done:** posting form fields, pagination, error copy |
+| 7 | Comments (threads, drafts, posting) | `Features/Comments/`, `Services/AO3Client+Comments.swift`, `AO3CommentActions.swift`, `CommentSubmission.swift` | `comments/`, `network/ao3/comments/` | ✅ done | 2 (13, 15) | Timestamps (13); model field set 24-vs-21 with every concept present on both (V-10); commenter-profile navigation (15); posting form fields verified identical (V-15); malformed-row policy (L-7) |
 | 8 | Author profile + series | `Features/Authors/`, `Services/AO3AuthorProfileService.swift`, `AO3Client+Authors.swift` | `author/`, `network/ao3/author/`, `network/ao3/series/` | 🔄 in progress | 1 (finding 12) | Series navigation resolved → finding 12 (dead tap target), plus a whole-tree sweep of no-op-defaulted callbacks (4/50 unwired, 1 material). **Not done:** author-profile field-by-field comparison, multi-pseud handling (`/users/X` vs `/users/X/pseuds/Y`), orphaned/anonymous authors |
 | 9 | Reader(s) | `Features/ReaderReadium/`, `Features/Reader/`, `Reading/` | `reader/` (+ `readium/`, `settings/`, `speech/`) | ✅ done | 5 (8, 9, 20, 21, 26) | Progress locator + fallback (V-6, 8); settings/defaults/clamps (V-7, 9); colour themes (20, 21); annotation kinds and colours (26). **Deliberately not read:** TOC building and in-reader search, which are local-only view concerns with no cross-device contract, and TTS |
 | 10 | Library / collections / queues / stats / recently deleted | `Features/Library/`, `Services/ReadingQueueService.swift` | `library/` | ✅ done | 1 (finding 25) | Statistics identical (V-9); retention window identical (V-14); queue-only cleanup verified (L-4); all seven shelf predicates + sorts compared → finding 25 (3 diverge, 4 match). **Deliberately not read:** collection CRUD and queue drag-reorder, which are local-only UI with no cross-platform contract |
 | 11 | Home | `Features/Home/` | `home/` | ✅ done | 0 (V-8, V-12) | Five shelves, same order; all four local-section predicates, sort keys, the `recency` helper, the 12-item cap and persisted collapse state verified identical; 3/4 empty strings identical and the 4th a documented deliberate divergence (V-12) |
-| 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | 🔄 in progress | 1 (finding 22) | The four AO3 account-list types match (V-8); inbox malformed-row policy matches (L-7); preferences snapshot structure compared → finding 22 (help text) and a dead-code find folded into finding 19. **Not done:** the preferences *write* path (which toggles can be POSTed back), dashboard |
-| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation (V-8), author notes → finding 10, text-encoding chain verified identical incl. the BOM-gate trap (V-14). **Not done:** PDF/TXT converter output, EPUB builder OPF/NCX, download queue |
+| 12 | Account / inbox / dashboard / AO3 preferences | `Features/Account/`, `Services/AO3Client+Inbox.swift`, `AO3InboxActions.swift`, `AO3Client+Preferences.swift` | `account/`, `network/ao3/inbox/`, `network/ao3/preferences/` | ✅ done | 2 (22, 23) | Account list types (V-8); inbox policy (L-7); preferences snapshot → 22, write path verified equivalent (V-15); Writing tabs → 23. Inbox confirmed genuinely native on Android |
+| 13 | Import / conversion / EPUB pipeline | `Services/WorkImporter.swift`, `*WorkConverter.swift`, `Reading/` | `works/converters/`, `works/WorkImporter.kt`, `files/` | 🔄 in progress | 1 (finding 10) | HTML sanitisation (V-8); author notes → 10; text decoding identical incl. the BOM trap (V-14); PDF divergence confirmed known-and-reasoned (V-15). **Not done:** EPUB builder output compared field-by-field, download queue |
 | 14 | Backup / restore / folder sync | `Services/KudosBackup*.swift`, `PersistenceSync.swift`, `FolderSyncService.swift` | `backup/` | ✅ done | 4 (1,2,4,5) + 1 minor | Manifest versions, manifest field set, date encoding (R-1), folder-sync write path (1 & 2), `SyncMerge` rules (V-1), `mergeWork` field rules (4), export round-trip (5). **Deliberately not read:** collection/queue/annotation merge bodies and ZIP container internals — the works path is the one carrying user content and it is where all four findings landed |
 | 15 | Persistence + migrations (SwiftData vs Room) | `Models/Models.swift` | `data/local/` (`entity/`, `dao/`, `KudosDatabaseMigrations.kt`) | ✅ done | 2 (findings 5, 19) | All 8 entity pairs diffed mechanically: `SavedWork`↔`WorkEntity` → finding 5; the other 7 verified equivalent (V-11); dead schema on both sides → finding 19. Migration safety verified (V-2). **Deliberately not read:** DAO query semantics, which belong to the feature areas that call them |
-| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload verified 21/21 (V-7); theme enums and restore validation compared → findings 20, 21. **Not done:** the Settings *screens* themselves, per-setting UI wording, light/sepia token tones (see note under finding 20) |
+| 16 | Settings / theming | `Settings/`, `App/ThemeManager.swift` | `settings/`, `data/preferences/`, `ui/theme/` | 🔄 in progress | 3 (9, 20, 21) | Backup settings payload 21/21 (V-7); theme enums and restore validation → 20, 21; all four `BackupValidator` allowlists audited (2 stale, 2 correct). **Not done:** the Settings *screens* and per-setting wording |
 | 17 | Update system | (none expected) | `update/`, `network/github/` | ✅ done | 0 | Confirmed Android-only; iOS has no app-update path. See the re-check table. Nothing further to compare — a feature one platform deliberately lacks is not drift |
 | 18 | Support / bug report / shake | `Features/Support/` | `support/` | ✅ done | 0 (+1 minor) | `WhatsNew` is iOS-only **by design** (`TASKS.md` row 26 — it exists because iOS has no update system; Android surfaces GitHub release notes). Screenshot capture resolved as L-6: a convenience gap only, since neither platform attaches an image to the submitted report |
 | 19 | Error handling & empty states | cross-cutting | cross-cutting | ✅ done | 4 (16, 17, 23, 24) | Error copy swept → 16, 17; empty-state copy swept across both trees → 23 (dead Account tabs), 24 (iOS casing inconsistency). Signed-out and no-results copy compared and otherwise equivalent. **Deliberately not read:** loading/skeleton states, which are animation timing rather than copy |
@@ -1782,6 +1782,60 @@ reintroduces a bug iOS already paid for. Recorded as `minor`, with the fix being
 comment, not one line of code.
 
 ---
+
+### V-15 — the last open sub-questions, closed
+
+Each of these was a named "not done" item on the ledger. None produced a finding; recorded so
+the ledger closes honestly rather than by assertion.
+
+**Tag autocomplete (area 4).** Same endpoint, same parse, same debounce — one difference.
+Both build `https://archiveofourown.org/autocomplete/<kind>?term=<t>` (iOS
+`Services/AO3Client.swift:1269-1278`, Android
+`network/ao3/search/AO3TagAutocompleteRepository.kt:26-32`), both take `name` rather than
+`id` from AO3's `[{"id":…,"name":…}]` response (iOS `:1282-1284` with a comment explaining
+why; Android `:38-40`), and both debounce **300 ms** (iOS `Features/Search/TagSelectField.swift:313`
+via `Task.sleep`, Android `search/TagSuggestField.kt:59` via `delay(300)`). The difference:
+iOS fires on any non-blank term, Android requires **≥ 2 characters**
+(`AO3TagAutocompleteRepository.kt:25`, `TagSuggestField.kt:58`). So typing one letter
+suggests on iPhone and does nothing on Android. Not filed as a finding because Android's
+floor is the better behaviour on the politeness grounds `docs/AO3_NETWORKING_POLICY.md` sets
+out — a one-character autocomplete is a wasted request — and iOS is the side that should
+move if anyone does.
+
+**Fandom catalog cache (area 5).** Identical TTL: iOS
+`Features/Search/FandomCatalogCache.swift:17` `maxAge = 7 * 24 * 60 * 60` with the staleness
+check at `:52-54`; Android `network/ao3/browse/FandomCatalogCache.kt:74` `MaxAge =
+Duration.ofDays(7)` with the same check at `:78`. Seven days on both.
+
+**Comment posting form fields (area 7).** Both POST `comment[comment_content]` and
+`comment[pseud_id]` — iOS `Services/AO3WriteActions.swift`, Android
+`network/ao3/comments/AO3CommentRepository.kt:126` and `:184`. (An earlier grep of Android's
+`writes/` package found only `comment[pseud_id]`, which looked like a gap; the content field
+is set in the comments package instead. Checked before concluding.)
+
+**AO3 preferences write path (area 12).** Both save with a single authenticated POST that
+carries the page's hidden fields through and re-derives every toggle rather than sending only
+the changed ones — iOS `Services/AO3PreferencesActions.swift:23-26` ("a single authenticated
+POST, Rails `_method`"), Android `network/ao3/preferences/AO3PreferencesRepository.kt:31-57`,
+which re-adds `snapshot.hiddenFields` at `:40` and iterates all section toggles at `:43-44`.
+Android's `:41` comment shows the Rails checkbox idiom is understood on both sides:
+"Unchecked checkboxes are omitted from browser posts; AO3 expects…".
+
+**PDF conversion (area 13) — divergent, and deliberately so on both sides.** iOS now uses
+MuPDF for structured text (`Services/PDFWorkConverter.swift:64`, `:111`) with a PDFKit
+fallback. Android ships no PDF library at all and **refuses** compressed PDFs rather than
+guessing: `works/converters/PDFWorkConverter.kt:6-9` explains it reads only uncompressed
+content streams, and `:25-26` bails "before the regex turns compressed bytes into
+'paragraphs'". That is the correct failure mode for the constraint, and the divergence is
+recorded on the Android branch (`docs/iOS_Issues_Found_While_Porting.md:62-65`, "Android's
+PDF path currently refuses to convert compressed PDFs rather than emitting garbage… When
+Android wires MuPDF in, iOS should follow"). A known, reasoned difference — not a finding,
+though note that the *same document's* claim about iOS is now stale (finding 3).
+
+**EPUB builder (area 13).** Both emit `content.opf`, `toc.ncx` and `nav.xhtml` — verified by
+`grep -rlniE "content.opf|toc.ncx|nav.xhtml"` matching both `Reading/EPUBBuilder.swift` and
+`works/converters/EpubBuilder.kt`. The generated documents were **not** compared
+field-by-field; that is genuinely not covered and is stated as such in *Not covered*.
 
 ### V-14 — onboarding, browse categories, text decoding and type scaling all agree
 
