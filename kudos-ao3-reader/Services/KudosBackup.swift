@@ -235,6 +235,11 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// In-book bookmarks / highlights / notes (manifest v8+). Decoded as empty
     /// for v1-v7 archives, which predate the feature.
     let annotations: [KudosBackupAnnotation]
+    /// Named AO3 searches. Android has written this array for a while; iOS
+    /// historically dropped it on both export and import. Additive optional —
+    /// archives without the key still decode as `[]`. No version bump: Android
+    /// `BackupVersion.isSupported` only accepts 1…8.
+    let savedSearches: [KudosBackupSavedSearch]
     let settings: KudosBackupSettings
     // Carrying tombstones with the backup means a fresh install/reinstall restoring
     // this file inherits the source device's deletion history, instead of having zero
@@ -251,6 +256,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingQueues: [KudosBackupReadingQueue] = [],
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
         annotations: [KudosBackupAnnotation] = [],
+        savedSearches: [KudosBackupSavedSearch] = [],
         settings: KudosBackupSettings,
         tombstones: [KudosBackupTombstone] = []
     ) {
@@ -263,6 +269,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.readingQueues = readingQueues
         self.readingQueueMemberships = readingQueueMemberships
         self.annotations = annotations
+        self.savedSearches = savedSearches
         self.settings = settings
         self.tombstones = tombstones
     }
@@ -277,6 +284,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case readingQueues
         case readingQueueMemberships
         case annotations
+        case savedSearches
         case settings
         case tombstones
     }
@@ -303,6 +311,10 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         annotations = try container.decodeIfPresent(
             [KudosBackupAnnotation].self,
             forKey: .annotations
+        ) ?? []
+        savedSearches = try container.decodeIfPresent(
+            [KudosBackupSavedSearch].self,
+            forKey: .savedSearches
         ) ?? []
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         tombstones = try container.decodeIfPresent(
@@ -601,6 +613,35 @@ nonisolated struct KudosBackupFont: Codable, Equatable {
         name = font.name
         fileName = font.fileName
         dateAdded = font.dateAdded
+    }
+}
+
+/// Transport form of a named AO3 search. Mirrors Android's `BackupSavedSearch`
+/// (`id`, `name`, `dateAdded`, `filters` as a nested JSON object).
+///
+/// `filters` is `AO3SearchFilters` (Codable) so it encodes as a nested object,
+/// not a string — Android declares the field `JsonObject` and rejects anything
+/// else. Dates ride the same fractional-seconds ISO-8601 strategy as every other
+/// manifest date (`Instant.parse` / `OffsetDateTime.parse` compatible).
+nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
+    let id: UUID
+    let name: String
+    let dateAdded: Date
+    let filters: AO3SearchFilters
+
+    @MainActor
+    init(savedSearch: SavedSearch) {
+        id = savedSearch.id
+        name = savedSearch.name
+        dateAdded = savedSearch.dateAdded
+        filters = savedSearch.filters
+    }
+
+    init(id: UUID, name: String, dateAdded: Date, filters: AO3SearchFilters) {
+        self.id = id
+        self.name = name
+        self.dateAdded = dateAdded
+        self.filters = filters
     }
 }
 
@@ -1072,6 +1113,7 @@ enum KudosBackupService {
         collections: [WorkCollection] = [],
         readingQueues: [ReadingQueue],
         annotations: [ReadingAnnotation] = [],
+        savedSearches: [SavedSearch] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -1099,6 +1141,7 @@ enum KudosBackupService {
             readingQueues: readingQueues.map(KudosBackupReadingQueue.init),
             readingQueueMemberships: queueMemberships,
             annotations: annotations.compactMap(KudosBackupAnnotation.init),
+            savedSearches: savedSearches.map(KudosBackupSavedSearch.init),
             settings: .capture(defaults: defaults),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
@@ -1507,6 +1550,29 @@ enum KudosBackupService {
             restoredWorksByArchivedID: restoredWorksByArchivedID,
             suppressed: &suppressedAnnotations
         )
+
+        // Saved searches: match by id, update in place if present, insert if not.
+        // Name collisions keep the incoming name (no uniqueName inventing on iOS;
+        // Android de-dupes names only on *insert* of a new id — we keep parity
+        // with the rest of this restore function's "incoming name wins" style).
+        let existingSavedSearches = try context.fetch(FetchDescriptor<SavedSearch>())
+        var savedSearchesByID = Dictionary(
+            existingSavedSearches.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for archived in contents.manifest.savedSearches {
+            if let existing = savedSearchesByID[archived.id] {
+                existing.name = archived.name
+                existing.dateAdded = archived.dateAdded
+                existing.filters = archived.filters
+            } else {
+                let search = SavedSearch(name: archived.name, filters: archived.filters)
+                search.id = archived.id
+                search.dateAdded = archived.dateAdded
+                context.insert(search)
+                savedSearchesByID[archived.id] = search
+            }
+        }
 
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(

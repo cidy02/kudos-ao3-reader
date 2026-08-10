@@ -915,6 +915,225 @@ struct KudosBackupTests {
         #expect(!FileManager.default.fileExists(atPath: neverWrittenPath))
     }
 
+    @Test func savedSearchSurvivesExportImportRoundTrip() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let searchID = UUID(uuidString: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")!
+        let dateAdded = Date(timeIntervalSince1970: 1_719_403_200) // 2024-06-26T12:00:00Z
+        var filters = AO3SearchFilters()
+        filters.query = "hurt/comfort"
+        filters.fandom = "The Untamed"
+        filters.rating = .teen
+        filters.completion = .complete
+        filters.wordsFrom = "1000"
+        filters.language = try #require(AO3SearchFilters.Language.allCases.first { $0.id == "en" })
+        filters.sort = .kudos
+
+        let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let sourceContainer = try ModelContainer(for: schema, configurations: [sourceConfiguration])
+        let sourceContext = ModelContext(sourceContainer)
+        let saved = SavedSearch(name: "Comfort reads", filters: filters)
+        saved.id = searchID
+        saved.dateAdded = dateAdded
+        sourceContext.insert(saved)
+        try sourceContext.save()
+
+        let contents = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [saved],
+            defaults: try testDefaults()
+        )
+        #expect(contents.manifest.savedSearches.count == 1)
+        #expect(contents.manifest.savedSearches.first?.id == searchID)
+        #expect(contents.manifest.savedSearches.first?.name == "Comfort reads")
+        #expect(contents.manifest.savedSearches.first?.dateAdded == dateAdded)
+        #expect(contents.manifest.savedSearches.first?.filters.query == "hurt/comfort")
+        #expect(contents.manifest.savedSearches.first?.filters.fandom == "The Untamed")
+        #expect(contents.manifest.savedSearches.first?.filters.rating == .teen)
+        #expect(contents.manifest.savedSearches.first?.filters.completion == .complete)
+        #expect(contents.manifest.savedSearches.first?.filters.wordsFrom == "1000")
+        #expect(contents.manifest.savedSearches.first?.filters.language.id == "en")
+        #expect(contents.manifest.savedSearches.first?.filters.sort == .kudos)
+
+        // filters must encode as a nested JSON *object*, not a string (Android
+        // `BackupSavedSearch.filters: JsonObject`).
+        let manifestJSON = try JSONSerialization.jsonObject(
+            with: contents.manifestData()
+        ) as? [String: Any]
+        let savedArray = try #require(manifestJSON?["savedSearches"] as? [[String: Any]])
+        let first = try #require(savedArray.first)
+        #expect(first["filters"] is [String: Any])
+        #expect(!(first["filters"] is String))
+
+        let targetConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let targetContainer = try ModelContainer(for: schema, configurations: [targetConfiguration])
+        let targetContext = ModelContext(targetContainer)
+        _ = try KudosBackupService.restore(
+            contents,
+            into: targetContext,
+            defaults: try testDefaults()
+        )
+        let restored = try #require(
+            try targetContext.fetch(FetchDescriptor<SavedSearch>()).first
+        )
+        #expect(restored.id == searchID)
+        #expect(restored.name == "Comfort reads")
+        #expect(restored.dateAdded == dateAdded)
+        #expect(restored.filters.query == "hurt/comfort")
+        #expect(restored.filters.fandom == "The Untamed")
+        #expect(restored.filters.rating == .teen)
+        #expect(restored.filters.completion == .complete)
+        #expect(restored.filters.wordsFrom == "1000")
+        #expect(restored.filters.language.id == "en")
+        #expect(restored.filters.sort == .kudos)
+    }
+
+    @Test func manifestWithoutSavedSearchesKeyStillDecodes() throws {
+        // Backward compat: v1–v8 archives that predate (or Android builds that
+        // omit) the key must not fail to decode.
+        let minimal = """
+        {
+          "version": 8,
+          "exportedAt": "2026-06-26T12:00:00Z",
+          "works": [],
+          "bookmarks": [],
+          "fonts": [],
+          "settings": {
+            "readerFontID": "system",
+            "readerMode": "scroll",
+            "readerTwoPage": false,
+            "readerCustomize": false,
+            "readerBoldText": false,
+            "readerFontPt": 18,
+            "readerLineHeight": 1.65,
+            "readerLetterSpacing": 0,
+            "readerWordSpacing": 0,
+            "readerMargin": 28,
+            "readerJustify": false,
+            "confirmBeforeDelete": true,
+            "hideMatureContent": true,
+            "matureContentMode": "obscure",
+            "requireBiometricToReveal": false,
+            "appTheme": "light",
+            "readerTheme": "light",
+            "matchAppReaderTheme": true,
+            "accentColorHex": "#990000",
+            "autoPreserveSmallSeriesOnSaveForLater": false,
+            "autoPreserveSeriesWorkThreshold": 5
+          }
+        }
+        """
+        let manifest = try decodeManifestJSON(minimal)
+        #expect(manifest.savedSearches.isEmpty)
+    }
+
+    @Test func androidSavedSearchJSONShapeDecodes() throws {
+        // Hand-written from Kotlin `BackupSavedSearch` — not produced by our
+        // own encoder — so this actually proves cross-platform decode.
+        // Android: id = UUID string (lowercase), dateAdded = ISO-8601 instant,
+        // filters = JsonObject (nested object, may be empty or a partial DTO).
+        let androidManifest = """
+        {
+          "version": 8,
+          "exportedAt": "2026-06-26T12:00:00Z",
+          "works": [],
+          "bookmarks": [],
+          "fonts": [],
+          "savedSearches": [
+            {
+              "id": "11111111-2222-4333-8444-555555555555",
+              "name": "Android comfort",
+              "dateAdded": "2026-06-26T12:00:00Z",
+              "filters": {
+                "query": "found family",
+                "fandom": "Good Omens",
+                "characters": "",
+                "relationships": "",
+                "additionalTags": "",
+                "excludedFandoms": "",
+                "excludedCharacters": "",
+                "excludedRelationships": "",
+                "excludedAdditionalTags": "",
+                "rating": "teen",
+                "ratingMatch": "exact",
+                "includeNotRated": true,
+                "warnings": [],
+                "excludedWarnings": [],
+                "categories": ["mm"],
+                "excludedCategories": [],
+                "crossover": "any",
+                "completion": "complete",
+                "wordsFrom": "5000",
+                "wordsTo": "",
+                "updated": "any",
+                "language": "en",
+                "sort": "kudos"
+              }
+            },
+            {
+              "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "name": "Empty filters",
+              "dateAdded": "2026-06-26T13:30:00.123Z",
+              "filters": {}
+            }
+          ],
+          "settings": {
+            "readerFontID": "system",
+            "readerMode": "scroll",
+            "readerTwoPage": false,
+            "readerCustomize": false,
+            "readerBoldText": false,
+            "readerFontPt": 18,
+            "readerLineHeight": 1.65,
+            "readerLetterSpacing": 0,
+            "readerWordSpacing": 0,
+            "readerMargin": 28,
+            "readerJustify": false,
+            "confirmBeforeDelete": true,
+            "hideMatureContent": true,
+            "matureContentMode": "obscure",
+            "requireBiometricToReveal": false,
+            "appTheme": "light",
+            "readerTheme": "light",
+            "matchAppReaderTheme": true,
+            "accentColorHex": "#990000",
+            "autoPreserveSmallSeriesOnSaveForLater": false,
+            "autoPreserveSeriesWorkThreshold": 5
+          }
+        }
+        """
+        let manifest = try decodeManifestJSON(androidManifest)
+        #expect(manifest.savedSearches.count == 2)
+
+        let first = try #require(manifest.savedSearches.first)
+        #expect(first.id == UUID(uuidString: "11111111-2222-4333-8444-555555555555"))
+        #expect(first.name == "Android comfort")
+        #expect(first.filters.query == "found family")
+        #expect(first.filters.fandom == "Good Omens")
+        #expect(first.filters.rating == .teen)
+        #expect(first.filters.categories == [.mm])
+        #expect(first.filters.completion == .complete)
+        #expect(first.filters.wordsFrom == "5000")
+        #expect(first.filters.language.id == "en")
+        #expect(first.filters.sort == .kudos)
+
+        let second = try #require(manifest.savedSearches.last)
+        #expect(second.name == "Empty filters")
+        #expect(second.filters == AO3SearchFilters())
+    }
+
+    /// Decode a hand-written manifest JSON blob with the same date strategy the
+    /// real archive path uses (fractional seconds + whole-second fallback).
+    private func decodeManifestJSON(_ json: String) throws -> KudosBackupManifest {
+        try KudosBackupContents.decodeManifest(Data(json.utf8))
+    }
+
     private func testDefaults() throws -> UserDefaults {
         let name = "KudosBackupTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))

@@ -354,6 +354,7 @@ enum FolderSyncService {
             collections: context.fetch(FetchDescriptor<WorkCollection>()),
             readingQueues: context.fetch(FetchDescriptor<ReadingQueue>()),
             annotations: context.fetch(FetchDescriptor<ReadingAnnotation>()),
+            savedSearches: context.fetch(FetchDescriptor<SavedSearch>()),
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
         )
@@ -705,7 +706,16 @@ nonisolated private func writeSyncDirectoryContents(
 }
 
 nonisolated private func writeIfChanged(_ data: Data, to url: URL) throws {
-    if let existingSize = fileSize(of: url), existingSize == data.count { return }
+    // Equal length is not equal content. Skipping on size alone means an edit that
+    // happens to keep the byte count — a typo fix, a same-width metadata tweak —
+    // never syncs at all. The size check stays as the cheap reject, so the read
+    // below only happens when size cannot already prove a difference, and a read
+    // that fails falls through to writing rather than silently skipping.
+    if let existingSize = fileSize(of: url), existingSize == data.count,
+       let existing = try? Data(contentsOf: url, options: .mappedIfSafe),
+       existing == data {
+        return
+    }
     try data.write(to: url, options: .atomic)
 }
 

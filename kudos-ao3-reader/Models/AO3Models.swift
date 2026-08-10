@@ -316,30 +316,42 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     }
 
     init(from decoder: Decoder) throws {
+        // Every key is optional with a default so (a) previously-saved SwiftData
+        // records that predate a field still load, and (b) Android's
+        // `BackupSavedSearch.filters: JsonObject` — which may be `{}` or a partial
+        // `AO3SearchFiltersDto` — decodes without discarding the whole saved search.
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        query = try container.decode(String.self, forKey: .query)
+        query = try container.decodeIfPresent(String.self, forKey: .query) ?? ""
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
         creators = try container.decodeIfPresent(String.self, forKey: .creators) ?? ""
-        fandom = try container.decode(String.self, forKey: .fandom)
-        characters = try container.decode(String.self, forKey: .characters)
-        relationships = try container.decode(String.self, forKey: .relationships)
-        additionalTags = try container.decode(String.self, forKey: .additionalTags)
-        excludedFandoms = try container.decode(String.self, forKey: .excludedFandoms)
-        excludedCharacters = try container.decode(String.self, forKey: .excludedCharacters)
-        excludedRelationships = try container.decode(String.self, forKey: .excludedRelationships)
-        excludedAdditionalTags = try container.decode(String.self, forKey: .excludedAdditionalTags)
-        rating = try container.decode(Rating.self, forKey: .rating)
-        ratingMatch = try container.decode(RatingMatch.self, forKey: .ratingMatch)
-        includeNotRated = try container.decode(Bool.self, forKey: .includeNotRated)
-        warnings = try container.decode(Set<Warning>.self, forKey: .warnings)
-        excludedWarnings = try container.decode(Set<Warning>.self, forKey: .excludedWarnings)
-        categories = try container.decode(Set<Category>.self, forKey: .categories)
-        excludedCategories = try container.decode(Set<Category>.self, forKey: .excludedCategories)
-        crossover = try container.decode(Crossover.self, forKey: .crossover)
-        completion = try container.decode(Completion.self, forKey: .completion)
+        fandom = try container.decodeIfPresent(String.self, forKey: .fandom) ?? ""
+        characters = try container.decodeIfPresent(String.self, forKey: .characters) ?? ""
+        relationships = try container.decodeIfPresent(String.self, forKey: .relationships) ?? ""
+        additionalTags = try container.decodeIfPresent(String.self, forKey: .additionalTags) ?? ""
+        excludedFandoms = try container.decodeIfPresent(String.self, forKey: .excludedFandoms) ?? ""
+        excludedCharacters = try container.decodeIfPresent(String.self, forKey: .excludedCharacters) ?? ""
+        excludedRelationships = try container.decodeIfPresent(
+            String.self, forKey: .excludedRelationships
+        ) ?? ""
+        excludedAdditionalTags = try container.decodeIfPresent(
+            String.self, forKey: .excludedAdditionalTags
+        ) ?? ""
+        rating = try container.decodeIfPresent(Rating.self, forKey: .rating) ?? .any
+        ratingMatch = try container.decodeIfPresent(RatingMatch.self, forKey: .ratingMatch) ?? .exact
+        includeNotRated = try container.decodeIfPresent(Bool.self, forKey: .includeNotRated) ?? true
+        warnings = try container.decodeIfPresent(Set<Warning>.self, forKey: .warnings) ?? []
+        excludedWarnings = try container.decodeIfPresent(
+            Set<Warning>.self, forKey: .excludedWarnings
+        ) ?? []
+        categories = try container.decodeIfPresent(Set<Category>.self, forKey: .categories) ?? []
+        excludedCategories = try container.decodeIfPresent(
+            Set<Category>.self, forKey: .excludedCategories
+        ) ?? []
+        crossover = try container.decodeIfPresent(Crossover.self, forKey: .crossover) ?? .any
+        completion = try container.decodeIfPresent(Completion.self, forKey: .completion) ?? .any
         chapterCount = try container.decodeIfPresent(ChapterCount.self, forKey: .chapterCount) ?? .any
-        wordsFrom = try container.decode(String.self, forKey: .wordsFrom)
-        wordsTo = try container.decode(String.self, forKey: .wordsTo)
+        wordsFrom = try container.decodeIfPresent(String.self, forKey: .wordsFrom) ?? ""
+        wordsTo = try container.decodeIfPresent(String.self, forKey: .wordsTo) ?? ""
         hitsFrom = try container.decodeIfPresent(String.self, forKey: .hitsFrom) ?? ""
         hitsTo = try container.decodeIfPresent(String.self, forKey: .hitsTo) ?? ""
         kudosFrom = try container.decodeIfPresent(String.self, forKey: .kudosFrom) ?? ""
@@ -348,12 +360,13 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         commentsTo = try container.decodeIfPresent(String.self, forKey: .commentsTo) ?? ""
         bookmarksFrom = try container.decodeIfPresent(String.self, forKey: .bookmarksFrom) ?? ""
         bookmarksTo = try container.decodeIfPresent(String.self, forKey: .bookmarksTo) ?? ""
-        updated = try container.decode(Updated.self, forKey: .updated)
+        updated = try container.decodeIfPresent(Updated.self, forKey: .updated) ?? .any
         dateFrom = try container.decodeIfPresent(Date.self, forKey: .dateFrom)
         dateTo = try container.decodeIfPresent(Date.self, forKey: .dateTo)
-        language = try container.decode(Language.self, forKey: .language)
-        sort = try container.decode(Sort.self, forKey: .sort)
-        sortDirection = try container.decodeIfPresent(SortDirection.self, forKey: .sortDirection) ?? .descending
+        language = try container.decodeIfPresent(Language.self, forKey: .language) ?? .any
+        sort = try container.decodeIfPresent(Sort.self, forKey: .sort) ?? .relevance
+        sortDirection = try container.decodeIfPresent(SortDirection.self, forKey: .sortDirection)
+            ?? .descending
     }
 
     /// True when any filter beyond the plain query is set (drives the filter
@@ -710,7 +723,12 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         }
     }
 
-    /// Archive warnings (AO3 `archive_warning_ids`). Raw value is the AO3 id.
+    /// Archive warnings (AO3 `archive_warning_ids`). Raw value is the AO3 id
+    /// (used by the search URL builder). Codable intentionally does **not** use
+    /// the raw value: Android's `SearchFiltersCodec` writes the Swift case name
+    /// (`appleCaseName`, e.g. `"noWarnings"`), and iOS must accept both that
+    /// shape and legacy AO3-id payloads (`"16"`) so cross-platform backups and
+    /// older iOS archives keep decoding.
     nonisolated enum Warning: String, CaseIterable, Identifiable, Codable {
         case noWarnings = "16"
         case chooseNotTo = "14"
@@ -726,6 +744,18 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             rawValue
         }
 
+        /// Cross-platform Codable token — matches Android `AO3Warning.appleCaseName`.
+        var appleCaseName: String {
+            switch self {
+            case .noWarnings: "noWarnings"
+            case .chooseNotTo: "chooseNotTo"
+            case .violence: "violence"
+            case .death: "death"
+            case .nonCon: "nonCon"
+            case .underage: "underage"
+            }
+        }
+
         var title: String {
             switch self {
             case .noWarnings: "No Archive Warnings Apply"
@@ -736,9 +766,36 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             case .underage: "Underage Sex"
             }
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let token = try container.decode(String.self)
+            if let byID = Self(rawValue: token) {
+                self = byID
+                return
+            }
+            if let byName = Self.allCases.first(where: {
+                $0.appleCaseName.caseInsensitiveCompare(token) == .orderedSame
+            }) {
+                self = byName
+                return
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Cannot initialize Warning from invalid String value \(token)"
+            )
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(appleCaseName)
+        }
     }
 
-    /// Categories (AO3 `category_ids`). Raw value is the AO3 id.
+    /// Categories (AO3 `category_ids`). Raw value is the AO3 id (search URL
+    /// builder). Codable uses the Swift case name so Android's
+    /// `AO3Category.appleCaseName` (`"mm"`, `"ff"`, …) round-trips; decode also
+    /// accepts legacy AO3-id tokens (`"23"`, …).
     nonisolated enum Category: String, CaseIterable, Identifiable, Codable {
         case ff = "116", fm = "22", gen = "21", mm = "23", multi = "2246", other = "24"
         var id: String {
@@ -747,6 +804,18 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
 
         var ao3ID: String {
             rawValue
+        }
+
+        /// Cross-platform Codable token — matches Android `AO3Category.appleCaseName`.
+        var appleCaseName: String {
+            switch self {
+            case .ff: "ff"
+            case .fm: "fm"
+            case .gen: "gen"
+            case .mm: "mm"
+            case .multi: "multi"
+            case .other: "other"
+            }
         }
 
         var title: String {
@@ -758,6 +827,30 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             case .multi: "Multi"
             case .other: "Other"
             }
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let token = try container.decode(String.self)
+            if let byID = Self(rawValue: token) {
+                self = byID
+                return
+            }
+            if let byName = Self.allCases.first(where: {
+                $0.appleCaseName.caseInsensitiveCompare(token) == .orderedSame
+            }) {
+                self = byName
+                return
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Cannot initialize Category from invalid String value \(token)"
+            )
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(appleCaseName)
         }
     }
 
