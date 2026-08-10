@@ -45,6 +45,33 @@ class LibraryRepositoryAllWorksTest {
     }
 
     @Test
+    fun statisticsCountWorksThatWereReadThenUnsaved() = runTest {
+        // iOS computes Reading Insights over every non-deleted work; Android was
+        // computing them over saved works only, so un-saving something you had read
+        // silently changed all nine statistics. The Library shelves must NOT change.
+        workRepository.upsert(savedWork("saved").copy(isSaved = true))
+        workRepository.upsert(savedWork("history").copy(isSaved = false))
+
+        val statistics = libraryRepository.observeStatisticsWorks().first()
+        val shelves = libraryRepository.observeSavedWorks().first()
+
+        assertEquals(listOf("history", "saved"), statistics.map { it.id }.sorted())
+        assertEquals(listOf("saved"), shelves.map { it.id })
+    }
+
+    @Test
+    fun statisticsStillExcludeQueueOnlyWorks() = runTest {
+        workRepository.upsert(savedWork("saved").copy(isSaved = true))
+        workRepository.upsert(
+            savedWork("queued").copy(isSaved = false, isQueuedForLater = true)
+        )
+
+        val statistics = libraryRepository.observeStatisticsWorks().first()
+
+        assertEquals(listOf("saved"), statistics.map { it.id })
+    }
+
+    @Test
     fun snapshotIncludesSavedWorksUserTagsAndCollections() = runTest {
         workRepository.upsert(savedWork("saved").copy(isSaved = true))
         workRepository.upsert(savedWork("history").copy(isSaved = false))

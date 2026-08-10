@@ -66,7 +66,7 @@ class ReadingStatisticsViewModel(
     privacyGate: PrivacyGate = PrivacyGate()
 ) : ViewModel() {
     val state: StateFlow<ReadingStatisticsUiState> = combine(
-        libraryRepository.observeSavedWorks(),
+        libraryRepository.observeStatisticsWorks(),
         settingsRepository?.settings ?: flowOf(KudosSettings()),
         privacyGate.state
     ) { works, settings, reveal ->
