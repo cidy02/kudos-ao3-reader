@@ -196,21 +196,37 @@ internal fun testSession(username: String = "AO3_Reader"): AO3Session {
 }
 
 internal class MemorySessionStore(
-    var session: AO3Session? = null
+    var session: AO3Session? = null,
+    var removalPending: Boolean = false,
+    /** When true, [delete] leaves [session] and returns false. */
+    var failDelete: Boolean = false
 ) : AO3SessionStore {
     override suspend fun load(): AO3Session? = session
     override suspend fun save(session: AO3Session) {
         this.session = session
+        removalPending = false
     }
-    override suspend fun delete() {
+    override suspend fun delete(): Boolean {
+        if (failDelete) return false
         session = null
+        return true
+    }
+    override suspend fun isRemovalPending(): Boolean = removalPending
+    override suspend fun markRemovalPending() {
+        removalPending = true
+    }
+    override suspend fun clearRemovalPending() {
+        removalPending = false
     }
 }
 
 internal class ThrowingSessionStore(private val error: Exception) : AO3SessionStore {
     override suspend fun load(): AO3Session? = throw error
     override suspend fun save(session: AO3Session) {}
-    override suspend fun delete() {}
+    override suspend fun delete(): Boolean = true
+    override suspend fun isRemovalPending(): Boolean = false
+    override suspend fun markRemovalPending() {}
+    override suspend fun clearRemovalPending() {}
 }
 
 internal class MemoryCookieStore(

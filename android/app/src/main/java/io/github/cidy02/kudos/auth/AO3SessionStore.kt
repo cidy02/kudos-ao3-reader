@@ -13,7 +13,22 @@ import kotlinx.serialization.json.Json
 interface AO3SessionStore {
     suspend fun load(): AO3Session?
     suspend fun save(session: AO3Session)
-    suspend fun delete()
+    /**
+     * Removes any durable session file.
+     *
+     * @return `true` when no reusable session file remains (or never existed);
+     *   `false` when a delete failed and credentials may still be on disk.
+     */
+    suspend fun delete(): Boolean
+
+    /** A previous logout/expiry could not fully erase the durable session. */
+    suspend fun isRemovalPending(): Boolean
+
+    /** Mark that restore must refuse until [delete] succeeds. */
+    suspend fun markRemovalPending()
+
+    /** Clear the removal-pending flag after a successful delete or intentional save. */
+    suspend fun clearRemovalPending()
 }
 
 /**
@@ -22,6 +37,10 @@ interface AO3SessionStore {
  *
  * On first load, migrates a legacy plaintext `session.json` if present, then
  * deletes the plaintext copy so credentials/cookies never rest unencrypted.
+ *
+ * Removal-pending is a non-secret sibling marker file (port of iOS
+ * `UserDefaultsAO3SessionRemovalTracker`): while set, [AO3AuthRepository.restoreSession]
+ * must refuse to load any leftover session blob.
  */
 class EncryptedFileAO3SessionStore(
     context: Context,
@@ -31,6 +50,7 @@ class EncryptedFileAO3SessionStore(
     private val dir = File(appContext.noBackupFilesDir, "ao3")
     private val encryptedFile = File(dir, "session.enc")
     private val legacyPlainFile = File(dir, "session.json")
+    private val removalPendingFile = File(dir, "session.removal_pending")
 
     private val masterKey: MasterKey by lazy {
         MasterKey.Builder(appContext)
@@ -66,15 +86,45 @@ class EncryptedFileAO3SessionStore(
         }
         // Never leave a plaintext twin behind.
         if (legacyPlainFile.exists()) legacyPlainFile.delete()
+        // A fresh intentional save supersedes any earlier failed-logout marker.
+        clearRemovalPendingBlocking()
     }
 
-    override suspend fun delete() = withContext(Dispatchers.IO) {
+    override suspend fun delete(): Boolean = withContext(Dispatchers.IO) {
         deleteBlocking()
     }
 
-    private fun deleteBlocking() {
-        if (encryptedFile.exists()) encryptedFile.delete()
-        if (legacyPlainFile.exists()) legacyPlainFile.delete()
+    override suspend fun isRemovalPending(): Boolean = withContext(Dispatchers.IO) {
+        removalPendingFile.exists()
+    }
+
+    override suspend fun markRemovalPending() = withContext(Dispatchers.IO) {
+        dir.mkdirs()
+        if (!removalPendingFile.exists()) {
+            removalPendingFile.writeText("1")
+        }
+    }
+
+    override suspend fun clearRemovalPending() = withContext(Dispatchers.IO) {
+        clearRemovalPendingBlocking()
+    }
+
+    private fun clearRemovalPendingBlocking() {
+        if (removalPendingFile.exists()) removalPendingFile.delete()
+    }
+
+    /**
+     * @return true if no session file remains (or never existed).
+     */
+    private fun deleteBlocking(): Boolean {
+        var fullyGone = true
+        if (encryptedFile.exists() && !encryptedFile.delete()) {
+            fullyGone = false
+        }
+        if (legacyPlainFile.exists() && !legacyPlainFile.delete()) {
+            fullyGone = false
+        }
+        return fullyGone
     }
 
     private fun openEncrypted(forWrite: Boolean): EncryptedFile {
@@ -116,6 +166,9 @@ class FileAO3SessionStore(
         sessionFile = File(File(context.noBackupFilesDir, "ao3"), "session.json")
     )
 
+    private val removalPendingFile: File =
+        File(sessionFile.parentFile ?: File("."), "${sessionFile.name}.removal_pending")
+
     override suspend fun load(): AO3Session? = withContext(Dispatchers.IO) {
         if (!sessionFile.exists()) return@withContext null
         try {
@@ -137,13 +190,34 @@ class FileAO3SessionStore(
             temp.copyTo(sessionFile, overwrite = true)
             temp.delete()
         }
+        clearRemovalPendingBlocking()
     }
 
-    override suspend fun delete() = withContext(Dispatchers.IO) {
+    override suspend fun delete(): Boolean = withContext(Dispatchers.IO) {
         deleteBlocking()
     }
 
-    private fun deleteBlocking() {
-        if (sessionFile.exists()) sessionFile.delete()
+    override suspend fun isRemovalPending(): Boolean = withContext(Dispatchers.IO) {
+        removalPendingFile.exists()
+    }
+
+    override suspend fun markRemovalPending() = withContext(Dispatchers.IO) {
+        sessionFile.parentFile?.mkdirs()
+        if (!removalPendingFile.exists()) {
+            removalPendingFile.writeText("1")
+        }
+    }
+
+    override suspend fun clearRemovalPending() = withContext(Dispatchers.IO) {
+        clearRemovalPendingBlocking()
+    }
+
+    private fun clearRemovalPendingBlocking() {
+        if (removalPendingFile.exists()) removalPendingFile.delete()
+    }
+
+    private fun deleteBlocking(): Boolean {
+        if (!sessionFile.exists()) return true
+        return sessionFile.delete()
     }
 }

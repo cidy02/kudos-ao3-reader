@@ -6,6 +6,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class AO3AuthRepository(
     private val sessionStore: AO3SessionStore,
@@ -27,6 +29,20 @@ class AO3AuthRepository(
     private var didRestore = false
 
     /**
+     * Bumped on every identity transition (restore start, login start, logout,
+     * expiry clear, successful verify-refresh). Continuations that captured an
+     * older generation must not write session state or install cookies.
+     * Port of iOS `AO3AuthService.sessionGeneration`.
+     */
+    private var sessionGeneration: Int = 0
+
+    /**
+     * Short critical-section lock for generation check + session mutation.
+     * Never held across network validation — only around local apply/clear.
+     */
+    private val sessionMutex = Mutex()
+
+    /**
      * Loads the persisted session once per process. When a [sessionValidator]
      * is configured, GETs a cheap AO3 page with the stored cookies:
      * - clearly logged-out → clear session ([AO3AuthState.Expired])
@@ -36,7 +52,24 @@ class AO3AuthRepository(
     suspend fun restoreSession() {
         if (didRestore) return
         didRestore = true
-        mutableState.value = AO3AuthState.Restoring
+        val expectedGeneration = sessionMutex.withLock {
+            mutableState.value = AO3AuthState.Restoring
+            advanceSessionGenerationLocked()
+        }
+
+        // A previous logout/expiry couldn't fully clear the durable store.
+        // Retry delete, but never restore a leftover blob this launch.
+        if (sessionStore.isRemovalPending()) {
+            retryPendingRemoval()
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) return
+                currentSession = null
+                mutableState.value = AO3AuthState.SignedOut
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+            }
+            return
+        }
+
         // sessionStore.load() only guarantees catching malformed-content errors
         // (IllegalArgumentException/SerializationException) internally; a plain
         // IOException (corrupt/half-written file, disk error) must not crash
@@ -49,39 +82,61 @@ class AO3AuthRepository(
             null
         }
         if (restored == null || !restored.hasSessionCookie()) {
-            currentSession = null
-            mutableState.value = AO3AuthState.SignedOut
-            mutableSessionHealth.value = AO3SessionHealth.Unknown
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) return
+                currentSession = null
+                mutableState.value = AO3AuthState.SignedOut
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+            }
             return
         }
 
-        currentSession = restored
-        cookieStore.install(restored)
+        sessionMutex.withLock {
+            if (sessionGeneration != expectedGeneration) return
+            currentSession = restored
+            // Install under the lock so a concurrent logout cannot clear cookies
+            // only to have this continuation reinstall them immediately after.
+            cookieStore.install(restored)
+        }
 
         val validator = sessionValidator
         if (validator == null) {
-            mutableState.value = AO3AuthState.SignedIn(restored.username)
-            mutableSessionHealth.value = AO3SessionHealth.Unknown
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) return
+                mutableState.value = AO3AuthState.SignedIn(restored.username)
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+            }
             return
         }
 
         try {
             when (val validation = validator.validate(restored)) {
                 is AO3SessionValidation.Valid -> {
-                    applyValidSession(validation.session)
+                    sessionMutex.withLock {
+                        if (sessionGeneration != expectedGeneration) return
+                        if (currentSession != restored) return
+                        applyValidSessionLocked(validation.session, markHealthy = true)
+                    }
                 }
                 AO3SessionValidation.Expired -> {
-                    clearSession()
-                    mutableState.value = AO3AuthState.Expired()
-                    mutableSessionHealth.value = AO3SessionHealth.Expired
+                    sessionMutex.withLock {
+                        if (sessionGeneration != expectedGeneration) return
+                        clearSessionLocked()
+                        mutableState.value = AO3AuthState.Expired()
+                        mutableSessionHealth.value = AO3SessionHealth.Expired
+                    }
                 }
             }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
             // Connectivity or non-definitive response — keep the saved session.
-            mutableState.value = AO3AuthState.SignedIn(restored.username)
-            mutableSessionHealth.value = AO3SessionHealth.Unreachable
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) return
+                if (currentSession != restored) return
+                mutableState.value = AO3AuthState.SignedIn(restored.username)
+                mutableSessionHealth.value = AO3SessionHealth.Unreachable
+            }
         }
     }
 
@@ -91,12 +146,19 @@ class AO3AuthRepository(
      * this can run whenever the user asks. Mirrors restore's valid/expired/
      * transient handling: a transient failure keeps the session and reports
      * [AO3SessionHealth.Unreachable] rather than logging the user out.
+     *
+     * Captures [sessionGeneration] before the network call; after return, the
+     * check-plus-apply runs under [sessionMutex] so a concurrent [logout] that
+     * advanced the generation cannot be overwritten by this continuation.
      */
     suspend fun verifySession() {
-        val session = currentSession
-        if (session == null || mutableState.value !is AO3AuthState.SignedIn) {
-            mutableSessionHealth.value = AO3SessionHealth.Unknown
-            return
+        val (session, expectedGeneration) = sessionMutex.withLock {
+            val current = currentSession
+            if (current == null || mutableState.value !is AO3AuthState.SignedIn) {
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+                return
+            }
+            current to sessionGeneration
         }
         val validator = sessionValidator
         if (validator == null) {
@@ -105,50 +167,83 @@ class AO3AuthRepository(
             return
         }
 
-        mutableSessionHealth.value = AO3SessionHealth.Verifying
+        sessionMutex.withLock {
+            if (sessionGeneration != expectedGeneration) return
+            mutableSessionHealth.value = AO3SessionHealth.Verifying
+        }
         try {
+            // Network — intentionally outside the mutex so logout is not stalled.
             when (val validation = validator.validate(session)) {
                 is AO3SessionValidation.Valid -> {
-                    applyValidSession(validation.session)
+                    sessionMutex.withLock {
+                        if (sessionGeneration != expectedGeneration) return
+                        if (currentSession != session) return
+                        // Bump generation so any other in-flight continuation
+                        // that captured the pre-refresh generation goes stale.
+                        advanceSessionGenerationLocked()
+                        applyValidSessionLocked(validation.session, markHealthy = true)
+                    }
                 }
                 AO3SessionValidation.Expired -> {
-                    clearSession()
-                    mutableState.value = AO3AuthState.Expired()
-                    mutableSessionHealth.value = AO3SessionHealth.Expired
+                    sessionMutex.withLock {
+                        if (sessionGeneration != expectedGeneration) return
+                        clearSessionLocked()
+                        mutableState.value = AO3AuthState.Expired()
+                        mutableSessionHealth.value = AO3SessionHealth.Expired
+                    }
                 }
             }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
             // Transient (offline / server hiccup): keep the session, flag unverified.
-            mutableSessionHealth.value = AO3SessionHealth.Unreachable
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) return
+                mutableSessionHealth.value = AO3SessionHealth.Unreachable
+            }
         }
     }
 
     suspend fun acceptWebLogin(username: String): AO3Result<AO3Session> {
-        mutableState.value = AO3AuthState.SigningIn
+        val expectedGeneration = sessionMutex.withLock {
+            mutableState.value = AO3AuthState.SigningIn
+            advanceSessionGenerationLocked()
+        }
         val trimmed = username.trim()
         if (trimmed.isBlank()) {
             val error = AO3Error.Validation("AO3 username could not be detected.")
-            mutableState.value = AO3AuthState.Error(error.message)
-            mutableSessionHealth.value = AO3SessionHealth.Unknown
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) {
+                    return AO3Result.Failure(error)
+                }
+                mutableState.value = AO3AuthState.Error(error.message)
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+            }
             return AO3Result.Failure(error)
         }
 
         val session = cookieStore.captureSession(trimmed)
         if (session == null) {
             val error = AO3Error.AuthenticationRequired
-            mutableState.value = AO3AuthState.Error("AO3 login did not produce a usable session.")
-            mutableSessionHealth.value = AO3SessionHealth.Unknown
+            sessionMutex.withLock {
+                if (sessionGeneration != expectedGeneration) {
+                    return AO3Result.Failure(error)
+                }
+                mutableState.value = AO3AuthState.Error("AO3 login did not produce a usable session.")
+                mutableSessionHealth.value = AO3SessionHealth.Unknown
+            }
             return AO3Result.Failure(error)
         }
 
-        sessionStore.save(session)
-        cookieStore.install(session)
-        currentSession = session
-        mutableState.value = AO3AuthState.SignedIn(session.username)
-        // Fresh login is trusted for gating but has not been re-checked on demand.
-        mutableSessionHealth.value = AO3SessionHealth.Unknown
+        sessionMutex.withLock {
+            if (sessionGeneration != expectedGeneration) {
+                // Logout / another login won while we captured cookies — do not
+                // reinstall this (possibly stale) WebView snapshot.
+                return AO3Result.Failure(AO3Error.AuthenticationRequired)
+            }
+            // Fresh login is trusted for gating but has not been re-checked on demand.
+            applyValidSessionLocked(session, markHealthy = false)
+        }
         return AO3Result.Success(session)
     }
 
@@ -162,28 +257,68 @@ class AO3AuthRepository(
     fun username(): String? = currentSession?.username
 
     suspend fun sessionDidExpire() {
-        clearSession()
-        mutableState.value = AO3AuthState.Expired()
-        mutableSessionHealth.value = AO3SessionHealth.Expired
+        sessionMutex.withLock {
+            clearSessionLocked()
+            mutableState.value = AO3AuthState.Expired()
+            mutableSessionHealth.value = AO3SessionHealth.Expired
+        }
     }
 
     suspend fun logout() {
-        clearSession()
-        mutableState.value = AO3AuthState.SignedOut
-        mutableSessionHealth.value = AO3SessionHealth.Unknown
+        sessionMutex.withLock {
+            clearSessionLocked()
+            mutableState.value = AO3AuthState.SignedOut
+            mutableSessionHealth.value = AO3SessionHealth.Unknown
+        }
     }
 
-    private suspend fun applyValidSession(session: AO3Session) {
+    /**
+     * Must be called while [sessionMutex] is held. Writes durable session +
+     * installs cookies + updates in-memory state.
+     */
+    private suspend fun applyValidSessionLocked(session: AO3Session, markHealthy: Boolean) {
         sessionStore.save(session)
+        // save() also clears removal-pending on file stores; call explicitly so
+        // in-memory / custom stores stay consistent.
+        sessionStore.clearRemovalPending()
         cookieStore.install(session)
         currentSession = session
         mutableState.value = AO3AuthState.SignedIn(session.username)
-        mutableSessionHealth.value = AO3SessionHealth.Healthy(System.currentTimeMillis())
+        mutableSessionHealth.value = if (markHealthy) {
+            AO3SessionHealth.Healthy(System.currentTimeMillis())
+        } else {
+            AO3SessionHealth.Unknown
+        }
     }
 
-    private suspend fun clearSession() {
+    /**
+     * Must be called while [sessionMutex] is held. Advances generation so every
+     * in-flight continuation becomes stale, then clears memory + durable store
+     * + cookies. Honours delete failure by marking removal pending.
+     */
+    private suspend fun clearSessionLocked() {
+        advanceSessionGenerationLocked()
         currentSession = null
-        sessionStore.delete()
+        val deleted = sessionStore.delete()
+        if (deleted) {
+            sessionStore.clearRemovalPending()
+        } else {
+            sessionStore.markRemovalPending()
+        }
         cookieStore.clear()
+    }
+
+    private fun advanceSessionGenerationLocked(): Int {
+        sessionGeneration += 1
+        return sessionGeneration
+    }
+
+    /** Best-effort retry of a previously failed durable delete. */
+    private suspend fun retryPendingRemoval() {
+        val deleted = sessionStore.delete()
+        if (deleted) {
+            sessionStore.clearRemovalPending()
+        }
+        // If still failing, leave the marker set so the next launch also refuses.
     }
 }
