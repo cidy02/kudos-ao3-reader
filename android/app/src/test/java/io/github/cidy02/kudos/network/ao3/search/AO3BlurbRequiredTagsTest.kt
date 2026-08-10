@@ -69,7 +69,7 @@ class AO3BlurbRequiredTagsTest {
         assertTrue(work.warnings.contains("Rape/Non-Con"))
         // The user-visible symptom: this chip read "1 Warning Applies".
         val chips = statusChips(work.rating, work.categories, work.warnings, work.isComplete)
-        assertTrue(chips.any { it.text == "3 Warnings Apply" })
+        assertTrue(chips.any { it.text == "3 Warnings" })
     }
 
     /**
@@ -118,7 +118,7 @@ class AO3BlurbRequiredTagsTest {
         )
         assertEquals(listOf("Major Character Death", "Underage Sex"), work.warnings)
         val chips = statusChips(work.rating, work.categories, work.warnings, work.isComplete)
-        assertTrue(chips.any { it.text == "2 Warnings Apply" })
+        assertTrue(chips.any { it.text == "2 Warnings" })
     }
 
     @Test

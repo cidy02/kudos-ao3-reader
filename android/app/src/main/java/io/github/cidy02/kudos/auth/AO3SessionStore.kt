@@ -44,7 +44,17 @@ interface AO3SessionStore {
  */
 class EncryptedFileAO3SessionStore(
     context: Context,
-    private val json: Json = Json { ignoreUnknownKeys = true }
+    private val json: Json = Json {
+        ignoreUnknownKeys = true
+        // Persist every field, including ones equal to their default.
+        // `savedAtEpochMillis` defaults to `Clock.systemUTC().millis()`, and
+        // kotlinx.serialization re-evaluates that default when deciding whether
+        // to omit it — so a session constructed and written inside the same
+        // millisecond had the field silently dropped from the file, and a later
+        // load re-stamped it with load time instead. Harmless while nothing
+        // reads it; a trap the moment anything treats it as a session age.
+        encodeDefaults = true
+    }
 ) : AO3SessionStore {
     private val appContext = context.applicationContext
     private val dir = File(appContext.noBackupFilesDir, "ao3")
@@ -160,7 +170,17 @@ class EncryptedFileAO3SessionStore(
  */
 class FileAO3SessionStore(
     private val sessionFile: File,
-    private val json: Json = Json { ignoreUnknownKeys = true }
+    private val json: Json = Json {
+        ignoreUnknownKeys = true
+        // Persist every field, including ones equal to their default.
+        // `savedAtEpochMillis` defaults to `Clock.systemUTC().millis()`, and
+        // kotlinx.serialization re-evaluates that default when deciding whether
+        // to omit it — so a session constructed and written inside the same
+        // millisecond had the field silently dropped from the file, and a later
+        // load re-stamped it with load time instead. Harmless while nothing
+        // reads it; a trap the moment anything treats it as a session age.
+        encodeDefaults = true
+    }
 ) : AO3SessionStore {
     constructor(context: Context) : this(
         sessionFile = File(File(context.noBackupFilesDir, "ao3"), "session.json")

@@ -5,3 +5,6 @@ local.properties
 keystore.properties
 *.keystore
 *.jks
+
+# Kotlin Gradle plugin 2.x scratch dir (session files, build reports).
+.kotlin/
