@@ -645,6 +645,15 @@ nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
     }
 }
 
+/// Matches Android `BackupCollection` (`backup/BackupManifest.kt`):
+/// `id`, `name`, `dateAdded`, `workIDs`, optional `description`/`sortOrder`
+/// (`String?` / `Int?`), plus the Apple sync tombstone fields.
+///
+/// `description` and `sortOrder` are passthrough for Android. iOS does not edit
+/// them in UI — they exist so a restore does not destroy the other platform's
+/// data. Decoded with optional synthesis (`decodeIfPresent`); nil encodes as
+/// *absent* (Swift `encodeIfPresent`), matching Android `BackupJson`
+/// (`explicitNulls = false`) so null stays null rather than becoming `""`.
 nonisolated struct KudosBackupCollection: Codable, Equatable {
     let id: UUID
     let name: String
@@ -656,6 +665,10 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     let permanentDeletionScheduledAt: Date?
     let syncStatusRaw: String?
     let workIDs: [UUID]
+    /// Android `BackupCollection.description: String?` — wire key `description`.
+    let description: String?
+    /// Android `BackupCollection.sortOrder: Int?` — wire key `sortOrder`.
+    let sortOrder: Int?
 
     @MainActor
     init(collection: WorkCollection) {
@@ -669,6 +682,8 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         permanentDeletionScheduledAt = collection.permanentDeletionScheduledAt
         syncStatusRaw = collection.syncStatusRaw
         workIDs = collection.works.map(\.id).sorted { $0.uuidString < $1.uuidString }
+        description = collection.collectionDescription
+        sortOrder = collection.sortOrder
     }
 }
 
@@ -1338,6 +1353,15 @@ enum KudosBackupService {
             collection.permanentDeletionScheduledAt = incomingWins
                 ? archived.permanentDeletionScheduledAt
                 : collection.permanentDeletionScheduledAt
+            // Android merge: `archived.description ?: existing.description` (and the
+            // same for sortOrder) — non-null archive wins; null/absent never wipes a
+            // local value. On a brand-new collection the local defaults are already
+            // nil, so this is a straight assign of whatever the archive carried.
+            if isNewCollection || incomingWins {
+                collection.collectionDescription =
+                    archived.description ?? collection.collectionDescription
+                collection.sortOrder = archived.sortOrder ?? collection.sortOrder
+            }
 
             for workID in archived.workIDs {
                 guard let work = restoredWorksByArchivedID[workID] else { continue }

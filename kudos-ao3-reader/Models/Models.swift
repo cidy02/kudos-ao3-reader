@@ -594,6 +594,18 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
 
+    /// Android collection description, stored only so Android↔iOS backup restore
+    /// does not drop it. **Not a half-finished feature** — iOS has no collection-
+    /// description UI and this property is not rendered anywhere. Named
+    /// `collectionDescription` (not `description`) to avoid colliding with
+    /// `NSObject.description` / Core Data reserved names. Wire name in
+    /// `KudosBackupCollection` is still `description`, matching Android.
+    var collectionDescription: String?
+    /// Android collection sort order — same passthrough-only rationale as
+    /// `collectionDescription`. Wire name `sortOrder`. Defaults to nil so
+    /// existing stores open via lightweight migration without a plan.
+    var sortOrder: Int?
+
     /// The works in this collection (inverse of `SavedWork.collections`).
     var works: [SavedWork] = []
 

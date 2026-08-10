@@ -915,6 +915,300 @@ struct KudosBackupTests {
         #expect(!FileManager.default.fileExists(atPath: neverWrittenPath))
     }
 
+    @Test func collectionDescriptionAndSortOrderSurviveExportImportRoundTrip() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let collectionID = UUID(uuidString: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff")!
+        let dateAdded = Date(timeIntervalSince1970: 1_719_403_200) // 2024-06-26T12:00:00Z
+
+        let sourceConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let sourceContainer = try ModelContainer(for: schema, configurations: [sourceConfiguration])
+        let sourceContext = ModelContext(sourceContainer)
+        let collection = WorkCollection(name: "Comfort shelf")
+        collection.id = collectionID
+        collection.dateAdded = dateAdded
+        collection.createdAt = dateAdded
+        collection.lastModifiedAt = dateAdded
+        // Passthrough fields — iOS never edits these in UI, but must keep them.
+        collection.collectionDescription = "Android-written shelf notes"
+        collection.sortOrder = 7
+        sourceContext.insert(collection)
+        try sourceContext.save()
+
+        let contents = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            collections: [collection],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        #expect(contents.manifest.collections.count == 1)
+        #expect(contents.manifest.collections.first?.id == collectionID)
+        #expect(contents.manifest.collections.first?.description == "Android-written shelf notes")
+        #expect(contents.manifest.collections.first?.sortOrder == 7)
+
+        // Wire keys match Android exactly (property names on KudosBackupCollection).
+        let manifestJSON = try JSONSerialization.jsonObject(
+            with: contents.manifestData()
+        ) as? [String: Any]
+        let collectionsArray = try #require(manifestJSON?["collections"] as? [[String: Any]])
+        let firstJSON = try #require(collectionsArray.first)
+        #expect(firstJSON["description"] as? String == "Android-written shelf notes")
+        #expect(firstJSON["sortOrder"] as? Int == 7)
+
+        let targetConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let targetContainer = try ModelContainer(for: schema, configurations: [targetConfiguration])
+        let targetContext = ModelContext(targetContainer)
+        _ = try KudosBackupService.restore(
+            contents,
+            into: targetContext,
+            defaults: try testDefaults()
+        )
+        let restored = try #require(
+            try targetContext.fetch(FetchDescriptor<WorkCollection>()).first
+        )
+        #expect(restored.id == collectionID)
+        #expect(restored.name == "Comfort shelf")
+        #expect(restored.collectionDescription == "Android-written shelf notes")
+        #expect(restored.sortOrder == 7)
+
+        // Re-export must keep the values (not collapse them to nil/"").
+        let reexported = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            collections: [restored],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        #expect(reexported.manifest.collections.first?.description == "Android-written shelf notes")
+        #expect(reexported.manifest.collections.first?.sortOrder == 7)
+    }
+
+    @Test func collectionWithoutDescriptionOrSortOrderKeysStillDecodes() throws {
+        // Backward compat: pre-passthrough iOS archives and any writer that omits
+        // the optional keys must still load. Android BackupJson uses
+        // `explicitNulls = false`, so a null description is also absent on the wire.
+        let minimal = """
+        {
+          "version": 8,
+          "exportedAt": "2026-06-26T12:00:00Z",
+          "works": [],
+          "bookmarks": [],
+          "fonts": [],
+          "collections": [
+            {
+              "id": "cccccccc-dddd-4eee-8fff-000000000001",
+              "name": "No extras",
+              "dateAdded": "2026-06-26T12:00:00Z",
+              "workIDs": []
+            }
+          ],
+          "settings": {
+            "readerFontID": "system",
+            "readerMode": "scroll",
+            "readerTwoPage": false,
+            "readerCustomize": false,
+            "readerBoldText": false,
+            "readerFontPt": 18,
+            "readerLineHeight": 1.65,
+            "readerLetterSpacing": 0,
+            "readerWordSpacing": 0,
+            "readerMargin": 28,
+            "readerJustify": false,
+            "confirmBeforeDelete": true,
+            "hideMatureContent": true,
+            "matureContentMode": "obscure",
+            "requireBiometricToReveal": false,
+            "appTheme": "light",
+            "readerTheme": "light",
+            "matchAppReaderTheme": true,
+            "accentColorHex": "#990000",
+            "autoPreserveSmallSeriesOnSaveForLater": false,
+            "autoPreserveSeriesWorkThreshold": 5
+          }
+        }
+        """
+        let manifest = try decodeManifestJSON(minimal)
+        let collection = try #require(manifest.collections.first)
+        #expect(collection.name == "No extras")
+        #expect(collection.description == nil)
+        #expect(collection.sortOrder == nil)
+
+        // Re-export path must not invent "" for a missing description.
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: Data(minimal.utf8))
+        ])
+        let contents = try KudosBackupContents(fileWrapper: wrapper)
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+        let restored = try #require(try context.fetch(FetchDescriptor<WorkCollection>()).first)
+        #expect(restored.collectionDescription == nil)
+        #expect(restored.sortOrder == nil)
+
+        let reexported = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            collections: [restored],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        #expect(reexported.manifest.collections.first?.description == nil)
+        #expect(reexported.manifest.collections.first?.sortOrder == nil)
+        let reexportJSON = try JSONSerialization.jsonObject(
+            with: reexported.manifestData()
+        ) as? [String: Any]
+        let reexportCollections = try #require(reexportJSON?["collections"] as? [[String: Any]])
+        let reexportFirst = try #require(reexportCollections.first)
+        // encodeIfPresent + Android explicitNulls=false: absent, not "".
+        #expect(reexportFirst["description"] == nil)
+        #expect(reexportFirst["sortOrder"] == nil)
+        #expect((reexportFirst["description"] as? String) != "")
+    }
+
+    @Test func androidCollectionJSONShapeDecodesAndReexportsUnchanged() throws {
+        // Hand-written from Kotlin `BackupCollection` — not produced by our own
+        // encoder — so this proves cross-platform decode. Contract
+        // (BackupManifest.kt ~114-127):
+        //   id: String, name: String, dateAdded: String,
+        //   workIDs: List<String> = emptyList(),
+        //   description: String? = null, sortOrder: Int? = null,
+        //   createdAt/lastModifiedAt/deletedAt/isDeleted/
+        //   permanentDeletionScheduledAt/syncStatusRaw: optional.
+        let androidManifest = """
+        {
+          "version": 8,
+          "exportedAt": "2026-06-26T12:00:00Z",
+          "works": [],
+          "bookmarks": [],
+          "fonts": [],
+          "collections": [
+            {
+              "id": "11111111-2222-4333-8444-555555555555",
+              "name": "Android shelf",
+              "dateAdded": "2026-06-26T12:00:00Z",
+              "workIDs": [],
+              "description": "Notes from the Android library",
+              "sortOrder": 3,
+              "createdAt": "2026-06-26T12:00:00Z",
+              "lastModifiedAt": "2026-06-26T13:00:00Z",
+              "deletedAt": null,
+              "isDeleted": false,
+              "permanentDeletionScheduledAt": null,
+              "syncStatusRaw": "localOnly"
+            },
+            {
+              "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "name": "Null description shelf",
+              "dateAdded": "2026-06-26T12:30:00Z",
+              "workIDs": [],
+              "description": null,
+              "sortOrder": null
+            }
+          ],
+          "settings": {
+            "readerFontID": "system",
+            "readerMode": "scroll",
+            "readerTwoPage": false,
+            "readerCustomize": false,
+            "readerBoldText": false,
+            "readerFontPt": 18,
+            "readerLineHeight": 1.65,
+            "readerLetterSpacing": 0,
+            "readerWordSpacing": 0,
+            "readerMargin": 28,
+            "readerJustify": false,
+            "confirmBeforeDelete": true,
+            "hideMatureContent": true,
+            "matureContentMode": "obscure",
+            "requireBiometricToReveal": false,
+            "appTheme": "light",
+            "readerTheme": "light",
+            "matchAppReaderTheme": true,
+            "accentColorHex": "#990000",
+            "autoPreserveSmallSeriesOnSaveForLater": false,
+            "autoPreserveSeriesWorkThreshold": 5
+          }
+        }
+        """
+        let manifest = try decodeManifestJSON(androidManifest)
+        #expect(manifest.collections.count == 2)
+
+        let first = try #require(manifest.collections.first)
+        #expect(first.id == UUID(uuidString: "11111111-2222-4333-8444-555555555555"))
+        #expect(first.name == "Android shelf")
+        #expect(first.description == "Notes from the Android library")
+        #expect(first.sortOrder == 3)
+
+        let second = try #require(manifest.collections.last)
+        #expect(second.name == "Null description shelf")
+        #expect(second.description == nil)
+        #expect(second.sortOrder == nil)
+
+        // Restore into a store, re-export, and confirm values (and nulls) survive.
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let wrapper = FileWrapper(directoryWithFileWrappers: [
+            "manifest.json": FileWrapper(regularFileWithContents: Data(androidManifest.utf8))
+        ])
+        let contents = try KudosBackupContents(fileWrapper: wrapper)
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let restored = try context.fetch(FetchDescriptor<WorkCollection>())
+            .sorted { $0.name < $1.name }
+        #expect(restored.count == 2)
+        let androidShelf = try #require(restored.first { $0.name == "Android shelf" })
+        #expect(androidShelf.collectionDescription == "Notes from the Android library")
+        #expect(androidShelf.sortOrder == 3)
+        let nullShelf = try #require(restored.first { $0.name == "Null description shelf" })
+        #expect(nullShelf.collectionDescription == nil)
+        #expect(nullShelf.sortOrder == nil)
+
+        let reexported = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            collections: restored,
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let byName = Dictionary(
+            uniqueKeysWithValues: reexported.manifest.collections.map { ($0.name, $0) }
+        )
+        #expect(byName["Android shelf"]?.description == "Notes from the Android library")
+        #expect(byName["Android shelf"]?.sortOrder == 3)
+        #expect(byName["Null description shelf"]?.description == nil)
+        #expect(byName["Null description shelf"]?.sortOrder == nil)
+
+        let reexportJSON = try JSONSerialization.jsonObject(
+            with: reexported.manifestData()
+        ) as? [String: Any]
+        let reexportCollections = try #require(reexportJSON?["collections"] as? [[String: Any]])
+        let nullJSON = try #require(
+            reexportCollections.first { ($0["name"] as? String) == "Null description shelf" }
+        )
+        #expect(nullJSON["description"] == nil)
+        #expect(nullJSON["sortOrder"] == nil)
+    }
+
     @Test func savedSearchSurvivesExportImportRoundTrip() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
