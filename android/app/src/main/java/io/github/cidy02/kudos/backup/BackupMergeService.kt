@@ -74,7 +74,24 @@ object BackupMergeService {
                 mergeWork(existing, restored, archived)
             }
 
-            if (incomingEpub != null) {
+            // Only replace a local EPUB when the archive's copy is genuinely the
+            // newer one. Writing it whenever the archive carried a file — which is
+            // what this used to do, ungated by the LWW result above — means folder
+            // sync *destroys* a locally changed EPUB rather than merely failing to
+            // propagate it: sync-down runs before sync-up, so the stale remote copy
+            // is restored over the fresh local file and then exported back out.
+            //
+            // Strictly newer, not >=: when neither side's metadata moved, the two
+            // clocks are equal and there is nothing to justify overwriting bytes
+            // this device holds. The font merge already treats differing content as
+            // something to preserve rather than clobber.
+            val incomingModifiedAt = parseOptionalInstant(archived.lastModifiedAt)
+            val incomingEpubWins = existing == null ||
+                (
+                    incomingModifiedAt != null &&
+                        existing.effectiveLastModifiedAt.isBefore(incomingModifiedAt)
+                    )
+            if (incomingEpub != null && (!existingHasEpub || incomingEpubWins)) {
                 epubFilesToWrite[id] = incomingEpub
             }
 
