@@ -138,6 +138,10 @@ object Routes {
     const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}"
     fun authorProfile(username: String) = "author-profile/${encode(username)}"
 
+    private const val ARG_SERIES_URL = "seriesUrl"
+    const val SeriesWorks = "series-works/{$ARG_SERIES_URL}"
+    fun seriesWorks(seriesUrl: String) = "series-works/${encode(seriesUrl)}"
+
     private const val ARG_TAG_NAME = "tagName"
     const val TagWorks = "tag-works/{$ARG_TAG_NAME}"
     fun tagWorks(tagName: String) = "tag-works/${encode(tagName)}"
@@ -200,6 +204,7 @@ object Routes {
             CollectionDetail -> "Collection"
             AuthorWorks -> "Author"
             AuthorProfile -> "Author"
+            SeriesWorks -> "Series"
             TagWorks -> "Works"
             AO3Dashboard -> "My Dashboard"
             LocalHistory -> "Reading History"

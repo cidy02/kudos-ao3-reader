@@ -60,7 +60,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.comments.AO3Comment
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentParticipantRole
@@ -88,6 +87,8 @@ fun CommentsScreen(
     repository: AO3CommentRepository,
     onLogin: () -> Unit,
     currentUsername: String? = null,
+    /** Opens the commenter's AO3 profile (username), same as a byline author tap. */
+    onOpenAuthor: (String) -> Unit = {},
     draftStore: CommentDraftStore? = null,
     settingsRepository: SettingsRepository? = null,
     focusedCommentId: Long? = null,
@@ -327,6 +328,7 @@ fun CommentsScreen(
                             onDelete = { pendingDeleteComment = it },
                             onLoadMore = { viewModel.load() },
                             onViewThread = { commentId -> viewModel.load(focusedId = commentId) },
+                            onOpenAuthor = onOpenAuthor,
                             collapsedIds = collapsedIds,
                             visibleReplyCounts = visibleReplyCounts
                         )
@@ -444,6 +446,7 @@ private fun CommentThreadRow(
     onDelete: (AO3Comment) -> Unit,
     onLoadMore: (String) -> Unit,
     onViewThread: (Long) -> Unit,
+    onOpenAuthor: (String) -> Unit,
     collapsedIds: MutableMap<String, Boolean>,
     visibleReplyCounts: MutableMap<String, Int>,
     depth: Int = 0
@@ -481,7 +484,8 @@ private fun CommentThreadRow(
                 isExpanded = !isCollapsed,
                 onToggleExpand = ::toggle,
                 depth = depth,
-                onViewThread = onViewThread
+                onViewThread = onViewThread,
+                onOpenAuthor = onOpenAuthor
             )
         }
 
@@ -505,6 +509,7 @@ private fun CommentThreadRow(
                     onDelete = onDelete,
                     onLoadMore = onLoadMore,
                     onViewThread = onViewThread,
+                    onOpenAuthor = onOpenAuthor,
                     collapsedIds = collapsedIds,
                     visibleReplyCounts = visibleReplyCounts,
                     depth = depth + 1
@@ -536,6 +541,7 @@ private fun CommentRow(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onViewThread: (Long) -> Unit,
+    onOpenAuthor: (String) -> Unit,
     depth: Int
 ) {
     val role = remember(comment, currentUsername, workAuthors) {
@@ -551,6 +557,7 @@ private fun CommentRow(
     }
     val clipboard = LocalClipboardManager.current
     var showMenu by remember { mutableStateOf(false) }
+    val profileUsername = comment.author.username?.takeIf { it.isNotBlank() }
 
     Row(
         modifier = Modifier
@@ -590,9 +597,22 @@ private fun CommentRow(
                 Text(
                     text = comment.author.name,
                     style = MaterialTheme.typography.titleSmall,
+                    color = if (profileUsername != null) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .then(
+                            if (profileUsername != null) {
+                                Modifier.clickable { onOpenAuthor(profileUsername) }
+                            } else {
+                                Modifier
+                            }
+                        )
                 )
                 CommentParticipantBadge(role = role)
                 if (comment.chapterLabel != null) {
@@ -850,22 +870,6 @@ private fun ChapterScopePicker(
                 label = { Text("Chapter ${chapterTarget.chapterId}") }
             )
         }
-    }
-}
-
-private fun AO3Error.displayMessage(): String {
-    return when (this) {
-        AO3Error.BadRequest -> "AO3 rejected the request."
-        AO3Error.AuthenticationRequired -> "AO3 requires login."
-        AO3Error.Forbidden -> "AO3 denied access."
-        AO3Error.NotFound -> "AO3 could not find these comments."
-        is AO3Error.Http -> "AO3 returned HTTP $statusCode."
-        is AO3Error.Network -> message
-        is AO3Error.Overloaded -> "AO3 is busy. Try again shortly."
-        is AO3Error.Parse -> message
-        is AO3Error.RateLimited -> "AO3 is rate-limiting requests. Try again shortly."
-        is AO3Error.Server -> "AO3 had a server problem (HTTP $statusCode)."
-        is AO3Error.Validation -> message
     }
 }
 

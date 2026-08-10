@@ -9,11 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -30,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesRepository
 import io.github.cidy02.kudos.network.ao3.preferences.AO3PreferencesSnapshot
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
@@ -41,7 +46,8 @@ import kotlinx.coroutines.launch
 fun AO3PreferencesScreen(
     username: String,
     repository: AO3PreferencesRepository,
-    onSaved: () -> Unit = {}
+    onSaved: () -> Unit = {},
+    onOpenHelp: (String) -> Unit = {}
 ) {
     var snapshot by remember { mutableStateOf<AO3PreferencesSnapshot?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -67,7 +73,7 @@ fun AO3PreferencesScreen(
                     result.value.textFields.forEach { texts[it.name] = it.value }
                 }
                 is AO3Result.Failure -> {
-                    error = result.error.toString()
+                    error = result.error.displayMessage()
                 }
             }
             loading = false
@@ -117,6 +123,17 @@ fun AO3PreferencesScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f)
                             )
+                            toggle.helpUrl?.let { helpUrl ->
+                                IconButton(
+                                    onClick = { onOpenHelp(helpUrl) },
+                                    enabled = !saving
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                                        contentDescription = "Help for ${toggle.label}"
+                                    )
+                                }
+                            }
                             Switch(
                                 checked = toggles[toggle.name] ?: toggle.checked,
                                 onCheckedChange = { toggles[toggle.name] = it },
@@ -193,7 +210,7 @@ fun AO3PreferencesScreen(
                                         load()
                                     }
                                     is AO3Result.Failure -> {
-                                        status = "Save failed: ${result.error}"
+                                        status = "Save failed: ${result.error.displayMessage()}"
                                     }
                                 }
                                 saving = false

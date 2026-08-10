@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.displayMessage
+import io.github.cidy02.kudos.network.ao3.isOffline
 import io.github.cidy02.kudos.network.ao3.comments.AO3Comment
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
@@ -104,7 +106,7 @@ class CommentsViewModel(
                     _state.value = if (result.error == AO3Error.AuthenticationRequired) {
                         CommentsUiState.AuthRequired("Log in to AO3 before commenting.")
                     } else {
-                        CommentsUiState.Error(result.error.toString())
+                        CommentsUiState.Error(result.error.displayMessage())
                     }
                 }
             }
@@ -176,7 +178,7 @@ class CommentsViewModel(
                     load()
                 }
                 is AO3Result.Failure -> {
-                    _message.value = result.error.toString()
+                    _message.value = result.error.displayMessage()
                 }
             }
             _submitting.value = false
@@ -223,13 +225,13 @@ class CommentsViewModel(
                     load()
                 }
                 is AO3Result.Failure -> {
-                    if (result.error is AO3Error.Network) {
+                    if (result.error is AO3Error.Network && !result.error.isOffline()) {
                         // Ambiguous network failure: don't clear draft, block immediate retry of same content.
                         lastSubmittedContentHash = contentHash
                         _message.value = "Couldn't confirm this posted — reloading to check."
                         load()
                     } else {
-                        _message.value = result.error.toString()
+                        _message.value = result.error.displayMessage()
                     }
                 }
             }

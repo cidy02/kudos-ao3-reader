@@ -514,6 +514,7 @@ fun AppNavHost(
                 postingPseudStore = container.postingPseudStore,
                 metadataRepository = container.metadataRepository,
                 settingsRepository = container.settingsRepository,
+                seriesRepository = container.seriesRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenComments = { workId ->
                     navController.navigate(Routes.comments(workId))
@@ -523,6 +524,9 @@ fun AppNavHost(
                 },
                 onOpenAuthor = { authorName ->
                     navController.navigate(Routes.authorProfile(authorName))
+                },
+                onOpenSeries = { seriesUrl ->
+                    navController.navigate(Routes.seriesWorks(seriesUrl))
                 }
             )
         }
@@ -606,6 +610,9 @@ fun AppNavHost(
                 repository = container.commentRepository,
                 currentUsername = commentsAuthState.usernameOrNull,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
+                onOpenAuthor = { username ->
+                    navController.navigate(Routes.authorProfile(username))
+                },
                 focusedCommentId = focusedId,
                 initialChapterPosition = chapterPosition,
                 chapterIndexRepository = container.chapterIndexRepository,
@@ -677,8 +684,29 @@ fun AppNavHost(
                     onOpenWork = { work ->
                         navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     },
+                    onOpenSeries = { seriesUrl ->
+                        navController.navigate(Routes.seriesWorks(seriesUrl))
+                    },
                     onOpenWeb = { url ->
                         navController.navigate(Routes.webFallback(url))
+                    }
+                )
+            }
+        }
+
+        sharedComposable(
+            Routes.SeriesWorks,
+            arguments = listOf(Routes.navArgOf("seriesUrl"))
+        ) { backStackEntry ->
+            val seriesUrl = Routes.routeArg(backStackEntry, "seriesUrl")
+            if (seriesUrl.isNullOrBlank()) {
+                navController.popBackStack()
+            } else {
+                SeriesWorksScreen(
+                    seriesUrl = seriesUrl,
+                    seriesRepository = container.seriesRepository,
+                    onOpenWork = { work ->
+                        navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                     }
                 )
             }
@@ -693,7 +721,10 @@ fun AppNavHost(
                 AO3PreferencesScreen(
                     username = prefsUsername,
                     repository = container.preferencesRepository,
-                    onSaved = { navController.popBackStack() }
+                    onSaved = { navController.popBackStack() },
+                    onOpenHelp = { url ->
+                        navController.navigate(Routes.webFallback(url))
+                    }
                 )
             }
         }

@@ -180,12 +180,7 @@ class OkHttpAO3Client(
         } catch (error: CancellationException) {
             throw error
         } catch (error: IOException) {
-            AO3Result.Failure(
-                AO3Error.Network(
-                    message = error.message ?: "Network request failed.",
-                    cause = error
-                )
-            )
+            AO3Result.Failure(AO3Error.networkFromTransport(error))
         }
     }
 
@@ -223,12 +218,7 @@ class OkHttpAO3Client(
         } catch (error: CancellationException) {
             throw error
         } catch (error: IOException) {
-            AO3Result.Failure(
-                AO3Error.Network(
-                    message = error.message ?: "Network request failed.",
-                    cause = error
-                )
-            )
+            AO3Result.Failure(AO3Error.networkFromTransport(error))
         }
     }
 

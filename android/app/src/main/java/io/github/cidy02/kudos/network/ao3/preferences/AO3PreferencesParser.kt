@@ -100,10 +100,15 @@ class AO3PreferencesParser {
             val label = findLabel(root, name)
                 ?: input.parent()?.normalizedText()?.takeIf { it.isNotBlank() }
                 ?: name
+            // Help `?` links live near the control (same <li>/<dd>/<dt>), not on
+            // the checkbox itself — match iOS `parseHelpRef(in:container)`.
+            val container = nearestFieldContainer(input) ?: root
+            val helpUrl = parseHelpUrl(container)
             AO3PreferenceToggle(
                 name = name,
                 label = label,
-                checked = input.hasAttr("checked")
+                checked = input.hasAttr("checked"),
+                helpUrl = helpUrl
             )
         }
     }
@@ -116,6 +121,38 @@ class AO3PreferencesParser {
         val parentLabel = input.parents().firstOrNull { it.tagName() == "label" }
             ?.normalizedText()
         return parentLabel?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * AO3 renders help as
+     * `<a href="/help/…" class="help symbol question modal" …>`.
+     * Prefer anchors scoped to the field container so section-heading help is
+     * not incorrectly attributed to every toggle in the fieldset.
+     */
+    private fun parseHelpUrl(root: Element): String? {
+        val candidates = root.select(
+            "a.help[href], a.modal[href*=/help/], a[href*=/help/][class*=help], a[href*=/help/][class*=question]"
+        )
+        for (anchor in candidates) {
+            val href = anchor.attr("href").trim()
+            if (href.isEmpty()) continue
+            val absolute = absoluteUrl(href) ?: continue
+            if (!absolute.contains("/help/", ignoreCase = true)) continue
+            return absolute
+        }
+        return null
+    }
+
+    private fun nearestFieldContainer(element: Element): Element? {
+        var node: Element? = element
+        repeat(6) {
+            val parent = node?.parent() ?: return null
+            when (parent.tagName().lowercase()) {
+                "li", "dd", "dt", "div" -> return parent
+            }
+            node = parent
+        }
+        return null
     }
 
     private fun absoluteUrl(href: String): String? {

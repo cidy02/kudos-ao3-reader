@@ -87,6 +87,7 @@ import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.AO3URLResolver
+import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.series.AO3SeriesRepository
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
@@ -136,7 +137,8 @@ fun WorkDetailScreen(
     onLogin: () -> Unit,
     onOpenComments: (Long) -> Unit,
     onOpenReader: (String) -> Unit,
-    onOpenAuthor: (String) -> Unit = {}
+    onOpenAuthor: (String) -> Unit = {},
+    onOpenSeries: (String) -> Unit = {}
 ) {
     var state by remember(source) { mutableStateOf(WorkDetailUiState()) }
     var newTagName by remember { mutableStateOf("") }
@@ -1187,7 +1189,8 @@ fun WorkDetailScreen(
         },
         onChapterIndex = { chapterIndexSheetOpen = true },
         onOpenReader = onOpenReader,
-        onOpenAuthor = onOpenAuthor
+        onOpenAuthor = onOpenAuthor,
+        onOpenSeries = onOpenSeries
     )
 }
 
@@ -1222,7 +1225,8 @@ private fun WorkDetailContent(
     onComments: () -> Unit,
     onChapterIndex: () -> Unit,
     onOpenReader: (String) -> Unit,
-    onOpenAuthor: (String) -> Unit
+    onOpenAuthor: (String) -> Unit,
+    onOpenSeries: (String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(WorkDetailTab.Overview) }
     var overflowExpanded by remember { mutableStateOf(false) }
@@ -1453,6 +1457,7 @@ private fun WorkDetailContent(
                     onOpenReader = onOpenReader,
                     onDownload = onDownload,
                     onOpenAo3 = onOpenAo3,
+                    onOpenSeries = onOpenSeries,
                     onToggleSaved = onToggleSaved,
                     onAddToSavedForLater = onAddToSavedForLater,
                     onAddToQueue = onAddToQueue,
@@ -1620,6 +1625,7 @@ private fun OverviewTab(
     onOpenReader: (String) -> Unit,
     onDownload: () -> Unit,
     onOpenAo3: () -> Unit,
+    onOpenSeries: (String) -> Unit,
     onToggleSaved: () -> Unit,
     onAddToSavedForLater: () -> Unit,
     onAddToQueue: () -> Unit,
@@ -1776,10 +1782,22 @@ private fun OverviewTab(
                         .clickable(onClick = onOpenAo3)
                 )
                 if (state.seriesLine.isNotBlank()) {
+                    val seriesUrl = state.seriesUrl
                     Text(
                         text = state.seriesLine,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (seriesUrl.isNotBlank()) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = if (seriesUrl.isNotBlank()) {
+                            Modifier
+                                .semantics { contentDescription = "Open series" }
+                                .clickable { onOpenSeries(seriesUrl) }
+                        } else {
+                            Modifier
+                        }
                     )
                 }
             }
@@ -2566,21 +2584,7 @@ private fun formatInstant(instant: Instant): String {
     return formatter.format(instant)
 }
 
-private fun AO3Error.displayMessage(): String {
-    return when (this) {
-        AO3Error.BadRequest -> "AO3 rejected the request."
-        AO3Error.AuthenticationRequired -> "AO3 requires login for this work."
-        AO3Error.Forbidden -> "AO3 denied access to this work."
-        AO3Error.NotFound -> "AO3 could not find this work."
-        is AO3Error.Http -> "AO3 returned HTTP $statusCode."
-        is AO3Error.Network -> message
-        is AO3Error.Overloaded -> "AO3 is busy. Try again shortly."
-        is AO3Error.Parse -> message
-        is AO3Error.RateLimited -> "AO3 is rate-limiting requests. Try again shortly."
-        is AO3Error.Server -> "AO3 had a server problem (HTTP $statusCode)."
-        is AO3Error.Validation -> message
-    }
-}
+
 
 /**
  * Map work-page tag/stats metadata into a remote summary so Download / Save /
