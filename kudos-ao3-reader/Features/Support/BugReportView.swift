@@ -163,12 +163,30 @@ struct BugReportView: View {
         return AppLinks.newIssue(title: "Bug report", body: body)
     }
 
+    /// OS + hardware model, shaped like Android's
+    /// `"Android ${RELEASE} (API ${SDK_INT}); ${MANUFACTURER} ${MODEL}"` so the two
+    /// platforms are comparable in the issue tracker. Uses the `utsname` machine
+    /// identifier (e.g. `iPhone14,2`) rather than `UIDevice.model` ("iPhone"/"iPad"),
+    /// which does not distinguish devices.
     static var systemInfo: String {
         #if os(iOS)
-        return "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
+        return "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion); \(machineIdentifier)"
         #else
         let version = ProcessInfo.processInfo.operatingSystemVersion
-        return "macOS \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        return "macOS \(version.majorVersion).\(version.minorVersion).\(version.patchVersion); \(machineIdentifier)"
         #endif
+    }
+
+    /// Hardware machine identifier from `uname` (e.g. `iPhone14,2`, `Mac15,7`).
+    /// On the iOS Simulator this is typically the host architecture (`arm64`).
+    private static var machineIdentifier: String {
+        var info = utsname()
+        uname(&info)
+        // Mirror over the fixed-size CChar tuple — avoids exclusive-access
+        // conflicts with `withUnsafePointer(to: &info.machine)`.
+        return Mirror(reflecting: info.machine).children.reduce(into: "") { result, child in
+            guard let value = child.value as? Int8, value != 0 else { return }
+            result.append(Character(UnicodeScalar(UInt8(bitPattern: value))))
+        }
     }
 }

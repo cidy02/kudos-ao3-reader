@@ -36,6 +36,20 @@ struct AO3URLResolverTests {
         #expect(resolved?.absoluteString == "https://archiveofourown.org/users/alice")
     }
 
+    @Test func cleartextHTTPAbsoluteAO3URLIsRejected() {
+        // Parity with Android `AO3BrowseUrls.isAo3Url` (scheme must be https).
+        #expect(AO3URLResolver.resolve("http://archiveofourown.org") == nil)
+        #expect(AO3URLResolver.resolve("http://archiveofourown.org/works/1") == nil)
+        #expect(AO3URLResolver.resolve("http://download.archiveofourown.org/works/1") == nil)
+        // Even with allowExternalHost, AO3 destinations stay https-only.
+        #expect(AO3URLResolver.resolve("http://archiveofourown.org/works/1", allowExternalHost: true) == nil)
+    }
+
+    @Test func httpsAO3ApexIsAccepted() {
+        #expect(AO3URLResolver.resolve("https://archiveofourown.org") != nil)
+        #expect(AO3URLResolver.resolve("https://notarchiveofourown.org") == nil)
+    }
+
     @Test func subdomainHostIsAllowedByDefault() {
         #expect(AO3URLResolver.resolve("https://download.archiveofourown.org/works/1") != nil)
     }

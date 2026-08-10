@@ -31,7 +31,10 @@ enum BrowserThemeStyle {
     }
 
     static func isAO3URL(_ url: URL?) -> Bool {
-        guard let host = url?.host()?.lowercased() else { return false }
+        // Match Android `AO3BrowseUrls.isAo3Url`: https only, apex or subdomain.
+        guard url?.scheme?.lowercased() == "https",
+              let host = url?.host()?.lowercased()
+        else { return false }
         return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
     }
 

@@ -108,7 +108,8 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
     }
 
     static func isAO3URL(_ url: URL) -> Bool {
-        guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
+        // Match Android `AO3BrowseUrls.isAo3Url`: https only, apex or subdomain.
+        guard url.scheme?.lowercased() == "https",
               let host = url.host?.lowercased()
         else { return false }
         return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
