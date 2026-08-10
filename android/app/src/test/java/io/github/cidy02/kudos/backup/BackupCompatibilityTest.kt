@@ -6,6 +6,8 @@ import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.local.entity.toDomain
+import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.time.Instant
@@ -536,6 +538,76 @@ class BackupPreservesLegacyProgressFieldsTest {
 
         assertEquals(3, result.snapshot.works.single().lastSpineIndex)
         assertEquals(0.42, result.snapshot.works.single().lastScrollFraction, 0.0)
+    }
+}
+
+/**
+ * EPUB preservation trio is Android pass-through only: import must store what
+ * arrived and export must re-emit it unchanged — including null, which must not
+ * become `"notPreserved"`.
+ */
+class BackupEpubPreservationPassThroughTest {
+    @Test
+    fun preservedValuesSurviveImportThenExport() {
+        val preservedAt = "2025-11-02T14:30:00Z"
+        val lastAttempt = "2025-11-02T14:29:55Z"
+        val archived = sampleBackupWork().copy(
+            epubPreservationStatusRaw = "preserved",
+            preservedAt = preservedAt,
+            lastPreservationAttemptAt = lastAttempt
+        )
+        val imported = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archived)))
+        )
+        val work = imported.snapshot.works.single()
+        assertEquals("preserved", work.epubPreservationStatusRaw)
+        assertEquals(Instant.parse(preservedAt), work.preservedAt)
+        assertEquals(Instant.parse(lastAttempt), work.lastPreservationAttemptAt)
+
+        val reexported = work.toBackupWork()
+        assertEquals("preserved", reexported.epubPreservationStatusRaw)
+        assertEquals(preservedAt, reexported.preservedAt)
+        assertEquals(lastAttempt, reexported.lastPreservationAttemptAt)
+    }
+
+    @Test
+    fun nullPreservationValuesSurviveImportThenExportAsNull() {
+        val archived = sampleBackupWork().copy(
+            epubPreservationStatusRaw = null,
+            preservedAt = null,
+            lastPreservationAttemptAt = null
+        )
+        val imported = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archived)))
+        )
+        val work = imported.snapshot.works.single()
+        assertNull(work.epubPreservationStatusRaw)
+        assertNull(work.preservedAt)
+        assertNull(work.lastPreservationAttemptAt)
+
+        val reexported = work.toBackupWork()
+        assertNull(
+            "null must not become notPreserved on export",
+            reexported.epubPreservationStatusRaw
+        )
+        assertNull(reexported.preservedAt)
+        assertNull(reexported.lastPreservationAttemptAt)
+    }
+
+    @Test
+    fun domainEntityRoundTripKeepsPreservationFields() {
+        val work = sampleSavedWork().copy(
+            epubPreservationStatusRaw = "failed",
+            preservedAt = Instant.parse("2026-01-15T08:00:00Z"),
+            lastPreservationAttemptAt = Instant.parse("2026-01-15T07:59:00Z")
+        )
+        val entity = work.toEntity()
+        val restored = entity.toDomain()
+        assertEquals("failed", restored.epubPreservationStatusRaw)
+        assertEquals(work.preservedAt, restored.preservedAt)
+        assertEquals(work.lastPreservationAttemptAt, restored.lastPreservationAttemptAt)
     }
 }
 

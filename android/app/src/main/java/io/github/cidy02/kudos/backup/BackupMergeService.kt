@@ -250,7 +250,23 @@ object BackupMergeService {
             )
         }
 
-        return applyProgressLww(base, existing, restored, archived)
+        // Preservation trio: store/re-emit only. Never invent a status. Prefer the
+        // non-null side when one is absent so a local-wins merge does not wipe
+        // values that only arrived on the archive (and vice versa).
+        val withPreservation = base.copy(
+            epubPreservationStatusRaw = if (incomingWins) {
+                restored.epubPreservationStatusRaw ?: existing.epubPreservationStatusRaw
+            } else {
+                existing.epubPreservationStatusRaw ?: restored.epubPreservationStatusRaw
+            },
+            preservedAt = maxInstant(existing.preservedAt, restored.preservedAt),
+            lastPreservationAttemptAt = maxInstant(
+                existing.lastPreservationAttemptAt,
+                restored.lastPreservationAttemptAt
+            )
+        )
+
+        return applyProgressLww(withPreservation, existing, restored, archived)
     }
 
     /**

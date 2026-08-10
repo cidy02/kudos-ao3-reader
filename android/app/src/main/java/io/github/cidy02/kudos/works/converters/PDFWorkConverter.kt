@@ -14,12 +14,27 @@ package io.github.cidy02.kudos.works.converters
  * "can't read this" message. Measured on a real PDF, 10 of 18 emitted
  * "paragraphs" were raw binary and none were document text.
  *
+ * When extraction does yield readable paragraphs, [AuthorNoteDetector] marks
+ * author's notes the same way as plain-text import (iOS PDF path uses the same
+ * detector via `HTMLWorkSanitizer.paragraphs`).
+ *
  * ponytail: literal-only extraction. Swap in PdfBox-Android (plus ML Kit OCR for
  * scanned pages) if PDF import becomes a feature worth its dependency weight.
  */
 class PDFWorkConverter {
 
     fun convert(title: String, bytes: ByteArray): ByteArray? {
+        val paragraphs = extractParagraphs(bytes) ?: return null
+        if (paragraphs.isEmpty()) return null
+        val body = paragraphsWithAuthorNotes(paragraphs)
+        return if (body.isBlank()) null else EpubBuilder.buildEpub(title, body)
+    }
+
+    /**
+     * Readable paragraph strings from an uncompressed PDF content stream, or
+     * null when the file is compressed / encrypted / empty. Exposed for tests.
+     */
+    fun extractParagraphs(bytes: ByteArray): List<String>? {
         val rawData = String(bytes, Charsets.ISO_8859_1)
 
         // Compressed content streams need an inflater + object parser to read.
@@ -32,7 +47,7 @@ class PDFWorkConverter {
             return null
         }
 
-        val paragraphs = Regex("""\((.*?)\)""", RegexOption.DOT_MATCHES_ALL)
+        return Regex("""\((.*?)\)""", RegexOption.DOT_MATCHES_ALL)
             .findAll(rawData)
             .map { match ->
                 match.groupValues[1]
@@ -42,13 +57,6 @@ class PDFWorkConverter {
             }
             .filter { it.isNotBlank() && it.isMostlyReadable() && !it.isPdfDateStamp() }
             .toList()
-
-        if (paragraphs.isEmpty()) return null
-
-        val body = paragraphs.joinToString("\n") { paragraph ->
-            "<p>${paragraph.replace("&", "&amp;").replace("<", "&lt;")}</p>"
-        }
-        return EpubBuilder.buildEpub(title, body)
     }
 
     /** Rejects binary that happened to sit between parentheses. */
