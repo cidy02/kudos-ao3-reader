@@ -94,6 +94,18 @@ private const val LineHeightMax = 2.2f
 private const val MarginMin = 8f
 private const val MarginMax = 48f
 
+// These two must not exceed BackupValidator's accepted ranges (-0.03..0.12 and
+// 0.0..0.6). They used to allow 0.5 and 1.0, so a user who dragged either slider
+// past the validator's ceiling had the value silently replaced by the default on
+// the next restore — with nothing to indicate the setting had been discarded.
+// They match Apple's ReaderTextStyle.letterSpacingRange / wordSpacingRange.
+// The font/line-height/margin bounds above are *narrower* than the validator,
+// which is harmless.
+private const val LetterSpacingMin = 0f
+private const val LetterSpacingMax = 0.12f
+private const val WordSpacingMin = 0f
+private const val WordSpacingMax = 0.6f
+
 /** SAF MIME types commonly used for TrueType / OpenType fonts. */
 private val FontOpenMimeTypes = arrayOf(
     "font/ttf",
@@ -549,8 +561,9 @@ fun SettingsScreen(
                 )
                 SettingSliderRow(
                     label = "Letter spacing",
-                    value = settings.reader.readerLetterSpacing.toFloat().coerceIn(0f, 0.5f),
-                    valueRange = 0f..0.5f,
+                    value = settings.reader.readerLetterSpacing.toFloat()
+                        .coerceIn(LetterSpacingMin, LetterSpacingMax),
+                    valueRange = LetterSpacingMin..LetterSpacingMax,
                     steps = 9,
                     formatValue = { String.format("%.2f em", it) },
                     onValueChangeFinished = { value ->
@@ -562,8 +575,9 @@ fun SettingsScreen(
                 )
                 SettingSliderRow(
                     label = "Word spacing",
-                    value = settings.reader.readerWordSpacing.toFloat().coerceIn(0f, 1f),
-                    valueRange = 0f..1f,
+                    value = settings.reader.readerWordSpacing.toFloat()
+                        .coerceIn(WordSpacingMin, WordSpacingMax),
+                    valueRange = WordSpacingMin..WordSpacingMax,
                     steps = 9,
                     formatValue = { String.format("%.2f em", it) },
                     onValueChangeFinished = { value ->
