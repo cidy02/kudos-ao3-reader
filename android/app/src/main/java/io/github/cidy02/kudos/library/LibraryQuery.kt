@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.library
 import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
 import java.time.Instant
 
 object LibraryQuery {
@@ -56,8 +57,14 @@ object LibraryQuery {
             downloaded = downloaded(shelfSource),
             topFandoms = topFandoms(visible),
             userTags = snapshot.userTags.sortedBy { it.normalizedName.lowercase() },
+            // Newest first, matching iOS's
+            // `@Query(sort: \WorkCollection.dateAdded, order: .reverse)`. Sorting
+            // alphabetically here meant a collection you just made was buried
+            // mid-list on Android and sat at the top on iOS. Name breaks ties so
+            // the order stays stable for same-instant imports.
             collections = snapshot.collections.sortedWith(
-                compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                compareByDescending<WorkCollection> { it.dateAdded }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
             ),
             hideMatureContent = snapshot.privacy.hideMatureContent,
             matureWorkCount = matureCount,
