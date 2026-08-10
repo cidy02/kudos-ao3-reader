@@ -43,12 +43,12 @@ class WorkStatusChipsTest {
             warnings = listOf("Graphic Depictions Of Violence", "Major Character Death"),
             isComplete = false
         )
-        assertTrue(two.map { it.text }.contains("2 Warnings Apply"))
-        val label = two.first { it.text == "2 Warnings Apply" }.accessibilityLabel
+        assertTrue(two.map { it.text }.contains("2 Warnings"))
+        val label = two.first { it.text == "2 Warnings" }.accessibilityLabel
         assertTrue(label!!.contains("Graphic Depictions Of Violence"))
         assertTrue(label.contains("Major Character Death"))
 
-        assertTrue(texts(warnings = listOf("Underage Sex")).contains("1 Warning Applies"))
+        assertTrue(texts(warnings = listOf("Underage Sex")).contains("1 Warning"))
     }
 
     @Test

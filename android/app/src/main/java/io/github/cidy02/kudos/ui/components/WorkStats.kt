@@ -380,7 +380,7 @@ fun statusChips(
         }
     } else chips += when {
         real.isNotEmpty() && !chooseNotTo -> WorkStatItem(
-            text = if (real.size == 1) "1 Warning Applies" else "${real.size} Warnings Apply",
+            text = if (real.size == 1) "1 Warning" else "${real.size} Warnings",
             accessibilityLabel = "Warnings: ${real.joinToString(", ")}",
             icon = Icons.Outlined.WarningAmber,
             tint = AO3StatusTint.red

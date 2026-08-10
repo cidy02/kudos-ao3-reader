@@ -162,7 +162,7 @@ fun AO3WorkCard(
             // No raw warnings/categories row here. It listed them verbatim on a
             // *collapsed* card — "No Archive Warnings Apply", "F/F", "M/M" — right
             // above the status chips that deliberately fold the same values into
-            // "Multi" and "2 Warnings Apply", so the collapse it was supposed to
+            // "Multi" and "2 Warnings", so the collapse it was supposed to
             // be doing was undone one line earlier. The status row below carries
             // both, colour-coded, and expands them on demand.
 

@@ -28,9 +28,9 @@ class WarningChipTest {
 
     @Test
     fun collapsedCountsThem() {
-        assertEquals(listOf("3 Warnings Apply"), warningChips(three, expanded = false))
+        assertEquals(listOf("3 Warnings"), warningChips(three, expanded = false))
         assertEquals(
-            listOf("1 Warning Applies"),
+            listOf("1 Warning"),
             warningChips(listOf("Major Character Death"), expanded = false)
         )
     }
