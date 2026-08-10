@@ -191,7 +191,12 @@ class AccountLogoutTest {
 internal fun testSession(username: String = "AO3_Reader"): AO3Session {
     return AO3Session(
         username = username,
-        cookies = listOf(AO3StoredCookie(name = AO3StoredCookie.SessionCookieName, value = "secret"))
+        cookies = listOf(AO3StoredCookie(name = AO3StoredCookie.SessionCookieName, value = "secret")),
+        // Fixed clock: Json encodeDefaults=false omits properties equal to their
+        // default, and AO3Session.savedAtEpochMillis defaults to Clock.now(). A
+        // 1ms gap between construct and encode made the field vanish, so load()
+        // re-evaluated "now" and the full suite flaked (passes in isolation).
+        savedAtEpochMillis = 1_700_000_000_000L
     )
 }
 
