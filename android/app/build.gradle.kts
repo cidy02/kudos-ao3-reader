@@ -42,8 +42,8 @@ android {
         applicationId = "io.github.cidy02.kudos"
         minSdk = 26
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.2.0"
+        versionCode = 9
+        versionName = "0.2.1"
         // Escaped for a Java string literal inside generated BuildConfig.
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha.replace("\"", "\\\"")}\"")
     }
