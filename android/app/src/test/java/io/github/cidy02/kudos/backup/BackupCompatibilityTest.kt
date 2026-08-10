@@ -993,6 +993,165 @@ class BackupAppleV8CompatibilityTest {
     }
 }
 
+/**
+ * The cross-platform merge rules the Android side used to drop on the floor.
+ * Each of these fails against the pre-fix `BackupMergeService`.
+ */
+class BackupQueueAndAnnotationTombstoneTest {
+    @Test
+    fun appliesIncomingQueueDeletion() {
+        val local = io.github.cidy02.kudos.core.model.ReadingQueue(
+            id = QUEUE_ID,
+            name = "Weekend",
+            kindRaw = "custom",
+            dateCreated = DATE,
+            dateUpdated = DATE
+        )
+        val archived = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Weekend",
+            kindRaw = "custom",
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE.plusSeconds(3600).toString(),
+            isDeleted = true,
+            deletedAt = DATE.plusSeconds(3600).toString()
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(readingQueues = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(readingQueues = listOf(archived))
+            )
+        )
+
+        // Before the fix the incoming queue was skipped outright, so a queue
+        // deleted on iOS came straight back on the next Android restore.
+        assertTrue(result.snapshot.readingQueues.single().isDeleted)
+    }
+
+    @Test
+    fun appliesIncomingAnnotationDeletion() {
+        val local = io.github.cidy02.kudos.core.model.ReadingAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            createdAt = DATE,
+            lastModifiedAt = DATE
+        )
+        val archived = BackupAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE.plusSeconds(3600).toString(),
+            isPendingDeletion = true,
+            deletedAt = DATE.plusSeconds(3600).toString()
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(annotations = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(archived)
+                )
+            )
+        )
+
+        assertTrue(result.snapshot.annotations.single().isPendingDeletion)
+    }
+
+    @Test
+    fun matchesSystemQueueByKindRatherThanId() {
+        // Each platform mints its own UUID for "Saved for Later", so an iOS
+        // archive carries an id this device has never seen.
+        val foreignQueueId = "44444444-4444-4444-8444-444444444444"
+        val local = io.github.cidy02.kudos.core.model.ReadingQueue(
+            id = QUEUE_ID,
+            name = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER_NAME,
+            kindRaw = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER,
+            dateCreated = DATE,
+            dateUpdated = DATE
+        )
+        val archived = BackupReadingQueue(
+            id = foreignQueueId,
+            name = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER_NAME,
+            kindRaw = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER,
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE.plusSeconds(3600).toString()
+        )
+        val membership = BackupReadingQueueMembership(
+            id = MEMBERSHIP_ID,
+            queueID = foreignQueueId,
+            workID = WORK_ID,
+            queuedAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(readingQueues = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    readingQueues = listOf(archived),
+                    readingQueueMemberships = listOf(membership)
+                )
+            )
+        )
+
+        // One system queue, keeping this device's id — not a second, undeletable
+        // "Saved for Later" splitting the shelf in two.
+        assertEquals(1, result.snapshot.readingQueues.size)
+        assertEquals(QUEUE_ID, result.snapshot.readingQueues.single().id)
+        // ...and the incoming membership follows the remap onto the local queue.
+        assertEquals(QUEUE_ID, result.snapshot.readingQueueMemberships.single().queueID)
+    }
+
+    @Test
+    fun membershipTimestampsCountTowardsTheQueueConflictClock() {
+        // Local queue's own dateUpdated is older than the incoming one, but one of
+        // its memberships was touched later. iOS folds that into the comparison;
+        // Android used to pass an empty list and hand the win to the incoming copy.
+        val local = io.github.cidy02.kudos.core.model.ReadingQueue(
+            id = QUEUE_ID,
+            name = "Local name",
+            kindRaw = "custom",
+            dateCreated = DATE,
+            dateUpdated = DATE
+        )
+        val localMembership = io.github.cidy02.kudos.core.model.ReadingQueueMembership(
+            id = MEMBERSHIP_ID,
+            queueID = QUEUE_ID,
+            workID = WORK_ID,
+            queuedAt = DATE,
+            lastModifiedAt = DATE.plusSeconds(7200)
+        )
+        val archived = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Incoming name",
+            kindRaw = "custom",
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE.plusSeconds(3600).toString()
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                readingQueues = listOf(local),
+                readingQueueMemberships = listOf(localMembership)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    readingQueues = listOf(archived)
+                )
+            )
+        )
+
+        assertEquals("Local name", result.snapshot.readingQueues.single().name)
+    }
+}
+
 private const val WORK_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 private const val OTHER_WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 private const val COLLECTION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"

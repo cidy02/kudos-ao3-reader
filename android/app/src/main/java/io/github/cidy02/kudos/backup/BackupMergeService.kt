@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.core.model.Bookmark
 import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -496,13 +497,43 @@ object BackupMergeService {
         var queuesCreated = 0
         var queuesUpdated = 0
 
+        // iOS folds each queue's *membership* timestamps into the conflict clock
+        // (`ReadingQueue.effectiveModifiedAt(memberships:)`). Passing an empty list
+        // here — which is what this used to do — makes a queue whose memberships
+        // changed but whose `dateUpdated` did not pick a different winner on
+        // Android than on iOS, from the very same file.
+        val incomingMembershipTimes = incomingMemberships
+            .groupBy { BackupPaths.normalizeIdForComparison(it.queueID) }
+            .mapValues { (_, memberships) ->
+                memberships.mapNotNull { membership ->
+                    parseOptionalInstant(membership.lastModifiedAt)
+                        ?: parseOptionalInstant(membership.queuedAt.takeIf { it.isNotBlank() })
+                }
+            }
+        val localMembershipTimes = currentMemberships
+            .groupBy { BackupPaths.normalizeIdForComparison(it.queueID) }
+            .mapValues { (_, memberships) -> memberships.map { it.lastModifiedAt ?: it.queuedAt } }
+
+        // The system queue is matched by *kind*, never by id: each platform mints
+        // its own UUID for it (`ReadingQueueRepository.ensureSystemQueue`), so
+        // matching on id alone inserts a *second* "Saved for Later" — and since
+        // system queues cannot be renamed or deleted, the user is left with a
+        // permanently split shelf. iOS special-cases the same way.
+        val localSystemQueueId = currentQueues
+            .firstOrNull { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
+            ?.let { BackupPaths.normalizeIdForComparison(it.id) }
+        val queueIdRemap = mutableMapOf<String, String>()
+
         incomingQueues.forEach { archived ->
-            if (archived.isDeleted == true) return@forEach
-            val id = BackupPaths.canonicalUuid(archived.id, "queue.id")
+            val incomingId = BackupPaths.canonicalUuid(archived.id, "queue.id")
+            val isSystemQueue = archived.kindRaw == ReadingQueueKind.SAVED_FOR_LATER
+            val id = if (isSystemQueue && localSystemQueueId != null) localSystemQueueId else incomingId
+            queueIdRemap[incomingId] = id
+
             val incomingModified = SyncMerge.effectiveQueueModifiedAt(
                 queueUpdatedAt = parseOptionalInstant(archived.dateUpdated.takeIf { it.isNotBlank() }),
                 lastMembershipChangedAt = parseOptionalInstant(archived.lastMembershipChangedAt),
-                membershipModifiedAts = emptyList()
+                membershipModifiedAts = incomingMembershipTimes[incomingId].orEmpty()
             ) ?: parseOptionalInstant(archived.dateCreated.takeIf { it.isNotBlank() })
 
             val existing = queuesById[id]
@@ -519,11 +550,28 @@ object BackupMergeService {
                 val localModified = SyncMerge.effectiveQueueModifiedAt(
                     queueUpdatedAt = existing.dateUpdated,
                     lastMembershipChangedAt = existing.lastMembershipChangedAt,
-                    membershipModifiedAts = emptyList()
+                    membershipModifiedAts = localMembershipTimes[id].orEmpty()
                 )
                 if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    queuesById[id] = archived.toReadingQueue().copy(
-                        dateCreated = minInstant(existing.dateCreated, archived.toReadingQueue().dateCreated)
+                    val restored = archived.toReadingQueue()
+                    queuesById[id] = restored.copy(
+                        // Keep the local identity: local memberships already point
+                        // at it, and for the system queue the incoming id is a
+                        // different platform's UUID entirely.
+                        id = existing.id,
+                        // iOS pins the system queue's name and kind rather than let
+                        // a restore rename it, and nothing may soft-delete it —
+                        // there is no UI that could ever bring it back.
+                        name = if (isSystemQueue) ReadingQueueKind.SAVED_FOR_LATER_NAME else restored.name,
+                        kindRaw = if (isSystemQueue) ReadingQueueKind.SAVED_FOR_LATER else restored.kindRaw,
+                        isDeleted = !isSystemQueue && restored.isDeleted,
+                        deletedAt = if (isSystemQueue) null else restored.deletedAt,
+                        permanentDeletionScheduledAt = if (isSystemQueue) {
+                            null
+                        } else {
+                            restored.permanentDeletionScheduledAt
+                        },
+                        dateCreated = minInstant(existing.dateCreated, restored.dateCreated)
                     )
                     queuesUpdated += 1
                 }
@@ -539,7 +587,10 @@ object BackupMergeService {
 
         incomingMemberships.forEach { archived ->
             val id = BackupPaths.canonicalUuid(archived.id, "membership.id")
-            val queueId = BackupPaths.canonicalUuid(archived.queueID, "membership.queueID")
+            val incomingQueueId = BackupPaths.canonicalUuid(archived.queueID, "membership.queueID")
+            // Follow the system-queue remap above, or these memberships would point
+            // at the *other* platform's queue UUID and be dropped on the next line.
+            val queueId = queueIdRemap[incomingQueueId] ?: incomingQueueId
             val workId = BackupPaths.canonicalUuid(archived.workID, "membership.workID")
             if (queueId !in queuesById) return@forEach
             if (workId !in worksById) return@forEach
@@ -557,6 +608,7 @@ object BackupMergeService {
 
             val existing = membershipsById[id]
             val restored = archived.toReadingQueueMembership()
+                .let { if (queueId == incomingQueueId) it else it.copy(queueID = queueId) }
             if (existing == null) {
                 membershipsById[id] = restored
                 membershipsCreated += 1
@@ -598,7 +650,10 @@ object BackupMergeService {
             val workId = BackupPaths.canonicalUuid(archived.workID, "annotation.workID")
             // Never orphan annotations without a work in this restore.
             if (workId !in worksById) return@forEach
-            if (archived.isPendingDeletion) return@forEach
+            // A pending-deletion annotation is a *tombstone*, not noise: dropping it
+            // here (as this used to) means a highlight deleted on iOS silently comes
+            // back on Android. iOS assigns `isPendingDeletion` through instead, and
+            // the LWW check below decides whether the deletion actually wins.
 
             val incomingModified = parseOptionalInstant(archived.lastModifiedAt)
                 ?: parseOptionalInstant(archived.createdAt.takeIf { it.isNotBlank() })
