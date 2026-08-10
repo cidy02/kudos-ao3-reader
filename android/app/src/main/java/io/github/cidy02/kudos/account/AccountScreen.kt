@@ -148,6 +148,7 @@ fun AccountScreen(
     onOpenWeb: (String) -> Unit = {},
     onOpenWork: (AO3WorkSummary) -> Unit = {},
     onOpenCollection: (AO3Collection) -> Unit = {},
+    onOpenSeries: (String) -> Unit = {},
     inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
     commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
     authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository? = null,
@@ -244,16 +245,20 @@ fun AccountScreen(
             AccountHubTab.Writing -> {
                 WritingTabContent(
                     signedIn = signedIn,
+                    username = username,
                     kind = selectedWriting,
                     onKindChange = { writingKind = it.name },
                     selectedFandom = selectedFandom,
                     onFandomChange = { selectedFandom = it },
                     listRepository = listRepository,
                     workRepository = workRepository,
+                    authorRepository = authorRepository,
                     detailedMode = detailedMode,
                     onToggleDetailed = { detailedMode = !detailedMode },
                     onLogin = onLogin,
-                    onOpenWork = onOpenWork
+                    onOpenWork = onOpenWork,
+                    onOpenSeries = onOpenSeries,
+                    onOpenWeb = onOpenWeb
                 )
             }
             AccountHubTab.Activity -> {
@@ -732,9 +737,14 @@ private fun OverviewTabContent(
                                     moreOnAo3MenuOpen = false
                                     val user = username
                                     if (!user.isNullOrBlank()) {
-                                        onOpenWeb(
+                                        // Drafts shares the same helper as Writing → Drafts.
+                                        val url = if (pathSuffix == "works/drafts") {
+                                            io.github.cidy02.kudos.network.ao3.author.AO3AuthorUrls
+                                                .userDraftsUrl(user)
+                                        } else {
                                             "https://archiveofourown.org/users/$user/$pathSuffix"
-                                        )
+                                        }
+                                        if (url != null) onOpenWeb(url)
                                     }
                                 }
                             )
@@ -1020,16 +1030,20 @@ private fun ReadingTabContent(
 @Composable
 private fun WritingTabContent(
     signedIn: Boolean,
+    username: String?,
     kind: AccountWritingKind,
     onKindChange: (AccountWritingKind) -> Unit,
     selectedFandom: String?,
     onFandomChange: (String?) -> Unit,
     listRepository: AccountListRepository,
     workRepository: WorkRepository,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository?,
     detailedMode: Boolean,
     onToggleDetailed: () -> Unit,
     onLogin: () -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenSeries: (String) -> Unit,
+    onOpenWeb: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
         Row(
@@ -1039,16 +1053,27 @@ private fun WritingTabContent(
         ) {
             AccountListKindPicker(
                 label = kind.label,
-                icon = Icons.Outlined.Description,
+                icon = when (kind) {
+                    AccountWritingKind.Works -> Icons.Outlined.Description
+                    AccountWritingKind.Series -> Icons.Outlined.Collections
+                    AccountWritingKind.Drafts -> Icons.Outlined.Drafts
+                },
                 options = AccountWritingKind.entries.map { it.label to it },
                 onSelect = onKindChange,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = onToggleDetailed) {
-                Icon(
-                    imageVector = if (detailedMode) Icons.Outlined.GridView else Icons.AutoMirrored.Outlined.List,
-                    contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
-                )
+            // Density toggle only applies to native work lists (Works).
+            if (kind == AccountWritingKind.Works) {
+                IconButton(onClick = onToggleDetailed) {
+                    Icon(
+                        imageVector = if (detailedMode) {
+                            Icons.Outlined.GridView
+                        } else {
+                            Icons.AutoMirrored.Outlined.List
+                        },
+                        contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
+                    )
+                }
             }
         }
 
@@ -1073,16 +1098,158 @@ private fun WritingTabContent(
                 )
             }
             AccountWritingKind.Series -> {
-                EmptyStateCard(
-                    title = "Series not available yet",
-                    message = "Your AO3 series will show here once list support lands."
-                )
+                // iOS: Writing → Series reuses the signed-in user's author-profile
+                // series tab (`syncProfileTab(.series)`). Same parser/source here.
+                if (username.isNullOrBlank() || authorRepository == null) {
+                    EmptyStateCard(
+                        title = "Series unavailable",
+                        message = "Couldn't load your series. Try signing in again."
+                    )
+                } else {
+                    HubSeriesPane(
+                        username = username,
+                        authorRepository = authorRepository,
+                        onLogin = onLogin,
+                        onOpenSeries = onOpenSeries
+                    )
+                }
             }
             AccountWritingKind.Drafts -> {
-                EmptyStateCard(
-                    title = "Drafts not available yet",
-                    message = "AO3 drafts stay on the website until a drafts parser is added."
+                // iOS: Writing → Drafts opens AO3 web (`works/drafts`), not a
+                // native list. Same destination as Overview → More on AO3 → Drafts.
+                DraftsWebCard(
+                    username = username,
+                    onOpenWeb = onOpenWeb
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Writing → Drafts: open the signed-in user's AO3 drafts page in the in-app web
+ * surface (iOS `AccountExternalNavCard` parity). No native drafts parser.
+ */
+@Composable
+private fun DraftsWebCard(
+    username: String?,
+    onOpenWeb: (String) -> Unit
+) {
+    val draftsUrl = username
+        ?.takeIf { it.isNotBlank() }
+        ?.let { io.github.cidy02.kudos.network.ao3.author.AO3AuthorUrls.userDraftsUrl(it) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AccountLinkRow(
+            title = "Open Drafts on AO3",
+            icon = Icons.Outlined.Drafts,
+            onClick = {
+                if (draftsUrl != null) onOpenWeb(draftsUrl)
+            }
+        )
+        Text(
+            text = "Drafts still open on the Archive until a native editor ships.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun HubSeriesPane(
+    username: String,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository,
+    onLogin: () -> Unit,
+    onOpenSeries: (String) -> Unit,
+    viewModel: AccountSeriesViewModel = viewModel(
+        key = "hub-series-$username",
+        factory = AccountSeriesViewModel.factory(username, authorRepository)
+    )
+) {
+    val state by viewModel.uiState.collectAsState()
+    when (val current = state) {
+        AccountSeriesUiState.Loading -> LoadingStateCard("Loading series")
+        AccountSeriesUiState.AuthRequired -> SignInRequiredCard(onLogin)
+        is AccountSeriesUiState.Failed -> ErrorStateCard(
+            title = "Couldn't load series",
+            message = current.message,
+            primaryActionLabel = "Retry",
+            onPrimaryAction = { viewModel.load(1) }
+        )
+        is AccountSeriesUiState.Loaded -> {
+            val page = current.page
+            if (page.series.isEmpty()) {
+                EmptyStateCard(
+                    title = "No series yet",
+                    message = "Series you create on AO3 show up here."
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item {
+                        KudosSectionHeader(
+                            title = "Series",
+                            subtitle = if (page.totalPages > 1) {
+                                "Page ${page.currentPage} of ${page.totalPages}"
+                            } else {
+                                null
+                            }
+                        )
+                    }
+                    items(page.series, key = { it.id }) { item ->
+                        Card(
+                            onClick = { onOpenSeries(item.url) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        text = item.title,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                supportingContent = {
+                                    val meta = buildList {
+                                        item.workCount?.let { add("$it works") }
+                                        item.words?.let { add("$it words") }
+                                        if (item.dateUpdated.isNotBlank()) add(item.dateUpdated)
+                                    }.joinToString(" · ")
+                                    if (meta.isNotBlank()) {
+                                        Text(
+                                            text = meta,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
+                        }
+                    }
+                    if (page.totalPages > 1) {
+                        item {
+                            PaginationControls(
+                                page = page.currentPage,
+                                totalPages = page.totalPages,
+                                onLoadPage = viewModel::load
+                            )
+                        }
+                    }
+                }
             }
         }
     }

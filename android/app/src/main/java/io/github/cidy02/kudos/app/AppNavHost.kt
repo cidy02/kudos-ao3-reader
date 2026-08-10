@@ -392,6 +392,9 @@ fun AppNavHost(
                     )
                     navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
+                onOpenSeries = { seriesUrl ->
+                    navController.navigate(Routes.seriesWorks(seriesUrl))
+                },
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
                 authorRepository = container.authorRepository,

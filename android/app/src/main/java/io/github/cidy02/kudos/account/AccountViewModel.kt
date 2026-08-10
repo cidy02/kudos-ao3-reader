@@ -21,6 +21,62 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.network.ao3.displayMessage
 
+/**
+ * Inline Writing → Series pane: loads the signed-in user's own series via the
+ * author-profile series parser (iOS `syncProfileTab(.series)` parity).
+ */
+class AccountSeriesViewModel(
+    private val username: String,
+    private val authorRepository: AO3AuthorRepository
+) : ViewModel() {
+    private val mutableState = MutableStateFlow<AccountSeriesUiState>(AccountSeriesUiState.Loading)
+    val uiState: StateFlow<AccountSeriesUiState> = mutableState
+
+    init {
+        load(1)
+    }
+
+    fun load(page: Int) {
+        viewModelScope.launch {
+            mutableState.value = AccountSeriesUiState.Loading
+            val route = AO3AuthorRoute(username)
+            mutableState.value = when (val result = authorRepository.loadSeries(route, page)) {
+                is AO3Result.Success -> AccountSeriesUiState.Loaded(result.value)
+                is AO3Result.Failure -> {
+                    if (result.error == AO3Error.AuthenticationRequired) {
+                        AccountSeriesUiState.AuthRequired
+                    } else {
+                        AccountSeriesUiState.Failed(result.error.displayMessage())
+                    }
+                }
+            }
+        }
+    }
+
+    companion object {
+        fun factory(
+            username: String,
+            authorRepository: AO3AuthorRepository
+        ): ViewModelProvider.Factory {
+            return object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return AccountSeriesViewModel(username, authorRepository) as T
+                }
+            }
+        }
+    }
+}
+
+sealed interface AccountSeriesUiState {
+    data object Loading : AccountSeriesUiState
+    data object AuthRequired : AccountSeriesUiState
+    data class Loaded(
+        val page: io.github.cidy02.kudos.network.ao3.author.AO3AuthorSeriesPage
+    ) : AccountSeriesUiState
+    data class Failed(val message: String) : AccountSeriesUiState
+}
+
 class AccountViewModel(
     private val authRepository: AO3AuthRepository,
     private val authorRepository: AO3AuthorRepository? = null,

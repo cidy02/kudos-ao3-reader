@@ -45,4 +45,17 @@ class AO3AuthorUrlsTest {
     fun userWorksUrlReturnsNullForBlankUsername() {
         assertNull(AO3AuthorUrls.userWorksUrl("  "))
     }
+
+    @Test
+    fun userDraftsUrlBuildsWorksDraftsPath() {
+        val url = AO3AuthorUrls.userDraftsUrl("AO3_Reader")!!.toHttpUrl()
+        assertEquals("/users/AO3_Reader/works/drafts", url.encodedPath)
+        assertNull(url.queryParameter("page"))
+    }
+
+    @Test
+    fun userDraftsUrlReturnsNullForBlankUsername() {
+        assertNull(AO3AuthorUrls.userDraftsUrl(""))
+        assertNull(AO3AuthorUrls.userDraftsUrl("  "))
+    }
 }

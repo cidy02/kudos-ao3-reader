@@ -91,6 +91,23 @@ object AO3AuthorUrls {
         return builder.build().toString()
     }
 
+    /**
+     * Drafts index on AO3 (`/users/<username>/works/drafts`).
+     * There is no native drafts surface — iOS and Android open this in the in-app
+     * web view (Account → Writing → Drafts, and "More on AO3").
+     */
+    fun userDraftsUrl(username: String): String? {
+        val name = username.trim()
+        if (name.isEmpty()) return null
+        return AO3Constants.baseHttpUrl.newBuilder()
+            .addPathSegment("users")
+            .addPathSegment(name)
+            .addPathSegment("works")
+            .addPathSegment("drafts")
+            .build()
+            .toString()
+    }
+
     fun preferencesUrl(username: String): String? {
         val name = username.trim()
         if (name.isEmpty()) return null
