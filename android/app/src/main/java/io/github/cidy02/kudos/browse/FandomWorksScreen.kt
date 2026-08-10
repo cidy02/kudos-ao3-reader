@@ -59,6 +59,7 @@ import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.search.summaryLabels
 import io.github.cidy02.kudos.search.SearchResultsHero
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +108,7 @@ fun FandomWorksScreen(
         scope.launch {
             val result = when (val result = repository.worksForFandom(fandomName, page, filters)) {
                 is AO3Result.Success -> FandomWorksState.Loaded(result.value)
-                is AO3Result.Failure -> FandomWorksState.Error(result.error.browseMessage(), page)
+                is AO3Result.Failure -> FandomWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = result
         }

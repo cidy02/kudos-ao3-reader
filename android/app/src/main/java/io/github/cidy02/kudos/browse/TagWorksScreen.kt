@@ -58,6 +58,7 @@ import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.search.summaryLabels
 import io.github.cidy02.kudos.search.SearchResultsHero
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -101,7 +102,7 @@ fun TagWorksScreen(
             val searchFilters = filters.copy(additionalTags = tagName)
             val result = when (val result = repository.search(searchFilters, page)) {
                 is AO3Result.Success -> TagWorksState.Loaded(result.value)
-                is AO3Result.Failure -> TagWorksState.Error(result.error.toString(), page)
+                is AO3Result.Failure -> TagWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = result
         }

@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import io.github.cidy02.kudos.browse.browseMessage
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorAbout
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorBookmarksPage
@@ -57,6 +56,7 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 private enum class AuthorTab(val label: String) {
     Works("Works"),
@@ -106,7 +106,7 @@ fun AuthorProfileScreen(
                     headerError = null
                 }
                 is AO3Result.Failure -> {
-                    headerError = result.error.browseMessage()
+                    headerError = result.error.displayMessage()
                 }
             }
             headerLoading = false
@@ -121,19 +121,19 @@ fun AuthorProfileScreen(
             when (target) {
                 AuthorTab.Works -> when (val r = authorRepository.loadWorks(route, pageNum)) {
                     is AO3Result.Success -> works = r.value
-                    is AO3Result.Failure -> tabError = r.error.browseMessage()
+                    is AO3Result.Failure -> tabError = r.error.displayMessage()
                 }
                 AuthorTab.Series -> when (val r = authorRepository.loadSeries(route, pageNum)) {
                     is AO3Result.Success -> series = r.value
-                    is AO3Result.Failure -> tabError = r.error.browseMessage()
+                    is AO3Result.Failure -> tabError = r.error.displayMessage()
                 }
                 AuthorTab.Bookmarks -> when (val r = authorRepository.loadBookmarks(route, pageNum)) {
                     is AO3Result.Success -> bookmarks = r.value
-                    is AO3Result.Failure -> tabError = r.error.browseMessage()
+                    is AO3Result.Failure -> tabError = r.error.displayMessage()
                 }
                 AuthorTab.About -> when (val r = authorRepository.loadAbout(route)) {
                     is AO3Result.Success -> about = r.value
-                    is AO3Result.Failure -> tabError = r.error.browseMessage()
+                    is AO3Result.Failure -> tabError = r.error.displayMessage()
                 }
             }
             tabLoading = false

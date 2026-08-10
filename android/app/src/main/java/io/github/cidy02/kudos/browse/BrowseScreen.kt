@@ -66,6 +66,7 @@ import kotlinx.coroutines.withContext
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.outlined.Search
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 @Composable
 fun BrowseScreen(
@@ -99,7 +100,7 @@ fun BrowseScreen(
                     }
                 }
                 is AO3Result.Failure -> {
-                    state = BrowseCategoriesState.Error(result.error.browseMessage())
+                    state = BrowseCategoriesState.Error(result.error.displayMessage())
                 }
             }
         }

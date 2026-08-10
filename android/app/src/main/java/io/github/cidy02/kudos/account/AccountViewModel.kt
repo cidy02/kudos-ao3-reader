@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 class AccountViewModel(
     private val authRepository: AO3AuthRepository,
@@ -220,18 +221,3 @@ class AO3CollectionsViewModel(
     }
 }
 
-internal fun AO3Error.displayMessage(): String {
-    return when (this) {
-        AO3Error.BadRequest -> "AO3 rejected the request."
-        AO3Error.AuthenticationRequired -> "Log in to AO3 again."
-        AO3Error.Forbidden -> "AO3 denied access to this account page."
-        AO3Error.NotFound -> "AO3 could not find this account page."
-        is AO3Error.Http -> "AO3 returned HTTP $statusCode."
-        is AO3Error.Network -> message
-        is AO3Error.Overloaded -> "AO3 is busy. Try again shortly."
-        is AO3Error.Parse -> message
-        is AO3Error.RateLimited -> "AO3 is rate-limiting requests. Try again shortly."
-        is AO3Error.Server -> "AO3 had a server problem (HTTP $statusCode)."
-        is AO3Error.Validation -> message
-    }
-}

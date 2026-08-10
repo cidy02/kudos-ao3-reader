@@ -36,6 +36,7 @@ import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 @Composable
 fun FandomListScreen(
@@ -69,7 +70,7 @@ fun FandomListScreen(
                 is AO3Result.Success -> FandomListState.Loaded(
                     result.value.sortedByDescending { it.workCount ?: 0 }
                 )
-                is AO3Result.Failure -> FandomListState.Error(result.error.browseMessage())
+                is AO3Result.Failure -> FandomListState.Error(result.error.displayMessage())
             }
         }
     }

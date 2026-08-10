@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.browse.BrowseLocalIndicator
 import io.github.cidy02.kudos.browse.BrowseLocalIndicators
-import io.github.cidy02.kudos.browse.browseMessage
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
@@ -48,6 +47,7 @@ import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.RemoteWorkSelectionBar
 import io.github.cidy02.kudos.ui.components.RemoteWorkBulkActions
 import kotlinx.coroutines.launch
+import io.github.cidy02.kudos.network.ao3.displayMessage
 
 /**
  * Simple MD3 author works list: AO3 search by creator + [AO3WorkCard] results.
@@ -78,7 +78,7 @@ fun AuthorWorksScreen(
         scope.launch {
             val result = when (val result = repository.worksForAuthor(authorName, page)) {
                 is AO3Result.Success -> AuthorWorksState.Loaded(result.value)
-                is AO3Result.Failure -> AuthorWorksState.Error(result.error.browseMessage(), page)
+                is AO3Result.Failure -> AuthorWorksState.Error(result.error.displayMessage(), page)
             }
             if (generation == loadGeneration) state = result
         }
