@@ -58,7 +58,7 @@ struct BlurbRequiredTagsTests {
         #expect(work.warnings.count == 3)
         #expect(WorkStat.realWarnings(work.warnings).count == 3)
         // The user-visible symptom: this read "1 Warning Applies".
-        #expect(WorkWarningStatus(rawWarnings: work.warnings).text == "3 Warnings Apply")
+        #expect(WorkWarningStatus(rawWarnings: work.warnings).text == "3 Warnings")
         // "Rape/Non-Con" must survive intact — the slash is not a separator.
         #expect(work.warnings.contains("Rape/Non-Con"))
     }
@@ -106,7 +106,7 @@ struct BlurbRequiredTagsTests {
             tagList: "<li class='freeforms'><a class=\"tag\" href=\"/tags/Angst/works\">Angst</a></li>"
         ))
         #expect(work.warnings == ["Major Character Death", "Underage Sex"])
-        #expect(WorkWarningStatus(rawWarnings: work.warnings).text == "2 Warnings Apply")
+        #expect(WorkWarningStatus(rawWarnings: work.warnings).text == "2 Warnings")
     }
 
     @Test func splittingIgnoresAnEmptyLabel() {

@@ -446,7 +446,7 @@ enum WorkWarningStatus: Equatable {
         switch self {
         case .none: "No Warnings"
         case .undisclosed: "Not Disclosed"
-        case .present(let count): count == 1 ? "1 Warning Applies" : "\(count) Warnings Apply"
+        case .present(let count): count == 1 ? "1 Warning" : "\(count) Warnings"
         }
     }
 

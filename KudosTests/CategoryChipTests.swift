@@ -71,8 +71,8 @@ struct WarningChipTests {
     private let three = ["Graphic Depictions Of Violence", "Rape/Non-Con", "Underage Sex"]
 
     @Test func collapsedCountsThem() {
-        #expect(chipTexts(three, expanded: false) == ["3 Warnings Apply"])
-        #expect(chipTexts(["Major Character Death"], expanded: false) == ["1 Warning Applies"])
+        #expect(chipTexts(three, expanded: false) == ["3 Warnings"])
+        #expect(chipTexts(["Major Character Death"], expanded: false) == ["1 Warning"])
     }
 
     @Test func expandingNamesThem() {

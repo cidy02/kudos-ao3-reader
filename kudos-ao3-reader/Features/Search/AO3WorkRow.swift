@@ -135,7 +135,7 @@ struct AO3WorkRow: View {
             // Categorized tags appear when expanded — they can be numerous on AO3.
             if expanded {
                 // No "Archive Warnings" group: expanding now turns the stats row's
-                // "3 Warnings Apply" chip into the three warnings themselves, and a
+                // "3 Warnings" chip into the three warnings themselves, and a
                 // labelled section repeating them right above was the same list
                 // twice. The stats row keeps AO3's red, which the neutral tag chips
                 // here never had.
