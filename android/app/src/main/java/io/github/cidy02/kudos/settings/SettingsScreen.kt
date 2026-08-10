@@ -15,8 +15,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BugReport
@@ -74,8 +77,10 @@ import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.CustomFontRepository
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.browse.FandomCatalogCache
+import io.github.cidy02.kudos.update.AndroidReleaseMatcher
 import io.github.cidy02.kudos.update.AppUpdateRepository
 import io.github.cidy02.kudos.update.AppUpdateState
+import io.github.cidy02.kudos.update.ReleaseNotesPresentation
 import io.github.cidy02.kudos.works.WorkImportResult
 import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkRepository
@@ -1070,6 +1075,7 @@ private fun UpdateSection(
                     "Version ${state.match.version} is available.",
                     style = MaterialTheme.typography.bodyMedium
                 )
+                ReleaseNotesBlock(match = state.match)
             }
             is AppUpdateState.Downloading -> {
                 Text(
@@ -1080,6 +1086,7 @@ private fun UpdateSection(
                     progress = { state.progress },
                     modifier = Modifier.fillMaxWidth()
                 )
+                ReleaseNotesBlock(match = state.match)
             }
             is AppUpdateState.ReadyToInstall -> {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1087,6 +1094,7 @@ private fun UpdateSection(
                         "Version ${state.match.version} is ready to install.",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    ReleaseNotesBlock(match = state.match)
                     Button(onClick = { onInstall(state.apkPath) }) { Text("Install Update") }
                 }
             }
@@ -1101,6 +1109,44 @@ private fun UpdateSection(
                 }
             }
         }
+    }
+}
+
+/**
+ * Shows release name, published date, and notes already carried on [match.release]
+ * (fetched with the GitHub releases list — presentation only, no extra network).
+ * Body is plain text: GitHub bodies are Markdown, but the project has no Markdown
+ * dependency, so line breaks and list markers are preserved as-is.
+ */
+@Composable
+private fun ReleaseNotesBlock(match: AndroidReleaseMatcher.Match) {
+    val release = match.release
+    val title = ReleaseNotesPresentation.title(release, match.version)
+    val published = ReleaseNotesPresentation.formatPublishedDate(release.publishedAt)
+    val notes = ReleaseNotesPresentation.notesForDisplay(release.body)
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (published != null) {
+            Text(
+                text = "Published $published",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = notes,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp)
+                .verticalScroll(rememberScrollState())
+        )
     }
 }
 

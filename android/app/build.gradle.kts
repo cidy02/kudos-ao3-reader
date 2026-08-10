@@ -16,6 +16,24 @@ val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) load(keystorePropertiesFile.inputStream())
 }
 
+// Short git SHA for bug-report correlation (mirrors iOS Info.plist GitCommitSHA).
+// Evaluated once at configuration via providers.exec — not a per-task shell-out.
+// Empty string when git is missing, not a repo, or output isn't a plausible SHA
+// (source tarball / CI without .git must still configure and build cleanly).
+val gitCommitSha: String = try {
+    val exec = providers.exec {
+        commandLine("git", "rev-parse", "--short=7", "HEAD")
+        // android/ lives inside the git worktree; git walks up to find .git.
+        workingDir(rootProject.rootDir)
+        isIgnoreExitValue = true
+    }
+    val exit = exec.result.get().exitValue
+    val text = exec.standardOutput.asText.get().trim()
+    if (exit == 0 && text.matches(Regex("[0-9a-fA-F]{4,40}"))) text else ""
+} catch (_: Exception) {
+    ""
+}
+
 android {
     namespace = "io.github.cidy02.kudos"
     compileSdk = 37
@@ -26,6 +44,8 @@ android {
         targetSdk = 37
         versionCode = 8
         versionName = "0.2.0"
+        // Escaped for a Java string literal inside generated BuildConfig.
+        buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha.replace("\"", "\\\"")}\"")
     }
 
     signingConfigs {

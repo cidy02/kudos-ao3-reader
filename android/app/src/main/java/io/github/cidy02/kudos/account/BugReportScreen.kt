@@ -33,13 +33,33 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.BuildConfig
 
+/**
+ * Version field for bug reports — mirrors iOS `AboutView.versionString`:
+ * `1.0 (1) · abc1234` when a git SHA is available, otherwise `1.0 (1)`.
+ * [gitCommitSha] is empty when the build wasn't from a git checkout (or git
+ * was unavailable at configure time); never invent a placeholder SHA.
+ */
+internal fun bugReportVersionString(
+    versionName: String,
+    versionCode: Int,
+    gitCommitSha: String
+): String {
+    val base = "$versionName ($versionCode)"
+    val sha = gitCommitSha.trim()
+    return if (sha.isNotEmpty()) "$base · $sha" else base
+}
+
 @Composable
 fun BugReportScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     var summary by remember { mutableStateOf("") }
-    val versionString = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+    val versionString = bugReportVersionString(
+        versionName = BuildConfig.VERSION_NAME,
+        versionCode = BuildConfig.VERSION_CODE,
+        gitCommitSha = BuildConfig.GIT_COMMIT_SHA
+    )
     val systemInfo = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}); ${Build.MANUFACTURER} ${Build.MODEL}"
 
     Column(
