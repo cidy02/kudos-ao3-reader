@@ -669,8 +669,29 @@ fun SettingsScreen(
                                     sweepStatus = null
                                     scope.launch {
                                         try {
-                                            val unavailable = workAvailabilitySweep.sweep()
-                                            sweepStatus = "Sweep complete: $unavailable works marked unavailable."
+                                            val summary = workAvailabilitySweep.sweep()
+                                            // Say what was *not* reached too. The run
+                                            // is capped now, so "0 marked unavailable"
+                                            // over a 2,000-work library would otherwise
+                                            // read as "all clear" when most of it was
+                                            // never checked.
+                                            sweepStatus = buildString {
+                                                append(
+                                                    "Sweep complete: ${summary.checked} checked, " +
+                                                        "${summary.nowUnavailable} marked unavailable."
+                                                )
+                                                if (summary.skippedRecent > 0) {
+                                                    append(
+                                                        " ${summary.skippedRecent} checked recently" +
+                                                            " and skipped."
+                                                    )
+                                                }
+                                                if (summary.remaining > 0) {
+                                                    append(
+                                                        " ${summary.remaining} left for the next run."
+                                                    )
+                                                }
+                                            }
                                         } catch (e: Exception) {
                                             sweepStatus = "Sweep failed: ${e.message}"
                                         } finally {

@@ -12,13 +12,31 @@ fail() {
 echo "check-invariants: scanning $SRC"
 
 # 1) User-Agent only defined in AO3UserAgent
+ua_file="$SRC/io/github/cidy02/kudos/network/ao3/AO3UserAgent.kt"
 ua_hits=$(grep -RIn --include='*.kt' 'Mozilla/5.0' "$SRC" | grep -v 'AO3UserAgent.kt' || true)
 if [ -n "$ua_hits" ]; then
   echo "$ua_hits"
   fail "Mozilla/5.0 appears outside AO3UserAgent.kt"
 fi
-grep -q 'KudosReader/' "$SRC/io/github/cidy02/kudos/network/ao3/AO3UserAgent.kt" || \
+grep -q 'KudosReader/' "$ua_file" || \
   fail "AO3UserAgent must include KudosReader/<version> token"
+
+# UA version token must track gradle versionName (via BuildConfig), not a
+# hardcoded literal — a literal is exactly how this drifted to 0.1.0 while
+# versionName moved to 0.2.0 and the old check still passed.
+grep -q 'BuildConfig.VERSION_NAME' "$ua_file" || \
+  fail "AO3UserAgent must derive version from BuildConfig.VERSION_NAME"
+if grep -E 'APP_VERSION[[:space:]]*[:=][[:space:]]*"[0-9]+\.[0-9]' "$ua_file" >/dev/null 2>&1; then
+  fail "AO3UserAgent.APP_VERSION must not be a hardcoded version string"
+fi
+gradle_version=$(sed -n 's/.*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$ROOT/app/build.gradle.kts" | head -n 1)
+if [ -z "$gradle_version" ]; then
+  fail "app/build.gradle.kts must define versionName"
+fi
+# BuildConfig is generated from versionName; requiring BuildConfig.VERSION_NAME
+# above means the UA token and versionName always agree. Echo for operators.
+echo "check-invariants: UA version tracks BuildConfig.VERSION_NAME (gradle versionName=$gradle_version)"
 
 # 2) Backup must never touch credentials.
 # Comment lines are allowed (they document *why* passwords aren't stored);

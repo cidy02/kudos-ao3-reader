@@ -61,22 +61,31 @@ class KudosApplication : Application(), Configuration.Provider {
     }
 
     private fun scheduleWorkManagerTasks() {
-        val sweepWork = androidx.work.PeriodicWorkRequestBuilder<io.github.cidy02.kudos.works.AvailabilitySweepWorker>(
-            7, java.util.concurrent.TimeUnit.DAYS
-        ).build()
+        val workManager = androidx.work.WorkManager.getInstance(this)
 
+        // Availability sweeps are manual-only (AO3 networking policy: no periodic
+        // full-library metadata sweeps). Cancel any previously-enqueued periodic
+        // instance from older installs; AvailabilitySweepWorker remains for a
+        // one-shot / manual trigger.
+        workManager.cancelUniqueWork("AvailabilitySweepWorker")
+
+        // Tag enrichment is the sanctioned background refresh path — throttle with
+        // network + battery constraints (shape matches SyncRepository.scheduleWorker).
+        val tagRefreshConstraints = androidx.work.Constraints.Builder()
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
         val tagRefreshWork = androidx.work.PeriodicWorkRequestBuilder<io.github.cidy02.kudos.works.WorkTagsRefreshWorker>(
             1, java.util.concurrent.TimeUnit.DAYS
-        ).build()
-
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "AvailabilitySweepWorker",
-            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-            sweepWork
         )
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            .setConstraints(tagRefreshConstraints)
+            .build()
+
+        // UPDATE so existing installs pick up the new network/battery constraints
+        // rather than keeping an unconstrained periodic request forever.
+        workManager.enqueueUniquePeriodicWork(
             "WorkTagsRefreshWorker",
-            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
             tagRefreshWork
         )
     }
