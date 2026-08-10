@@ -1030,6 +1030,25 @@ class BackupQueueAndAnnotationTombstoneTest {
     }
 
     @Test
+    fun restoreKeepsAQueueOnlyWorkOutOfTheLibrary() {
+        // Owner decision: Android adopts iOS's queue-only concept. Forcing
+        // `isSaved = isSaved || hasEpub` on the way in meant a work you had queued
+        // but deliberately not saved came back sitting on the Library shelves —
+        // and there is no way for the user to tell it apart afterwards.
+        val archived = sampleBackupWork().copy(isSaved = false, isQueuedForLater = true)
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archived)))
+        )
+
+        val restored = result.snapshot.works.single()
+        assertFalse(restored.isSaved)
+        assertTrue(restored.isQueuedForLater)
+        assertTrue(restored.isQueueOnlyWork)
+    }
+
+    @Test
     fun appliesIncomingAnnotationDeletion() {
         val local = io.github.cidy02.kudos.core.model.ReadingAnnotation(
             id = ANN_ID,

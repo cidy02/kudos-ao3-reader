@@ -138,9 +138,13 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         sourceUrl = sourceURL,
         dateAdded = added,
         isFavorite = isFavorite,
-        // Prefer archive flag; default to saved when Apple marks hasEPUB so the
-        // work appears in the offline Library after import.
-        isSaved = isSaved || hasEpub,
+        // Honour the archive's flag exactly, as iOS does (`KudosBackup.swift`
+        // `work.isSaved = incomingWins ? archived.isSaved : work.isSaved`).
+        // Forcing saved whenever an EPUB was present destroyed the queue-only
+        // state on the way in: a work you had queued but deliberately not saved
+        // came back sitting on the Library shelves. Owner decision — Android
+        // adopts iOS's queue-only concept rather than the other way round.
+        isSaved = isSaved,
         isQueuedForLater = isQueuedForLater ?: false,
         isFinished = isFinished,
         hasEpub = hasEpub,

@@ -191,7 +191,10 @@ object BackupMergeService {
             restored.copy(
                 // Never lose a local EPUB just because the archive lacked one.
                 hasEpub = existing.hasEpub || restored.hasEpub,
-                isSaved = restored.isSaved || existing.isSaved || (existing.hasEpub || restored.hasEpub),
+                // No hasEpub coercion: an EPUB on disk is what `isQueuedForLater`
+                // already protects, and promoting it to `isSaved` silently
+                // converted every queue-only work into a library work on merge.
+                isSaved = restored.isSaved || existing.isSaved,
                 isQueuedForLater = restored.isQueuedForLater || existing.isQueuedForLater,
                 dateAdded = minInstant(existing.dateAdded, restored.dateAdded),
                 lastModifiedAt = maxInstant(existing.lastModifiedAt, incomingModifiedAt)
