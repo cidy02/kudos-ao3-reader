@@ -59,6 +59,10 @@ class ReaderSettingsMapperTest {
             ReaderThemeSetting.Dark,
             ReaderSettingsMapper.toReaderThemeSetting(ReaderColorTheme.Dark)
         )
+        assertEquals(
+            ReaderThemeSetting.Oled,
+            ReaderSettingsMapper.toReaderThemeSetting(ReaderColorTheme.Oled)
+        )
     }
 
     @Test
@@ -143,6 +147,7 @@ class ReaderThemeMappingTest {
             mapper.resolveTheme(ReaderSettings(matchAppReaderTheme = true), AppSettings(appTheme = app))
 
         assertEquals(ReaderColorTheme.Dark, themeFor(AppThemeSetting.Dark))
+        assertEquals(ReaderColorTheme.Oled, themeFor(AppThemeSetting.Oled))
         assertEquals(ReaderColorTheme.Sepia, themeFor(AppThemeSetting.Sepia))
         assertEquals(ReaderColorTheme.Light, themeFor(AppThemeSetting.Light))
         // System has no EPUB equivalent -> documented Light fallback.
@@ -159,13 +164,22 @@ class ReaderThemeMappingTest {
     }
 
     @Test
-    fun lightDarkSepiaAllSupported() {
+    fun lightDarkSepiaOledAllSupported() {
         val mapped = ReaderThemeSetting.entries.map { setting ->
             mapper.resolveTheme(
                 ReaderSettings(matchAppReaderTheme = false, readerTheme = setting),
                 AppSettings()
             )
         }
-        assertTrue(mapped.containsAll(listOf(ReaderColorTheme.Light, ReaderColorTheme.Dark, ReaderColorTheme.Sepia)))
+        assertTrue(
+            mapped.containsAll(
+                listOf(
+                    ReaderColorTheme.Light,
+                    ReaderColorTheme.Dark,
+                    ReaderColorTheme.Sepia,
+                    ReaderColorTheme.Oled
+                )
+            )
+        )
     }
 }

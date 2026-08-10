@@ -5,6 +5,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.Color
 import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.TextAlign
@@ -23,12 +24,21 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  */
 @OptIn(ExperimentalReadiumApi::class)
 object ReadiumSettingsAdapter {
+    /** True-black page for OLED; matches iOS `ReaderTheme.oled.backgroundHex`. */
+    private val OledBackground = Color(android.graphics.Color.BLACK)
+
     fun toEpubPreferences(prefs: ReaderPreferences): EpubPreferences {
         return EpubPreferences(
+            // Readium has no OLED case; use DARK chrome + explicit pure-black page
+            // for Oled so the shell and the page stay true-black together.
             theme = when (prefs.theme) {
                 ReaderColorTheme.Light -> Theme.LIGHT
                 ReaderColorTheme.Sepia -> Theme.SEPIA
-                ReaderColorTheme.Dark -> Theme.DARK
+                ReaderColorTheme.Dark, ReaderColorTheme.Oled -> Theme.DARK
+            },
+            backgroundColor = when (prefs.theme) {
+                ReaderColorTheme.Oled -> OledBackground
+                else -> null
             },
             scroll = prefs.scroll,
             columnCount = if (!prefs.scroll && prefs.columnCount >= 2) ColumnCount.TWO else ColumnCount.AUTO,

@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.backup
 
+import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.core.model.MatureContentMode
+import io.github.cidy02.kudos.core.model.ReaderFontCatalog
+import io.github.cidy02.kudos.core.model.ReaderMode
+import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -7,20 +12,13 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 
 object BackupValidator {
-    private val readerModes = setOf("scroll", "paged")
-    private val readerThemes = setOf("light", "sepia", "dark")
-    private val appThemes = setOf("light", "sepia", "dark", "system")
-    private val matureModes = setOf("obscure", "hide")
-    private val builtInFontIds = setOf(
-        "system",
-        "nyserif",
-        "georgia",
-        "palatino",
-        "times",
-        "helvetica",
-        "avenir",
-        "menlo"
-    )
+    // Derived from the enums / catalog so allowlists cannot drift from storage
+    // strings (the previous hand-maintained appThemes set omitted "oled").
+    private val readerModes = ReaderMode.entries.map { it.storageValue }.toSet()
+    private val readerThemes = ReaderThemeSetting.entries.map { it.storageValue }.toSet()
+    private val appThemes = AppThemeSetting.entries.map { it.storageValue }.toSet()
+    private val matureModes = MatureContentMode.entries.map { it.storageValue }.toSet()
+    private val builtInFontIds = ReaderFontCatalog.builtInIds
     private val accentPattern = Regex("^#[0-9A-Fa-f]{6}$")
 
     fun decodeManifest(bytes: ByteArray): KudosBackupManifest {

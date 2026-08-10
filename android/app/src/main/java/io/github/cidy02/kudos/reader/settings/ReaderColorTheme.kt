@@ -4,13 +4,20 @@ import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.ui.theme.Paper
 import io.github.cidy02.kudos.ui.theme.PaperWarm
 import io.github.cidy02.kudos.ui.theme.SurfaceDark
+import io.github.cidy02.kudos.ui.theme.SurfaceOled
 
-/** Engine-agnostic reader colour theme. Mapped to Readium's EPUB theme in the adapter. */
-enum class ReaderColorTheme { Light, Sepia, Dark }
+/**
+ * Engine-agnostic reader colour theme. Mapped to Readium's EPUB theme in the
+ * adapter. [Oled] is true-black chrome (and page background override); Readium
+ * has no OLED case of its own so the adapter uses Readium DARK plus an explicit
+ * black background — same split as iOS `ReaderTheme.readiumTheme`.
+ */
+enum class ReaderColorTheme { Light, Sepia, Dark, Oled }
 
 /** Matches the same tone KudosTheme uses for this theme's app-wide background. */
 fun ReaderColorTheme.backgroundColor(): Color = when (this) {
     ReaderColorTheme.Light -> Paper
     ReaderColorTheme.Sepia -> PaperWarm
     ReaderColorTheme.Dark -> SurfaceDark
+    ReaderColorTheme.Oled -> SurfaceOled
 }

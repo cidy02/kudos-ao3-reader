@@ -69,11 +69,20 @@ class ReadiumNavigatorController {
     companion object {
         const val DECORATION_GROUP_HIGHLIGHTS = "highlights"
 
+        /**
+         * Parse a stored locator only when it is an Android-compatible envelope.
+         * Foreign (e.g. iOS bare) locators return null so callers skip navigation —
+         * matching iOS which discards annotations it cannot rebuild
+         * (`Locator(persistenceString:)` → nil).
+         */
         fun locatorFromJson(raw: String): Locator? {
             if (raw.isBlank()) return null
+            // Do not fall back to parsing [raw] as a bare Readium locator: an
+            // iOS-written bare locator shares the same schema and would navigate
+            // into a foreign pagination position.
+            val decoded = io.github.cidy02.kudos.reader.ReaderLocatorCodec
+                .decodeCompatibleLocator(raw) ?: return null
             return runCatching {
-                val decoded = io.github.cidy02.kudos.reader.ReaderLocatorCodec
-                    .decodeCompatibleLocator(raw) ?: raw
                 Locator.fromJSON(org.json.JSONObject(decoded))
             }.getOrNull()
         }

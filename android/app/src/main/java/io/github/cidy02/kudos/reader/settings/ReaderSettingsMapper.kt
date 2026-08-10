@@ -47,12 +47,14 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
     fun resolveTheme(reader: ReaderSettings, app: AppSettings): ReaderColorTheme {
         return if (reader.matchAppReaderTheme) {
             when (app.appTheme) {
-                AppThemeSetting.Dark, AppThemeSetting.Oled -> ReaderColorTheme.Dark
+                AppThemeSetting.Oled -> ReaderColorTheme.Oled
+                AppThemeSetting.Dark -> ReaderColorTheme.Dark
                 AppThemeSetting.Sepia -> ReaderColorTheme.Sepia
                 AppThemeSetting.Light, AppThemeSetting.System -> ReaderColorTheme.Light
             }
         } else {
             when (reader.readerTheme) {
+                ReaderThemeSetting.Oled -> ReaderColorTheme.Oled
                 ReaderThemeSetting.Dark -> ReaderColorTheme.Dark
                 ReaderThemeSetting.Sepia -> ReaderColorTheme.Sepia
                 ReaderThemeSetting.Light -> ReaderColorTheme.Light
@@ -146,6 +148,7 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
                 ReaderColorTheme.Light -> ReaderThemeSetting.Light
                 ReaderColorTheme.Sepia -> ReaderThemeSetting.Sepia
                 ReaderColorTheme.Dark -> ReaderThemeSetting.Dark
+                ReaderColorTheme.Oled -> ReaderThemeSetting.Oled
             }
     }
 }

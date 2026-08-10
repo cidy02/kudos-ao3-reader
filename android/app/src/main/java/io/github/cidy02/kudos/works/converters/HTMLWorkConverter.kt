@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.works.converters
 
 import io.github.cidy02.kudos.files.TextDecoding
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.safety.Safelist
 
 /**
@@ -11,6 +12,10 @@ import org.jsoup.safety.Safelist
  * a WebView, so unsanitised imported HTML is a stored-XSS vector. Everything
  * goes through Jsoup's allowlist, with remote images stripped so opening a work
  * can't phone home.
+ *
+ * Output uses XML syntax so void elements (`br`, `hr`, `col`) serialise as
+ * self-closing tags (`<br />`) and the chapter stays well-formed XHTML for
+ * strict EPUB parsers — same rationale as iOS `HTMLWorkSanitizer`.
  */
 class HTMLWorkConverter {
 
@@ -31,7 +36,16 @@ class HTMLWorkConverter {
             document.selectFirst(selector)?.takeIf { it.text().isNotBlank() }
         } ?: document.body()
         // relaxed minus <img>: no remote fetches from imported content.
-        return Jsoup.clean(region.html(), Safelist.relaxed().removeTags("img"))
+        // XML syntax so void elements close properly inside application/xhtml+xml.
+        // A fresh OutputSettings per call: it carries a lazily-prepared charset
+        // encoder and is not thread-safe, so it is not worth sharing one instance
+        // to save an allocation this size.
+        return Jsoup.clean(
+            region.html(),
+            "",
+            Safelist.relaxed().removeTags("img"),
+            Document.OutputSettings().syntax(Document.OutputSettings.Syntax.xml)
+        )
     }
 
     /** Title from the document, for imports that don't carry a useful file name. */

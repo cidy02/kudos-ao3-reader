@@ -14,7 +14,9 @@ enum class ReaderMode(val storageValue: String) {
 enum class ReaderThemeSetting(val storageValue: String) {
     Light("light"),
     Sepia("sepia"),
-    Dark("dark");
+    Dark("dark"),
+    /** True-black page chrome for AMOLED; matches app OLED / iOS ReaderTheme.oled. */
+    Oled("oled");
 
     companion object {
         fun fromStorage(value: String?): ReaderThemeSetting {
