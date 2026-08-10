@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import java.time.Instant
@@ -9,7 +10,8 @@ object LibraryQuery {
         snapshot: LibrarySnapshot,
         searchQuery: String,
         filters: LibraryFilterState,
-        sort: LibrarySort
+        sort: LibrarySort,
+        reveal: PrivacyRevealState = PrivacyRevealState()
     ): LibraryUiState {
         // A queue-only work (isQueueOnlyWork) is intentionally not on the main saved
         // shelves - it's excluded upstream too (WorkRepository.observeSavedWorks()
@@ -21,7 +23,9 @@ object LibraryQuery {
         // reader would expect to find it.
         val savedItems = snapshot.items.filter { !it.work.isQueueOnlyWork }
         val visible = savedItems.mapNotNull { item ->
-            when (val visibility = LibraryPrivacy.visibility(item.work, snapshot.privacy)) {
+            when (
+                val visibility = LibraryPrivacy.visibility(item.work, snapshot.privacy, reveal)
+            ) {
                 LibraryPrivacyVisibility.Hidden -> null
                 LibraryPrivacyVisibility.Visible,
                 LibraryPrivacyVisibility.Obscured -> LibraryDisplayItem(item, visibility)

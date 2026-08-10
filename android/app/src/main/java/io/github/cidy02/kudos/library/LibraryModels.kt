@@ -1,6 +1,5 @@
 package io.github.cidy02.kudos.library
 
-import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
@@ -26,17 +25,6 @@ data class LibraryDisplayItem(
     val item: LibraryWorkListItem,
     val privacyVisibility: LibraryPrivacyVisibility = LibraryPrivacyVisibility.Visible
 )
-
-/**
- * Session reveal flips Obscured → Visible for a work [reveal] covers — shared by
- * every screen's ViewModel (Library, Home) that folds `PrivacyGate` state into its
- * own `LibraryQuery.buildState`-derived items, so the rule can't drift between them.
- */
-fun LibraryDisplayItem.withReveal(reveal: PrivacyRevealState): LibraryDisplayItem {
-    if (privacyVisibility != LibraryPrivacyVisibility.Obscured) return this
-    if (!reveal.isRevealed(item.work.id)) return this
-    return copy(privacyVisibility = LibraryPrivacyVisibility.Visible)
-}
 
 data class LibrarySection(
     val title: String,

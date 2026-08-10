@@ -260,6 +260,58 @@ class LibraryPrivacyFilterTest {
     }
 
     @Test
+    fun revealAllRestoresHideModeWorks() {
+        // The eye button was a dead control in Hide mode: hidden works were dropped
+        // before reveal was ever consulted, so tapping it emptied nothing and filled
+        // nothing — only the icon flipped. Apple's predicate includes
+        // `&& !isRevealed(work)`, so reveal-all brings them back.
+        val state = LibraryQuery.buildState(
+            snapshot = LibrarySnapshot(
+                items = sampleItems().map { it.item },
+                userTags = emptyList(),
+                collections = emptyList(),
+                privacy = PrivacySettings(
+                    hideMatureContent = true,
+                    matureContentMode = MatureContentMode.Hide
+                )
+            ),
+            searchQuery = "",
+            filters = LibraryFilterState(),
+            sort = LibrarySort.RecentlyAdded,
+            reveal = io.github.cidy02.kudos.app.PrivacyRevealState(revealAll = true)
+        )
+
+        assertEquals(0, state.hiddenByPrivacyCount)
+        assertTrue("gamma" in state.items.ids())
+        assertEquals(
+            LibraryPrivacyVisibility.Visible,
+            state.items.first { it.item.work.id == "gamma" }.privacyVisibility
+        )
+    }
+
+    @Test
+    fun revealingASingleWorkRestoresOnlyThatWorkInHideMode() {
+        val state = LibraryQuery.buildState(
+            snapshot = LibrarySnapshot(
+                items = sampleItems().map { it.item },
+                userTags = emptyList(),
+                collections = emptyList(),
+                privacy = PrivacySettings(
+                    hideMatureContent = true,
+                    matureContentMode = MatureContentMode.Hide
+                )
+            ),
+            searchQuery = "",
+            filters = LibraryFilterState(),
+            sort = LibrarySort.RecentlyAdded,
+            reveal = io.github.cidy02.kudos.app.PrivacyRevealState(revealedIds = setOf("gamma"))
+        )
+
+        assertTrue("gamma" in state.items.ids())
+        assertEquals(0, state.hiddenByPrivacyCount)
+    }
+
+    @Test
     fun obscureModeKeepsAdultRatedWorksButMarksThemObscured() {
         val state = LibraryQuery.buildState(
             snapshot = LibrarySnapshot(

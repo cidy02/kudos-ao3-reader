@@ -76,11 +76,8 @@ class ReadingStatisticsViewModel(
         // `works.filter { !hideMature || !$0.isAdult || gate.isRevealed($0) }`
         // (LibraryView.statisticsWorks).
         val visible = works.filter { work ->
-            when (LibraryPrivacy.visibility(work, settings.privacy)) {
-                LibraryPrivacyVisibility.Visible -> true
-                LibraryPrivacyVisibility.Obscured,
-                LibraryPrivacyVisibility.Hidden -> reveal.isRevealed(work.id)
-            }
+            LibraryPrivacy.visibility(work, settings.privacy, reveal) ==
+                LibraryPrivacyVisibility.Visible
         }
         ReadingStatisticsUiState(
             loading = false,

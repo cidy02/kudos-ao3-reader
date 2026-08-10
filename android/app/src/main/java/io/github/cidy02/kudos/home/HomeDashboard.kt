@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryFilterState
 import io.github.cidy02.kudos.library.LibraryQuery
@@ -21,12 +22,16 @@ data class HomeDashboardState(
 }
 
 object HomeDashboard {
-    fun buildState(snapshot: LibrarySnapshot): HomeDashboardState {
+    fun buildState(
+        snapshot: LibrarySnapshot,
+        reveal: PrivacyRevealState = PrivacyRevealState()
+    ): HomeDashboardState {
         val library = LibraryQuery.buildState(
             snapshot = snapshot,
             searchQuery = "",
             filters = LibraryFilterState(),
-            sort = LibrarySort.RecentlyAdded
+            sort = LibrarySort.RecentlyAdded,
+            reveal = reveal
         )
         // Empty search + filters → `items` is the full privacy-visible set.
         return HomeDashboardState(

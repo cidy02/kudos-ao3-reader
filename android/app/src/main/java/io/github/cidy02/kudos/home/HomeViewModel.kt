@@ -6,12 +6,10 @@ import androidx.lifecycle.viewModelScope
 import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.app.PrivacyGate
-import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.isSignedIn
 import io.github.cidy02.kudos.library.LibraryRepository
-import io.github.cidy02.kudos.library.withReveal
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
@@ -58,8 +56,10 @@ class HomeViewModel(
     private val subscriptions = MutableStateFlow<List<AO3WorkSummary>>(emptyList())
     private val subscriptionsLoading = MutableStateFlow(false)
 
-    private val dashboard: StateFlow<HomeDashboardState> = libraryRepository.observeSnapshot()
-        .map(HomeDashboard::buildState)
+    private val dashboard: StateFlow<HomeDashboardState> = combine(
+        libraryRepository.observeSnapshot(),
+        privacyGate.state
+    ) { snapshot, revealed -> HomeDashboard.buildState(snapshot, revealed) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -74,7 +74,8 @@ class HomeViewModel(
         privacyGate.state
     ) { dash, subs, loading, auth, revealed ->
         HomeUiState(
-            dashboard = dash.withReveal(revealed),
+            // Reveal is already folded in by HomeDashboard.buildState.
+            dashboard = dash,
             subscriptions = subs,
             subscriptionsLoading = loading,
             isSignedIn = auth.isSignedIn
@@ -175,10 +176,3 @@ class HomeViewModel(
         }
     }
 }
-
-private fun HomeDashboardState.withReveal(revealed: PrivacyRevealState): HomeDashboardState = copy(
-    continueReading = continueReading.map { it.withReveal(revealed) },
-    recentlyUpdated = recentlyUpdated.map { it.withReveal(revealed) },
-    favorites = favorites.map { it.withReveal(revealed) },
-    recentlyOpened = recentlyOpened.map { it.withReveal(revealed) }
-)

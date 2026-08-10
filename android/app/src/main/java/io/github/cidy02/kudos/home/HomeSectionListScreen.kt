@@ -85,7 +85,10 @@ fun HomeSectionListScreen(
     val displayItems: List<LibraryDisplayItem> = remember(snapshot, privacyState) {
         val current = snapshot ?: return@remember emptyList()
         current.items.mapNotNull { item ->
-            when (val visibility = LibraryPrivacy.visibility(item.work, current.privacy)) {
+            when (
+                val visibility =
+                    LibraryPrivacy.visibility(item.work, current.privacy, privacyState)
+            ) {
                 LibraryPrivacyVisibility.Hidden -> null
                 else -> LibraryDisplayItem(item, visibility)
             }

@@ -36,9 +36,13 @@ class LibraryViewModel(
         repository.observeSnapshot(),
         searchQuery,
         filters,
-        sort
-    ) { snapshot, query, filters, sort ->
-        LibraryQuery.buildState(snapshot, query, filters, sort)
+        sort,
+        privacyGate.state
+    ) { snapshot, query, filters, sort, revealed ->
+        // Reveal has to reach the visibility decision itself, not be re-applied to
+        // the result: in Hide mode the hidden works are gone from these lists before
+        // any later pass could bring them back.
+        LibraryQuery.buildState(snapshot, query, filters, sort, revealed)
     }.catch { throwable ->
         emit(
             LibraryUiState(
@@ -64,16 +68,8 @@ class LibraryViewModel(
             selectedWorkIds = if (selecting) ids else emptySet(),
             revealedWorkIds = revealed.revealedIds,
             revealAllActive = revealed.revealAll,
-            readingQueues = queues,
-            // Session reveal flips Obscured → Visible for those work ids.
-            continueReading = base.continueReading.map { it.withReveal(revealed) },
-            readingHistory = base.readingHistory.map { it.withReveal(revealed) },
-            recentlyAdded = base.recentlyAdded.map { it.withReveal(revealed) },
-            favorites = base.favorites.map { it.withReveal(revealed) },
-            savedForLater = base.savedForLater.map { it.withReveal(revealed) },
-            finished = base.finished.map { it.withReveal(revealed) },
-            downloaded = base.downloaded.map { it.withReveal(revealed) },
-            items = base.items.map { it.withReveal(revealed) }
+            readingQueues = queues
+            // Reveal is already folded into every shelf by LibraryQuery.buildState.
         )
     }.stateIn(
         scope = viewModelScope,
