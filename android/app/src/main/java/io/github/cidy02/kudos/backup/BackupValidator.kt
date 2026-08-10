@@ -8,6 +8,7 @@ import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 
@@ -156,7 +157,19 @@ object BackupValidator {
         return value?.let { parseInstant(it, field) }
     }
 
-    fun formatInstant(instant: Instant): String = instant.toString()
+    /**
+     * Lead L-2. `Instant.now()` can carry sub-millisecond precision, and
+     * `Instant.toString()` then emits six or nine fractional digits. Apple's
+     * ISO-8601 decoder accepts at most three, and a single unparseable date
+     * aborts the **entire** import — so one microsecond-precision clock would
+     * make every Android-written archive unreadable on iOS.
+     *
+     * Truncating here is one call and costs nothing: millisecond precision is
+     * already all the merge rules compare on (`KudosTypeConverters` stores
+     * epoch-millis), so no conflict resolution changes.
+     */
+    fun formatInstant(instant: Instant): String =
+        instant.truncatedTo(ChronoUnit.MILLIS).toString()
 
     fun normalizeSettings(
         settings: BackupSettingsPayload,
