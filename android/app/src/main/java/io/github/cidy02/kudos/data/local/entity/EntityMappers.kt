@@ -58,7 +58,10 @@ fun SavedWork.toEntity(): WorkEntity {
         isQueuedForLater = isQueuedForLater,
         searchText = searchText,
         searchIndexVersion = searchIndexVersion,
-        lastTagRefreshAttemptAt = lastTagRefreshAttemptAt
+        lastTagRefreshAttemptAt = lastTagRefreshAttemptAt,
+        epubPreservationStatusRaw = epubPreservationStatusRaw,
+        preservedAt = preservedAt,
+        lastPreservationAttemptAt = lastPreservationAttemptAt
     )
 }
 
@@ -109,7 +112,10 @@ fun WorkEntity.toDomain(): SavedWork {
         isQueuedForLater = isQueuedForLater,
         searchText = searchText,
         searchIndexVersion = searchIndexVersion,
-        lastTagRefreshAttemptAt = lastTagRefreshAttemptAt
+        lastTagRefreshAttemptAt = lastTagRefreshAttemptAt,
+        epubPreservationStatusRaw = epubPreservationStatusRaw,
+        preservedAt = preservedAt,
+        lastPreservationAttemptAt = lastPreservationAttemptAt
     )
 }
 

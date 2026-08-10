@@ -60,5 +60,13 @@ data class WorkEntity(
     val searchText: String = "",
     val searchIndexVersion: Int = 0,
 
-    val lastTagRefreshAttemptAt: Instant? = null
+    val lastTagRefreshAttemptAt: Instant? = null,
+    /**
+     * Cross-platform backup pass-through only (see [io.github.cidy02.kudos.core.model.SavedWork]).
+     * Nullable with no backfill — existing rows simply have no preservation history.
+     * Android must not act on these values.
+     */
+    val epubPreservationStatusRaw: String? = null,
+    val preservedAt: Instant? = null,
+    val lastPreservationAttemptAt: Instant? = null
 )

@@ -64,7 +64,20 @@ data class SavedWork(
     val searchText: String = "",
     /** Stamp for [io.github.cidy02.kudos.works.WorkSearchIndex.currentVersion]; 0 = never indexed. */
     val searchIndexVersion: Int = 0,
-    val lastTagRefreshAttemptAt: Instant? = null
+    val lastTagRefreshAttemptAt: Instant? = null,
+    /**
+     * EPUB preservation pass-through for cross-platform backup (iOS
+     * `SavedWork.epubPreservationStatusRaw` / `preservedAt` /
+     * `lastPreservationAttemptAt`).
+     *
+     * Android has no preservation feature. These fields exist only so an
+     * iOS→Android→iOS round trip does not destroy the other platform's data:
+     * store what arrived, re-emit it unchanged. Do not default null to a
+     * status string, and do not drive Android UI or file cleanup from them.
+     */
+    val epubPreservationStatusRaw: String? = null,
+    val preservedAt: Instant? = null,
+    val lastPreservationAttemptAt: Instant? = null
 ) {
     // isQueuedForLater counts as protection too - queue-add now preserves the EPUB
     // (T-89), and without this a queue-only work marked Finished would have that

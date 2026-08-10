@@ -116,7 +116,11 @@ fun SavedWork.toBackupWork(
         isDeleted = isDeleted,
         deletedAt = deletedAt?.let(BackupValidator::formatInstant),
         permanentDeletionScheduledAt = permanentDeletionScheduledAt
-            ?.let(BackupValidator::formatInstant)
+            ?.let(BackupValidator::formatInstant),
+        // Pass-through only — do not default null to "notPreserved" (would rewrite iOS data).
+        epubPreservationStatusRaw = epubPreservationStatusRaw,
+        preservedAt = preservedAt?.let(BackupValidator::formatInstant),
+        lastPreservationAttemptAt = lastPreservationAttemptAt?.let(BackupValidator::formatInstant)
     )
 }
 
@@ -197,6 +201,16 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         permanentDeletionScheduledAt = BackupValidator.parseNullableInstant(
             permanentDeletionScheduledAt?.takeIf { it.isNotBlank() },
             "work.permanentDeletionScheduledAt"
+        ),
+        // Pass-through: blank/absent stays null (never invent "notPreserved").
+        epubPreservationStatusRaw = epubPreservationStatusRaw?.takeIf { it.isNotBlank() },
+        preservedAt = BackupValidator.parseNullableInstant(
+            preservedAt?.takeIf { it.isNotBlank() },
+            "work.preservedAt"
+        ),
+        lastPreservationAttemptAt = BackupValidator.parseNullableInstant(
+            lastPreservationAttemptAt?.takeIf { it.isNotBlank() },
+            "work.lastPreservationAttemptAt"
         )
     )
 }

@@ -15,6 +15,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * v3 → v4: `isQueuedForLater` on works (T-89 queue-only semantics) — a work added
  * to a reading queue is no longer implicitly marked `isSaved`.
+ *
+ * v7 → v8: EPUB preservation pass-through columns on works (nullable, no backfill).
+ * Android stores and re-emits them only — it does not run a preservation feature.
  */
 object KudosDatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -199,6 +202,21 @@ object KudosDatabaseMigrations {
     val MIGRATION_6_7 = object : Migration(6, 7) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE works ADD COLUMN lastTagRefreshAttemptAt INTEGER")
+        }
+    }
+
+    /**
+     * v7 → v8: EPUB preservation pass-through columns on works.
+     *
+     * Nullable, no backfill — Android does not run a preservation feature; it only
+     * stores and re-emits values so an iOS→Android→iOS backup round trip keeps
+     * `epubPreservationStatusRaw` / `preservedAt` / `lastPreservationAttemptAt`.
+     */
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN epubPreservationStatusRaw TEXT")
+            db.execSQL("ALTER TABLE works ADD COLUMN preservedAt INTEGER")
+            db.execSQL("ALTER TABLE works ADD COLUMN lastPreservationAttemptAt INTEGER")
         }
     }
 }
