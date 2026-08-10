@@ -6,6 +6,22 @@ import java.util.UUID
 
 object BackupPaths {
     const val MANIFEST = "manifest.json"
+
+    /**
+     * The previous manifest, kept beside the live one. SAF offers no atomic
+     * replace, so this is the recovery half of [MANIFEST]'s write: sync-down
+     * falls back to it when the primary is missing, empty or unparseable.
+     */
+    const val MANIFEST_BACKUP = "manifest.json.bak"
+
+    /**
+     * Staging name for a manifest being written. Never authoritative — a temp
+     * left behind by an interrupted run is deleted, not folded in as a conflict
+     * copy. `createDocument` may append its own extension for the MIME type, so
+     * this is only ever matched as a *prefix*.
+     */
+    const val MANIFEST_TEMP = "manifest.json.tmp"
+
     const val WORKS_DIRECTORY = "Works"
     const val FONTS_DIRECTORY = "Fonts"
 

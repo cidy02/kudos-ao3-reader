@@ -3,14 +3,18 @@ package io.github.cidy02.kudos.backup
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.files.FontFileStore
+import java.io.IOException
 import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -95,46 +99,38 @@ class SyncRepository(
             // unresolved version rather than picking a winner, so nothing a user
             // did on either device is dropped; we do the same, then delete the
             // folded copies.
-            val manifestFilesToRead = mutableListOf<DocumentFile>()
-            val manifestFile = syncDir.findFile("manifest.json")
-            if (manifestFile != null) manifestFilesToRead.add(manifestFile)
-            
-            val conflicts = syncDir.listFiles().filter { it.name?.startsWith("manifest") == true && it.name?.endsWith(".json") == true && it.name != "manifest.json" }
-            manifestFilesToRead.addAll(conflicts)
-            val foldedConflicts = conflicts.size
-            
-            if (manifestFilesToRead.isNotEmpty()) {
-                manifestFilesToRead.forEach { mFile ->
-                    context.contentResolver.openInputStream(mFile.uri)?.use { input ->
-                        val bytes = input.readBytes()
-                        if (bytes.isNotEmpty()) {
-                            val manifest = BackupValidator.decodeManifest(bytes)
-                            val epubFiles = mutableMapOf<String, ByteArray>()
-                            val fontFiles = mutableMapOf<String, ByteArray>()
-                            
-                            syncDir.findFile("Works")?.let { worksDir ->
-                                manifest.works.forEach { work ->
-                                    val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
-                                    worksDir.findFile(epubName)?.let { file ->
-                                        context.contentResolver.openInputStream(file.uri)?.use { epubFiles[work.id] = it.readBytes() }
-                                    }
-                                }
-                            }
-                            syncDir.findFile("Fonts")?.let { fontsDir ->
-                                manifest.fonts.forEach { font ->
-                                    fontsDir.findFile(font.fileName)?.let { file ->
-                                        context.contentResolver.openInputStream(file.uri)?.use { fontFiles[font.fileName] = it.readBytes() }
-                                    }
-                                }
-                            }
-                            
-                            val pack = KudosBackupPackage(manifest, epubFiles, fontFiles)
-                            backupRepository.importPackage(pack)
-                        }
+            val conflicts = syncDir.listFiles().filter { file ->
+                val name = file.name ?: return@filter false
+                name.startsWith("manifest") && name.endsWith(".json") &&
+                    name != BackupPaths.MANIFEST &&
+                    name != BackupPaths.MANIFEST_BACKUP &&
+                    !name.startsWith(BackupPaths.MANIFEST_TEMP)
+            }
+            val liveManifest = syncDir.findFile(BackupPaths.MANIFEST)
+            val backupManifest = syncDir.findFile(BackupPaths.MANIFEST_BACKUP)
+            var foldedConflicts = 0
+
+            if (liveManifest != null || backupManifest != null || conflicts.isNotEmpty()) {
+                // The live manifest, or the .bak kept beside it. That fallback is
+                // what stops a half-written manifest from wedging the folder for
+                // good: import runs before export, so a manifest that throws here
+                // aborts the run at the catch below and the export that would have
+                // rewritten it never happens — every later sync then fails the same
+                // way, forever.
+                val primary = decodeManifestOrNull(liveManifest)
+                    ?: decodeManifestOrNull(backupManifest)
+                primary?.let { importManifest(syncDir, it) }
+
+                conflicts.forEach { file ->
+                    val manifest = decodeManifestOrNull(file)
+                    if (manifest != null) {
+                        importManifest(syncDir, manifest)
+                        file.delete()
+                        foldedConflicts += 1
                     }
-                    if (mFile.name != "manifest.json") {
-                        mFile.delete()
-                    }
+                    // An unreadable conflict copy is left where it is: deleting it
+                    // would discard whatever the other device wrote, and throwing
+                    // would wedge this folder exactly like the primary used to.
                 }
             } else {
                 root.findFile("Kudos.kudosbackup")?.let { remoteBackup ->
@@ -150,7 +146,12 @@ class SyncRepository(
             // 2. Export incrementally
             persistenceGate.withLock {
                 val snapshot = backupRepository.captureLibrarySnapshot()
-                val manifestOut = snapshot.toV2Manifest(exportedAt = clock(), appVersion = "0.1.0")
+                // Same single-source rule as the User-Agent: a hardcoded version here
+                // drifts silently and lands in every archive the user exports.
+                val manifestOut = snapshot.toV2Manifest(
+                    exportedAt = clock(),
+                    appVersion = BuildConfig.VERSION_NAME
+                )
                 
                 var worksDir = syncDir.findFile("Works")
                 if (worksDir == null) worksDir = syncDir.createDirectory("Works")
@@ -161,7 +162,8 @@ class SyncRepository(
                 val expectedWorks = mutableSetOf<String>()
                 val expectedFonts = mutableSetOf<String>()
 
-                // Write works
+                // Assets first, manifest last: the manifest is the commit point, so
+                // it can never reference an asset file that was not already written.
                 if (worksDir != null) {
                     snapshot.works.filter { it.hasEpub }.forEach { work ->
                         val localPath = workFileStore.workEpubPath(work.id)
@@ -172,15 +174,8 @@ class SyncRepository(
                             writeIfChanged(worksDir, epubName, "application/epub+zip", bytes)
                         }
                     }
-                    // Orphan pruning
-                    worksDir.listFiles().forEach { file ->
-                        if (file.name != null && !expectedWorks.contains(file.name)) {
-                            file.delete()
-                        }
-                    }
                 }
 
-                // Write fonts
                 if (fontsDir != null) {
                     snapshot.fonts.forEach { font ->
                         val bytes = fontFileStore.readFont(font.fileName)
@@ -189,21 +184,19 @@ class SyncRepository(
                             writeIfChanged(fontsDir, font.fileName, "application/octet-stream", bytes)
                         }
                     }
-                    // Orphan pruning
-                    fontsDir.listFiles().forEach { file ->
-                        if (file.name != null && !expectedFonts.contains(file.name)) {
-                            file.delete()
-                        }
-                    }
                 }
 
-                // Write manifest.json
+                // The commit point.
                 val manifestBytes = BackupJson.encodeToString(manifestOut).toByteArray(Charsets.UTF_8)
-                var manifestDoc = syncDir.findFile("manifest.json")
-                if (manifestDoc == null) manifestDoc = syncDir.createFile("application/json", "manifest.json")
-                if (manifestDoc != null) {
-                    context.contentResolver.openOutputStream(manifestDoc.uri, "wt")?.use { it.write(manifestBytes) }
-                }
+                writeManifestAtomically(syncDir, manifestBytes)
+
+                // Only now drop asset files that no manifest record references any
+                // more. Pruning *before* the commit point, as this used to, means a
+                // crash in between leaves assets deleted while the manifest still
+                // lists them — iOS prunes after its own commit for exactly this
+                // reason.
+                worksDir?.let { removeOrphans(it, expectedWorks) }
+                fontsDir?.let { removeOrphans(it, expectedFonts) }
             }
 
             settingsRepository.updateSyncLastSyncAt(clock())
@@ -217,13 +210,113 @@ class SyncRepository(
     private fun writeIfChanged(dir: DocumentFile, fileName: String, mimeType: String, data: ByteArray) {
         var file = dir.findFile(fileName)
         if (file != null && file.length() == data.size.toLong()) {
-            return
+            // Equal length is not equal content. Skipping on length alone means an
+            // edit that happens to keep the byte count — a typo fix, a same-width
+            // metadata tweak — never syncs at all. The length check is kept as the
+            // cheap reject, so the read below only happens when it cannot already
+            // prove a difference.
+            val existing = runCatching {
+                context.contentResolver.openInputStream(file.uri)?.use { it.readBytes() }
+            }.getOrNull()
+            if (existing != null && existing.contentEquals(data)) return
         }
         if (file == null) {
             file = dir.createFile(mimeType, fileName)
         }
         if (file != null) {
             context.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(data) }
+        }
+    }
+
+    /** Decodes a manifest document, or null if it is absent, empty or unreadable. */
+    private fun decodeManifestOrNull(file: DocumentFile?): KudosBackupManifest? {
+        if (file == null) return null
+        return runCatching {
+            context.contentResolver.openInputStream(file.uri)?.use { input ->
+                val bytes = input.readBytes()
+                if (bytes.isEmpty()) null else BackupValidator.decodeManifest(bytes)
+            }
+        }.getOrNull()
+    }
+
+    private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest) {
+        val epubFiles = mutableMapOf<String, ByteArray>()
+        val fontFiles = mutableMapOf<String, ByteArray>()
+
+        syncDir.findFile(BackupPaths.WORKS_DIRECTORY)?.let { worksDir ->
+            manifest.works.forEach { work ->
+                val epubName = "${BackupPaths.canonicalUuid(work.id, "work.id")}.epub"
+                worksDir.findFile(epubName)?.let { file ->
+                    context.contentResolver.openInputStream(file.uri)?.use {
+                        epubFiles[work.id] = it.readBytes()
+                    }
+                }
+            }
+        }
+        syncDir.findFile(BackupPaths.FONTS_DIRECTORY)?.let { fontsDir ->
+            manifest.fonts.forEach { font ->
+                fontsDir.findFile(font.fileName)?.let { file ->
+                    context.contentResolver.openInputStream(file.uri)?.use {
+                        fontFiles[font.fileName] = it.readBytes()
+                    }
+                }
+            }
+        }
+
+        backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+    }
+
+    /**
+     * SAF has no atomic-replace primitive, so this is the closest achievable
+     * equivalent of iOS's `options: .atomic`: write a fresh temp document, fsync
+     * it, demote the live manifest to `.bak`, then rename the temp into place.
+     *
+     * Opening the live manifest with `"wt"` — which is what this used to do —
+     * truncates it to zero length for the whole write. A crash or a second device
+     * reading in that window sees no index at all for a folder that still holds
+     * every EPUB, and a *partially* written manifest is worse still: it throws on
+     * the next import, before the export that would repair it ever runs.
+     */
+    private fun writeManifestAtomically(syncDir: DocumentFile, bytes: ByteArray) {
+        val resolver = context.contentResolver
+
+        // A run that died mid-write leaves a temp behind. It is never
+        // authoritative, so drop it rather than let it look like a conflict copy.
+        syncDir.listFiles().forEach { file ->
+            if (file.name?.startsWith(BackupPaths.MANIFEST_TEMP) == true) file.delete()
+        }
+
+        // createDocument may append its own extension for the MIME type, so the
+        // temp is never looked up by name again — we keep the handle we were given.
+        val temp = syncDir.createFile("application/json", BackupPaths.MANIFEST_TEMP)
+            ?: throw IOException("Could not create a temporary manifest.")
+        try {
+            val descriptor = resolver.openFileDescriptor(temp.uri, "w")
+                ?: throw IOException("Could not open the temporary manifest for writing.")
+            ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { output ->
+                output.write(bytes)
+                output.flush()
+                // Durability before the rename: a rename that reaches the disk
+                // ahead of its own data is precisely the corruption this prevents.
+                descriptor.fileDescriptor.sync()
+            }
+        } catch (error: Exception) {
+            temp.delete()
+            throw error
+        }
+
+        val live = syncDir.findFile(BackupPaths.MANIFEST)
+        if (live != null) {
+            syncDir.findFile(BackupPaths.MANIFEST_BACKUP)?.delete()
+            DocumentsContract.renameDocument(resolver, live.uri, BackupPaths.MANIFEST_BACKUP)
+        }
+        DocumentsContract.renameDocument(resolver, temp.uri, BackupPaths.MANIFEST)
+    }
+
+    private fun removeOrphans(directory: DocumentFile, expected: Set<String>) {
+        directory.listFiles().forEach { file ->
+            val name = file.name ?: return@forEach
+            if (name !in expected) file.delete()
         }
     }
 }
