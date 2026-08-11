@@ -174,9 +174,16 @@ class ReadingQueueRepository(
         }
     }
 
-    suspend fun ensureSavedForLaterQueue(): ReadingQueue {
+    // Room serializes concurrent withTransaction calls against the same database (each
+    // waits for the prior one to commit before its own body runs), so the second of two
+    // racing callers sees the first caller's insert on its own check and returns that
+    // row instead of inserting a duplicate. Multiple call sites (LibraryViewModel's
+    // refresh() and refreshQueues(), plus this repository's own add()/preserve() paths)
+    // could otherwise both pass the check-then-create race at once — confirmed via a
+    // fresh install producing two "Saved for Later" rows before this fix.
+    suspend fun ensureSavedForLaterQueue(): ReadingQueue = database.withTransaction {
         queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.let {
-            return it.toDomain()
+            return@withTransaction it.toDomain()
         }
         val now = clock()
         val queue = ReadingQueue(
@@ -188,7 +195,7 @@ class ReadingQueueRepository(
             dateUpdated = now
         )
         queueDao.upsertQueue(queue.toEntity())
-        return queue
+        queue
     }
 
     /** Creates a user-named custom queue (Library “+ New Queue”). */
