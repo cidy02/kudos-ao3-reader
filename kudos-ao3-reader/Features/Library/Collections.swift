@@ -23,9 +23,13 @@ struct CollectionCard: View {
         self.collection = collection
     }
 
-    // Works sitting in Recently Deleted don't count toward the card's size.
+    // Works sitting in Recently Deleted don't count toward the card's size or the stack.
+    private var visibleWorks: [SavedWork] {
+        collection.works.filter { !$0.isPendingDeletion }.sorted { $0.dateAdded > $1.dateAdded }
+    }
+
     private var workCount: Int {
-        collection.works.count(where: { !$0.isPendingDeletion })
+        visibleWorks.count
     }
 
     var body: some View {
@@ -45,7 +49,19 @@ struct CollectionCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
+    // 2+ works reads as a shelf of the actual works inside; 0-1 keeps the abstract
+    // name-hued tile — a single face would just be a worse-looking work card, and an
+    // empty stack has no titles to hue.
+    @ViewBuilder
     private var tile: some View {
+        if workCount >= 2 {
+            StackedWorkCover(workTitles: visibleWorks.map(\.title), cardSize: cardSize)
+        } else {
+            singleTile
+        }
+    }
+
+    private var singleTile: some View {
         let hue = CoverArt.hue(for: collection.name)
         let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
         return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)

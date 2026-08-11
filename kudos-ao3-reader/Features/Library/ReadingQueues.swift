@@ -26,10 +26,13 @@ struct ReadingQueueCard: View {
         self.queue = queue
     }
 
-    // Memberships of a soft-deleted work survive (so restoring it re-joins its
-    // queues), but the work itself belongs to Recently Deleted, not this card.
+    // Ordered the same way the queue's own detail view is (sortOrderInQueue) — the
+    // stack's first ≤3 faces should be the queue's actual first ≤3 works, not an
+    // arbitrary membership order. Memberships of a soft-deleted work survive (so
+    // restoring it re-joins its queues), but the work itself belongs to Recently
+    // Deleted, not this card — orderedWorks already excludes it.
     private var works: [SavedWork] {
-        queue.memberships.compactMap(\.work).filter { !$0.isPendingDeletion }
+        ReadingQueueService.orderedWorks(in: queue)
     }
 
     var body: some View {
@@ -49,7 +52,19 @@ struct ReadingQueueCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
+    // 2+ works reads as a shelf of the actual works inside; 0-1 keeps the abstract
+    // name-hued tile — a single face would just be a worse-looking work card, and an
+    // empty stack has no titles to hue.
+    @ViewBuilder
     private var tile: some View {
+        if works.count >= 2 {
+            StackedWorkCover(workTitles: works.map(\.title), cardSize: cardSize)
+        } else {
+            singleTile
+        }
+    }
+
+    private var singleTile: some View {
         let hue = CoverArt.hue(for: queue.displayName)
         return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
             .fill(.regularMaterial)
