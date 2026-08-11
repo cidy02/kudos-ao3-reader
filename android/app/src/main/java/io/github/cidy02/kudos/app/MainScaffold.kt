@@ -50,6 +50,9 @@ fun MainScaffold(
     val currentRoute = currentDestination?.route
     val isTopLevel = Routes.isTopLevel(currentRoute)
     val isReader = currentRoute == Routes.Reader
+    // The queue browser owns its own bottom chrome (the switcher pill / sidebar) —
+    // the top-level nav bar underneath it would double up the bottom edge.
+    val isReadingQueueBrowser = currentRoute == Routes.ReadingQueues
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useNavigationRail = maxWidth >= 840.dp
@@ -115,7 +118,7 @@ fun MainScaffold(
                 }
             },
             bottomBar = {
-                if (!isReader && !useNavigationRail) {
+                if (!isReader && !isReadingQueueBrowser && !useNavigationRail) {
                     TopLevelNavigationBar(
                         currentDestination = currentDestination,
                         onNavigate = { route -> navController.navigateTopLevel(route) }
@@ -131,7 +134,7 @@ fun MainScaffold(
                     .padding(innerPadding)
             ) {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    if (!isReader && useNavigationRail) {
+                    if (!isReader && !isReadingQueueBrowser && useNavigationRail) {
                         TopLevelNavigationRail(
                             currentDestination = currentDestination,
                             onNavigate = { route -> navController.navigateTopLevel(route) }

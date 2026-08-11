@@ -51,6 +51,11 @@ class ReadingQueueRepository(
         return queueDao.getQueueById(queueId)?.toDomain()
     }
 
+    /** Active (non-deleted-queue) membership count for multi-queue "In N" badges. */
+    suspend fun activeMembershipCountForWork(workId: String): Int {
+        return queueDao.getActiveMembershipCountForWork(workId)
+    }
+
     /**
      * Memberships for [queueId] joined with work titles from WorkDao, excluding
      * works currently soft-deleted (Recently Deleted) — same as Collections'

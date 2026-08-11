@@ -34,7 +34,18 @@ object Routes {
     const val Backup = "backup"
     const val QueueStorage = "queue_storage"
     const val RecentlyDeleted = "recently-deleted"
-    const val ReadingQueues = "reading-queues"
+    /**
+     * Reading-queue browser (Safari-style switcher). Optional [queueId] pre-selects a
+     * queue when opened from a Library shelf tile; omit for last-selected / Saved for Later.
+     */
+    private const val ARG_BROWSER_QUEUE_ID = "queueId"
+    const val ReadingQueues = "reading-queues?queueId={$ARG_BROWSER_QUEUE_ID}"
+    fun readingQueues(initialQueueId: String? = null): String =
+        if (initialQueueId.isNullOrBlank()) {
+            "reading-queues"
+        } else {
+            "reading-queues?queueId=${encode(initialQueueId)}"
+        }
     const val ReadingStatistics = "reading-statistics"
     const val Collections = "collections"
     const val AO3Dashboard = "ao3-dashboard"

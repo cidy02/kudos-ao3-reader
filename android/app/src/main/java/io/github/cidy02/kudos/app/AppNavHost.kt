@@ -52,7 +52,7 @@ import io.github.cidy02.kudos.library.CollectionsScreen
 import io.github.cidy02.kudos.library.LibraryScreen
 import io.github.cidy02.kudos.library.RecentlyDeletedScreen
 import io.github.cidy02.kudos.library.QueueDetailScreen
-import io.github.cidy02.kudos.library.ReadingQueuesScreen
+import io.github.cidy02.kudos.library.ReadingQueueBrowserScreen
 import io.github.cidy02.kudos.library.ReadingStatisticsScreen
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
@@ -147,11 +147,12 @@ fun AppNavHost(
                     navController.navigate(Routes.reader(workId))
                 },
                 onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
-                onOpenReadingQueues = { navController.navigate(Routes.ReadingQueues) },
+                onOpenReadingQueues = { navController.navigate(Routes.readingQueues()) },
                 onOpenReadingStatistics = { navController.navigate(Routes.ReadingStatistics) },
                 onOpenCollections = { navController.navigate(Routes.Collections) },
                 onOpenQueue = { queueId ->
-                    navController.navigate(Routes.queueDetail(queueId))
+                    // Shelf tile → browser pre-selected on that queue (not straight to detail).
+                    navController.navigate(Routes.readingQueues(queueId))
                 },
                 onOpenCollection = { collectionId ->
                     navController.navigate(Routes.collectionDetail(collectionId))
@@ -192,10 +193,27 @@ fun AppNavHost(
                 )
             }
         }
-        sharedComposable(Routes.ReadingQueues) {
-            ReadingQueuesScreen(
+        sharedComposable(
+            Routes.ReadingQueues,
+            arguments = listOf(
+                navArgument("queueId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val initialQueueId = Routes.routeArg(backStackEntry, "queueId")
+            ReadingQueueBrowserScreen(
                 repository = container.readingQueueRepository,
-                onOpenQueue = { queueId ->
+                initialQueueId = initialQueueId,
+                onOpenWork = { workId ->
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                },
+                onOpenReader = { workId ->
+                    navController.navigate(Routes.reader(workId))
+                },
+                onManageQueue = { queueId ->
                     navController.navigate(Routes.queueDetail(queueId))
                 }
             )
