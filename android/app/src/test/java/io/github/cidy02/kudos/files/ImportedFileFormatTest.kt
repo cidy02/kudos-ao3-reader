@@ -1,0 +1,79 @@
+package io.github.cidy02.kudos.files
+
+import io.github.cidy02.kudos.works.converters.PDFWorkConverter
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+
+class ImportedFileFormatTest {
+
+    private fun zip(vararg entries: String): ByteArray {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            entries.forEach { name ->
+                zos.putNextEntry(ZipEntry(name))
+                zos.write("x".toByteArray())
+                zos.closeEntry()
+            }
+        }
+        return out.toByteArray()
+    }
+
+    @Test
+    fun `renamed epub is rescued by its container entry`() {
+        // The case this exists for: a real EPUB that arrived as fic.epub.zip.
+        val bytes = zip("mimetype", "META-INF/container.xml", "OEBPS/content.opf")
+        assertEquals(ImportedFileFormat.EPUB, ImportedFileFormat.sniff(bytes, "fic.epub.zip"))
+    }
+
+    @Test
+    fun `plain zip without a container is not an epub`() {
+        val bytes = zip("notes.txt", "photo.jpg")
+        assertEquals(ImportedFileFormat.ZIP, ImportedFileFormat.sniff(bytes, "bundle.zip"))
+    }
+
+    @Test
+    fun `a file named epub stays epub even when structurally bogus`() {
+        // Structure is validated downstream; sniffing must not pre-empt that,
+        // or WorkImporter's "not a valid EPUB" message never fires.
+        val bogus = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 1, 2, 3)
+        assertEquals(ImportedFileFormat.EPUB, ImportedFileFormat.sniff(bogus, "story.epub"))
+    }
+
+    @Test
+    fun `pdf is detected by magic bytes regardless of name`() {
+        val bytes = "%PDF-1.7\nnonsense".toByteArray(Charsets.ISO_8859_1)
+        assertEquals(ImportedFileFormat.PDF, ImportedFileFormat.sniff(bytes, "story.txt"))
+    }
+
+    @Test
+    fun `html is detected by content not extension`() {
+        val bytes = "<!DOCTYPE html><html><body>hi</body></html>".toByteArray()
+        assertEquals(ImportedFileFormat.HTML, ImportedFileFormat.sniff(bytes, "chapter.txt"))
+    }
+
+    @Test
+    fun `compressed pdf refuses to convert rather than emitting binary noise`() {
+        // The defect this guards: /FlateDecode streams made the old regex emit
+        // decompressed binary as <p> paragraphs, so users got mojibake works.
+        // A FlateDecode header plus bytes that would previously have been
+        // scraped out from between parentheses and emitted as <p> paragraphs.
+        val header = "%PDF-1.4\n<< /Filter /FlateDecode /Length 42 >>\nstream\n"
+        val compressed = header.toByteArray(Charsets.ISO_8859_1) +
+            byteArrayOf(0x00, 0x01, 0x28, 0xC3.toByte(), 0xAB.toByte(), 0x29, 0x0A) +
+            "endstream".toByteArray(Charsets.ISO_8859_1)
+        assertNull(PDFWorkConverter().convert("Story", compressed))
+    }
+
+    @Test
+    fun `uncompressed pdf text still converts`() {
+        val simple = "%PDF-1.4\nBT (Hello there, reader.) Tj ET".toByteArray(Charsets.ISO_8859_1)
+        val epub = PDFWorkConverter().convert("Story", simple)
+        assertNotNull("plain literal text should still be extractable", epub)
+        assertEquals(ImportedFileFormat.EPUB, ImportedFileFormat.sniff(epub!!, "Story.epub"))
+    }
+}

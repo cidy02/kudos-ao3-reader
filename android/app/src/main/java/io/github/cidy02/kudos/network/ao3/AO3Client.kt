@@ -1,0 +1,414 @@
+package io.github.cidy02.kudos.network.ao3
+
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.HttpUrl.Companion.toHttpUrl
+
+interface AO3Client {
+    suspend fun get(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): AO3Result<AO3HttpResponse>
+
+    suspend fun getBytes(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): AO3Result<AO3BinaryResponse> {
+        return when (val result = get(url, headers)) {
+            is AO3Result.Failure -> result
+            is AO3Result.Success -> AO3Result.Success(
+                AO3BinaryResponse(
+                    url = result.value.url,
+                    statusCode = result.value.statusCode,
+                    headers = result.value.headers,
+                    body = result.value.body.toByteArray()
+                )
+            )
+        }
+    }
+}
+
+interface AO3FormPostClient {
+    suspend fun postForm(
+        url: String,
+        formFields: List<Pair<String, String>>,
+        headers: Map<String, String> = emptyMap()
+    ): AO3Result<AO3HttpResponse>
+}
+
+class OkHttpAO3Client(
+    private val okHttpClient: OkHttpClient,
+    private val config: AO3NetworkConfig = AO3NetworkConfig(),
+    private val coordinator: AO3RequestCoordinator = AO3RequestCoordinator(config),
+    private val coalescer: AO3RequestCoalescer<AO3RequestKey, AO3Result<AO3HttpResponse>> =
+        AO3RequestCoalescer(),
+    private val retryPolicy: AO3RetryPolicy = AO3RetryPolicy(config),
+    private val delay: AO3Delay = CoroutineAO3Delay
+) : AO3Client, AO3FormPostClient {
+    constructor(
+        config: AO3NetworkConfig = AO3NetworkConfig()
+    ) : this(
+        okHttpClient = defaultOkHttpClient(config),
+        config = config
+    )
+
+    companion object {
+        /**
+         * Default OkHttp stack: redirects are followed by
+         * [AO3RedirectCookieRelayInterceptor] so an explicit Cookie header is
+         * refreshed from Set-Cookie on same-host AO3 redirects and stripped
+         * when the redirect leaves trusted AO3 hosts.
+         */
+        fun defaultOkHttpClient(config: AO3NetworkConfig = AO3NetworkConfig()): OkHttpClient {
+            return OkHttpClient.Builder()
+                .callTimeout(config.callTimeoutSeconds, TimeUnit.SECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .addInterceptor(AO3RedirectCookieRelayInterceptor())
+                .build()
+        }
+    }
+
+    override suspend fun get(
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3HttpResponse> {
+        val key = try {
+            AO3RequestKey.get(url, headers)
+        } catch (error: IllegalArgumentException) {
+            return AO3Result.Failure(AO3Error.Validation("Invalid AO3 URL: $url"))
+        }
+
+        return coalescer.coalesce(key) {
+            executeWithRetry(
+                method = AO3HttpMethod.GET,
+                url = key.canonicalUrl,
+                headers = headers
+            )
+        }
+    }
+
+    override suspend fun getBytes(
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3BinaryResponse> {
+        val key = try {
+            AO3RequestKey.get(url, headers)
+        } catch (error: IllegalArgumentException) {
+            return AO3Result.Failure(AO3Error.Validation("Invalid AO3 URL: $url"))
+        }
+
+        return executeBinaryWithRetry(
+            method = AO3HttpMethod.GET,
+            url = key.canonicalUrl,
+            headers = headers
+        )
+    }
+
+    override suspend fun postForm(
+        url: String,
+        formFields: List<Pair<String, String>>,
+        headers: Map<String, String>
+    ): AO3Result<AO3HttpResponse> {
+        val canonicalUrl = try {
+            url.toHttpUrl().toString()
+        } catch (error: IllegalArgumentException) {
+            return AO3Result.Failure(AO3Error.Validation("Invalid AO3 URL: $url"))
+        }
+
+        return executeWithRetry(
+            method = AO3HttpMethod.POST,
+            url = canonicalUrl,
+            headers = headers,
+            formBody = AO3FormEncoding.encode(formFields)
+        )
+    }
+
+    private suspend fun executeWithRetry(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>,
+        formBody: String? = null
+    ): AO3Result<AO3HttpResponse> {
+        var retryNumber = 0
+        while (true) {
+            val result = coordinator.coordinate {
+                performOnce(method, url, headers, formBody)
+            }
+            if (result is AO3Result.Success) return result
+
+            val error = (result as AO3Result.Failure).error
+            retryNumber += 1
+            if (!retryPolicy.shouldRetry(method, error, retryNumber)) return result
+
+            delay.delay(retryPolicy.retryDelayMillis(error, retryNumber))
+        }
+    }
+
+    private suspend fun performOnce(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>,
+        formBody: String? = null
+    ): AO3Result<AO3HttpResponse> {
+        val request = buildRequest(method, url, headers, formBody)
+        return try {
+            val response = okHttpClient.newCall(request).await()
+            withContext(Dispatchers.IO) {
+                response.use {
+                    if (method == AO3HttpMethod.POST) {
+                        mapWriteResponse(it, originalUrl = url)
+                    } else {
+                        mapResponse(it, originalUrl = url)
+                    }
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            AO3Result.Failure(AO3Error.networkFromTransport(error))
+        }
+    }
+
+    private suspend fun executeBinaryWithRetry(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3BinaryResponse> {
+        var retryNumber = 0
+        while (true) {
+            val result = coordinator.coordinate {
+                performBinaryOnce(method, url, headers)
+            }
+            if (result is AO3Result.Success) return result
+
+            val error = (result as AO3Result.Failure).error
+            retryNumber += 1
+            if (!retryPolicy.shouldRetry(method, error, retryNumber)) return result
+
+            delay.delay(retryPolicy.retryDelayMillis(error, retryNumber))
+        }
+    }
+
+    private suspend fun performBinaryOnce(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>
+    ): AO3Result<AO3BinaryResponse> {
+        val request = buildRequest(method, url, headers)
+        return try {
+            val response = okHttpClient.newCall(request).await()
+            withContext(Dispatchers.IO) {
+                response.use { mapBinaryResponse(it, originalUrl = url) }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            AO3Result.Failure(AO3Error.networkFromTransport(error))
+        }
+    }
+
+    private fun buildRequest(
+        method: AO3HttpMethod,
+        url: String,
+        headers: Map<String, String>,
+        formBody: String? = null
+    ): Request {
+        val builder = Request.Builder().url(url)
+        headers.forEach { (name, value) ->
+            builder.header(name, value)
+        }
+        builder.header("User-Agent", AO3UserAgent.VALUE)
+
+        return when (method) {
+            AO3HttpMethod.GET -> builder.get().build()
+            AO3HttpMethod.POST -> {
+                val mediaType = "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+                builder.post((formBody ?: "").toRequestBody(mediaType)).build()
+            }
+            AO3HttpMethod.PUT,
+            AO3HttpMethod.PATCH,
+            AO3HttpMethod.DELETE -> error("$method is not implemented in Phase 4.")
+        }
+    }
+
+    private fun mapWriteResponse(
+        response: Response,
+        originalUrl: String
+    ): AO3Result<AO3HttpResponse> {
+        val body = response.body.string()
+        val statusCode = response.code
+        val retryAfterMillis = AO3RetryAfter.parseMillis(response.header("Retry-After"))
+        val finalUrl = response.request.url.toString()
+
+        if (
+            AO3Constants.isLoginUrl(finalUrl) &&
+            !AO3Constants.isLoginUrl(originalUrl)
+        ) {
+            return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+
+        if (AO3OverloadDetector.isOverloadPage(body)) {
+            return AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis))
+        }
+
+        return when (statusCode) {
+            401 -> AO3Result.Failure(AO3Error.AuthenticationRequired)
+            403 -> AO3Result.Failure(AO3Error.Forbidden)
+            429 -> AO3Result.Failure(AO3Error.RateLimited(retryAfterMillis))
+            in 500..599 -> AO3Result.Failure(AO3Error.Server(statusCode))
+            else -> AO3Result.Success(
+                AO3HttpResponse(
+                    url = finalUrl,
+                    statusCode = statusCode,
+                    headers = response.headers.toMultimap(),
+                    body = body
+                )
+            )
+        }
+    }
+
+    private fun mapResponse(
+        response: Response,
+        originalUrl: String
+    ): AO3Result<AO3HttpResponse> {
+        val body = response.body.string()
+        val statusCode = response.code
+        val retryAfterMillis = AO3RetryAfter.parseMillis(response.header("Retry-After"))
+        val finalUrl = response.request.url.toString()
+
+        if (
+            AO3Constants.isLoginUrl(finalUrl) &&
+            !AO3Constants.isLoginUrl(originalUrl)
+        ) {
+            return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+
+        if (AO3OverloadDetector.isOverloadPage(body)) {
+            return AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis))
+        }
+
+        return when (statusCode) {
+            in 200..299 -> AO3Result.Success(
+                AO3HttpResponse(
+                    url = finalUrl,
+                    statusCode = statusCode,
+                    headers = response.headers.toMultimap(),
+                    body = body
+                )
+            )
+            400 -> AO3Result.Failure(AO3Error.BadRequest)
+            401 -> AO3Result.Failure(AO3Error.AuthenticationRequired)
+            403 -> AO3Result.Failure(AO3Error.Forbidden)
+            404 -> AO3Result.Failure(AO3Error.NotFound)
+            429 -> AO3Result.Failure(AO3Error.RateLimited(retryAfterMillis))
+            in 500..599 -> AO3Result.Failure(AO3Error.Server(statusCode))
+            else -> AO3Result.Failure(AO3Error.Http(statusCode))
+        }
+    }
+
+    private fun mapBinaryResponse(
+        response: Response,
+        originalUrl: String
+    ): AO3Result<AO3BinaryResponse> {
+        val bytes = response.body.bytes()
+        val statusCode = response.code
+        val retryAfterMillis = AO3RetryAfter.parseMillis(response.header("Retry-After"))
+        val finalUrl = response.request.url.toString()
+
+        if (
+            AO3Constants.isLoginUrl(finalUrl) &&
+            !AO3Constants.isLoginUrl(originalUrl)
+        ) {
+            return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+
+        val textPreview = bytes.decodeToString(endIndex = minOf(bytes.size, 8192))
+        if (AO3OverloadDetector.isOverloadPage(textPreview)) {
+            return AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis))
+        }
+
+        return when (statusCode) {
+            in 200..299 -> AO3Result.Success(
+                AO3BinaryResponse(
+                    url = finalUrl,
+                    statusCode = statusCode,
+                    headers = response.headers.toMultimap(),
+                    body = bytes
+                )
+            )
+            400 -> AO3Result.Failure(AO3Error.BadRequest)
+            401 -> AO3Result.Failure(AO3Error.AuthenticationRequired)
+            403 -> AO3Result.Failure(AO3Error.Forbidden)
+            404 -> AO3Result.Failure(AO3Error.NotFound)
+            429 -> AO3Result.Failure(AO3Error.RateLimited(retryAfterMillis))
+            in 500..599 -> AO3Result.Failure(AO3Error.Server(statusCode))
+            else -> AO3Result.Failure(AO3Error.Http(statusCode))
+        }
+    }
+
+    private suspend fun Call.await(): Response {
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { cancel() }
+            enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    if (continuation.isActive) {
+                        continuation.resume(response)
+                    } else {
+                        response.close()
+                    }
+                }
+            })
+        }
+    }
+}
+
+object AO3FormEncoding {
+    fun encode(fields: List<Pair<String, String>>): String {
+        return fields.joinToString("&") { (key, value) ->
+            "${percentEncode(key)}=${percentEncode(value)}"
+        }
+    }
+
+    private fun percentEncode(value: String): String {
+        val bytes = value.encodeToByteArray()
+        val builder = StringBuilder()
+        for (byte in bytes) {
+            val unsigned = byte.toInt() and 0xff
+            val char = unsigned.toChar()
+            if (
+                char in 'A'..'Z' ||
+                char in 'a'..'z' ||
+                char in '0'..'9' ||
+                char == '-' ||
+                char == '.' ||
+                char == '_' ||
+                char == '~'
+            ) {
+                builder.append(char)
+            } else {
+                builder.append('%')
+                builder.append(unsigned.toString(16).uppercase().padStart(2, '0'))
+            }
+        }
+        return builder.toString()
+    }
+}

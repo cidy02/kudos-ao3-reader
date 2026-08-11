@@ -1,0 +1,1889 @@
+package io.github.cidy02.kudos.account
+
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import io.github.cidy02.kudos.R
+import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.auth.AO3AuthState
+import io.github.cidy02.kudos.auth.AO3SessionHealth
+import io.github.cidy02.kudos.network.ao3.account.AO3Collection
+import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.ui.components.AO3WorkCard
+import io.github.cidy02.kudos.ui.components.EmptyStateCard
+import io.github.cidy02.kudos.ui.components.ErrorStateCard
+import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.WorkCoverCard
+import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
+import io.github.cidy02.kudos.ui.components.coverCardStats
+import io.github.cidy02.kudos.ui.theme.Ao3Red
+import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.library.LibraryWorkListItem
+import io.github.cidy02.kudos.library.LibraryDisplayItem
+import io.github.cidy02.kudos.library.LibraryCarouselCard
+import io.github.cidy02.kudos.library.LibraryCardActions
+import java.util.concurrent.TimeUnit
+
+/**
+ * Account hub — Material 3 expression of the iOS Account SoT:
+ * profile header · Overview/Reading/Writing/Activity tabs · shortcut grid ·
+ * inline list browsers that reuse [AccountListRepository] / [AccountListType].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AccountScreen(
+    authRepository: AO3AuthRepository,
+    listRepository: AccountListRepository,
+    workRepository: WorkRepository,
+    onLogin: () -> Unit,
+    onOpenList: (AccountListType) -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenCollections: () -> Unit = {},
+    onOpenAO3Collections: () -> Unit = {},
+    onOpenDashboard: () -> Unit = {},
+    onOpenLocalHistory: () -> Unit = {},
+    onOpenLocalFavorites: () -> Unit = {},
+    onOpenAbout: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
+    onOpenWeb: (String) -> Unit = {},
+    onOpenWork: (AO3WorkSummary) -> Unit = {},
+    onOpenCollection: (AO3Collection) -> Unit = {},
+    onOpenSeries: (String) -> Unit = {},
+    inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
+    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository? = null,
+    countsCache: io.github.cidy02.kudos.account.AO3AccountListCountsCache? = null,
+    onOpenWorkComments: (workId: Long, focusedId: Long?) -> Unit = { _, _ -> },
+    modifier: Modifier = Modifier,
+    viewModel: AccountViewModel = viewModel(
+        factory = AccountViewModel.factory(
+            authRepository,
+            authorRepository,
+            countsCache
+        )
+    )
+) {
+    val state by viewModel.uiState.collectAsState()
+    val signedIn = state.authState is AO3AuthState.SignedIn
+    val username = (state.authState as? AO3AuthState.SignedIn)?.username
+
+    var tab by rememberSaveable { mutableStateOf(AccountHubTab.Overview.name) }
+    var readingKind by rememberSaveable { mutableStateOf(AccountReadingKind.MarkedForLater.name) }
+    var writingKind by rememberSaveable { mutableStateOf(AccountWritingKind.Works.name) }
+    var activityKind by rememberSaveable { mutableStateOf(AccountActivityKind.History.name) }
+    var selectedFandom by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailedMode by rememberSaveable { mutableStateOf(false) }
+
+    val selectedTab = AccountHubTab.entries.find { it.name == tab } ?: AccountHubTab.Overview
+    val selectedReading =
+        AccountReadingKind.entries.find { it.name == readingKind } ?: AccountReadingKind.MarkedForLater
+    val selectedWriting =
+        AccountWritingKind.entries.find { it.name == writingKind } ?: AccountWritingKind.Works
+    val selectedActivity =
+        AccountActivityKind.entries.find { it.name == activityKind } ?: AccountActivityKind.History
+
+    // Reset client fandom filter when the active list identity changes.
+    LaunchedEffect(selectedTab, selectedReading, selectedWriting, selectedActivity) {
+        selectedFandom = null
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        AccountProfileHeader(
+            authState = state.authState,
+            sessionHealth = state.sessionHealth,
+            avatarUrl = state.header?.avatarUrl,
+            onLogin = onLogin,
+            onLogout = viewModel::logout,
+            onVerifySession = viewModel::verifySession,
+            onOpenSettings = onOpenSettings,
+            onOpenAbout = onOpenAbout,
+            onOpenPrivacy = onOpenPrivacy,
+            onOpenBackup = onOpenBackup,
+            onOpenLocalHistory = onOpenLocalHistory,
+            onOpenLocalFavorites = onOpenLocalFavorites,
+            onOpenCollections = onOpenCollections,
+            onOpenAuthorProfile = { onOpenWeb("native:profile") }
+        )
+
+        AccountHubTabRow(
+            selected = selectedTab,
+            onSelect = { tab = it.name }
+        )
+
+        when (selectedTab) {
+            AccountHubTab.Overview -> {
+                OverviewTabContent(
+                    signedIn = signedIn,
+                    username = username,
+                    counts = state.counts,
+                    onOpenDashboard = onOpenDashboard,
+                    onOpenList = onOpenList,
+                    onOpenAO3Collections = onOpenAO3Collections,
+                    onOpenWeb = onOpenWeb
+                )
+            }
+            AccountHubTab.Reading -> {
+                ReadingTabContent(
+                    signedIn = signedIn,
+                    kind = selectedReading,
+                    onKindChange = { readingKind = it.name },
+                    listRepository = listRepository,
+                    workRepository = workRepository,
+                    detailedMode = detailedMode,
+                    onToggleDetailed = { detailedMode = !detailedMode },
+                    onLogin = onLogin,
+                    onOpenWork = onOpenWork,
+                    onOpenCollection = onOpenCollection,
+                    onOpenAO3Collections = onOpenAO3Collections
+                )
+            }
+            AccountHubTab.Writing -> {
+                WritingTabContent(
+                    signedIn = signedIn,
+                    username = username,
+                    kind = selectedWriting,
+                    onKindChange = { writingKind = it.name },
+                    selectedFandom = selectedFandom,
+                    onFandomChange = { selectedFandom = it },
+                    listRepository = listRepository,
+                    workRepository = workRepository,
+                    authorRepository = authorRepository,
+                    detailedMode = detailedMode,
+                    onToggleDetailed = { detailedMode = !detailedMode },
+                    onLogin = onLogin,
+                    onOpenWork = onOpenWork,
+                    onOpenSeries = onOpenSeries,
+                    onOpenWeb = onOpenWeb
+                )
+            }
+            AccountHubTab.Activity -> {
+                ActivityTabContent(
+                    signedIn = signedIn,
+                    kind = selectedActivity,
+                    onKindChange = { activityKind = it.name },
+                    listRepository = listRepository,
+                    workRepository = workRepository,
+                    onLogin = onLogin,
+                    onOpenWork = onOpenWork,
+                    username = username,
+                    inboxRepository = inboxRepository,
+                    commentRepository = commentRepository,
+                    onOpenWorkComments = onOpenWorkComments
+                )
+            }
+        }
+    }
+}
+
+// region Profile + tabs
+
+@Composable
+private fun AccountProfileHeader(
+    authState: AO3AuthState,
+    sessionHealth: AO3SessionHealth,
+    avatarUrl: String?,
+    onLogin: () -> Unit,
+    onLogout: () -> Unit,
+    onVerifySession: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenLocalHistory: () -> Unit,
+    onOpenLocalFavorites: () -> Unit,
+    onOpenCollections: () -> Unit,
+    onOpenAuthorProfile: () -> Unit = {}
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.clickable(enabled = authState is AO3AuthState.SignedIn) {
+                onOpenAuthorProfile()
+            }) {
+                AccountAvatar(avatarUrl = avatarUrl)
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                when (authState) {
+                    AO3AuthState.Restoring, AO3AuthState.SigningIn -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(
+                                text = if (authState is AO3AuthState.SigningIn) {
+                                    "Signing in…"
+                                } else {
+                                    "Checking session…"
+                                },
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                    is AO3AuthState.SignedIn -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = authState.username,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            SessionHealthIcon(sessionHealth)
+                        }
+                        Text(
+                            text = sessionHealthDetailText(sessionHealth),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = when (sessionHealth) {
+                                AO3SessionHealth.Expired -> MaterialTheme.colorScheme.error
+                                AO3SessionHealth.Unreachable -> Color(0xFFFF9500)
+                                else -> MaterialTheme.colorScheme.primary
+                            }
+                        )
+                    }
+                    AO3AuthState.SignedOut -> {
+                        Text(
+                            text = "Not signed in",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                        TextButton(
+                            onClick = onLogin,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                        ) {
+                            Text("Log In to AO3…")
+                        }
+                    }
+                    is AO3AuthState.Expired -> {
+                        Text(
+                            text = "Session expired",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        TextButton(
+                            onClick = onLogin,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                        ) {
+                            Text("Log In Again")
+                        }
+                    }
+                    is AO3AuthState.Error -> {
+                        Text(
+                            text = "Account error",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        TextButton(
+                            onClick = onLogin,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                        ) {
+                            Text("Log In")
+                        }
+                    }
+                }
+            }
+
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreHoriz,
+                        contentDescription = "Account menu"
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (authState is AO3AuthState.SignedIn) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (sessionHealth.isChecking) "Checking…" else "Verify Session"
+                                )
+                            },
+                            leadingIcon = {
+                                if (sessionHealth.isChecking) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Refresh,
+                                        contentDescription = null
+                                    )
+                                }
+                            },
+                            enabled = !sessionHealth.isChecking,
+                            onClick = {
+                                menuOpen = false
+                                onVerifySession()
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Settings") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenSettings()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Privacy & Local Data") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenPrivacy()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Backup") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenBackup()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Local Reading History") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenLocalHistory()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Favorites") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenLocalFavorites()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Local Collections") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenCollections()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("About Kudos") },
+                        onClick = {
+                            menuOpen = false
+                            onOpenAbout()
+                        }
+                    )
+                    if (authState is AO3AuthState.SignedIn) {
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Text("Log Out", color = MaterialTheme.colorScheme.error)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onLogout()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionHealthIcon(health: AO3SessionHealth) {
+    when (health) {
+        AO3SessionHealth.Unknown -> {
+            Icon(
+                imageVector = Icons.Outlined.CheckCircle,
+                contentDescription = "Signed in",
+                tint = Color(0xFF34C759),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AO3SessionHealth.Verifying -> {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp
+            )
+        }
+        is AO3SessionHealth.Healthy -> {
+            Icon(
+                imageVector = Icons.Outlined.Verified,
+                contentDescription = "Session verified",
+                tint = Color(0xFF34C759),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AO3SessionHealth.Expired -> {
+            Icon(
+                imageVector = Icons.Outlined.Cancel,
+                contentDescription = "Session expired",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AO3SessionHealth.Unreachable -> {
+            Icon(
+                imageVector = Icons.Outlined.WifiOff,
+                contentDescription = "Couldn't verify session",
+                tint = Color(0xFFFF9500),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+private fun sessionHealthDetailText(health: AO3SessionHealth): String {
+    return when (health) {
+        AO3SessionHealth.Unknown -> "Signed in to AO3"
+        AO3SessionHealth.Verifying -> "Checking session…"
+        is AO3SessionHealth.Healthy -> {
+            val ageMs = (System.currentTimeMillis() - health.verifiedAtEpochMillis).coerceAtLeast(0L)
+            val minutes = TimeUnit.MILLISECONDS.toMinutes(ageMs)
+            when {
+                minutes < 1L -> "Signed in · verified just now"
+                minutes == 1L -> "Signed in · verified 1 minute ago"
+                minutes < 60L -> "Signed in · verified $minutes minutes ago"
+                else -> {
+                    val hours = TimeUnit.MILLISECONDS.toHours(ageMs)
+                    if (hours == 1L) {
+                        "Signed in · verified 1 hour ago"
+                    } else {
+                        "Signed in · verified $hours hours ago"
+                    }
+                }
+            }
+        }
+        AO3SessionHealth.Expired -> "Session expired"
+        AO3SessionHealth.Unreachable -> "Signed in · couldn't verify"
+    }
+}
+
+@Composable
+private fun AccountAvatar(avatarUrl: String?) {
+    val context = LocalContext.current
+    Surface(
+        modifier = Modifier
+            .size(56.dp)
+            .semantics { contentDescription = "Account avatar" },
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            if (avatarUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(avatarUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_kudos_mark),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountHubTabRow(
+    selected: AccountHubTab,
+    onSelect: (AccountHubTab) -> Unit
+) {
+    val tabs = AccountHubTab.entries
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        tabs.forEachIndexed { index, hubTab ->
+            SegmentedButton(
+                selected = selected == hubTab,
+                onClick = { onSelect(hubTab) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = tabs.size),
+                label = {
+                    Text(
+                        text = hubTab.label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            )
+        }
+    }
+}
+
+// endregion
+
+// region Overview
+
+@Composable
+private fun OverviewTabContent(
+    signedIn: Boolean,
+    username: String?,
+    counts: Map<String, AO3AccountListCountsCache.Count>,
+    onOpenDashboard: () -> Unit,
+    onOpenList: (AccountListType) -> Unit,
+    onOpenAO3Collections: () -> Unit,
+    onOpenWeb: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var moreOnAo3MenuOpen by remember { mutableStateOf(false) }
+    val moreOnAo3Enabled = !username.isNullOrBlank()
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        item {
+            KudosSectionHeader(title = "Shortcuts")
+            Spacer(Modifier.height(8.dp))
+            AccountShortcutsGrid(
+                signedIn = signedIn,
+                counts = counts,
+                onOpenDashboard = onOpenDashboard,
+                onOpenList = onOpenList,
+                onOpenAO3Collections = onOpenAO3Collections
+            )
+        }
+        item {
+            KudosSectionHeader(title = "Account")
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AccountLinkRow(
+                    title = "Preferences",
+                    icon = Icons.Outlined.Tune,
+                    onClick = {
+                        if (signedIn) {
+                            onOpenWeb("native:preferences")
+                        } else {
+                            onOpenWeb("https://archiveofourown.org/preferences")
+                        }
+                    }
+                )
+                // Curated account-scoped AO3 destinations (iOS AccountMoreOnAO3View parity).
+                // Opens a menu first; each item hits the WebView fallback with the user path.
+                Box {
+                    AccountLinkRow(
+                        title = "More on AO3",
+                        icon = Icons.Outlined.Public,
+                        onClick = { moreOnAo3MenuOpen = true }
+                    )
+                    DropdownMenu(
+                        expanded = moreOnAo3MenuOpen,
+                        onDismissRequest = { moreOnAo3MenuOpen = false }
+                    ) {
+                        val destinations = listOf(
+                            Triple("Drafts", Icons.Outlined.Drafts, "works/drafts"),
+                            Triple("Pseuds", Icons.Outlined.People, "pseuds"),
+                            Triple("Skins", Icons.Outlined.Palette, "skins"),
+                            Triple("Statistics", Icons.Outlined.BarChart, "stats"),
+                            Triple("Co-Creator Requests", Icons.Outlined.PersonAdd, "creatorships"),
+                            Triple("Sign-ups", Icons.Outlined.EditNote, "signups"),
+                            Triple("Assignments", Icons.AutoMirrored.Outlined.Assignment, "assignments"),
+                            Triple("Claims", Icons.Outlined.Flag, "claims"),
+                            Triple("Related Works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
+                            Triple("Gifts", Icons.Outlined.CardGiftcard, "gifts")
+                        )
+                        destinations.forEach { (title, icon, pathSuffix) ->
+                            DropdownMenuItem(
+                                text = { Text(title) },
+                                leadingIcon = {
+                                    Icon(imageVector = icon, contentDescription = null)
+                                },
+                                enabled = moreOnAo3Enabled,
+                                onClick = {
+                                    moreOnAo3MenuOpen = false
+                                    val user = username
+                                    if (!user.isNullOrBlank()) {
+                                        // Drafts shares the same helper as Writing → Drafts.
+                                        val url = if (pathSuffix == "works/drafts") {
+                                            io.github.cidy02.kudos.network.ao3.author.AO3AuthorUrls
+                                                .userDraftsUrl(user)
+                                        } else {
+                                            "https://archiveofourown.org/users/$user/$pathSuffix"
+                                        }
+                                        if (url != null) onOpenWeb(url)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (!signedIn) {
+            item {
+                Text(
+                    text = "Log in to use AO3 subscriptions, bookmarks, history, and your reading list.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
+        }
+        item {
+            // Quiet help affordance — iOS keeps bug/source off the overview face.
+            TextButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cidy02/kudos-ao3-reader"))
+                    runCatching { context.startActivity(intent) }
+                }
+            ) {
+                Text("Source on GitHub", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountShortcutsGrid(
+    signedIn: Boolean,
+    counts: Map<String, AO3AccountListCountsCache.Count>,
+    onOpenDashboard: () -> Unit,
+    onOpenList: (AccountListType) -> Unit,
+    onOpenAO3Collections: () -> Unit
+) {
+    val shortcuts = listOf(
+        ShortcutItem(
+            "My Dashboard",
+            Icons.Outlined.GridView,
+            enabled = signedIn,
+            onClick = onOpenDashboard
+        ),
+        ShortcutItem(
+            "My Subscriptions",
+            Icons.Outlined.NotificationsNone,
+            enabled = signedIn,
+            count = counts[AccountListType.Subscriptions.listKey],
+            onClick = { onOpenList(AccountListType.Subscriptions) }
+        ),
+        ShortcutItem(
+            "My Works",
+            Icons.Outlined.Description,
+            enabled = signedIn,
+            count = counts[AccountListType.MyWorks.listKey],
+            onClick = { onOpenList(AccountListType.MyWorks) }
+        ),
+        ShortcutItem(
+            "My Bookmarks",
+            Icons.Outlined.BookmarkBorder,
+            enabled = signedIn,
+            count = counts[AccountListType.Bookmarks.listKey],
+            onClick = { onOpenList(AccountListType.Bookmarks) }
+        ),
+        ShortcutItem(
+            "My Collections",
+            Icons.Outlined.Collections,
+            enabled = signedIn,
+            onClick = onOpenAO3Collections
+        ),
+        ShortcutItem(
+            "My History",
+            Icons.Outlined.History,
+            enabled = signedIn,
+            count = counts[AccountListType.History.listKey],
+            onClick = { onOpenList(AccountListType.History) }
+        )
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        shortcuts.chunked(3).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { item ->
+                    AccountShortcutTile(
+                        item = item,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Pad incomplete final rows so tiles keep equal width.
+                repeat(3 - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+private data class ShortcutItem(
+    val title: String,
+    val icon: ImageVector,
+    val enabled: Boolean,
+    val count: AO3AccountListCountsCache.Count? = null,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun AccountShortcutTile(
+    item: ShortcutItem,
+    modifier: Modifier = Modifier
+) {
+    val iconTint = if (item.enabled) Ao3Red else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val textColor = if (item.enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
+    Card(
+        onClick = item.onClick,
+        enabled = item.enabled,
+        modifier = modifier.aspectRatio(1f),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.7f)
+        ),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = textColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            item.count?.displayText?.let { count ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 0.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                ) {
+                    Text(
+                        text = count,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountLinkRow(
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = MaterialTheme.shapes.large
+    ) {
+        ListItem(
+            headlineContent = { Text(title) },
+            leadingContent = {
+                Icon(imageVector = icon, contentDescription = null, tint = Ao3Red)
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            colors = ListItemDefaults.colors(
+                containerColor = Color.Transparent
+            )
+        )
+    }
+}
+
+// endregion
+
+// region Reading / Writing / Activity tabs
+
+@Composable
+private fun ReadingTabContent(
+    signedIn: Boolean,
+    kind: AccountReadingKind,
+    onKindChange: (AccountReadingKind) -> Unit,
+    listRepository: AccountListRepository,
+    workRepository: WorkRepository,
+    detailedMode: Boolean,
+    onToggleDetailed: () -> Unit,
+    onLogin: () -> Unit,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenCollection: (AO3Collection) -> Unit,
+    onOpenAO3Collections: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AccountListKindPicker(
+                label = kind.label,
+                icon = when (kind) {
+                    AccountReadingKind.MarkedForLater -> Icons.Outlined.Schedule
+                    AccountReadingKind.Subscriptions -> Icons.Outlined.NotificationsNone
+                    AccountReadingKind.Bookmarks -> Icons.Outlined.BookmarkBorder
+                    AccountReadingKind.Collections -> Icons.Outlined.Collections
+                },
+                options = AccountReadingKind.entries.map { it.label to it },
+                onSelect = onKindChange,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onToggleDetailed) {
+                Icon(
+                    imageVector = if (detailedMode) Icons.Outlined.GridView else Icons.AutoMirrored.Outlined.List,
+                    contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
+                )
+            }
+        }
+
+        if (!signedIn) {
+            SignInRequiredCard(onLogin)
+            return
+        }
+
+        when (kind) {
+            AccountReadingKind.Collections -> {
+                HubCollectionsPane(
+                    listRepository = listRepository,
+                    onLogin = onLogin,
+                    onOpenCollection = onOpenCollection,
+                    onOpenFullIndex = onOpenAO3Collections
+                )
+            }
+            else -> {
+                val listType = kind.toAccountListType() ?: return
+                HubWorksPane(
+                    listType = listType,
+                    listRepository = listRepository,
+                    workRepository = workRepository,
+                    detailedMode = detailedMode,
+                    onLogin = onLogin,
+                    onOpenWork = onOpenWork,
+                    sectionTitle = kind.label
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WritingTabContent(
+    signedIn: Boolean,
+    username: String?,
+    kind: AccountWritingKind,
+    onKindChange: (AccountWritingKind) -> Unit,
+    selectedFandom: String?,
+    onFandomChange: (String?) -> Unit,
+    listRepository: AccountListRepository,
+    workRepository: WorkRepository,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository?,
+    detailedMode: Boolean,
+    onToggleDetailed: () -> Unit,
+    onLogin: () -> Unit,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenSeries: (String) -> Unit,
+    onOpenWeb: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AccountListKindPicker(
+                label = kind.label,
+                icon = when (kind) {
+                    AccountWritingKind.Works -> Icons.Outlined.Description
+                    AccountWritingKind.Series -> Icons.Outlined.Collections
+                    AccountWritingKind.Drafts -> Icons.Outlined.Drafts
+                },
+                options = AccountWritingKind.entries.map { it.label to it },
+                onSelect = onKindChange,
+                modifier = Modifier.weight(1f)
+            )
+            // Density toggle only applies to native work lists (Works).
+            if (kind == AccountWritingKind.Works) {
+                IconButton(onClick = onToggleDetailed) {
+                    Icon(
+                        imageVector = if (detailedMode) {
+                            Icons.Outlined.GridView
+                        } else {
+                            Icons.AutoMirrored.Outlined.List
+                        },
+                        contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
+                    )
+                }
+            }
+        }
+
+        if (!signedIn) {
+            SignInRequiredCard(onLogin)
+            return
+        }
+
+        when (kind) {
+            AccountWritingKind.Works -> {
+                HubWorksPane(
+                    listType = AccountListType.MyWorks,
+                    listRepository = listRepository,
+                    workRepository = workRepository,
+                    detailedMode = detailedMode,
+                    onLogin = onLogin,
+                    onOpenWork = onOpenWork,
+                    sectionTitle = "Works",
+                    fandomFilter = selectedFandom,
+                    onFandomFilterChange = onFandomChange,
+                    showFandomChips = true
+                )
+            }
+            AccountWritingKind.Series -> {
+                // iOS: Writing → Series reuses the signed-in user's author-profile
+                // series tab (`syncProfileTab(.series)`). Same parser/source here.
+                if (username.isNullOrBlank() || authorRepository == null) {
+                    EmptyStateCard(
+                        title = "Series unavailable",
+                        message = "Couldn't load your series. Try signing in again."
+                    )
+                } else {
+                    HubSeriesPane(
+                        username = username,
+                        authorRepository = authorRepository,
+                        onLogin = onLogin,
+                        onOpenSeries = onOpenSeries
+                    )
+                }
+            }
+            AccountWritingKind.Drafts -> {
+                // iOS: Writing → Drafts opens AO3 web (`works/drafts`), not a
+                // native list. Same destination as Overview → More on AO3 → Drafts.
+                DraftsWebCard(
+                    username = username,
+                    onOpenWeb = onOpenWeb
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Writing → Drafts: open the signed-in user's AO3 drafts page in the in-app web
+ * surface (iOS `AccountExternalNavCard` parity). No native drafts parser.
+ */
+@Composable
+private fun DraftsWebCard(
+    username: String?,
+    onOpenWeb: (String) -> Unit
+) {
+    val draftsUrl = username
+        ?.takeIf { it.isNotBlank() }
+        ?.let { io.github.cidy02.kudos.network.ao3.author.AO3AuthorUrls.userDraftsUrl(it) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AccountLinkRow(
+            title = "Open Drafts on AO3",
+            icon = Icons.Outlined.Drafts,
+            onClick = {
+                if (draftsUrl != null) onOpenWeb(draftsUrl)
+            }
+        )
+        Text(
+            text = "Drafts still open on the Archive until a native editor ships.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun HubSeriesPane(
+    username: String,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository,
+    onLogin: () -> Unit,
+    onOpenSeries: (String) -> Unit,
+    viewModel: AccountSeriesViewModel = viewModel(
+        key = "hub-series-$username",
+        factory = AccountSeriesViewModel.factory(username, authorRepository)
+    )
+) {
+    val state by viewModel.uiState.collectAsState()
+    when (val current = state) {
+        AccountSeriesUiState.Loading -> LoadingStateCard("Loading series")
+        AccountSeriesUiState.AuthRequired -> SignInRequiredCard(onLogin)
+        is AccountSeriesUiState.Failed -> ErrorStateCard(
+            title = "Couldn't load series",
+            message = current.message,
+            primaryActionLabel = "Retry",
+            onPrimaryAction = { viewModel.load(1) }
+        )
+        is AccountSeriesUiState.Loaded -> {
+            val page = current.page
+            if (page.series.isEmpty()) {
+                EmptyStateCard(
+                    title = "No series yet",
+                    message = "Series you create on AO3 show up here."
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item {
+                        KudosSectionHeader(
+                            title = "Series",
+                            subtitle = if (page.totalPages > 1) {
+                                "Page ${page.currentPage} of ${page.totalPages}"
+                            } else {
+                                null
+                            }
+                        )
+                    }
+                    items(page.series, key = { it.id }) { item ->
+                        Card(
+                            onClick = { onOpenSeries(item.url) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        text = item.title,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                supportingContent = {
+                                    val meta = buildList {
+                                        item.workCount?.let { add("$it works") }
+                                        item.words?.let { add("$it words") }
+                                        if (item.dateUpdated.isNotBlank()) add(item.dateUpdated)
+                                    }.joinToString(" · ")
+                                    if (meta.isNotBlank()) {
+                                        Text(
+                                            text = meta,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
+                        }
+                    }
+                    if (page.totalPages > 1) {
+                        item {
+                            PaginationControls(
+                                page = page.currentPage,
+                                totalPages = page.totalPages,
+                                onLoadPage = viewModel::load
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityTabContent(
+    signedIn: Boolean,
+    kind: AccountActivityKind,
+    onKindChange: (AccountActivityKind) -> Unit,
+    listRepository: AccountListRepository,
+    workRepository: WorkRepository,
+    onLogin: () -> Unit,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    onOpenWorkComments: (Long, Long?) -> Unit,
+    username: String? = null,
+    inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
+    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+        AccountListKindPicker(
+            label = kind.label,
+            icon = when (kind) {
+                AccountActivityKind.History -> Icons.Outlined.History
+                AccountActivityKind.Inbox -> Icons.Outlined.Inbox
+            },
+            options = AccountActivityKind.entries.map { it.label to it },
+            onSelect = onKindChange
+        )
+
+        if (!signedIn) {
+            SignInRequiredCard(onLogin)
+            return
+        }
+
+        when (kind) {
+            AccountActivityKind.History -> {
+                HubWorksPane(
+                    listType = AccountListType.History,
+                    listRepository = listRepository,
+                    workRepository = workRepository,
+                    detailedMode = false, // History always compact in activity tab
+                    onLogin = onLogin,
+                    onOpenWork = onOpenWork,
+                    sectionTitle = "My AO3 History"
+                )
+            }
+            AccountActivityKind.Inbox -> {
+                if (inboxRepository != null && commentRepository != null) {
+                    AccountInboxPane(
+                        inboxRepository = inboxRepository,
+                        commentRepository = commentRepository,
+                        currentUsername = username,
+                        onOpenWorkComments = onOpenWorkComments,
+                        settingsRepository = listRepository.settingsRepository
+                    )
+                } else {
+                    EmptyStateCard(
+                        title = "Inbox not available yet",
+                        message = "AO3 inbox messages stay on the website for now."
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> AccountListKindPicker(
+    label: String,
+    icon: ImageVector,
+    options: List<Pair<String, T>>,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier.fillMaxWidth()) {
+        Card(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(imageVector = icon, contentDescription = null, tint = Ao3Red)
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = Icons.Outlined.ExpandMore,
+                    contentDescription = "Choose list",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (optionLabel, value) ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel) },
+                    onClick = {
+                        expanded = false
+                        onSelect(value)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignInRequiredCard(onLogin: () -> Unit) {
+    EmptyStateCard(
+        title = "AO3 session required",
+        message = "Log in to AO3 to browse this account list.",
+        primaryActionLabel = "Log In to AO3",
+        onPrimaryAction = onLogin
+    )
+}
+
+@Composable
+private fun HubWorksPane(
+    listType: AccountListType,
+    listRepository: AccountListRepository,
+    workRepository: WorkRepository,
+    onLogin: () -> Unit,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    sectionTitle: String,
+    fandomFilter: String? = null,
+    onFandomFilterChange: (String?) -> Unit = {},
+    showFandomChips: Boolean = false,
+    detailedMode: Boolean = false,
+    viewModel: AccountListViewModel = viewModel(
+        key = "hub-${listType.listKey}",
+        factory = AccountListViewModel.factory(listType, listRepository, workRepository)
+    )
+) {
+    val state by viewModel.uiState.collectAsState()
+
+    when (val current = state) {
+        AccountListUiState.Loading -> LoadingStateCard("Loading ${listType.title}")
+        AccountListUiState.AuthRequired -> SignInRequiredCard(onLogin)
+        is AccountListUiState.Failed -> ErrorStateCard(
+            title = "Could not load ${listType.title}",
+            message = current.message,
+            primaryActionLabel = "Retry",
+            onPrimaryAction = { viewModel.load(1) }
+        )
+        is AccountListUiState.Loaded -> {
+            val allWorks = current.canonicalWorks
+            if (allWorks.isEmpty() && current.page.works.isEmpty()) {
+                EmptyStateCard(title = listType.emptyTitle, message = listType.emptyMessage)
+                return
+            }
+
+            val fandomCounts = remember(allWorks) {
+                allWorks
+                    .flatMap { it.remote.fandoms }
+                    .filter { it.isNotBlank() }
+                    .groupingBy { it }
+                    .eachCount()
+                    .entries
+                    .sortedByDescending { it.value }
+            }
+            val works = if (fandomFilter.isNullOrBlank()) {
+                allWorks
+            } else {
+                allWorks.filter { work -> work.remote.fandoms.any { it == fandomFilter } }
+            }
+
+            if (detailedMode) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = WorkCoverCardMetrics.width),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (showFandomChips && fandomCounts.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Fandom",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        FilterChip(
+                                            selected = fandomFilter == null,
+                                            onClick = { onFandomFilterChange(null) },
+                                            label = { Text("All") }
+                                        )
+                                    }
+                                    items(fandomCounts, key = { it.key }) { entry ->
+                                        val label = if (entry.value > 1) {
+                                            "${entry.key} (${entry.value})"
+                                        } else {
+                                            entry.key
+                                        }
+                                        FilterChip(
+                                            selected = fandomFilter == entry.key,
+                                            onClick = { onFandomFilterChange(entry.key) },
+                                            label = {
+                                                Text(
+                                                    text = label,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        KudosSectionHeader(
+                            title = sectionTitle,
+                            subtitle = if (current.page.totalPages > 1) {
+                                "Page ${current.page.currentPage} of ${current.page.totalPages}"
+                            } else {
+                                null
+                            }
+                        )
+                    }
+
+                    if (works.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            EmptyStateCard(
+                                title = "No works in this fandom",
+                                message = "Try another fandom chip or clear the filter."
+                            )
+                        }
+                    } else {
+                        gridItems(works, key = { "${listType.listKey}-${it.id}" }) { work ->
+                            if (work.local != null) {
+                                LibraryCarouselCard(
+                                    display = LibraryDisplayItem(
+                                        item = LibraryWorkListItem(
+                                            work = work.local,
+                                            userTags = emptyList(), // Later: pair tags too
+                                            collections = emptyList()
+                                        )
+                                    ),
+                                    showProgress = true,
+                                    footerOverride = null,
+                                    actions = LibraryCardActions(
+                                        onOpenWork = { onOpenWork(work.remote) },
+                                        onOpenReader = { onOpenWork(work.remote) }, // Detail handles read
+                                        onToggleFavorite = { },
+                                        onToggleFinished = { },
+                                        onRemove = { },
+                                        onSetSaved = { _, _ -> },
+                                        onSelect = { },
+                                        onReveal = { },
+                                        onAddToQueue = { },
+                                        onAddToCollection = { },
+                                        onOpenComments = { }
+                                    )
+                                )
+                            } else {
+                                AccountRemoteWorkCover(work = work.remote, onOpen = { onOpenWork(work.remote) })
+                            }
+                        }
+                    }
+
+                    if (current.page.totalPages > 1) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            PaginationControls(
+                                page = current.page.currentPage,
+                                totalPages = current.page.totalPages,
+                                onLoadPage = viewModel::load
+                            )
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (showFandomChips && fandomCounts.isNotEmpty()) {
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Fandom",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        FilterChip(
+                                            selected = fandomFilter == null,
+                                            onClick = { onFandomFilterChange(null) },
+                                            label = { Text("All") }
+                                        )
+                                    }
+                                    items(fandomCounts, key = { it.key }) { entry ->
+                                        FilterChip(
+                                            selected = fandomFilter == entry.key,
+                                            onClick = { onFandomFilterChange(entry.key) },
+                                            label = { Text(entry.key) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        KudosSectionHeader(title = sectionTitle)
+                    }
+                    items(works, key = { "${listType.listKey}-${it.id}" }) { work ->
+                        AO3WorkCard(
+                            work = work.remote,
+                            onOpenWork = onOpenWork,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (current.page.totalPages > 1) {
+                        item {
+                            PaginationControls(
+                                page = current.page.currentPage,
+                                totalPages = current.page.totalPages,
+                                onLoadPage = viewModel::load
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HubCollectionsPane(
+    listRepository: AccountListRepository,
+    onLogin: () -> Unit,
+    onOpenCollection: (AO3Collection) -> Unit,
+    onOpenFullIndex: () -> Unit,
+    viewModel: AO3CollectionsViewModel = viewModel(
+        key = "hub-collections",
+        factory = AO3CollectionsViewModel.factory(listRepository)
+    )
+) {
+    val state by viewModel.uiState.collectAsState()
+    when (val current = state) {
+        AO3CollectionsUiState.Loading -> LoadingStateCard("Loading collections")
+        AO3CollectionsUiState.AuthRequired -> SignInRequiredCard(onLogin)
+        is AO3CollectionsUiState.Failed -> ErrorStateCard(
+            title = "Couldn't load collections",
+            message = current.message,
+            primaryActionLabel = "Retry",
+            onPrimaryAction = viewModel::load
+        )
+        is AO3CollectionsUiState.Loaded -> {
+            if (current.collections.isEmpty()) {
+                EmptyStateCard(
+                    title = "No collections yet",
+                    message = "Collections you create or maintain on AO3 show up here."
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    item {
+                        KudosSectionHeader(
+                            title = "Collections",
+                            trailing = {
+                                TextButton(onClick = onOpenFullIndex) {
+                                    Text("See all")
+                                }
+                            }
+                        )
+                    }
+                    items(current.collections, key = { it.name }) { collection ->
+                        Card(
+                            onClick = { onOpenCollection(collection) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ListItem(
+                                headlineContent = { Text(collection.title) },
+                                supportingContent = if (collection.byline.isNotBlank()) {
+                                    {
+                                        Text(
+                                            text = collection.byline,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Collections,
+                                        contentDescription = null,
+                                        tint = Ao3Red
+                                    )
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                                        contentDescription = null
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountRemoteWorkCover(
+    work: AO3WorkSummary,
+    onOpen: () -> Unit
+) {
+    WorkCoverCard(
+        workId = work.id,
+        title = work.title,
+        author = work.authorText,
+        fandom = work.fandoms.firstOrNull { it.isNotBlank() },
+        stats = coverCardStats(
+            rating = work.rating,
+            chapters = work.chapters,
+            isComplete = work.isComplete == true,
+            wordCount = work.wordCount?.takeIf { it > 0 },
+            kudos = work.kudos?.takeIf { it > 0 }
+        ),
+        onOpen = onOpen,
+        onOpenDetails = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        statusChips = listOfNotNull(
+            if (work.isRestricted) "Restricted" else null
+        ),
+        contentDescription = "Open ${work.title}, by ${work.authorText}"
+    )
+}
+
+// endregion
+
+// region Full-page list (existing destinations)
+
+@Composable
+fun AccountListScreen(
+    type: AccountListType,
+    repository: AccountListRepository,
+    workRepository: WorkRepository,
+    onLogin: () -> Unit,
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: AccountListViewModel = viewModel(
+        key = type.listKey,
+        factory = AccountListViewModel.factory(type, repository, workRepository)
+    )
+) {
+    val state by viewModel.uiState.collectAsState()
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        when (val current = state) {
+            AccountListUiState.Loading -> LoadingStateCard("Loading ${type.title}")
+            AccountListUiState.AuthRequired -> EmptyStateCard(
+                title = "AO3 session required",
+                message = "Your AO3 session needs to be refreshed.",
+                primaryActionLabel = "Log In Again",
+                onPrimaryAction = onLogin
+            )
+            is AccountListUiState.Failed -> {
+                ErrorStateCard(
+                    title = "Could not load ${type.title}",
+                    message = current.message,
+                    primaryActionLabel = "Retry",
+                    onPrimaryAction = { viewModel.load(1) }
+                )
+            }
+            is AccountListUiState.Loaded -> {
+                if (current.canonicalWorks.isEmpty() && current.page.works.isEmpty()) {
+                    EmptyStateCard(
+                        title = type.emptyTitle,
+                        message = type.emptyMessage
+                    )
+                } else {
+                    AccountListContent(
+                        type = type,
+                        page = current.page.currentPage,
+                        totalPages = current.page.totalPages,
+                        works = current.canonicalWorks,
+                        onLoadPage = viewModel::load,
+                        onOpenWork = onOpenWork
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountListContent(
+    type: AccountListType,
+    page: Int,
+    totalPages: Int,
+    works: List<io.github.cidy02.kudos.works.CanonicalWork>,
+    onLoadPage: (Int) -> Unit,
+    onOpenWork: (AO3WorkSummary) -> Unit
+) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            if (totalPages > 1) {
+                PaginationControls(page, totalPages, onLoadPage)
+            }
+        }
+        items(works, key = { "${type.listKey}-${it.id}" }) { work ->
+            if (work.local != null) {
+                LibraryCarouselCard(
+                    display = LibraryDisplayItem(
+                        item = LibraryWorkListItem(
+                            work = work.local,
+                            userTags = emptyList(), // Later: pair tags too
+                            collections = emptyList()
+                        )
+                    ),
+                    showProgress = true,
+                    footerOverride = null,
+                    actions = LibraryCardActions(
+                        onOpenWork = { onOpenWork(work.remote) },
+                        onOpenReader = { onOpenWork(work.remote) }, // Detail handles read
+                        onToggleFavorite = { },
+                        onToggleFinished = { },
+                        onRemove = { },
+                        onSetSaved = { _, _ -> },
+                        onSelect = { },
+                        onReveal = { },
+                        onAddToQueue = { },
+                        onAddToCollection = { },
+                        onOpenComments = { }
+                    )
+                )
+            } else {
+                EnrichingAO3WorkCard(work = work.remote, onOpenWork = onOpenWork)
+            }
+        }
+        item {
+            if (totalPages > 1) {
+                PaginationControls(page, totalPages, onLoadPage)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaginationControls(page: Int, totalPages: Int, onLoadPage: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            enabled = page > 1,
+            onClick = { onLoadPage(page - 1) },
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Previous")
+        }
+        Text(
+            text = "Page $page of $totalPages",
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 12.dp),
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center
+        )
+        OutlinedButton(
+            enabled = page < totalPages,
+            onClick = { onLoadPage(page + 1) },
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Next")
+        }
+    }
+}
+
+// endregion
+
+/**
+ * An AO3 work card that fills itself in when the listing it came from was sparse.
+ *
+ * AO3's subscriptions page lists only title, id and author, so those cards would
+ * otherwise show no tags, no stats and no summary. The fetch happens per card as it
+ * appears rather than for the whole page up front: 20 works would be 20 politeness
+ * slots before anything could render, and scrolling past a work you didn't care
+ * about would still have cost one.
+ *
+ * A card that is already complete — every other list — does no work at all;
+ * `enrich` returns null immediately and this stays exactly [AO3WorkCard].
+ */
+@Composable
+private fun EnrichingAO3WorkCard(
+    work: AO3WorkSummary,
+    onOpenWork: (AO3WorkSummary) -> Unit
+) {
+    val context = LocalContext.current
+    val enricher = remember {
+        (context.applicationContext as? io.github.cidy02.kudos.KudosApplication)
+            ?.container?.sparseWorkEnricher
+    }
+    var enriched by remember(work.id) { mutableStateOf<AO3WorkSummary?>(null) }
+
+    // Keyed on the id so recycling this slot onto a different work restarts the
+    // effect instead of showing the previous work's metadata.
+    LaunchedEffect(work.id) {
+        enriched = enricher?.enrich(work)
+    }
+
+    AO3WorkCard(work = enriched ?: work, onOpenWork = onOpenWork)
+}

@@ -1,0 +1,1672 @@
+package io.github.cidy02.kudos.backup
+
+import io.github.cidy02.kudos.core.model.BackupSettings as CoreBackupSettings
+import io.github.cidy02.kudos.core.model.Bookmark
+import io.github.cidy02.kudos.core.model.CustomFont
+import io.github.cidy02.kudos.core.model.SavedSearch
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.local.entity.toDomain
+import io.github.cidy02.kudos.data.local.entity.toEntity
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.time.Instant
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+import kotlinx.serialization.encodeToString
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class BackupV1ManifestDecodeTest {
+    @Test
+    fun decodesCurrentAppleV1ManifestWithoutV2Fields() {
+        val manifest = BackupImporter.decodeManifest(v1ManifestJson().toByteArray(Charsets.UTF_8))
+
+        assertEquals(BackupVersion.APPLE_V1, manifest.version)
+        assertEquals(WORK_ID, manifest.works.single().id)
+        assertEquals("https://archiveofourown.org/works/123", manifest.works.single().sourceURL)
+        assertNull(manifest.works.single().comments)
+        assertNull(manifest.works.single().hits)
+        assertNull(manifest.works.single().knownChapterCount)
+        assertTrue(manifest.collections.isEmpty())
+        assertTrue(manifest.savedSearches.isEmpty())
+    }
+
+    @Test
+    fun importsAppleV1DirectoryPackageWhereAccessible() {
+        val root = Files.createTempDirectory("kudos-v1").resolve("Library.kudosbackup")
+        val works = root.resolve("Works")
+        val fonts = root.resolve("Fonts")
+        Files.createDirectories(works)
+        Files.createDirectories(fonts)
+        Files.write(root.resolve(BackupPaths.MANIFEST), v1ManifestJson().toByteArray(Charsets.UTF_8))
+        Files.write(works.resolve("${WORK_ID.uppercase()}.epub"), EPUB_BYTES)
+        Files.write(fonts.resolve("Reader.ttf"), FONT_BYTES)
+
+        val backup = BackupImporter.importV1Directory(root)
+
+        assertEquals(BackupVersion.APPLE_V1, backup.manifest.version)
+        assertArrayEquals(EPUB_BYTES, backup.epubFilesByWorkId[WORK_ID])
+        assertArrayEquals(FONT_BYTES, backup.fontFilesByFileName["Reader.ttf"])
+    }
+}
+
+class BackupV2ZipDecodeTest {
+    @Test
+    fun importsV2ZipBackup() {
+        val bytes = BackupExporter.exportV2(samplePackage())
+
+        val backup = BackupImporter.importV2Zip(bytes)
+
+        assertEquals(BackupVersion.CURRENT, backup.manifest.version)
+        assertEquals("android", backup.manifest.exportedBy?.platform)
+        assertArrayEquals(EPUB_BYTES, backup.epubFilesByWorkId[WORK_ID])
+        assertArrayEquals(FONT_BYTES, backup.fontFilesByFileName["Reader.ttf"])
+    }
+
+    @Test
+    fun preservesMixedCaseUuidAsCanonicalLowercase() {
+        val manifest = sampleManifest(
+            works = listOf(sampleBackupWork(id = WORK_ID.uppercase()))
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = manifest,
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+
+        val backup = BackupImporter.importV2Zip(bytes)
+
+        assertEquals(WORK_ID, backup.manifest.works.single().id)
+        assertArrayEquals(EPUB_BYTES, backup.epubFilesByWorkId[WORK_ID])
+    }
+}
+
+class BackupV2ZipExportTest {
+    @Test
+    fun writesV2ZipWithManifestWorksFontsCollectionsAndSavedSearches() {
+        val bytes = BackupExporter.exportV2(samplePackage())
+        val entries = unzip(bytes)
+
+        assertTrue(entries.containsKey(BackupPaths.MANIFEST))
+        assertTrue(entries.containsKey("Works/$WORK_ID.epub"))
+        assertTrue(entries.containsKey("Fonts/Reader.ttf"))
+
+        val manifest = BackupImporter.decodeManifest(entries.getValue(BackupPaths.MANIFEST))
+        assertEquals(BackupVersion.CURRENT, manifest.version)
+        assertEquals("android", manifest.exportedBy?.platform)
+        assertEquals(COLLECTION_ID, manifest.collections.single().id)
+        assertEquals(SEARCH_ID, manifest.savedSearches.single().id)
+    }
+}
+
+class BackupRoundTripBasicTest {
+    @Test
+    fun exportsImportsAndMergesBasicLibrary() {
+        val exported = BackupExporter.exportV2(samplePackage())
+        val imported = BackupImporter.importV2Zip(exported)
+
+        val result = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+
+        assertEquals(1, result.summary.worksCreated)
+        assertEquals(1, result.summary.bookmarksCreated)
+        assertEquals(1, result.summary.fontsCreated)
+        assertEquals(1, result.snapshot.works.size)
+        assertEquals("Example Work", result.snapshot.works.single().title)
+        assertEquals("Reader.ttf", result.snapshot.fonts.single().fileName)
+        assertEquals("custom:Reader.ttf", result.snapshot.settings.readerFontID)
+    }
+}
+
+class BackupMergeDoesNotDeleteExistingWorkTest {
+    @Test
+    fun mergeKeepsWorksAbsentFromBackup() {
+        val existing = sampleSavedWork(id = OTHER_WORK_ID, title = "Local Only")
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(existing)),
+            backup = samplePackage()
+        )
+
+        assertEquals(2, result.snapshot.works.size)
+        assertNotNull(result.snapshot.works.firstOrNull { it.id == OTHER_WORK_ID })
+    }
+}
+
+class BackupMergeDoesNotDeleteExistingEpubTest {
+    @Test
+    fun mergeKeepsLocalEpubWhenBackupLacksFile() {
+        val existing = sampleSavedWork(hasEpub = true)
+        val backup = samplePackage(epubFiles = emptyMap())
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(existing), epubWorkIds = setOf(WORK_ID)),
+            backup = backup
+        )
+
+        val restored = result.snapshot.works.single { it.id == WORK_ID }
+        assertTrue(restored.hasEpub)
+        assertTrue(result.epubFilesToWriteByWorkId.isEmpty())
+    }
+}
+
+class BackupMissingEpubMarksHasEpubFalseTest {
+    @Test
+    fun newWorkMarkedHasEpubFalseWhenBackupFileIsMissing() {
+        val backup = samplePackage(epubFiles = emptyMap())
+
+        val result = BackupMergeService.merge(BackupLibrarySnapshot(), backup)
+
+        assertFalse(result.snapshot.works.single().hasEpub)
+    }
+}
+
+class BackupUserTagMergeTest {
+    @Test
+    fun mergeTrimsAndDeduplicatesUserTags() {
+        val backup = samplePackage(
+            manifest = sampleManifest(
+                works = listOf(
+                    sampleBackupWork(userTags = listOf(" Comfort ", "Comfort", "Favorite"))
+                )
+            )
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                userTagsByWorkId = mapOf(WORK_ID to listOf("Local", " Comfort"))
+            ),
+            backup = backup
+        )
+
+        assertEquals(listOf("Local", "Comfort", "Favorite"), result.snapshot.userTagsByWorkId[WORK_ID])
+    }
+}
+
+class BackupCollectionMergeTest {
+    @Test
+    fun collectionWithNameCollisionKeepsSeparateSuffixedCollection() {
+        val current = WorkCollection(
+            id = OTHER_COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE,
+            workIds = listOf(OTHER_WORK_ID)
+        )
+        val backup = samplePackage(
+            manifest = sampleManifest(
+                collections = listOf(
+                    BackupCollection(
+                        id = COLLECTION_ID,
+                        name = "Favorites",
+                        dateAdded = DATE_STRING,
+                        workIDs = listOf(WORK_ID)
+                    )
+                )
+            )
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(collections = listOf(current)),
+            backup = backup
+        )
+
+        assertEquals(2, result.snapshot.collections.size)
+        assertTrue(result.snapshot.collections.any { it.name == "Favorites" })
+        assertTrue(result.snapshot.collections.any { it.name == "Favorites (Restored)" })
+    }
+
+    @Test
+    fun keepsLocalRenameWhenLocalLastModifiedIsNewer() {
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Local Name",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-07-10T00:00:00Z")
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Archive Name",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(collections = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertEquals("Local Name", merged.name)
+    }
+
+    @Test
+    fun appliesArchiveRenameWhenArchiveLastModifiedIsNewer() {
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Local Name",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Archive Name",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-07-10T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(collections = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertEquals("Archive Name", merged.name)
+    }
+
+    @Test
+    fun suppressesResurrectionOfDeletedCollection() {
+        val deletedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = COLLECTION_ID,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        assertTrue(result.snapshot.collections.none { it.id == COLLECTION_ID })
+    }
+
+    @Test
+    fun suppressesResurrectionOfAWorkRemovedFromACollection() {
+        // The user removed WORK_ID from the collection locally (it's no longer in
+        // `local.workIds`) and that removal recorded a membership tombstone. An
+        // older backup that still lists WORK_ID as a member must not bring it back.
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-06-01T00:00:00Z"),
+            workIds = listOf(OTHER_WORK_ID)
+        )
+        val removedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            ),
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = removedAt,
+            lastModifiedAt = removedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            workIDs = listOf(WORK_ID, OTHER_WORK_ID)
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                collections = listOf(local),
+                tombstones = listOf(membershipTombstone)
+            ),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertTrue(OTHER_WORK_ID in merged.workIds)
+        assertTrue(WORK_ID !in merged.workIds)
+    }
+
+    @Test
+    fun suppressesResurrectionWithLegacyColonFormMembershipTombstone() {
+        // android-v0.2.1-alpha already shipped colon-form rows. After upgrade those
+        // rows are still in Room; merge must treat them as the XOR-UUID identity.
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-06-01T00:00:00Z"),
+            workIds = listOf(OTHER_WORK_ID)
+        )
+        val removedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val legacyColonRecordId =
+            io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            )
+        val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = legacyColonRecordId,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = removedAt,
+            lastModifiedAt = removedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            workIDs = listOf(WORK_ID, OTHER_WORK_ID)
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                collections = listOf(local),
+                tombstones = listOf(membershipTombstone)
+            ),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertTrue(OTHER_WORK_ID in merged.workIds)
+        assertTrue(WORK_ID !in merged.workIds)
+    }
+
+    @Test
+    fun exportsLegacyColonFormMembershipTombstoneAsXorUuid() {
+        // Export used to call canonicalUuid(recordID) and throw on colon form —
+        // a real upgrade failure path for users with pre-existing tombstones.
+        val legacyColonRecordId =
+            io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            )
+        val expectedXor = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(
+            COLLECTION_ID,
+            WORK_ID
+        )
+        val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = legacyColonRecordId,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = DATE,
+            lastModifiedAt = DATE
+        )
+        val snapshot = BackupLibrarySnapshot(
+            works = listOf(sampleSavedWork()),
+            collections = listOf(
+                WorkCollection(
+                    id = COLLECTION_ID,
+                    name = "Favorites",
+                    dateAdded = DATE,
+                    workIds = listOf(OTHER_WORK_ID)
+                )
+            ),
+            tombstones = listOf(membershipTombstone)
+        )
+
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = DATE),
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+        val imported = BackupImporter.importV2Zip(bytes)
+        val exported = imported.manifest.tombstones.single {
+            it.recordTypeRaw ==
+                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
+        }
+        assertEquals(expectedXor, exported.recordID)
+    }
+
+    @Test
+    fun revivesCollectionWhenArchiveIsNewerThanTombstone() {
+        val deletedAt = Instant.parse("2026-01-01T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = COLLECTION_ID,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-07-10T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        assertTrue(result.snapshot.collections.any { it.id == COLLECTION_ID })
+    }
+}
+
+class BackupBookmarkMergeByUrlTest {
+    @Test
+    fun bookmarkMergeByUrlDoesNotDuplicate() {
+        val existing = Bookmark(
+            title = "Old Title",
+            urlString = "https://archiveofourown.org/works/123",
+            dateAdded = Instant.parse("2026-01-01T00:00:00Z")
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(bookmarks = listOf(existing)),
+            backup = samplePackage()
+        )
+
+        assertEquals(1, result.snapshot.bookmarks.size)
+        assertEquals("Example Bookmark", result.snapshot.bookmarks.single().title)
+        assertEquals(1, result.summary.bookmarksUpdated)
+    }
+}
+
+class BackupFontMissingReaderFontFallbackTest {
+    @Test
+    fun missingCustomFontSelectionFallsBackToSystem() {
+        val backup = samplePackage(
+            manifest = sampleManifest(settings = BackupSettingsPayload(readerFontID = "custom:Missing.ttf")),
+            fontFiles = emptyMap()
+        )
+
+        val result = BackupMergeService.merge(BackupLibrarySnapshot(), backup)
+
+        assertEquals("system", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun collidingDifferentFontBytesAreSuffixedAndSettingsRetargeted() {
+        val existingFont = CustomFont(name = "Reader", fileName = "Reader.ttf", dateAdded = DATE)
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                fonts = listOf(existingFont),
+                fontFilesByFileName = mapOf("Reader.ttf" to "local font".toByteArray())
+            ),
+            backup = samplePackage()
+        )
+
+        assertTrue(result.snapshot.fonts.any { it.fileName == "Reader.ttf" })
+        assertTrue(result.snapshot.fonts.any { it.fileName == "Reader-restored-1.ttf" })
+        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+    }
+}
+
+class BackupRejectsUnsupportedVersionTest {
+    @Test
+    fun rejectsUnsupportedManifestVersion() {
+        val error = assertThrows(BackupError.UnsupportedVersion::class.java) {
+            BackupImporter.decodeManifest(
+                BackupJson.encodeToString(sampleManifest().copy(version = 99)).toByteArray(Charsets.UTF_8)
+            )
+        }
+
+        assertEquals(99, error.version)
+    }
+}
+
+class BackupRejectsMissingManifestTest {
+    @Test
+    fun rejectsZipWithoutManifest() {
+        assertThrows(BackupError.MissingManifest::class.java) {
+            BackupImporter.importV2Zip(rawZip(listOf("Works/$WORK_ID.epub" to EPUB_BYTES)))
+        }
+    }
+}
+
+class BackupRejectsPathTraversalTest {
+    @Test
+    fun rejectsTraversalEntry() {
+        assertThrows(BackupError.UnsafePath::class.java) {
+            BackupImporter.importV2Zip(
+                rawZip(
+                    listOf(
+                        BackupPaths.MANIFEST to BackupJson.encodeToString(sampleManifest()).toByteArray(),
+                        "../evil" to "bad".toByteArray()
+                    )
+                )
+            )
+        }
+    }
+}
+
+class BackupRejectsAbsolutePathTest {
+    @Test
+    fun rejectsAbsoluteEntry() {
+        assertThrows(BackupError.UnsafePath::class.java) {
+            BackupImporter.importV2Zip(
+                rawZip(
+                    listOf(
+                        BackupPaths.MANIFEST to BackupJson.encodeToString(sampleManifest()).toByteArray(),
+                        "/tmp/evil" to "bad".toByteArray()
+                    )
+                )
+            )
+        }
+    }
+}
+
+class BackupRejectsInvalidJsonTest {
+    @Test
+    fun rejectsInvalidManifestJson() {
+        assertThrows(BackupError.InvalidJson::class.java) {
+            BackupImporter.importV2Zip(rawZip(listOf(BackupPaths.MANIFEST to "{".toByteArray())))
+        }
+    }
+
+    @Test
+    fun rejectsInvalidDateAndUuid() {
+        assertThrows(BackupError.InvalidDate::class.java) {
+            BackupImporter.decodeManifest(
+                BackupJson.encodeToString(sampleManifest(exportedAt = "not-a-date")).toByteArray()
+            )
+        }
+        assertThrows(BackupError.InvalidUuid::class.java) {
+            BackupImporter.decodeManifest(
+                BackupJson.encodeToString(
+                    sampleManifest(works = listOf(sampleBackupWork(id = "not-a-uuid")))
+                ).toByteArray()
+            )
+        }
+    }
+}
+
+class BackupRejectsTruncatedZipTest {
+    @Test
+    fun rejectsTruncatedZipBeforeReadingEntries() {
+        val bytes = BackupExporter.exportV2(samplePackage())
+        val truncated = bytes.copyOf(bytes.size - 22)
+
+        assertThrows(BackupError.InvalidPackage::class.java) {
+            BackupImporter.importV2Zip(truncated)
+        }
+    }
+}
+
+class BackupRejectsDuplicateEntryTest {
+    @Test
+    fun rejectsDuplicateZipEntries() {
+        val manifestBytes = BackupJson.encodeToString(sampleManifest()).toByteArray()
+
+        assertThrows(BackupError.DuplicateEntry::class.java) {
+            BackupImporter.importV2Zip(
+                rawZipAllowingDuplicateEntries(
+                    listOf(
+                        BackupPaths.MANIFEST to manifestBytes,
+                        BackupPaths.MANIFEST to manifestBytes
+                    )
+                )
+            )
+        }
+    }
+}
+
+class BackupPreservesLegacyProgressFieldsTest {
+    @Test
+    fun preservesSpineIndexAndScrollFractionForCrossPlatformResume() {
+        val backup = samplePackage(
+            manifest = sampleManifest(
+                works = listOf(
+                    sampleBackupWork(lastSpineIndex = 3, lastScrollFraction = 0.42)
+                )
+            )
+        )
+
+        val result = BackupMergeService.merge(BackupLibrarySnapshot(), backup)
+
+        assertEquals(3, result.snapshot.works.single().lastSpineIndex)
+        assertEquals(0.42, result.snapshot.works.single().lastScrollFraction, 0.0)
+    }
+}
+
+/**
+ * EPUB preservation trio is Android pass-through only: import must store what
+ * arrived and export must re-emit it unchanged — including null, which must not
+ * become `"notPreserved"`.
+ */
+class BackupEpubPreservationPassThroughTest {
+    @Test
+    fun preservedValuesSurviveImportThenExport() {
+        val preservedAt = "2025-11-02T14:30:00Z"
+        val lastAttempt = "2025-11-02T14:29:55Z"
+        val archived = sampleBackupWork().copy(
+            epubPreservationStatusRaw = "preserved",
+            preservedAt = preservedAt,
+            lastPreservationAttemptAt = lastAttempt
+        )
+        val imported = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archived)))
+        )
+        val work = imported.snapshot.works.single()
+        assertEquals("preserved", work.epubPreservationStatusRaw)
+        assertEquals(Instant.parse(preservedAt), work.preservedAt)
+        assertEquals(Instant.parse(lastAttempt), work.lastPreservationAttemptAt)
+
+        val reexported = work.toBackupWork()
+        assertEquals("preserved", reexported.epubPreservationStatusRaw)
+        assertEquals(preservedAt, reexported.preservedAt)
+        assertEquals(lastAttempt, reexported.lastPreservationAttemptAt)
+    }
+
+    @Test
+    fun nullPreservationValuesSurviveImportThenExportAsNull() {
+        val archived = sampleBackupWork().copy(
+            epubPreservationStatusRaw = null,
+            preservedAt = null,
+            lastPreservationAttemptAt = null
+        )
+        val imported = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archived)))
+        )
+        val work = imported.snapshot.works.single()
+        assertNull(work.epubPreservationStatusRaw)
+        assertNull(work.preservedAt)
+        assertNull(work.lastPreservationAttemptAt)
+
+        val reexported = work.toBackupWork()
+        assertNull(
+            "null must not become notPreserved on export",
+            reexported.epubPreservationStatusRaw
+        )
+        assertNull(reexported.preservedAt)
+        assertNull(reexported.lastPreservationAttemptAt)
+    }
+
+    @Test
+    fun domainEntityRoundTripKeepsPreservationFields() {
+        val work = sampleSavedWork().copy(
+            epubPreservationStatusRaw = "failed",
+            preservedAt = Instant.parse("2026-01-15T08:00:00Z"),
+            lastPreservationAttemptAt = Instant.parse("2026-01-15T07:59:00Z")
+        )
+        val entity = work.toEntity()
+        val restored = entity.toDomain()
+        assertEquals("failed", restored.epubPreservationStatusRaw)
+        assertEquals(work.preservedAt, restored.preservedAt)
+        assertEquals(work.lastPreservationAttemptAt, restored.lastPreservationAttemptAt)
+    }
+}
+
+class BackupPreservesReadiumLocatorAsPlatformSpecificDataTest {
+    @Test
+    fun preservesReadiumLocatorWithoutTreatingItAsFallbackSource() {
+        val locator = """{"locations":{"totalProgression":0.72}}"""
+        val backup = samplePackage(
+            manifest = sampleManifest(
+                works = listOf(
+                    sampleBackupWork(
+                        lastSpineIndex = 4,
+                        lastScrollFraction = 0.5,
+                        readiumLocator = locator
+                    )
+                )
+            )
+        )
+
+        val result = BackupMergeService.merge(BackupLibrarySnapshot(), backup)
+
+        assertEquals(locator, result.snapshot.works.single().readiumLocator)
+        assertEquals(4, result.snapshot.works.single().lastSpineIndex)
+        assertEquals(0.5, result.snapshot.works.single().lastScrollFraction, 0.0)
+    }
+}
+
+class BackupLwwProgressMergeTest {
+    @Test
+    fun keepsLocalProgressWhenLocalLastReadIsNewerAndArchiveLacksProgressClock() {
+        val local = sampleSavedWork().copy(
+            lastSpineIndex = 9,
+            lastScrollFraction = 0.9,
+            lastReadDate = Instant.parse("2026-07-01T00:00:00Z"),
+            progressModifiedAt = Instant.parse("2026-07-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-07-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork(
+            lastSpineIndex = 1,
+            lastScrollFraction = 0.1
+        ).copy(
+            lastReadDate = "2026-01-01T00:00:00Z",
+            progressModifiedAt = null,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals(9, merged.lastSpineIndex)
+        assertEquals(0.9, merged.lastScrollFraction, 0.0)
+        assertEquals(Instant.parse("2026-07-01T00:00:00Z"), merged.lastReadDate)
+    }
+
+    @Test
+    fun appliesArchiveProgressWhenProgressModifiedAtIsNewer() {
+        val local = sampleSavedWork().copy(
+            lastSpineIndex = 2,
+            lastScrollFraction = 0.2,
+            lastReadDate = Instant.parse("2026-01-01T00:00:00Z"),
+            progressModifiedAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork(
+            lastSpineIndex = 5,
+            lastScrollFraction = 0.55
+        ).copy(
+            lastReadDate = "2026-06-01T00:00:00Z",
+            progressModifiedAt = "2026-06-01T00:00:00Z",
+            lastModifiedAt = "2026-06-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals(5, merged.lastSpineIndex)
+        assertEquals(0.55, merged.lastScrollFraction, 0.0)
+        assertEquals(Instant.parse("2026-06-01T00:00:00Z"), merged.lastReadDate)
+    }
+
+    @Test
+    fun keepsLocalFavoriteWhenLocalLastModifiedIsNewer() {
+        val local = sampleSavedWork().copy(
+            isFavorite = true,
+            title = "Local Title",
+            lastModifiedAt = Instant.parse("2026-07-10T00:00:00Z")
+        )
+        val archive = sampleBackupWork().copy(
+            isFavorite = false,
+            title = "Archive Title",
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertTrue(merged.isFavorite)
+        assertEquals("Local Title", merged.title)
+    }
+}
+
+class BackupTombstoneSuppressTest {
+    @Test
+    fun suppressesResurrectionOfDeletedWorkByUuid() {
+        val deletedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt,
+            sourceURL = "https://archiveofourown.org/works/123",
+            ao3WorkID = 123
+        )
+        val archive = sampleBackupWork().copy(
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            dateAdded = "2026-01-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(tombstone)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archive)))
+        )
+
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
+        assertEquals(1, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.tombstones.size)
+    }
+
+    @Test
+    fun exportsAndReimportsTombstonesInManifest() {
+        val tombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE,
+            lastModifiedAt = DATE,
+            sourceURL = "https://archiveofourown.org/works/123"
+        )
+        val snapshot = BackupLibrarySnapshot(
+            works = listOf(sampleSavedWork()),
+            tombstones = listOf(tombstone)
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = DATE),
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+        val imported = BackupImporter.importV2Zip(bytes)
+        assertEquals(1, imported.manifest.tombstones.size)
+        assertEquals(WORK_ID, imported.manifest.tombstones.single().recordID)
+
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+        assertEquals(1, merged.snapshot.tombstones.size)
+    }
+}
+
+class BackupAnnotationApplyTest {
+    @Test
+    fun appliesAnnotationsByIdWithLww() {
+        val olderLocal = io.github.cidy02.kudos.core.model.ReadingAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            note = "old",
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = BackupAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "highlight",
+            colorRaw = "green",
+            locatorString = """{"href":"ch1"}""",
+            selectedText = "text",
+            note = "new note",
+            progression = 0.3,
+            spineIndex = 2,
+            chapterTitle = "Ch 1",
+            createdAt = "2026-01-01T00:00:00Z",
+            lastModifiedAt = "2026-06-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                annotations = listOf(olderLocal)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(archive)
+                )
+            )
+        )
+
+        assertEquals(1, result.summary.annotationsUpdated)
+        val ann = result.snapshot.annotations.single()
+        assertEquals("new note", ann.note)
+        assertEquals("highlight", ann.kindRaw)
+        assertEquals("""{"href":"ch1"}""", ann.locatorString)
+    }
+
+    @Test
+    fun skipsAnnotationWhenWorkAbsentFromRestore() {
+        val archive = BackupAnnotation(
+            id = ANN_ID,
+            workID = OTHER_WORK_ID,
+            kindRaw = "bookmark",
+            createdAt = DATE_STRING
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(archive)
+                )
+            )
+        )
+        assertTrue(result.snapshot.annotations.isEmpty())
+    }
+}
+
+class BackupQueueApplyTest {
+    @Test
+    fun storesAndRestoresQueueMembershipLinks() {
+        val queue = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Weekend",
+            kindRaw = "custom",
+            sortOrder = 1,
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE_STRING
+        )
+        val membership = BackupReadingQueueMembership(
+            id = MEMBERSHIP_ID,
+            queueID = QUEUE_ID,
+            workID = WORK_ID,
+            queuedAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING,
+            sortOrderInQueue = 0,
+            note = "try this"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    readingQueues = listOf(queue),
+                    readingQueueMemberships = listOf(membership)
+                )
+            )
+        )
+
+        assertEquals(1, result.summary.queuesCreated)
+        assertEquals(1, result.summary.membershipsCreated)
+        assertEquals("Weekend", result.snapshot.readingQueues.single().name)
+        assertEquals(WORK_ID, result.snapshot.readingQueueMemberships.single().workID)
+        assertEquals("try this", result.snapshot.readingQueueMemberships.single().note)
+    }
+
+    @Test
+    fun exportsQueuesAndMembershipsInManifest() {
+        val snapshot = BackupLibrarySnapshot(
+            works = listOf(sampleSavedWork()),
+            readingQueues = listOf(
+                io.github.cidy02.kudos.core.model.ReadingQueue(
+                    id = QUEUE_ID,
+                    name = "Later",
+                    kindRaw = "custom",
+                    sortOrder = 0,
+                    dateCreated = DATE,
+                    dateUpdated = DATE
+                )
+            ),
+            readingQueueMemberships = listOf(
+                io.github.cidy02.kudos.core.model.ReadingQueueMembership(
+                    id = MEMBERSHIP_ID,
+                    queueID = QUEUE_ID,
+                    workID = WORK_ID,
+                    queuedAt = DATE,
+                    lastModifiedAt = DATE
+                )
+            )
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = DATE),
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+        val imported = BackupImporter.importV2Zip(bytes)
+        assertEquals(1, imported.manifest.readingQueues.size)
+        assertEquals(1, imported.manifest.readingQueueMemberships.size)
+    }
+}
+
+class BackupAppleV8CompatibilityTest {
+    @Test
+    fun acceptsManifestVersion8WithAnnotations() {
+        val locator = """{"href":"/OEBPS/ch3.xhtml","locations":{"progression":0.42}}"""
+        val manifest = sampleManifest(
+            version = 8,
+            annotations = listOf(
+                BackupAnnotation(
+                    id = "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                    workID = WORK_ID,
+                    kindRaw = "highlight",
+                    colorRaw = "green",
+                    locatorString = locator,
+                    selectedText = "the lantern guttered",
+                    note = "echoes the opening",
+                    progression = 0.17,
+                    spineIndex = 4,
+                    chapterTitle = "Chapter 3",
+                    createdAt = DATE_STRING
+                )
+            )
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = manifest,
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+
+        val imported = BackupImporter.importV2Zip(bytes)
+        assertEquals(BackupVersion.CURRENT, imported.manifest.version)
+        // Export rewrites at CURRENT; annotations are carried when present on the package.
+        assertEquals(1, imported.manifest.annotations.size)
+        assertEquals(locator, imported.manifest.annotations.single().locatorString)
+
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+        assertEquals(1, merged.snapshot.works.size)
+        assertEquals("Example Work", merged.snapshot.works.single().title)
+        assertEquals(1, merged.summary.annotationsCreated)
+        assertEquals(1, merged.snapshot.annotations.size)
+        assertEquals("highlight", merged.snapshot.annotations.single().kindRaw)
+    }
+
+    @Test
+    fun importsRawAppleShapedV8ZipWithoutAndroidExportedBy() {
+        // Minimal Apple-like v8 JSON: no exportedBy, with annotations + tombstones keys.
+        val json = """
+            {
+              "version": 8,
+              "exportedAt": "$DATE_STRING",
+              "works": [{
+                "id": "$WORK_ID",
+                "title": "From iPhone",
+                "author": "Author",
+                "summary": "",
+                "sourceURL": "https://archiveofourown.org/works/999",
+                "dateAdded": "$DATE_STRING",
+                "isFavorite": true,
+                "isSaved": true,
+                "isFinished": false,
+                "hasEPUB": true,
+                "isComplete": true,
+                "rating": "Mature",
+                "language": "English",
+                "wordCount": 5000,
+                "chapters": "3/3",
+                "kudos": 10,
+                "comments": 1,
+                "hits": 100,
+                "workWarnings": [],
+                "workCategories": [],
+                "seriesTitle": "",
+                "seriesPosition": 0,
+                "seriesURL": "",
+                "lastSpineIndex": 1,
+                "lastScrollFraction": 0.25,
+                "workTags": [],
+                "workFandoms": ["Fandom"],
+                "workCharacters": [],
+                "workRelationships": [],
+                "workFreeforms": [],
+                "workTagsFetched": true,
+                "userTags": ["Keep"],
+                "ao3WorkID": 999,
+                "epubPreservationStatusRaw": "preserved",
+                "metadataSyncStatusRaw": "current"
+              }],
+              "bookmarks": [],
+              "fonts": [],
+              "collections": [],
+              "readingQueues": [],
+              "readingQueueMemberships": [],
+              "annotations": [{
+                "id": "11111111-1111-4111-8111-111111111111",
+                "workID": "$WORK_ID",
+                "kindRaw": "bookmark",
+                "colorRaw": "yellow",
+                "locatorString": "{}",
+                "selectedText": "",
+                "note": "",
+                "progression": 0.1,
+                "spineIndex": 0,
+                "chapterTitle": "",
+                "createdAt": "$DATE_STRING",
+                "isPendingDeletion": false
+              }],
+              "settings": {
+                "readerFontID": "system",
+                "readerMode": "scroll",
+                "appTheme": "system",
+                "readerTheme": "sepia",
+                "accentColorHex": "#990000",
+                "autoPreserveSmallSeriesOnSaveForLater": true,
+                "autoPreserveSeriesWorkThreshold": 5
+              },
+              "tombstones": []
+            }
+        """.trimIndent()
+        val zip = rawZip(
+            listOf(
+                BackupPaths.MANIFEST to json.toByteArray(Charsets.UTF_8),
+                "Works/$WORK_ID.epub" to EPUB_BYTES
+            )
+        )
+
+        val imported = BackupImporter.importV2Zip(zip)
+        assertEquals(8, imported.manifest.version)
+        assertEquals("From iPhone", imported.manifest.works.single().title)
+        assertEquals(1, imported.manifest.annotations.size)
+        assertArrayEquals(EPUB_BYTES, imported.epubFilesByWorkId[WORK_ID])
+
+        val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
+        assertEquals(1, merged.summary.worksCreated)
+        assertEquals("From iPhone", merged.snapshot.works.single().title)
+        assertTrue(merged.snapshot.works.single().isFavorite)
+        assertEquals(listOf("Keep"), merged.snapshot.userTagsByWorkId[WORK_ID])
+    }
+
+    @Test
+    fun rejectsVersionsAboveCurrent() {
+        assertThrows(BackupError.UnsupportedVersion::class.java) {
+            BackupImporter.decodeManifest(
+                BackupJson.encodeToString(sampleManifest().copy(version = 99)).toByteArray(Charsets.UTF_8)
+            )
+        }
+    }
+}
+
+/**
+ * The cross-platform merge rules the Android side used to drop on the floor.
+ * Each of these fails against the pre-fix `BackupMergeService`.
+ */
+class BackupQueueAndAnnotationTombstoneTest {
+    @Test
+    fun appliesIncomingQueueDeletion() {
+        val local = io.github.cidy02.kudos.core.model.ReadingQueue(
+            id = QUEUE_ID,
+            name = "Weekend",
+            kindRaw = "custom",
+            dateCreated = DATE,
+            dateUpdated = DATE
+        )
+        val archived = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Weekend",
+            kindRaw = "custom",
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE.plusSeconds(3600).toString(),
+            isDeleted = true,
+            deletedAt = DATE.plusSeconds(3600).toString()
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(readingQueues = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(readingQueues = listOf(archived))
+            )
+        )
+
+        // Before the fix the incoming queue was skipped outright, so a queue
+        // deleted on iOS came straight back on the next Android restore.
+        assertTrue(result.snapshot.readingQueues.single().isDeleted)
+    }
+
+    @Test
+    fun restoreKeepsAQueueOnlyWorkOutOfTheLibrary() {
+        // Owner decision: Android adopts iOS's queue-only concept. Forcing
+        // `isSaved = isSaved || hasEpub` on the way in meant a work you had queued
+        // but deliberately not saved came back sitting on the Library shelves —
+        // and there is no way for the user to tell it apart afterwards.
+        val archived = sampleBackupWork().copy(isSaved = false, isQueuedForLater = true)
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(archived)))
+        )
+
+        val restored = result.snapshot.works.single()
+        assertFalse(restored.isSaved)
+        assertTrue(restored.isQueuedForLater)
+        assertTrue(restored.isQueueOnlyWork)
+    }
+
+    @Test
+    fun appliesIncomingAnnotationDeletion() {
+        val local = io.github.cidy02.kudos.core.model.ReadingAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            createdAt = DATE,
+            lastModifiedAt = DATE
+        )
+        val archived = BackupAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE.plusSeconds(3600).toString(),
+            isPendingDeletion = true,
+            deletedAt = DATE.plusSeconds(3600).toString()
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(annotations = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(archived)
+                )
+            )
+        )
+
+        assertTrue(result.snapshot.annotations.single().isPendingDeletion)
+    }
+
+    @Test
+    fun matchesSystemQueueByKindRatherThanId() {
+        // Each platform mints its own UUID for "Saved for Later", so an iOS
+        // archive carries an id this device has never seen.
+        val foreignQueueId = "44444444-4444-4444-8444-444444444444"
+        val local = io.github.cidy02.kudos.core.model.ReadingQueue(
+            id = QUEUE_ID,
+            name = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER_NAME,
+            kindRaw = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER,
+            dateCreated = DATE,
+            dateUpdated = DATE
+        )
+        val archived = BackupReadingQueue(
+            id = foreignQueueId,
+            name = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER_NAME,
+            kindRaw = io.github.cidy02.kudos.core.model.ReadingQueueKind.SAVED_FOR_LATER,
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE.plusSeconds(3600).toString()
+        )
+        val membership = BackupReadingQueueMembership(
+            id = MEMBERSHIP_ID,
+            queueID = foreignQueueId,
+            workID = WORK_ID,
+            queuedAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(readingQueues = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    readingQueues = listOf(archived),
+                    readingQueueMemberships = listOf(membership)
+                )
+            )
+        )
+
+        // One system queue, keeping this device's id — not a second, undeletable
+        // "Saved for Later" splitting the shelf in two.
+        assertEquals(1, result.snapshot.readingQueues.size)
+        assertEquals(QUEUE_ID, result.snapshot.readingQueues.single().id)
+        // ...and the incoming membership follows the remap onto the local queue.
+        assertEquals(QUEUE_ID, result.snapshot.readingQueueMemberships.single().queueID)
+    }
+
+    @Test
+    fun membershipTimestampsCountTowardsTheQueueConflictClock() {
+        // Local queue's own dateUpdated is older than the incoming one, but one of
+        // its memberships was touched later. iOS folds that into the comparison;
+        // Android used to pass an empty list and hand the win to the incoming copy.
+        val local = io.github.cidy02.kudos.core.model.ReadingQueue(
+            id = QUEUE_ID,
+            name = "Local name",
+            kindRaw = "custom",
+            dateCreated = DATE,
+            dateUpdated = DATE
+        )
+        val localMembership = io.github.cidy02.kudos.core.model.ReadingQueueMembership(
+            id = MEMBERSHIP_ID,
+            queueID = QUEUE_ID,
+            workID = WORK_ID,
+            queuedAt = DATE,
+            lastModifiedAt = DATE.plusSeconds(7200)
+        )
+        val archived = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Incoming name",
+            kindRaw = "custom",
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE.plusSeconds(3600).toString()
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                readingQueues = listOf(local),
+                readingQueueMemberships = listOf(localMembership)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    readingQueues = listOf(archived)
+                )
+            )
+        )
+
+        assertEquals("Local name", result.snapshot.readingQueues.single().name)
+    }
+}
+
+private const val WORK_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+private const val OTHER_WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+private const val COLLECTION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+private const val OTHER_COLLECTION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+private const val SEARCH_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+private const val ANN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+private const val QUEUE_ID = "11111111-1111-4111-8111-111111111111"
+private const val MEMBERSHIP_ID = "22222222-2222-4222-8222-222222222222"
+private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
+private const val DATE_STRING = "2026-06-26T12:00:00Z"
+private val DATE: Instant = Instant.parse(DATE_STRING)
+private val EPUB_BYTES = "dummy epub bytes".toByteArray()
+private val FONT_BYTES = "dummy font bytes".toByteArray()
+
+private fun samplePackage(
+    manifest: KudosBackupManifest = sampleManifest(),
+    epubFiles: Map<String, ByteArray> = mapOf(WORK_ID to EPUB_BYTES),
+    fontFiles: Map<String, ByteArray> = mapOf("Reader.ttf" to FONT_BYTES)
+): KudosBackupPackage {
+    return KudosBackupPackage(
+        manifest = manifest,
+        epubFilesByWorkId = epubFiles,
+        fontFilesByFileName = fontFiles
+    )
+}
+
+private fun sampleManifest(
+    version: Int = BackupVersion.CURRENT,
+    exportedAt: String = DATE_STRING,
+    works: List<BackupWork> = listOf(sampleBackupWork()),
+    settings: BackupSettingsPayload = BackupSettingsPayload(readerFontID = "custom:Reader.ttf"),
+    collections: List<BackupCollection> = listOf(
+        BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            workIDs = listOf(WORK_ID)
+        )
+    ),
+    savedSearches: List<BackupSavedSearch> = listOf(
+        BackupSavedSearch(
+            id = SEARCH_ID,
+            name = "Slow Burn",
+            dateAdded = DATE_STRING
+        )
+    ),
+    annotations: List<BackupAnnotation> = emptyList(),
+    readingQueues: List<BackupReadingQueue> = emptyList(),
+    readingQueueMemberships: List<BackupReadingQueueMembership> = emptyList(),
+    tombstones: List<BackupTombstone> = emptyList()
+): KudosBackupManifest {
+    return KudosBackupManifest(
+        version = version,
+        exportedAt = exportedAt,
+        exportedBy = BackupExportedBy(
+            platform = "android",
+            appVersion = "0.1.0",
+            schemaVersion = version
+        ),
+        works = works,
+        bookmarks = listOf(
+            BackupBookmark(
+                title = "Example Bookmark",
+                urlString = "https://archiveofourown.org/works/123",
+                dateAdded = DATE_STRING
+            )
+        ),
+        fonts = listOf(
+            BackupFont(
+                name = "Reader",
+                fileName = "Reader.ttf",
+                dateAdded = DATE_STRING
+            )
+        ),
+        collections = collections,
+        savedSearches = savedSearches,
+        readingQueues = readingQueues,
+        readingQueueMemberships = readingQueueMemberships,
+        annotations = annotations,
+        tombstones = tombstones,
+        settings = settings
+    )
+}
+
+private fun sampleBackupWork(
+    id: String = WORK_ID,
+    hasEpub: Boolean = true,
+    userTags: List<String> = listOf("Comfort"),
+    lastSpineIndex: Int = 0,
+    lastScrollFraction: Double = 0.0,
+    readiumLocator: String? = null
+): BackupWork {
+    return BackupWork(
+        id = id,
+        title = "Example Work",
+        author = "Example Author",
+        summary = "Summary",
+        sourceURL = "https://archiveofourown.org/works/123",
+        dateAdded = DATE_STRING,
+        isFavorite = false,
+        isSaved = true,
+        isFinished = false,
+        hasEPUB = hasEpub,
+        isComplete = true,
+        rating = "Teen And Up Audiences",
+        language = "English",
+        wordCount = 1200,
+        chapters = "1/1",
+        kudos = 7,
+        comments = 2,
+        hits = 30,
+        workWarnings = listOf("No Archive Warnings Apply"),
+        workCategories = listOf("Gen"),
+        seriesTitle = "",
+        seriesPosition = 0,
+        seriesURL = "",
+        lastSpineIndex = lastSpineIndex,
+        lastScrollFraction = lastScrollFraction,
+        lastReadDate = DATE_STRING,
+        knownChapterCount = 1,
+        lastUpdateCheck = DATE_STRING,
+        workTags = listOf("Fluff"),
+        workFandoms = listOf("Example Fandom"),
+        workCharacters = emptyList(),
+        workRelationships = emptyList(),
+        workFreeforms = listOf("Fluff"),
+        workTagsFetched = true,
+        userTags = userTags,
+        collectionIDs = listOf(COLLECTION_ID),
+        readiumLocator = readiumLocator,
+        readiumLocatorPlatform = "android",
+        readiumLocatorEngine = "readium-kotlin",
+        readiumLocatorVersion = "test"
+    )
+}
+
+private fun sampleSavedWork(
+    id: String = WORK_ID,
+    title: String = "Existing Work",
+    hasEpub: Boolean = true
+): SavedWork {
+    return SavedWork(
+        id = id,
+        title = title,
+        author = "Existing Author",
+        sourceUrl = "https://archiveofourown.org/works/123",
+        dateAdded = DATE,
+        isSaved = true,
+        hasEpub = hasEpub,
+        comments = 99,
+        hits = 100,
+        knownChapterCount = 1,
+        lastUpdateCheck = DATE
+    )
+}
+
+private fun unzip(bytes: ByteArray): Map<String, ByteArray> {
+    val result = linkedMapOf<String, ByteArray>()
+    ZipInputStream(bytes.inputStream()).use { zip ->
+        while (true) {
+            val entry = zip.nextEntry ?: break
+            if (!entry.isDirectory) {
+                result[entry.name] = zip.readBytes()
+            }
+            zip.closeEntry()
+        }
+    }
+    return result
+}
+
+private fun rawZip(entries: List<Pair<String, ByteArray>>): ByteArray {
+    val output = ByteArrayOutputStream()
+    ZipOutputStream(output).use { zip ->
+        entries.forEach { (name, bytes) ->
+            val entry = ZipEntry(name).apply { time = 0L }
+            zip.putNextEntry(entry)
+            zip.write(bytes)
+            zip.closeEntry()
+        }
+    }
+    return output.toByteArray()
+}
+
+private fun rawZipAllowingDuplicateEntries(entries: List<Pair<String, ByteArray>>): ByteArray {
+    val output = ByteArrayOutputStream()
+    val centralDirectory = ByteArrayOutputStream()
+    val centralOffsets = mutableListOf<Int>()
+
+    entries.forEach { (name, bytes) ->
+        val nameBytes = name.toByteArray(Charsets.UTF_8)
+        val crc = CRC32().apply { update(bytes) }.value
+        val localOffset = output.size()
+        centralOffsets += localOffset
+
+        output.writeIntLe(0x04034b50)
+        output.writeShortLe(20)
+        output.writeShortLe(0)
+        output.writeShortLe(0)
+        output.writeShortLe(0)
+        output.writeShortLe(0)
+        output.writeIntLe(crc.toInt())
+        output.writeIntLe(bytes.size)
+        output.writeIntLe(bytes.size)
+        output.writeShortLe(nameBytes.size)
+        output.writeShortLe(0)
+        output.write(nameBytes)
+        output.write(bytes)
+    }
+
+    entries.forEachIndexed { index, (name, bytes) ->
+        val nameBytes = name.toByteArray(Charsets.UTF_8)
+        val crc = CRC32().apply { update(bytes) }.value
+
+        centralDirectory.writeIntLe(0x02014b50)
+        centralDirectory.writeShortLe(20)
+        centralDirectory.writeShortLe(20)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeIntLe(crc.toInt())
+        centralDirectory.writeIntLe(bytes.size)
+        centralDirectory.writeIntLe(bytes.size)
+        centralDirectory.writeShortLe(nameBytes.size)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeShortLe(0)
+        centralDirectory.writeIntLe(0)
+        centralDirectory.writeIntLe(centralOffsets[index])
+        centralDirectory.write(nameBytes)
+    }
+
+    val centralOffset = output.size()
+    val centralBytes = centralDirectory.toByteArray()
+    output.write(centralBytes)
+    output.writeIntLe(0x06054b50)
+    output.writeShortLe(0)
+    output.writeShortLe(0)
+    output.writeShortLe(entries.size)
+    output.writeShortLe(entries.size)
+    output.writeIntLe(centralBytes.size)
+    output.writeIntLe(centralOffset)
+    output.writeShortLe(0)
+    return output.toByteArray()
+}
+
+private fun ByteArrayOutputStream.writeShortLe(value: Int) {
+    write(value and 0xff)
+    write((value ushr 8) and 0xff)
+}
+
+private fun ByteArrayOutputStream.writeIntLe(value: Int) {
+    write(value and 0xff)
+    write((value ushr 8) and 0xff)
+    write((value ushr 16) and 0xff)
+    write((value ushr 24) and 0xff)
+}
+
+private fun v1ManifestJson(): String {
+    return """
+        {
+          "version": 1,
+          "exportedAt": "$DATE_STRING",
+          "works": [
+            {
+              "id": "${WORK_ID.uppercase()}",
+              "title": "Example Work",
+              "author": "Example Author",
+              "summary": "Summary",
+              "sourceURL": "https://archiveofourown.org/works/123",
+              "dateAdded": "$DATE_STRING",
+              "isFavorite": false,
+              "isSaved": true,
+              "isFinished": false,
+              "hasEPUB": true,
+              "isComplete": true,
+              "rating": "Teen And Up Audiences",
+              "language": "English",
+              "wordCount": 1200,
+              "chapters": "1/1",
+              "kudos": 7,
+              "workWarnings": ["No Archive Warnings Apply"],
+              "workCategories": ["Gen"],
+              "seriesTitle": "",
+              "seriesPosition": 0,
+              "seriesURL": "",
+              "lastSpineIndex": 2,
+              "lastScrollFraction": 0.25,
+              "lastReadDate": "$DATE_STRING",
+              "workTags": ["Fluff"],
+              "workFandoms": ["Example Fandom"],
+              "workCharacters": [],
+              "workRelationships": [],
+              "workFreeforms": ["Fluff"],
+              "workTagsFetched": true,
+              "userTags": ["Comfort"],
+              "readiumLocator": "{\"locations\":{\"totalProgression\":0.5}}"
+            }
+          ],
+          "bookmarks": [],
+          "fonts": [
+            {
+              "name": "Reader",
+              "fileName": "Reader.ttf",
+              "dateAdded": "$DATE_STRING"
+            }
+          ],
+          "settings": {
+            "readerFontID": "custom:Reader.ttf",
+            "readerMode": "scroll",
+            "readerTwoPage": false,
+            "readerCustomize": false,
+            "readerBoldText": false,
+            "readerFontPt": 18,
+            "readerLineHeight": 1.65,
+            "readerLetterSpacing": 0,
+            "readerWordSpacing": 0,
+            "readerMargin": 28,
+            "readerJustify": false,
+            "confirmBeforeDelete": true,
+            "hideMatureContent": true,
+            "matureContentMode": "obscure",
+            "requireBiometricToReveal": false,
+            "appTheme": "light",
+            "readerTheme": "light",
+            "matchAppReaderTheme": true,
+            "accentColorHex": "#990000"
+          }
+        }
+    """.trimIndent()
+}

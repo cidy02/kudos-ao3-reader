@@ -5,6 +5,8 @@
 Icon?
 
 # ---- Xcode: build output & DerivedData ----
+# AdditionalDocumentation sync (Scripts/sync-xcode-docs.sh) — local only
+docs/xcode/
 build/
 DerivedData/
 *.xcuserstate
@@ -28,6 +30,11 @@ xcuserdata/
 
 # ---- Claude Code / local tooling config (personal) ----
 .claude/
+
+# ---- JetBrains / Android Studio local project state ----
+.idea/
+android/.idea/
+android/gradle/gradle-daemon-jvm.properties
 
 # ---- Migration notes, prompts, temp scripts (kept OUT of version control) ----
 READIUM_MIGRATION_NOTES.md

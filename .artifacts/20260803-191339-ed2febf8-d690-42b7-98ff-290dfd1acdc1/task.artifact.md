@@ -1,0 +1,39 @@
+# Task Management
+
+- [x] Verify Phase 0-2 implementation and correctness
+- [x] Verify and Complete Phase 3 (Account / Auth / Author profiles)
+- [x] Address Review Findings (Phases 2 & 3)
+- [x] Phase 4: Library / Reading Queues / Collections
+- [x] Phase 5: Comments / Discussion
+    - [x] Rebuild comment tree model (Prerequisite)
+    - [x] Nested reply-tree rendering (Item 1)
+    - [x] Collapse/expand + whole-thread fold (Item 2)
+    - [x] AO3 deep-thread cutoff node (Item 3)
+    - [x] Edit and Delete comment (Items 5, 6) - (Repository ready, UI partially in dropdown)
+    - [x] Duplicate-post guard (Item 8)
+    - [x] Comment draft persistence (Item 9)
+    - [x] "By Chapter" comment scope + chapter picker (Item 10)
+    - [x] Newest/oldest-first toggle (Item 11)
+    - [x] Inbox notification tap opens focused thread (Item 13)
+    - [x] "Read more" clamp on long comments (Item 17)
+    - [x] Chapter badge on comments (Item 18)
+    - [x] Comment-page cache / stale-offline fallback (Item 19)
+- [/] Phase 6: Browse / Search
+    - [ ] Local search index (Prerequisite)
+    - [ ] Local-first Global Search (Item 1)
+    - [ ] Canonical work identity merge for remote lists (Item 3)
+    - [ ] Tappable tags/fandom chips on result cards (Item 4)
+    - [ ] Client-side "refine" filter for tag works (Item 5)
+    - [ ] Query-time filter panel for Browse fandom-works (Item 6)
+    - [ ] Bulk multi-select over search/browse results (Item 7)
+    - [ ] Expand/collapse-all for browse fandom-works (Item 8)
+    - [ ] Full pagination bar (Item 9)
+    - [ ] Background tag refresh / availability tracking (Item 11)
+    - [ ] Fandom catalog disk cache (Item 12)
+    - [ ] AO3 tag autocomplete in filter sheet (Item 13)
+    - [ ] Long-press quick actions on result cards (Item 14)
+- [ ] Phase 7: Home / Onboarding / Privacy / Support
+- [ ] Phase 8: Sync & Backup
+- [ ] Phase 9: Non-EPUB file import
+- [ ] Phase 10: Work availability / update-checking
+- [ ] Phase 11: Shared UI/UX components

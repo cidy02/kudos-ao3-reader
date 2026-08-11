@@ -1,0 +1,24 @@
+<html>
+<head>
+  <meta name="csrf-token" content="token-from-meta">
+</head>
+<body class="works-show logged-in">
+  <form action="/users/AO3_Reader/subscriptions" method="post">
+    <input type="hidden" name="authenticity_token" value="token-from-input">
+    <input type="hidden" name="subscription[subscribable_type]" value="Work">
+    <input type="submit" value="Subscribe">
+  </form>
+  <form id="new_comment" action="/works/123/comments" method="post">
+    <input type="hidden" name="authenticity_token" value="token-from-input">
+    <select name="comment[pseud_id]">
+      <option value="11">Alt</option>
+      <option value="22" selected="selected">Main</option>
+    </select>
+  </form>
+  <form action="/works/123/bookmarks" method="post">
+    <select name="bookmark[pseud_id]">
+      <option value="44" selected="selected">Main</option>
+    </select>
+  </form>
+</body>
+</html>

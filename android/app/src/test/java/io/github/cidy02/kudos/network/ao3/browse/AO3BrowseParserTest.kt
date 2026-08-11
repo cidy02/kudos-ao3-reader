@@ -1,0 +1,115 @@
+package io.github.cidy02.kudos.network.ao3.browse
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Test
+
+private fun fixture(path: String): String {
+    val stream = AO3BrowseParserTest::class.java.classLoader!!.getResourceAsStream(path)
+        ?: error("Missing fixture: $path")
+    return stream.bufferedReader().use { it.readText() }
+}
+
+class AO3BrowseParserTest {
+    private val parser = AO3BrowseParser()
+
+    @Test
+    fun parsesMediaCategoriesWithFeaturedFandoms() {
+        val categories = parser.parseMediaCategories(fixture("ao3/browse/categories.html"))
+
+        assertEquals(2, categories.size)
+        val anime = categories.first()
+        assertEquals("Anime & Manga", anime.name)
+        assertEquals("/media/Anime%20*a*%20Manga/fandoms", anime.fandomsPath)
+        assertEquals(listOf("Naruto", "Bleach"), anime.featuredFandoms)
+        assertEquals("TV Shows", categories[1].name)
+    }
+
+    @Test
+    fun skipsCategoriesWithNoFeaturedFandoms() {
+        // Parity with Apple mediaCategories() which drops featured-fandom-less categories.
+        val categories = parser.parseMediaCategories(fixture("ao3/browse/categories_with_featureless.html"))
+        assertEquals(listOf("Anime & Manga"), categories.map { it.name })
+    }
+
+    @Test
+    fun pageOfOnlyFeaturelessCategoriesThrowsMissingStructure() {
+        val html = """
+            <ul class="media fandom index group">
+              <li class="medium listbox group">
+                <h3 class="heading"><a href="/media/Featureless/fandoms">Featureless</a></h3>
+              </li>
+            </ul>
+        """.trimIndent()
+        try {
+            parser.parseMediaCategories(html)
+            fail("Expected missing-structure error when no category has featured fandoms.")
+        } catch (_: AO3BrowseParseException.MissingRequiredStructure) {
+            // expected
+        }
+    }
+
+    @Test
+    fun parsesFandomListWithCountsAndDedupesFirstSeen() {
+        val fandoms = parser.parseFandomList(fixture("ao3/browse/fandom_list.html"))
+
+        // Naruto appears twice in the fixture; first-seen wins, dupes dropped.
+        assertEquals(listOf("Naruto", "Bleach", "Example Fandom"), fandoms.map { it.name })
+        assertEquals(12345, fandoms.first().workCount)
+        assertEquals(42, fandoms[2].workCount)
+    }
+
+    @Test
+    fun parsesFandomListAcrossMultipleLetterSectionsAndDecodesEntities() {
+        // The real /media/<name>/fandoms page is one <ol class="fandom index"> per
+        // letter (A, B, C...), which is exactly why the parser must be a linear scan
+        // across the whole page rather than one DOM select() — this pins that the
+        // scan actually continues past the first section's closing </ol>.
+        val html = """
+            <ol class="fandom index group">
+              <li><a class="tag" href="/tags/Ai/works">Ai &amp; Friends</a> (3)</li>
+            </ol>
+            <p>-- B --</p>
+            <ol class="fandom index group">
+              <li><a class="tag" href="/tags/Bleach/works">Bleach</a> (6,789)</li>
+            </ol>
+        """.trimIndent()
+
+        val fandoms = parser.parseFandomList(html)
+
+        assertEquals(listOf("Ai & Friends", "Bleach"), fandoms.map { it.name })
+        assertEquals(3, fandoms[0].workCount)
+        assertEquals(6789, fandoms[1].workCount)
+    }
+
+    @Test
+    fun overloadPageThrowsTypedError() {
+        try {
+            parser.parseMediaCategories(fixture("ao3/browse/overload.html"))
+            fail("Expected overload error.")
+        } catch (_: AO3BrowseParseException.Overloaded) {
+            // expected
+        }
+    }
+
+    @Test
+    fun emptyCategoryThrowsMissingStructure() {
+        try {
+            parser.parseFandomList(fixture("ao3/browse/empty_category.html"))
+            fail("Expected missing-structure error.")
+        } catch (error: AO3BrowseParseException.MissingRequiredStructure) {
+            assertTrue(error.message!!.isNotBlank())
+        }
+    }
+
+    @Test
+    fun changedMarkupThrowsMissingStructureNotEmptyList() {
+        try {
+            parser.parseMediaCategories(fixture("ao3/browse/parser_changed.html"))
+            fail("Expected missing-structure error for changed markup.")
+        } catch (_: AO3BrowseParseException.MissingRequiredStructure) {
+            // expected — a parser break must not look like "no categories".
+        }
+    }
+}
