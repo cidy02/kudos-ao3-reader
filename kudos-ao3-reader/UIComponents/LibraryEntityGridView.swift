@@ -6,9 +6,13 @@ import SwiftUI
 /// views unchanged, just laid out in an adaptive grid instead of a horizontal
 /// scroll, so a large Collections/Reading Queues list has a real page to land on
 /// instead of growing the carousel indefinitely.
-struct LibraryEntityGridView<Item: Identifiable & Hashable, Card: View, NewCard: View>: View {
+///
+/// `destination` maps each item to the navigation value pushed when its card is
+/// tapped — identity for Collections (detail), a browser route for Reading Queues.
+struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: View, NewCard: View>: View {
     let title: String
     let items: [Item]
+    let destination: (Item) -> Destination
     let onNew: () -> Void
     @ViewBuilder let card: (Item) -> Card
     @ViewBuilder let newCard: () -> NewCard
@@ -38,7 +42,7 @@ struct LibraryEntityGridView<Item: Identifiable & Hashable, Card: View, NewCard:
                 Button(action: onNew) { newCard() }
                     .buttonStyle(.plain)
                 ForEach(items) { item in
-                    NavigationLink(value: item) { card(item) }
+                    NavigationLink(value: destination(item)) { card(item) }
                         .buttonStyle(.plain)
                 }
             }

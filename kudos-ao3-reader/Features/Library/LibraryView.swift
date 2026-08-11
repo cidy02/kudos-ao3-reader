@@ -102,12 +102,32 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         LibraryEntityGridView(
             title: "Collections",
             items: collections,
+            destination: { $0 },
             onNew: {
                 newCollectionName = ""
                 showingNewCollection = true
             },
             card: { CollectionCard(collection: $0) },
             newCard: { NewCollectionCard() }
+        )
+    }
+
+    /// Chevron "See all" lands here — a grid of queue stack cards (same tiles as the
+    /// carousel), not the works of whichever queue would have been auto-selected.
+    /// Tapping a stack pushes `ReadingQueueBrowserView` for that queue.
+    private var readingQueuesGridDestination: some View {
+        LibraryEntityGridView(
+            title: "Reading Queues",
+            items: readingQueues
+                .filter { $0.kind == .custom }
+                .sorted { $0.sortOrder < $1.sortOrder },
+            destination: { AllReadingQueuesDestination(initialQueueID: $0.id) },
+            onNew: {
+                newQueueName = ""
+                showingNewQueue = true
+            },
+            card: { ReadingQueueCard(queue: $0) },
+            newCard: { NewReadingQueueCard() }
         )
     }
 
@@ -139,7 +159,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
                 .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
-                    ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
+                    // Chevron passes nil → stack grid. A specific queue id (carousel
+                    // tile or a stack in that grid) opens the Safari-style browser.
+                    if destination.initialQueueID == nil {
+                        readingQueuesGridDestination
+                    } else {
+                        ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
+                    }
                 }
                 .toolbar { toolbarContent }
             #if os(iOS)

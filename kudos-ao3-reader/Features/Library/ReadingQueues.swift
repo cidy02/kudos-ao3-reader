@@ -4,9 +4,10 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Navigation route for the Reading Queue browser — the switcher + active-queue
-/// page above `ReadingQueueDetailView`. `initialQueueID` pre-selects a queue when
-/// arriving from a specific carousel tile instead of "See all" (nil).
+/// Navigation route for Reading Queues beyond the Library carousel.
+/// - `initialQueueID == nil` — the full grid of queue stack cards ("See all" chevron).
+/// - non-nil — the Safari-style browser pre-selected on that queue (carousel tile
+///   or a stack tapped inside the grid).
 struct AllReadingQueuesDestination: Hashable {
     var initialQueueID: UUID?
 }
