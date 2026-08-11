@@ -66,8 +66,8 @@ struct ScopedRemovalBulkActionBar: View {
                 bulkToggleSavedForLater()
             } label: {
                 Label(
-                    allSavedForLater ? "Remove from Saved for Later" : "Save for Later",
-                    systemImage: allSavedForLater ? "bookmark.slash" : "clock.arrow.circlepath"
+                    WorkActionLabels.savedForLater(isQueued: allSavedForLater).title,
+                    systemImage: WorkActionLabels.savedForLater(isQueued: allSavedForLater).systemImage
                 )
             }
             Button {

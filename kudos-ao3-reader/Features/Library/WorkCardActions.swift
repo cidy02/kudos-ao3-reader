@@ -225,11 +225,19 @@ enum WorkActionLabels {
             : ("Mark as Finished", "checkmark.circle")
     }
 
+    /// Clock — not bookmark. Bookmark is reserved for AO3 bookmarks and "Save
+    /// to Keep" (permanent EPUB retention); reusing it here made those three
+    /// actions unreadable next to each other.
     static func savedForLater(isQueued: Bool) -> (title: String, systemImage: String) {
         isQueued
-            ? ("Remove from Saved for Later", "bookmark.slash")
-            : ("Save for Later", "bookmark.fill")
+            ? ("Remove from Saved for Later", "clock.badge.xmark")
+            : ("Save for Later", "clock")
     }
+
+    /// Filled clock for "this *is* Saved for Later" states (queue glyph, badges).
+    static let savedForLaterSymbol = "clock.fill"
+    /// Outline clock for empty/idle Saved for Later affordances.
+    static let savedForLaterEmptySymbol = "clock"
 
     static func favorite(isFavorite: Bool) -> (title: String, systemImage: String) {
         isFavorite

@@ -204,9 +204,13 @@ enum WorkDetailPresentation {
     }
 
     /// Compact tile labels; the Library row uses `WorkActionLabels.savedForLater`'s
-    /// full wording for the same toggle.
+    /// full wording for the same toggle. Icons match that pair (clock, not bookmark).
     static func laterAction(isQueued: Bool) -> (title: String, systemImage: String) {
-        isQueued ? ("Remove from Later", "bookmark.slash") : ("Save for Later", "clock.badge")
+        let icons = WorkActionLabels.savedForLater(isQueued: isQueued)
+        return (
+            isQueued ? "Remove from Later" : "Save for Later",
+            icons.systemImage
+        )
     }
 
     static func queueLabel(count: Int) -> String {

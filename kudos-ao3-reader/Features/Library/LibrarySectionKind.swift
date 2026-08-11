@@ -62,7 +62,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     var emptyIcon: String {
         switch self {
         case .readingNow: "book"
-        case .savedForLater: "bookmark"
+        case .savedForLater: WorkActionLabels.savedForLaterEmptySymbol
         case .finished: "checkmark.circle"
         case .collections: "square.stack"
         case .downloaded: "arrow.down.circle"

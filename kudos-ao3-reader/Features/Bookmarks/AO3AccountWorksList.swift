@@ -48,6 +48,17 @@ struct AO3AccountWorksList: View {
             }
         }
 
+        /// Empty / signed-out chrome — bookmark is reserved for AO3 bookmarks only.
+        var emptySymbol: String {
+            switch self {
+            case .markedForLater: WorkActionLabels.savedForLaterEmptySymbol
+            case .bookmarks: "bookmark"
+            case .history: "clock.arrow.circlepath"
+            case .subscriptions: "bell"
+            case .collection: "square.stack"
+            }
+        }
+
         var signedOutTitle: String {
             switch self {
             case .markedForLater: "Marked for Later"
@@ -215,7 +226,7 @@ struct AO3AccountWorksList: View {
         switch phase {
         case .loaded where works.isEmpty:
             ContentUnavailableView {
-                Label(kind.emptyTitle, systemImage: "bookmark")
+                Label(kind.emptyTitle, systemImage: kind.emptySymbol)
             } description: {
                 Text(kind.emptyMessage)
             }
@@ -328,7 +339,7 @@ struct AO3AccountWorksList: View {
 
     private var signedOutPrompt: some View {
         ContentUnavailableView {
-            Label(kind.signedOutTitle, systemImage: "bookmark")
+            Label(kind.signedOutTitle, systemImage: kind.emptySymbol)
         } description: {
             Text(kind.signedOutMessage)
         } actions: {

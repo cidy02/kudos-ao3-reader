@@ -347,7 +347,7 @@ struct ReadingQueueBrowserView: View {
                 .fill(themeManager.appTheme.carouselQueueTint(hue: CoverArt.hue(for: queue.displayName)))
                 .frame(width: 10, height: 10)
         } else {
-            Image(systemName: "bookmark.fill")
+            Image(systemName: WorkActionLabels.savedForLaterSymbol)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -362,7 +362,7 @@ struct ReadingQueueBrowserView: View {
                 Label(
                     selectedQueue.displayName,
                     systemImage: selectedQueue.kind == .savedForLater
-                        ? "bookmark"
+                        ? WorkActionLabels.savedForLaterEmptySymbol
                         : "list.bullet.rectangle"
                 )
             } description: {

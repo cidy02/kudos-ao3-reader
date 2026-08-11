@@ -151,7 +151,9 @@ struct ReadingQueueCard: View {
             }
             .overlay(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: queue.kind == .savedForLater ? "bookmark.fill" : "list.bullet.rectangle")
+                    Image(systemName: queue.kind == .savedForLater
+                            ? WorkActionLabels.savedForLaterSymbol
+                            : "list.bullet.rectangle")
                         .font(.system(size: 34, weight: .semibold))
                         .foregroundStyle(.tint)
                     Spacer()
@@ -384,7 +386,9 @@ struct ReadingQueueStorageView: View {
 
     private func preservedWorkRow(_ work: SavedWork) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: work.isInSavedForLaterQueue ? "bookmark.fill" : "list.bullet.rectangle")
+            Image(systemName: work.isInSavedForLaterQueue
+                ? WorkActionLabels.savedForLaterSymbol
+                : "list.bullet.rectangle")
                 .foregroundStyle(.tint)
                 .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
@@ -599,7 +603,9 @@ struct AddToQueueView: View {
     }
 
     private func queueSymbol(_ queue: ReadingQueue) -> String {
-        queue.kind == .savedForLater ? "bookmark" : "list.bullet.rectangle"
+        queue.kind == .savedForLater
+            ? WorkActionLabels.savedForLaterEmptySymbol
+            : "list.bullet.rectangle"
     }
 
     // Series preservation is anchored to a single AO3 series, so it only applies

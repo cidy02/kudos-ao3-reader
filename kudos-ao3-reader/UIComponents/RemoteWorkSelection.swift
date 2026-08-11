@@ -132,7 +132,10 @@ struct RemoteWorkBulkActionBar: View {
         Button {
             run { await controller.bulkSaveForLater(selectedSummaries(), in: context) }
         } label: {
-            Label("Save for Later", systemImage: "clock.arrow.circlepath")
+            Label(
+                WorkActionLabels.savedForLater(isQueued: false).title,
+                systemImage: WorkActionLabels.savedForLater(isQueued: false).systemImage
+            )
         }
         .disabled(controller.selection.isEmpty || controller.isProcessingBatch)
 

@@ -196,7 +196,9 @@ struct WorkProvenanceSections: View {
         if let preservation = work.preservationState.badgeLabel {
             badges.append((text: preservation, symbol: work.preservationState.badgeSymbol))
         }
-        if work.isInSavedForLaterQueue { badges.append((text: "Later", symbol: "bookmark.fill")) }
+        if work.isInSavedForLaterQueue {
+            badges.append((text: "Later", symbol: WorkActionLabels.savedForLaterSymbol))
+        }
         if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
         if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
         if work.isFinished { badges.append((text: "Finished", symbol: "checkmark.circle.fill")) }
