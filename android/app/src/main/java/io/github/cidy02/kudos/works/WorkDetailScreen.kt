@@ -28,10 +28,12 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Person
@@ -1124,12 +1126,36 @@ fun WorkDetailScreen(
         onAddToSavedForLater = {
             ensureLocalThen(queueOnly = true) { work ->
                 if (state.inSavedForLater) {
+                    // Capture AO3 identity before remove may soft-delete a queue-only row.
+                    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+                        ?: state.ao3WorkId
+                        ?: state.remote?.id
+                    val remoteFallback = state.remote
                     readingQueueRepository.removeFromSavedForLater(work.id)
+                    val stillThere = workRepository.getWork(work.id)
+                    if (stillThere == null || stillThere.isDeleted) {
+                        // Stay on the page with remote/AO3 state — don't pop (looked like delete).
+                        state = state.copy(
+                            local = null,
+                            remote = remoteFallback ?: state.remote,
+                            inSavedForLater = false,
+                            loading = false,
+                            ao3Message = if (ao3Id != null || remoteFallback != null) {
+                                "Removed from Saved for Later. Offline copy is in Recently Deleted for 90 days."
+                            } else {
+                                "Removed from Saved for Later."
+                            },
+                            error = null
+                        )
+                    } else {
+                        refreshLocal(stillThere.id, state.remote)
+                        state = state.copy(ao3Message = "Removed from Saved for Later.")
+                    }
                 } else {
                     readingQueueRepository.addToSavedForLater(work.id)
                     preserveEpubForQueue(work)
+                    refreshLocal(work.id, state.remote)
                 }
-                refreshLocal(work.id, state.remote)
             }
         },
         onAddToQueue = {
@@ -1675,8 +1701,8 @@ private fun OverviewTab(
                 onClick = onOpenAo3
             ),
             QuickAction(
-                label = if (isSaved) "Saved" else "Save",
-                icon = if (isSaved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                label = if (isSaved) "Downloaded" else "Download",
+                icon = if (isSaved) Icons.Filled.Download else Icons.Outlined.Download,
                 enabled = !busy && (state.local != null || state.remote != null),
                 emphasized = isSaved,
                 onClick = onToggleSaved

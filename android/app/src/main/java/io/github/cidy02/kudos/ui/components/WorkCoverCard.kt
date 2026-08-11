@@ -46,7 +46,7 @@ import kotlin.math.absoluteValue
  * not a pixel clone of the 164×228 SwiftUI tile.
  *
  * - Whole-card open is the primary action (usually Read).
- * - [IconButton] + [Icons.Outlined.Info] is the Work Detail affordance (MD3).
+ * - Work Details lives on long-press / context menu (no corner ⓘ — iOS parity).
  * - Local status badges stay off the face when possible; progress uses
  *   [LinearProgressIndicator].
  */
@@ -58,7 +58,7 @@ fun WorkCoverCard(
     fandom: String?,
     stats: List<WorkStatItem>,
     onOpen: () -> Unit,
-    onOpenDetails: () -> Unit,
+    onOpenDetails: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     workId: Long? = null,
     progress: Float? = null,
@@ -119,22 +119,15 @@ fun WorkCoverCard(
                 .padding(WorkCoverCardMetrics.contentPadding),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    minLines = 2,
-                    modifier = Modifier.weight(1f)
-                )
-                WorkDetailsIconButton(onClick = onOpenDetails)
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             // Always reserve one attribution line so cards with/without fandom match.
             CardMetaLine(
@@ -307,7 +300,7 @@ fun CardMetaLine(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(14.dp)
         )
         Text(
@@ -385,6 +378,11 @@ object WorkCoverCardMetrics {
     val minHeight = height
     val contentPadding = 12.dp
     val shelfSpacing = 12.dp
+    /**
+     * Shared gap for compact cover grids — horizontal *and* vertical
+     * ([LazyVerticalGrid] spacing). Matches iOS `compactGridSpacing`.
+     */
+    val compactGridSpacing = 16.dp
     /** Progress / footer band reserved on every card. */
     val footerHeight = 36.dp
     /** Cap stats rows so denser works don't overflow the fixed card. */

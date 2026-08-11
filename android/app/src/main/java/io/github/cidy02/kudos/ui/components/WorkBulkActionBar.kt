@@ -10,9 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.AlertDialog
@@ -93,7 +93,7 @@ fun WorkBulkActionBar(
                         onDone()
                     }
                 }, enabled = hasSelection) {
-                    Icon(Icons.Outlined.Bookmark, "Save")
+                    Icon(Icons.Outlined.Download, "Download")
                 }
                 IconButton(onClick = { showingAddToQueue = true }, enabled = hasSelection) {
                     Icon(Icons.Outlined.Queue, "Add to Queue")
@@ -132,7 +132,7 @@ fun WorkBulkActionBar(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Unsave") },
+                            text = { Text("Remove Download") },
                             onClick = {
                                 overflowExpanded = false
                                 scope.launch {
@@ -152,7 +152,10 @@ fun WorkBulkActionBar(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Remove from Save for Later") },
+                            text = { Text(WorkActionLabels.savedForLater(isQueued = true).title) },
+                            leadingIcon = {
+                                Icon(WorkActionLabels.savedForLaterIcon, contentDescription = null)
+                            },
                             onClick = {
                                 overflowExpanded = false
                                 scope.launch {

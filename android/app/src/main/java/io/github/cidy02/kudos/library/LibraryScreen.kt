@@ -36,12 +36,12 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.Bookmark
-import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Queue
@@ -890,7 +890,7 @@ private fun LibraryToolbarPill(
             text = if (state.selectionMode) {
                 if (state.hasSelection) "${state.selectedCount} selected" else "Select works"
             } else {
-                "${state.totalSaved} saved$hidden"
+                "${state.totalSaved} downloaded$hidden"
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1266,30 +1266,20 @@ fun LibraryCarouselCard(
                     actions.onSelect(work.id)
                 }
             )
-            if (work.isSaved) {
-                ContextMenuItem(
-                    icon = Icons.Outlined.BookmarkBorder,
-                    label = "Remove from Saved",
-                    onClick = {
-                        menuOpen = false
-                        actions.onSetSaved(work.id, false)
-                    }
-                )
-            }
+            ContextMenuItem(
+                icon = if (work.isSaved) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+                label = if (work.isSaved) "Remove Download" else "Download",
+                onClick = {
+                    menuOpen = false
+                    actions.onSetSaved(work.id, !work.isSaved)
+                }
+            )
             ContextMenuItem(
                 icon = if (work.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
                 label = if (work.isFavorite) "Unfavorite" else "Favorite",
                 onClick = {
                     menuOpen = false
                     actions.onToggleFavorite(work.id)
-                }
-            )
-            ContextMenuItem(
-                icon = Icons.Outlined.Bookmark,
-                label = if (work.isSaved) "Saved for Later" else "Save for Later",
-                onClick = {
-                    menuOpen = false
-                    actions.onSetSaved(work.id, !work.isSaved)
                 }
             )
             ContextMenuItem(
@@ -1652,7 +1642,7 @@ private fun LibrarySelectionActionBar(
                     Icon(Icons.Outlined.Star, "Favorite")
                 }
                 IconButton(onClick = onSave, enabled = hasSelection) {
-                    Icon(Icons.Outlined.Bookmark, "Save")
+                    Icon(Icons.Outlined.Download, "Download")
                 }
                 IconButton(onClick = onAddToQueue, enabled = hasSelection) {
                     Icon(Icons.Outlined.Queue, "Add to Queue")
@@ -1679,7 +1669,7 @@ private fun LibrarySelectionActionBar(
                             onClick = { overflowExpanded = false; onUnfavorite() }
                         )
                         DropdownMenuItem(
-                            text = { Text("Unsave") },
+                            text = { Text("Remove Download") },
                             onClick = { overflowExpanded = false; onUnsave() }
                         )
                         DropdownMenuItem(
@@ -1687,7 +1677,7 @@ private fun LibrarySelectionActionBar(
                             onClick = { overflowExpanded = false; onMarkUnfinished() }
                         )
                         DropdownMenuItem(
-                            text = { Text("Remove from Save for Later") },
+                            text = { Text("Remove from Saved for Later") },
                             onClick = { overflowExpanded = false; onRemoveFromSaveForLater() }
                         )
                         HorizontalDivider()

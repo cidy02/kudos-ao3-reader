@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,11 +26,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -72,11 +76,11 @@ import io.github.cidy02.kudos.ui.components.coverHue
 import kotlinx.coroutines.launch
 
 /**
- * Lightweight reading-queue browser (Apple `ReadingQueueBrowserView`).
+ * Reading-queue browser (Apple `ReadingQueueBrowserView`).
  *
- * Bottom queue-name pill + sheet switcher (compact) or persistent sidebar (expanded),
- * full work-card grid for the active queue. Filters / reorder / rename / delete stay on
- * [QueueDetailScreen], reached via [onManageQueue] — this screen does not duplicate them.
+ * - [initialQueueId] null → full grid of queue stack tiles (See all), then open a queue.
+ * - non-null → Safari-style switcher + active-queue work grid for that queue.
+ * Overflow opens advanced list management ([QueueDetailScreen]) for filters/reorder.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,19 +92,35 @@ fun ReadingQueueBrowserScreen(
     onManageQueue: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // See-all lands with null and must show the stack grid first — not auto-select
+    // Saved for Later. Shelf tile taps pass a concrete id and skip the grid.
+    var selectedQueueId by rememberSaveable {
+        mutableStateOf(initialQueueId)
+    }
+    val showingAllQueuesGrid = selectedQueueId == null && initialQueueId == null
+
+    if (showingAllQueuesGrid) {
+        AllReadingQueuesGridScreen(
+            repository = repository,
+            onOpenQueue = { id ->
+                selectedQueueId = id
+                ReadingQueueBrowserMemory.lastSelectedId = id
+            },
+            onNewQueueCreated = { id ->
+                selectedQueueId = id
+                ReadingQueueBrowserMemory.lastSelectedId = id
+            }
+        )
+        return
+    }
+
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var queues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
     var workCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var works by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
-    var membershipCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
 
-    // Last-selected queue for this process (deliberately not DataStore — no cheap UI-pref
-    // precedent in SettingsRepository for arbitrary screen keys). Survives within-session
-    // re-entry; config changes also keep selection via rememberSaveable.
-    var selectedQueueId by rememberSaveable {
-        mutableStateOf(initialQueueId ?: ReadingQueueBrowserMemory.lastSelectedId)
-    }
+    // Once a queue is chosen (from grid or deep link), keep selection across config.
     var showSwitcher by remember { mutableStateOf(false) }
     var showNewQueue by remember { mutableStateOf(false) }
     var newQueueName by remember { mutableStateOf("") }
@@ -122,15 +142,10 @@ fun ReadingQueueBrowserScreen(
     suspend fun refreshWorks(queueId: String?) {
         if (queueId == null) {
             works = emptyList()
-            membershipCounts = emptyMap()
             return
         }
         val items = repository.listWorks(queueId)
-        val present = items.mapNotNull { it.work }
-        works = present
-        membershipCounts = present.associate { work ->
-            work.id to repository.activeMembershipCountForWork(work.id)
-        }
+        works = items.mapNotNull { it.work }
     }
 
     suspend fun refreshAll() {
@@ -275,7 +290,6 @@ fun ReadingQueueBrowserScreen(
                 workCounts = workCounts,
                 selectedQueue = selectedQueue,
                 works = works,
-                membershipCounts = membershipCounts,
                 loading = loading,
                 error = error,
                 onSelectQueue = { selectQueue(it.id) },
@@ -293,7 +307,6 @@ fun ReadingQueueBrowserScreen(
             CompactBrowserLayout(
                 selectedQueue = selectedQueue,
                 works = works,
-                membershipCounts = membershipCounts,
                 loading = loading,
                 error = error,
                 onOpenSwitcher = { showSwitcher = true },
@@ -315,7 +328,6 @@ fun ReadingQueueBrowserScreen(
 private fun CompactBrowserLayout(
     selectedQueue: ReadingQueue?,
     works: List<SavedWork>,
-    membershipCounts: Map<String, Int>,
     loading: Boolean,
     error: String?,
     onOpenSwitcher: () -> Unit,
@@ -346,7 +358,6 @@ private fun CompactBrowserLayout(
             BrowserPageContent(
                 selectedQueue = selectedQueue,
                 works = works,
-                membershipCounts = membershipCounts,
                 loading = loading,
                 error = error,
                 onOpenWork = onOpenWork,
@@ -363,7 +374,6 @@ private fun ExpandedBrowserLayout(
     workCounts: Map<String, Int>,
     selectedQueue: ReadingQueue?,
     works: List<SavedWork>,
-    membershipCounts: Map<String, Int>,
     loading: Boolean,
     error: String?,
     onSelectQueue: (ReadingQueue) -> Unit,
@@ -413,7 +423,6 @@ private fun ExpandedBrowserLayout(
             BrowserPageContent(
                 selectedQueue = selectedQueue,
                 works = works,
-                membershipCounts = membershipCounts,
                 loading = loading,
                 error = error,
                 onOpenWork = onOpenWork,
@@ -454,7 +463,7 @@ private fun BrowserManageHeader(
         IconButton(onClick = onManageQueue, enabled = enabled) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
-                contentDescription = "Manage Queue"
+                contentDescription = "List filters and reorder"
             )
         }
     }
@@ -464,7 +473,6 @@ private fun BrowserManageHeader(
 private fun BrowserPageContent(
     selectedQueue: ReadingQueue?,
     works: List<SavedWork>,
-    membershipCounts: Map<String, Int>,
     loading: Boolean,
     error: String?,
     onOpenWork: (String) -> Unit,
@@ -495,7 +503,6 @@ private fun BrowserPageContent(
                 LibraryCardActions(
                     onOpenWork = onOpenWork,
                     onOpenReader = onOpenReader,
-                    // Browse-layer only — full management lives on QueueDetailScreen.
                     onToggleFavorite = {},
                     onToggleFinished = {},
                     onRemove = {},
@@ -509,39 +516,20 @@ private fun BrowserPageContent(
             }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = WorkCoverCardMetrics.width),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.compactGridSpacing),
+                verticalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.compactGridSpacing),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 modifier = modifier.fillMaxSize()
             ) {
                 items(works, key = { it.id }) { work ->
-                    val count = membershipCounts[work.id] ?: 1
-                    Box {
-                        LibraryCarouselCard(
-                            display = LibraryDisplayItem(
-                                item = LibraryWorkListItem(work = work)
-                            ),
-                            showProgress = true,
-                            footerOverride = null,
-                            actions = cardActions
-                        )
-                        if (count > 1) {
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(6.dp),
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
-                                tonalElevation = 2.dp
-                            ) {
-                                Text(
-                                    text = "In $count",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                    }
+                    LibraryCarouselCard(
+                        display = LibraryDisplayItem(
+                            item = LibraryWorkListItem(work = work)
+                        ),
+                        showProgress = true,
+                        footerOverride = null,
+                        actions = cardActions
+                    )
                 }
             }
         }
@@ -683,10 +671,216 @@ private fun QueueGlyph(queue: ReadingQueue?) {
         )
     } else {
         Icon(
-            imageVector = Icons.Filled.Bookmark,
+            imageVector = Icons.Outlined.Schedule,
             contentDescription = null,
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Full grid of reading-queue tiles behind the Library "See all" chevron —
+ * iOS `AllReadingQueuesGridView`. Tapping a tile opens that queue in the browser.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AllReadingQueuesGridScreen(
+    repository: ReadingQueueRepository,
+    onOpenQueue: (String) -> Unit,
+    onNewQueueCreated: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var queues by remember { mutableStateOf<List<ReadingQueue>>(emptyList()) }
+    var workCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var showNewQueue by remember { mutableStateOf(false) }
+    var newQueueName by remember { mutableStateOf("") }
+
+    suspend fun refresh() {
+        loading = true
+        error = null
+        try {
+            repository.ensureSavedForLaterQueue()
+            val listed = repository.listQueues()
+            queues = orderQueues(listed)
+            workCounts = listed.associate { queue ->
+                queue.id to repository.listWorks(queue.id).size
+            }
+        } catch (e: Exception) {
+            error = e.message ?: "Could not load reading queues."
+        } finally {
+            loading = false
+        }
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    if (showNewQueue) {
+        AlertDialog(
+            onDismissRequest = {
+                showNewQueue = false
+                newQueueName = ""
+            },
+            title = { Text("New Queue") },
+            text = {
+                OutlinedTextField(
+                    value = newQueueName,
+                    onValueChange = { newQueueName = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = newQueueName.trim().isNotEmpty(),
+                    onClick = {
+                        val trimmed = newQueueName.trim()
+                        showNewQueue = false
+                        newQueueName = ""
+                        if (trimmed.isEmpty()) return@TextButton
+                        scope.launch {
+                            try {
+                                val created = repository.createQueue(trimmed)
+                                onNewQueueCreated(created.id)
+                            } catch (e: Exception) {
+                                error = e.message ?: "Could not create queue."
+                            }
+                        }
+                    }
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showNewQueue = false
+                    newQueueName = ""
+                }) { Text("Cancel") }
+            }
+        )
+    }
+
+    when {
+        loading && queues.isEmpty() -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingStateCard("Loading queues")
+            }
+        }
+        error != null && queues.isEmpty() -> {
+            val message = error ?: "Could not load reading queues."
+            Box(Modifier.fillMaxSize().padding(20.dp)) {
+                ErrorStateCard(title = "Queues unavailable", message = message)
+            }
+        }
+        else -> {
+            val customQueues = queues.filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = WorkCoverCardMetrics.width),
+                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.compactGridSpacing),
+                verticalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.compactGridSpacing),
+                contentPadding = PaddingValues(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(key = "new-queue") {
+                    QueueGridNewTile(onClick = {
+                        newQueueName = ""
+                        showNewQueue = true
+                    })
+                }
+                items(customQueues, key = { it.id }) { queue ->
+                    QueueGridTile(
+                        title = queue.displayName,
+                        workCount = workCounts[queue.id] ?: 0,
+                        onClick = { onOpenQueue(queue.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueGridNewTile(onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.width(WorkCoverCardMetrics.width),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                MaterialTheme.colorScheme.outlineVariant
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(WorkCoverCardMetrics.height - 48.dp)
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "New Queue",
+                    modifier = Modifier.size(34.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Text("New Queue", style = MaterialTheme.typography.titleSmall, maxLines = 2)
+        Text(
+            "Tap to create",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun QueueGridTile(
+    title: String,
+    workCount: Int,
+    onClick: () -> Unit
+) {
+    val hue = coverHue(title)
+    Column(
+        modifier = Modifier
+            .width(WorkCoverCardMetrics.width)
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(WorkCoverCardMetrics.height - 48.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.hsl(hue, 0.35f, 0.55f, alpha = 0.22f))
+                    .padding(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(28.dp)
+                )
+            }
+        }
+        Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+        Text(
+            text = when (workCount) {
+                0 -> "Empty"
+                1 -> "1 work"
+                else -> "$workCount works"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

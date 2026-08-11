@@ -140,7 +140,6 @@ fun AO3WorkCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                WorkDetailsIconButton(onClick = { onOpenWork(work) })
             }
 
             // Collapsed, the card names the work's main fandom and counts the rest:

@@ -97,7 +97,9 @@ fun WorkStatLabel(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                // Secondary — not primary/accent. Language, words, kudos etc. sit
+                // under the category chips as quiet metadata (iOS WorkStatLabel).
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp)
             )
         }
