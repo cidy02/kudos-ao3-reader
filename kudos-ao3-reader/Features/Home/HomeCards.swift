@@ -8,11 +8,10 @@ import SwiftUI
 ///
 /// **One stat per row.** This was a `FlowLayout` that packed as many stats onto a line
 /// as fit, which is why the values were abbreviated to the point of being cryptic ("M",
-/// "112K", "WIP"). The status badges that used to compete for the same space now live
-/// behind the card's ⓘ button, so the vertical room exists and each stat can say what
-/// it means. A column also removes the two-pass sizing hazard `WorkSummaryCardSurface`
-/// documents: a `VStack`'s height does not depend on the width it is proposed, so it
-/// cannot wrap differently between the ideal-size query and placement.
+/// "112K", "WIP"). A column gives each stat room to say what it means, and removes
+/// the two-pass sizing hazard `WorkSummaryCardSurface` documents: a `VStack`'s height
+/// does not depend on the width it is proposed, so it cannot wrap differently between
+/// the ideal-size query and placement.
 struct CoverCardStatsRow: View {
     var ratingName: String?
     /// The full AO3 rating ("Teen And Up Audiences"), announced in place of the visible
@@ -101,18 +100,15 @@ struct WorkCoverCard: View {
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .top, spacing: 6) {
-                    Text(work.title)
-                        .font(.subheadline.weight(.semibold))
-                        // Two lines, then "…". A third line costs real card height
-                        // for a fraction of a title, and long fandom titles are
-                        // common enough that they decided the card's size more often
-                        // than the metadata below them did.
-                        .lineLimit(2)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    statusButton
-                }
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    // Two lines, then "…". A third line costs real card height
+                    // for a fraction of a title, and long fandom titles are
+                    // common enough that they decided the card's size more often
+                    // than the metadata below them did.
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 // Three groups on this card — what it is, who wrote it, what it
                 // measures — and the uniform 7pt rhythm ran them together. The extra
                 // space sits on the *title* rather than on the author row so the gap
@@ -140,10 +136,9 @@ struct WorkCoverCard: View {
 
                 // Only preservation stays on the card. It is the one status the app
                 // exists to surface — "this is the last copy of a deleted work" — and
-                // hiding that behind a tap would defeat the point. It also appears on
-                // very few cards, so it costs space only where it matters most.
-                // Everything else lives behind the ⓘ button, which is what the owner
-                // asked for: statuses without the card paying for them.
+                // hiding that would defeat the point. It also appears on very few
+                // cards, so it costs space only where it matters most. Work Details
+                // is on the long-press menu, not a corner control.
                 if let preservation = work.preservationState.badgeLabel {
                     WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
                         .font(.caption2)
@@ -189,44 +184,6 @@ struct WorkCoverCard: View {
         return progressValue >= 1 ? "Finished" : "Reading"
     }
 
-    /// ⓘ in the card's top-right corner: pushes Work Details.
-    ///
-    /// Shown on **every** card. It used to appear only when the work had a badge worth
-    /// showing, because it opened a sheet that would otherwise have been empty; now that
-    /// it goes to Work Details — which always has something to say — a card without one
-    /// would just be a card missing its shortcut.
-    ///
-    /// A foreground `NavigationLink` is safe even though the whole card navigates: the
-    /// card's own link lives in the *background* (see `CardNavigationModifier`), so a
-    /// foreground control is hit-tested first and takes its own taps. That is precisely
-    /// why the card's link is in the background rather than wrapping the content. The
-    /// card opens the reader; this opens the work.
-    private var statusButton: some View {
-        NavigationLink(value: LocalWorkDestination.detail(work)) {
-            Image(systemName: "info.circle")
-                // Body size, matching the same ⓘ in the card's long-press menu — at
-                // .caption it read as decoration rather than a control.
-                .font(.body)
-                .foregroundStyle(.secondary)
-                // 30pt of tappable area around a 17pt glyph. Still under the 44pt
-                // guideline, deliberately: a larger target on a compact carousel card
-                // would eat the title's width, and Work Details is also reachable by
-                // long-pressing the card.
-                //
-                // The glyph is pinned to the box's own top-trailing corner, and the
-                // box is then pulled into the card's 12pt padding. Without both, the
-                // slack between a 28pt target and a 13pt glyph left the ⓘ floating
-                // roughly 19pt inside the corner instead of sitting in it. The tap
-                // target keeps its full 28pt — only the layout moves.
-                .frame(width: 30, height: 30, alignment: .topTrailing)
-                .contentShape(Rectangle())
-                .padding(.top, -4)
-                .padding(.trailing, -6)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Work details")
-    }
-
     private var footerSymbol: String {
         if work.isFinished { return "checkmark.circle.fill" }
         if footer?.contains("new") == true { return "sparkle" }
@@ -268,15 +225,12 @@ struct AO3WorkCoverCard: View {
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .top, spacing: 6) {
-                    Text(work.title)
-                        .font(.subheadline.weight(.semibold))
-                        // Matches the local card — see `WorkCoverCard`.
-                        .lineLimit(2)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    detailButton
-                }
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    // Matches the local card — see `WorkCoverCard`.
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 // Matches the local card's grouping — see `WorkCoverCard`.
                 .padding(.bottom, 3)
 
@@ -309,24 +263,6 @@ struct AO3WorkCoverCard: View {
         }
         .workCardZoomSource(work.id, in: zoomNamespace)
         .remoteWorkContextMenu(work: work)
-    }
-
-    /// ⓘ → Work Details for the remote work. Same placement and target size as the
-    /// local card's (see `WorkCoverCard.statusButton`).
-    private var detailButton: some View {
-        NavigationLink(value: work) {
-            Image(systemName: "info.circle")
-                // Body size, matching the same ⓘ in the card's long-press menu — at
-                // .caption it read as decoration rather than a control.
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30, alignment: .topTrailing)
-                .contentShape(Rectangle())
-                .padding(.top, -4)
-                .padding(.trailing, -6)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Work details")
     }
 
     private var cardStats: some View {
