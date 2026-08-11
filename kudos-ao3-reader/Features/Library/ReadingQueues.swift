@@ -4,8 +4,12 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Navigation route for the Reading Queues carousel's "See all" destination.
-struct AllReadingQueuesDestination: Hashable {}
+/// Navigation route for the Reading Queue browser — the switcher + active-queue
+/// page above `ReadingQueueDetailView`. `initialQueueID` pre-selects a queue when
+/// arriving from a specific carousel tile instead of "See all" (nil).
+struct AllReadingQueuesDestination: Hashable {
+    var initialQueueID: UUID?
+}
 
 // MARK: - Cards
 
