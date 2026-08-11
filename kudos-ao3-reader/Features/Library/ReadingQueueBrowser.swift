@@ -8,7 +8,8 @@ import SwiftUI
 /// as "yet another segmented control" rather than a group switcher). Filters,
 /// drag-reorder, the display-mode toggle, and rename/delete all stay on
 /// `ReadingQueueDetailView`, reached from here via "Manage Queue" — this view never
-/// duplicates them.
+/// duplicates them. Work cards are plain covers (no multi-queue membership badge —
+/// it overlapped SensitiveWorkCoverCard chrome).
 struct ReadingQueueBrowserView: View {
     /// Which queue to land on. `nil` falls back to the last-selected queue, or the
     /// first queue (Saved for Later) if there's no prior selection.
@@ -268,22 +269,8 @@ struct ReadingQueueBrowserView: View {
     }
 
     private func pageCard(_ work: SavedWork) -> some View {
-        let membershipCount = work.queueMemberships.filter { membership in
-            guard let queue = membership.queue else { return false }
-            return !membership.isPendingDeletion && !queue.isPendingDeletion
-        }.count
-        return NavigationLink(value: LocalWorkDestination.reader(work)) {
-            ZStack(alignment: .topTrailing) {
-                SensitiveWorkCoverCard(work: work)
-                if membershipCount > 1 {
-                    Text("In \(membershipCount)")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(6)
-                }
-            }
+        NavigationLink(value: LocalWorkDestination.reader(work)) {
+            SensitiveWorkCoverCard(work: work)
         }
         .buttonStyle(.plain)
         .localWorkContextMenu(work: work)
