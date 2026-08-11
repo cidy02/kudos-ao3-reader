@@ -1,25 +1,23 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// The browsing layer above `ReadingQueueDetailView` — a fast, chrome-light way to
-/// switch between reading queues and glance/open their works. Modeled on Safari's
-/// iOS tab-group switcher: a bottom queue-name pill reveals the full queue list
-/// (not a top chip strip — a top strip fights the same swipe gesture space and reads
-/// as "yet another segmented control" rather than a group switcher). Filters,
-/// drag-reorder, the display-mode toggle, and rename/delete all stay on
-/// `ReadingQueueDetailView`, reached from here via "Manage Queue" — this view never
-/// duplicates them. Work cards are plain covers (no multi-queue membership badge —
-/// it overlapped SensitiveWorkCoverCard chrome).
+/// Single Reading Queue screen: Safari-style queue switcher + the full manage
+/// surface (filters, reorder, select, display mode, rename/delete) for the
+/// active queue. There is no separate "Manage Queue" page — that used to live
+/// in `ReadingQueueDetailView`, which is now a thin redirect here.
 struct ReadingQueueBrowserView: View {
     /// Which queue to land on. `nil` falls back to the last-selected queue, or the
     /// first queue (Saved for Later) if there's no prior selection.
     var initialQueueID: UUID?
 
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(ThemeManager.self) private var themeManager
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var allQueues: [ReadingQueue]
+    @Query(sort: \Tag.name) private var allTags: [Tag]
 
     /// Persists the last-open queue across visits to this screen, independent of
     /// which queue a Library carousel tap pre-selected this time.
@@ -28,10 +26,30 @@ struct ReadingQueueBrowserView: View {
     @State private var showingSwitcher = false
     @State private var showingNewQueue = false
     @State private var newQueueName = ""
+
+    // MARK: Manage-surface state (formerly ReadingQueueDetailView)
+
+    @State private var showingRename = false
+    @State private var renameText = ""
+    @State private var confirmDelete = false
+    @State private var expandAll = false
+    @State private var filters = LibraryFilters()
+    @State private var showingFilters = false
+    /// Cover grid matches the prior browser default; switch to detailed via the menu.
+    @State private var displayMode: WorkListDisplayMode = .compact
+    #if os(iOS)
+    @State private var reorderEditMode: EditMode = .inactive
+    #else
+    @State private var isReorderingMac = false
+    #endif
+    @State private var refreshTask: Task<Void, Never>?
+    @State private var draggedWorkID: UUID?
+    @State private var pendingCompactOrder: [UUID]?
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
     var cardSize = ScaledCarouselCardSize()
 
-    /// Saved for Later first (it's always present, even with zero custom queues),
-    /// then customs by `sortOrder` — the same ordering `AddToQueueView` already uses.
+    /// Saved for Later first, then customs by `sortOrder`.
     private var orderedQueues: [ReadingQueue] {
         allQueues.sorted {
             if $0.kind != $1.kind { return $0.kind == .savedForLater }
@@ -49,9 +67,43 @@ struct ReadingQueueBrowserView: View {
         selectedQueue.map(ReadingQueueService.orderedWorks(in:)) ?? []
     }
 
-    private var gridColumns: [GridItem] {
+    private var visibleWorks: [SavedWork] {
+        filters.hasActiveFilters ? filters.apply(to: works) : works
+    }
+
+    private var isReordering: Bool {
+        #if os(iOS)
+        reorderEditMode.isEditing
+        #else
+        isReorderingMac
+        #endif
+    }
+
+    /// While reordering, filters step aside — move/drag need index-stable unfiltered order.
+    private var displayedWorks: [SavedWork] {
+        isReordering ? works : visibleWorks
+    }
+
+    private var compactDisplayedWorks: [SavedWork] {
+        guard let pendingCompactOrder else { return displayedWorks }
+        let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return pendingCompactOrder.compactMap { byID[$0] }
+    }
+
+    private var compactGridColumns: [GridItem] {
         CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
+
+    private var selectedWorks: [SavedWork] {
+        works.filter { selection.contains($0.id) }
+    }
+
+    private var allSelected: Bool {
+        let ids = Set(works.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    // MARK: - Body
 
     var body: some View {
         Group {
@@ -71,35 +123,63 @@ struct ReadingQueueBrowserView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .onAppear(perform: resolveInitialSelection)
-            // Sheet (not alert): alert TextFields on a view that also hosts a
-            // popover/sheet switcher often fail to present or to commit the typed
-            // name before the action runs — which made + look dead.
-            .sheet(isPresented: $showingNewQueue) {
-                newQueueSheet
+            .sheet(isPresented: $showingNewQueue) { newQueueSheet }
+            .inspector(isPresented: $showingFilters) {
+                LibraryFilterPanel(
+                    filters: $filters,
+                    works: works,
+                    userTagNames: allTags.map(\.name)
+                )
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                #if os(iOS)
+                    .presentationDragIndicator(.visible)
+                #endif
+            }
+            .toolbar { manageToolbar }
+            #if os(iOS)
+            // Always hide the app tab bar: this screen owns bottom chrome (switcher
+            // and/or select bulk bar). Select mode also needs the bottomBar free.
+            .toolbar(.hidden, for: .tabBar)
+            #endif
+            .alert("Rename Queue", isPresented: $showingRename) {
+                TextField("Name", text: $renameText)
+                Button("Save") {
+                    guard let queue = selectedQueue else { return }
+                    let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        queue.name = trimmed
+                        queue.markModified()
+                        context.saveBestEffort(reason: "Saving queue rename failed")
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .confirmationDialog(
+                "Delete “\(selectedQueue?.displayName ?? "Queue")”?",
+                isPresented: $confirmDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) { deleteSelectedQueue() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "The queue moves to Recently Deleted for 90 days, with everything in it "
+                        + "intact. Works stay in Kudos either way."
+                )
             }
     }
 
-    // MARK: - Compact (iPhone): bottom switcher pill
+    // MARK: - Compact (iPhone)
 
     private var compactLayout: some View {
         pageContent
-            .safeAreaInset(edge: .bottom) { switcherBar }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) { manageButton }
+            .safeAreaInset(edge: .bottom) {
+                if !isSelecting && !isReordering {
+                    switcherBar
+                }
             }
-            // The switcher bar is this screen's own bottom chrome — the app's tab bar
-            // (and floating search glass) underneath it is redundant and doubles up
-            // the bottom edge. Same pattern LibraryView's selection mode already uses.
-            #if os(iOS)
-            .toolbar(.hidden, for: .tabBar)
-            #endif
     }
 
-    // Three independently-floating glass elements with gaps between them (matching
-    // Safari's own tab-group bar, and this app's existing ReaderChromeTopBar
-    // convention) — not one flat, edge-to-edge toolbar strip. Each button gets its
-    // own .glassEffect() rather than a shared .background(.bar). Popover is scoped
-    // to the switcher controls only so the + button isn't an anchor for it.
     private var switcherBar: some View {
         HStack(spacing: 10) {
             Button { showingSwitcher = true } label: {
@@ -174,10 +254,8 @@ struct ReadingQueueBrowserView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        createQueue()
-                    }
-                    .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Create") { createQueue() }
+                        .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -187,7 +265,7 @@ struct ReadingQueueBrowserView: View {
         #endif
     }
 
-    // MARK: - Regular (iPad/Mac): persistent leading sidebar
+    // MARK: - Regular (iPad/Mac)
 
     private var regularLayout: some View {
         HStack(spacing: 0) {
@@ -208,6 +286,7 @@ struct ReadingQueueBrowserView: View {
             .listStyle(.sidebar)
             .appThemedScroll()
             .frame(width: 240)
+            .disabled(isSelecting || isReordering)
 
             Divider()
 
@@ -216,7 +295,6 @@ struct ReadingQueueBrowserView: View {
                     Text(selectedQueue?.displayName ?? "Reading Queues")
                         .font(.title3.weight(.semibold))
                     Spacer()
-                    manageButton
                 }
                 .padding([.horizontal, .top], 20)
                 .padding(.bottom, 8)
@@ -225,7 +303,7 @@ struct ReadingQueueBrowserView: View {
         }
     }
 
-    // MARK: - Shared: queue switcher list + queue row
+    // MARK: - Switcher list
 
     private var switcherList: some View {
         List {
@@ -275,51 +353,233 @@ struct ReadingQueueBrowserView: View {
         }
     }
 
-    // MARK: - Shared: active queue page (native work-card grid)
-
-    private var pageContent: some View {
-        Group {
-            if let selectedQueue, works.isEmpty {
-                ContentUnavailableView {
-                    Label(
-                        selectedQueue.displayName,
-                        systemImage: selectedQueue.kind == .savedForLater
-                            ? "bookmark"
-                            : "list.bullet.rectangle"
-                    )
-                } description: {
-                    Text("Works you add to this queue will keep a local EPUB for offline reading.")
-                }
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: gridColumns, spacing: 16) {
-                        ForEach(works) { work in
-                            pageCard(work)
-                        }
-                    }
-                    .padding(16)
-                }
-            }
-        }
-    }
-
-    private func pageCard(_ work: SavedWork) -> some View {
-        NavigationLink(value: LocalWorkDestination.reader(work)) {
-            SensitiveWorkCoverCard(work: work)
-        }
-        .buttonStyle(.plain)
-        .localWorkContextMenu(work: work)
-    }
-
-    // MARK: - Manage Queue
+    // MARK: - Active queue content
 
     @ViewBuilder
-    private var manageButton: some View {
-        if let selectedQueue {
-            NavigationLink(value: selectedQueue) {
-                Image(systemName: "ellipsis.circle")
+    private var pageContent: some View {
+        if let selectedQueue, works.isEmpty {
+            ContentUnavailableView {
+                Label(
+                    selectedQueue.displayName,
+                    systemImage: selectedQueue.kind == .savedForLater
+                        ? "bookmark"
+                        : "list.bullet.rectangle"
+                )
+            } description: {
+                Text("Works you add to this queue will keep a local EPUB for offline reading.")
             }
-            .accessibilityLabel("Manage Queue")
+        } else {
+            Group {
+                if displayMode == .detailed {
+                    detailedList
+                } else {
+                    compactGrid
+                }
+            }
+            .refreshable {
+                let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                refreshTask = task
+                await task.value
+            }
+            .cancelRefreshOnTabChange($refreshTask)
+            .overlay {
+                if visibleWorks.isEmpty, !works.isEmpty, !isReordering {
+                    ContentUnavailableView {
+                        Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
+                    } description: {
+                        Text("No works in this queue match the current filters.")
+                    } actions: {
+                        Button("Clear Filters") { filters = LibraryFilters() }
+                    }
+                }
+            }
+        }
+    }
+
+    private var detailedList: some View {
+        List {
+            ForEach(displayedWorks) { work in
+                SensitiveWorkRow(
+                    work: work,
+                    expandAll: expandAll,
+                    openMode: .reader,
+                    isSelecting: isSelecting,
+                    isSelected: selection.contains(work.id),
+                    onToggleSelection: { toggleSelection(work) }
+                )
+                .swipeActions(edge: .trailing) {
+                    if !isSelecting, let queue = selectedQueue {
+                        Button(role: .destructive) {
+                            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+                        } label: {
+                            Label("Remove from Queue", systemImage: "minus.circle")
+                        }
+                    }
+                }
+                .moveDisabled(!isReordering)
+            }
+            .onMove(perform: moveWorks)
+            .cardRow()
+        }
+        .cardList()
+        #if os(iOS)
+            .environment(\.editMode, $reorderEditMode)
+        #endif
+    }
+
+    private var compactGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: compactGridColumns, spacing: 16) {
+                ForEach(compactDisplayedWorks) { work in
+                    compactCard(work)
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    @ViewBuilder
+    private func compactCard(_ work: SavedWork) -> some View {
+        if isSelecting {
+            SensitiveWorkCoverCard(
+                work: work,
+                isSelecting: true,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) }
+            )
+        } else if isReordering, let queue = selectedQueue {
+            ZStack(alignment: .topTrailing) {
+                SensitiveWorkCoverCard(work: work)
+                    .opacity(draggedWorkID == work.id ? 0.4 : 1)
+                    .allowsHitTesting(false)
+                dragHandle(for: work)
+            }
+            .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
+                target: work,
+                works: works,
+                draggedWorkID: $draggedWorkID,
+                pendingOrder: $pendingCompactOrder,
+                queue: queue,
+                context: context
+            ))
+            .accessibilityAction(named: "Move Up") { moveWork(work, toIndex: currentIndex(of: work) - 1) }
+            .accessibilityAction(named: "Move Down") { moveWork(work, toIndex: currentIndex(of: work) + 1) }
+            .accessibilityAction(named: "Move to Top") { moveWork(work, toIndex: 0) }
+            .accessibilityAction(named: "Move to Bottom") { moveWork(work, toIndex: works.count - 1) }
+        } else {
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                SensitiveWorkCoverCard(work: work)
+            }
+            .buttonStyle(.plain)
+            .localWorkContextMenu(work: work)
+        }
+    }
+
+    private func dragHandle(for work: SavedWork) -> some View {
+        ReorderHandleView()
+            .padding(6)
+            .onDrag {
+                draggedWorkID = work.id
+                return NSItemProvider(object: work.id.uuidString as NSString)
+            }
+            .minimumHitTarget(28)
+    }
+
+    // MARK: - Toolbar (manage surface)
+
+    @ToolbarContentBuilder
+    private var manageToolbar: some ToolbarContent {
+        if !works.isEmpty {
+            if isReordering {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Done") { setReordering(false) }
+                }
+            } else if isSelecting {
+                ToolbarItem(placement: .confirmationAction) {
+                    SelectAllButton(allSelected: allSelected, action: toggleSelectAll)
+                }
+                #if os(iOS)
+                ToolbarItemGroup(placement: .bottomBar) {
+                    ScopedRemovalBulkActionBar(
+                        selectedWorks: selectedWorks,
+                        removeLabel: "Remove from Queue",
+                        scopeName: "queue",
+                        onRemove: bulkRemove,
+                        onDone: exitSelectMode
+                    )
+                }
+                #else
+                ToolbarItemGroup(placement: .primaryAction) {
+                    ScopedRemovalBulkActionBar(
+                        selectedWorks: selectedWorks,
+                        removeLabel: "Remove from Queue",
+                        scopeName: "queue",
+                        onRemove: bulkRemove,
+                        onDone: exitSelectMode
+                    )
+                }
+                #endif
+            } else {
+                ActionToolbar {
+                    FilterButton(
+                        filtersActive: filters.hasActiveFilters,
+                        showingFilters: $showingFilters,
+                        filterHelp: "Filter the works in this queue",
+                        onClearFilters: { filters = LibraryFilters() }
+                    )
+                    WorkListMoreMenu {
+                        Button {
+                            setReordering(true)
+                        } label: {
+                            Label("Reorder", systemImage: "arrow.up.arrow.down")
+                        }
+                        .disabled(filters.hasActiveFilters)
+                        .help(filters.hasActiveFilters
+                            ? "Clear filters to reorder"
+                            : "Reorder works in this queue")
+                        Button {
+                            isSelecting = true
+                        } label: {
+                            Label("Select", systemImage: "checklist")
+                        }
+                        DisplayModeMenuPicker(mode: $displayMode)
+                        if displayMode == .detailed {
+                            ExpandAllMenuItem(expandAll: $expandAll)
+                        }
+                        if let queue = selectedQueue, queue.kind == .custom {
+                            Divider()
+                            Button {
+                                renameText = queue.name
+                                showingRename = true
+                            } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                confirmDelete = true
+                            } label: {
+                                Label("Delete Queue", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+        } else if let queue = selectedQueue, queue.kind == .custom {
+            // Empty custom queue: still allow rename/delete from the toolbar.
+            ToolbarItem(placement: .primaryAction) {
+                WorkListMoreMenu {
+                    Button {
+                        renameText = queue.name
+                        showingRename = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        confirmDelete = true
+                    } label: {
+                        Label("Delete Queue", systemImage: "trash")
+                    }
+                }
+            }
         }
     }
 
@@ -331,16 +591,19 @@ struct ReadingQueueBrowserView: View {
         if let initialQueueID {
             selectedQueueID = initialQueueID
             lastSelectedIDRaw = initialQueueID.uuidString
+        } else if let saved = UUID(uuidString: lastSelectedIDRaw),
+                  orderedQueues.contains(where: { $0.id == saved }) {
+            selectedQueueID = saved
         } else {
-            if let saved = UUID(uuidString: lastSelectedIDRaw), orderedQueues.contains(where: { $0.id == saved }) {
-                selectedQueueID = saved
-            } else {
-                selectedQueueID = orderedQueues.first?.id
-            }
+            selectedQueueID = orderedQueues.first?.id
         }
     }
 
     private func select(_ queue: ReadingQueue) {
+        // Leaving mid-select/reorder on another queue would leave dangling state.
+        exitSelectMode()
+        setReordering(false)
+        filters = LibraryFilters()
         selectedQueueID = queue.id
         lastSelectedIDRaw = queue.id.uuidString
         showingSwitcher = false
@@ -353,5 +616,77 @@ struct ReadingQueueBrowserView: View {
         showingNewQueue = false
         let queue = ReadingQueueService.createQueue(named: trimmed, in: context)
         select(queue)
+    }
+
+    private func setReordering(_ active: Bool) {
+        #if os(iOS)
+        reorderEditMode = active ? .active : .inactive
+        #else
+        isReorderingMac = active
+        #endif
+        draggedWorkID = nil
+        pendingCompactOrder = nil
+    }
+
+    private func moveWorks(from source: IndexSet, to destination: Int) {
+        guard isReordering, let queue = selectedQueue else { return }
+        var ids = works.map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        ReadingQueueService.reorder(ids, in: queue, context: context)
+    }
+
+    private func currentIndex(of work: SavedWork) -> Int {
+        works.firstIndex(where: { $0.id == work.id }) ?? 0
+    }
+
+    private func moveWork(_ work: SavedWork, toIndex newIndex: Int) {
+        guard isReordering,
+              let queue = selectedQueue,
+              let (from, to) = ReadingQueueService.moveOffsets(
+                  currentIndex: currentIndex(of: work),
+                  requestedIndex: newIndex,
+                  count: works.count
+              )
+        else { return }
+        var ids = works.map(\.id)
+        ids.move(fromOffsets: from, toOffset: to)
+        ReadingQueueService.reorder(ids, in: queue, context: context)
+    }
+
+    private func deleteSelectedQueue() {
+        guard let queue = selectedQueue else { return }
+        PreservedWorkService.softDelete(queue, in: context)
+        exitSelectMode()
+        setReordering(false)
+        // Prefer staying on the browser if other queues remain.
+        if let next = orderedQueues.first(where: { $0.id != queue.id }) {
+            select(next)
+        } else {
+            dismiss()
+        }
+    }
+
+    private func toggleSelectAll() {
+        selection = allSelected ? [] : Set(works.map(\.id))
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func bulkRemove() {
+        guard let queue = selectedQueue else { return }
+        for work in selectedWorks {
+            ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+        }
     }
 }
