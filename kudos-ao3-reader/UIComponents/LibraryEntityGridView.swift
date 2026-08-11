@@ -38,7 +38,7 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 20) {
+            LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
                 Button(action: onNew) { newCard() }
                     .buttonStyle(.plain)
                 ForEach(items) { item in
@@ -46,6 +46,7 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
                         .buttonStyle(.plain)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .uniformWorkCardHeights()
         }

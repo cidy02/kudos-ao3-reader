@@ -429,11 +429,12 @@ struct ReadingQueueBrowserView: View {
 
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: compactGridColumns, spacing: 16) {
+            LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
                 ForEach(compactDisplayedWorks) { work in
                     compactCard(work)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
     }

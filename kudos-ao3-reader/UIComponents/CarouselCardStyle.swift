@@ -25,6 +25,11 @@ enum CarouselCardMetrics {
     static let width: CGFloat = 164
     static let height: CGFloat = 228
     static let cornerRadius: CGFloat = CardRadius.tile
+    /// Shared gap for compact cover grids — used as both inter-column spacing
+    /// (`GridItem.spacing`) and inter-row spacing (`LazyVGrid.spacing`) so
+    /// side-by-side cards match stacked cards. Don't invent a second constant
+    /// at call sites.
+    static let compactGridSpacing: CGFloat = 16
 }
 
 /// Scales `CarouselCardMetrics`'s fixed 164×228 tile size in proportion to the
@@ -107,12 +112,25 @@ extension CarouselCardMetrics {
     /// removed fixed-2 layout already did at that width). Keep it small: it is a
     /// rounding allowance, not a lever for forcing a column that genuinely does
     /// not fit — the overlap case above is what happens when a column is forced.
+    ///
+    /// `maximum` is pinned to the card's own width. Without a max, `.adaptive`
+    /// grows each column to soak leftover container width, so the *visual* gap
+    /// between side-by-side cards becomes `spacing + leftover/N` while stacked
+    /// rows stay at plain `spacing` — the cards look farther apart horizontally
+    /// than vertically. Capping the column stops that absorption; any leftover
+    /// width sits at the trailing edge of a leading-aligned grid instead.
     static func adaptiveCardColumns(
         minimum: CGFloat = CarouselCardMetrics.width,
-        spacing: CGFloat = 16,
+        spacing: CGFloat = CarouselCardMetrics.compactGridSpacing,
         tolerance: CGFloat = 2
     ) -> [GridItem] {
-        [GridItem(.adaptive(minimum: max(1, minimum - tolerance)), spacing: spacing)]
+        let columnMin = max(1, minimum - tolerance)
+        return [
+            GridItem(
+                .adaptive(minimum: columnMin, maximum: minimum),
+                spacing: spacing
+            )
+        ]
     }
 }
 

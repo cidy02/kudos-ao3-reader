@@ -282,7 +282,7 @@ struct LibrarySectionListView: View {
     /// uses, wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: compactGridColumns, spacing: 16) {
+            LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
                 ForEach(visibleItems) { work in
                     if isSelecting {
                         SensitiveWorkCoverCard(
@@ -313,6 +313,7 @@ struct LibrarySectionListView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
     }

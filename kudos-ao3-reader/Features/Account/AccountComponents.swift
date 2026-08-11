@@ -515,11 +515,12 @@ struct AccountWorksCompactGrid: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
+        LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
             ForEach(entries) { entry in
                 compactCard(for: entry)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .uniformWorkCardHeights()
     }
@@ -560,7 +561,7 @@ struct AccountBookmarksCompactGrid: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
+        LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
             ForEach(bookmarks) { bookmark in
                 NavigationLink(value: WorkCardTap.destination(for: bookmark.work)) {
                     AO3WorkCoverCard(work: bookmark.work)
@@ -568,6 +569,7 @@ struct AccountBookmarksCompactGrid: View {
                 .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .uniformWorkCardHeights()
     }
