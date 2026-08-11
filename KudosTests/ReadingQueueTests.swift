@@ -816,4 +816,39 @@ struct ReadingQueueTests {
         #expect(work.workFandoms == summary.fandoms)
         #expect(work.workFreeforms == summary.tags)
     }
+
+    @Test func ensureLocalMetadataCreatesStubWithoutEPUB() throws {
+        let context = try makeContext()
+        let remote = summary(8801)
+
+        let created = try ReadingQueueService.ensureLocalMetadata(for: remote, in: context)
+
+        #expect(created.ao3WorkID == 8801)
+        #expect(created.title == remote.title)
+        #expect(!created.hasEPUB)
+        #expect(!created.isSaved)
+        #expect(!created.isQueuedForLater)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+
+        // Second call reuses the same row — no duplicate, still no download.
+        let again = try ReadingQueueService.ensureLocalMetadata(for: remote, in: context)
+        #expect(again.id == created.id)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+    }
+
+    @Test func discardUnattachedMetadataRemovesOrphansButKeepsRealItems() throws {
+        let context = try makeContext()
+        let remote = summary(8802)
+        let stub = try ReadingQueueService.ensureLocalMetadata(for: remote, in: context)
+
+        ReadingQueueService.discardUnattachedMetadataIfNeeded(stub, in: context)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+
+        let kept = try ReadingQueueService.ensureLocalMetadata(for: summary(8803), in: context)
+        let queue = ReadingQueueService.createQueue(named: "Keep Me", in: context)
+        ReadingQueueService.add(kept, to: queue, in: context)
+        ReadingQueueService.discardUnattachedMetadataIfNeeded(kept, in: context)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+        #expect(kept.isQueuedForLater)
+    }
 }

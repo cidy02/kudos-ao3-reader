@@ -91,8 +91,14 @@ struct ContentView: View {
                 applyWindowTint(tint)
             }
             .task {
+                // Yield first so the initial tab chrome (Liquid Glass) can paint before
+                // we burn the main actor on session restore / full-library normalize.
+                await Task.yield()
                 await auth.restoreSession()
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
+                // Another yield before walking every SavedWork + fileExists — that used
+                // to hitch the first tab switch if it still had the main actor.
+                await Task.yield()
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
                 await PersistenceMigrationService.runIfNeeded(in: modelContext)
                 // Independent of folder sync — a local Recently Deleted item past its
@@ -387,14 +393,20 @@ struct ContentView: View {
     }
 
     /// The detail content for the selected section.
+    ///
+    /// Wrapped in `DeferredTabContent` so the tab-bar Liquid Glass selection
+    /// animation can start/finish without waiting for Home/Library's heavy first
+    /// body (multi-@Query filters, carousel sections) to fully evaluate.
     @ViewBuilder
     private func destination(for tab: AppTab) -> some View {
-        switch tab {
-        case .home: HomeView()
-        case .library: LibraryView()
-        case .browse: BrowseView()
-        case .account: AccountView()
-        case .search: SearchView()
+        DeferredTabContent {
+            switch tab {
+            case .home: HomeView()
+            case .library: LibraryView()
+            case .browse: BrowseView()
+            case .account: AccountView()
+            case .search: SearchView()
+            }
         }
     }
 
@@ -453,6 +465,35 @@ struct ContentView: View {
                 searchButton
             }
         #endif
+    }
+}
+
+/// Defers building a tab's real root view until after the current run-loop turn,
+/// so `TabView`'s selection / Liquid Glass chrome can animate without waiting on
+/// the destination's first layout (Home/Library especially — large @Query + many
+/// carousels). State is kept once built (`hasBuilt`), so later tab switches are free.
+private struct DeferredTabContent<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    @State private var hasBuilt = false
+
+    var body: some View {
+        Group {
+            if hasBuilt {
+                content()
+            } else {
+                // Lightweight stand-in: still fills the safe area so the tab bar
+                // doesn't jump when the real content mounts.
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityHidden(true)
+            }
+        }
+        .task {
+            guard !hasBuilt else { return }
+            // One yield lets the tab selection + glass morph commit first.
+            await Task.yield()
+            hasBuilt = true
+        }
     }
 }
 

@@ -207,8 +207,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     #endif
                 }
                 .task {
+                    // ContentView already normalizes the full library at launch.
+                    // Don't re-walk every SavedWork + fileExists when the Library
+                    // tab first mounts — that was hitching Liquid Glass tab switches.
+                    await Task.yield()
                     ReadingQueueService.ensureSavedForLaterQueue(in: context)
-                    ReadingQueueService.normalizeAllQueuedWorks(in: context)
                     await backfillFilterMetadata()
                 }
                 .task(id: auth.isLoggedIn) { await loadMarkedForLater() }

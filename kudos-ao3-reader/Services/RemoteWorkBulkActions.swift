@@ -5,6 +5,15 @@ import SwiftData
 /// selected AO3WorkSummary to a local work, sequentially, never bursting concurrent
 /// requests, one failure doesn't sink the whole batch but is honestly reported."
 
+/// How far to localize each selected remote summary before running the bulk action.
+enum RemoteWorkResolveMode {
+    /// Metadata row only — instant, no EPUB download. Used for Queue/Collection
+    /// pickers and flag flips so sheets open without waiting on the network.
+    case metadataOnly
+    /// Full EPUB import when no local match exists (legacy "must be on disk" path).
+    case withEPUB
+}
+
 /// Resolves each selected summary to a local work one at a time, then hands the
 /// resolved works to `perform`. Returns a user-facing error message if any resolution
 /// failed (nil on full success or on cancellation, which the caller should treat as a
@@ -13,13 +22,19 @@ import SwiftData
 func resolveSelectedRemoteWorks(
     _ selected: [AO3WorkSummary],
     in context: ModelContext,
+    mode: RemoteWorkResolveMode = .metadataOnly,
     perform: ([SavedWork]) async -> Void
 ) async -> String? {
     var resolved: [SavedWork] = []
     var failureCount = 0
     for summary in selected {
         do {
-            resolved.append(try await ReadingQueueService.resolveLocalWork(for: summary, in: context))
+            switch mode {
+            case .metadataOnly:
+                resolved.append(try ReadingQueueService.ensureLocalMetadata(for: summary, in: context))
+            case .withEPUB:
+                resolved.append(try await ReadingQueueService.resolveLocalWork(for: summary, in: context))
+            }
         } catch is CancellationError {
             return nil
         } catch {

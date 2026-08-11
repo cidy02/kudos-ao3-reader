@@ -172,8 +172,21 @@ enum ReadingQueueService {
             context.delete(membership)
         }
 
-        let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-        for work in works {
+        // Only walk works that participate in queues (or still claim queue flags).
+        // A full-library `fileExists` pass was hitching launch and tab switches on
+        // large libraries — non-queued works don't need EPUB preservation reconcile here.
+        var seen = Set<UUID>()
+        for membership in memberships {
+            guard let work = membership.work, seen.insert(work.id).inserted else { continue }
+            normalize(work)
+        }
+        // Catch stale `isQueuedForLater` rows that lost their memberships without a prior
+        // normalize (orphaned flag) — still a tiny set vs the whole library.
+        let staleDescriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.isQueuedForLater }
+        )
+        let flagged = (try? context.fetch(staleDescriptor)) ?? []
+        for work in flagged where seen.insert(work.id).inserted {
             normalize(work)
         }
         context.saveBestEffort(reason: "Saving queue normalization failed")
@@ -602,6 +615,66 @@ enum ReadingQueueService {
     static func existingWork(for summary: AO3WorkSummary, in context: ModelContext) -> SavedWork? {
         let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
         return WorkIdentityIndex(works).existingWork(for: summary)
+    }
+
+    /// Instant local row for remote-card actions that should not wait on an EPUB
+    /// download (Add to Queue / Collection sheets, Save flag flips, etc.).
+    ///
+    /// Reuses an existing match (reviving Recently Deleted when needed); otherwise
+    /// inserts a metadata-only `SavedWork` (`hasEPUB = false`) from the search-page
+    /// summary. EPUB download still happens later via `preserve` / Read / explicit
+    /// download — never as a gate on presenting UI.
+    ///
+    /// Android parity: `WorkImporter.saveMetadataOnly`.
+    @discardableResult
+    static func ensureLocalMetadata(
+        for summary: AO3WorkSummary,
+        in context: ModelContext
+    ) throws -> SavedWork {
+        if let existing = existingWork(for: summary, in: context) {
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
+            applyRemoteMetadata(summary, to: existing)
+            try context.save()
+            return existing
+        }
+
+        let saved = SavedWork(
+            title: summary.title,
+            author: summary.authorText,
+            summary: summary.summary,
+            sourceURL: summary.workURL.absoluteString
+        )
+        saved.ao3WorkID = summary.id
+        saved.knownChapterCount = SavedWork.postedChapterCount(from: summary.chapters)
+        // No package on disk yet — preserve/Read will fetch later.
+        saved.hasEPUB = false
+        saved.isSaved = false
+        applyRemoteMetadata(summary, to: saved)
+        context.insert(saved)
+        try context.save()
+        return saved
+    }
+
+    /// Drops a metadata-only stub that never became a real library item: no EPUB,
+    /// no queue/collection membership, not saved/favorited, never opened. Used when
+    /// the user dismisses Add to Queue without picking anything so search → queue
+    /// doesn't leave History ghosts.
+    static func discardUnattachedMetadataIfNeeded(_ work: SavedWork, in context: ModelContext) {
+        guard !work.isSaved,
+              !work.isFavorite,
+              !work.isFinished,
+              !work.hasEPUB,
+              work.queueMemberships.isEmpty,
+              work.collections.isEmpty,
+              work.lastReadDate == nil,
+              work.readiumLocator.isEmpty,
+              work.lastSpineIndex == 0,
+              work.lastScrollFraction == 0
+        else { return }
+        context.delete(work)
+        context.saveBestEffort(reason: "Discarding unattached metadata stub failed")
     }
 
     static func resolveLocalWork(for summary: AO3WorkSummary, in context: ModelContext) async throws -> SavedWork {

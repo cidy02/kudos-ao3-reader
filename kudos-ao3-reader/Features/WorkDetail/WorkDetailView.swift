@@ -594,13 +594,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Ensures a local `SavedWork` exists, importing the remote work on demand through
-    /// the same centralized resolve/download/import/apply-metadata sequence every other
-    /// remote-work action (`WorkCardActions.performRemoteAction`, bulk actions) already
-    /// uses — no new AO3 request types, and no separately-derived chapter count. Local
-    /// works, and works with an existing (possibly Recently-Deleted, silently revived)
-    /// local match, run `action` immediately without a download.
-    func withLocalWork(_ action: @escaping (SavedWork) -> Void) {
+    /// Ensures a local `SavedWork` exists, then runs `action`.
+    ///
+    /// - Parameter requireEPUB: When `false` (default for Queue/Collection sheets and
+    ///   flag toggles), uses metadata-only localization so UI never waits on a download.
+    ///   When `true` (Read), falls through to full EPUB import if needed.
+    func withLocalWork(requireEPUB: Bool = false, _ action: @escaping (SavedWork) -> Void) {
         resolveExistingIfNeeded()
         if let work = localWork {
             // Removing the last queue membership can soft-delete a queue-only
@@ -613,8 +612,23 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             action(work)
             return
         }
-        // A remote work needs importing; ignore re-taps while one is already in flight.
+        // A remote work needs localizing; ignore re-taps while one is already in flight.
         guard let summary = remote, !working else { return }
+
+        if !requireEPUB {
+            // Instant path — mirrors Android `saveMetadataOnly` / card Add to Queue.
+            do {
+                let saved = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
+                localWork = saved
+                action(saved)
+            } catch let error as AO3Error {
+                loadError = error.errorDescription
+            } catch {
+                loadError = "Couldn't prepare this work."
+            }
+            return
+        }
+
         Task {
             working = true
             loadError = nil

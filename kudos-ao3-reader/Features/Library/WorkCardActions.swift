@@ -694,7 +694,8 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     }
 
     private func read() {
-        performRemoteAction { saved in
+        // Read still needs a real EPUB — only this path waits on download/import.
+        performRemoteAction(requireEPUB: true) { saved in
             if !WorkReaderPreparation.hasReadableEPUB(for: saved) {
                 try await WorkReaderPreparation.restoreReadableEPUB(for: saved, in: context)
             }
@@ -703,19 +704,29 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     }
 
     private func save() {
-        performRemoteAction { saved in
+        // Metadata-only: flag flips immediately; no EPUB gate on "Download/Save".
+        performRemoteAction(requireEPUB: false) { saved in
             WorkLifecycle.setSaved(saved, true, in: context)
         }
     }
 
     private func addToQueue() {
-        performRemoteAction { saved in
+        // Present the picker immediately — EPUB preserve runs when the user joins a queue.
+        // Fast path: already-local works skip even metadata ensure (and its full-library fetch).
+        if let existing = existingLocalWork {
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
+            queueWork = existing
+            return
+        }
+        performRemoteAction(requireEPUB: false) { saved in
             queueWork = saved
         }
     }
 
     private func toggleSavedForLater() {
-        performRemoteAction { saved in
+        performRemoteAction(requireEPUB: false) { saved in
             if saved.isInSavedForLaterQueue {
                 ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
                     saved,
@@ -729,13 +740,20 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     }
 
     private func addToCollection() {
-        performRemoteAction { saved in
+        if let existing = existingLocalWork {
+            if existing.isPendingDeletion {
+                PreservedWorkService.restore(existing, in: context)
+            }
+            collectionWork = existing
+            return
+        }
+        performRemoteAction(requireEPUB: false) { saved in
             collectionWork = saved
         }
     }
 
     private func toggleFinished() {
-        performRemoteAction { saved in
+        performRemoteAction(requireEPUB: false) { saved in
             if saved.isFinished {
                 WorkLifecycle.markStillReading(saved, in: context)
             } else {
@@ -744,7 +762,13 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
         }
     }
 
-    private func performRemoteAction(_ action: @MainActor @escaping (SavedWork) async throws -> Void) {
+    /// - Parameter requireEPUB: `true` only for Read (and similar). Queue/Collection
+    ///   sheets and flag toggles use metadata-only localization so the UI never waits
+    ///   on AO3 download before presenting.
+    private func performRemoteAction(
+        requireEPUB: Bool,
+        _ action: @MainActor @escaping (SavedWork) async throws -> Void
+    ) {
         guard !working else { return }
         Task { @MainActor in
             working = true
@@ -752,17 +776,17 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             defer { working = false }
 
             do {
-                let saved = try await resolveLocalWork()
+                let saved: SavedWork
+                if requireEPUB {
+                    saved = try await ReadingQueueService.resolveLocalWork(for: work, in: context)
+                } else {
+                    saved = try ReadingQueueService.ensureLocalMetadata(for: work, in: context)
+                }
                 try await action(saved)
             } catch {
                 actionError = WorkCardActionError.message(for: error)
             }
         }
-    }
-
-    @MainActor
-    private func resolveLocalWork() async throws -> SavedWork {
-        try await ReadingQueueService.resolveLocalWork(for: work, in: context)
     }
 }
 

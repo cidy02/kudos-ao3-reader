@@ -130,8 +130,16 @@ struct HomeView: View {
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
                 .ao3AuthorNavigation(path: $path, tab: .home)
-                .task(id: auth.isLoggedIn) { await loadSubscriptions() }
-                .task { await WorkUpdateChecker.checkForUpdates(among: works, in: context) }
+                .task(id: auth.isLoggedIn) {
+                    await Task.yield()
+                    await loadSubscriptions()
+                }
+                .task {
+                    // Defer network/update polling until after the Home tab paints —
+                    // don't compete with tab-switch Liquid Glass for the main actor.
+                    await Task.yield()
+                    await WorkUpdateChecker.checkForUpdates(among: works, in: context)
+                }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; matches
                 // LibraryView's own rationale for hiding the floating tab bar meanwhile.

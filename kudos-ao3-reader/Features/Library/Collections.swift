@@ -456,6 +456,13 @@ struct AddToCollectionView: View {
                         Button("Done") { dismiss() }
                     }
                 }
+                // Same stub cleanup as AddToQueueView: metadata-only rows created only
+                // to open this sheet shouldn't linger if the user never attaches them.
+                .onDisappear {
+                    for work in works {
+                        ReadingQueueService.discardUnattachedMetadataIfNeeded(work, in: context)
+                    }
+                }
         }
         .presentationDragIndicator(.visible)
     }

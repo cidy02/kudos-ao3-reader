@@ -592,6 +592,14 @@ struct AddToQueueView: View {
                         seriesResult = nil
                     }
                 }
+                // Search → Add to Queue creates a metadata-only stub so the sheet can
+                // open instantly. If the user never joins a queue, drop that stub so it
+                // doesn't show up as empty History.
+                .onDisappear {
+                    for work in works {
+                        ReadingQueueService.discardUnattachedMetadataIfNeeded(work, in: context)
+                    }
+                }
         }
         .presentationDragIndicator(.visible)
     }
