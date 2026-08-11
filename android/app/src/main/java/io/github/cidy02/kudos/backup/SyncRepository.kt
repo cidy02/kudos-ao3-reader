@@ -20,6 +20,7 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
 private const val SYNC_WORK_NAME = "FolderSyncWorker"
@@ -34,6 +35,14 @@ class SyncRepository(
     private val persistenceGate: PersistenceGate,
     private val clock: () -> Instant = { Instant.now() }
 ) {
+    /**
+     * Whole-run single-flight for [runSync]. [PersistenceGate] only serializes
+     * the later import/export portions; without this, lifecycle 0→1 / 1→0 kicks
+     * (or a rapid background-then-foreground) can overlap on manifest discovery
+     * and directory creation at the start of the run.
+     */
+    private val runSyncMutex = Mutex()
+
     suspend fun isSyncEnabled(): Boolean {
         return settingsRepository.settings.first().sync.isEnabled
     }
@@ -82,15 +91,30 @@ class SyncRepository(
     }
 
     suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
-        val uri = getSyncFolderUri() ?: return@withContext SyncResult.Error("No sync folder selected.")
-        val root = DocumentFile.fromTreeUri(context, uri) ?: return@withContext SyncResult.Error("Could not access sync folder.")
-        
+        // Opportunistic best-effort: skip if another run is already in flight
+        // (lifecycle + WorkManager + manual Sync Now can all race). Prefer
+        // tryLock over await so callers are never stuck behind a long SAF run.
+        if (!runSyncMutex.tryLock()) {
+            return@withContext SyncResult.SkippedAlreadyRunning
+        }
+        try {
+            return@withContext runSyncLocked()
+        } finally {
+            runSyncMutex.unlock()
+        }
+    }
+
+    private suspend fun runSyncLocked(): SyncResult {
+        val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
+        val root = DocumentFile.fromTreeUri(context, uri)
+            ?: return SyncResult.Error("Could not access sync folder.")
+
         try {
             var syncDir = root.findFile("KudosLibrary")
             if (syncDir == null) {
                 syncDir = root.createDirectory("KudosLibrary")
             }
-            if (syncDir == null) return@withContext SyncResult.Error("Could not create KudosLibrary directory.")
+            if (syncDir == null) return SyncResult.Error("Could not create KudosLibrary directory.")
 
             // 1. Import first, folding in any conflict copies.
             //
@@ -201,9 +225,9 @@ class SyncRepository(
 
             settingsRepository.updateSyncLastSyncAt(clock())
             settingsRepository.updateSyncHasPendingChanges(false)
-            SyncResult.Success(foldedConflicts)
+            return SyncResult.Success(foldedConflicts)
         } catch (e: Exception) {
-            SyncResult.Error(e.message ?: "Sync failed.")
+            return SyncResult.Error(e.message ?: "Sync failed.")
         }
     }
     
@@ -330,4 +354,10 @@ sealed interface SyncResult {
      */
     data class Success(val foldedConflicts: Int = 0) : SyncResult
     data class Error(val message: String) : SyncResult
+
+    /**
+     * A concurrent [SyncRepository.runSync] is already in flight; this call did
+     * nothing. Treated as non-failure by lifecycle / WorkManager callers.
+     */
+    data object SkippedAlreadyRunning : SyncResult
 }

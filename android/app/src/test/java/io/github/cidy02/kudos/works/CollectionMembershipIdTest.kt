@@ -1,7 +1,10 @@
 package io.github.cidy02.kudos.works
 
+import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
+import io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -18,5 +21,27 @@ class CollectionMembershipIdTest {
 
         assertEquals(expected, collectionMembershipRecordId(a, b))
         assertEquals(expected, collectionMembershipRecordId(b, a))
+    }
+
+    @Test
+    fun canonicalizeAcceptsXorFormAndLegacyColonForm() {
+        val a = "12345678-1234-5678-1234-567812345678"
+        val b = "87654321-4321-8765-4321-876543218765"
+        val xor = collectionMembershipRecordId(a, b)
+        val colon = legacyCollectionMembershipRecordId(a, b)
+
+        assertEquals(xor, canonicalizeCollectionMembershipRecordId(xor))
+        assertEquals(xor, canonicalizeCollectionMembershipRecordId(colon))
+        assertEquals(xor, canonicalizeCollectionMembershipRecordId(xor.uppercase()))
+    }
+
+    @Test
+    fun canonicalizeRejectsGarbage() {
+        assertThrows(IllegalArgumentException::class.java) {
+            canonicalizeCollectionMembershipRecordId("not-a-membership-id")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            canonicalizeCollectionMembershipRecordId("a:b:c")
+        }
     }
 }

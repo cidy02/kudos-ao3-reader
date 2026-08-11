@@ -31,6 +31,50 @@ fun collectionMembershipRecordId(collectionId: String, workId: String): String {
 }
 
 /**
+ * android-v0.2.1-alpha wrote membership tombstones as `"$collectionId:$workId"`.
+ * Kept for dual-delete of those legacy rows after upgrade.
+ */
+fun legacyCollectionMembershipRecordId(collectionId: String, workId: String): String =
+    "$collectionId:$workId"
+
+/**
+ * Canonical (XOR-UUID) form of a WORK_COLLECTION_MEMBERSHIP tombstone recordID.
+ *
+ * Accepts either:
+ * - the current / iOS XOR-UUID form, or
+ * - the legacy android-v0.2.1-alpha colon form `"$collectionId:$workId"`.
+ *
+ * Used on merge lookup and export so rows already persisted by the shipped
+ * release keep suppressing resurrection and do not crash [canonicalUuid].
+ *
+ * @throws IllegalArgumentException if [recordId] is neither a UUID nor a
+ * well-formed colon pair of UUIDs.
+ */
+fun canonicalizeCollectionMembershipRecordId(recordId: String): String {
+    val trimmed = recordId.trim()
+    try {
+        return UUID.fromString(trimmed).toString()
+    } catch (_: IllegalArgumentException) {
+        // fall through — may be the shipped colon form
+    }
+    val separator = trimmed.indexOf(':')
+    if (separator <= 0 || separator >= trimmed.lastIndex) {
+        throw IllegalArgumentException(
+            "Not a collection-membership record id: $recordId"
+        )
+    }
+    val left = trimmed.substring(0, separator).trim()
+    val right = trimmed.substring(separator + 1).trim()
+    // Reject extra colons / garbage after the pair (UUIDs use hyphens only).
+    if (right.contains(':')) {
+        throw IllegalArgumentException(
+            "Not a collection-membership record id: $recordId"
+        )
+    }
+    return collectionMembershipRecordId(left, right)
+}
+
+/**
  * Durable marker for an explicit local deletion. Backup restore consults these so
  * an older archive does not resurrect a deleted work (Apple SyncTombstone).
  */

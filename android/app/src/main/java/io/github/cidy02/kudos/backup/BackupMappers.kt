@@ -9,7 +9,9 @@ import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -481,7 +483,10 @@ fun BackupAnnotation.toReadingAnnotation(): ReadingAnnotation {
 fun SyncTombstone.toBackupTombstone(): BackupTombstone {
     return BackupTombstone(
         id = BackupPaths.canonicalUuid(id, "tombstone.id"),
-        recordID = BackupPaths.canonicalUuid(recordID, "tombstone.recordID"),
+        recordID = BackupPaths.canonicalUuid(
+            membershipRecordIdForExport(recordID, recordTypeRaw),
+            "tombstone.recordID"
+        ),
         recordTypeRaw = recordTypeRaw,
         createdAt = BackupValidator.formatInstant(createdAt),
         lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt),
@@ -503,10 +508,14 @@ fun BackupTombstone.toSyncTombstone(): SyncTombstone {
     } else {
         created
     }
+    val type = recordTypeRaw.ifBlank { "savedWork" }
     return SyncTombstone(
         id = BackupPaths.canonicalUuid(id, "tombstone.id"),
-        recordID = BackupPaths.canonicalUuid(recordID, "tombstone.recordID"),
-        recordTypeRaw = recordTypeRaw.ifBlank { "savedWork" },
+        recordID = BackupPaths.canonicalUuid(
+            membershipRecordIdForExport(recordID, type),
+            "tombstone.recordID"
+        ),
+        recordTypeRaw = type,
         createdAt = created,
         lastModifiedAt = modified,
         sourceURL = sourceURL,
@@ -514,6 +523,22 @@ fun BackupTombstone.toSyncTombstone(): SyncTombstone {
         deletedOnDeviceID = deletedOnDeviceID,
         deletionReason = deletionReason
     )
+}
+
+/**
+ * Membership tombstones may still be the android-v0.2.1-alpha colon form on
+ * disk; rewrite to the XOR-UUID form before [BackupPaths.canonicalUuid] so
+ * export/import does not throw [BackupError.InvalidUuid].
+ */
+private fun membershipRecordIdForExport(recordId: String, recordTypeRaw: String): String {
+    if (recordTypeRaw != SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP) {
+        return recordId
+    }
+    return try {
+        canonicalizeCollectionMembershipRecordId(recordId)
+    } catch (_: IllegalArgumentException) {
+        recordId
+    }
 }
 
 internal fun List<String>.normalizedNames(): List<String> {
