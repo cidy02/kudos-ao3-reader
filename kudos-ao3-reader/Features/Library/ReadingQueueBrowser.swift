@@ -71,10 +71,11 @@ struct ReadingQueueBrowserView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .onAppear(perform: resolveInitialSelection)
-            .alert("New Queue", isPresented: $showingNewQueue) {
-                TextField("Name", text: $newQueueName)
-                Button("Add", action: createQueue)
-                Button("Cancel", role: .cancel) { newQueueName = "" }
+            // Sheet (not alert): alert TextFields on a view that also hosts a
+            // popover/sheet switcher often fail to present or to commit the typed
+            // name before the action runs — which made + look dead.
+            .sheet(isPresented: $showingNewQueue) {
+                newQueueSheet
             }
     }
 
@@ -97,7 +98,8 @@ struct ReadingQueueBrowserView: View {
     // Three independently-floating glass elements with gaps between them (matching
     // Safari's own tab-group bar, and this app's existing ReaderChromeTopBar
     // convention) — not one flat, edge-to-edge toolbar strip. Each button gets its
-    // own .glassEffect() rather than a shared .background(.bar).
+    // own .glassEffect() rather than a shared .background(.bar). Popover is scoped
+    // to the switcher controls only so the + button isn't an anchor for it.
     private var switcherBar: some View {
         HStack(spacing: 10) {
             Button { showingSwitcher = true } label: {
@@ -109,6 +111,11 @@ struct ReadingQueueBrowserView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("All Queues")
+            .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
+                switcherList
+                    .presentationCompactAdaptation(.sheet)
+                    .presentationDetents([.medium, .large])
+            }
 
             Button { showingSwitcher = true } label: {
                 HStack(spacing: 6) {
@@ -145,11 +152,39 @@ struct ReadingQueueBrowserView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
-        .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
-            switcherList
-                .presentationCompactAdaptation(.sheet)
-                .presentationDetents([.medium, .large])
+    }
+
+    private var newQueueSheet: some View {
+        NavigationStack {
+            Form {
+                TextField("Name", text: $newQueueName)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.words)
+                    #endif
+            }
+            .navigationTitle("New Queue")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        newQueueName = ""
+                        showingNewQueue = false
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        createQueue()
+                    }
+                    .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
+        #if os(iOS)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        #endif
     }
 
     // MARK: - Regular (iPad/Mac): persistent leading sidebar
@@ -313,8 +348,9 @@ struct ReadingQueueBrowserView: View {
 
     private func createQueue() {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
-        newQueueName = ""
         guard !trimmed.isEmpty else { return }
+        newQueueName = ""
+        showingNewQueue = false
         let queue = ReadingQueueService.createQueue(named: trimmed, in: context)
         select(queue)
     }

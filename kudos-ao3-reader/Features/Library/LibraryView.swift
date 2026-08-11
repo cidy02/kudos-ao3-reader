@@ -112,25 +112,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         )
     }
 
-    /// Chevron "See all" lands here — a grid of queue stack cards (same tiles as the
-    /// carousel), not the works of whichever queue would have been auto-selected.
-    /// Tapping a stack pushes `ReadingQueueBrowserView` for that queue.
-    private var readingQueuesGridDestination: some View {
-        LibraryEntityGridView(
-            title: "Reading Queues",
-            items: readingQueues
-                .filter { $0.kind == .custom }
-                .sorted { $0.sortOrder < $1.sortOrder },
-            destination: { AllReadingQueuesDestination(initialQueueID: $0.id) },
-            onNew: {
-                newQueueName = ""
-                showingNewQueue = true
-            },
-            card: { ReadingQueueCard(queue: $0) },
-            newCard: { NewReadingQueueCard() }
-        )
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             Group {
@@ -159,10 +140,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
                 .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
-                    // Chevron passes nil → stack grid. A specific queue id (carousel
-                    // tile or a stack in that grid) opens the Safari-style browser.
+                    // Chevron passes nil → stack grid (owns its own New Queue sheet).
+                    // A specific queue id opens the Safari-style browser.
                     if destination.initialQueueID == nil {
-                        readingQueuesGridDestination
+                        AllReadingQueuesGridView()
                     } else {
                         ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
                     }
@@ -184,12 +165,37 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 } message: {
                     Text("Name your collection.")
                 }
-                .alert("New Queue", isPresented: $showingNewQueue) {
-                    TextField("Name", text: $newQueueName)
-                    Button("Create") { createQueue() }
-                    Button("Cancel", role: .cancel) { newQueueName = "" }
-                } message: {
-                    Text("Name your reading queue.")
+                // Sheet for the dashboard carousel's New Queue card — same reliability
+                // reasons as AllReadingQueuesGridView / ReadingQueueBrowserView.
+                .sheet(isPresented: $showingNewQueue) {
+                    NavigationStack {
+                        Form {
+                            TextField("Name", text: $newQueueName)
+                                #if os(iOS)
+                                .textInputAutocapitalization(.words)
+                                #endif
+                        }
+                        .navigationTitle("New Queue")
+                        #if !os(macOS)
+                        .navigationBarTitleDisplayMode(.inline)
+                        #endif
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel") {
+                                    newQueueName = ""
+                                    showingNewQueue = false
+                                }
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Create") { createQueue() }
+                                    .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                        }
+                    }
+                    #if os(iOS)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+                    #endif
                 }
                 .inspector(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -623,8 +629,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private func createQueue() {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
-        newQueueName = ""
         guard !trimmed.isEmpty else { return }
+        newQueueName = ""
+        showingNewQueue = false
         _ = ReadingQueueService.createQueue(named: trimmed, in: context)
     }
 

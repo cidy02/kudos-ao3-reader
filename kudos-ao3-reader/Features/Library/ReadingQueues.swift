@@ -12,6 +12,78 @@ struct AllReadingQueuesDestination: Hashable {
     var initialQueueID: UUID?
 }
 
+/// Full grid of Reading Queue stack cards behind the Library carousel chevron.
+/// Owns its own "New Queue" sheet so creation works while this destination is
+/// pushed (parent LibraryView alerts often don't present on top of a nav child).
+struct AllReadingQueuesGridView: View {
+    @Environment(\.modelContext) private var context
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
+    private var readingQueues: [ReadingQueue]
+
+    @State private var showingNewQueue = false
+    @State private var newQueueName = ""
+
+    private var customQueues: [ReadingQueue] {
+        readingQueues
+            .filter { $0.kind == .custom }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    var body: some View {
+        LibraryEntityGridView(
+            title: "Reading Queues",
+            items: customQueues,
+            destination: { AllReadingQueuesDestination(initialQueueID: $0.id) },
+            onNew: {
+                newQueueName = ""
+                showingNewQueue = true
+            },
+            card: { ReadingQueueCard(queue: $0) },
+            newCard: { NewReadingQueueCard() }
+        )
+        .sheet(isPresented: $showingNewQueue) {
+            NavigationStack {
+                Form {
+                    TextField("Name", text: $newQueueName)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.words)
+                        #endif
+                }
+                .navigationTitle("New Queue")
+                #if !os(macOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            newQueueName = ""
+                            showingNewQueue = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Create") {
+                            createQueue()
+                        }
+                        .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            #if os(iOS)
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            #endif
+        }
+    }
+
+    private func createQueue() {
+        let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        newQueueName = ""
+        showingNewQueue = false
+        _ = ReadingQueueService.createQueue(named: trimmed, in: context)
+    }
+}
+
 // MARK: - Cards
 
 struct ReadingQueueCard: View {
