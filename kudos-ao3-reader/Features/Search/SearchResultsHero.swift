@@ -84,9 +84,8 @@ struct SearchResultsHero: View {
                     }
                 }
 
-                // Icon tinted by `WorkStatLabel`'s `.tint`, so it tracks the app
-                // theme like every other stat glyph; the text inherits the
-                // secondary style set here.
+                // Icon uses WorkStatLabel's secondary default; the text inherits
+                // the secondary style set here.
                 //
                 // `doc.text` is the app's established Works glyph — the Works tab on
                 // both `AccountView` and `AuthorProfileView` uses it. Not

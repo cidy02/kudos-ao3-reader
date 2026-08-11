@@ -22,9 +22,9 @@ extension View {
     }
 }
 
-/// A single compact work stat: a bold, theme-tinted glyph hugging its value, with
-/// the value inheriting the surrounding font/colour. Shared across every work
-/// surface — the Search/Library rows (`AO3WorkRow` / `WorkRow`) and the Home/Library
+/// A single compact work stat: a bold glyph hugging its value, with the value
+/// inheriting the surrounding font/colour. Shared across every work surface —
+/// the Search/Library rows (`AO3WorkRow` / `WorkRow`) and the Home/Library
 /// cover-card shelves — so metadata reads as one family (Part 4 card consistency).
 struct WorkStatLabel: View {
     let text: String
@@ -34,15 +34,17 @@ struct WorkStatLabel: View {
     /// to `text` for callers where the visible string is already self-describing
     /// (e.g. a full rating name, "Complete").
     var accessibilityLabel: String?
-    /// Overrides the icon's usual `.tint` — the rating and category icons use
-    /// AO3's own color coding instead.
+    /// Overrides the icon's usual secondary colour — rating/category chips that
+    /// still need AO3's own coding pass an explicit colour. Default is secondary
+    /// (not app accent): language/words/kudos etc. sit under the category row and
+    /// should read as quiet metadata, not chrome.
     var iconColor: Color?
 
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.tint))
+                .foregroundStyle(iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
             Text(text)
         }
         .lineLimit(1)
