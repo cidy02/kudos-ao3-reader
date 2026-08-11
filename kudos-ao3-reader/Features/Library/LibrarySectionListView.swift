@@ -349,8 +349,10 @@ struct LibrarySectionListView: View {
                 Button {
                     WorkLifecycle.setSaved(work, !work.isSaved, in: context)
                 } label: {
-                    Label(work.isSaved ? "Unsave" : "Save",
-                          systemImage: work.isSaved ? "bookmark.slash" : "bookmark")
+                    Label(
+                        WorkActionLabels.saved(isSaved: work.isSaved).title,
+                        systemImage: WorkActionLabels.saved(isSaved: work.isSaved).systemImage
+                    )
                 }
                 .tint(.blue)
 

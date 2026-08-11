@@ -199,8 +199,12 @@ enum WorkDetailPresentation {
         return continueReading ? ("Continue Reading", "book") : ("Read", "book")
     }
 
+    /// Compact tile labels for the keep-offline toggle. Menus use
+    /// `WorkActionLabels.saved`'s full wording ("Download" / "Remove Download").
     static func savedAction(isSaved: Bool) -> (title: String, systemImage: String) {
-        isSaved ? ("Saved", "bookmark.fill") : ("Save to Keep", "bookmark")
+        isSaved
+            ? ("Downloaded", WorkActionLabels.downloadedSymbol)
+            : ("Download", WorkActionLabels.downloadEmptySymbol)
     }
 
     /// Compact tile labels; the Library row uses `WorkActionLabels.savedForLater`'s
@@ -223,8 +227,8 @@ enum WorkDetailPresentation {
 
     /// What the detail should do after "Remove from Later" possibly soft-deleted
     /// a queue-only record: keep showing the (still-live) local work, fall back
-    /// to remote state, or — with no remote source to fall back to — dismiss so
-    /// the screen can't keep mutating a Recently Deleted record.
+    /// to remote/AO3 state, or — only when there is nothing left to show — dismiss
+    /// so the screen can't keep mutating a Recently Deleted record.
     enum PostRemovalAction: Equatable {
         case keepLocal
         case showRemote
@@ -236,6 +240,45 @@ enum WorkDetailPresentation {
     ) -> PostRemovalAction {
         guard isPendingDeletion else { return .keepLocal }
         return hasRemoteSource ? .showRemote : .dismiss
+    }
+
+    /// Sparse AO3 blurb built from a local record so Work Details can stay open
+    /// after a queue-only remove soft-deletes the local copy (opened from Library
+    /// with no separate `remote` payload).
+    static func summaryFromLocal(_ work: SavedWork) -> AO3WorkSummary? {
+        guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
+            return nil
+        }
+        let authors = work.author
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return AO3WorkSummary(
+            id: id,
+            title: work.title,
+            authors: authors,
+            authorIdentities: work.verifiedAuthorIdentities,
+            fandoms: work.workFandoms,
+            rating: work.rating,
+            warnings: work.workWarnings,
+            categories: work.workCategories,
+            relationships: work.workRelationships,
+            characters: work.workCharacters,
+            isComplete: work.isComplete,
+            dateUpdated: work.dateUpdated,
+            tags: work.workFreeforms,
+            summary: work.summary,
+            language: work.language,
+            words: work.wordCount > 0 ? work.wordCount : nil,
+            chapters: work.chapters,
+            comments: work.comments > 0 ? work.comments : nil,
+            kudos: work.kudos > 0 ? work.kudos : nil,
+            bookmarks: work.bookmarks > 0 ? work.bookmarks : nil,
+            hits: work.hits > 0 ? work.hits : nil,
+            seriesTitle: work.seriesTitle.isEmpty ? nil : work.seriesTitle,
+            seriesURL: work.seriesURL.isEmpty ? nil : work.seriesURL,
+            seriesPosition: work.seriesPosition > 0 ? work.seriesPosition : nil
+        )
     }
 
     /// Long summaries start collapsed behind a Show More affordance; short ones

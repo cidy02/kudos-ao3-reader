@@ -225,9 +225,8 @@ enum WorkActionLabels {
             : ("Mark as Finished", "checkmark.circle")
     }
 
-    /// Clock — not bookmark. Bookmark is reserved for AO3 bookmarks and "Save
-    /// to Keep" (permanent EPUB retention); reusing it here made those three
-    /// actions unreadable next to each other.
+    /// Clock — not bookmark. Bookmark is reserved for AO3 bookmarks; Download
+    /// (permanent EPUB retention) uses the arrow.down.circle family.
     static func savedForLater(isQueued: Bool) -> (title: String, systemImage: String) {
         isQueued
             ? ("Remove from Saved for Later", "clock.badge.xmark")
@@ -245,13 +244,19 @@ enum WorkActionLabels {
             : ("Favorite", "star")
     }
 
-    /// "Saved" keeps a work's EPUB from ever being freed. Distinct from Delete, which
-    /// removes the work — the two used to share one menu slot.
+    /// "Downloaded" keeps a work's EPUB from ever being freed. Distinct from Delete
+    /// (removes the work) and from Saved for Later (the reading queue). Bookmark is
+    /// reserved for AO3 bookmarks.
     static func saved(isSaved: Bool) -> (title: String, systemImage: String) {
         isSaved
-            ? ("Remove from Saved", "bookmark.slash")
-            : ("Save", "bookmark")
+            ? ("Remove Download", "arrow.down.circle.badge.xmark")
+            : ("Download", "arrow.down.circle")
     }
+
+    /// Filled download mark for "this *is* kept offline" badges/state chips.
+    static let downloadedSymbol = "arrow.down.circle.fill"
+    /// Outline download mark for empty/idle Download affordances.
+    static let downloadEmptySymbol = "arrow.down.circle"
 }
 
 enum WorkReaderPreparation {
@@ -546,7 +551,10 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 // from a listing, and it's what the local rows put here too.
                 if existingLocalWork?.isSaved != true {
                     Button(action: save) {
-                        Label("Save", systemImage: "bookmark")
+                        Label(
+                            WorkActionLabels.saved(isSaved: false).title,
+                            systemImage: WorkActionLabels.saved(isSaved: false).systemImage
+                        )
                     }
                     .tint(.blue)
                     .disabled(working)
@@ -613,7 +621,10 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     Button {
                         save()
                     } label: {
-                        Label("Save", systemImage: "bookmark")
+                        Label(
+                            WorkActionLabels.saved(isSaved: false).title,
+                            systemImage: WorkActionLabels.saved(isSaved: false).systemImage
+                        )
                     }
                     .disabled(working)
                 }

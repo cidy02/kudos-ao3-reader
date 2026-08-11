@@ -330,7 +330,10 @@ struct ReadingQueueStorageView: View {
                                     Button {
                                         WorkLifecycle.setSaved(work, true, in: context)
                                     } label: {
-                                        Label("Save to Keep", systemImage: "bookmark")
+                                        Label(
+                                            WorkActionLabels.saved(isSaved: false).title,
+                                            systemImage: WorkActionLabels.saved(isSaved: false).systemImage
+                                        )
                                     }
                                     .tint(.blue)
                                 }
@@ -338,7 +341,10 @@ struct ReadingQueueStorageView: View {
                                     Button {
                                         WorkLifecycle.setSaved(work, true, in: context)
                                     } label: {
-                                        Label("Save to Keep", systemImage: "bookmark")
+                                        Label(
+                                            WorkActionLabels.saved(isSaved: false).title,
+                                            systemImage: WorkActionLabels.saved(isSaved: false).systemImage
+                                        )
                                     }
                                     Button(role: .destructive) {
                                         pendingQueueRemoval = work

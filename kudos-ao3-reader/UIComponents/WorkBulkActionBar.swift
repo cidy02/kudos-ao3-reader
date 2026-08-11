@@ -57,7 +57,10 @@ struct WorkBulkActionBar: View {
             Button {
                 bulkSave()
             } label: {
-                Label(allSaved ? "Saved" : "Save", systemImage: allSaved ? "bookmark.fill" : "bookmark")
+                Label(
+                    WorkActionLabels.saved(isSaved: allSaved).title,
+                    systemImage: WorkActionLabels.saved(isSaved: allSaved).systemImage
+                )
             }
             Button {
                 bulkFavorite()

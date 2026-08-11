@@ -151,7 +151,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// Whether the user has marked this work as a favorite.
     var isFavorite: Bool = false
 
-    /// Whether the user explicitly saved this work to keep its EPUB permanently.
+    /// Whether the user marked this work as Downloaded — keep its EPUB permanently
+    /// (never auto-freed). Distinct from Saved for Later (reading queue) and AO3 bookmarks.
     var isSaved: Bool = false
 
     /// Whether the user has finished reading. When finished and not kept

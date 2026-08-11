@@ -167,7 +167,7 @@ struct MediaBrowserView: View {
                     .skeletonShimmer()
             }
             if let saved = stats?.savedCount, saved > 0 {
-                statItem("bookmark.fill", "\(saved) saved")
+                statItem(WorkActionLabels.downloadedSymbol, "\(saved) downloaded")
             }
         }
         .font(.caption2)

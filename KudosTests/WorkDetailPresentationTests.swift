@@ -46,12 +46,24 @@ struct WorkDetailPresentationTests {
     }
 
     @Test func savedAndLaterActionsAreStateAware() {
-        #expect(WorkDetailPresentation.savedAction(isSaved: false).title == "Save to Keep")
-        #expect(WorkDetailPresentation.savedAction(isSaved: true).title == "Saved")
-        #expect(WorkDetailPresentation.savedAction(isSaved: true).systemImage == "bookmark.fill")
+        #expect(WorkDetailPresentation.savedAction(isSaved: false).title == "Download")
+        #expect(WorkDetailPresentation.savedAction(isSaved: true).title == "Downloaded")
+        #expect(WorkDetailPresentation.savedAction(isSaved: true).systemImage
+            == WorkActionLabels.downloadedSymbol)
 
         #expect(WorkDetailPresentation.laterAction(isQueued: false).title == "Save for Later")
         #expect(WorkDetailPresentation.laterAction(isQueued: true).title == "Remove from Later")
+        #expect(WorkDetailPresentation.laterAction(isQueued: false).systemImage
+            == WorkActionLabels.savedForLater(isQueued: false).systemImage)
+    }
+
+    @Test func summaryFromLocalRequiresAO3Identity() {
+        let withID = SavedWork(title: "T", author: "A", sourceURL: "https://archiveofourown.org/works/99")
+        withID.ao3WorkID = 99
+        #expect(WorkDetailPresentation.summaryFromLocal(withID)?.id == 99)
+
+        let noID = SavedWork(title: "Local", author: "B", sourceURL: "file:///tmp/x.epub")
+        #expect(WorkDetailPresentation.summaryFromLocal(noID) == nil)
     }
 
     @Test func queueAndCollectionLabelsPluralize() {

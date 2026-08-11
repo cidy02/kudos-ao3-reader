@@ -536,7 +536,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         if work.isQueuedForLater {
             return "In a Reading Queue — its EPUB is protected while queued."
         }
-        if work.isSaved { return "Saved — kept on this device." }
+        if work.isSaved { return "Downloaded — kept on this device." }
         if work.ao3WorkID == nil, WorkTags.ao3WorkID(from: work.sourceURL) == nil {
             return "Imported EPUB — kept on this device for offline reading."
         }
@@ -689,6 +689,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     /// The same command the work-card context menus run for "Remove from Saved for
     /// Later" — a queue-only record moves to Recently Deleted (90-day recovery).
+    /// Work Details stays open whenever we can still show the work (as a live local
+    /// record, or as an AO3 summary). Dismiss only when the soft-deleted record is
+    /// the only representation (pure local import with no AO3 id) — otherwise
+    /// removing from Later felt like deleting the work.
     func removeFromSavedForLater() {
         guard let work = localWork else { return }
         queueNotice = nil
@@ -698,23 +702,27 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
             in: context
         )
-        queueNotice = "Removed from Saved for Later."
+        let canShowRemote = remote != nil
+            || WorkDetailPresentation.summaryFromLocal(work) != nil
         switch WorkDetailPresentation.postRemovalAction(
             isPendingDeletion: work.isPendingDeletion,
-            hasRemoteSource: remote != nil
+            hasRemoteSource: canShowRemote
         ) {
         case .keepLocal:
-            break
+            queueNotice = "Removed from Saved for Later."
         case .showRemote:
-            // The record existed only for the queue; the page returns to remote
-            // state — the same rule as resolveExistingIfNeeded, which never adopts
-            // a Recently-Deleted match.
+            // Prefer the original remote payload; otherwise rebuild a blurb from
+            // the local fields so the page doesn't slam shut on Library opens.
+            if remote == nil, let fallback = WorkDetailPresentation.summaryFromLocal(work) {
+                refreshedRemote = fallback
+            }
             localWork = nil
+            queueNotice = work.isPendingDeletion
+                ? "Removed from Saved for Later. Offline copy is in Recently Deleted for 90 days."
+                : "Removed from Saved for Later."
         case .dismiss:
-            // Opened directly from the (now soft-deleted) local record: there is
-            // no remote state to fall back to, and leaving the detail bound to a
-            // hidden record would let later taps mutate it while hidden. Return
-            // to the previous screen instead.
+            // No AO3 identity and the local record is soft-deleted — nothing left
+            // to display without mutating a hidden row.
             dismiss()
         }
     }

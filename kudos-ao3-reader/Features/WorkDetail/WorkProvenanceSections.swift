@@ -199,7 +199,9 @@ struct WorkProvenanceSections: View {
         if work.isInSavedForLaterQueue {
             badges.append((text: "Later", symbol: WorkActionLabels.savedForLaterSymbol))
         }
-        if work.isSaved { badges.append((text: "Saved", symbol: "bookmark.fill")) }
+        if work.isSaved {
+            badges.append((text: "Downloaded", symbol: WorkActionLabels.downloadedSymbol))
+        }
         if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
         if work.isFinished { badges.append((text: "Finished", symbol: "checkmark.circle.fill")) }
         if !work.hasEPUB, !work.ao3Unavailable {
