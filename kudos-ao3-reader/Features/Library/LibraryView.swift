@@ -111,19 +111,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         )
     }
 
-    private var readingQueuesGridDestination: some View {
-        LibraryEntityGridView(
-            title: "Reading Queues",
-            items: readingQueues.filter { $0.kind == .custom }.sorted { $0.sortOrder < $1.sortOrder },
-            onNew: {
-                newQueueName = ""
-                showingNewQueue = true
-            },
-            card: { ReadingQueueCard(queue: $0) },
-            newCard: { NewReadingQueueCard() }
-        )
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             Group {
@@ -151,7 +138,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
-                .navigationDestination(for: AllReadingQueuesDestination.self) { _ in readingQueuesGridDestination }
+                .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
+                    ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
+                }
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
@@ -372,7 +361,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: "Reading Queues",
             collapseKey: "library.readingQueues",
             hasItems: true,
-            onSeeAll: !customQueues.isEmpty ? { path.append(AllReadingQueuesDestination()) } : nil
+            onSeeAll: !customQueues.isEmpty
+                ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+                : nil
         ) {
             Button {
                 newQueueName = ""
@@ -383,7 +374,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .buttonStyle(.plain)
 
             ForEach(customQueues.prefix(12)) { queue in
-                NavigationLink(value: queue) {
+                NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
                     ReadingQueueCard(queue: queue)
                 }
                 .buttonStyle(.plain)
