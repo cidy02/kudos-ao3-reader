@@ -267,6 +267,18 @@ class LibraryViewModel(
         }
     }
 
+    fun toggleSavedForLaterOne(workId: String) {
+        val repo = queueRepository ?: return
+        viewModelScope.launch {
+            if (repo.isInSavedForLater(workId)) {
+                repo.removeFromSavedForLater(workId)
+            } else {
+                runCatching { repo.addToSavedForLater(workId) }
+            }
+            queueRefreshTick.update { it + 1 }
+        }
+    }
+
     fun addToQueue(workId: String, queueId: String) {
         val queues = queueRepository ?: return
         viewModelScope.launch {

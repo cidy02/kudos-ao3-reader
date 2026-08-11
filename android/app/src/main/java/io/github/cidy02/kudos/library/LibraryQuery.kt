@@ -124,10 +124,16 @@ object LibraryQuery {
             .sortedWith(recencyComparator())
     }
 
-    /** Apple `LibrarySectionKind.savedForLater`: explicitly saved works. */
+    /**
+     * Apple `LibrarySectionKind.savedForLater`: queue members (including queue-only)
+     * plus legacy isSaved works that predate queues and aren't already queued.
+     */
     fun savedForLater(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
-            .filter { it.item.work.isSaved }
+            .filter {
+                val w = it.item.work
+                w.isQueuedForLater || (w.isSaved && !w.isQueuedForLater)
+            }
             .sortedWith(recencyComparator())
     }
 

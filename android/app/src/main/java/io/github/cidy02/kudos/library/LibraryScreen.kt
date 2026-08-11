@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Queue
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -488,6 +489,7 @@ fun LibraryScreen(
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
         onSetSavedOne = viewModel::setSavedOne,
+        onToggleSavedForLaterOne = viewModel::toggleSavedForLaterOne,
         onRevealWork = { viewModel.revealWork(it, activity) },
         onAddToQueue = { addToQueueWorkId = it },
         onAddToCollection = { addToCollectionWorkId = it },
@@ -531,6 +533,7 @@ private fun LibraryContent(
     onToggleFinishedOne: (String) -> Unit,
     onRemoveOne: (String) -> Unit,
     onSetSavedOne: (String, Boolean) -> Unit,
+    onToggleSavedForLaterOne: (String) -> Unit = {},
     onRevealWork: (String) -> Unit,
     onAddToQueue: (String) -> Unit,
     onAddToCollection: (String) -> Unit,
@@ -547,6 +550,7 @@ private fun LibraryContent(
         onToggleFinished = onToggleFinishedOne,
         onRemove = onRemoveOne,
         onSetSaved = onSetSavedOne,
+        onToggleSavedForLater = onToggleSavedForLaterOne,
         onSelect = { id ->
             onEnterSelection()
             onToggleSelection(id)
@@ -859,6 +863,8 @@ data class LibraryCardActions(
     val onToggleFinished: (String) -> Unit,
     val onRemove: (String) -> Unit,
     val onSetSaved: (String, Boolean) -> Unit,
+    /** Toggle Saved for Later queue membership (not isSaved / Download). */
+    val onToggleSavedForLater: (String) -> Unit = {},
     val onSelect: (String) -> Unit,
     val onReveal: (String) -> Unit,
     val onAddToQueue: (String) -> Unit,
@@ -1272,6 +1278,14 @@ fun LibraryCarouselCard(
                 onClick = {
                     menuOpen = false
                     actions.onSetSaved(work.id, !work.isSaved)
+                }
+            )
+            ContextMenuItem(
+                icon = Icons.Outlined.Schedule,
+                label = if (work.isQueuedForLater) "Remove from Saved for Later" else "Save for Later",
+                onClick = {
+                    menuOpen = false
+                    actions.onToggleSavedForLater(work.id)
                 }
             )
             ContextMenuItem(
