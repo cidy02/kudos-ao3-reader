@@ -10,6 +10,10 @@ import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -56,6 +60,25 @@ class ReadingQueueRepositoryTest {
         assertEquals(ReadingQueueKind.SAVED_FOR_LATER, first.kindRaw)
         assertEquals(ReadingQueueKind.SAVED_FOR_LATER_NAME, first.displayName)
         assertEquals(1, repository.listQueues().size)
+    }
+
+    @Test
+    fun ensureSavedForLaterIsRaceSafeUnderConcurrentCallers() = runTest {
+        // Regression test: LibraryViewModel's refresh() and refreshQueues() (plus this
+        // repository's own add()/preserve() paths) can all call ensureSavedForLaterQueue()
+        // around the same time. Before wrapping the check-then-create in a transaction,
+        // concurrent callers could each pass the "does it exist" check before either had
+        // committed its insert, producing two "Saved for Later" queues — reproduced on a
+        // real device via a direct sqlite query on a fresh install.
+        coroutineScope {
+            (1..20).map {
+                async(Dispatchers.IO) { repository.ensureSavedForLaterQueue() }
+            }.awaitAll()
+        }
+
+        val savedForLaterQueues = repository.listQueues()
+            .filter { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
+        assertEquals(1, savedForLaterQueues.size)
     }
 
     @Test
