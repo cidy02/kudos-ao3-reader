@@ -1159,13 +1159,11 @@ fun WorkDetailScreen(
             }
         },
         onAddToQueue = {
-            ensureLocalThen { work ->
-                availableQueues = readingQueueRepository.listQueues()
-                    .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
-                queuePickerOpen = true
-                // Keep work in state after ensureLocal.
-                refreshLocal(work.id, state.remote)
-            }
+            // Open the picker immediately — never wait on AO3 metadata/EPUB work.
+            // Selecting a queue still runs ensureLocalThen(queueOnly = true) + preserve.
+            availableQueues = readingQueueRepository.listQueues()
+                .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+            queuePickerOpen = true
         },
         onAddToCollection = { collectionDialogOpen = true },
         onBookmark = {
