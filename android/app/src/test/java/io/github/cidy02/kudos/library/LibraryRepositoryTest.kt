@@ -73,14 +73,18 @@ class LibraryRepositoryAllWorksTest {
 
     @Test
     fun snapshotIncludesSavedWorksUserTagsAndCollections() = runTest {
-        workRepository.upsert(savedWork("saved").copy(isSaved = true))
-        workRepository.upsert(savedWork("history").copy(isSaved = false))
-        workRepository.addUserTag("saved", "Comfort")
-        workRepository.addToCollection("saved", "Weekend")
+        // Work / collection ids are UUIDs in production; membership tombstone ids
+        // XOR those UUIDs, so tests that join collections must use real UUIDs too.
+        val savedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        val historyId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        workRepository.upsert(savedWork(savedId).copy(isSaved = true))
+        workRepository.upsert(savedWork(historyId).copy(isSaved = false))
+        workRepository.addUserTag(savedId, "Comfort")
+        workRepository.addToCollection(savedId, "Weekend")
 
         val snapshot = libraryRepository.observeSnapshot().first()
 
-        assertEquals(listOf("saved"), snapshot.items.map { it.work.id })
+        assertEquals(listOf(savedId), snapshot.items.map { it.work.id })
         assertEquals(listOf("Comfort"), snapshot.items.single().userTags.map { it.normalizedName })
         assertEquals(listOf("Weekend"), snapshot.items.single().collections.map { it.name })
         assertEquals(listOf("Comfort"), snapshot.userTags.map { it.normalizedName })

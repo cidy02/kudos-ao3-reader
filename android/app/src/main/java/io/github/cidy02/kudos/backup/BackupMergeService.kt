@@ -11,6 +11,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
 import java.time.Instant
 
 /**
@@ -455,7 +456,7 @@ object BackupMergeService {
                     // lists it as a member.
                     .filterNot { workId ->
                         tombstoneIndex.collectionMembershipResolution(
-                            "$id:$workId",
+                            collectionMembershipRecordId(id, workId),
                             incomingModified
                         ) == TombstoneResolution.SUPPRESS_STALE
                     }

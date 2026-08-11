@@ -14,6 +14,23 @@ object SyncTombstoneRecordType {
 }
 
 /**
+ * Deterministic, order-independent UUID for a collection↔work membership tombstone,
+ * matching iOS `collectionMembershipID`: XOR of the two UUIDs' 16 RFC 4122
+ * big-endian bytes (the same layout as [UUID.toString] / [UUID.fromString]).
+ *
+ * XOR is commutative, so `collectionMembershipRecordId(a, b) ==
+ * collectionMembershipRecordId(b, a)`.
+ */
+fun collectionMembershipRecordId(collectionId: String, workId: String): String {
+    val collection = UUID.fromString(collectionId)
+    val work = UUID.fromString(workId)
+    return UUID(
+        collection.mostSignificantBits xor work.mostSignificantBits,
+        collection.leastSignificantBits xor work.leastSignificantBits
+    ).toString()
+}
+
+/**
  * Durable marker for an explicit local deletion. Backup restore consults these so
  * an older archive does not resurrect a deleted work (Apple SyncTombstone).
  */

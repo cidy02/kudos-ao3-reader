@@ -312,7 +312,10 @@ class BackupCollectionMergeTest {
         val removedAt = Instant.parse("2026-06-01T00:00:00Z")
         val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
             id = TOMBSTONE_ID,
-            recordID = "$COLLECTION_ID:$WORK_ID",
+            recordID = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            ),
             recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
             createdAt = removedAt,
             lastModifiedAt = removedAt

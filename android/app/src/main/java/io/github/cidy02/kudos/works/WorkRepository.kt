@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionEntity
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
@@ -503,10 +504,12 @@ class WorkRepository(
     /**
      * [CollectionWorkCrossRef] has no id of its own (plain composite key), unlike
      * [io.github.cidy02.kudos.library.ReadingQueueMembership] — build a stable
-     * tombstone record id from the pairing instead.
+     * tombstone record id from the pairing instead. Must match iOS
+     * `collectionMembershipID` (XOR of the two UUIDs' RFC 4122 bytes) so
+     * cross-device restores suppress the same membership.
      */
     private fun membershipRecordId(collectionId: String, workId: String): String =
-        "$collectionId:$workId"
+        collectionMembershipRecordId(collectionId, workId)
 
     private suspend fun touchCollection(collectionId: String) {
         val entity = collectionDao.getById(collectionId) ?: return
