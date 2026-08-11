@@ -93,50 +93,57 @@ struct ReadingQueueBrowserView: View {
             #endif
     }
 
+    // Three independently-floating glass elements with gaps between them (matching
+    // Safari's own tab-group bar, and this app's existing ReaderChromeTopBar
+    // convention) — not one flat, edge-to-edge toolbar strip. Each button gets its
+    // own .glassEffect() rather than a shared .background(.bar).
     private var switcherBar: some View {
         HStack(spacing: 10) {
             Button { showingSwitcher = true } label: {
                 Image(systemName: "square.grid.2x2")
-                    .frame(width: 36, height: 36)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("All Queues")
-            .minimumHitTarget()
 
             Button { showingSwitcher = true } label: {
                 HStack(spacing: 6) {
                     queueGlyph(selectedQueue)
                     Text(selectedQueue?.displayName ?? "Reading Queues")
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Image(systemName: "chevron.up")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
-                .overlay { Capsule().strokeBorder(.quaternary, lineWidth: 0.75) }
+                .frame(height: 44)
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .contentShape(.capsule)
             .accessibilityLabel("Switch Reading Queue")
             .accessibilityValue(selectedQueue?.displayName ?? "No queue selected")
-            .minimumHitTarget()
 
             Button {
                 newQueueName = ""
                 showingNewQueue = true
             } label: {
                 Image(systemName: "plus")
-                    .frame(width: 36, height: 36)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("New Queue")
-            .minimumHitTarget()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
+        .padding(.bottom, 8)
         .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
             switcherList
                 .presentationCompactAdaptation(.sheet)
