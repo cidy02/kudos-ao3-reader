@@ -1,15 +1,16 @@
 package io.github.cidy02.kudos
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
+import androidx.work.Configuration
 import io.github.cidy02.kudos.app.KudosAppContainer
+import io.github.cidy02.kudos.works.KudosWorkerFactory
+import io.github.cidy02.kudos.works.WorkAvailabilitySweep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-
-import androidx.work.Configuration
-import io.github.cidy02.kudos.works.KudosWorkerFactory
-import io.github.cidy02.kudos.works.WorkAvailabilitySweep
 
 class KudosApplication : Application(), Configuration.Provider {
     lateinit var container: KudosAppContainer
@@ -28,6 +29,14 @@ class KudosApplication : Application(), Configuration.Provider {
 
     /** Process-scoped IO work that outlives any single Activity/composition. */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Started-activity counter used as a ProcessLifecycleOwner stand-in: 0→1 is
+     * foreground, 1→0 is background. lifecycle-process is only a transitive
+     * runtime artifact here and is not on the compile classpath, so we avoid a
+     * new Gradle dependency and count activity start/stop instead.
+     */
+    private var startedActivityCount = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -57,7 +66,45 @@ class KudosApplication : Application(), Configuration.Provider {
             runCatching { container.appUpdateRepository.checkIfDue() }
         }
 
+        // iOS also syncs on launch / foreground / background; the 6h WorkManager
+        // job remains as the backstop when the app is never opened.
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                if (startedActivityCount == 0) {
+                    maybeRunFolderSync()
+                }
+                startedActivityCount++
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
+                if (startedActivityCount == 0) {
+                    maybeRunFolderSync()
+                }
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+
         scheduleWorkManagerTasks()
+    }
+
+    /**
+     * Fire-and-forget folder sync when auto-sync is on and a folder is connected.
+     * Mirrors FolderSyncWorker: failures are swallowed so UI / lifecycle isn't blocked.
+     */
+    private fun maybeRunFolderSync() {
+        applicationScope.launch {
+            runCatching {
+                if (!container.syncRepository.isSyncEnabled()) return@runCatching
+                if (container.syncRepository.getSyncFolderUri() == null) return@runCatching
+                container.syncRepository.runSync()
+            }
+        }
     }
 
     private fun scheduleWorkManagerTasks() {

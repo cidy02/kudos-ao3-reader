@@ -4,6 +4,8 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
+import io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionEntity
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
@@ -473,8 +475,16 @@ class WorkRepository(
         // Retract any tombstone from a prior removal of this same pairing — a
         // stale one here would make a later backup restore silently drop this
         // work back out of the collection despite the user just re-adding it.
+        val xorId = membershipRecordId(collectionId, workId)
         tombstoneDao.deleteByRecord(
-            membershipRecordId(collectionId, workId),
+            xorId,
+            SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
+        )
+        // android-v0.2.1-alpha wrote colon-form rows; retract those too so a
+        // re-add is not suppressed by a legacy tombstone that only the dual-form
+        // merge path would still honor.
+        tombstoneDao.deleteByRecord(
+            legacyCollectionMembershipRecordId(collectionId, workId),
             SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
         )
         return collectionsForWork(workId)
@@ -503,10 +513,12 @@ class WorkRepository(
     /**
      * [CollectionWorkCrossRef] has no id of its own (plain composite key), unlike
      * [io.github.cidy02.kudos.library.ReadingQueueMembership] — build a stable
-     * tombstone record id from the pairing instead.
+     * tombstone record id from the pairing instead. Must match iOS
+     * `collectionMembershipID` (XOR of the two UUIDs' RFC 4122 bytes) so
+     * cross-device restores suppress the same membership.
      */
     private fun membershipRecordId(collectionId: String, workId: String): String =
-        "$collectionId:$workId"
+        collectionMembershipRecordId(collectionId, workId)
 
     private suspend fun touchCollection(collectionId: String) {
         val entity = collectionDao.getById(collectionId) ?: return

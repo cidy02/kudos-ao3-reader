@@ -312,7 +312,10 @@ class BackupCollectionMergeTest {
         val removedAt = Instant.parse("2026-06-01T00:00:00Z")
         val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
             id = TOMBSTONE_ID,
-            recordID = "$COLLECTION_ID:$WORK_ID",
+            recordID = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            ),
             recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
             createdAt = removedAt,
             lastModifiedAt = removedAt
@@ -336,6 +339,98 @@ class BackupCollectionMergeTest {
         val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
         assertTrue(OTHER_WORK_ID in merged.workIds)
         assertTrue(WORK_ID !in merged.workIds)
+    }
+
+    @Test
+    fun suppressesResurrectionWithLegacyColonFormMembershipTombstone() {
+        // android-v0.2.1-alpha already shipped colon-form rows. After upgrade those
+        // rows are still in Room; merge must treat them as the XOR-UUID identity.
+        val local = WorkCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE,
+            lastModifiedAt = Instant.parse("2026-06-01T00:00:00Z"),
+            workIds = listOf(OTHER_WORK_ID)
+        )
+        val removedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val legacyColonRecordId =
+            io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            )
+        val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = legacyColonRecordId,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = removedAt,
+            lastModifiedAt = removedAt
+        )
+        val archive = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Favorites",
+            dateAdded = DATE_STRING,
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            workIDs = listOf(WORK_ID, OTHER_WORK_ID)
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                collections = listOf(local),
+                tombstones = listOf(membershipTombstone)
+            ),
+            backup = samplePackage(manifest = sampleManifest(collections = listOf(archive)))
+        )
+
+        val merged = result.snapshot.collections.single { it.id == COLLECTION_ID }
+        assertTrue(OTHER_WORK_ID in merged.workIds)
+        assertTrue(WORK_ID !in merged.workIds)
+    }
+
+    @Test
+    fun exportsLegacyColonFormMembershipTombstoneAsXorUuid() {
+        // Export used to call canonicalUuid(recordID) and throw on colon form —
+        // a real upgrade failure path for users with pre-existing tombstones.
+        val legacyColonRecordId =
+            io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId(
+                COLLECTION_ID,
+                WORK_ID
+            )
+        val expectedXor = io.github.cidy02.kudos.core.model.collectionMembershipRecordId(
+            COLLECTION_ID,
+            WORK_ID
+        )
+        val membershipTombstone = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = legacyColonRecordId,
+            recordTypeRaw = io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            createdAt = DATE,
+            lastModifiedAt = DATE
+        )
+        val snapshot = BackupLibrarySnapshot(
+            works = listOf(sampleSavedWork()),
+            collections = listOf(
+                WorkCollection(
+                    id = COLLECTION_ID,
+                    name = "Favorites",
+                    dateAdded = DATE,
+                    workIds = listOf(OTHER_WORK_ID)
+                )
+            ),
+            tombstones = listOf(membershipTombstone)
+        )
+
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = snapshot.toV2Manifest(exportedAt = DATE),
+                epubFilesByWorkId = mapOf(WORK_ID to EPUB_BYTES)
+            )
+        )
+        val imported = BackupImporter.importV2Zip(bytes)
+        val exported = imported.manifest.tombstones.single {
+            it.recordTypeRaw ==
+                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP
+        }
+        assertEquals(expectedXor, exported.recordID)
     }
 
     @Test

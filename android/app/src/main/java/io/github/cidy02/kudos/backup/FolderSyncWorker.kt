@@ -15,6 +15,8 @@ class FolderSyncWorker(
 
         return when (syncRepository.runSync()) {
             is SyncResult.Success -> Result.success()
+            // Another lifecycle/manual run already covers this window.
+            is SyncResult.SkippedAlreadyRunning -> Result.success()
             // SAF IO failures (e.g. permission revoked) are unlikely to be transient;
             // don't retry endlessly, just wait for the next scheduled run.
             is SyncResult.Error -> Result.failure()

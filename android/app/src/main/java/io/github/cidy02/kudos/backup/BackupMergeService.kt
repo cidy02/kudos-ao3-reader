@@ -11,6 +11,8 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
+import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
 import java.time.Instant
 
 /**
@@ -455,7 +457,7 @@ object BackupMergeService {
                     // lists it as a member.
                     .filterNot { workId ->
                         tombstoneIndex.collectionMembershipResolution(
-                            "$id:$workId",
+                            collectionMembershipRecordId(id, workId),
                             incomingModified
                         ) == TombstoneResolution.SUPPRESS_STALE
                     }
@@ -877,8 +879,18 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
                     indexNewest(annotationById, recordId, tombstone)
                 SyncTombstoneRecordType.WORK_COLLECTION ->
                     indexNewest(collectionById, recordId, tombstone)
-                SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP ->
-                    indexNewest(collectionMembershipById, recordId, tombstone)
+                SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP -> {
+                    // android-v0.2.1-alpha stored "$collectionId:$workId"; rewrite
+                    // to the XOR-UUID key so legacy rows still suppress resurrection.
+                    val membershipKey = try {
+                        BackupPaths.normalizeIdForComparison(
+                            canonicalizeCollectionMembershipRecordId(tombstone.recordID)
+                        )
+                    } catch (_: IllegalArgumentException) {
+                        recordId
+                    }
+                    indexNewest(collectionMembershipById, membershipKey, tombstone)
+                }
                 else -> Unit
             }
         }
@@ -926,7 +938,11 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
         )
     }
 
-    /** [id] is a `"<collectionId>:<workId>"` pairing — see [io.github.cidy02.kudos.works.WorkRepository]. */
+    /**
+     * [id] is the XOR-UUID membership id from [collectionMembershipRecordId]
+     * (iOS `collectionMembershipID`). Legacy colon-form tombstones are rewritten
+     * to this key when the index is built.
+     */
     fun collectionMembershipResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
         return SyncMerge.tombstoneResolution(
             incomingModifiedAt = incomingModifiedAt,
