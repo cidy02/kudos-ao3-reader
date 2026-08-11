@@ -33,6 +33,11 @@ struct HomeView: View {
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
 
+    // Section cache — same rationale as LibraryView: don't re-filter every
+    // carousel on every body pass while Liquid Glass is mid-morph.
+    @State private var sectionCache: [HomeSectionKind: [SavedWork]] = [:]
+    @State private var hasSectionCache = false
+
     /// Route marker so the Subscriptions header can push the full AO3 list.
     private struct SubscriptionsRoute: Hashable {}
 
@@ -76,24 +81,13 @@ struct HomeView: View {
     }
 
     private func section(_ kind: HomeSectionKind) -> [SavedWork] {
-        kind.works(from: works, visible: passesPrivacy)
+        sectionCache[kind] ?? []
     }
 
-    private var readingNow: [SavedWork] {
-        section(.readingNow)
-    }
-
-    private var recentlyUpdated: [SavedWork] {
-        section(.recentlyUpdated)
-    }
-
-    private var favorites: [SavedWork] {
-        section(.favorites)
-    }
-
-    private var recentlyOpened: [SavedWork] {
-        section(.recentlyOpened)
-    }
+    private var readingNow: [SavedWork] { section(.readingNow) }
+    private var recentlyUpdated: [SavedWork] { section(.recentlyUpdated) }
+    private var favorites: [SavedWork] { section(.favorites) }
+    private var recentlyOpened: [SavedWork] { section(.recentlyOpened) }
 
     /// The union of every local section, untruncated, for the Privacy button's
     /// visibility check — a `.prefix(12)`-truncated set could hide the button even
@@ -102,19 +96,58 @@ struct HomeView: View {
         readingNow + recentlyUpdated + favorites + recentlyOpened
     }
 
+    private var homeSectionsRevision: String {
+        let newest = Int(works.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0)
+        let bits = works.reduce(into: 0) { partial, work in
+            if work.isFavorite { partial += 1 }
+            if work.isFinished { partial += 2 }
+            if work.hasUpdate { partial += 4 }
+            if work.hasStartedReading { partial += 8 }
+        }
+        return [
+            "\(works.count)",
+            "\(newest)",
+            "\(bits)",
+            "\(hideMature)",
+            "\(matureMode.rawValue)",
+            "\(gate.revealAll)",
+            "\(gate.revealedIDs.count)"
+        ].joined(separator: "|")
+    }
+
+    private func rebuildHomeSectionCache() {
+        var next: [HomeSectionKind: [SavedWork]] = [:]
+        for kind in HomeSectionKind.allCases {
+            next[kind] = kind.works(from: works, visible: passesPrivacy)
+        }
+        sectionCache = next
+        hasSectionCache = true
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    localSection(.readingNow, works: readingNow)
-                    localSection(.recentlyUpdated, works: recentlyUpdated)
-                    subscriptionsSection
-                    localSection(.favorites, works: favorites)
-                    localSection(.recentlyOpened, works: recentlyOpened)
+            Group {
+                if hasSectionCache {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            localSection(.readingNow, works: readingNow)
+                            localSection(.recentlyUpdated, works: recentlyUpdated)
+                            subscriptionsSection
+                            localSection(.favorites, works: favorites)
+                            localSection(.recentlyOpened, works: recentlyOpened)
+                        }
+                        .padding(.vertical, 12)
+                    }
+                    .refreshable { await refreshHome() }
+                } else {
+                    TabDashboardShell(
+                        sectionTitles: [
+                            "Reading Now", "Recently Updated",
+                            "Subscriptions", "Favorites", "Recently Opened"
+                        ]
+                    )
                 }
-                .padding(.vertical, 12)
             }
-            .refreshable { await refreshHome() }
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
@@ -130,6 +163,10 @@ struct HomeView: View {
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
                 .ao3AuthorNavigation(path: $path, tab: .home)
+                .task(id: homeSectionsRevision) {
+                    await Task.yield()
+                    rebuildHomeSectionCache()
+                }
                 .task(id: auth.isLoggedIn) {
                     await Task.yield()
                     await loadSubscriptions()

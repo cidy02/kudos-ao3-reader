@@ -47,6 +47,17 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var showingNewQueue = false
     @State private var newQueueName = ""
 
+    // MARK: Section cache
+    //
+    // Filtering the whole library for every carousel on every body pass was
+    // hitching Liquid Glass tab switches. Rebuild once when data/filters change;
+    // carousels read the cache.
+
+    @State private var sectionCache: [LibrarySectionKind: [SavedWork]] = [:]
+    @State private var topFandomsCache: [String] = []
+    @State private var markedForLaterCache: [AO3WorkSummary] = []
+    @State private var hasSectionCache = false
+
     // Multi-select / bulk actions — a plain cross-platform Bool, the same pattern
     // `LibrarySectionListView` already uses (its `EditMode`-free `isSelecting`
     // state works identically on iOS and macOS). This used to be a local,
@@ -215,6 +226,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     await backfillFilterMetadata()
                 }
                 .task(id: auth.isLoggedIn) { await loadMarkedForLater() }
+                .task(id: sectionsRevision) {
+                    // Yield so the progressive tab shell (or prior frame) can paint
+                    // before we spend the main actor filtering every section.
+                    await Task.yield()
+                    rebuildSectionCache()
+                }
                 // A tag tapped on a work's detail page filters the Library to it.
                 // `initial: true` catches a tag set just before this view appears.
                 .onChange(of: router.pendingLibraryTag, initial: true) { _, tag in
@@ -244,7 +261,93 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     // MARK: Dashboard
 
+    /// Fingerprint of everything that should rebuild section slices. Kept coarse
+    /// (counts + newest stamp + filter/privacy bits) so we don't re-filter on
+    /// unrelated body passes, but still refresh when the user filters or reveals.
+    private var sectionsRevision: String {
+        let newest = Int(works.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0)
+        let lifecycleBits = works.reduce(into: 0) { partial, work in
+            if work.isQueuedForLater { partial += 1 }
+            if work.isSaved { partial += 2 }
+            if work.isFinished { partial += 4 }
+            if work.isFavorite { partial += 8 }
+            if work.hasEPUB { partial += 16 }
+        }
+        return [
+            "\(works.count)",
+            "\(newest)",
+            "\(lifecycleBits)",
+            "\(filters.fandoms.sorted().joined(separator: ","))",
+            "\(filters.userTags.count)",
+            "\(filters.rating.rawValue)",
+            "\(filters.completion.rawValue)",
+            "\(filters.sort.rawValue)",
+            "\(filters.language)",
+            "\(filters.wordsFrom)|\(filters.wordsTo)",
+            "\(filters.hasActiveFilters)",
+            "\(hideMature)",
+            "\(matureMode.rawValue)",
+            "\(gate.revealAll)",
+            "\(gate.revealedIDs.count)",
+            "\(markedForLater.count)",
+            "\(isLoadingMarkedForLater)"
+        ].joined(separator: "|")
+    }
+
+    private func rebuildSectionCache() {
+        var next: [LibrarySectionKind: [SavedWork]] = [:]
+        let localKinds: [LibrarySectionKind] = [
+            .readingNow, .savedForLater, .finished, .downloaded, .history, .favorites
+        ]
+        for kind in localKinds {
+            next[kind] = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
+        }
+        sectionCache = next
+
+        let counts: [String: Int] = works
+            .filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
+            .flatMap(\.workFandoms)
+            .reduce(into: [:]) { $0[$1, default: 0] += 1 }
+        topFandomsCache = counts
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .prefix(10)
+            .map(\.key)
+
+        let remoteOnly = CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
+        if filters.fandoms.isEmpty {
+            markedForLaterCache = remoteOnly
+        } else {
+            let wanted = Set(filters.fandoms.map { $0.lowercased() })
+            markedForLaterCache = remoteOnly.filter { summary in
+                summary.fandoms.contains { wanted.contains($0.lowercased()) }
+            }
+        }
+        hasSectionCache = true
+    }
+
+    private func cachedWorks(for kind: LibrarySectionKind) -> [SavedWork] {
+        sectionCache[kind] ?? []
+    }
+
     private var dashboard: some View {
+        Group {
+            if hasSectionCache {
+                realDashboard
+            } else {
+                // First paint inside the progressive tab content — keep showing
+                // skeletons until the section cache is ready (usually one yield).
+                TabDashboardShell(
+                    sectionTitles: [
+                        "Reading Now", "Saved for Later", "Finished",
+                        "Reading Queues", "Collections", "Downloaded"
+                    ],
+                    showFilterChips: true
+                )
+            }
+        }
+    }
+
+    private var realDashboard: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 fandomFilterBar
@@ -292,10 +395,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         .buttonStyle(.plain)
     }
 
-    /// A purely local section carousel (Reading Now / Finished / Downloaded). Applies
-    /// the active filters on top of the section's own filter + ordering.
+    /// A purely local section carousel (Reading Now / Finished / Downloaded).
+    /// Reads pre-filtered slices from `sectionCache`.
     private func localCarousel(_ kind: LibrarySectionKind) -> some View {
-        let sectionWorks = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
+        let sectionWorks = cachedWorks(for: kind)
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
@@ -314,8 +417,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// list (loaded when signed in). The `>` chevron opens the combined full list.
     private var savedForLaterCarousel: some View {
         let kind = LibrarySectionKind.savedForLater
-        let saved = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
-        let mfl = filteredMarkedForLater
+        let saved = cachedWorks(for: kind)
+        let mfl = markedForLaterCache
         let hasItems = !saved.isEmpty || !mfl.isEmpty
         // Skeletons only while the remote list is loading and there's nothing yet —
         // local saved works render immediately and suppress the placeholders.
@@ -341,20 +444,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
         } emptyState: {
             SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
-        }
-    }
-
-    /// The AO3 Marked-for-Later (remote) list with any locally-saved work removed —
-    /// a work in both lists renders once, as its richer local card (which may live
-    /// in another section, e.g. Reading Now) — then narrowed by the active fandom
-    /// quick-filter so the chips affect this section too. The other, metadata-only
-    /// filters don't apply to remote summaries (they carry no rating/word count).
-    private var filteredMarkedForLater: [AO3WorkSummary] {
-        let remoteOnly = CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
-        guard !filters.fandoms.isEmpty else { return remoteOnly }
-        let wanted = Set(filters.fandoms.map { $0.lowercased() })
-        return remoteOnly.filter { summary in
-            summary.fandoms.contains { wanted.contains($0.lowercased()) }
         }
     }
 
@@ -419,26 +508,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// The user's most-common fandoms (privacy-filtered), most frequent first —
-    /// the data behind the quick-filter chips.
-    private var topFandoms: [String] {
-        let counts: [String: Int] = works
-            .filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
-            .flatMap(\.workFandoms)
-            .reduce(into: [:]) { $0[$1, default: 0] += 1 }
-        return counts
-            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
-            .prefix(10)
-            .map(\.key)
-    }
-
     /// A light, horizontal quick-filter chip row: tap a fandom to filter every
     /// section to it (the full faceted filters stay behind the "Filters" button).
     /// Reuses `TagChip` so it matches the Browse/Search chips; a trailing Reset chip
     /// appears whenever any filter (chip or inspector) is active.
     @ViewBuilder
     private var fandomFilterBar: some View {
-        let fandoms = topFandoms
+        let fandoms = topFandomsCache
         if !fandoms.isEmpty || filters.hasActiveFilters {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -745,7 +821,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private func dashboardWorks(for kind: LibrarySectionKind) -> [SavedWork] {
-        Array(filters.apply(to: kind.works(from: works, visible: passesPrivacy)).prefix(12))
+        Array(cachedWorks(for: kind).prefix(12))
     }
 
     private func unique(_ works: [SavedWork]) -> [SavedWork] {

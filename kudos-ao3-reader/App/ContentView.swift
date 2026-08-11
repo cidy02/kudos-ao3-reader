@@ -9,27 +9,12 @@ import UIKit
 /// at the bottom of the sidebar; on iOS it's an adaptive tab bar / sidebar.
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.scenePhase) private var scenePhase
-    @Query private var folderSyncWorks: [SavedWork]
-    @Query private var folderSyncBookmarks: [Bookmark]
-    @Query private var folderSyncFonts: [CustomFont]
-    @Query private var folderSyncCollections: [WorkCollection]
-    @Query private var folderSyncQueues: [ReadingQueue]
-    @Query private var folderSyncMemberships: [ReadingQueueMembership]
-    @Query private var folderSyncTombstones: [SyncTombstone]
     @State private var router = AppRouter()
     @State private var externalImport = ExternalFileImport()
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
-    @State private var folderSyncUpTask: Task<Void, Never>?
-    @State private var lastForegroundFolderSyncAt: Date?
-
-    /// Automatic sync triggers only run more than once a minute when the scene keeps
-    /// flipping active (Control Center, quick app-switches); an explicit dirty change
-    /// or a manual Sync Now still goes through immediately regardless of this gate.
-    private static let foregroundSyncThrottle: TimeInterval = 60
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -90,6 +75,9 @@ struct ContentView: View {
             .onChange(of: theme.effectiveTint, initial: true) { _, tint in
                 applyWindowTint(tint)
             }
+            // Folder-sync queries live in a sibling observer so library mutations
+            // don't re-render the whole TabView (which was hitching Liquid Glass).
+            .background { FolderSyncObserver() }
             .task {
                 // Yield first so the initial tab chrome (Liquid Glass) can paint before
                 // we burn the main actor on session restore / full-library normalize.
@@ -107,57 +95,6 @@ struct ContentView: View {
                 // Backfills the derived search text for records that predate indexing,
                 // arrived via an older backup, or were indexed under an older schema.
                 await WorkSearchIndex.rebuildIfNeeded(in: modelContext)
-                guard FolderSyncService.snapshot().autoSyncEnabled else { return }
-                lastForegroundFolderSyncAt = Date()
-                _ = try? await FolderSyncService.syncDown(in: modelContext)
-                // Catches up anything a prior session's debounce lost to a force-quit —
-                // the dirty flag is durable across launches, unlike the debounce Task.
-                if FolderSyncService.snapshot().isDirty {
-                    _ = try? await FolderSyncService.syncUp(in: modelContext)
-                }
-                #if os(iOS)
-                FolderSyncBackgroundTask.scheduleNext()
-                #endif
-            }
-            .onChange(of: scenePhase) { _, phase in
-                guard FolderSyncService.snapshot().autoSyncEnabled else { return }
-                switch phase {
-                case .active:
-                    let now = Date()
-                    if let last = lastForegroundFolderSyncAt,
-                       now.timeIntervalSince(last) < Self.foregroundSyncThrottle,
-                       !FolderSyncService.snapshot().isDirty {
-                        return
-                    }
-                    lastForegroundFolderSyncAt = now
-                    Task { @MainActor in
-                        _ = try? await FolderSyncService.syncDown(in: modelContext)
-                    }
-                case .inactive, .background:
-                    folderSyncUpTask?.cancel()
-                    #if os(iOS)
-                    // Submitting right before backgrounding is the pattern most
-                    // likely to actually get honored by the OS soon.
-                    FolderSyncBackgroundTask.scheduleNext()
-                    #endif
-                    guard FolderSyncService.snapshot().isDirty else { return }
-                    Task { @MainActor in
-                        _ = try? await FolderSyncService.syncUp(in: modelContext)
-                    }
-                @unknown default:
-                    break
-                }
-            }
-            .onChange(of: folderSyncChangeToken) { _, _ in
-                FolderSyncService.markDirty()
-                scheduleFolderSyncUp()
-            }
-            // Settings that ship in the backup manifest (reader/privacy prefs) live in
-            // SettingsView's own @AppStorage bindings — it marks sync dirty itself via
-            // NotificationCenter since it isn't always mounted while ContentView is.
-            .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
-                FolderSyncService.markDirty()
-                scheduleFolderSyncUp()
             }
             // "Open in Kudos" from Files, Safari, Reddit, AirDrop — the way a
             // community-redistributed copy actually reaches the app. Converts
@@ -276,41 +213,6 @@ struct ContentView: View {
         )
     }
 
-    /// Fingerprint of library content that should mark the sync folder dirty.
-    ///
-    /// Quantizes timestamps to whole seconds so high-frequency progress stamps
-    /// (if any path still advances `lastModifiedAt` mid-read) cannot reschedule
-    /// a full package `syncUp` many times per second. Debounced Readium writes
-    /// deliberately leave `lastModifiedAt` alone; this is a second line of defense.
-    private var folderSyncChangeToken: String {
-        [
-            "\(folderSyncWorks.count):\(newestDate(folderSyncWorks.map(\.lastModifiedAt)))",
-            "\(folderSyncBookmarks.count):\(newestDate(folderSyncBookmarks.map(\.dateAdded)))",
-            "\(folderSyncFonts.count):\(newestDate(folderSyncFonts.map(\.dateAdded)))",
-            "\(folderSyncCollections.count):\(newestDate(folderSyncCollections.map(\.lastModifiedAt)))",
-            "\(folderSyncQueues.count):\(newestDate(folderSyncQueues.map(\.dateUpdated)))",
-            "\(folderSyncMemberships.count):\(newestDate(folderSyncMemberships.map(\.lastModifiedAt)))",
-            "\(folderSyncTombstones.count):\(newestDate(folderSyncTombstones.map(\.lastModifiedAt)))"
-        ].joined(separator: "|")
-    }
-
-    private func newestDate(_ dates: [Date]) -> TimeInterval {
-        // Floor to whole seconds: sub-second stamp churn is never a distinct
-        // sync-worthy event for the full-package uploader.
-        floor(dates.max()?.timeIntervalSince1970 ?? 0)
-    }
-
-    private func scheduleFolderSyncUp() {
-        let snapshot = FolderSyncService.snapshot()
-        guard snapshot.isConnected, snapshot.autoSyncEnabled else { return }
-        folderSyncUpTask?.cancel()
-        folderSyncUpTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 7_000_000_000)
-            guard !Task.isCancelled else { return }
-            _ = try? await FolderSyncService.syncUp(in: modelContext)
-        }
-    }
-
     /// Warms `UISegmentedControl` for Sepia (resets to default for Light/Dark).
     /// Colors are bridged from `ReaderTheme`'s existing semantic surface/text
     /// tokens — the same ones `.appThemedRows()`/`.appThemedScroll()` use for
@@ -394,18 +296,39 @@ struct ContentView: View {
 
     /// The detail content for the selected section.
     ///
-    /// Wrapped in `DeferredTabContent` so the tab-bar Liquid Glass selection
-    /// animation can start/finish without waiting for Home/Library's heavy first
-    /// body (multi-@Query filters, carousel sections) to fully evaluate.
+    /// Heavy tabs (Home / Library) paint a skeleton shell first so the tab bar's
+    /// Liquid Glass morph can finish; real content mounts after a short hold and
+    /// then stays warm for later switches. Lighter tabs use a blank shell only.
     @ViewBuilder
     private func destination(for tab: AppTab) -> some View {
-        DeferredTabContent {
-            switch tab {
-            case .home: HomeView()
-            case .library: LibraryView()
-            case .browse: BrowseView()
-            case .account: AccountView()
-            case .search: SearchView()
+        switch tab {
+        case .home:
+            ProgressiveTabContent(
+                shell: .dashboard(
+                    title: "Home",
+                    sections: ["Reading Now", "Recently Updated", "Subscriptions", "Favorites"],
+                    showFilterChips: false
+                )
+            ) {
+                HomeView()
+            }
+        case .library:
+            ProgressiveTabContent(
+                shell: .dashboard(
+                    title: "Library",
+                    sections: ["Reading Now", "Saved for Later", "Finished", "Reading Queues"],
+                    showFilterChips: true
+                )
+            ) {
+                LibraryView()
+            }
+        case .browse:
+            ProgressiveTabContent(shell: .blank) { BrowseView() }
+        case .account:
+            ProgressiveTabContent(shell: .blank) { AccountView() }
+        case .search:
+            ProgressiveTabContent(shell: .blank, shellDuration: .milliseconds(80)) {
+                SearchView()
             }
         }
     }
@@ -465,35 +388,6 @@ struct ContentView: View {
                 searchButton
             }
         #endif
-    }
-}
-
-/// Defers building a tab's real root view until after the current run-loop turn,
-/// so `TabView`'s selection / Liquid Glass chrome can animate without waiting on
-/// the destination's first layout (Home/Library especially — large @Query + many
-/// carousels). State is kept once built (`hasBuilt`), so later tab switches are free.
-private struct DeferredTabContent<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-    @State private var hasBuilt = false
-
-    var body: some View {
-        Group {
-            if hasBuilt {
-                content()
-            } else {
-                // Lightweight stand-in: still fills the safe area so the tab bar
-                // doesn't jump when the real content mounts.
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityHidden(true)
-            }
-        }
-        .task {
-            guard !hasBuilt else { return }
-            // One yield lets the tab selection + glass morph commit first.
-            await Task.yield()
-            hasBuilt = true
-        }
     }
 }
 
