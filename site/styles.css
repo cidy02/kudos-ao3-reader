@@ -1,28 +1,55 @@
+/* Kudos GitHub Pages — plain CSS, no build step, no external assets.
+   Chrome is near-black / off-white + one accent (icon red). Multi-hue color
+   lives only inside real screenshots. */
+
 :root {
+  /* Dark default (matches the app's own dark chrome). */
   --bg-color: #111111;
   --text-color: #f5f5f7;
-  --text-muted: #86868b;
-  --accent-color: #a40303;
-  --rule-color: rgba(255, 255, 255, 0.1);
+  --text-muted: #a1a1a6;
+  /* Icon red sampled from AppIconArt is #a40303 (~2.3:1 on near-black).
+     In dark mode, lighten the *text/link* accent for readable contrast while
+     keeping the same hue family; borders still read as the brand red. */
+  --accent-color: #e53935;
+  --accent-border: #c62828;
+  --rule-color: rgba(255, 255, 255, 0.12);
   --frame-bezel: #222222;
   --frame-shadow: rgba(0, 0, 0, 0.5);
-  
+  --card-bg: transparent;
+  --focus-ring: #e53935;
+
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg-color: #ffffff;
+    --bg-color: #f5f5f7;
     --text-color: #1d1d1f;
-    --text-muted: #86868b;
+    --text-muted: #6e6e73;
+    /* Icon red has strong contrast on off-white (~7.4:1). */
+    --accent-color: #a40303;
+    --accent-border: #a40303;
     --rule-color: rgba(0, 0, 0, 0.1);
     --frame-bezel: #e5e5ea;
-    --frame-shadow: rgba(0, 0, 0, 0.1);
+    --frame-shadow: rgba(0, 0, 0, 0.12);
+    --focus-ring: #a40303;
   }
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body {
@@ -35,6 +62,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 a {
   color: var(--accent-color);
   text-decoration: none;
@@ -44,11 +76,49 @@ a:hover {
   text-decoration: underline;
 }
 
+a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  padding: 8px 16px;
+  background: var(--bg-color);
+  color: var(--accent-color);
+  border: 2px solid var(--accent-border);
+}
+
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Typography */
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   margin-top: 0;
   font-weight: 600;
   letter-spacing: -0.02em;
+  color: var(--text-color);
 }
 
 h1 {
@@ -58,26 +128,41 @@ h1 {
 }
 
 h2 {
-  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.1;
   margin-bottom: 0.5em;
 }
 
 h3 {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  line-height: 1.2;
   margin-bottom: 0.5em;
 }
 
 p {
   color: var(--text-muted);
-  font-size: clamp(1.125rem, 2vw, 1.3rem);
-  max-width: 700px;
-  margin: 0 auto 1.5em auto;
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  max-width: 40rem;
+  margin: 0 0 1.25em;
 }
 
-.text-left {
-  text-align: left;
-  margin-left: 0;
+.tagline {
+  color: var(--text-color);
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  max-width: 36rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.section-lede {
+  margin-bottom: 2rem;
+}
+
+.commitment {
+  color: var(--text-color);
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 600;
+  max-width: 40rem;
 }
 
 /* Structure */
@@ -87,29 +172,29 @@ p {
   padding: 0 24px;
 }
 
-section {
-  padding: 120px 0;
+main > section {
+  padding: 100px 0;
   border-bottom: 1px solid var(--rule-color);
 }
 
-section:last-child {
+main > section:last-child {
   border-bottom: none;
 }
 
 /* Nav */
-nav {
+.site-nav {
   position: sticky;
   top: 0;
-  background-color: rgba(17, 17, 17, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(17, 17, 17, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   z-index: 100;
   border-bottom: 1px solid var(--rule-color);
 }
 
 @media (prefers-color-scheme: light) {
-  nav {
-    background-color: rgba(255, 255, 255, 0.8);
+  .site-nav {
+    background-color: rgba(245, 245, 247, 0.86);
   }
 }
 
@@ -117,7 +202,7 @@ nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 60px;
+  height: 56px;
   max-width: 1024px;
   margin: 0 auto;
   padding: 0 24px;
@@ -126,48 +211,67 @@ nav {
 .nav-wordmark {
   font-weight: 600;
   color: var(--text-color);
-  font-size: 1.25rem;
+  font-size: 1.15rem;
 }
 
 .nav-wordmark:hover {
   text-decoration: none;
+  color: var(--accent-color);
 }
 
-/* CTA Buttons */
+.nav-github {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--accent-color);
+}
+
+/* CTA Buttons — accent as border/text only, never solid fill (brief). */
 .cta-group {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
-  margin-top: 2rem;
-  margin-bottom: 4rem;
+  margin: 2rem 0 3rem;
 }
 
 .cta-button {
   display: inline-block;
-  padding: 12px 24px;
-  border: 2px solid var(--accent-color);
+  padding: 12px 22px;
+  border: 2px solid var(--accent-border);
   color: var(--accent-color);
-  border-radius: 30px;
+  border-radius: 980px;
   font-weight: 500;
-  font-size: 1.1rem;
-  transition: all 0.2s ease;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  transition: color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
 .cta-button:hover {
-  background-color: rgba(164, 3, 3, 0.1);
   text-decoration: none;
+  opacity: 0.85;
+  border-color: var(--accent-color);
 }
 
-/* Device Mockup */
+.cta-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.cta-button--small {
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Device mockup — bezel is the firewall between calm chrome and app UI. */
 .device-frame {
-  border: 12px solid var(--frame-bezel);
-  border-radius: 40px;
+  border: 10px solid var(--frame-bezel);
+  border-radius: 36px;
   box-shadow: 0 20px 50px var(--frame-shadow);
   overflow: hidden;
-  max-width: 320px;
+  max-width: 300px;
   margin: 0 auto;
-  position: relative;
   background-color: #000;
 }
 
@@ -177,126 +281,263 @@ nav {
   height: auto;
 }
 
+.device-frame--hero {
+  max-width: 300px;
+}
+
+.device-frame--proof {
+  max-width: 340px;
+}
+
 /* Hero */
 .hero {
   text-align: center;
-  padding-top: 160px;
+  padding-top: 120px;
 }
 
-.hero p {
-  color: var(--text-color);
+.hero .tagline {
+  margin-bottom: 0;
 }
 
-/* Colorful Proof */
+/* Colorful proof */
 .colorful-proof {
   text-align: center;
 }
 
-.colorful-proof .device-frame {
-  max-width: 360px;
+.colorful-proof .section-lede {
+  margin-left: auto;
+  margin-right: auto;
 }
 
-/* Feature Narrative */
+/* Feature narrative */
+.features h3 {
+  font-size: clamp(1.6rem, 3vw, 2.25rem);
+}
+
 .feature-beat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 60px;
-  margin-bottom: 120px;
+  gap: 40px;
+  margin-bottom: 100px;
 }
 
 .feature-beat:last-child {
   margin-bottom: 0;
 }
 
+.feature-text {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.feature-text p {
+  margin-bottom: 0;
+}
+
+.feature-image {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 @media (min-width: 768px) {
   .feature-beat {
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
+    gap: 48px;
   }
-  
-  .feature-beat.reverse {
+
+  .feature-beat--reverse {
     flex-direction: row-reverse;
   }
-  
-  .feature-text, .feature-image {
-    flex: 1;
+
+  .feature-text,
+  .feature-image {
+    flex: 1 1 0;
+    max-width: none;
   }
-  
+
   .feature-text {
-    padding: 0 40px;
+    padding: 0 8px;
+  }
+
+  .feature-image .device-frame {
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
 /* Grids */
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 40px;
-}
-
+.grid-2,
 .grid-3 {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 40px;
+  gap: 24px;
 }
 
-@media (min-width: 768px) {
-  .grid-2 { grid-template-columns: 1fr 1fr; }
-  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (min-width: 700px) {
+  .grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Join-in: stay single-column until there's real room for three equal cards
+   (a code block in a 3-col row at 768px is unreadable). */
+@media (min-width: 960px) {
+  .grid-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: stretch;
+  }
 }
 
 .card {
-  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
   border: 1px solid var(--rule-color);
   border-radius: 16px;
+  background: var(--card-bg);
+  min-width: 0; /* allow pre to shrink inside grid */
 }
 
 .card h3 {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
+  margin-bottom: 0.6em;
+}
+
+.card p {
+  max-width: none;
+  font-size: 1rem;
+  margin-bottom: 1em;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+}
+
+.card-link {
+  display: inline-block;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.join-card {
+  gap: 20px;
+}
+
+.join-card-body {
+  flex: 1 1 auto;
+}
+
+.join-card-body p {
+  margin-bottom: 0.85em;
+}
+
+.join-card-body p:last-child {
+  margin-bottom: 0;
+}
+
+.platforms .card p,
+.privacy p {
+  max-width: 40rem;
+}
+
+.privacy p {
+  max-width: 42rem;
 }
 
 pre {
   background-color: var(--frame-bezel);
-  padding: 16px;
+  padding: 12px 14px;
   border-radius: 8px;
   overflow-x: auto;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
   color: var(--text-color);
+  margin: 0 0 1em;
+  max-width: 100%;
 }
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
 }
 
-/* Scroll Reveal */
-.reveal {
+p code {
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--frame-bezel);
+}
+
+/* Scroll reveal — only when JS is available (progressive enhancement).
+   Without the html.js class, content stays visible so file:// + no-JS works. */
+html.js .reveal {
   opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
 }
 
-.reveal.is-visible {
+html.js .reveal.is-visible {
   opacity: 1;
   transform: translateY(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reveal {
+  html.js .reveal {
     transition: none;
     opacity: 1;
     transform: none;
   }
+
+  .cta-button {
+    transition: none;
+  }
 }
 
 /* Footer */
-footer {
-  padding: 60px 0;
+.site-footer {
+  padding: 48px 0 64px;
   text-align: center;
   font-size: 0.9rem;
   color: var(--text-muted);
+  border-top: 1px solid var(--rule-color);
 }
 
-footer a {
-  margin: 0 10px;
+.site-footer p {
+  margin-left: auto;
+  margin-right: auto;
+  font-size: inherit;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+}
+
+.footer-links a {
+  margin: 0;
+}
+
+/* Narrow phones */
+@media (max-width: 380px) {
+  .cta-button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .device-frame {
+    border-width: 8px;
+    border-radius: 28px;
+  }
+
+  main > section {
+    padding: 72px 0;
+  }
 }
