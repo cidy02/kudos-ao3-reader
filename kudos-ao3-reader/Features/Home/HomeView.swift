@@ -238,7 +238,10 @@ struct HomeView: View {
                 // Strong empty state (Synthesis v2): section chrome + CTAs, not a
                 // dead hero-shaped hole. Same header weight as other Home rows.
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(HomeSectionKind.readingNow.title)
+                    // "Continue Reading" — matches the title used above the hero
+                    // in the non-empty branch below, so the section doesn't
+                    // appear to rename itself depending on whether it has content.
+                    Text("Continue Reading")
                         .font(.title2.bold())
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 16)
@@ -269,7 +272,12 @@ struct HomeView: View {
                 let heroWork = readingNow[0]
                 let stripWorks = Array(readingNow.dropFirst().prefix(4))
 
-                VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Continue Reading")
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 16)
+
                     HomeResumeHero(
                         work: heroWork,
                         isSelecting: isSelecting,
@@ -280,8 +288,12 @@ struct HomeView: View {
                     .padding(.horizontal, 16)
 
                     if !stripWorks.isEmpty {
+                        // Smaller title than a normal section header — this strip
+                        // is a subsection of "Continue Reading" above, not a peer
+                        // top-level row, so it shouldn't compete at the same weight.
                         WorkCarouselSection(
                             title: "More In Progress",
+                            titleFont: .subheadline.weight(.semibold),
                             collapseKey: "home.readingNow.strip",
                             hasItems: true,
                             onSeeAll: readingNow.count > 5

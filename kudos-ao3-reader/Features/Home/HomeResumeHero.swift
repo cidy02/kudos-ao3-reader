@@ -125,20 +125,43 @@ private struct UnblurredHomeResumeHero: View {
                     .font(.caption)
             }
 
-            // Same metadata every carousel card shows (CoverCardStatsRow), just at
-            // hero scale — the most prominent card on Home was otherwise showing
-            // *less* than the strip cards below it, which reads backwards.
+            // Same metadata every carousel card shows, just laid out like
+            // WorkDetailHeroCard's own stat row — a wrapping FlowLayout of
+            // WorkStatLabels, not CoverCardStatsRow's one-stat-per-line column.
+            // The hero is this page's own "detail card" moment, so it should
+            // read like one, not like a bigger carousel tile.
             if !work.author.isEmpty || !(work.workFandoms.first ?? "").isEmpty {
                 CardMetaSeparator()
             }
 
-            CoverCardStatsRow(
-                ratingName: WorkStat.ratingName(work.rating),
-                ratingFull: work.rating.isEmpty ? nil : work.rating,
-                chapters: work.chapters.isEmpty ? nil : work.chapters,
-                completion: work.completionStatus,
-                wordCount: work.wordCount > 0 ? work.wordCount : nil
-            )
+            FlowLayout(spacing: 10, rowSpacing: 6) {
+                let ratingName = WorkStat.ratingName(work.rating)
+                if let ratingName {
+                    WorkStatLabel(
+                        text: ratingName,
+                        symbol: "checkmark.shield",
+                        accessibilityLabel: work.rating.isEmpty ? ratingName : work.rating
+                    )
+                }
+                if !work.chapters.isEmpty {
+                    WorkStatLabel(text: work.chapters, symbol: "book", accessibilityLabel: "Chapters \(work.chapters)")
+                }
+                WorkStatLabel(
+                    text: work.completionStatus.text,
+                    symbol: work.completionStatus.symbol,
+                    iconColor: work.completionStatus.color
+                )
+                if work.wordCount > 0 {
+                    WorkStatLabel(
+                        text: work.wordCount.formatted(),
+                        symbol: "textformat.size",
+                        accessibilityLabel: "\(work.wordCount.formatted()) words"
+                    )
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
 
             Spacer(minLength: 16)
 
