@@ -24,6 +24,7 @@ struct ReadingQueueBrowserView: View {
     @AppStorage("library.readingQueueBrowser.lastSelectedID") private var lastSelectedIDRaw = ""
     @State private var selectedQueueID: UUID?
     @State private var showingSwitcher = false
+    @State private var showingQueueGrid = false
     @State private var showingNewQueue = false
     @State private var newQueueName = ""
 
@@ -188,7 +189,11 @@ struct ReadingQueueBrowserView: View {
 
     private var switcherBar: some View {
         HStack(spacing: 10) {
-            Button { showingSwitcher = true } label: {
+            // Visual overview (Safari tab-grid analog) — distinct from the middle
+            // pill's fast text-list switch below. Discussed in
+            // discussions/queue-switcher-left-button.md: both controls used to open
+            // the same switcherList popover, which was dead-weight duplication.
+            Button { showingQueueGrid = true } label: {
                 Image(systemName: "square.grid.2x2")
                     // 17pt (.body scale), not the 15pt this app's other custom glass
                     // bars use (e.g. ReaderChromeTopBar) — those pair a custom top bar
@@ -203,14 +208,14 @@ struct ReadingQueueBrowserView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("All Queues")
-            .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
-                switcherList
+            .popover(isPresented: $showingQueueGrid, arrowEdge: .bottom) {
+                queueOverviewGrid
                     .presentationCompactAdaptation(.sheet)
-                    // Sized to actual content instead of a fixed .medium fraction of
-                    // the screen — with only 2-4 queues, .medium left a large dead
-                    // black area below the last row. .large stays available so a
-                    // long queue list can still be dragged up to scroll.
-                    .presentationDetents([switcherListHeight, .large])
+                    // Fixed-size ReadingQueueCard tiles (~228pt tall) don't fit two
+                    // rows inside .medium the way the plain switcherList's short rows
+                    // do — .medium would clip a second row mid-card, so this grid
+                    // defaults straight to .large.
+                    .presentationDetents([.large])
             }
 
             Button { showingSwitcher = true } label: {
@@ -366,6 +371,71 @@ struct ReadingQueueBrowserView: View {
         .buttonStyle(.plain)
         .accessibilityValue("\(workCount) work\(workCount == 1 ? "" : "s")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    // MARK: - Queue overview grid
+
+    /// The left switcher button's target: a visual "browse all queues" overview,
+    /// distinct from `switcherList`'s fast text-based quick-switch. Reuses
+    /// `ReadingQueueCard` directly (not `AllReadingQueuesGridView`/
+    /// `LibraryEntityGridView` — those are built around `NavigationLink`-based push
+    /// navigation via a `destination:` closure, which would push a second browser on
+    /// top of this one; this popover needs tap-to-select-and-dismiss instead).
+    private var queueOverviewGrid: some View {
+        ScrollView {
+            LazyVGrid(
+                columns: CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width),
+                spacing: CarouselCardMetrics.compactGridSpacing
+            ) {
+                ForEach(orderedQueues) { queue in
+                    queueOverviewCard(queue)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+        }
+        .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
+        .navigationTitle("Reading Queues")
+        #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    private func queueOverviewCard(_ queue: ReadingQueue) -> some View {
+        let workCount = ReadingQueueService.orderedWorks(in: queue).count
+        let isSelected = queue.id == selectedQueue?.id
+        return Button { select(queue) } label: {
+            // ReadingQueueCard's init only takes `queue:` (its own cardSize defaults
+            // to a fresh ScaledCarouselCardSize() — see ReadingQueues.swift:97-104 for
+            // why that init is explicit/non-defaulted); that still tracks the same
+            // Dynamic Type setting as this view's own `cardSize`, so it stays visually
+            // consistent without needing to be threaded through.
+            ReadingQueueCard(queue: queue)
+                .overlay(alignment: .topTrailing) {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white, Color.accentColor)
+                            .padding(8)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(Color.accentColor, lineWidth: 2)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        // Parity with queueRow's a11y: ReadingQueueCard on its own is a purely
+        // visual layout with no explicit VoiceOver grouping, so without this the
+        // grid would announce disconnected fragments (title, then count, then
+        // "button") instead of one selectable item.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(queue.displayName)
+        .accessibilityValue("\(workCount) work\(workCount == 1 ? "" : "s")")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     @ViewBuilder
@@ -688,7 +758,11 @@ struct ReadingQueueBrowserView: View {
         filters = LibraryFilters()
         selectedQueueID = queue.id
         lastSelectedIDRaw = queue.id.uuidString
+        // Clear both presentations regardless of which one triggered the select —
+        // they're two independent @State flags, so a select from the grid must not
+        // leave a stale switcherList popover flagged open (or vice versa).
         showingSwitcher = false
+        showingQueueGrid = false
     }
 
     private func createQueue() {
